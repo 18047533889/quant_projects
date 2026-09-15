@@ -23,6 +23,7 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
     ParamSpec,
     RelationalParamSpec,
     SeriesOperator,
@@ -142,6 +143,24 @@ def _id_value_map(
             continue
         out[key] = float(v)
     return out
+
+
+def _variadic_relation_panels(
+    args: tuple[pd.DataFrame, ...], extras: dict[str, Any]
+) -> tuple[pd.DataFrame, ...]:
+    """Bind the conceptual ``relations`` input from args or one sequence kwarg."""
+    if "relations" not in extras:
+        return tuple(args)
+    if args:
+        raise TypeError("relations passed both positionally and by keyword")
+    relations = extras["relations"]
+    if isinstance(relations, pd.DataFrame):
+        return (relations,)
+    if not isinstance(relations, (tuple, list)) or not all(
+        isinstance(panel, pd.DataFrame) for panel in relations
+    ):
+        raise TypeError("relations must be a sequence of pandas DataFrames")
+    return tuple(relations)
 
 
 @register_operator(
@@ -264,8 +283,12 @@ class RelationDistributionSkew(SeriesOperator):
     )
     # R5-06: genuinely variadic (3+ ranked panels in one positional slot).
     metadata.tags = list(metadata.tags) + ["variadic"]
+    metadata.panel_params = ("relations",)
+    metadata.panel_arity = 1
+    metadata.scalar_params = ()
 
     def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
+        args = _variadic_relation_panels(args, _)
         if len(args) < 3:
             raise ValueError("relation_distribution_skew requires at least three ranked panels")
         base = args[0]
@@ -309,8 +332,12 @@ class RelationDistributionPearsonKurtosis(SeriesOperator):
     )
     # R5-06: genuinely variadic (4+ ranked panels in one positional slot).
     metadata.tags = list(metadata.tags) + ["variadic"]
+    metadata.panel_params = ("relations",)
+    metadata.panel_arity = 1
+    metadata.scalar_params = ()
 
     def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
+        args = _variadic_relation_panels(args, _)
         if len(args) < 4:
             raise ValueError("relation_distribution_pearson_kurtosis requires at least four ranked panels")
         base = args[0]
@@ -343,8 +370,12 @@ class RelationDistributionExcessKurtosis(SeriesOperator):
     )
     # R5-06: genuinely variadic (4+ ranked panels in one positional slot).
     metadata.tags = list(metadata.tags) + ["variadic"]
+    metadata.panel_params = ("relations",)
+    metadata.panel_arity = 1
+    metadata.scalar_params = ()
 
     def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
+        args = _variadic_relation_panels(args, _)
         if len(args) < 4:
             raise ValueError("relation_distribution_excess_kurtosis requires at least four ranked panels")
         base = args[0]
@@ -582,19 +613,48 @@ class RelationRankEntityMobility(SeriesOperator):
         unit="same_as:share",
         output_unit="same_as:share",
     )
-    metadata.tags = list(metadata.tags) + ["entity_identity"]
+    metadata.tags = list(metadata.tags) + ["entity_identity", "dynamic_inputs"]
+    metadata.panel_params = tuple(metadata.param_names)
+    metadata.panel_arity = len(metadata.panel_params)
+    metadata.scalar_params = ()
 
     def _calculate_series(self, *args: pd.DataFrame, **_: Any) -> pd.DataFrame:
-        if len(args) != 40:
-            raise ValueError(
-                "relation_rank_entity_mobility requires 40 panels "
-                "(10 current values + 10 current ids + 10 previous values + 10 previous ids)"
-            )
-        base = args[0]
-        cur = _stack_panels(*args[:10])
-        cur_id = _stack_id_panels(*args[10:20])
-        prev = _stack_panels(*args[20:30])
-        prev_id = _stack_id_panels(*args[30:40])
+        declared = tuple(self.metadata.param_names)
+        supplied_keywords = {name: _[name] for name in declared if name in _}
+        if args and supplied_keywords:
+            raise TypeError("relation_rank_entity_mobility does not mix positional and keyword relation panels")
+        if args:
+            if len(args) % 4 != 0 or not 4 <= len(args) <= 40:
+                raise ValueError(
+                    "relation_rank_entity_mobility requires 4*N panels for 1 <= N <= 10 "
+                    "(current values, current ids, previous values, previous ids)"
+                )
+            n = len(args) // 4
+            cur_panels = args[:n]
+            cur_id_panels = args[n:2 * n]
+            prev_panels = args[2 * n:3 * n]
+            prev_id_panels = args[3 * n:4 * n]
+        else:
+            rank_sets = []
+            for prefix in ("s", "sid", "p", "psid"):
+                rank_sets.append({i for i in range(1, 11) if f"{prefix}{i}" in supplied_keywords})
+            if not rank_sets[0] or any(ranks != rank_sets[0] for ranks in rank_sets[1:]):
+                raise ValueError("current/previous value and id panels must provide the same rank slots")
+            ranks = sorted(rank_sets[0])
+            if ranks != list(range(1, len(ranks) + 1)):
+                raise ValueError("relation rank slots must be a contiguous prefix starting at rank 1")
+            cur_panels = tuple(supplied_keywords[f"s{i}"] for i in ranks)
+            cur_id_panels = tuple(supplied_keywords[f"sid{i}"] for i in ranks)
+            prev_panels = tuple(supplied_keywords[f"p{i}"] for i in ranks)
+            prev_id_panels = tuple(supplied_keywords[f"psid{i}"] for i in ranks)
+        base = cur_panels[0]
+        for panel in (*cur_panels, *cur_id_panels, *prev_panels, *prev_id_panels):
+            if not panel.index.equals(base.index) or not panel.columns.equals(base.columns):
+                raise ValueError("relation entity panels must have identical index and columns")
+        cur = _stack_panels(*cur_panels)
+        cur_id = _stack_id_panels(*cur_id_panels)
+        prev = _stack_panels(*prev_panels)
+        prev_id = _stack_id_panels(*prev_id_panels)
         _, rows, cols = cur.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for r in range(rows):
@@ -753,7 +813,15 @@ class GroupQuantileSpread(SeriesOperator):
         ["x", "group", "q_low", "q_high"],
         category="cross_sectional",
         unit="level",
+        param_specs={
+            "q_low": ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12, default=0.25, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "q_high": ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12, default=0.75, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        },
+        relational_specs=[RelationalParamSpec("q_low < q_high")],
     )
+    metadata.panel_params = ("x", "group")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("q_low", "q_high")
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame, q_low: float = 0.25, q_high: float = 0.75, **_: Any) -> pd.DataFrame:
         ql, qh = float(q_low), float(q_high)
@@ -783,7 +851,15 @@ class GroupTailRatio(SeriesOperator):
         ["x", "group", "q_low", "q_high"],
         category="cross_sectional",
         unit="ratio",
+        param_specs={
+            "q_low": ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12, default=0.05, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "q_high": ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12, default=0.95, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        },
+        relational_specs=[RelationalParamSpec("q_low < q_high")],
     )
+    metadata.panel_params = ("x", "group")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("q_low", "q_high")
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame, q_low: float = 0.05, q_high: float = 0.95, **_: Any) -> pd.DataFrame:
         ql, qh = float(q_low), float(q_high)

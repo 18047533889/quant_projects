@@ -74,7 +74,8 @@ def _register(name,params,fn,desc):
     # ParamRole.HORIZON -> searched at full resolution, NOT an estimator knob).
     specs={p:ParamSpec(dtype=int,min=2,param_role=ParamRole.HORIZON)
            for p in params if p in ("window","atr_window")}
-    meta=OperatorMetadata(name=name,category="candle_pattern",description=desc,param_names=list(params),return_type="series",param_specs=specs,tags=["pit_safe","causal","bounded_history","continuous_candle","production_extension"])
+    panel_params=tuple(param for param in params if param not in specs)
+    meta=OperatorMetadata(name=name,category="candle_pattern",description=desc,param_names=list(params),return_type="series",param_specs=specs,tags=["pit_safe","causal","bounded_history","continuous_candle","production_extension"],panel_params=panel_params,panel_arity=len(panel_params),scalar_params=tuple(param for param in params if param in specs),total_positional_arity=len(params))
     def _calculate_series(self,*args,**kwargs):return fn(*args,**kwargs)
     cls=type(f"CandleGeometryV2_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":_calculate_series,"__module__":__name__})
     register_operator(name=name,category="candle_pattern",business_category="technical_extension",canonical=name,source="candle_geometry_v2",backend="pandas_numpy",status="production")(cls)

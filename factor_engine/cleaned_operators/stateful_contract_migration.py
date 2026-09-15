@@ -32,8 +32,6 @@ _FULL_HISTORY_RECURSIVE: tuple[str, ...] = (
     "KeltnerMid", "KeltnerUpper", "KeltnerLower", "KeltnerPosition",
     "TSI", "TSI_signal", "DEMA", "TEMA", "ChaikinOscillator", "ForceIndex",
     "expanding_rank", "hump_decay",
-    "state_latch", "state_hold", "state_slew_limit", "state_deadband",
-    "state_ewm_if",
     "event_refractory", "directional_change_state", "directional_change_extent",
     "state_since_trend_tstat",
     "ts_threshold_cycle_period", "ts_threshold_cycle_asymmetry",

@@ -39,6 +39,40 @@ def _minute_fallback_allowed(exc: BaseException) -> bool:
 class LQTPLogicalDataSource(_Base):
     prefer_series_panel_loading = True
 
+    def _approved_dependency(self, dataset):
+        snapshots = dict(getattr(self.inner, "_approved_source_snapshot_tokens", {}) or {})
+        digests = dict(getattr(self.inner, "_approved_source_content_digests", {}) or {})
+        managed = getattr(self, "execution_purpose", None) is not None
+        if ((snapshots and dataset not in snapshots)
+                or (digests and dataset not in digests)
+                or (managed and dataset not in digests)):
+            raise MissingDataDependencyError(
+                f"DATA_SOURCE_MISSING: approved dependency {dataset!r} is absent; "
+                "provide its authorized snapshot/content identity, not a substitute daily field")
+        return snapshots, digests
+
+    def _child(self, dataset, *, instrument_filter=None):
+        # Bind before any child read, including paths outside physical batch
+        # preflight. Never replace a missing approval with the current snapshot.
+        snapshots, digests = self._approved_dependency(dataset)
+        if instrument_filter is None:
+            instrument_filter = getattr(self.inner, "instrument_filter", None)
+        child = super()._child(dataset, instrument_filter=instrument_filter)
+        try:
+            child._approved_source_snapshot_tokens = snapshots
+            child._approved_source_content_digests = digests
+            if dataset in snapshots:
+                child.bind_approved_snapshot_token(snapshots[dataset])
+            if dataset in digests:
+                child.bind_approved_content_digest(digests[dataset])
+            broker = getattr(self.inner, "_cache_broker", None)
+            if broker is not None:
+                child.bind_resource_broker(broker)
+            return child
+        except BaseException:
+            child.close()
+            raise
+
     def _dependency_store(self) -> dict[str, dict[str, Any]]:
         return self._cache.setdefault("__source_dependencies__", {})
 
@@ -308,9 +342,7 @@ class LQTPLogicalDataSource(_Base):
 
     def scan_polars_long(self, columns: list[str]):
         if any(self._is_source_ref_name(name) for name in columns):
-            raise NotImplementedError(
-                "SourceRef columns require the certified logical/Pandas-Arrow boundary"
-            )
+            return super().scan_polars_long(columns)
         return self.inner.scan_polars_long(columns)
 
     def scan_index_long(self):
@@ -349,6 +381,7 @@ class LQTPLogicalDataSource(_Base):
         """#10 批量财务读：同一报表表的多个字段一次 ``store.read``（一次 scan）。"""
         from .data_access_source import _get_store
 
+        snapshots, digests = self._approved_dependency(dataset)
         store = _get_store()
         ds = store.get_dataset(dataset)
         required = [ds.instrument_column, "ReportPeriodEndDate", "PubDate", *fields]
@@ -356,7 +389,28 @@ class LQTPLogicalDataSource(_Base):
         kwargs: dict[str, Any] = {"columns": list(dict.fromkeys(required)), "mode": "event"}
         if end is not None:
             kwargs["time_range"] = (None, end)
-        result = store.read_result(dataset, **kwargs)
+        instruments = getattr(self.inner, "instrument_filter", None)
+        if instruments is not None:
+            kwargs["instrument_filter"] = instruments
+        if digests or snapshots or getattr(self, "execution_purpose", None) is not None:
+            from .data_access_source import ApprovedSnapshotMismatch
+            # Financial history keeps its original pre-end range and PubDate
+            # semantics; exact approval is checked against that prepared scope.
+            prepared = store.prepare_read(
+                dataset, **kwargs, run_mode="production", snapshot_policy="fail_if_changed")
+            try:
+                frozen = prepared.resolved_source_snapshot
+                if (getattr(frozen, "dataset", None) != dataset
+                        or getattr(frozen, "content_digest", None) != digests.get(dataset)):
+                    raise ApprovedSnapshotMismatch(
+                        "financial prepared snapshot differs from approved dependency")
+            except BaseException:
+                store._pipeline.release_reservation(
+                    getattr(prepared, "resource_reservation", None))
+                raise
+            result = store.execute_prepared_read(prepared)
+        else:
+            result = store.read_result(dataset, **kwargs)
         snapshot = getattr(getattr(result, "snapshot", None), "snapshot_id", None)
         for field in fields:
             self._record_dependency(
@@ -510,7 +564,12 @@ class LQTPLogicalDataSource(_Base):
                 snapshot_id=lineage["definition_hash"],
                 **lineage,
             )
-            series = evaluate_derived_field(field, self.inner)
+            series = evaluate_derived_field(
+                field,
+                self.inner,
+                execution_purpose=getattr(self, "execution_purpose", None),
+                execution_scope=getattr(self, "execution_scope", None),
+            )
             if isinstance(series, pd.DataFrame):
                 if series.shape[1] != 1:
                     raise MissingDataDependencyError(

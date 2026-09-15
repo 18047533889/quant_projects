@@ -479,10 +479,12 @@ def build_with_evidence(evidence: Mapping[str, Any]) -> CandidateEvaluation:
     maturity = evidence.get("label_maturity")
     if maturity is None:
         maturity = True
-    maturity = bool(maturity)
+    if not isinstance(maturity, bool):
+        raise ValueError("build_with_evidence: label_maturity must be a bool")
     if not maturity:
-        raise ValueError(
-            "build_with_evidence: label_maturity must be True for computed evidence"
+        raise JobError(
+            ErrorClass.DATA_UNAVAILABLE,
+            "build_with_evidence: label_not_mature; wait for mature evidence"
         )
     evidence_status = evidence.get("evidence_status")
     if not evidence_status:
@@ -618,6 +620,8 @@ class Pipeline:
 
         self._processed_fingerprints: set[str] = set()
         self._consumed_manifests: list[Any] = []
+        self._consumed_by_context: dict[str | None, list[Any]] = {None: self._consumed_manifests}
+        self._evaluation_context = ContextVar(f"evaluation_context_{id(self)}", default=None)
         self._feature_snapshots: list[FeatureSetVersion] = []
         self._run_counter = 0
         self._evaluation_by_job: dict[str, CandidateEvaluation] = {}
@@ -665,6 +669,34 @@ class Pipeline:
     def run(
         self, raw_records: Iterable[Mapping[str, Any]], *,
         library_snapshot: Mapping[str, Any], now: datetime | None = None,
+        evaluation_context_ref: str | None = None,
+    ) -> PipelineReport:
+        """Run within a caller-owned immutable evaluation intent.
+
+        The producer must change evaluation_context_ref for changed data,
+        evaluation policy or other evaluation inputs. It is an operational
+        reference, never a factor definition/semantic identity. None retains
+        legacy anti-replay keys. Restarts must pass the same reference.
+        """
+        if evaluation_context_ref is not None and (
+            not isinstance(evaluation_context_ref, str) or not evaluation_context_ref.strip()
+        ):
+            raise ValueError("evaluation_context_ref must be a non-empty reference")
+        context_token = self._evaluation_context.set(evaluation_context_ref)
+        try:
+            return self._run_reserved(raw_records, library_snapshot=library_snapshot, now=now)
+        finally:
+            self._evaluation_context.reset(context_token)
+
+    def _work_key(self, manifest: Any) -> str:
+        context = self._evaluation_context.get()
+        if context is None:
+            return manifest.factor_spec_sha256
+        return content_hash("pipeline-work-intent.v1", manifest.factor_spec_sha256, context)
+
+    def _run_reserved(
+        self, raw_records: Iterable[Mapping[str, Any]], *,
+        library_snapshot: Mapping[str, Any], now: datetime | None = None,
     ) -> PipelineReport:
         """Reserve discovered candidates before entering any external reader."""
         if self.run_storage is None:
@@ -676,7 +708,12 @@ class Pipeline:
                 manifest = normalize_candidate(raw)
             except CandidateNormalizationError:
                 continue
-            candidates[manifest.factor_spec_sha256] = json.dumps(dict(raw),sort_keys=True)
+            candidates[self._work_key(manifest)] = json.dumps({
+                # Persist the normalized carrier, not arbitrary raw Python
+                # objects. Supported datetime timestamps are now ISO strings.
+                "raw_record": {**asdict(manifest), "semantic_id": manifest.semantic_ref},
+                "evaluation_context_ref": self._evaluation_context.get(),
+            }, sort_keys=True)
         token = str(uuid.uuid4())
         reserved_hashes = self.run_storage.reserve_candidates(candidates, token)
         context_token = self._reservation_context.set((token, tuple(reserved_hashes)))
@@ -723,7 +760,7 @@ class Pipeline:
             try:
                 manifests.append(normalize_candidate(raw))
             except CandidateNormalizationError as exc:
-                candidate_id = str(raw.get("candidate_id") or "?")
+                candidate_id = str(raw.get("candidate_id") or "?") if isinstance(raw, Mapping) else "?"
                 normalization_failures.append(
                     {
                         "candidate_id": candidate_id,
@@ -734,6 +771,8 @@ class Pipeline:
                     }
                 )
         fingerprint = batch_fingerprint(manifests)
+        if self._evaluation_context.get() is not None:
+            fingerprint = content_hash("pipeline-batch-intent.v1", fingerprint, self._evaluation_context.get())
 
         # 2. Anti-replay: a batch whose fingerprint we already consumed is a
         #    replay — short-circuit (no new events, all candidates skipped).
@@ -779,14 +818,25 @@ class Pipeline:
         # store the consumed-manifest known-set is ALSO seeded from the store
         # (all consumed content hashes), so a candidate consumed by a PREVIOUS
         # process still reconciles as a duplicate.
-        known = list(self._consumed_manifests)
+        known = list(self._consumed_by_context.get(self._evaluation_context.get(), ()))
         if self.run_storage is not None:
+            # Hash-only seeds cannot restore semantic conflicts after restart.
+            # Reservations carry the original producer identity and intent;
+            # never manufacture a historical manifest from the current input.
+            for discovery in self.run_storage.completed_discoveries():
+                document = json.loads(discovery)
+                context = document.get("evaluation_context_ref") if "raw_record" in document else None
+                if context == self._evaluation_context.get():
+                    known.append(normalize_candidate(document.get("raw_record", document)))
             known_hash_entries: list[Any] = []
             for manifest in manifests:
-                if (manifest.factor_spec_sha256 in self._consumed_hash_seed
-                        or self.run_storage.is_consumed_hash(manifest.factor_spec_sha256)):
-                    self._consumed_hash_seed.add(manifest.factor_spec_sha256)
-                    known_hash_entries.append(manifest)
+                work_key = self._work_key(manifest)
+                if (work_key in self._consumed_hash_seed
+                        or self.run_storage.is_consumed_hash(work_key)):
+                    self._consumed_hash_seed.add(work_key)
+                    if not any(existing.factor_spec_sha256 == manifest.factor_spec_sha256
+                               for existing in known):
+                        known_hash_entries.append(manifest)
             known = known + known_hash_entries
         reconcile = reconcile_candidates(manifests, known)
 
@@ -796,25 +846,10 @@ class Pipeline:
         # DUPLICATE_EXACT on the second occurrence. Recompute the dual-key
         # classes here (content + semantic exact-match = duplicate) so only
         # genuinely NEW candidates enter the job + admission path.
-        reconcile_conflict_by_hash: dict[str, str] = {}
-        for conflict in reconcile.conflicts:
-            reconcile_conflict_by_hash[conflict.content_hash] = conflict.reason
-
-        seen_dual_key: set[tuple[str, str]] = set()
         retryable_failure = False
         approved_pending_consumption = []
-        for manifest in manifests:
+        for manifest, reason in zip(manifests, reconcile.classifications, strict=True):
             ch = manifest.factor_spec_sha256
-            semantic = manifest.semantic_family_hint or ""
-            dual_key = (ch, semantic)
-            reason = reconcile_conflict_by_hash.get(ch)
-
-            # Explicit intra-batch duplicate: same content+semantic identity
-            # already consumed this run.
-            if reason is None or reason != ReconcileReason.DUPLICATE_EXACT.value:
-                if dual_key in seen_dual_key:
-                    reason = ReconcileReason.DUPLICATE_EXACT.value
-            seen_dual_key.add(dual_key)
 
             if reason == ReconcileReason.DUPLICATE_EXACT.value:
                 report = report.with_duplicate(
@@ -856,8 +891,12 @@ class Pipeline:
             )
             # Schedule the candidate on the JobRunner (treatment + evaluation).
             job_key = (
-                f"candidate:{manifest.candidate_id}:{ch}:scenario:{run_index}"
+                f"candidate:{manifest.candidate_id}:{self._work_key(manifest)}:scenario:{run_index}"
             )
+            if self.run_storage is not None:
+                token, _ = self._reservation_context.get()
+                attempt = self.run_storage.reservation_attempt(self._work_key(manifest), token)
+                job_key = f"candidate:{manifest.candidate_id}:{self._work_key(manifest)}:attempt:{attempt}"
             spec = JobSpec(
                 job_type="pipeline.candidate.evaluate",
                 idempotency_key=job_key,
@@ -882,7 +921,10 @@ class Pipeline:
                 continue
 
             evaluation = self._evaluation_by_job.get(job_key)
+            if evaluation is None and (record.result is None or record.result.summary != _BAD_EVIDENCE_MARKER):
+                raise RuntimeError("completed job lacks recoverable evaluation; no terminal consumption recorded")
             if evaluation is None:
+                self._record_terminal_consumption(manifest, now)
                 event_id = self._publish_event(
                     milestone="CANDIDATE_REJECTED",
                     candidate=manifest,
@@ -910,7 +952,7 @@ class Pipeline:
                 semantic_ref=str(getattr(manifest, "semantic_ref", "") or ""),
                 evaluation=evaluation,
                 library_snapshot_ref=self._library_ref(library_snapshot),
-                context={"job_key": job_key},
+                context={"job_key": job_key, "evaluation_context_ref": self._evaluation_context.get()},
             )
             verdict = self.admission_authority.decide(request)
             self._verdict_by_job[job_key] = verdict
@@ -1112,26 +1154,31 @@ class Pipeline:
         return {name: str(value) for name, value in refs.items()}
 
     def _record_terminal_consumption(self, manifest: Any, now: datetime) -> None:
+        consumed = self._consumed_by_context.setdefault(self._evaluation_context.get(), [])
+        work_key = self._work_key(manifest)
         if any(
             existing.factor_spec_sha256 == manifest.factor_spec_sha256
-            for existing in self._consumed_manifests
+            for existing in consumed
         ):
             return
         if self.run_storage is not None:
             token, _ = self._reservation_context.get()
             self.run_storage.consume_reserved(
-                candidate_id=str(manifest.candidate_id),
-                content_hash=manifest.factor_spec_sha256,
+                # The legacy table's primary key is named candidate_id, but
+                # terminal consumption belongs to the operational work intent.
+                # Original candidate_id remains in durable discovery bytes.
+                candidate_id=f"pipeline-work:{work_key}",
+                content_hash=work_key,
                 semantic=str(manifest.semantic_family_hint or ""),
                 consumed_at=now,
                 owner_token=token,
             )
             _, hashes = self._reservation_context.get()
             self._reservation_context.set((
-                token, tuple(ch for ch in hashes if ch != manifest.factor_spec_sha256)
+                token, tuple(ch for ch in hashes if ch != work_key)
             ))
-        self._consumed_manifests.append(manifest)
-        self._consumed_hash_seed.add(manifest.factor_spec_sha256)
+        consumed.append(manifest)
+        self._consumed_hash_seed.add(work_key)
 
     def _make_candidate_handler(
         self,
@@ -1143,7 +1190,8 @@ class Pipeline:
             try:
                 evaluation = self.evaluate_candidate(
                     candidate,
-                    {"library_snapshot": library_snapshot, "job_key": job_key},
+                    {"library_snapshot": library_snapshot, "job_key": job_key,
+                     "evaluation_context_ref": self._evaluation_context.get()},
                 )
             except JobError:
                 raise
@@ -1257,7 +1305,8 @@ class Pipeline:
             payload = json.dumps({'schema':'feature-set-generation.v1',
                 'update_mode':self.config.feature_set_update_mode,
                 'parent_generation':parent_generation, 'version':asdict(version)},
-                sort_keys=True, separators=(',', ':'), default=lambda obj: obj.isoformat()
+                sort_keys=True, separators=(',', ':'), default=lambda obj: dict(obj)
+                    if isinstance(obj, Mapping) else obj.isoformat()
                     if isinstance(obj,datetime) else obj.value).encode()
             digest = hashlib.sha256(payload).hexdigest()
             ref = ArtifactRef(artifact_id='feature-set:' + self.config.feature_set_id,
@@ -1323,15 +1372,6 @@ class Pipeline:
             or ""
         )
 
-    @staticmethod
-    def _library_ref(library_snapshot: Mapping[str, Any]) -> str:
-        """The carried library version ref (platform reads it, never mints it)."""
-        return str(
-            library_snapshot.get("library_version_ref")
-            or library_snapshot.get("library_version_id")
-            or ""
-        )
-
     def _build_candidate_artifact(
         self,
         candidate: Any,
@@ -1347,6 +1387,7 @@ class Pipeline:
                 "semantic_ref": candidate.semantic_ref,
                 "factor_value_ref": candidate.factor_value_ref,
                 "source_spec_hash": source_spec_hash,
+                "evaluation_context_ref": self._evaluation_context.get(),
             },
             sort_keys=True,
             separators=(",", ":"),
@@ -1402,6 +1443,9 @@ class Pipeline:
         if artifact_id:
             key = f"{key}:artifact:{artifact_id}"
         event_id = content_hash(milestone, content_ch, run_index, reason, status)
+        if self._evaluation_context.get() is not None:
+            key = f"{key}:intent:{self._work_key(candidate)}"
+            event_id = content_hash(event_id, self._work_key(candidate))
         if artifact_id:
             event_id = content_hash(event_id, artifact_id)
         payload: dict[str, Any] = {
@@ -1409,6 +1453,7 @@ class Pipeline:
             "status": status,
             "candidate_id": candidate_id,
             "content_hash": content_ch,
+            "evaluation_context_ref": self._evaluation_context.get(),
             "reason": reason,
             "library_version_ref": str(
                 library_snapshot.get("library_version_ref")

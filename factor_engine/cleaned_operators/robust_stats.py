@@ -20,6 +20,7 @@ from factor_engine.cleaned_operators.base import (
     SeriesOperator,
     register_operator,
 )
+from factor_engine.cleaned_operators.common.strict_params import strict_int
 
 
 def _metadata(
@@ -32,14 +33,29 @@ def _metadata(
     output_unit: str | None = None,
     param_specs: dict | None = None,
 ) -> OperatorMetadata:
+    specs={
+        "window":ParamSpec(dtype=int,min=2,default=20,param_role=ParamRole.HORIZON,
+                           history_semantics="exact_rows" if name.endswith("_prior") else "max_rows"),
+    }
+    for key,default in (("q_low",.25),("q_high",.75)):
+        if key in params:
+            specs[key]=ParamSpec(dtype=float,min=float(np.nextafter(0.,1.)),max=float(np.nextafter(1.,0.)),
+                                 default=default,param_role=ParamRole.ECONOMIC)
+    if "trim_ratio" in params:
+        specs["trim_ratio"]=ParamSpec(dtype=float,min=0.,max=float(np.nextafter(.5,0.)),default=.1,param_role=ParamRole.ECONOMIC)
+    if "center" in params:
+        specs.update(center=ParamSpec(dtype=str,default="median",param_role=ParamRole.POLICY),
+                     scale=ParamSpec(dtype=str,default="mad",param_role=ParamRole.POLICY),
+                     clip=ParamSpec(dtype=float,min=float(np.nextafter(0.,1.)),default=None,param_role=ParamRole.POLICY))
     return OperatorMetadata(
         name=name,
+        panel_params=("x",),scalar_params=tuple(params[1:]),
         category="robust_statistics",
         description=description,
         param_names=params,
         return_type="series",
         output_unit=output_unit,
-        param_specs=param_specs or {},
+        param_specs={**(param_specs or {}),**specs},
         tags=[
             "robust_statistics", "daily", "pit_safe", "causal", "typed_v2",
             f"signature:{','.join(params)}->series", f"domain:{domain}",
@@ -53,8 +69,36 @@ def _metadata(
 # canonicals default to ``max(5, 0.5 * window)`` finite observations.
 def _auto_min_periods(window: int, min_periods: int | None) -> int:
     if min_periods is not None:
-        return max(1, int(min_periods))
+        return strict_int(min_periods,"min_periods",minimum=1)
     return max(5, int(0.5 * window))
+
+
+def _quantile_spread(valid,lo,hi):
+    magnitude=float(np.max(np.abs(valid)))
+    if magnitude==0.:
+        return 0.
+    unit=valid/magnitude
+    with np.errstate(over="ignore",invalid="ignore"):
+        value=float(np.quantile(unit,hi)-np.quantile(unit,lo))*magnitude
+    return value if np.isfinite(value) else np.nan
+
+def _robust_score(valid,current,center,scale,clip):
+    """Scale coordinates before centering; preserve original mean/MAD policies."""
+    if not np.isfinite(current) or valid.size==0:
+        return np.nan
+    magnitude=float(np.max(np.abs(valid)))
+    if magnitude==0.:
+        return np.nan
+    unit=valid/magnitude
+    location=float(np.median(unit)) if center=="median" else float(np.mean(unit))
+    spread=float(np.std(unit)) if scale=="std" else float(np.median(np.abs(unit-location)))*1.4826
+    if not np.isfinite(spread) or spread<=0.:
+        return np.nan
+    with np.errstate(over="ignore",invalid="ignore",divide="ignore"):
+        value=(current/magnitude-location)/spread
+    if clip is not None:
+        value=float(np.clip(value,-clip,clip))
+    return float(value) if np.isfinite(value) else np.nan
 
 
 def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
@@ -139,7 +183,7 @@ class TsQuantileRange(SeriesOperator):
         min_periods: int | None = None,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
+        w = strict_int(window,"window",minimum=2)
         lo = float(q_low)
         hi = float(q_high)
         if not (0.0 < lo < hi < 1.0):
@@ -150,7 +194,7 @@ class TsQuantileRange(SeriesOperator):
             valid = chunk[np.isfinite(chunk)]
             if valid.size < mp:
                 return np.nan
-            return float(np.quantile(valid, hi) - np.quantile(valid, lo))
+            return _quantile_spread(valid,lo,hi)
 
         return _frame_like(x, _rolling_apply_2d(x.to_numpy(dtype=float), w, _fn, mp))
 
@@ -191,7 +235,7 @@ class TsTrimmedMean(SeriesOperator):
         min_periods: int | None = None,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
+        w = strict_int(window,"window",minimum=2)
         trim = float(trim_ratio)
         if not (0.0 <= trim < 0.5):
             raise ValueError("ts_trimmed_mean requires 0 <= trim_ratio < 0.5")
@@ -208,7 +252,9 @@ class TsTrimmedMean(SeriesOperator):
                 # Falling back to the plain mean silently changes the operator —
                 # return NaN instead (P1-77).
                 return np.nan
-            return float(np.mean(ordered[cut : ordered.size - cut]))
+            selected=ordered[cut : ordered.size - cut]
+            magnitude=float(np.max(np.abs(selected)))
+            return float(np.mean(selected/magnitude))*magnitude if magnitude else 0.
 
         return _frame_like(x, _rolling_apply_2d(x.to_numpy(dtype=float), w, _fn, mp))
 
@@ -227,7 +273,7 @@ class TsRobustZscore(SeriesOperator):
     ``clip`` 非空时将输出截断到 [-clip, clip]。
 
     R11 round-3 #122: this is the *inclusive* baseline — the trailing window
-    ``[t-W, t]`` contains ``x_t`` itself, so an extreme current value shifts the
+    ``[t-W+1, t]`` contains ``x_t`` itself, so an extreme current value shifts the
     median/MAD and then scores itself.  The canonical is renamed to
     ``ts_robust_zscore_inclusive`` (with ``ts_robust_zscore`` kept as a
     back-compat alias) by :func:`_register_robust_zscore_split`; the
@@ -251,7 +297,7 @@ class TsRobustZscore(SeriesOperator):
         clip: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
+        w = strict_int(window,"window",minimum=2)
         center_name = str(center or "median").lower()
         scale_name = str(scale or "mad").lower()
         # Enum validation: an invalid string must fail loudly, never silently
@@ -270,17 +316,7 @@ class TsRobustZscore(SeriesOperator):
             valid = chunk[np.isfinite(chunk)]
             if valid.size == 0:
                 return np.nan
-            center_value = float(np.median(valid)) if center_name == "median" else float(np.mean(valid))
-            if scale_name == "std":
-                spread = float(np.std(valid))
-            else:
-                spread = float(np.median(np.abs(valid - center_value))) * 1.4826
-            if not np.isfinite(spread) or spread <= 0.0:
-                return np.nan
-            value = np.where(spread if np.isfinite(chunk[-1]) else np.nan != 0, (float(chunk[-1]) - center_value) / spread if np.isfinite(chunk[-1]) else np.nan, np.nan)
-            if clip is not None and np.isfinite(value):
-                value = max(-bound, min(bound, value))
-            return value
+            return _robust_score(valid,float(chunk[-1]),center_name,scale_name,None if clip is None else bound)
 
         return _frame_like(x, _rolling_apply_2d(x.to_numpy(dtype=float), w, _fn))
 
@@ -326,7 +362,7 @@ class TsRobustZscorePrior(SeriesOperator):
         min_periods: int | None = None,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
+        w = strict_int(window,"window",minimum=2)
         center_name = str(center or "median").lower()
         scale_name = str(scale or "mad").lower()
         # Enum validation: an invalid string must fail loudly, never silently
@@ -346,17 +382,7 @@ class TsRobustZscorePrior(SeriesOperator):
             valid = prior[np.isfinite(prior)]
             if valid.size < m:
                 return np.nan
-            center_value = float(np.median(valid)) if center_name == "median" else float(np.mean(valid))
-            if scale_name == "std":
-                spread = float(np.std(valid))
-            else:
-                spread = float(np.median(np.abs(valid - center_value))) * 1.4826
-            if not np.isfinite(spread) or spread <= 0.0:
-                return np.nan
-            value = np.where(spread if np.isfinite(x_t) else np.nan != 0, (float(x_t) - center_value) / spread if np.isfinite(x_t) else np.nan, np.nan)
-            if clip is not None and np.isfinite(value):
-                value = max(-bound, min(bound, value))
-            return value
+            return _robust_score(valid,float(x_t),center_name,scale_name,None if clip is None else bound)
 
         return _frame_like(x, _rolling_prior_apply_2d(x.to_numpy(dtype=float), w, _fn, mp))
 
@@ -365,7 +391,7 @@ def _register_robust_zscore_split() -> None:
     """R11 round-3 #122: split ``ts_robust_zscore`` into two canonicals.
 
     * ``ts_robust_zscore_inclusive`` — the historical behaviour (baseline
-      window ``[t-W, t]`` includes ``x_t``), and
+      window ``[t-W+1, t]`` includes ``x_t``), and
     * ``ts_robust_zscore_prior`` — the non-contaminating baseline on
       ``[t-W, t-1]``.
 

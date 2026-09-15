@@ -21,11 +21,48 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
     ParamSpec,
     RelationalParamSpec,
     SeriesOperator,
     register_operator,
 )
+
+_RANK_NAMES = {
+    "relation_hhi", "holder_observed_topk_hhi", "relation_entropy",
+    "relation_topk_sum", "relation_rank_weighted_sum",
+}
+_EVENT_NAMES = {
+    "event_cumulative_return_past", "event_abnormal_return_past",
+    "event_return_since_last", "event_arithmetic_return_sum",
+    "event_log_return_sum", "event_active_count",
+}
+_REL_SCALAR_SPECS = {
+    **{name: {"missing_semantic": ParamSpec(
+        dtype=str, choices=("structural_zero", "outside_top_k", "not_reported", "source_missing", "unknown"),
+        default="outside_top_k", param_role=ParamRole.POLICY,
+    )} for name in _RANK_NAMES},
+    "relation_entry_count": {
+        "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        "missing_policy": ParamSpec(dtype=str, choices=("break",), default="break", param_role=ParamRole.POLICY),
+    },
+    "relation_exit_count": {
+        "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        "missing_policy": ParamSpec(dtype=str, choices=("break",), default="break", param_role=ParamRole.POLICY),
+    },
+    "index_weight_change": {"window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON)},
+    "index_membership_age": {
+        "max_lookback": ParamSpec(dtype=int, min=1, default=None, param_role=ParamRole.HORIZON),
+        "output_mode": ParamSpec(dtype=str, choices=("exact", "lower_bound"), default="exact", searchable=False, param_role=ParamRole.POLICY),
+    },
+    **{name: {
+        "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        "event_effective_lag": ParamSpec(dtype=int, min=0, default=1, param_role=ParamRole.HORIZON),
+    } for name in _EVENT_NAMES},
+    "fin_applicability_mask": {"threshold": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.STATE_THRESHOLD)},
+    "relation_overlap_ratio": {"method": ParamSpec(dtype=str, choices=("jaccard", "overlap"), default="jaccard", param_role=ParamRole.POLICY)},
+    "index_weight": {"normalize": ParamSpec(dtype=bool, default=True, param_role=ParamRole.POLICY)},
+}
 
 
 def _metadata(
@@ -41,6 +78,14 @@ def _metadata(
     relational_specs: list[RelationalParamSpec] | None = None,
     extra_tags: tuple[str, ...] = (),
 ) -> OperatorMetadata:
+    specs = dict(param_specs or {})
+    specs.update(_REL_SCALAR_SPECS.get(name, {}))
+    scalar_params = tuple(specs)
+    panel_params = tuple(p for p in params if p not in specs)
+    if name in _RANK_NAMES and "dynamic_inputs" not in extra_tags:
+        # Ranked aggregation accepts any observed prefix s1..s10 (minimum two),
+        # so the unprovided tail is optional rather than missing required input.
+        extra_tags = (*extra_tags, "dynamic_inputs")
     metadata = OperatorMetadata(
         name=name,
         category=category,
@@ -53,7 +98,9 @@ def _metadata(
             f"unit:{unit}", "cost:1", *extra_tags,
         ],
         output_unit=output_unit,
-        param_specs=dict(param_specs or {}),
+        panel_params=panel_params,
+        scalar_params=scalar_params,
+        param_specs=specs,
         relational_specs=list(relational_specs or []),
     )
     return metadata
@@ -183,6 +230,22 @@ def _rank_values(stacked: np.ndarray, missing_semantic: str) -> np.ndarray:
     # share denominator, and any cell the caller must see as unknown stays NaN)
     return stacked
 
+def _split_rank_args(
+    args: tuple[Any, ...], missing_semantic: str, extras: dict[str, Any]
+) -> tuple[tuple[pd.DataFrame, ...], str]:
+    """Accept the registry's positional form for the trailing scalar policy."""
+    positional_panels = tuple(v for v in args if isinstance(v, pd.DataFrame))
+    supplied = {f"s{i}": value for i, value in enumerate(positional_panels, start=1)}
+    supplied.update({key: value for key, value in extras.items() if key.startswith("s")})
+    keyword_panels = tuple(
+        supplied[f"s{i}"] for i in range(1, 11) if f"s{i}" in supplied
+    )
+    if keyword_panels:
+        args = keyword_panels
+    if args and not isinstance(args[-1], pd.DataFrame):
+        return tuple(args[:-1]), str(args[-1])
+    return tuple(args), missing_semantic
+
 
 # ---------------------------------------------------------------------------
 # Cross-sectional / rank aggregation operators (scope: cs)
@@ -231,6 +294,7 @@ class RelationHhi(SeriesOperator):
     )
 
     def _calculate_series(self, *args: pd.DataFrame, missing_semantic: str = "outside_top_k", **_: Any) -> pd.DataFrame:
+        args, missing_semantic = _split_rank_args(args, missing_semantic, _)
         if len(args) < 2:
             raise ValueError("relation_hhi requires at least two ranked panels")
         base = args[0]
@@ -283,6 +347,7 @@ class HolderObservedTopkHhi(SeriesOperator):
     )
 
     def _calculate_series(self, *args: pd.DataFrame, missing_semantic: str = "outside_top_k", **_: Any) -> pd.DataFrame:
+        args, missing_semantic = _split_rank_args(args, missing_semantic, _)
         if len(args) < 2:
             raise ValueError("holder_observed_topk_hhi requires at least two ranked panels")
         base = args[0]
@@ -328,6 +393,7 @@ class RelationEntropy(SeriesOperator):
     )
 
     def _calculate_series(self, *args: pd.DataFrame, missing_semantic: str = "outside_top_k", **_: Any) -> pd.DataFrame:
+        args, missing_semantic = _split_rank_args(args, missing_semantic, _)
         if len(args) < 2:
             raise ValueError("relation_entropy requires at least two ranked panels")
         base = args[0]
@@ -377,6 +443,7 @@ class RelationTopkSum(SeriesOperator):
     )
 
     def _calculate_series(self, *args: pd.DataFrame, missing_semantic: str = "outside_top_k", **_: Any) -> pd.DataFrame:
+        args, missing_semantic = _split_rank_args(args, missing_semantic, _)
         if len(args) < 2:
             raise ValueError("relation_topk_sum requires at least two ranked panels")
         base = args[0]
@@ -421,6 +488,7 @@ class RelationRankWeightedSum(SeriesOperator):
     )
 
     def _calculate_series(self, *args: pd.DataFrame, missing_semantic: str = "outside_top_k", **_: Any) -> pd.DataFrame:
+        args, missing_semantic = _split_rank_args(args, missing_semantic, _)
         if len(args) < 2:
             raise ValueError("relation_rank_weighted_sum requires at least two ranked panels")
         base = args[0]

@@ -1,0 +1,1 @@
+{"command": ["/usr/bin/python3", "-m", "pytest", "-q", "factor_engine/tests/operators/test_r19_ts_ops.py", "-k", "ts_cov_var_std or ts_std_finite_extreme or ts_kurt_is_scale or ts_skew"], "returncode": 0, "sampled_peak_family_rss_bytes": 655163392, "sampling_seconds": 0.1, "seconds": 53.17157413484529, "test_guard_reason": null, "hard_memory_cap": false}

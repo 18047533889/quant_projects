@@ -181,6 +181,64 @@ class LazyColumnBundle:
         have = set(self.physical_columns)
         return [c for c in physical if c not in have]
 
+    def _leased_copy(self, value: Any, *, lease_id: str) -> tuple[Any, int] | None:
+        """Return a detached snapshot whose physical owners hold a budget lease."""
+        if self._cache_broker is None:
+            return None
+        from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
+        from factor_engine.runtime.resource_governor import estimate_object_bytes
+        from factor_engine.storage.sources.data_access_source import DataAccessSource
+
+        nbytes = estimate_object_bytes(value)
+        if nbytes <= 0 or nbytes > self.materialized_budget:
+            return None
+        lease = self._cache_broker.acquire_memory(
+            MemoryLeaseKind.SOURCE_READ, nbytes, lease_id=lease_id,
+        )
+        if lease is None:
+            return None
+        try:
+            copied = value.copy(deep=True)
+            index = getattr(value, "index", None)
+            if index is not None:
+                copied.index = index.copy(deep=True)
+        except BaseException:
+            lease.release()
+            raise
+        owners = DataAccessSource._physical_cache_owners(copied)
+        if not owners:
+            lease.release()
+            return None
+        token = id(lease)
+        state = {"remaining": len(owners), "lease": lease,
+                 "lock": RLock(), "finalizers": ()}
+        self._live_cache_leases[token] = state
+        bundle_ref = weakref.ref(self)
+
+        def release_owner(tok=token, owner_state=state, ref=bundle_ref):
+            with owner_state["lock"]:
+                owner_state["remaining"] -= 1
+                if owner_state["remaining"] != 0:
+                    return
+                owner_state["lease"].release()
+            bundle = ref()
+            if bundle is not None:
+                with bundle._materialize_lock:
+                    bundle._live_cache_leases.pop(tok, None)
+
+        registered = []
+        try:
+            for owner in owners:
+                registered.append(weakref.finalize(owner, release_owner))
+            state["finalizers"] = tuple(registered)
+        except Exception:
+            for finalizer in registered:
+                finalizer.detach()
+            self._live_cache_leases.pop(token, None)
+            lease.release()
+            return None
+        return copied, token
+
     def materialize_columns(
         self, physical_columns: list[str], *,
         output_names: dict[str, str] | None = None,
@@ -208,8 +266,22 @@ class LazyColumnBundle:
             request = {}
             for src in names:
                 if src in self._materialized:
-                    request[src] = self._materialized[src]
-                    self._materialized.move_to_end(src)
+                    cached = self._materialized[src]
+                    leased = self._leased_copy(
+                        cached,
+                        lease_id=(f"lazy-column-output:{id(self)}:{src}:"
+                                  f"{time.monotonic_ns()}"),
+                    )
+                    if leased is None:
+                        # A mutable duplicate without a lease is forbidden.
+                        # Transfer residency to the caller and collect again
+                        # on the next request instead of exceeding authority.
+                        request[src] = cached
+                        self._materialized.pop(src, None)
+                        self._cache_leases.pop(src, None)
+                    else:
+                        request[src] = leased[0]
+                        self._materialized.move_to_end(src)
             pending = [src for src in names if src not in request]
             if pending:
                 select_cols = list(dict.fromkeys(
@@ -227,53 +299,27 @@ class LazyColumnBundle:
                 request.update(fetched)
                 budget = self.materialized_budget
                 if budget > 0 and self._cache_broker is not None:
-                    from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
-                    from factor_engine.runtime.resource_governor import estimate_object_bytes
                     for src in pending:
-                        value = fetched[src]
-                        nbytes = estimate_object_bytes(value)
-                        if nbytes <= 0 or nbytes > budget:
-                            continue
-                        from factor_engine.storage.sources.data_access_source import DataAccessSource
-                        owners = DataAccessSource._physical_cache_owners(value)
-                        if not owners:
-                            continue
-                        lease = self._cache_broker.acquire_memory(
-                            MemoryLeaseKind.SOURCE_READ, nbytes,
+                        cached = self._leased_copy(
+                            fetched[src],
                             lease_id=(f"lazy-column-bundle:{id(self)}:{src}:"
                                       f"{time.monotonic_ns()}"),
                         )
-                        if lease is None:
+                        if cached is None:
                             continue
-                        self._materialized[src] = value
-                        token = id(lease)
-                        state = {"remaining": len(owners), "lease": lease,
-                                 "lock": RLock(), "finalizers": ()}
-                        self._live_cache_leases[token] = state
-                        bundle_ref = weakref.ref(self)
-                        def release_owner(tok=token, owner_state=state, ref=bundle_ref):
-                            with owner_state["lock"]:
-                                owner_state["remaining"] -= 1
-                                if owner_state["remaining"] != 0:
-                                    return
-                                owner_state["lease"].release()
-                            bundle = ref()
-                            if bundle is not None:
-                                with bundle._materialize_lock:
-                                    bundle._live_cache_leases.pop(tok, None)
-                        registered = []
-                        try:
-                            for owner in owners:
-                                registered.append(weakref.finalize(owner, release_owner))
-                            state["finalizers"] = tuple(registered)
-                        except Exception:
-                            for finalizer in registered:
-                                finalizer.detach()
-                            self._materialized.pop(src, None)
-                            self._live_cache_leases.pop(token, None)
-                            lease.release()
+                        output = self._leased_copy(
+                            fetched[src],
+                            lease_id=(f"lazy-column-output:{id(self)}:{src}:"
+                                      f"{time.monotonic_ns()}"),
+                        )
+                        if output is None:
+                            # The one admitted detached owner belongs to the
+                            # caller; without a second lease there is no cache.
+                            request[src] = cached[0]
                             continue
-                        self._cache_leases[src] = token
+                        request[src] = output[0]
+                        self._materialized[src] = cached[0]
+                        self._cache_leases[src] = cached[1]
             # Budget may shrink between waves even when every column is a hit.
             # Request references already own all results before cache eviction.
             self._evict_to(self.materialized_budget)

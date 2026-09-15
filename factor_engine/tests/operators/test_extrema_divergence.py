@@ -36,7 +36,7 @@ def test_ts_extrema_divergence_strength_basic() -> None:
 
     op = _op("ts_extrema_divergence_strength")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -50,7 +50,7 @@ def test_ts_extrema_divergence_strength_handles_nans() -> None:
 
     op = _op("ts_extrema_divergence_strength")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -64,8 +64,8 @@ def test_ts_extrema_divergence_strength_deterministic() -> None:
 
     op = _op("ts_extrema_divergence_strength")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, x)
+        result2 = op.calculate(x, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic
@@ -83,7 +83,7 @@ def test_ts_extrema_confirmation_rate_basic() -> None:
 
     op = _op("ts_extrema_confirmation_rate")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -97,7 +97,7 @@ def test_ts_extrema_confirmation_rate_handles_nans() -> None:
 
     op = _op("ts_extrema_confirmation_rate")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -111,8 +111,8 @@ def test_ts_extrema_confirmation_rate_deterministic() -> None:
 
     op = _op("ts_extrema_confirmation_rate")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, x)
+        result2 = op.calculate(x, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic

@@ -38,7 +38,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _LAGS = (1, 2, 4, 8)
@@ -63,6 +63,11 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         # window are used as aligned finite pairs, so at most ``window`` rows
         # are consumed (gaps reduce the pair count, never the row requirement).
         window_semantics="max_rows",
+        input_units={"x": "level"},
+        output_unit="dimensionless",
+        panel_params=("x",),
+        panel_arity=1,
+        scalar_params=tuple(params[1:]),
     )
 
 
@@ -76,6 +81,14 @@ def _check_window(window: int) -> int:
 _MIN_PAIRS_PER_LAG = 8
 _MIN_LAGS_FOR_FIT = 3
 _MIN_SCALING_R2 = 0.9
+
+_MULTIFRACTAL_WINDOW_SPEC = ParamSpec(
+    dtype=int,
+    min=40,
+    default=120,
+    history_semantics="max_rows",
+    param_role=ParamRole.HORIZON,
+)
 
 
 def _common_cohort(vals: np.ndarray, mode: str = "trailing_current_contiguous") -> np.ndarray:
@@ -206,7 +219,9 @@ def _hurst_spread_series(x2d: np.ndarray, window: int) -> np.ndarray:
             if r + 1 < w:
                 continue
             i0 = r - w + 1
-            chunk = col[i0 : r + 1]
+            chunk = _stable_dimensionless_chunk(col[i0 : r + 1])
+            if chunk is None:
+                continue
             h1 = _hurst_generalized(chunk, 1.0)
             h4 = _hurst_generalized(chunk, 4.0)
             if np.isfinite(h1) and np.isfinite(h4):
@@ -217,6 +232,20 @@ def _hurst_spread_series(x2d: np.ndarray, window: int) -> np.ndarray:
 # Reviewed moment-order grid for the spectrum (audit #89): large positive q is
 # dominated by single extreme increments and is not robust.
 _Q_GRID = np.array([0.5, 1.0, 2.0, 3.0, 4.0])
+
+
+def _stable_dimensionless_chunk(chunk: np.ndarray) -> np.ndarray | None:
+    """Scale a raw window without moving or compressing missing observations."""
+    raw = np.asarray(chunk, dtype=float)
+    finite = np.isfinite(raw)
+    if not np.any(finite):
+        return None
+    magnitude = float(np.max(np.abs(raw[finite])))
+    if not np.isfinite(magnitude) or magnitude == 0.0:
+        return None
+    out = raw.copy()
+    out[finite] = raw[finite] / magnitude
+    return out
 
 
 def _spectrum_width_series(x2d: np.ndarray, window: int) -> np.ndarray:
@@ -239,7 +268,9 @@ def _spectrum_width_series(x2d: np.ndarray, window: int) -> np.ndarray:
             if r + 1 < w:
                 continue
             i0 = r - w + 1
-            chunk = col[i0 : r + 1]
+            chunk = _stable_dimensionless_chunk(col[i0 : r + 1])
+            if chunk is None:
+                continue
             hs = np.asarray([_hurst_generalized(chunk, q_) for q_ in qs], dtype=float)
             ok = np.isfinite(hs)
             # Audit #90-style floor: a quadratic tau(q) has 3 parameters; fitting
@@ -275,7 +306,9 @@ def _curvature_series(x2d: np.ndarray, window: int) -> np.ndarray:
             if r + 1 < w:
                 continue
             i0 = r - w + 1
-            chunk = col[i0 : r + 1]
+            chunk = _stable_dimensionless_chunk(col[i0 : r + 1])
+            if chunk is None:
+                continue
             hs = np.asarray([_hurst_generalized(chunk, q_) for q_ in qs], dtype=float)
             ok = np.isfinite(hs)
             # Audit #90: a quadratic fit has 3 parameters; fitting to only 3
@@ -353,6 +386,7 @@ class TsGeneralizedHurstSpreadQ1Q4(SeriesOperator):
         unit="ratio",
         cost=7,
     )
+    metadata.param_specs = {"window": _MULTIFRACTAL_WINDOW_SPEC}
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 120, **_: Any) -> pd.DataFrame:
         w = _check_window(window)
@@ -382,6 +416,7 @@ class TsMultifractalSpectrumWidth(SeriesOperator):
         unit="ratio",
         cost=8,
     )
+    metadata.param_specs = {"window": _MULTIFRACTAL_WINDOW_SPEC}
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 120, **_: Any) -> pd.DataFrame:
         w = _check_window(window)
@@ -410,6 +445,7 @@ class TsMultifractalCurvature(SeriesOperator):
         unit="ratio",
         cost=8,
     )
+    metadata.param_specs = {"window": _MULTIFRACTAL_WINDOW_SPEC}
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 120, **_: Any) -> pd.DataFrame:
         w = _check_window(window)

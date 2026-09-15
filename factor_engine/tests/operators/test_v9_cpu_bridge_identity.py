@@ -35,13 +35,23 @@ source_callable = polars_peer._group_peer_beta_deviation
     subprocess.run([sys.executable, "-c", setup + COMMON], check=True)
 
 
-def test_expectile_bridge_has_content_bound_non_native_spec():
+def test_expectile_numpy_kernel_has_transitive_source_bound_spec():
     setup = r'''
+import hashlib
+from pathlib import Path
 from factor_engine.cleaned_operators.polars_native.ts_advanced_batch1 import TSExpectileBetaPolarsNative
-op = TSExpectileBetaPolarsNative()
-source_callable = TSExpectileBetaPolarsNative._calculate_series
+from factor_engine.cleaned_operators import advanced_expectile, rolling_pack
+from factor_engine.cleaned_operators.common import expectile_native
+from factor_engine.backend.contracts import ExecutionKind
+from factor_engine.backend.polars_backend_kind import get_physical_spec
+spec=get_physical_spec(TSExpectileBetaPolarsNative())
+assert spec.execution_kind is ExecutionKind.POLARS_NUMPY_KERNEL
+assert not spec.is_production_eligible()
+expected=hashlib.sha256(Path(advanced_expectile.__file__).read_bytes()
+    +Path(rolling_pack.__file__).read_bytes()+Path(expectile_native.__file__).read_bytes()).hexdigest()
+assert spec.implementation_source_hash==expected
 '''
-    subprocess.run([sys.executable, "-c", setup + COMMON], check=True)
+    subprocess.run([sys.executable, "-c", setup], check=True)
 
 
 def test_declaration_payload_hashes_are_reproducible():

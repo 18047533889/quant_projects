@@ -453,6 +453,7 @@ def test_hampel_warmup_period(registry):
 
 def test_hampel_parameter_validation(registry):
     """验证参数校验。"""
+    from factor_engine.backend.operator_errors import OperatorParameterError
     dates = pd.date_range("2020-01-01", periods=6, freq="D")
     data = pd.DataFrame({"A": [1.0] * 6}, index=dates)
 
@@ -465,15 +466,15 @@ def test_hampel_parameter_validation(registry):
         op.calculate(data, window=1)
 
     # n_sigma <= 0 应报错
-    with pytest.raises(ValueError, match=r"(?:ts_hampel_filter_causal\.n_sigma \[runtime\]: n_sigma must be >= 1\.0|ts_hampel_filter_causal requires n_sigma > 0, got 0\.0)"):
+    with pytest.raises(OperatorParameterError, match="n_sigma"):
         op.calculate(data, window=5, n_sigma=0.0)
 
     # scale_floor <= 0 应报错
-    with pytest.raises(ValueError, match="scale_floor > 0"):
+    with pytest.raises(OperatorParameterError, match="scale_floor"):
         op.calculate(data, window=5, scale_floor=0.0)
 
     # 无效的 replacement 应报错
-    with pytest.raises(ValueError, match="replacement must be"):
+    with pytest.raises(OperatorParameterError, match="replacement"):
         op.calculate(data, window=5, replacement="invalid")
 
 
@@ -686,7 +687,8 @@ def test_super_smoother_registration_contract_metadata(registry):
     assert contract.role.value == "low_pass"
     assert contract.causal is True
     assert contract.stateful is True
-    assert contract.checkpointable is True
+    # No serializer/restore kernel exists yet; the runtime requires full replay.
+    assert contract.checkpointable is False
     assert contract.time_shard_safe is False
 
 
@@ -806,7 +808,7 @@ def test_super_smoother_parameter_validation(registry):
     meta = op.metadata
 
     # period < 3 应报错（两极滤波器不稳定）
-    with pytest.raises(ValueError, match="period >= 3"):
+    with pytest.raises(ValueError, match=r"period.*>= 3"):
         op.calculate(data, period=2)
 
 
@@ -858,7 +860,8 @@ def test_kama_registration(registry):
     assert contract.role.value == "adaptive_low_pass"
     assert contract.causal is True
     assert contract.stateful is True
-    assert contract.checkpointable is True
+    # KAMA restoration needs both recursive output and ER input-ring history.
+    assert contract.checkpointable is False
 
 
 def test_kama_high_er_follows_fast(registry):
@@ -1416,8 +1419,10 @@ def test_butterworth_lowpass_registration(registry):
     assert contract.role.value == "low_pass"
     assert contract.causal is True
     assert contract.stateful is True
-    assert contract.checkpointable is True
+    # No serialized SOS-state adapter exists; execution requires full replay.
+    assert contract.checkpointable is False
     assert contract.time_shard_safe is False
+    assert contract.lag_class == "variable"
 
 
 def test_butterworth_stronger_attenuation_than_sma(registry):
@@ -1455,7 +1460,7 @@ def test_butterworth_stronger_attenuation_than_sma(registry):
 def test_butterworth_causal_forward_only(registry):
     """验证严格因果性：只使用过去和当前观测，禁止 filtfilt。
 
-    阶跃响应应单向平滑到目标值，无超前响应。
+    阶跃响应应匹配声明的数字 Butterworth SOS 递推且无超前响应。
     """
     dates = pd.date_range("2020-01-01", periods=100, freq="D")
     # 阶跃信号：前50个点为0，后50个点为10
@@ -1474,9 +1479,17 @@ def test_butterworth_causal_forward_only(registry):
     # 因果滤波器会有延迟
     assert result.iloc[50, 0] < 10.0, "阶跃时刻输出应滞后"
 
-    # 阶跃后：逐渐收敛到目标值
-    assert result.iloc[70, 0] > result.iloc[55, 0], "输出应逐渐上升"
-    assert result.iloc[-1, 0] > 8.0, "最终应接近目标值10.0"
+    # A causal Butterworth step response may overshoot; compare against the
+    # declared fs=1.0 SOS recurrence instead of inventing monotonicity.
+    from scipy import signal as scipy_signal
+    sos = scipy_signal.butter(2, 1.0 / 10.0, fs=1.0, btype="low", output="sos")
+    expected, _ = scipy_signal.sosfilt(
+        sos, signal, zi=scipy_signal.sosfilt_zi(sos) * signal[0]
+    )
+    np.testing.assert_allclose(result.iloc[:, 0], expected, rtol=1e-12, atol=1e-12)
+    assert result.iloc[-1, 0] == pytest.approx(10.0, abs=1e-8)
+    prefix = op.calculate(data.iloc[:60], cutoff_period=10, order=2)
+    pd.testing.assert_frame_equal(result.iloc[:60], prefix)
 
 
 def test_butterworth_stateful_recursive(registry):

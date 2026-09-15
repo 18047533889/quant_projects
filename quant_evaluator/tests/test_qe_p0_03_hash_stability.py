@@ -62,7 +62,8 @@ class _Color(enum.Enum):
 digest = {
     "ICSeriesArtifact": hash(ICSeriesArtifact(values=vals)),
     "ExposureArtifact": hash(ExposureArtifact(values=vals)),
-    "ProbePortfolioArtifact": hash(ProbePortfolioArtifact(values=vals)),
+    "ProbePortfolioArtifact": hash(ProbePortfolioArtifact(
+        values=vals, time_index=("d1", "d2"), factor_ids=("f1", "f2", "f3"))),
     "QuantileReturnArtifact": hash(QuantileReturnArtifact(values=vals, n_quantiles=2)),
     "ScalarMetricArtifact": hash(
         ScalarMetricArtifact(

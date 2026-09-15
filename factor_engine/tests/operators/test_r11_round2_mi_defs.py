@@ -11,10 +11,11 @@ Covers the P0 definition fixes in ``cleaned_operators.nonlinear_dependence``:
   ``lag < window`` gate; ``lag=1.9`` (previously silently truncated to 1) and
   ``lag == window`` raise.
 * #16 — ``min_periods`` is a strict lower bound (``min=10``) on
-  ts_distance_corr / ts_distance_cov / ts_mutual_information /
+  ts_distance_corr / ts_distance_cov / split mutual-information identities /
   ts_lagged_mutual_information; the old ``max(10, int(min_periods))`` clamp
   (which silently turned 2..10 into 10 — a fake parameter interval) is removed.
-* #17 — ``ts_mutual_information.normalized`` is a strict bool (only True/False);
+* #17 — normalized MI and nats MI are distinct identities; the legacy switch
+  is rejected instead of silently changing output units;
   the old ``bool(normalized)`` truthiness coercion (1/2/"False"/-1) is gone.
 * #18 — ``ts_distance_cov`` declares its output unit as the sqrt-product form
   ``sqrt(unit(x)*unit(y))`` so cross-scale mixes (price x turnover vs return x
@@ -141,22 +142,21 @@ def test_min_periods_below_10_raises(canonical):
 
 
 # ---------------------------------------------------------------------------
-# #17 — normalized is a strict bool (only True/False)
+# #17 — normalized and nats are distinct semantic identities
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize(
     "bad", [1, 0, 2, -1, 1.0, "False", "true", "0", np.bool_(True)]
 )
-def test_mi_normalized_strict_bool(bad):
+def test_legacy_mi_normalized_switch_is_not_silently_accepted(bad):
     rng = np.random.default_rng(3)
     n = 80
     x = _frame(rng.normal(size=(n, 2)))
     y = _frame(rng.normal(size=(n, 2)))
     op = _op("ts_mutual_information")
-    with pytest.raises((OperatorParameterError, ValueError), match="boolean"):
+    with pytest.raises((OperatorParameterError, ValueError, TypeError), match="normalized"):
         op.calculate(x, y, window=40, normalized=bad)
-    # Both strict booleans are accepted.
-    out_true = op.calculate(x, y, window=40, normalized=True)
-    out_false = op.calculate(x, y, window=40, normalized=False)
+    out_true = _op("ts_normalized_mutual_information").calculate(x, y, window=40)
+    out_false = _op("ts_mutual_information_nats").calculate(x, y, window=40)
     assert out_true.shape == x.shape
     assert out_false.shape == x.shape
     assert np.isfinite(out_true.to_numpy(dtype=float)).any()
@@ -168,11 +168,9 @@ def test_mi_normalized_accepts_bool_literals():
     n = 80
     x = _frame(rng.normal(size=(n, 2)))
     y = _frame(rng.normal(size=(n, 2)))
-    op = _op("ts_mutual_information")
-    assert op.metadata.param_specs["normalized"].dtype is bool
-    # Strict bool type: bool is a subclass of int, so a plain ``int`` input must
-    # NOT be accepted through the bool path.
-    out = op.calculate(x, y, window=40, normalized=True)
+    op = _op("ts_normalized_mutual_information")
+    assert "normalized" not in op.metadata.param_names
+    out = op.calculate(x, y, window=40)
     assert out.shape == x.shape
 
 

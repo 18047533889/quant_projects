@@ -37,6 +37,8 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
+    ParamSpec,
     SeriesOperator,
     register_operator,
     strict_int_runtime,
@@ -47,7 +49,7 @@ from factor_engine.cleaned_operators.intraday._core import (
     SessionAggregationOperator,
     as_panel,
     daily_agg,
-    metadata,
+    metadata as _core_metadata,
     minute_of_day,
     register_surface,
     require_same_session_grid,
@@ -60,6 +62,41 @@ _AFTERNOON = (780, 900)  # 13:00 .. 15:00 Shanghai minute-of-day
 _MAX_GAP_MINUTES = 10
 
 _CANONICALS: list[str] = []
+
+_TZ = ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY)
+_POLICY = ParamRole.POLICY
+_HORIZON = ParamRole.HORIZON
+
+
+def _ps(dtype=None, *, default=None, min=None, choices=None, role=_POLICY):
+    return ParamSpec(dtype=dtype, default=default, min=min, choices=choices, param_role=role)
+
+
+_STATE_CONTRACTS = {
+    "intra_state_count": (("state",), {"target": _ps(float, default=None), "window_days": _ps(int, default=1, min=1, role=_HORIZON), "session_tz": _TZ}),
+    "intra_state_sum": (("x", "state"), {"target": ParamSpec(dtype=float, param_role=_POLICY), "window_days": _ps(int, default=1, min=1, role=_HORIZON), "session_tz": _TZ}),
+    "intra_state_vwap": (("price", "volume", "state"), {"target": ParamSpec(dtype=float, param_role=_POLICY), "window_days": _ps(int, default=1, min=1, role=_HORIZON), "session_tz": _TZ}),
+    "intra_state_interval_moment": (("state",), {"target": ParamSpec(dtype=float, param_role=_POLICY), "moment": _ps(str, default="std", choices=("std", "skew", "kurtosis")), "window_days": _ps(int, default=20, min=1, role=_HORIZON), "min_events": _ps(int, default=4, min=1, role=ParamRole.ESTIMATOR_RESOLUTION), "session_tz": _TZ}),
+    "intra_state_follow_ratio": (("x", "state"), {"target": ParamSpec(dtype=float, param_role=_POLICY), "lead_bars": _ps(int, default=1, min=1, role=_HORIZON), "window_days": _ps(int, default=20, min=1, role=_HORIZON), "session_tz": _TZ}),
+    "intra_state_follow_beta": (("x", "state"), {"target": ParamSpec(dtype=float, param_role=_POLICY), "lead_bars": _ps(int, default=1, min=1, role=_HORIZON), "window_days": _ps(int, default=20, min=1, role=_HORIZON), "min_events": _ps(int, default=8, min=1, role=ParamRole.ESTIMATOR_RESOLUTION), "session_tz": _TZ}),
+    "intra_state_follow_corr": (("x", "state"), {"target": ParamSpec(dtype=float, param_role=_POLICY), "lead_bars": _ps(int, default=1, min=1, role=_HORIZON), "window_days": _ps(int, default=20, min=1, role=_HORIZON), "min_events": _ps(int, default=8, min=1, role=ParamRole.ESTIMATOR_RESOLUTION), "session_tz": _TZ}),
+    "intra_state_pair_same_slot_corr": (("state_a", "state_b"), {"target_a": ParamSpec(dtype=float, param_role=_POLICY), "target_b": ParamSpec(dtype=float, param_role=_POLICY), "window_days": _ps(int, default=20, min=1, role=_HORIZON), "min_slots": _ps(int, default=8, min=1, role=ParamRole.ESTIMATOR_RESOLUTION), "session_tz": _TZ}),
+    "intra_state_dwell_stats": (("state",), {"target_state": _ps(float, default=None), "output": _ps(str, default="mean", choices=("mean", "max", "cv", "last", "share")), "min_slots": _ps(int, default=20, min=1, role=ParamRole.ESTIMATOR_RESOLUTION), "session_tz": _TZ}),
+    "intra_state_transition_entropy": (("state",), {"min_slots": _ps(int, default=30, min=1, role=ParamRole.ESTIMATOR_RESOLUTION), "normalize": _ps(bool, default=True), "include_self": _ps(bool, default=True), "session_tz": _TZ}),
+    "intra_neighbor_event_class": (("event_mask",), {"radius": _ps(int, default=1, min=1, role=_HORIZON), "isolated_code": _ps(int, default=1), "clustered_code": _ps(int, default=2), "session_tz": _TZ}),
+    "intra_range_gap_flag": (("high", "low", "event_mask"), {"neighbor_bars": _ps(int, default=1, min=1, role=_HORIZON), "session_tz": _TZ}),
+}
+
+
+def metadata(name, description, params, **kwargs):
+    panels, scalars = _STATE_CONTRACTS[name]
+    declared = [*params]
+    if "session_tz" not in declared:
+        declared.append("session_tz")
+    return _core_metadata(
+        name, description, declared, panel_params=panels,
+        scalar_params=scalars, **kwargs,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -316,15 +353,23 @@ def _bar_metadata(name: str, description: str, params: list[str], *, unit: str) 
         f"signature:{','.join(params)}->series", f"unit:{unit}",
         "cost:3", "domain:intraday",
     ]
+    panels, scalars = _STATE_CONTRACTS[name]
+    declared = [*params]
+    if "session_tz" not in declared:
+        declared.append("session_tz")
     return OperatorMetadata(
         name=name,
         category="intraday_microstructure",
         description=description,
-        param_names=params,
+        param_names=declared,
         return_type="series",
         tags=tags,
         input_grain="minute",
         output_grain="minute",
+        panel_params=panels,
+        panel_arity=len(panels),
+        scalar_params=tuple(scalars),
+        param_specs=scalars,
     )
 
 

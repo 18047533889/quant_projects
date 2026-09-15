@@ -27,6 +27,7 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
     ParamSpec,
     SeriesOperator,
     register_operator,
@@ -155,8 +156,8 @@ class HMA(SeriesOperator):
         ["x", "window", "rounding"],
         unit="price",
         param_specs={
-            "window": ParamSpec(dtype=int, min=2),
-            "rounding": ParamSpec(dtype=str, choices=("floor", "round")),
+            "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+            "rounding": ParamSpec(dtype=str, choices=("floor", "round"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -269,10 +270,10 @@ class QQE(SeriesOperator):
         ["x", "length", "smooth", "factor", "output"],
         unit="level",
         param_specs={
-            "length": ParamSpec(dtype=int, min=2),
-            "smooth": ParamSpec(dtype=int, min=1),
-            "factor": ParamSpec(dtype=float, min=1e-6),
-            "output": ParamSpec(dtype=str, choices=("line", "basis", "long", "short", "trend")),
+            "length": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+            "smooth": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            "factor": ParamSpec(dtype=float, min=1e-6, param_role=ParamRole.STATE_THRESHOLD),
+            "output": ParamSpec(dtype=str, choices=("line", "basis", "long", "short", "trend"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -368,7 +369,7 @@ class RSX(SeriesOperator):
         "Jurik 低滞后 RSI：三阶双极点级联平滑的有符号/绝对变化比。",
         ["x", "length"],
         unit="level",
-        param_specs={"length": ParamSpec(dtype=int, min=2)},
+        param_specs={"length": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON)},
     )
 
     def _calculate_series(self, x: pd.DataFrame, length: int = 14, **_: Any) -> pd.DataFrame:
@@ -418,9 +419,9 @@ class ALMA(SeriesOperator):
         ["x", "window", "offset", "sigma"],
         unit="price",
         param_specs={
-            "window": ParamSpec(dtype=int, min=2),
-            "offset": ParamSpec(dtype=float, min=0.0, max=1.0),
-            "sigma": ParamSpec(dtype=float, min=1e-6),
+            "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+            "offset": ParamSpec(dtype=float, min=0.0, max=1.0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "sigma": ParamSpec(dtype=float, min=1e-6, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
         },
     )
 
@@ -467,10 +468,10 @@ class CoppockCurve(SeriesOperator):
         ["close", "roc1", "roc2", "wma_window", "roc_mode"],
         unit="level",
         param_specs={
-            "roc1": ParamSpec(dtype=int, min=1),
-            "roc2": ParamSpec(dtype=int, min=1),
-            "wma_window": ParamSpec(dtype=int, min=1),
-            "roc_mode": ParamSpec(dtype=str, choices=("pct", "log")),
+            "roc1": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            "roc2": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            "wma_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            "roc_mode": ParamSpec(dtype=str, choices=("pct", "log"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -515,8 +516,8 @@ class ElderRay(SeriesOperator):
         ["high", "low", "close", "ema", "output"],
         unit="price",
         param_specs={
-            "ema": ParamSpec(dtype=int, min=1),
-            "output": ParamSpec(dtype=str, choices=("bull", "bear", "spread")),
+            "ema": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            "output": ParamSpec(dtype=str, choices=("bull", "bear", "spread"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -627,10 +628,10 @@ class FisherTransform(SeriesOperator):
         ["high", "low", "window", "smooth", "signal_smooth", "output"],
         unit="level",
         param_specs={
-            "window": ParamSpec(dtype=int, min=2),
-            "smooth": ParamSpec(dtype=float, min=0.0, max=1.0),
-            "signal_smooth": ParamSpec(dtype=float, min=0.0, max=1.0),
-            "output": ParamSpec(dtype=str, choices=("value", "signal", "trigger")),
+            "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+            "smooth": ParamSpec(dtype=float, min=0.0, max=1.0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "signal_smooth": ParamSpec(dtype=float, min=0.0, max=1.0, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "output": ParamSpec(dtype=str, choices=("value", "signal", "trigger"), searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -670,4 +671,3 @@ def _register_surface() -> None:
 
 
 _register_surface()
-

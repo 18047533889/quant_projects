@@ -48,6 +48,7 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
     ParamSpec,
     RelationalParamSpec,
     SeriesOperator,
@@ -88,6 +89,14 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> O
         ],
         output_unit=output_unit,
     )
+
+
+def _declare(metadata: OperatorMetadata, specs: dict[str, ParamSpec]) -> OperatorMetadata:
+    metadata.panel_params = ("x", "y")
+    metadata.panel_arity = 2
+    metadata.scalar_params = tuple(p for p in metadata.param_names if p not in {"x", "y"})
+    metadata.param_specs = specs
+    return metadata
 
 
 def _double_center(a: np.ndarray) -> np.ndarray:
@@ -286,8 +295,15 @@ def _value_bins(values: np.ndarray, bins: int) -> np.ndarray:
     stay empty under heavy ties — empty bins contribute 0 to the contingency and
     are handled stably; edges are recomputed from the current window only.
     """
-    cuts = np.quantile(values, np.linspace(0.0, 1.0, bins + 1)[1:-1])
-    bucket = np.searchsorted(cuts, values, side="right")
+    # Quantiles depend only on ordering.  Normalize first so interpolation
+    # between opposite-sign values near float_max cannot overflow.
+    magnitude = float(np.max(np.abs(values)))
+    if not np.isfinite(magnitude) or magnitude == 0.0:
+        scaled = values
+    else:
+        scaled = values / magnitude
+    cuts = np.quantile(scaled, np.linspace(0.0, 1.0, bins + 1)[1:-1])
+    bucket = np.searchsorted(cuts, scaled, side="right")
     return np.clip(bucket.astype(np.int64), 0, bins - 1)
 
 
@@ -342,46 +358,25 @@ def _quantile_hist_mi(
     return float(min(1.0, max(0.0, mi / denom)))
 
 
-@register_operator(
-    name="ts_mutual_information",
-    category="time_series_risk",
-    business_category="time_series_risk",
-    canonical="ts_mutual_information",
-    source="nonlinear_dependence")
-class TsMutualInformation(SeriesOperator):
-    """互信息（分位数直方图估计）：normalized=True 输出 [0,1] 无量纲；否则为 nats。"""
-
-    metadata = _metadata(
-        "ts_mutual_information",
-        "互信息（rank 分位数直方图 + 可选 Miller–Madow 有限样本校正）。"
-        " 原始输出单位为 nats；normalized=True 时按 min(Hx,Hy) 归一为 [0,1] 无量纲比值。",
-        ["x", "y", "window", "estimator", "bins", "min_periods", "normalized", "bias_correction"],
-        unit="nats",
-    )
-    metadata.param_specs = {
-        "bias_correction": ParamSpec(dtype=bool, choices=(True, False)),
-        # R11 #17: strict bool, matching bias_correction — ``bool(normalized)``
-        # used to accept 1/2/"False"/-1 via Python truthiness, manufacturing
-        # false search-space duplicates.  Only True/False pass the gate.
-        "normalized": ParamSpec(dtype=bool, choices=(True, False)),
-        "window": ParamSpec(dtype=int, min=2),
-        "bins": ParamSpec(dtype=int, min=2, max=10),
-        # R11 #16: ``min_periods`` is a real lower bound, not a clamped minimum —
-        # values 2..10 used to be silently coerced to 10, manufacturing a fake
-        # parameter interval.  A value < 10 now raises at binding.
-        "min_periods": ParamSpec(dtype=int, min=10),
+def _mi_specs() -> dict[str, ParamSpec]:
+    return {
+        "estimator": ParamSpec(dtype=str, choices=("quantile_hist",), default="quantile_hist", searchable=False, param_role=ParamRole.POLICY),
+        "window": ParamSpec(dtype=int, min=2, default=40, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+        "bins": ParamSpec(dtype=int, min=2, max=10, default=5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "min_periods": ParamSpec(dtype=int, min=10, default=10, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        "bias_correction": ParamSpec(dtype=bool, choices=(True, False), default=True, searchable=False, param_role=ParamRole.POLICY),
     }
 
-    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 40, estimator: str = "quantile_hist", bins: int = 5, min_periods: int = 10, normalized: bool = True, bias_correction: bool = True, **_: Any) -> pd.DataFrame:
+
+class _MutualInformationBase(SeriesOperator):
+    _normalized = False
+
+    def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 40, estimator: str = "quantile_hist", bins: int = 5, min_periods: int = 10, bias_correction: bool = True, **_: Any) -> pd.DataFrame:
         w = check_window(window)
-        if str(estimator).lower() != "quantile_hist":
+        if estimator != "quantile_hist":
             raise ValueError("estimator must be 'quantile_hist' (deterministic)")
-        nb = int(bins)
-        if not 2 <= nb <= 10:
-            raise ValueError("bins must be in [2, 10]")
-        mp = min_periods  # strict ParamSpec(dtype=int, min=10) — no silent clamp
-        norm = normalized  # strict bool ParamSpec — no bool() truthiness coercion
-        bc = bias_correction
+        nb = bins
+        mp = min_periods
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
 
@@ -389,9 +384,50 @@ class TsMutualInformation(SeriesOperator):
             pa, pb = aligned_pairs(a, b)
             if pa.size < mp:
                 return np.nan
-            return _quantile_hist_mi(pa, pb, nb, norm, bias_correction=bc)
+            return _quantile_hist_mi(pa, pb, nb, self._normalized, bias_correction=bias_correction)
 
         return frame_like(x, map_pair_rolling(xv, yv, w, _fn))
+
+
+@register_operator(
+    name="ts_normalized_mutual_information",
+    category="time_series_risk",
+    business_category="time_series_risk",
+    canonical="ts_normalized_mutual_information",
+    source="nonlinear_dependence")
+class TsNormalizedMutualInformation(_MutualInformationBase):
+    """归一化互信息：MI/min(Hx,Hy)，输出 [0,1] 无量纲比值。"""
+
+    _normalized = True
+
+    metadata = _declare(_metadata(
+        "ts_normalized_mutual_information",
+        "归一化分位直方图互信息 MI/min(Hx,Hy)，无量纲 [0,1]。",
+        ["x", "y", "window", "estimator", "bins", "min_periods", "bias_correction"],
+        unit="ratio",
+    ), _mi_specs())
+    metadata.relational_specs = [RelationalParamSpec(
+        "min_periods <= window", message="window must be >= min_periods",
+    )]
+
+
+@register_operator(
+    name="ts_mutual_information_nats", category="time_series_risk",
+    business_category="time_series_risk", canonical="ts_mutual_information_nats",
+    source="nonlinear_dependence")
+class TsMutualInformationNats(_MutualInformationBase):
+    """未归一化分位直方图互信息，单位为 nats。"""
+
+    metadata = _declare(_metadata(
+        "ts_mutual_information_nats",
+        "分位直方图互信息（可选 Miller–Madow 校正），单位 nats。",
+        ["x", "y", "window", "estimator", "bins", "min_periods", "bias_correction"],
+        unit="nats",
+    ), _mi_specs())
+    metadata.output_unit = "nats"
+    metadata.relational_specs = [RelationalParamSpec(
+        "min_periods <= window", message="window must be >= min_periods",
+    )]
 
 
 @register_operator(
@@ -403,13 +439,18 @@ class TsMutualInformation(SeriesOperator):
 class TsLaggedMutualInformation(SeriesOperator):
     """滞后互信息：MI(x[t-lag], y[t])，lag 必须为非负整数，输出单位为 nats。"""
 
-    metadata = _metadata(
+    metadata = _declare(_metadata(
         "ts_lagged_mutual_information",
         "滞后互信息 MI(x[t-lag], y[t])（rank 分位数直方图，nats）。",
         ["x", "y", "window", "lag", "bins", "min_periods", "bias_correction"],
         unit="nats",
-    )
-    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
+    ), {
+        "window": ParamSpec(dtype=int, min=2, default=40, history_semantics="max_rows", history_formula="window + lag", param_role=ParamRole.HORIZON),
+        "lag": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
+        "bins": ParamSpec(dtype=int, min=2, max=10, default=5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "min_periods": ParamSpec(dtype=int, min=10, default=10, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        "bias_correction": ParamSpec(dtype=bool, choices=(True, False), default=True, searchable=False, param_role=ParamRole.POLICY),
+    })
     # R11 #14/#15: ``window`` counts the ALIGNED PAIRS actually used in the
     # statistic, so the raw history requirement is ``window + lag`` bars and the
     # parameter means the same thing across lags (window=60,lag=1 and
@@ -458,15 +499,16 @@ def _fractional_tail_membership(vals: np.ndarray, quantile: float, direction: st
 
     ``quantile`` is the q LEVEL (same convention as the operator's ``q``:
     ``(0.5, 1)`` for ``upper``, ``(0, 0.5)`` for ``lower``).  The tail is the
-    strict members plus a FRACTION of the boundary-tie group so the effective
-    tail mass equals the target tail size exactly:
+    most-extreme value groups plus a FRACTION of the boundary-tie group so the
+    effective tail mass equals the target tail size exactly:
 
-    * upper: ``count(v > Q(q)) + f * count(v == Q(q)) = (1 - q) * n``
-    * lower: ``count(v < Q(q)) + f * count(v == Q(q)) = q * n``
+    * upper: total membership mass = ``(1 - q) * n``
+    * lower: total membership mass = ``q * n``
 
-    where ``Q(q) = np.quantile(vals, q)`` and ``f`` is the boundary fraction.
-    On tie-free (continuous) data the boundary group is empty and the weights
-    collapse to the strict 0/1 indicator.  The fractional split keeps the
+    Value groups are consumed from the requested extreme inward.  The last
+    group receives the exact remaining fraction.  This avoids interpolation
+    quantiles whose threshold may not equal any observation and therefore
+    cannot supply a boundary group.  The fractional split keeps the
     effective tail mass symmetric for discrete A-share-style data (0 returns,
     limit up/down) where the old strict/inclusive pair ``x > Q`` vs ``x <= Q``
     was asymmetric (R11 P1 tie asymmetry).
@@ -475,25 +517,27 @@ def _fractional_tail_membership(vals: np.ndarray, quantile: float, direction: st
     n = v.size
     if n == 0:
         return np.zeros(0, dtype=float)
-    thr = float(np.quantile(v, quantile))
     if direction == "upper":
-        strict = v > thr
         target = (1.0 - quantile) * n
+        levels = np.unique(v)[::-1]
     elif direction == "lower":
-        strict = v < thr
         target = quantile * n
+        levels = np.unique(v)
     else:
         raise ValueError("direction must be 'upper' or 'lower'")
-    boundary = v == thr
     weights = np.zeros(n, dtype=float)
-    weights[strict] = 1.0
-    n_boundary = int(boundary.sum())
-    if n_boundary:
-        n_strict = float(weights.sum())
-        # Clamp to [0, 1]: under a pathological quantile rank the boundary group
-        # may not span the whole gap to the target (treat it fail-closed).
-        fraction = float(np.clip((target - n_strict) / n_boundary, 0.0, 1.0))
-        weights[boundary] = fraction
+    remaining = float(target)
+    for level in levels:
+        boundary = v == level
+        count = int(boundary.sum())
+        if remaining >= count:
+            weights[boundary] = 1.0
+            remaining -= count
+        elif remaining > 0.0:
+            weights[boundary] = remaining / count
+            remaining = 0.0
+        else:
+            break
     return weights
 
 
@@ -513,7 +557,7 @@ def _tail_dependence(a: np.ndarray, b: np.ndarray, q: float, upper: bool, min_ta
     n = a.size
     if n < 4:
         return np.nan
-    if np.std(a) < 1e-12 or np.std(b) < 1e-12:
+    if np.all(a == a[0]) or np.all(b == b[0]):
         return np.nan
     direction = "upper" if upper else "lower"
     x_w = _fractional_tail_membership(a, q, direction)
@@ -542,7 +586,7 @@ class TsUpperTailDependence(SeriesOperator):
     依赖；交换 x/y 会得到不同的数值。
     """
 
-    metadata = _metadata(
+    metadata = _declare(_metadata(
         "ts_upper_tail_coexceedance_probability",
         "固定 q 的上尾同超概率（tail coexceedance probability）"
         " P(y > Qy(q) | x > Qx(q))：以 source x 的 q 分位数为条件、target y 跟随"
@@ -550,7 +594,11 @@ class TsUpperTailDependence(SeriesOperator):
         " ts_upper_tail_dependence 为弃用别名。条件样本不足返回 NaN。",
         ["x", "y", "window", "q", "min_tail_count"],
         unit="ratio",
-    )
+    ), {
+        "window": ParamSpec(dtype=int, min=4, default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+        "q": ParamSpec(dtype=float, min=0.5, max=1.0, default=0.9, param_role=ParamRole.STATE_THRESHOLD),
+        "min_tail_count": ParamSpec(dtype=int, min=2, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+    })
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 60, q: float = 0.9, min_tail_count: int = 5, **_: Any) -> pd.DataFrame:
         w = check_window(window)
@@ -558,7 +606,7 @@ class TsUpperTailDependence(SeriesOperator):
         # R5 P1-39(c): upper tail is only meaningful past the median.
         if not 0.5 < quantile < 1.0:
             raise ValueError("q must be in (0.5, 1) for the upper tail")
-        min_tail = max(2, int(min_tail_count))
+        min_tail = min_tail_count
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
 
@@ -586,7 +634,7 @@ class TsLowerTailDependence(SeriesOperator):
     依赖；交换 x/y 会得到不同的数值。
     """
 
-    metadata = _metadata(
+    metadata = _declare(_metadata(
         "ts_lower_tail_coexceedance_probability",
         "固定 q 的下尾同超概率（tail coexceedance probability）"
         " P(y ≤ Qy(q) | x ≤ Qx(q))：以 source x 的 q 分位数为条件、target y 跟随"
@@ -594,7 +642,11 @@ class TsLowerTailDependence(SeriesOperator):
         " ts_lower_tail_dependence 为弃用别名。条件样本不足返回 NaN。",
         ["x", "y", "window", "q", "min_tail_count"],
         unit="ratio",
-    )
+    ), {
+        "window": ParamSpec(dtype=int, min=4, default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+        "q": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, param_role=ParamRole.STATE_THRESHOLD),
+        "min_tail_count": ParamSpec(dtype=int, min=2, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+    })
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, window: int = 60, q: float = 0.1, min_tail_count: int = 5, **_: Any) -> pd.DataFrame:
         w = check_window(window)
@@ -602,7 +654,7 @@ class TsLowerTailDependence(SeriesOperator):
         # R5 P1-39(c): lower tail is only meaningful below the median.
         if not 0.0 < quantile < 0.5:
             raise ValueError("q must be in (0, 0.5) for the lower tail")
-        min_tail = max(2, int(min_tail_count))
+        min_tail = min_tail_count
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
 
@@ -614,6 +666,8 @@ class TsLowerTailDependence(SeriesOperator):
 
 
 _NEW_CANONICALS = (
+    "ts_mutual_information_nats",
+    "ts_normalized_mutual_information",
     "ts_upper_tail_coexceedance_probability",
     "ts_lower_tail_coexceedance_probability",
 )
@@ -624,7 +678,8 @@ _NEW_CANONICALS = (
 _MODULE_CANONICALS = (
     "ts_distance_corr",
     "ts_distance_cov",
-    "ts_mutual_information",
+    "ts_mutual_information_nats",
+    "ts_normalized_mutual_information",
     "ts_lagged_mutual_information",
     "ts_upper_tail_coexceedance_probability",
     "ts_lower_tail_coexceedance_probability",
@@ -634,6 +689,7 @@ _MODULE_CANONICALS = (
 # names now say what they compute; the old names remain as deprecated resolving
 # aliases so existing recipes keep loading.
 _DEPRECATED_ALIASES = {
+    "ts_mutual_information": "ts_normalized_mutual_information",
     "ts_upper_tail_dependence": "ts_upper_tail_coexceedance_probability",
     "ts_lower_tail_dependence": "ts_lower_tail_coexceedance_probability",
 }
@@ -649,6 +705,7 @@ def _register_surface() -> None:
     # (ts_distance_corr / ts_mutual_information / …) and breaking the static
     # surface partition gate.
     _surface.extend_extended_only(set(_MODULE_CANONICALS))
+    _surface.retract_extended_only({"ts_mutual_information"})
     for _old, _new in _DEPRECATED_ALIASES.items():
         try:
             OperatorRegistry.register_alias(_old, _new)

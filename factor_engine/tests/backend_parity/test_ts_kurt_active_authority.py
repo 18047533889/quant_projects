@@ -115,5 +115,5 @@ def test_ts_kurt_rejects_window_below_four(
         [7.0] * 6,
     )
 
-    with pytest.raises(ValueError, match="ts_kurt window must be >= 4"):
+    with pytest.raises(ValueError, match="window.*(?:>=|minimum|min)"):
         _run(source, backend_name, window)

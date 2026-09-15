@@ -36,7 +36,7 @@ def test_ts_crossing_speed_basic() -> None:
 
     op = _op("ts_crossing_speed")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, pd.DataFrame(0.,index=x.index,columns=x.columns))
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -50,7 +50,7 @@ def test_ts_crossing_speed_handles_nans() -> None:
 
     op = _op("ts_crossing_speed")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, pd.DataFrame(0.,index=x.index,columns=x.columns))
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -64,8 +64,8 @@ def test_ts_crossing_speed_deterministic() -> None:
 
     op = _op("ts_crossing_speed")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, pd.DataFrame(0.,index=x.index,columns=x.columns))
+        result2 = op.calculate(x, pd.DataFrame(0.,index=x.index,columns=x.columns))
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception as e:
         pytest.fail(f"Determinism check failed: {e}")
@@ -83,7 +83,7 @@ def test_ts_crossing_acceleration_basic() -> None:
 
     op = _op("ts_crossing_acceleration")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, pd.DataFrame(0.,index=x.index,columns=x.columns))
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -97,7 +97,7 @@ def test_ts_crossing_acceleration_handles_nans() -> None:
 
     op = _op("ts_crossing_acceleration")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, pd.DataFrame(0.,index=x.index,columns=x.columns))
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -111,8 +111,8 @@ def test_ts_crossing_acceleration_deterministic() -> None:
 
     op = _op("ts_crossing_acceleration")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, pd.DataFrame(0.,index=x.index,columns=x.columns))
+        result2 = op.calculate(x, pd.DataFrame(0.,index=x.index,columns=x.columns))
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception as e:
         pytest.fail(f"Determinism check failed: {e}")

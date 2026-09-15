@@ -39,7 +39,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.microstructure.intraday_agg import (
     _as_panel,
     _daily_agg,
@@ -49,6 +49,34 @@ from factor_engine.cleaned_operators.microstructure.intraday_agg import (
 
 _EPS = 1e-12
 _PHI_GRID = np.linspace(0.0, 1.0, 512)
+
+
+def _integer_at_least(value: Any, name: str, minimum: int) -> int:
+    """Reject coercive/clamped integer policy at the numerical boundary."""
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be an integer >= {minimum}")
+    result = int(value)
+    if result < minimum:
+        raise ValueError(f"{name} must be an integer >= {minimum}")
+    return result
+
+
+def _require_same_axes(name: str, **panels: pd.DataFrame) -> None:
+    """Fail closed instead of silently union-aligning minute observations."""
+    items = list(panels.items())
+    if not items:
+        return
+    reference_name, reference = items[0]
+    for panel_name, panel in items[1:]:
+        if not reference.index.equals(panel.index) or not reference.columns.equals(panel.columns):
+            raise ValueError(
+                f"{name}: {panel_name} must have exactly the same index and columns "
+                f"as {reference_name}"
+            )
+
+
+def _spec(default: int, minimum: int, role: ParamRole) -> ParamSpec:
+    return ParamSpec(dtype=int, min=minimum, default=default, searchable=False, param_role=role)
 
 
 def _normal_cdf(x: np.ndarray) -> np.ndarray:
@@ -92,7 +120,8 @@ def _bvc_flow(
     """
     n = close_vals.shape[0]
     r = _log_returns(close_vals)
-    scale = _rolling_scale(r, max(2, int(scale_window)), max(2, int(scale_window) // 2))
+    sw = _integer_at_least(scale_window, "scale_window", 2)
+    scale = _rolling_scale(r, sw, max(2, sw // 2))
     finite_vol = np.isfinite(volume_vals) & (volume_vals >= 0.0)
     classifiable = np.isfinite(r) & np.isfinite(scale) & finite_vol
     if locked is not None:
@@ -115,7 +144,7 @@ def _wasserstein_shift_series(
     daily_returns: list[np.ndarray], lookback_days: int
 ) -> np.ndarray:
     """Per-instrument daily Wasserstein-shift over a list of per-day arrays."""
-    lb = max(2, int(lookback_days))
+    lb = _integer_at_least(lookback_days, "lookback_days", 2)
     rows = len(daily_returns)
     out = np.full(rows, np.nan)
     for i in range(rows):
@@ -192,8 +221,8 @@ def _vpin_series(
     bucket_count: int,
 ) -> np.ndarray:
     """Per-instrument daily VPIN over lists of per-day close/volume arrays."""
-    sw = max(2, int(scale_window))
-    buckets = max(2, int(bucket_count))
+    sw = _integer_at_least(scale_window, "scale_window", 2)
+    buckets = _integer_at_least(bucket_count, "bucket_count", 2)
     rows = len(daily_close)
     out = np.full(rows, np.nan)
     for i in range(rows):
@@ -222,6 +251,22 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> O
     )
 
 
+def _declare_contract(
+    metadata: OperatorMetadata,
+    panels: tuple[str, ...],
+    specs: dict[str, ParamSpec],
+) -> OperatorMetadata:
+    metadata.panel_params = panels
+    metadata.panel_arity = len(panels)
+    metadata.scalar_params = tuple(p for p in metadata.param_names if p not in panels)
+    metadata.param_specs = specs
+    metadata.input_grain = "minute"
+    metadata.output_grain = "daily"
+    metadata.available_at = "session_close"
+    metadata.same_session_usable = False
+    return metadata
+
+
 @register_operator(
     name="intraday_bvc_imbalance",
     category="intraday_microstructure",
@@ -243,11 +288,15 @@ class IntradayBvcImbalance(SeriesOperator):
     without tick-level trade direction.
     """
 
-    metadata = _metadata(
-        "intraday_bvc_imbalance",
-        "BV-C 成交量分类买卖流不平衡 (sum V(2Phi(z)-1)/sum V)。",
-        ["close", "volume", "scale_window", "locked"],
-        unit="ratio",
+    metadata = _declare_contract(
+        _metadata(
+            "intraday_bvc_imbalance",
+            "BV-C 成交量分类买卖流不平衡 (sum V(2Phi(z)-1)/sum V)。",
+            ["close", "volume", "scale_window", "locked"],
+            unit="ratio",
+        ),
+        ("close", "volume", "locked"),
+        {"scale_window": _spec(20, 2, ParamRole.SUPPORT_POLICY)},
     )
 
     def _calculate_series(
@@ -259,10 +308,17 @@ class IntradayBvcImbalance(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         close, volume = _as_panel(close), _as_panel(volume)
+        sw = _integer_at_least(scale_window, "scale_window", 2)
+        locked_panel = None
+        if locked is not None:
+            locked_panel = _as_panel(locked)
+            if not isinstance(locked_panel, pd.DataFrame):
+                raise ValueError("intraday_bvc_imbalance: locked must be a panel or None")
+            _require_same_axes("intraday_bvc_imbalance", close=close, volume=volume, locked=locked_panel)
+        else:
+            _require_same_axes("intraday_bvc_imbalance", close=close, volume=volume)
         if np.any(volume.to_numpy(dtype=float) < 0.0):
             raise ValueError("intraday_bvc_imbalance: volume must be non-negative")
-        locked_panel = _as_panel(locked) if isinstance(locked, pd.DataFrame) else None
-        sw = max(2, int(scale_window))
         out: dict[str, pd.Series] = {}
 
         for inst in close.columns:
@@ -311,11 +367,15 @@ class IntradayImpactBeta(SeriesOperator):
     regression primitive itself stays flow-agnostic.
     """
 
-    metadata = _metadata(
-        "intraday_impact_beta",
-        "日内价格冲击回归斜率 lambda (r = alpha + lambda*q)。",
-        ["returns", "flow", "min_periods"],
-        unit="impact",
+    metadata = _declare_contract(
+        _metadata(
+            "intraday_impact_beta",
+            "日内价格冲击回归斜率 lambda (r = alpha + lambda*q)。",
+            ["returns", "flow", "min_periods"],
+            unit="impact",
+        ),
+        ("returns", "flow"),
+        {"min_periods": _spec(20, 5, ParamRole.SUPPORT_POLICY)},
     )
 
     def _calculate_series(
@@ -325,7 +385,9 @@ class IntradayImpactBeta(SeriesOperator):
         min_periods: int = 20,
         **_: Any,
     ) -> pd.DataFrame:
-        mp = max(5, int(min_periods))
+        mp = _integer_at_least(min_periods, "min_periods", 5)
+        returns, flow = _as_panel(returns), _as_panel(flow)
+        _require_same_axes("intraday_impact_beta", returns=returns, flow=flow)
 
         def _fn(r_vals: np.ndarray, q_vals: np.ndarray) -> float:
             finite = np.isfinite(r_vals) & np.isfinite(q_vals)
@@ -358,11 +420,15 @@ class IntradayImpactAsymmetry(SeriesOperator):
     negative value means selling pressure dominates.
     """
 
-    metadata = _metadata(
-        "intraday_impact_asymmetry",
-        "买卖冲击不对称 (lambda_+ - |lambda_-|)/(|lambda_+|+|lambda_-|)。",
-        ["returns", "flow", "min_periods"],
-        unit="ratio",
+    metadata = _declare_contract(
+        _metadata(
+            "intraday_impact_asymmetry",
+            "买卖冲击不对称 (lambda_+ - |lambda_-|)/(|lambda_+|+|lambda_-|)。",
+            ["returns", "flow", "min_periods"],
+            unit="ratio",
+        ),
+        ("returns", "flow"),
+        {"min_periods": _spec(20, 5, ParamRole.SUPPORT_POLICY)},
     )
 
     def _calculate_series(
@@ -372,7 +438,9 @@ class IntradayImpactAsymmetry(SeriesOperator):
         min_periods: int = 20,
         **_: Any,
     ) -> pd.DataFrame:
-        mp = max(5, int(min_periods))
+        mp = _integer_at_least(min_periods, "min_periods", 5)
+        returns, flow = _as_panel(returns), _as_panel(flow)
+        _require_same_axes("intraday_impact_asymmetry", returns=returns, flow=flow)
         side_min = max(3, mp // 3)
 
         def _slope(r: np.ndarray, q: np.ndarray) -> float | None:
@@ -419,11 +487,15 @@ class IntradayReturnWassersteinShift(SeriesOperator):
     where trading activity sits.
     """
 
-    metadata = _metadata(
-        "intraday_return_wasserstein_shift",
-        "当日分钟收益分布相对过去 N 日的 W1 距离(MAD 标准化)。",
-        ["returns", "lookback_days"],
-        unit="ratio",
+    metadata = _declare_contract(
+        _metadata(
+            "intraday_return_wasserstein_shift",
+            "当日分钟收益分布相对过去 N 日的 W1 距离(MAD 标准化)。",
+            ["returns", "lookback_days"],
+            unit="ratio",
+        ),
+        ("returns",),
+        {"lookback_days": _spec(10, 2, ParamRole.HORIZON)},
     )
 
     def _calculate_series(
@@ -433,6 +505,7 @@ class IntradayReturnWassersteinShift(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         returns = _as_panel(returns)
+        lookback_days = _integer_at_least(lookback_days, "lookback_days", 2)
         out: dict[str, pd.Series] = {}
         for inst in returns.columns:
             col = returns[inst]
@@ -470,11 +543,18 @@ class MicroBvcVpin(SeriesOperator):
     and the VPIN literature itself is contested.
     """
 
-    metadata = _metadata(
-        "micro_bvc_vpin",
-        "BV-C 等量桶 VPIN (sum|OF_b|/total_volume), 边界分钟按量切分。",
-        ["close", "volume", "scale_window", "bucket_count"],
-        unit="ratio",
+    metadata = _declare_contract(
+        _metadata(
+            "micro_bvc_vpin",
+            "BV-C 等量桶 VPIN (sum|OF_b|/total_volume), 边界分钟按量切分。",
+            ["close", "volume", "scale_window", "bucket_count"],
+            unit="ratio",
+        ),
+        ("close", "volume"),
+        {
+            "scale_window": _spec(40, 2, ParamRole.SUPPORT_POLICY),
+            "bucket_count": _spec(20, 2, ParamRole.SUPPORT_POLICY),
+        },
     )
 
     def _calculate_series(
@@ -486,6 +566,9 @@ class MicroBvcVpin(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         close, volume = _as_panel(close), _as_panel(volume)
+        scale_window = _integer_at_least(scale_window, "scale_window", 2)
+        bucket_count = _integer_at_least(bucket_count, "bucket_count", 2)
+        _require_same_axes("micro_bvc_vpin", close=close, volume=volume)
         if np.any(volume.to_numpy(dtype=float) < 0.0):
             raise ValueError("micro_bvc_vpin: volume must be non-negative")
         out: dict[str, pd.Series] = {}

@@ -60,6 +60,20 @@ def last_te_binning_status() -> dict[str, Any]:
             "effective_y_bins": counts[2] if counts else None}
 
 
+def _remaining_information_contract(name):
+    # Other TE definitions retain their own established contracts.
+    if name == "ts_score_rank_weighted_mean":
+        return dict(panel_params=("target", "score"), scalar_params=("window", "decay"),
+            window_semantics="exact_rows", param_specs={
+                "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+                "decay": ParamSpec(dtype=float, min=0, max=1, default=.85, param_role=ParamRole.ECONOMIC)})
+    if name == "report_benford_js_divergence":
+        return dict(panel_params=("amount",), scalar_params=("window",),
+            window_semantics="exact_rows", param_specs={
+                "window": ParamSpec(dtype=int, min=10, default=60, param_role=ParamRole.HORIZON)})
+    return {}
+
+
 def _metadata(
     name: str,
     description: str,
@@ -76,7 +90,9 @@ def _metadata(
         description=description,
         param_names=params,
         return_type="series",
-        relational_specs=list(relational_specs) if relational_specs else [],
+        relational_specs=(list(relational_specs) if relational_specs else []) +
+            ([RelationalParamSpec("decay > 0")] if name == "ts_score_rank_weighted_mean" else []),
+        **_remaining_information_contract(name),
         tags=[
             "information_theory", "daily", "pit_safe", "causal", "typed_v2",
             "deterministic",
@@ -620,12 +636,14 @@ def _score_rank_weighted_mean(t: np.ndarray, sc: np.ndarray, decay: float) -> fl
             j += 1
         ranks[order[i : j + 1]] = 0.5 * (i + j)
         i = j + 1
-    w = np.power(decay, ranks)
+    # Subtracting the minimum rank cancels a common factor. Without this,
+    # tiny decay and a tied best score underflow every weight to zero.
+    w = np.power(np.longdouble(decay), (ranks - ranks.min()).astype(np.longdouble))
     w /= w.sum()
     # ``w`` is indexed by the ORIGINAL observation order (ranks[order[i]] = ...),
     # so it must multiply ``tv`` in that same order.  ``tv[order]`` would re-sort
     # the target and multiply each weight against a *different* observation.
-    return float(np.sum(w * tv))
+    return float(np.sum(w * tv.astype(np.longdouble)))
 
 
 @register_operator(
@@ -662,8 +680,16 @@ class TsScoreRankWeightedMean(SeriesOperator):
         decay: float = 0.85,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
-        d = float(decay)
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+        from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar
+        if (not isinstance(target, pd.DataFrame) or not isinstance(score, pd.DataFrame)):
+            raise TypeError("target and score must be DataFrame panels")
+        if (not target.index.is_unique or not target.columns.is_unique or
+            not score.index.is_unique or not score.columns.is_unique or
+            not target.index.equals(score.index) or not target.columns.equals(score.columns)):
+            raise ValueError("target and score axes must be unique and exactly aligned")
+        w = strict_int(window, "window", minimum=1)
+        d = strict_finite_scalar(decay, "decay", minimum=0, maximum=1)
         if not (0.0 < d <= 1.0):
             raise ValueError("ts_score_rank_weighted_mean requires 0 < decay <= 1")
         return _frame_like(
@@ -682,7 +708,9 @@ def _benford_js(vals: np.ndarray) -> float:
     finite = finite[finite != 0.0]
     if finite.size < 10:
         return np.nan
-    digits = np.floor(np.abs(finite) / (10.0 ** np.floor(np.log10(np.abs(finite)))))
+    # Wide precision keeps 10**-324 representable for float64 subnormals.
+    absolute = np.abs(finite.astype(np.longdouble))
+    digits = np.floor(absolute / np.power(np.longdouble(10), np.floor(np.log10(absolute))))
     digits = np.clip(digits, 1, 9).astype(np.int64)
     counts = np.bincount(digits, minlength=10)[1:].astype(np.float64)
     p = counts / counts.sum()
@@ -731,7 +759,8 @@ class ReportBenfordJsDivergence(SeriesOperator):
     )
 
     def _calculate_series(self, amount: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
-        w = int(window)
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+        w = strict_int(window, "window", minimum=10)
         return _frame_like(amount, _rolling_apply_2d(amount.to_numpy(dtype=float), w, _benford_js))
 
 
@@ -1116,6 +1145,9 @@ def _register_surface() -> None:
             "ts_transfer_entropy_peak_excess",
         })
     _surface.extend_research_only({"ts_effective_transfer_entropy", "report_benford_js_divergence"})
+    from factor_engine.cleaned_operators.common.information_rank_native import register
+    for name in ("ts_score_rank_weighted_mean", "report_benford_js_divergence"):
+        register(name)
 
 
 _register_surface()

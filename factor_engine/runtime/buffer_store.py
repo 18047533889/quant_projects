@@ -287,7 +287,12 @@ class GovernedBufferStore:
         self._entries: dict[str, _Entry] = {}
         self._entry_leases: dict[str, tuple[weakref.finalize, ...]] = {}
         self._lease_target_token = object()
-        self._budget = budget_bytes if budget_bytes is not None and budget_bytes > 0 else None
+        self._budget = (
+            None if budget_bytes is None else max(0, int(budget_bytes))
+        )
+        self._budget_authority: Any | None = None
+        self._budget_authority_name: str | None = None
+        self._budget_refreshes = 0
         self._pinned: set[str] = set()
         self._lock = threading.RLock()
         self._writes = 0
@@ -306,7 +311,45 @@ class GovernedBufferStore:
 
     @property
     def budget_bytes(self) -> int | None:
-        return self._budget
+        if self._budget_authority is not None:
+            self.refresh_budget()
+        with self._lock:
+            return self._budget
+
+    def bind_budget_authority(self, authority: Any) -> int:
+        """Bind capacity to the process ResourceBroker or its IPC proxy.
+
+        The broker remains the sole authority. A zero broker budget is a real
+        fail-closed limit, never the historical unbounded sentinel.
+        """
+        current = getattr(authority, "current_cse_budget", None)
+        if not callable(current):
+            raise TypeError("CSE budget authority must expose current_cse_budget()")
+        name = f"{type(authority).__name__}.current_cse_budget"
+        with self._lock:
+            self._budget_authority = current
+            self._budget_authority_name = name
+        return self.refresh_budget()
+
+    def refresh_budget(self) -> int:
+        """Refresh the live broker limit and evict only reclaimable entries."""
+        with self._lock:
+            authority = self._budget_authority
+            if authority is None:
+                return 0 if self._budget is None else self._budget
+            # Serialize samples so an older, larger result cannot overwrite a
+            # newer pressure reduction observed by another cache operation.
+            value = authority()
+            if type(value) is not int or value < 0:
+                raise ValueError(
+                    "current_cse_budget() must return a non-negative integer"
+                )
+            self._budget = value
+            self._budget_refreshes += 1
+            accounted = self._total_accounted()
+            if accounted > value:
+                self._evict_lru(accounted - value)
+            return value
 
     def _total_accounted(self) -> int:
         return sum(e.bytes for e in self._entries.values())
@@ -415,6 +458,8 @@ class GovernedBufferStore:
             next_use_distance: 距离下次使用的执行序数差（0=unknown, >0=已知）
             future_consumers: 未来剩余消费者数量（供 eviction 决策）
         """
+        if self._budget_authority is not None:
+            self.refresh_budget()
         size = max(0, int(bytes_)) if bytes_ is not None else _estimate_bytes(value)
         now = time.monotonic()
         with self._lock:
@@ -765,6 +810,8 @@ class GovernedBufferStore:
             }
 
     def summary(self) -> dict[str, Any]:
+        if self._budget_authority is not None:
+            self.refresh_budget()
         with self._lock:
             states: dict[str, int] = {}
             in_use = 0
@@ -774,6 +821,8 @@ class GovernedBufferStore:
                     in_use += 1
             return {
                 "budget_bytes": self._budget,
+                "budget_authority": self._budget_authority_name,
+                "budget_refreshes": self._budget_refreshes,
                 "accounted_bytes": self._total_accounted(),
                 "keys": len(self._backing),
                 "writes": self._writes,

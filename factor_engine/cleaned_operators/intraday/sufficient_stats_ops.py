@@ -36,7 +36,12 @@ from typing import Any, Callable
 
 import numpy as np
 
-from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from factor_engine.cleaned_operators.intraday._core import (
     _EPS,
     SessionAggregationOperator,
@@ -209,6 +214,12 @@ def _ts_amount_weighted_mean(
     return float(np.sum(close_v[valid] * amount[valid]) / total_a)
 
 
+# daily_agg_two uses this explicit semantic marker for the min_finite gate;
+# vector sufficient statistics already expose the same joint-positive count.
+_ts_vwap._joint_positive_support = True
+_ts_amount_weighted_mean._joint_positive_support = True
+
+
 # ---------------------------------------------------------------------------
 # register_surface for the 13 new canonicals.
 # ---------------------------------------------------------------------------
@@ -260,6 +271,13 @@ def _mk_scalar_family(name: str, description: str, unit: str, kernel: Callable, 
             name, description, ["close", "window"], unit=unit,
             available_at="session_close", same_session_usable=False,
         )
+        metadata.panel_params = ("close",)
+        metadata.scalar_params = ("window",)
+        metadata.param_specs = {
+            "window": ParamSpec(
+                dtype=int, min=1, default=None, param_role=ParamRole.HORIZON
+            )
+        }
 
         def _calculate_series(self, close, window=None, session_tz=None, **_):
             if window is not None:
@@ -301,6 +319,8 @@ def _register_builtin_one(
             name, description, ["close"], unit=unit,
             available_at="session_close", same_session_usable=False,
         )
+        metadata.panel_params = ("close",)
+        metadata.panel_arity = 1
 
         def _calculate_series(self, close, **_):
             return daily_agg(close, kernel, min_finite=min_finite)
@@ -327,6 +347,8 @@ def _register_builtin_two(
             name, description, ["close", "volume"], unit=unit,
             available_at="session_close", same_session_usable=False,
         )
+        metadata.panel_params = ("close", "volume")
+        metadata.panel_arity = 2
 
         def _calculate_series(self, close, volume, **_):
             return daily_agg_two(close, volume, kernel, min_finite=min_finite)

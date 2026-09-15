@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/runtime/test_r4_stable_stat_routing.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 1, "sampled_peak_family_rss_bytes": 306765824, "sampling_seconds": 0.1, "seconds": 4.8169131621252745, "test_guard_reason": null, "hard_memory_cap": false}

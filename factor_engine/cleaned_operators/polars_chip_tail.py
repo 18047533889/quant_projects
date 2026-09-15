@@ -17,7 +17,8 @@ from typing import Any
 import numpy as np
 import polars as pl
 
-from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator, PANEL_SKIP_COLUMNS
+from factor_engine.cleaned_operators.parameter_validation import strict_integer
 from factor_engine.cleaned_operators.turnover_survival import (
     _column_stats,
     _default_min_periods,
@@ -25,6 +26,7 @@ from factor_engine.cleaned_operators.turnover_survival import (
 from factor_engine.cleaned_operators.weighted_tail import (
     _stratified_stratum_mean,
     _weighted_es_tail,
+    _tail_specs, _support, _downside_rms, _normalize_nonnegative_weights,
 )
 from factor_engine.cleaned_operators.prospect_theory import (
     _MIN_COVERAGE,
@@ -34,6 +36,10 @@ from factor_engine.cleaned_operators.prospect_theory import (
 
 _SKIP_PANEL = frozenset({"date", "stock_code"})
 _EPS = 1e-12
+_WEIGHTED_TARGETS={"ts_stratified_mean_spread","ts_weighted_semivariance",
+    "ts_weighted_downside_deviation","ts_weighted_expected_shortfall","ts_weighted_drawdown_area"}
+def _tail_cols(frame):
+    return [c for c in frame.columns if c not in PANEL_SKIP_COLUMNS]
 
 
 def _cols(fr: pl.DataFrame) -> list[str]:
@@ -60,6 +66,11 @@ def _mk(canonical: str, description: str, params: list[str], fn):
         tags=["polars", "daily", "native_udf", "typed_v2"],
     )
 
+    if canonical in _WEIGHTED_TARGETS:
+        metadata.param_specs=_tail_specs(canonical)
+        metadata.scalar_params=tuple(metadata.param_specs)
+        metadata.panel_params=tuple(p for p in params if p not in metadata.param_specs)
+
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
 
@@ -68,6 +79,18 @@ def _mk(canonical: str, description: str, params: list[str], fn):
         (SeriesOperator,),
         {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
     )
+    if canonical in _WEIGHTED_TARGETS:
+        from factor_engine.backend.contracts import ExecutionKind,PhysicalImplementationSpec
+        import hashlib
+        from pathlib import Path
+        from factor_engine.cleaned_operators import weighted_tail
+        cls._fn=staticmethod(fn)
+        cls._physical_spec=PhysicalImplementationSpec(canonical=canonical,backend="polars",
+            execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,materializes_full_panel=False,
+            supports_nulls=True,supports_nan=True,supports_inf=True,
+            implementation_source_hash=hashlib.sha256(Path(__file__).read_bytes()+Path(weighted_tail.__file__).read_bytes()).hexdigest(),
+            kernel_identity="polars_chip_tail."+canonical,
+            notes="Per-column NumPy arrays; no Pandas-panel conversion. Window-aware finite and support policies.")
     register_operator(
         name=canonical,
         category="time_series_chip_cost",
@@ -173,13 +196,14 @@ _mk(
 # ---------------------------------------------------------------------------
 
 def _stratified_mean_spread(target, sorter, window, quantile, min_periods):
-    w = max(2, int(window))
+    w = strict_integer(window,"window",minimum=2)
     q = float(quantile)
     if not 0.0 < q <= 0.5:
         raise ValueError("quantile must be in (0, 0.5] so the top and bottom strata are disjoint")
-    mp = int(min_periods) if min_periods is not None else max(5, w // 4)
-    mp = max(2, mp)
-    cols = _cols(target)
+    mp = _support(min_periods,w,max(5,w//4))
+    if q*w<1:
+        raise ValueError("window must contain at least one observation in each quantile stratum")
+    cols = _tail_cols(target)
     out: dict[str, np.ndarray] = {}
     for c in cols:
         x = _col(target, c)
@@ -198,7 +222,9 @@ def _stratified_mean_spread(target, sorter, window, quantile, min_periods):
             order = np.argsort(ss, kind="stable")
             xs = xs[order]
             ss = ss[order]
-            k = max(1, min(int(round(q * xs.size)), xs.size - 1))
+            k = int(np.floor(q*xs.size))
+            if k<1 or 2*k>xs.size:
+                continue
             top = _stratified_stratum_mean(xs, ss, k, top=True)
             bot = _stratified_stratum_mean(xs, ss, k, top=False)
             if not np.isfinite(top) or not np.isfinite(bot):
@@ -219,50 +245,52 @@ _mk(
 
 
 def _pair_window_kernel(x_frame, w_frame, window, target, min_periods, kind):
-    w = max(2, int(window))
-    mp = int(min_periods) if min_periods is not None else 2
-    mp = max(2, mp)
-    cols = _cols(x_frame)
-    out: dict[str, np.ndarray] = {}
-    for c in cols:
-        x = _col(x_frame, c)
-        wt = _col(w_frame, c)
-        rows = x.shape[0]
-        res = np.full(rows, np.nan)
-        for t in range(rows):
-            lo = max(0, t - w + 1)
-            xv = x[lo : t + 1]
-            wv = wt[lo : t + 1]
-            finite = np.isfinite(xv) & np.isfinite(wv)
-            xv = xv[finite]
-            wv = wv[finite]
-            if xv.size < mp:
-                continue
-            total = float(wv.sum())
-            if total <= _EPS:
-                continue
-            if kind == "semivar":
-                # R3-113: true semivariance keeps the square (NO sqrt).
-                below = np.maximum(target - xv, 0.0)
-                res[t] = float(np.sum(wv * below * below) / total)
-            elif kind == "downside":
-                # R3-113: sqrt'd variant = weighted downside deviation.
-                below = np.maximum(target - xv, 0.0)
-                res[t] = float(np.sqrt(np.sum(wv * below * below) / total))
-            elif kind == "drawdown":
-                pos = xv > 0.0
-                if int(pos.sum()) < 2:
+    w = strict_integer(window,"window",minimum=2)
+    mp = _support(min_periods,w,2)
+    out = {}
+    for c in _tail_cols(x_frame):
+        x = _col(x_frame,c)
+        wt = _col(w_frame,c)
+        res = np.full(x.size,np.nan)
+        for t in range(x.size):
+            lo=max(0,t-w+1)
+            a,b=x[lo:t+1],wt[lo:t+1]
+            if kind=="drawdown":
+                # Keep physical price gaps: only price gaps reset the running peak.
+                if np.any(b<0):
                     continue
-                p = xv[pos]
-                wpos = wv[pos]
-                ttl = float(wpos.sum())
-                if ttl <= _EPS:
+                price_ok=np.isfinite(a)&(a>0)
+                if int(price_ok.sum())<2:
                     continue
-                running_max = np.maximum.accumulate(p)
-                dd = np.maximum(0.0, 1.0 - p / running_max)
-                res[t] = float(np.sum(wpos * dd) / ttl)
-        out[c] = res
-    return _rebuild(x_frame, out)
+                dd=np.full(a.size,np.nan)
+                peak=None
+                for i in range(a.size):
+                    if not price_ok[i]:
+                        peak=None
+                        continue
+                    peak=a[i] if peak is None else max(peak,a[i])
+                    dd[i]=max(0.,1.-a[i]/peak)
+                valid=price_ok&np.isfinite(b)
+                weights=_normalize_nonnegative_weights(b[valid])
+                if weights is not None:
+                    res[t]=float(np.dot(weights,dd[valid]))
+                continue
+            valid=np.isfinite(a)&np.isfinite(b)
+            xv,wv=a[valid],b[valid]
+            if xv.size<mp or np.any(wv<0):
+                continue
+            weights=_normalize_nonnegative_weights(wv)
+            if weights is None:
+                continue
+            rms=_downside_rms(xv,weights,target)
+            if kind=="downside":
+                res[t]=rms
+            elif kind=="semivar":
+                with np.errstate(over="ignore",under="ignore"):
+                    variance=float(np.square(rms))
+                res[t]=variance if np.isfinite(variance) else np.nan
+        out[c]=res
+    return _rebuild(x_frame,out)
 
 
 _mk(
@@ -292,18 +320,15 @@ _mk(
 
 
 def _weighted_es(x_frame, w_frame, window, quantile, side, min_tail_count):
-    w = max(2, int(window))
+    w = strict_integer(window,"window",minimum=2)
     q = float(quantile)
     if not 0.0 < q <= 0.5:
         raise ValueError("quantile must be in (0, 0.5] for expected-shortfall tail semantics")
     kind = str(side).lower()
     if kind not in {"lower", "upper"}:
         raise ValueError("side must be 'lower' or 'upper'")
-    if min_tail_count is not None:
-        min_tail = max(2, int(min_tail_count))
-    else:
-        min_tail = max(2, 3)
-    cols = _cols(x_frame)
+    min_tail = _support(min_tail_count,w,3)
+    cols = _tail_cols(x_frame)
     out: dict[str, np.ndarray] = {}
     for c in cols:
         x = _col(x_frame, c)

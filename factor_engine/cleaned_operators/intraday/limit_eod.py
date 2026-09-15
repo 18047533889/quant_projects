@@ -21,7 +21,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, register_operator
+from factor_engine.cleaned_operators.common.strict_params import strict_int
 from factor_engine.cleaned_operators.intraday._core import (
     _EPS,
     SessionAggregationOperator,
@@ -102,16 +103,18 @@ def _pre_hit_pressure_day(
         return np.nan
 
     if output == "return_accel":
-        if len(pre_prices) < 2:
+        if len(pre_prices) < 2 or np.any(pre_prices <= 0.0):
             return np.nan
         x = np.arange(len(pre_prices), dtype=float)
         return float(np.polyfit(x, np.log(pre_prices), 1)[0])
     if output == "volume_accel":
-        if len(pre_volumes) < 2:
+        if len(pre_volumes) < 2 or np.any(pre_volumes < 0.0):
             return np.nan
         x = np.arange(len(pre_volumes), dtype=float)
         return float(np.polyfit(x, pre_volumes, 1)[0])
     if output == "distance_decay":
+        if limit == 0.0:
+            return np.nan
         with np.errstate(divide="ignore", invalid="ignore"):
             return float(np.mean((limit - pre_prices) / limit))
     if output == "path_efficiency":
@@ -198,7 +201,18 @@ class IntraLimitPreHitPressureProfile(SessionAggregationOperator):
         unit="level",
         domain="intraday_limit",
         extra_tags=["allow_panel_broadcast"],
+        available_at="session_close",
+        same_session_usable=False,
+        panel_params=("price", "volume", "high_limit", "low_limit"),
+        scalar_params={
+            "side": ParamSpec(dtype=str, choices=("up", "down"), default="up", param_role=ParamRole.POLICY),
+            "pre_window": ParamSpec(dtype=int, min=2, default=30, history_semantics="session_slots", param_role=ParamRole.HORIZON),
+            "output": ParamSpec(dtype=str, choices=("return_accel", "volume_accel", "distance_decay", "path_efficiency"), default="return_accel", param_role=ParamRole.POLICY),
+            "require_hit": ParamSpec(dtype=bool, default=True, param_role=ParamRole.POLICY),
+        },
     )
+    metadata.input_units = {"price": "price", "volume": "volume", "high_limit": "price", "low_limit": "price"}
+    metadata.output_unit = "output_dependent"
 
     def _calculate_series(
         self,
@@ -214,9 +228,11 @@ class IntraLimitPreHitPressureProfile(SessionAggregationOperator):
     ) -> pd.DataFrame:
         if side not in ("up", "down"):
             raise ValueError(f"intra_limit_pre_hit_pressure_profile: side must be 'up' or 'down', got {side!r}")
+        if output not in ("return_accel", "volume_accel", "distance_decay", "path_efficiency"):
+            raise ValueError(f"intra_limit_pre_hit_pressure_profile: invalid output {output!r}")
         return _limit_pressure_daily(
             price, volume, high_limit, low_limit,
-            str(side), max(1, int(pre_window)), bool(require_hit), str(output),
+            str(side), strict_int(pre_window, "pre_window", minimum=2), bool(require_hit), str(output),
         )
 
 
@@ -252,6 +268,8 @@ def _eod_reversal_day(
         return np.nan
     if not np.all(np.isfinite(cw)) or not np.all(np.isfinite(bw)):
         return np.nan
+    if np.any(cw <= 0.0) or np.any(bw <= 0.0):
+        return np.nan
 
     cw_move = float(cw[-1]) - float(cw[0])
     bw_move = float(bw[-1]) - float(bw[0])
@@ -268,6 +286,8 @@ def _eod_reversal_day(
         return float(cw_move / (abs(bw_move) + _EPS))
     if output == "participation_adjusted":
         if volumes is None or len(volumes) < n:
+            return np.nan
+        if not np.all(np.isfinite(volumes)) or np.any(volumes < 0.0):
             return np.nan
         cw_vol = float(np.sum(volumes[cw_start:]))
         tot_vol = float(np.sum(volumes))
@@ -358,7 +378,17 @@ class IntraEodReversalDecomposition(SessionAggregationOperator):
         unit="level",
         domain="intraday_eod",
         extra_tags=["allow_panel_broadcast"],
+        available_at="session_close",
+        same_session_usable=False,
+        panel_params=("price", "volume", "amount"),
+        scalar_params={
+            "window_minutes": ParamSpec(dtype=int, min=5, default=30, history_semantics="session_slots", param_role=ParamRole.HORIZON),
+            "baseline": ParamSpec(dtype=str, choices=("prior_window", "morning"), default="prior_window", param_role=ParamRole.POLICY),
+            "output": ParamSpec(dtype=str, choices=("pressure", "reversal", "retention", "participation_adjusted"), default="pressure", param_role=ParamRole.POLICY),
+        },
     )
+    metadata.input_units = {"price": "price", "volume": "volume", "amount": "currency"}
+    metadata.output_unit = "output_dependent"
 
     def _calculate_series(
         self,
@@ -375,9 +405,11 @@ class IntraEodReversalDecomposition(SessionAggregationOperator):
                 f"intra_eod_reversal_decomposition: baseline must be 'prior_window' "
                 f"or 'morning', got {baseline!r}"
             )
+        if output not in ("pressure", "reversal", "retention", "participation_adjusted"):
+            raise ValueError(f"intra_eod_reversal_decomposition: invalid output {output!r}")
         return _eod_reversal_daily(
             price, volume, amount,
-            max(1, int(window_minutes)), str(baseline), str(output),
+            strict_int(window_minutes, "window_minutes", minimum=5), str(baseline), str(output),
         )
 
 

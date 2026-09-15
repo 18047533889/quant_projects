@@ -8,6 +8,9 @@ policy (break / aligned-pair / drop-valid); the helpers never compress time.
 """
 from __future__ import annotations
 
+import hashlib
+import inspect
+from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
@@ -27,6 +30,22 @@ from factor_engine.cleaned_operators.base import ParamSpec, ParamRole
 from factor_engine.cleaned_operators.common._polars_bridge import (
     _is_panel_like, numeric_cols, to_pandas_panel, verify_frames_share_identity, frame_time_index,
 )
+
+_DYNAMIC_REGRESSION_DELEGATES = frozenset({
+    "ts_expectile_beta_spread",
+    "ts_huber_regression_coeff", "ts_huber_regression_coeff_prior",
+    "ts_huber_regression_forecast_error", "ts_huber_regression_forecast_error_z",
+    "ts_huber_regression_resid_z", "ts_multi_regression_adjusted_r2_prior",
+    "ts_multi_regression_coeff", "ts_multi_regression_coeff_prior",
+    "ts_multi_regression_coeff_stability", "ts_multi_regression_forecast_error",
+    "ts_multi_regression_forecast_error_z", "ts_multi_regression_r2",
+    "ts_multi_regression_r2_prior", "ts_multi_regression_resid",
+    "ts_multi_regression_resid_z", "ts_quantile_beta_spread",
+    "ts_quantile_regression_coeff", "ts_quantile_regression_resid",
+    "ts_ridge_regression_coeff", "ts_ridge_regression_coeff_prior",
+    "ts_ridge_regression_forecast_error", "ts_ridge_regression_forecast_error_z",
+    "ts_ridge_regression_resid_z",
+})
 
 
 def frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
@@ -146,6 +165,40 @@ def _pl_rebuild(base: Any, result: Any) -> Any:
     )
 
 
+_INTRADAY_DAILY_DELEGATES = frozenset({
+    "intraday_rv_signature_slope",
+    "intra_impulse_event_detector",
+    "intra_multiresolution_resample_reduce",
+    "intra_neighbor_event_class",
+    "intra_round_price_clustering_share",
+    "intra_slice_mask_pair_reduce",
+    "intra_slice_mask_reduce",
+    "intra_state_dwell_stats",
+    "intra_state_interval_moment",
+    "intra_state_pair_same_slot_corr",
+})
+
+
+def _pl_rebuild_intraday_result(result: Any) -> Any:
+    """Rebuild a labelled frequency-changing result as a fresh Polars panel.
+
+    This is deliberately separate from ``_pl_rebuild``: a minute→daily result
+    must carry its own daily index and must never be attached to the minute
+    producer with ``with_columns``.
+    """
+    from factor_engine.backend.operator_errors import OperatorShapeError
+
+    if not isinstance(result, pd.DataFrame):
+        raise OperatorShapeError("intraday delegate result has no labelled output-axis contract")
+    if not result.index.is_unique or not result.columns.is_unique:
+        raise OperatorShapeError("intraday delegate result axes must be unique")
+    if not isinstance(result.index, pd.DatetimeIndex):
+        raise OperatorShapeError("intraday delegate result must have a DatetimeIndex")
+    pdf = result.copy()
+    pdf.index.name = "date"
+    return pl.from_pandas(pdf.reset_index())
+
+
 def _call_pandas_delegate(canonical: str, frames: tuple, params: dict):
     """Preserve Python argument binding; never reorder keyword operands."""
     from factor_engine.cleaned_operators.registry import OperatorRegistry
@@ -153,15 +206,30 @@ def _call_pandas_delegate(canonical: str, frames: tuple, params: dict):
     pandas_op = OperatorRegistry.get(canonical, "pandas_numpy")
     if pandas_op is None:
         raise RuntimeError(f"pandas_numpy reference missing for {canonical}")
-    panels = [v for v in (*frames, *params.values()) if _is_panel_like(v)]
+    def iter_panels(value):
+        if _is_panel_like(value):
+            yield value
+        elif isinstance(value, (tuple, list)):
+            for item in value:
+                yield from iter_panels(item)
+
+    panels = [panel for value in (*frames, *params.values()) for panel in iter_panels(value)]
     if not panels:
         raise ValueError(f"{canonical}: pandas delegate received no panel input")
+    if canonical in _INTRADAY_DAILY_DELEGATES:
+        for panel in panels:
+            if frame_time_index(panel) is None:
+                raise ValueError(f"{canonical}: intraday delegate panel is missing a time axis")
     verify_frames_share_identity(canonical, *panels)
     # Reuse each conversion once within the call, but keep original positional
     # and keyword slots. The reference's normal binder validates duplicates.
     converted = {}
 
     def convert(value):
+        if isinstance(value, tuple):
+            return tuple(convert(item) for item in value)
+        if isinstance(value, list):
+            return [convert(item) for item in value]
         if not _is_panel_like(value):
             return value
         key = id(value)
@@ -172,6 +240,8 @@ def _call_pandas_delegate(canonical: str, frames: tuple, params: dict):
     args = tuple(convert(v) for v in frames)
     kwargs = {k: convert(v) for k, v in params.items()}
     result = pandas_op.calculate(*args, **kwargs)
+    if canonical in _INTRADAY_DAILY_DELEGATES and len(result) != len(panels[0]):
+        return _pl_rebuild_intraday_result(result)
     return _pl_rebuild(panels[0], result)
 
 
@@ -231,6 +301,69 @@ def register_polars_udf(canonical: str) -> None:
     from factor_engine.cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
     from factor_engine.cleaned_operators.registry import OperatorRegistry
 
+    if canonical in {"ts_dc_overshoot_ratio","ts_dc_event_rate","ts_dc_duration_asymmetry","ts_dc_overshoot_asymmetry"}:
+        from factor_engine.cleaned_operators.common.directional_change_polars import make
+        OperatorRegistry.register(make(canonical),canonical=canonical,backend="polars",
+            source="directional_change_numpy",status="implemented",backend_explicit=True)
+        return
+
+    if canonical in {"ts_expectile","ts_expectile_beta"}:
+        from factor_engine.cleaned_operators.common.expectile_native import make
+        OperatorRegistry.register(make(canonical)(),canonical=canonical,backend="polars",
+            source="expectile_numpy",status="implemented",backend_explicit=True)
+        return
+
+    if canonical in {"ts_hampel_filter_causal","ts_median3_causal","ts_rolling_median_causal"}:
+        from factor_engine.cleaned_operators.common.despike_native import make
+        OperatorRegistry.register(make(canonical)(),canonical=canonical,backend="polars",
+            source="despike_numpy",status="implemented",backend_explicit=True)
+        return
+
+    if canonical in {"ohlc_corwin_schultz_spread","ts_roll_effective_spread"}:
+        from factor_engine.cleaned_operators.common.spread_native import make
+        OperatorRegistry.register(make(canonical)(),canonical=canonical,backend="polars",
+            source="spread_numpy",status="experimental" if canonical=="ts_roll_effective_spread" else "implemented",
+            backend_explicit=True)
+        return
+
+    if canonical in {"event_mark_autocorr", "event_interval_mark_coupling"}:
+        from factor_engine.cleaned_operators.common.marked_event_delegate import register
+        register(canonical)
+        return
+
+    from factor_engine.cleaned_operators.common import direction_risk_polars as risk_kernels
+    if canonical in risk_kernels.PARAMS:
+        kernel = getattr(risk_kernels, canonical)
+
+        class _RiskKernel(PolarsSeriesOperator):
+            metadata = PolarsMetadata(name=canonical, category="time_series",
+                                      **risk_kernels.contract(canonical))
+            _physical_spec = risk_kernels.physical_spec(canonical)
+            _contract_callable = staticmethod(kernel)
+
+            def _calculate_series(self, *frames, **params):
+                return kernel(*frames, **params)
+
+        OperatorRegistry.register(
+            _RiskKernel(), canonical=canonical, backend="polars",
+            source="direction_risk_polars", status="implemented", backend_explicit=True,
+        )
+        return
+
+    from factor_engine.cleaned_operators.common import regression_model_polars as model_kernels
+    if canonical in model_kernels.PARAMS:
+        kernel=getattr(model_kernels,canonical)
+        class _ModelKernel(PolarsSeriesOperator):
+            metadata=PolarsMetadata(name=canonical,category="time_series",**model_kernels.contract(canonical))
+            _physical_spec=model_kernels.physical_spec(canonical)
+            _contract_callable=staticmethod(kernel)
+            def _calculate_series(self,*frames,**params):
+                return kernel(*frames,**params)
+        OperatorRegistry.register(
+            _ModelKernel(),canonical=canonical,backend="polars",source="regression_model_polars",
+            status="implemented",backend_explicit=True)
+        return
+
     if canonical == "ts_regression_slope":
         from factor_engine.cleaned_operators.common.polars_ts_rolling import TSRegressionSlopeNative
 
@@ -246,6 +379,40 @@ def register_polars_udf(canonical: str) -> None:
             )
         return
 
+    if canonical == "session_event_recovery_score":
+        from factor_engine.cleaned_operators.common.session_recovery_delegate import register
+        register()
+        return
+
+    if canonical in {"ts_recovery_fraction", "ts_current_drawdown_area"}:
+        from factor_engine.cleaned_operators.common.drawdown_path_delegate import make
+        OperatorRegistry.register(
+            make(canonical)(), canonical=canonical, backend="polars",
+            source="drawdown_path_reference_polars", status="implemented",
+            backend_explicit=True,
+        )
+        return
+
+    if canonical in {
+        "beta_residual_z", "beta_divergence_pct", "relative_strength_group_pct",
+    }:
+        from factor_engine.cleaned_operators.common.group_state_v1_delegate import make
+        OperatorRegistry.register(
+            make(canonical)(), canonical=canonical, backend="polars",
+            source="group_state_v1_reference_polars", status="implemented",
+            backend_explicit=True,
+        )
+        return
+
+    if canonical in {"cross_event", "event_refractory"}:
+        from factor_engine.cleaned_operators.common.stateful_events_delegate import make
+        OperatorRegistry.register(
+            make(canonical)(), canonical=canonical, backend="polars",
+            source="stateful_events_reference_polars", status="implemented",
+            backend_explicit=True,
+        )
+        return
+
     class _PolarsUdf(PolarsSeriesOperator):
         metadata = PolarsMetadata(name=canonical, category="polars_udf", param_names=[])
         # FE-P0-005 / R13 P0-63: explicit physical-spec declaration so production
@@ -258,6 +425,7 @@ def register_polars_udf(canonical: str) -> None:
             execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
             supports_lazy=False,
             supports_streaming=False,
+            stateful=canonical == "hump_decay",
             materializes_full_panel=True,
             supports_nulls=True,
             supports_nan=True,
@@ -266,6 +434,12 @@ def register_polars_udf(canonical: str) -> None:
 
         def _calculate_series(self, *frames, **params):
             return _call_pandas_delegate(canonical, frames, params)
+
+    regression_contract_twins = {
+        "cs_multi_resid", "cs_wls_resid", "ts_max_drawdown", "ts_nth_value",
+        "ts_partial_corr", "ts_regression_tstat", "ts_trend_tstat",
+        "intra_impulse_event_detector",
+    }
 
     # R20: Attach param_specs from the pandas_numpy reference so the polars bridge
     # carries the same contract.  The registry backfills param_names but NOT
@@ -282,6 +456,21 @@ def register_polars_udf(canonical: str) -> None:
         # the polars delegate slot reports the same session-close availability.
         _ref_available_at = getattr(_ref_meta, "available_at", None)
         _ref_same_session_usable = getattr(_ref_meta, "same_session_usable", None)
+        if canonical in regression_contract_twins:
+            _PolarsUdf.metadata = PolarsMetadata(
+                name=canonical,
+                category="polars_udf",
+                param_names=list(getattr(_ref_meta, "param_names", None) or []),
+                param_specs=dict(_ref_specs or {}),
+                panel_params=tuple(getattr(_ref_meta, "panel_params", None) or ()),
+                scalar_params=tuple(getattr(_ref_meta, "scalar_params", None) or ()),
+                mixed_params=tuple(getattr(_ref_meta, "mixed_params", None) or ()),
+                nullable_mixed_params=tuple(getattr(_ref_meta, "nullable_mixed_params", None) or ()),
+                variadic_mixed_param=getattr(_ref_meta, "variadic_mixed_param", None),
+                available_at=_ref_available_at,
+                same_session_usable=_ref_same_session_usable,
+            )
+            _udf_names = set(_PolarsUdf.metadata.param_names)
         _filtered = {}
         if _ref_specs:
             from factor_engine.cleaned_operators.base import ParamSpec as _PS
@@ -289,7 +478,9 @@ def register_polars_udf(canonical: str) -> None:
                          if isinstance(v, _PS)
                          and (k in _ref_names or k in _ref_aliases)
                          and (k in _udf_names or k in _udf_aliases)}
-        if _filtered or _ref_available_at is not None or _ref_same_session_usable is not None:
+        if canonical not in regression_contract_twins and (
+            _filtered or _ref_available_at is not None or _ref_same_session_usable is not None
+        ):
             _PolarsUdf.metadata = PolarsMetadata(
                 name=canonical,
                 category="polars_udf",
@@ -298,10 +489,63 @@ def register_polars_udf(canonical: str) -> None:
                 available_at=_ref_available_at,
                 same_session_usable=_ref_same_session_usable,
             )
+        # The delegate has the same call topology as its pandas authority.
+        # In particular, variadic and dynamic-input tags are binder semantics,
+        # not documentation: dropping them makes an otherwise honest delegate
+        # reject valid multi-panel calls before conversion.
+        _PolarsUdf.metadata.param_names = list(getattr(_ref_meta, "param_names", None) or [])
+        _PolarsUdf.metadata.panel_params = tuple(getattr(_ref_meta, "panel_params", None) or ())
+        _PolarsUdf.metadata.panel_arity = int(getattr(_ref_meta, "panel_arity", 0) or 0)
+        _PolarsUdf.metadata.scalar_params = tuple(getattr(_ref_meta, "scalar_params", None) or ())
+        _PolarsUdf.metadata.mixed_params = tuple(getattr(_ref_meta, "mixed_params", None) or ())
+        _PolarsUdf.metadata.nullable_mixed_params = tuple(getattr(_ref_meta, "nullable_mixed_params", None) or ())
+        _PolarsUdf.metadata.variadic_mixed_param = getattr(_ref_meta, "variadic_mixed_param", None)
+        _PolarsUdf.metadata.tags = list(getattr(_ref_meta, "tags", None) or [])
+    if canonical in _DYNAMIC_REGRESSION_DELEGATES and _pandas_ref is not None:
+        _pandas_source = inspect.getsourcefile(type(_pandas_ref))
+        if not _pandas_source:
+            raise RuntimeError(f"{canonical}: cannot bind delegate to Pandas source")
+        _digest = hashlib.sha256(
+            Path(__file__).read_bytes() + Path(_pandas_source).read_bytes()
+        ).hexdigest()
+        _PolarsUdf._physical_spec = PhysicalImplementationSpec(
+            canonical=canonical, backend="polars",
+            execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+            supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+            supports_nulls=True, supports_nan=True, supports_inf=True,
+            implementation_source_hash=_digest,
+            kernel_identity=(
+                f"{type(_pandas_ref).__module__}.{type(_pandas_ref).__qualname__}"
+                "+rolling_pack._call_pandas_delegate"
+            ),
+        )
+    if canonical == "protected_div":
+        # This compiler-internal operator is registered before its final GTJA
+        # pandas override.  Preserve its stable public call topology instead of
+        # freezing the earlier TwoVarOperator panel-only inference.
+        _PolarsUdf.metadata.param_names = ["x", "y", "epsilon", "default"]
+        _PolarsUdf.metadata.panel_params = ()
+        _PolarsUdf.metadata.scalar_params = ("epsilon", "default")
+        _PolarsUdf.metadata.mixed_params = ("x", "y")
 
     # Check if there's already a polars backend registered
     existing = OperatorRegistry.get(canonical, "polars")
     if existing is not None:
+        # Test bootstrap may stage legacy single-series pseudo-native classes
+        # before the multi-panel regression contracts load.  For this audited
+        # family, deterministically replace those classes with the exact
+        # Pandas delegate whose content identity is bound above.
+        if canonical in _DYNAMIC_REGRESSION_DELEGATES:
+            OperatorRegistry.register(
+                _PolarsUdf(), canonical=canonical, backend="polars",
+                source="dynamic_regression_reference_polars",
+                status="implemented", backend_explicit=True, replace=True,
+                replacement_reason=(
+                    "replace legacy single-series regression backend with "
+                    "audited multi-panel pandas delegate"
+                ),
+            )
+            return
         # If there's already a polars backend, we need to find its source
         # For now, let's skip registration if there's already a polars backend
         # This avoids the replace issue

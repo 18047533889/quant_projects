@@ -22,18 +22,38 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator,
+)
 from factor_engine.cleaned_operators.common.strict_params import strict_nonnegative_int
 from factor_engine.cleaned_operators.rolling_pack import check_window, frame_like, register_polars_bridge
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str = "count") -> OperatorMetadata:
+    panel_names = {
+        "close", "down_event", "event", "high", "high_limit", "is_suspend",
+        "known_status", "limit_down_event", "limit_up_event", "low", "low_limit",
+        "open", "up_event", "valid_trade", "volume",
+    }
+    panel_params = tuple(param for param in params if param in panel_names)
+    scalar_params = tuple(param for param in params if param not in panel_names)
+    specs = {
+        "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        "max_lookback": ParamSpec(dtype=int, min=0, default=None, searchable=False, param_role=ParamRole.HORIZON),
+        "side": ParamSpec(dtype=str, choices=("up", "down"), default="up", searchable=False, param_role=ParamRole.MARKET_POLICY),
+        "tick_tolerance": ParamSpec(dtype=float, min=0.0, default=0.005, searchable=False, param_role=ParamRole.NUMERICAL),
+    }
     return OperatorMetadata(
         name=name,
         category="ashare",
         description=description,
         param_names=params,
         return_type="series",
+        param_specs={param: specs[param] for param in scalar_params},
+        panel_params=panel_params,
+        panel_arity=len(panel_params),
+        scalar_params=scalar_params,
+        total_positional_arity=len(params),
         tags=[
             "ashare", "daily", "pit_safe", "causal", "typed_v2",
             f"signature:{','.join(params)}->series", "domain:trading_state",
@@ -394,13 +414,13 @@ class AshareOnePriceLimitStreak(SeriesOperator):
         unit="count",
     )
 
-    def _calculate_series(self, open_p: pd.DataFrame, high: pd.DataFrame, low: pd.DataFrame, close: pd.DataFrame, high_limit: pd.DataFrame, low_limit: pd.DataFrame, valid_trade: pd.DataFrame, side: str = "up", tick_tolerance: float = 0.005, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, open: pd.DataFrame, high: pd.DataFrame, low: pd.DataFrame, close: pd.DataFrame, high_limit: pd.DataFrame, low_limit: pd.DataFrame, valid_trade: pd.DataFrame, side: str = "up", tick_tolerance: float = 0.005, **_: Any) -> pd.DataFrame:
         tol = _tolerance(tick_tolerance)
         side_kind = str(side).lower()
         if side_kind not in {"up", "down"}:
             raise ValueError("side must be 'up' or 'down'")
         rows, cols = close.shape
-        ov = open_p.to_numpy(dtype=float)
+        ov = open.to_numpy(dtype=float)
         hv = high.to_numpy(dtype=float)
         lv = low.to_numpy(dtype=float)
         cv = close.to_numpy(dtype=float)
@@ -575,11 +595,11 @@ class AshareLimitOpenUpStreak(SeriesOperator):
         unit="count",
     )
 
-    def _calculate_series(self, open_p: pd.DataFrame, high_limit: pd.DataFrame, valid_trade: pd.DataFrame, tick_tolerance: float = 0.005, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, open: pd.DataFrame, high_limit: pd.DataFrame, valid_trade: pd.DataFrame, tick_tolerance: float = 0.005, **_: Any) -> pd.DataFrame:
         return frame_like(
-            open_p,
+            open,
             _open_limit_streak(
-                open_p.to_numpy(dtype=float),
+                open.to_numpy(dtype=float),
                 high_limit.to_numpy(dtype=float),
                 valid_trade.to_numpy(dtype=float),
                 _tolerance(tick_tolerance),
@@ -604,8 +624,8 @@ class AshareLimitOpenDownStreak(SeriesOperator):
         unit="count",
     )
 
-    def _calculate_series(self, open_p: pd.DataFrame, low_limit: pd.DataFrame, valid_trade: pd.DataFrame, tick_tolerance: float = 0.005, **_: Any) -> pd.DataFrame:
-        ov = open_p.to_numpy(dtype=float)
+    def _calculate_series(self, open: pd.DataFrame, low_limit: pd.DataFrame, valid_trade: pd.DataFrame, tick_tolerance: float = 0.005, **_: Any) -> pd.DataFrame:
+        ov = open.to_numpy(dtype=float)
         limit = low_limit.to_numpy(dtype=float)
         rows, cols = ov.shape
         condition = np.full((rows, cols), np.nan, dtype=float)
@@ -617,7 +637,7 @@ class AshareLimitOpenDownStreak(SeriesOperator):
                     continue
                 if np.isfinite(ov[r, c]) and np.isfinite(limit[r, c]):
                     condition[r, c] = 1.0 if ov[r, c] <= limit[r, c] * (1.0 + _tolerance(tick_tolerance)) else 0.0
-        return frame_like(open_p, _consecutive_streak(condition, tradeable, rows, cols))
+        return frame_like(open, _consecutive_streak(condition, tradeable, rows, cols))
 
 
 def _event_volume_ratio(volume: np.ndarray, event: np.ndarray, window: int) -> np.ndarray:

@@ -749,25 +749,10 @@ def register() -> None:
         status="experimental",
     )(type("_FiscalPerpetualInventoryPolars", (_FiscalPerpetualInventory,), {"_calculate_series": lambda self, *args, **kwargs: pl_fiscal_perpetual_inventory(*args, **kwargs)}))
 
-    register_operator(
-        name="cash_flow_lifecycle_stage",
-        category="fundamental_period",
-        business_category="fundamental",
-        canonical="cash_flow_lifecycle_stage",
-        source="fundamental.fiscal_batch3",
-        backend="pandas_numpy",
-        status="experimental",
-    )(_CashFlowLifecycleStage)
-
-    register_operator(
-        name="cash_flow_lifecycle_stage",
-        category="fundamental_period",
-        business_category="fundamental",
-        canonical="cash_flow_lifecycle_stage",
-        source="fundamental.fiscal_batch3",
-        backend="polars",
-        status="experimental",
-    )(type("_CashFlowLifecycleStagePolars", (_CashFlowLifecycleStage,), {"_calculate_series": lambda self, *args, **kwargs: pl_cash_flow_lifecycle_stage(*args, **kwargs)}))
+    # ``cash_flow_lifecycle_stage`` is canonically the three-panel sign-stage
+    # operator registered by fiscal_event_ops.  This older experimental fiscal
+    # history variant has an incompatible eight-argument signature and must not
+    # overwrite either canonical backend during bootstrap.
 
     register_operator(
         name="laborforce_efficiency",

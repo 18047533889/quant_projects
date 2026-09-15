@@ -12,7 +12,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from factor_engine.cleaned_operators.fiscal_event_ops import FiscalEventView
 from factor_engine.cleaned_operators.fiscal_strict import period_ordinal
 
@@ -361,6 +367,13 @@ class _AccountingComparabilityScore(SeriesOperator):
             "min_peers",
             "revision_policy",
         ],
+        panel_params=("scaled_earnings", "report_return", "industry", "period_id"),
+        param_specs={
+            "periods": ParamSpec(dtype=int, min=1, default=16, param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=12, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_peers": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "revision_policy": ParamSpec(dtype=str, choices=("latest_available", "first_available"), default="latest_available", searchable=False, param_role=ParamRole.POLICY),
+        },
         return_type="series",
         tags=[
             "fundamental",
@@ -393,6 +406,12 @@ class _FiscalAsymmetricTimeliness(SeriesOperator):
             "min_periods",
             "revision_policy",
         ],
+        panel_params=("scaled_earnings", "report_return", "period_id"),
+        param_specs={
+            "periods": ParamSpec(dtype=int, min=1, default=16, param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=12, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "revision_policy": ParamSpec(dtype=str, choices=("latest_available", "first_available"), default="latest_available", searchable=False, param_role=ParamRole.POLICY),
+        },
         return_type="series",
         tags=[
             "fundamental",

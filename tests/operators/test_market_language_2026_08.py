@@ -53,6 +53,7 @@ def test_market_language_ops_registered_and_classified():
         "ts_dc_overshoot_asymmetry", "ts_feature_mode_share",
         "ts_feature_effective_rank", "ts_feature_subspace_rotation",
         "ts_beta_break_score", "intraday_subsampled_rv_dispersion",
+
         "intraday_volatility_signature_slope", "intraday_profile_surprise_energy",
         "ohlc_corwin_schultz_spread", "cs_knn_local_linear_residual",
         "group_tail_centrality", "event_mark_autocorr",
@@ -71,8 +72,13 @@ def test_market_language_ops_registered_and_classified():
     assert all_new <= ALL_OPS
     for c in p1:
         assert classify_canonical(c) in {"daily", "extended"}, c
+    # R22: authoring tier follows the explicit DirectUse promotion contract,
+    # not the source module's historical research-only registration list.
+    from factor_engine.mining.direct_use import _resolve_explicit
     for c in p2:
-        assert classify_canonical(c) == "research", c
+        contract=_resolve_explicit(c,{})
+        promoted=contract is not None and contract.status.value.startswith("direct_")
+        assert classify_canonical(c)==("extended" if promoted else "research"),c
     # polars bridge present for every new op (survives the overhaul cleanup).
     for c in all_new:
         assert "polars" in OperatorRegistry.backends_for(c), c
@@ -289,13 +295,14 @@ def test_corwin_schultz_two_day_golden():
     assert out.iloc[-1, 0] == pytest.approx(0.05, rel=1e-2)
 
 
-def test_roll_spread_geometric_zero():
+def test_roll_spread_geometric_has_no_real_spread():
     x = _col([1.0, 2.0, 4.0, 8.0, 16.0, 32.0, 64.0])
     out = OperatorRegistry.get("ts_roll_effective_spread", "pandas_numpy").calculate(
         x, window=5
     )
-    # constant log-diffs -> zero covariance -> S = 0.
-    assert out.iloc[-1, 0] == pytest.approx(0.0)
+    # Constant log-diffs do not meet the negative-covariance model premise.
+    # The existing R26 contract is undefined/NaN, never fabricated liquidity.
+    assert np.isnan(out.iloc[-1, 0])
 
 
 # ---------------------------------------------------------------------------

@@ -29,7 +29,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator, ParamRole, ParamSpec
+from factor_engine.cleaned_operators.parameter_validation import strict_integer
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
@@ -41,6 +42,13 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         category="interval_geometry",
         description=description,
         param_names=params,
+        panel_params=tuple(p for p in params if p in {"x","low","high","close"}),
+        scalar_params=tuple(p for p in params if p not in {"x","low","high","close"}),
+        param_specs={p:spec for p,spec in {
+            "window":ParamSpec(dtype=int,min=1,default=20,param_role=ParamRole.HORIZON),
+            "bins":ParamSpec(dtype=int,min=2,default=8,param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "mode":ParamSpec(dtype=str,choices=("inside","outside"),default="inside",param_role=ParamRole.ECONOMIC),
+        }.items() if p in params},
         return_type="series",
         tags=[
             "interval_geometry", "daily", "pit_safe", "causal", "typed_v2",
@@ -122,7 +130,7 @@ def _occupancy_profile(l: np.ndarray, h: np.ndarray, bins: int) -> tuple[np.ndar
 def _union_coverage_series(lo2d: np.ndarray, hi2d: np.ndarray, window: int) -> np.ndarray:
     rows, cols = lo2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    w = int(window)
+    w = strict_integer(window,"window",minimum=1)
     for c in range(cols):
         lo, hi = lo2d[:, c], hi2d[:, c]
         for r in range(rows):
@@ -141,7 +149,7 @@ def _union_coverage_series(lo2d: np.ndarray, hi2d: np.ndarray, window: int) -> n
 def _occupancy_series(lo2d: np.ndarray, hi2d: np.ndarray, window: int, bins: int, mode: str) -> np.ndarray:
     rows, cols = lo2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    w, b = int(window), int(bins)
+    w, b = strict_integer(window,"window",minimum=1), strict_integer(bins,"bins",minimum=2)
     for c in range(cols):
         lo, hi = lo2d[:, c], hi2d[:, c]
         for r in range(rows):
@@ -197,7 +205,7 @@ def _nesting_depth_series(lo2d: np.ndarray, hi2d: np.ndarray, mode: str) -> np.n
 def _exploration_efficiency_series(hi2d: np.ndarray, lo2d: np.ndarray, cl2d: np.ndarray, window: int) -> np.ndarray:
     rows, cols = hi2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    w = int(window)
+    w = strict_integer(window,"window",minimum=1)
     for c in range(cols):
         hi, lo, cl = hi2d[:, c], lo2d[:, c], cl2d[:, c]
         prev_cl = np.concatenate([[np.nan], cl[:-1]])
@@ -246,7 +254,7 @@ def _exploration_efficiency_series(hi2d: np.ndarray, lo2d: np.ndarray, cl2d: np.
 def _overlap_component_ratio_series(lo2d: np.ndarray, hi2d: np.ndarray, window: int) -> np.ndarray:
     rows, cols = lo2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    w = int(window)
+    w = strict_integer(window,"window",minimum=1)
     for c in range(cols):
         lo, hi = lo2d[:, c], hi2d[:, c]
         for r in range(rows):
@@ -359,10 +367,10 @@ class TsIntervalOccupancyModeDistance(SeriesOperator):
         x2, lo2, hi2 = (a.to_numpy(dtype=float) for a in (x, low, high))
         rows, cols = x2.shape
         out = np.full((rows, cols), np.nan, dtype=float)
-        w, b = int(window), int(bins)
+        w, b = strict_integer(window,"window",minimum=1), strict_integer(bins,"bins",minimum=2)
         for c in range(cols):
             for r in range(rows):
-                i0 = max(0, r - w + 1)
+                i0 = max(0, r - w)
                 # R6-111: the occupancy profile must EXCLUDE the current row.
                 # Including ``[low_t, high_t]`` then measuring the distance of
                 # the current price to the mode of that same profile is
@@ -380,7 +388,8 @@ class TsIntervalOccupancyModeDistance(SeriesOperator):
                 modal = int(np.argmax(p))
                 centre = (edges[modal] + edges[modal + 1]) / 2.0
                 span = edges[-1] - edges[0]
-                out[r, c] = (x2[r, c] - centre) / span  # no EPS floor; span > 0
+                if np.isfinite(x2[r, c]):
+                    out[r, c] = (x2[r, c] - centre) / span  # no EPS floor; span > 0
         return frame_like(x, out)
 
 

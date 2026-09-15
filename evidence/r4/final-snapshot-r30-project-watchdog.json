@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "tests/operators/test_runtime_operator_snapshot_v3.py", "tests/operators/r30/test_all_public_param_kinds_explicit.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 0, "sampled_peak_family_rss_bytes": 777527296, "sampling_seconds": 0.1, "seconds": 56.43809385900386, "test_guard_reason": null, "hard_memory_cap": false}

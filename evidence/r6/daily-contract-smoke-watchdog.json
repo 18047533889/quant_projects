@@ -1,0 +1,690 @@
+EEEEEEEE                                                                 [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_argext_ignores_infinity_preserves_original_age[ts_argmax-pandas_numpy] _
+
+    @pytest.fixture(scope="module",autouse=True)
+    def registry():
+>       load_all()
+
+factor_engine/tests/runtime/test_r6_daily_finite_history.py:11: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/__init__.py:918: in load_all
+    REGISTRY_BOOTSTRAP.ensure_ready(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:652: in ensure_ready
+    self._run_initialization(self._include_research)
+factor_engine/cleaned_operators/__init__.py:614: in _run_initialization
+    _load_all_impl(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:957: in _load_all_impl
+    _load_module_if_available(spec.module)
+factor_engine/cleaned_operators/__init__.py:526: in _load_module_if_available
+    __import__(mod, fromlist=["*"])
+factor_engine/cleaned_operators/operator_overhaul.py:10: in <module>
+    register_all()
+factor_engine/cleaned_operators/overhaul/__init__.py:29: in register_all
+    daily.register()
+factor_engine/cleaned_operators/overhaul/daily.py:540: in register
+    register_specs(specs)
+factor_engine/cleaned_operators/overhaul/base.py:337: in register_specs
+    _inherit_canonical_logical_contract(name, pandas_op)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+canonical = 'ts_count_if', operator = <Operator: ts_count_if>
+
+    def _inherit_canonical_logical_contract(canonical: str, operator: Any) -> None:
+        """R13 NEW-P0-04: replacement metadata inherits the canonical logical contract.
+    
+        Before an overhaul replacement is registered, resolve the canonical's
+        logical contract (ParamSpec / aliases / units / compatible units / output
+        unit / active_when-in-specs / grains / availability / role / arity /
+        broadcast / semantic fields) from the existing catalog entry.  Every empty
+        slot on the replacement is copied from the canonical; every non-empty slot
+        must EQUAL the canonical or registration raises — a replacement may change
+        the implementation, not the logical contract.
+    
+        The registry's ``_backfill_logical_contract`` already enforces this at
+        ``register()`` time; this helper makes the overhaul layer honest up front and
+        carries the canonical contract onto the operator *instance* metadata so the
+        central validator sees the same contract on every backend.
+        """
+        meta = getattr(operator, "metadata", None)
+        if meta is None:
+            return
+        catalog = OperatorRegistry._catalog.get(canonical) or {}
+        for field, empty in _CONTRACT_FIELDS:
+            canonical_value = catalog.get(field)
+            if canonical_value in (None, "", (), [], {}):
+                continue  # the canonical declares nothing here — nothing to inherit
+            try:
+                current = getattr(meta, field, None)
+            except AttributeError:  # pragma: no cover - metadata is a dataclass
+                continue
+            if current in (None, "", (), [], {}):
+                # Empty replacement slot -> inherit the canonical contract value so
+                # the operator instance (not just the catalog dict) carries it.
+                try:
+                    if isinstance(canonical_value, dict):
+                        setattr(meta, field, dict(canonical_value))
+                    elif isinstance(canonical_value, (list, tuple)):
+                        setattr(meta, field, type(canonical_value)(canonical_value))
+                    else:
+                        setattr(meta, field, canonical_value)
+                except (AttributeError, TypeError, ValueError):
+                    pass  # frozen metadata: the catalog still carries the contract
+                continue
+            # Non-empty replacement-declared value must MATCH the canonical.
+            if not _contract_field_equal(current, canonical_value):
+>               raise ValueError(
+                    f"overhaul replacement of {canonical!r} diverges from the "
+                    f"canonical logical contract: field {field!r} declares "
+                    f"{current!r} but the canonical contract holds "
+                    f"{canonical_value!r} (R13 NEW-P0-04 — a replacement may change "
+                    "only the implementation callable / backend capability / "
+                    "implementation hash, never the logical contract)"
+                )
+E               ValueError: overhaul replacement of 'ts_count_if' diverges from the canonical logical contract: field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=1, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} (R13 NEW-P0-04 — a replacement may change only the implementation callable / backend capability / implementation hash, never the logical contract)
+
+factor_engine/cleaned_operators/overhaul/base.py:312: ValueError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: duplicate registration of canonical 'ts_count_if' backend 'polars' (old source='factor_dsl_polars_native', new source='daily_panel_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_sum_if' backend 'polars' (old source='factor_dsl_polars_native', new source='daily_panel_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_mean_if' backend 'polars' (old source='factor_dsl_polars_native', new source='daily_panel_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_std_if' backend 'polars' (old source='factor_dsl_polars_native', new source='daily_panel_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_days_since' backend 'polars' (old source='factor_dsl_polars_native', new source='daily_panel_polars'). Continuing despite duplicate for compatibility.
+_ ERROR at setup of test_argext_ignores_infinity_preserves_original_age[ts_argmax-polars] _
+
+    @pytest.fixture(scope="module",autouse=True)
+    def registry():
+>       load_all()
+
+factor_engine/tests/runtime/test_r6_daily_finite_history.py:11: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/__init__.py:918: in load_all
+    REGISTRY_BOOTSTRAP.ensure_ready(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:652: in ensure_ready
+    self._run_initialization(self._include_research)
+factor_engine/cleaned_operators/__init__.py:614: in _run_initialization
+    _load_all_impl(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:957: in _load_all_impl
+    _load_module_if_available(spec.module)
+factor_engine/cleaned_operators/__init__.py:526: in _load_module_if_available
+    __import__(mod, fromlist=["*"])
+factor_engine/cleaned_operators/operator_overhaul.py:10: in <module>
+    register_all()
+factor_engine/cleaned_operators/overhaul/__init__.py:29: in register_all
+    daily.register()
+factor_engine/cleaned_operators/overhaul/daily.py:540: in register
+    register_specs(specs)
+factor_engine/cleaned_operators/overhaul/base.py:337: in register_specs
+    _inherit_canonical_logical_contract(name, pandas_op)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+canonical = 'ts_count_if', operator = <Operator: ts_count_if>
+
+    def _inherit_canonical_logical_contract(canonical: str, operator: Any) -> None:
+        """R13 NEW-P0-04: replacement metadata inherits the canonical logical contract.
+    
+        Before an overhaul replacement is registered, resolve the canonical's
+        logical contract (ParamSpec / aliases / units / compatible units / output
+        unit / active_when-in-specs / grains / availability / role / arity /
+        broadcast / semantic fields) from the existing catalog entry.  Every empty
+        slot on the replacement is copied from the canonical; every non-empty slot
+        must EQUAL the canonical or registration raises — a replacement may change
+        the implementation, not the logical contract.
+    
+        The registry's ``_backfill_logical_contract`` already enforces this at
+        ``register()`` time; this helper makes the overhaul layer honest up front and
+        carries the canonical contract onto the operator *instance* metadata so the
+        central validator sees the same contract on every backend.
+        """
+        meta = getattr(operator, "metadata", None)
+        if meta is None:
+            return
+        catalog = OperatorRegistry._catalog.get(canonical) or {}
+        for field, empty in _CONTRACT_FIELDS:
+            canonical_value = catalog.get(field)
+            if canonical_value in (None, "", (), [], {}):
+                continue  # the canonical declares nothing here — nothing to inherit
+            try:
+                current = getattr(meta, field, None)
+            except AttributeError:  # pragma: no cover - metadata is a dataclass
+                continue
+            if current in (None, "", (), [], {}):
+                # Empty replacement slot -> inherit the canonical contract value so
+                # the operator instance (not just the catalog dict) carries it.
+                try:
+                    if isinstance(canonical_value, dict):
+                        setattr(meta, field, dict(canonical_value))
+                    elif isinstance(canonical_value, (list, tuple)):
+                        setattr(meta, field, type(canonical_value)(canonical_value))
+                    else:
+                        setattr(meta, field, canonical_value)
+                except (AttributeError, TypeError, ValueError):
+                    pass  # frozen metadata: the catalog still carries the contract
+                continue
+            # Non-empty replacement-declared value must MATCH the canonical.
+            if not _contract_field_equal(current, canonical_value):
+>               raise ValueError(
+                    f"overhaul replacement of {canonical!r} diverges from the "
+                    f"canonical logical contract: field {field!r} declares "
+                    f"{current!r} but the canonical contract holds "
+                    f"{canonical_value!r} (R13 NEW-P0-04 — a replacement may change "
+                    "only the implementation callable / backend capability / "
+                    "implementation hash, never the logical contract)"
+                )
+E               ValueError: overhaul replacement of 'ts_count_if' diverges from the canonical logical contract: field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=1, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} (R13 NEW-P0-04 — a replacement may change only the implementation callable / backend capability / implementation hash, never the logical contract)
+
+factor_engine/cleaned_operators/overhaul/base.py:312: ValueError
+_ ERROR at setup of test_argext_ignores_infinity_preserves_original_age[ts_argmin-pandas_numpy] _
+
+    @pytest.fixture(scope="module",autouse=True)
+    def registry():
+>       load_all()
+
+factor_engine/tests/runtime/test_r6_daily_finite_history.py:11: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/__init__.py:918: in load_all
+    REGISTRY_BOOTSTRAP.ensure_ready(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:652: in ensure_ready
+    self._run_initialization(self._include_research)
+factor_engine/cleaned_operators/__init__.py:614: in _run_initialization
+    _load_all_impl(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:957: in _load_all_impl
+    _load_module_if_available(spec.module)
+factor_engine/cleaned_operators/__init__.py:526: in _load_module_if_available
+    __import__(mod, fromlist=["*"])
+factor_engine/cleaned_operators/operator_overhaul.py:10: in <module>
+    register_all()
+factor_engine/cleaned_operators/overhaul/__init__.py:29: in register_all
+    daily.register()
+factor_engine/cleaned_operators/overhaul/daily.py:540: in register
+    register_specs(specs)
+factor_engine/cleaned_operators/overhaul/base.py:337: in register_specs
+    _inherit_canonical_logical_contract(name, pandas_op)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+canonical = 'ts_count_if', operator = <Operator: ts_count_if>
+
+    def _inherit_canonical_logical_contract(canonical: str, operator: Any) -> None:
+        """R13 NEW-P0-04: replacement metadata inherits the canonical logical contract.
+    
+        Before an overhaul replacement is registered, resolve the canonical's
+        logical contract (ParamSpec / aliases / units / compatible units / output
+        unit / active_when-in-specs / grains / availability / role / arity /
+        broadcast / semantic fields) from the existing catalog entry.  Every empty
+        slot on the replacement is copied from the canonical; every non-empty slot
+        must EQUAL the canonical or registration raises — a replacement may change
+        the implementation, not the logical contract.
+    
+        The registry's ``_backfill_logical_contract`` already enforces this at
+        ``register()`` time; this helper makes the overhaul layer honest up front and
+        carries the canonical contract onto the operator *instance* metadata so the
+        central validator sees the same contract on every backend.
+        """
+        meta = getattr(operator, "metadata", None)
+        if meta is None:
+            return
+        catalog = OperatorRegistry._catalog.get(canonical) or {}
+        for field, empty in _CONTRACT_FIELDS:
+            canonical_value = catalog.get(field)
+            if canonical_value in (None, "", (), [], {}):
+                continue  # the canonical declares nothing here — nothing to inherit
+            try:
+                current = getattr(meta, field, None)
+            except AttributeError:  # pragma: no cover - metadata is a dataclass
+                continue
+            if current in (None, "", (), [], {}):
+                # Empty replacement slot -> inherit the canonical contract value so
+                # the operator instance (not just the catalog dict) carries it.
+                try:
+                    if isinstance(canonical_value, dict):
+                        setattr(meta, field, dict(canonical_value))
+                    elif isinstance(canonical_value, (list, tuple)):
+                        setattr(meta, field, type(canonical_value)(canonical_value))
+                    else:
+                        setattr(meta, field, canonical_value)
+                except (AttributeError, TypeError, ValueError):
+                    pass  # frozen metadata: the catalog still carries the contract
+                continue
+            # Non-empty replacement-declared value must MATCH the canonical.
+            if not _contract_field_equal(current, canonical_value):
+>               raise ValueError(
+                    f"overhaul replacement of {canonical!r} diverges from the "
+                    f"canonical logical contract: field {field!r} declares "
+                    f"{current!r} but the canonical contract holds "
+                    f"{canonical_value!r} (R13 NEW-P0-04 — a replacement may change "
+                    "only the implementation callable / backend capability / "
+                    "implementation hash, never the logical contract)"
+                )
+E               ValueError: overhaul replacement of 'ts_count_if' diverges from the canonical logical contract: field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=1, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} (R13 NEW-P0-04 — a replacement may change only the implementation callable / backend capability / implementation hash, never the logical contract)
+
+factor_engine/cleaned_operators/overhaul/base.py:312: ValueError
+_ ERROR at setup of test_argext_ignores_infinity_preserves_original_age[ts_argmin-polars] _
+
+    @pytest.fixture(scope="module",autouse=True)
+    def registry():
+>       load_all()
+
+factor_engine/tests/runtime/test_r6_daily_finite_history.py:11: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/__init__.py:918: in load_all
+    REGISTRY_BOOTSTRAP.ensure_ready(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:652: in ensure_ready
+    self._run_initialization(self._include_research)
+factor_engine/cleaned_operators/__init__.py:614: in _run_initialization
+    _load_all_impl(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:957: in _load_all_impl
+    _load_module_if_available(spec.module)
+factor_engine/cleaned_operators/__init__.py:526: in _load_module_if_available
+    __import__(mod, fromlist=["*"])
+factor_engine/cleaned_operators/operator_overhaul.py:10: in <module>
+    register_all()
+factor_engine/cleaned_operators/overhaul/__init__.py:29: in register_all
+    daily.register()
+factor_engine/cleaned_operators/overhaul/daily.py:540: in register
+    register_specs(specs)
+factor_engine/cleaned_operators/overhaul/base.py:337: in register_specs
+    _inherit_canonical_logical_contract(name, pandas_op)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+canonical = 'ts_count_if', operator = <Operator: ts_count_if>
+
+    def _inherit_canonical_logical_contract(canonical: str, operator: Any) -> None:
+        """R13 NEW-P0-04: replacement metadata inherits the canonical logical contract.
+    
+        Before an overhaul replacement is registered, resolve the canonical's
+        logical contract (ParamSpec / aliases / units / compatible units / output
+        unit / active_when-in-specs / grains / availability / role / arity /
+        broadcast / semantic fields) from the existing catalog entry.  Every empty
+        slot on the replacement is copied from the canonical; every non-empty slot
+        must EQUAL the canonical or registration raises — a replacement may change
+        the implementation, not the logical contract.
+    
+        The registry's ``_backfill_logical_contract`` already enforces this at
+        ``register()`` time; this helper makes the overhaul layer honest up front and
+        carries the canonical contract onto the operator *instance* metadata so the
+        central validator sees the same contract on every backend.
+        """
+        meta = getattr(operator, "metadata", None)
+        if meta is None:
+            return
+        catalog = OperatorRegistry._catalog.get(canonical) or {}
+        for field, empty in _CONTRACT_FIELDS:
+            canonical_value = catalog.get(field)
+            if canonical_value in (None, "", (), [], {}):
+                continue  # the canonical declares nothing here — nothing to inherit
+            try:
+                current = getattr(meta, field, None)
+            except AttributeError:  # pragma: no cover - metadata is a dataclass
+                continue
+            if current in (None, "", (), [], {}):
+                # Empty replacement slot -> inherit the canonical contract value so
+                # the operator instance (not just the catalog dict) carries it.
+                try:
+                    if isinstance(canonical_value, dict):
+                        setattr(meta, field, dict(canonical_value))
+                    elif isinstance(canonical_value, (list, tuple)):
+                        setattr(meta, field, type(canonical_value)(canonical_value))
+                    else:
+                        setattr(meta, field, canonical_value)
+                except (AttributeError, TypeError, ValueError):
+                    pass  # frozen metadata: the catalog still carries the contract
+                continue
+            # Non-empty replacement-declared value must MATCH the canonical.
+            if not _contract_field_equal(current, canonical_value):
+>               raise ValueError(
+                    f"overhaul replacement of {canonical!r} diverges from the "
+                    f"canonical logical contract: field {field!r} declares "
+                    f"{current!r} but the canonical contract holds "
+                    f"{canonical_value!r} (R13 NEW-P0-04 — a replacement may change "
+                    "only the implementation callable / backend capability / "
+                    "implementation hash, never the logical contract)"
+                )
+E               ValueError: overhaul replacement of 'ts_count_if' diverges from the canonical logical contract: field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=1, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} (R13 NEW-P0-04 — a replacement may change only the implementation callable / backend capability / implementation hash, never the logical contract)
+
+factor_engine/cleaned_operators/overhaul/base.py:312: ValueError
+_ ERROR at setup of test_cs_bucket_finite_only_and_invalid_direction[pandas_numpy] _
+
+    @pytest.fixture(scope="module",autouse=True)
+    def registry():
+>       load_all()
+
+factor_engine/tests/runtime/test_r6_daily_finite_history.py:11: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/__init__.py:918: in load_all
+    REGISTRY_BOOTSTRAP.ensure_ready(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:652: in ensure_ready
+    self._run_initialization(self._include_research)
+factor_engine/cleaned_operators/__init__.py:614: in _run_initialization
+    _load_all_impl(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:957: in _load_all_impl
+    _load_module_if_available(spec.module)
+factor_engine/cleaned_operators/__init__.py:526: in _load_module_if_available
+    __import__(mod, fromlist=["*"])
+factor_engine/cleaned_operators/operator_overhaul.py:10: in <module>
+    register_all()
+factor_engine/cleaned_operators/overhaul/__init__.py:29: in register_all
+    daily.register()
+factor_engine/cleaned_operators/overhaul/daily.py:540: in register
+    register_specs(specs)
+factor_engine/cleaned_operators/overhaul/base.py:337: in register_specs
+    _inherit_canonical_logical_contract(name, pandas_op)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+canonical = 'ts_count_if', operator = <Operator: ts_count_if>
+
+    def _inherit_canonical_logical_contract(canonical: str, operator: Any) -> None:
+        """R13 NEW-P0-04: replacement metadata inherits the canonical logical contract.
+    
+        Before an overhaul replacement is registered, resolve the canonical's
+        logical contract (ParamSpec / aliases / units / compatible units / output
+        unit / active_when-in-specs / grains / availability / role / arity /
+        broadcast / semantic fields) from the existing catalog entry.  Every empty
+        slot on the replacement is copied from the canonical; every non-empty slot
+        must EQUAL the canonical or registration raises — a replacement may change
+        the implementation, not the logical contract.
+    
+        The registry's ``_backfill_logical_contract`` already enforces this at
+        ``register()`` time; this helper makes the overhaul layer honest up front and
+        carries the canonical contract onto the operator *instance* metadata so the
+        central validator sees the same contract on every backend.
+        """
+        meta = getattr(operator, "metadata", None)
+        if meta is None:
+            return
+        catalog = OperatorRegistry._catalog.get(canonical) or {}
+        for field, empty in _CONTRACT_FIELDS:
+            canonical_value = catalog.get(field)
+            if canonical_value in (None, "", (), [], {}):
+                continue  # the canonical declares nothing here — nothing to inherit
+            try:
+                current = getattr(meta, field, None)
+            except AttributeError:  # pragma: no cover - metadata is a dataclass
+                continue
+            if current in (None, "", (), [], {}):
+                # Empty replacement slot -> inherit the canonical contract value so
+                # the operator instance (not just the catalog dict) carries it.
+                try:
+                    if isinstance(canonical_value, dict):
+                        setattr(meta, field, dict(canonical_value))
+                    elif isinstance(canonical_value, (list, tuple)):
+                        setattr(meta, field, type(canonical_value)(canonical_value))
+                    else:
+                        setattr(meta, field, canonical_value)
+                except (AttributeError, TypeError, ValueError):
+                    pass  # frozen metadata: the catalog still carries the contract
+                continue
+            # Non-empty replacement-declared value must MATCH the canonical.
+            if not _contract_field_equal(current, canonical_value):
+>               raise ValueError(
+                    f"overhaul replacement of {canonical!r} diverges from the "
+                    f"canonical logical contract: field {field!r} declares "
+                    f"{current!r} but the canonical contract holds "
+                    f"{canonical_value!r} (R13 NEW-P0-04 — a replacement may change "
+                    "only the implementation callable / backend capability / "
+                    "implementation hash, never the logical contract)"
+                )
+E               ValueError: overhaul replacement of 'ts_count_if' diverges from the canonical logical contract: field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=1, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} (R13 NEW-P0-04 — a replacement may change only the implementation callable / backend capability / implementation hash, never the logical contract)
+
+factor_engine/cleaned_operators/overhaul/base.py:312: ValueError
+__ ERROR at setup of test_cs_bucket_finite_only_and_invalid_direction[polars] __
+
+    @pytest.fixture(scope="module",autouse=True)
+    def registry():
+>       load_all()
+
+factor_engine/tests/runtime/test_r6_daily_finite_history.py:11: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/__init__.py:918: in load_all
+    REGISTRY_BOOTSTRAP.ensure_ready(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:652: in ensure_ready
+    self._run_initialization(self._include_research)
+factor_engine/cleaned_operators/__init__.py:614: in _run_initialization
+    _load_all_impl(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:957: in _load_all_impl
+    _load_module_if_available(spec.module)
+factor_engine/cleaned_operators/__init__.py:526: in _load_module_if_available
+    __import__(mod, fromlist=["*"])
+factor_engine/cleaned_operators/operator_overhaul.py:10: in <module>
+    register_all()
+factor_engine/cleaned_operators/overhaul/__init__.py:29: in register_all
+    daily.register()
+factor_engine/cleaned_operators/overhaul/daily.py:540: in register
+    register_specs(specs)
+factor_engine/cleaned_operators/overhaul/base.py:337: in register_specs
+    _inherit_canonical_logical_contract(name, pandas_op)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+canonical = 'ts_count_if', operator = <Operator: ts_count_if>
+
+    def _inherit_canonical_logical_contract(canonical: str, operator: Any) -> None:
+        """R13 NEW-P0-04: replacement metadata inherits the canonical logical contract.
+    
+        Before an overhaul replacement is registered, resolve the canonical's
+        logical contract (ParamSpec / aliases / units / compatible units / output
+        unit / active_when-in-specs / grains / availability / role / arity /
+        broadcast / semantic fields) from the existing catalog entry.  Every empty
+        slot on the replacement is copied from the canonical; every non-empty slot
+        must EQUAL the canonical or registration raises — a replacement may change
+        the implementation, not the logical contract.
+    
+        The registry's ``_backfill_logical_contract`` already enforces this at
+        ``register()`` time; this helper makes the overhaul layer honest up front and
+        carries the canonical contract onto the operator *instance* metadata so the
+        central validator sees the same contract on every backend.
+        """
+        meta = getattr(operator, "metadata", None)
+        if meta is None:
+            return
+        catalog = OperatorRegistry._catalog.get(canonical) or {}
+        for field, empty in _CONTRACT_FIELDS:
+            canonical_value = catalog.get(field)
+            if canonical_value in (None, "", (), [], {}):
+                continue  # the canonical declares nothing here — nothing to inherit
+            try:
+                current = getattr(meta, field, None)
+            except AttributeError:  # pragma: no cover - metadata is a dataclass
+                continue
+            if current in (None, "", (), [], {}):
+                # Empty replacement slot -> inherit the canonical contract value so
+                # the operator instance (not just the catalog dict) carries it.
+                try:
+                    if isinstance(canonical_value, dict):
+                        setattr(meta, field, dict(canonical_value))
+                    elif isinstance(canonical_value, (list, tuple)):
+                        setattr(meta, field, type(canonical_value)(canonical_value))
+                    else:
+                        setattr(meta, field, canonical_value)
+                except (AttributeError, TypeError, ValueError):
+                    pass  # frozen metadata: the catalog still carries the contract
+                continue
+            # Non-empty replacement-declared value must MATCH the canonical.
+            if not _contract_field_equal(current, canonical_value):
+>               raise ValueError(
+                    f"overhaul replacement of {canonical!r} diverges from the "
+                    f"canonical logical contract: field {field!r} declares "
+                    f"{current!r} but the canonical contract holds "
+                    f"{canonical_value!r} (R13 NEW-P0-04 — a replacement may change "
+                    "only the implementation callable / backend capability / "
+                    "implementation hash, never the logical contract)"
+                )
+E               ValueError: overhaul replacement of 'ts_count_if' diverges from the canonical logical contract: field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=1, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} (R13 NEW-P0-04 — a replacement may change only the implementation callable / backend capability / implementation hash, never the logical contract)
+
+factor_engine/cleaned_operators/overhaul/base.py:312: ValueError
+_______ ERROR at setup of test_historical_bucket_uses_exact_prior_window _______
+
+    @pytest.fixture(scope="module",autouse=True)
+    def registry():
+>       load_all()
+
+factor_engine/tests/runtime/test_r6_daily_finite_history.py:11: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/__init__.py:918: in load_all
+    REGISTRY_BOOTSTRAP.ensure_ready(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:652: in ensure_ready
+    self._run_initialization(self._include_research)
+factor_engine/cleaned_operators/__init__.py:614: in _run_initialization
+    _load_all_impl(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:957: in _load_all_impl
+    _load_module_if_available(spec.module)
+factor_engine/cleaned_operators/__init__.py:526: in _load_module_if_available
+    __import__(mod, fromlist=["*"])
+factor_engine/cleaned_operators/operator_overhaul.py:10: in <module>
+    register_all()
+factor_engine/cleaned_operators/overhaul/__init__.py:29: in register_all
+    daily.register()
+factor_engine/cleaned_operators/overhaul/daily.py:540: in register
+    register_specs(specs)
+factor_engine/cleaned_operators/overhaul/base.py:337: in register_specs
+    _inherit_canonical_logical_contract(name, pandas_op)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+canonical = 'ts_count_if', operator = <Operator: ts_count_if>
+
+    def _inherit_canonical_logical_contract(canonical: str, operator: Any) -> None:
+        """R13 NEW-P0-04: replacement metadata inherits the canonical logical contract.
+    
+        Before an overhaul replacement is registered, resolve the canonical's
+        logical contract (ParamSpec / aliases / units / compatible units / output
+        unit / active_when-in-specs / grains / availability / role / arity /
+        broadcast / semantic fields) from the existing catalog entry.  Every empty
+        slot on the replacement is copied from the canonical; every non-empty slot
+        must EQUAL the canonical or registration raises — a replacement may change
+        the implementation, not the logical contract.
+    
+        The registry's ``_backfill_logical_contract`` already enforces this at
+        ``register()`` time; this helper makes the overhaul layer honest up front and
+        carries the canonical contract onto the operator *instance* metadata so the
+        central validator sees the same contract on every backend.
+        """
+        meta = getattr(operator, "metadata", None)
+        if meta is None:
+            return
+        catalog = OperatorRegistry._catalog.get(canonical) or {}
+        for field, empty in _CONTRACT_FIELDS:
+            canonical_value = catalog.get(field)
+            if canonical_value in (None, "", (), [], {}):
+                continue  # the canonical declares nothing here — nothing to inherit
+            try:
+                current = getattr(meta, field, None)
+            except AttributeError:  # pragma: no cover - metadata is a dataclass
+                continue
+            if current in (None, "", (), [], {}):
+                # Empty replacement slot -> inherit the canonical contract value so
+                # the operator instance (not just the catalog dict) carries it.
+                try:
+                    if isinstance(canonical_value, dict):
+                        setattr(meta, field, dict(canonical_value))
+                    elif isinstance(canonical_value, (list, tuple)):
+                        setattr(meta, field, type(canonical_value)(canonical_value))
+                    else:
+                        setattr(meta, field, canonical_value)
+                except (AttributeError, TypeError, ValueError):
+                    pass  # frozen metadata: the catalog still carries the contract
+                continue
+            # Non-empty replacement-declared value must MATCH the canonical.
+            if not _contract_field_equal(current, canonical_value):
+>               raise ValueError(
+                    f"overhaul replacement of {canonical!r} diverges from the "
+                    f"canonical logical contract: field {field!r} declares "
+                    f"{current!r} but the canonical contract holds "
+                    f"{canonical_value!r} (R13 NEW-P0-04 — a replacement may change "
+                    "only the implementation callable / backend capability / "
+                    "implementation hash, never the logical contract)"
+                )
+E               ValueError: overhaul replacement of 'ts_count_if' diverges from the canonical logical contract: field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=1, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} (R13 NEW-P0-04 — a replacement may change only the implementation callable / backend capability / implementation hash, never the logical contract)
+
+factor_engine/cleaned_operators/overhaul/base.py:312: ValueError
+_________ ERROR at setup of test_fixed_bucket_finite_sorted_boundaries _________
+
+    @pytest.fixture(scope="module",autouse=True)
+    def registry():
+>       load_all()
+
+factor_engine/tests/runtime/test_r6_daily_finite_history.py:11: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/cleaned_operators/__init__.py:918: in load_all
+    REGISTRY_BOOTSTRAP.ensure_ready(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:652: in ensure_ready
+    self._run_initialization(self._include_research)
+factor_engine/cleaned_operators/__init__.py:614: in _run_initialization
+    _load_all_impl(include_research=include_research)
+factor_engine/cleaned_operators/__init__.py:957: in _load_all_impl
+    _load_module_if_available(spec.module)
+factor_engine/cleaned_operators/__init__.py:526: in _load_module_if_available
+    __import__(mod, fromlist=["*"])
+factor_engine/cleaned_operators/operator_overhaul.py:10: in <module>
+    register_all()
+factor_engine/cleaned_operators/overhaul/__init__.py:29: in register_all
+    daily.register()
+factor_engine/cleaned_operators/overhaul/daily.py:540: in register
+    register_specs(specs)
+factor_engine/cleaned_operators/overhaul/base.py:337: in register_specs
+    _inherit_canonical_logical_contract(name, pandas_op)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+canonical = 'ts_count_if', operator = <Operator: ts_count_if>
+
+    def _inherit_canonical_logical_contract(canonical: str, operator: Any) -> None:
+        """R13 NEW-P0-04: replacement metadata inherits the canonical logical contract.
+    
+        Before an overhaul replacement is registered, resolve the canonical's
+        logical contract (ParamSpec / aliases / units / compatible units / output
+        unit / active_when-in-specs / grains / availability / role / arity /
+        broadcast / semantic fields) from the existing catalog entry.  Every empty
+        slot on the replacement is copied from the canonical; every non-empty slot
+        must EQUAL the canonical or registration raises — a replacement may change
+        the implementation, not the logical contract.
+    
+        The registry's ``_backfill_logical_contract`` already enforces this at
+        ``register()`` time; this helper makes the overhaul layer honest up front and
+        carries the canonical contract onto the operator *instance* metadata so the
+        central validator sees the same contract on every backend.
+        """
+        meta = getattr(operator, "metadata", None)
+        if meta is None:
+            return
+        catalog = OperatorRegistry._catalog.get(canonical) or {}
+        for field, empty in _CONTRACT_FIELDS:
+            canonical_value = catalog.get(field)
+            if canonical_value in (None, "", (), [], {}):
+                continue  # the canonical declares nothing here — nothing to inherit
+            try:
+                current = getattr(meta, field, None)
+            except AttributeError:  # pragma: no cover - metadata is a dataclass
+                continue
+            if current in (None, "", (), [], {}):
+                # Empty replacement slot -> inherit the canonical contract value so
+                # the operator instance (not just the catalog dict) carries it.
+                try:
+                    if isinstance(canonical_value, dict):
+                        setattr(meta, field, dict(canonical_value))
+                    elif isinstance(canonical_value, (list, tuple)):
+                        setattr(meta, field, type(canonical_value)(canonical_value))
+                    else:
+                        setattr(meta, field, canonical_value)
+                except (AttributeError, TypeError, ValueError):
+                    pass  # frozen metadata: the catalog still carries the contract
+                continue
+            # Non-empty replacement-declared value must MATCH the canonical.
+            if not _contract_field_equal(current, canonical_value):
+>               raise ValueError(
+                    f"overhaul replacement of {canonical!r} diverges from the "
+                    f"canonical logical contract: field {field!r} declares "
+                    f"{current!r} but the canonical contract holds "
+                    f"{canonical_value!r} (R13 NEW-P0-04 — a replacement may change "
+                    "only the implementation callable / backend capability / "
+                    "implementation hash, never the logical contract)"
+                )
+E               ValueError: overhaul replacement of 'ts_count_if' diverges from the canonical logical contract: field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=1, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} (R13 NEW-P0-04 — a replacement may change only the implementation callable / backend capability / implementation hash, never the logical contract)
+
+factor_engine/cleaned_operators/overhaul/base.py:312: ValueError
+=========================== short test summary info ============================
+ERROR factor_engine/tests/runtime/test_r6_daily_finite_history.py::test_argext_ignores_infinity_preserves_original_age[ts_argmax-pandas_numpy]
+ERROR factor_engine/tests/runtime/test_r6_daily_finite_history.py::test_argext_ignores_infinity_preserves_original_age[ts_argmax-polars]
+ERROR factor_engine/tests/runtime/test_r6_daily_finite_history.py::test_argext_ignores_infinity_preserves_original_age[ts_argmin-pandas_numpy]
+ERROR factor_engine/tests/runtime/test_r6_daily_finite_history.py::test_argext_ignores_infinity_preserves_original_age[ts_argmin-polars]
+ERROR factor_engine/tests/runtime/test_r6_daily_finite_history.py::test_cs_bucket_finite_only_and_invalid_direction[pandas_numpy]
+ERROR factor_engine/tests/runtime/test_r6_daily_finite_history.py::test_cs_bucket_finite_only_and_invalid_direction[polars]
+ERROR factor_engine/tests/runtime/test_r6_daily_finite_history.py::test_historical_bucket_uses_exact_prior_window
+ERROR factor_engine/tests/runtime/test_r6_daily_finite_history.py::test_fixed_bucket_finite_sorted_boundaries
+8 errors in 2.26s

@@ -11,14 +11,32 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    ParamRole,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+    validate_operator_call,
+)
 from factor_engine.cleaned_operators.closure.strict_scalar import strict_int
 from factor_engine.cleaned_operators.ts_model._rolling_core import frame_like, metadata
 
 _CANONICALS: list[str] = []
 
 
-def _register(name: str, description: str, params: list[str], unit: str, fn, cost: int = 8):
+def _register(
+    name: str,
+    description: str,
+    params: list[str],
+    unit: str,
+    fn,
+    cost: int = 8,
+    *,
+    scalar_params: tuple[str, ...],
+    param_specs: dict[str, ParamSpec],
+    relational_specs: tuple[RelationalParamSpec, ...] = (),
+):
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -29,7 +47,25 @@ def _register(name: str, description: str, params: list[str], unit: str, fn, cos
         status="experimental",
     )
     class _SigOp(SeriesOperator):
-        metadata = metadata(name, description, params, unit=unit, cost=cost)
+        _HANDLES_CALL_CONTRACT = True
+        metadata = metadata(
+            name, description, params, unit=unit, cost=cost,
+            param_specs=param_specs,
+        )
+        metadata.panel_params = ("x", "y")
+        metadata.scalar_params = scalar_params
+        metadata.relational_specs = list(relational_specs)
+
+        def calculate(self, *args, **kwargs):
+            # Preserve this family's pre-existing strict public API before the
+            # generic DSL binder canonicalizes declared numeric strings.
+            scalar_positions = {param: params.index(param) for param in scalar_params}
+            for param, position in scalar_positions.items():
+                value = kwargs.get(param, args[position] if position < len(args) else None)
+                if isinstance(value, str):
+                    raise TypeError(f"{param} must be an integer, not a string ({value!r})")
+            validate_operator_call(self, args, kwargs)
+            return super().calculate(*args, **kwargs)
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)
@@ -123,8 +159,16 @@ def _sig_area(x: np.ndarray, y: np.ndarray, window: int) -> float:
     return np.nan if out is None else float(out[4])
 
 
+def _calculate_signature_area(x, y, window=60):
+    w = strict_int(window, "window", lower=3)
+    return _apply_two(x, y, lambda a, b: _sig_area(a, b, w))
+
+
+_WINDOW_SPEC = ParamSpec(dtype=int, min=3, default=60, param_role=ParamRole.HORIZON)
+
+
 _register("ts_path_signature_area", "二维路径的有向面积（Levy 面积）。当前行必须是路径端点（当前行参与 signature 计算）；历史窗口为 trailing window。", ["x", "y", "window"], "level",
-           lambda x, y, window=60: _apply_two(x, y, lambda a, b: _sig_area(a, b, int(window))))
+           _calculate_signature_area, scalar_params=("window",), param_specs={"window": _WINDOW_SPEC})
 
 
 def _robust_scale(vals: np.ndarray) -> float:
@@ -173,8 +217,13 @@ def _sig_depth2_norm(x: np.ndarray, y: np.ndarray, window: int) -> float:
     return float(np.sqrt(sum(c * c for c in out[:4])))
 
 
+def _calculate_signature_depth2_norm(x, y, window=60):
+    w = strict_int(window, "window", lower=3)
+    return _apply_two(x, y, lambda a, b: _sig_depth2_norm(a, b, w))
+
+
 _register("ts_path_signature_depth2_norm", "二阶路径签名各项 L2 范数。当前行必须是路径端点（当前行参与 signature 计算）；历史窗口为 trailing window。", ["x", "y", "window"], "level",
-           lambda x, y, window=60: _apply_two(x, y, lambda a, b: _sig_depth2_norm(a, b, int(window))))
+           _calculate_signature_depth2_norm, scalar_params=("window",), param_specs={"window": _WINDOW_SPEC})
 
 
 def _leadlag_area(x: np.ndarray, y: np.ndarray, window: int, lag: int) -> float:
@@ -192,5 +241,24 @@ def _leadlag_area(x: np.ndarray, y: np.ndarray, window: int, lag: int) -> float:
     return _sig_area(seg_x[:-l], seg_y[l:], len(seg_x) - l)
 
 
-_register("ts_path_leadlag_area", "lead-lag 变换后的路径有向面积。当前行必须是路径端点（当前行参与 signature 计算）；历史窗口为 trailing window。", ["x", "y", "window", "lag"], "level",
-           lambda x, y, window=60, lag=1: _apply_two(x, y, lambda a, b: _leadlag_area(a, b, int(window), lag)))
+def _calculate_leadlag_area(x, y, window=60, lag=1):
+    w = strict_int(window, "window", lower=4)
+    l = strict_int(lag, "lag", lower=1)
+    if l + 3 > w:
+        raise ValueError("ts_path_leadlag_area requires lag + 3 <= window")
+    return _apply_two(x, y, lambda a, b: _leadlag_area(a, b, w, l))
+
+
+_register(
+    "ts_path_leadlag_area",
+    "lead-lag 变换后的路径有向面积。当前行必须是路径端点（当前行参与 signature 计算）；历史窗口为 trailing window。",
+    ["x", "y", "window", "lag"],
+    "level",
+    _calculate_leadlag_area,
+    scalar_params=("window", "lag"),
+    param_specs={
+        "window": ParamSpec(dtype=int, min=4, default=60, param_role=ParamRole.HORIZON),
+        "lag": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
+    },
+    relational_specs=(RelationalParamSpec("lag + 3 <= window"),),
+)

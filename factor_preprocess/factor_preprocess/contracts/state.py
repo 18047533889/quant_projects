@@ -259,6 +259,10 @@ class FittedState:
         components = {
             "transform_name": self.transform_name,
             "transform_version": self.transform_version,
+            "fit_start_time": self.fit_start_time,
+            "fit_end_time": self.fit_end_time,
+            "state_kind": self.state_kind.value,
+            "fit_universe_ref": self.fit_universe_ref,
             "implementation_hash": self.implementation_hash,
             "learned_params_hash": self.learned_params_hash,
             "data_snapshot_ref": self.data_snapshot_ref,
@@ -268,6 +272,9 @@ class FittedState:
             "fit_coordinate_hash": self.fit_coordinate_hash,
             "feature_order": tuple(self.feature_order),
             "policy_hash": self.policy_hash,
+            "config_hash": self.config_hash,
+            "producer": self.producer,
+            "producer_version": self.producer_version,
         }
         return _content_hash(components)
 

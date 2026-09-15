@@ -367,6 +367,12 @@ class DownsideBetaPolars(SeriesOperator):
 class TailBetaPolars(SeriesOperator):
     """Polars 尾部 Beta"""
     metadata = OperatorMetadata(
+        panel_params=("ret", "benchmark_ret"),
+        scalar_params=("window", "q"),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+            "q": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.05, param_role=ParamRole.THRESHOLD),
+        },
         name="tail_beta", category="price_volume", description="尾部 Beta",
         param_names=["ret", "benchmark_ret", "window", "q"], return_type="series", tags=["price_volume", "polars"],
         param_aliases={"d": "window"},
@@ -410,6 +416,11 @@ class RollingBetaToMarketPolars(TSBetaPolars):
     """Polars 滚动市场 Beta"""
     _physical_spec = _beta_delegate_spec("rolling_beta_to_market")
     metadata = OperatorMetadata(
+        panel_params=("ret", "benchmark_ret"),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        },
         name="rolling_beta_to_market",
         category="price_volume",
         description="滚动市场 Beta",
@@ -500,6 +511,11 @@ class IdioVolPolars(SeriesOperator):
     """CAPM 残差滚动标准差（Polars：ts_regression residual → rolling std）。"""
 
     metadata = OperatorMetadata(
+        panel_params=("ret", "benchmark_ret"),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        },
         name="idio_vol",
         category="price_volume",
         description="特质波动率",
@@ -508,22 +524,14 @@ class IdioVolPolars(SeriesOperator):
         tags=["price_volume", "polars"],
     )
 
-    def _calculate_series(self, ret: pl.DataFrame, benchmark_ret: pl.DataFrame, window: int = 60, **kwargs) -> pl.DataFrame:
-        w = max(int(kwargs.get("d", window)), 3)
-        cols = _align_cols(ret, benchmark_ret)
-        scale = float(np.sqrt(252))
-        exprs = []
-        for c in cols:
-            cov = pl.rolling_cov(ret[c], benchmark_ret[c], window_size=w, min_samples=3)
-            var_x = benchmark_ret[c].rolling_var(window_size=w, min_samples=3)
-            slope = cov / var_x
-            mean_y = ret[c].rolling_mean(window_size=w, min_samples=3)
-            mean_x = benchmark_ret[c].rolling_mean(window_size=w, min_samples=3)
-            intercept = mean_y - slope * mean_x
-            resid = ret[c] - (slope * benchmark_ret[c] + intercept)
-            exprs.append((resid.rolling_std(window_size=w, min_samples=3) * scale).alias(c))
-        return ret.with_columns(exprs)
+    def _calculate_series(
+        self, ret: pl.DataFrame, benchmark_ret: pl.DataFrame, window: int = 60, **kwargs
+    ) -> pl.DataFrame:
+        from factor_engine.cleaned_operators._numpy_kernels import idio_vol_
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
 
+        w = strict_int(kwargs.get("d", window), "window", minimum=1)
+        return _apply_numpy_kernel_2d(ret, benchmark_ret, w, idio_vol_)
 
 def _apply_numpy_kernel_2d(
     ret: pl.DataFrame,
@@ -531,7 +539,6 @@ def _apply_numpy_kernel_2d(
     window: int,
     kernel,
 ) -> pl.DataFrame:
-    """宽表逐列调用 ``kernel(ret_col, idx_col, window)``，与 pandas 列方向一致。"""
     w = int(window)
     cols = _align_cols(ret, index_ret)
     out: dict[str, np.ndarray] = {}
@@ -553,6 +560,11 @@ def _apply_numpy_kernel_2d(
 class ResidualMomentumCapmPolars(SeriesOperator):
     """Polars CAPM 残差动量"""
     metadata = OperatorMetadata(
+        panel_params=("ret", "benchmark_ret"),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        },
         name="residual_momentum_capm",
         category="price_volume",
         description="CAPM 残差动量",
@@ -580,6 +592,11 @@ class ResidualMomentumCapmPolars(SeriesOperator):
 class CoskewnessToMarketPolars(SeriesOperator):
     """Polars 相对市场的余偏度"""
     metadata = OperatorMetadata(
+        panel_params=("ret", "benchmark_ret"),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        },
         name="coskewness_to_market",
         category="price_volume",
         description="相对市场的余偏度",
@@ -607,6 +624,11 @@ class CoskewnessToMarketPolars(SeriesOperator):
 class IdioSkewPolars(SeriesOperator):
     """Polars CAPM 残差偏度"""
     metadata = OperatorMetadata(
+        panel_params=("ret", "benchmark_ret"),
+        scalar_params=("window",),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        },
         name="idio_skew",
         category="price_volume",
         description="CAPM 残差偏度",

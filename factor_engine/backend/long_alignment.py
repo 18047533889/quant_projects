@@ -35,6 +35,23 @@ def assert_unique_keys(lf: "pl.LazyFrame", *, context: str = "") -> None:
         raise AlignmentError(msg)
 
 
+def _compatible_time_keys(left, right):
+    """Unify naive temporal representations without truncating precision."""
+    import polars as pl
+    a, b = left.collect_schema()[_TS], right.collect_schema()[_TS]
+    if a == b:
+        return left, right
+    def naive(dtype):
+        return dtype == pl.Date or (isinstance(dtype, pl.Datetime) and dtype.time_zone is None)
+    if naive(a) and naive(b):
+        units = [d.time_unit for d in (a,b) if isinstance(d,pl.Datetime)]
+        unit = max(units, key=lambda u: {"ms":0,"us":1,"ns":2}[u])
+        target = pl.Datetime(unit)
+        return (left.with_columns(pl.col(_TS).cast(target, strict=True)),
+                right.with_columns(pl.col(_TS).cast(target, strict=True)))
+    return left, right
+
+
 def _key_set(lf: "pl.LazyFrame"):
     """Materialize only the binary alignment keys for an exact-set check."""
     return lf.select([_TS, _INST]).collect()
@@ -50,29 +67,39 @@ def assert_exact_key_set(
     explicit and small (only keys are collected), while reporting directional
     counts and representative keys to make bad inputs actionable.
     """
-    assert_unique_keys(left, context=f"{context} left" if context else "left")
-    assert_unique_keys(right, context=f"{context} right" if context else "right")
+    left, right = _compatible_time_keys(left, right)
     left_keys = _key_set(left)
     right_keys = _key_set(right)
-    left_set = set(zip(left_keys[_TS].to_list(), left_keys[_INST].to_list()))
-    right_set = set(zip(right_keys[_TS].to_list(), right_keys[_INST].to_list()))
-    missing_right = left_set - right_set
-    missing_left = right_set - left_set
-    if missing_right or missing_left:
+    # Validate each materialized key projection once. Re-collecting a lazy
+    # map_groups subtree for uniqueness and then for equality executes the
+    # factor twice. Python tuple sets also multiply full-panel memory usage.
+    for side, keys in (("left", left_keys), ("right", right_keys)):
+        duplicate = keys.is_duplicated()
+        if duplicate.any():
+            count = keys.filter(duplicate).unique().height
+            raise AlignmentError(f"{context} {side}: 对齐契约违反：(ts, inst) 存在 {count} 组重复 key")
+    import polars as pl
+    try:
+        missing_right = left_keys.join(right_keys, on=[_TS,_INST], how="anti", nulls_equal=True)
+        missing_left = right_keys.join(left_keys, on=[_TS,_INST], how="anti", nulls_equal=True)
+    except pl.exceptions.SchemaError as exc:
+        raise AlignmentError(f"{context}: binary key schemas are not aligned: {exc}") from exc
+    if missing_right.height or missing_left.height:
         def sample(keys):
-            return sorted((repr(ts), repr(inst)) for ts, inst in keys)[:5]
+            return [(repr(ts),repr(inst)) for ts,inst in keys.sort([_TS,_INST]).head(5).iter_rows()]
 
         prefix = f"{context}: " if context else ""
         raise AlignmentError(
             f"{prefix}binary key sets are not exactly aligned; "
-            f"left_count={len(left_set)}, right_count={len(right_set)}, "
-            f"missing_right={len(missing_right)} sample={sample(missing_right)}, "
-            f"missing_left={len(missing_left)} sample={sample(missing_left)}"
+            f"left_count={left_keys.height}, right_count={right_keys.height}, "
+            f"missing_right={missing_right.height} sample={sample(missing_right)}, "
+            f"missing_left={missing_left.height} sample={sample(missing_left)}"
         )
 
 
 def anchor_left_join_binary(left: "pl.LazyFrame", right: "pl.LazyFrame", *, right_col: str = "_y") -> "pl.LazyFrame":
     """Join binary long inputs only after exact key-set validation."""
+    left, right = _compatible_time_keys(left, right)
     assert_exact_key_set(left, right, context="binary join")
     return left.join(
         right.rename({_VAL: right_col}),
@@ -87,6 +114,9 @@ def anchor_left_join_triple(
     right: "pl.LazyFrame",
 ) -> "pl.LazyFrame":
     """Join three long inputs only after exact key-set validation."""
+    left, mid = _compatible_time_keys(left, mid)
+    left, right = _compatible_time_keys(left, right)
+    left, mid = _compatible_time_keys(left, mid)
     assert_exact_key_set(left, mid, context="triple join left/mid")
     assert_exact_key_set(left, right, context="triple join left/right")
     return left.join(

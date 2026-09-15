@@ -42,11 +42,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator, strict_int_param
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 
-def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int, window_default: int, coverage_default: float, minimum: int) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="moments",
@@ -59,14 +59,21 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:distribution_shape",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        output_unit="dimensionless",
+        panel_params=("x",),
+        panel_arity=1,
+        scalar_params=("window", "min_periods", "min_coverage_fraction"),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=minimum, default=window_default, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=minimum, default=20, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "min_coverage_fraction": ParamSpec(dtype=float, min=np.nextafter(0.0, 1.0), max=1.0, default=coverage_default, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        },
+        relational_specs=[RelationalParamSpec(expression="min_periods <= window")],
     )
 
 
-def _check_window(window: int) -> int:
-    w = int(window)
-    if w < 2:
-        raise ValueError("window must be >= 2")
-    return w
+def _check_window(window: int, *, minimum: int) -> int:
+    return strict_int_param(window, "window", lower=minimum)
 
 
 # ---------------------------------------------------------------------------
@@ -98,9 +105,11 @@ def _l_ratio_series(
 ) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    w = int(window)
-    mp = max(1, int(min_periods))
+    w = strict_int_param(window, "window", lower=4)
+    mp = strict_int_param(min_periods, "min_periods", lower=4)
     mcf = float(min_coverage_fraction)
+    if not np.isfinite(mcf) or not 0.0 < mcf <= 1.0:
+        raise ValueError("min_coverage_fraction must be finite and in (0, 1]")
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
@@ -116,8 +125,11 @@ def _l_ratio_series(
                 continue
             if valid.size / float(chunk.size) < mcf:
                 continue
-            _l1, l2, l3, l4 = _l_moments(valid)
-            if not np.isfinite(l2) or abs(l2) <= 1e-12:
+            magnitude = float(np.max(np.abs(valid)))
+            if magnitude == 0.0:
+                continue
+            _l1, l2, l3, l4 = _l_moments(valid / magnitude)
+            if not np.isfinite(l2) or l2 == 0.0:
                 continue
             if ratio == "skew":
                 if np.isfinite(l3):
@@ -290,9 +302,11 @@ def _dip_series(
 ) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    w = int(window)
-    mp = max(1, int(min_periods))
+    w = strict_int_param(window, "window", lower=2)
+    mp = strict_int_param(min_periods, "min_periods", lower=2)
     mcf = float(min_coverage_fraction)
+    if not np.isfinite(mcf) or not 0.0 < mcf <= 1.0:
+        raise ValueError("min_coverage_fraction must be finite and in (0, 1]")
     for c in range(cols):
         col = x2d[:, c]
         for r in range(rows):
@@ -309,7 +323,8 @@ def _dip_series(
                 continue
             if float(valid.min()) == float(valid.max()):
                 continue  # degenerate constant window -> NaN (never fabricate 0)
-            out[r, c] = _hartigan_dip(np.sort(valid))
+            magnitude = float(np.max(np.abs(valid)))
+            out[r, c] = _hartigan_dip(np.sort(valid / magnitude))
     return out
 
 
@@ -334,6 +349,9 @@ class TsLSkewness(SeriesOperator):
         ["x", "window", "min_periods", "min_coverage_fraction"],
         unit="ratio",
         cost=3,
+        window_default=60,
+        coverage_default=0.5,
+        minimum=4,
     )
 
     def _calculate_series(
@@ -344,7 +362,7 @@ class TsLSkewness(SeriesOperator):
         min_coverage_fraction: float = 0.5,
         **_: Any,
     ) -> pd.DataFrame:
-        w = _check_window(window)
+        w = _check_window(window, minimum=4)
         return frame_like(
             x,
             _l_ratio_series(
@@ -374,6 +392,9 @@ class TsLKurtosis(SeriesOperator):
         ["x", "window", "min_periods", "min_coverage_fraction"],
         unit="ratio",
         cost=3,
+        window_default=60,
+        coverage_default=0.5,
+        minimum=4,
     )
 
     def _calculate_series(
@@ -384,7 +405,7 @@ class TsLKurtosis(SeriesOperator):
         min_coverage_fraction: float = 0.5,
         **_: Any,
     ) -> pd.DataFrame:
-        w = _check_window(window)
+        w = _check_window(window, minimum=4)
         return frame_like(
             x,
             _l_ratio_series(
@@ -416,6 +437,9 @@ class TsHartiganDip(SeriesOperator):
         ["x", "window", "min_periods", "min_coverage_fraction"],
         unit="ratio",
         cost=7,
+        window_default=120,
+        coverage_default=0.8,
+        minimum=2,
     )
 
     def _calculate_series(
@@ -426,7 +450,7 @@ class TsHartiganDip(SeriesOperator):
         min_coverage_fraction: float = 0.8,
         **_: Any,
     ) -> pd.DataFrame:
-        w = _check_window(window)
+        w = _check_window(window, minimum=2)
         return frame_like(
             x,
             _dip_series(

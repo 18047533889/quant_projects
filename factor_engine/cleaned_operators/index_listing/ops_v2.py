@@ -11,10 +11,26 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.stateful._common import assert_condition_bool
 
 _EPS = 1e-12
 _CANONICALS: list[str] = []
+
+_WINDOW = lambda default: ParamSpec(dtype=int, min=1, default=default, param_role=ParamRole.HORIZON)
+_INDEX_CONTRACTS = {
+    "index_weight_gap_to_free_float": (("index_weight", "free_float_weight"), {}),
+    "index_reconstitution_churn": (("member",), {"window": _WINDOW(60)}),
+    "multi_index_entry_intensity": (("entry_index_a", "entry_index_b", "entry_index_c"), {"window": _WINDOW(20)}),
+    "listing_age": (("listing_date",), {}),
+    "suspension_frequency": (("is_suspend",), {"window": _WINDOW(60)}),
+    "suspension_status_coverage": (("is_suspend",), {"window": _WINDOW(60)}),
+    "index_event_decay": (("entry_event",), {
+        "window": _WINDOW(20),
+        "decay": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.9, param_role=ParamRole.STATE_THRESHOLD),
+        "missing_policy": ParamSpec(dtype=str, choices=("break", "carry"), default="break", searchable=False, param_role=ParamRole.MISSING_POLICY),
+    }),
+}
 
 
 def _meta(name: str, description: str, params: list[str], *, unit: str = "level") -> OperatorMetadata:
@@ -39,6 +55,11 @@ def _safe_div(num, den):
 
 def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "level"):
     metadata = _meta(name, description, params, unit=unit)
+    panels, specs = _INDEX_CONTRACTS[name]
+    metadata.panel_params = panels
+    metadata.panel_arity = len(panels)
+    metadata.scalar_params = tuple(specs)
+    metadata.param_specs = specs
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -84,6 +105,7 @@ def _reconstitution_churn(member, window=60):
     fabricates entry/exit events at the boundary of a data gap.  Only count a
     transition when both the current and the previous status are known.
     """
+    assert_condition_bool(member, name="member")
     m = member.copy()
     known = m.notna()
     # Previous-row known mask: build explicitly to avoid shift+fillna
@@ -111,14 +133,17 @@ _mk(
 )
 
 
-def _multi_index_entry_intensity(entry_a, entry_b, entry_c, window=20):
+def _multi_index_entry_intensity(entry_index_a, entry_index_b, entry_index_c, window=20):
     # P1-141: partial-unknown flags (A=1,B=NaN,C=NaN) must NOT collapse to
     # "1 entered" via 1+0+0 — B/C could also be entered but are undisclosed.
     # Require ALL THREE index flags known per day; unknown is never treated as
     # "not entered".  The rolling sum then fails closed (min_periods=window)
     # whenever any day inside the window carries an unknown flag.
-    all_known = entry_a.notna() & entry_b.notna() & entry_c.notna()
-    total = (entry_a + entry_b + entry_c).where(all_known)
+    assert_condition_bool(entry_index_a, name="entry_index_a")
+    assert_condition_bool(entry_index_b, name="entry_index_b")
+    assert_condition_bool(entry_index_c, name="entry_index_c")
+    all_known = entry_index_a.notna() & entry_index_b.notna() & entry_index_c.notna()
+    total = (entry_index_a + entry_index_b + entry_index_c).where(all_known)
     return total.rolling(int(window)).sum()
 
 
@@ -157,7 +182,7 @@ _mk(
     "listing_age",
     "上市日距当前交易日数（非上市股 NaN）。",
     ["listing_date"],
-    lambda ld: _listing_age(ld, ld.index),
+    lambda listing_date: _listing_age(listing_date, listing_date.index),
     unit="count",
 )
 
@@ -171,6 +196,7 @@ def _suspension_frequency(is_suspend, window=60):
     those days flagged as suspended.  ``!= 0``（已知且非零）视为停牌，与 Polars
     后端保持一致（0/1 指标下与 ``== 1`` 等价）。
     """
+    assert_condition_bool(is_suspend, name="is_suspend")
     m = is_suspend.copy()
     known = m.notna().astype(float)
     num = ((m != 0) & m.notna()).astype(float).rolling(int(window)).sum()
@@ -180,6 +206,7 @@ def _suspension_frequency(is_suspend, window=60):
 
 def _suspension_status_coverage(is_suspend, window=60):
     """已知状态覆盖率：窗口内非 NaN 状态日占比。"""
+    assert_condition_bool(is_suspend, name="is_suspend")
     known = is_suspend.notna().astype(float)
     return known.rolling(int(window)).mean()
 
@@ -212,6 +239,9 @@ def _index_event_decay(entry_event, window=20, decay=0.9, missing_policy="break"
         不中断，也不谎报为 0 事件）。
     事件序列为 0/±1（纳入=+1、剔除=-1），权重按时间衰减。
     """
+    finite = entry_event.to_numpy(dtype=float)
+    if not np.isin(finite[np.isfinite(finite)], (-1.0, 0.0, 1.0)).all():
+        raise ValueError("entry_event finite values must be in {-1, 0, 1}")
     w = int(window)
     d = float(decay)
     if not np.isfinite(d) or d < 0.0 or d > 1.0:

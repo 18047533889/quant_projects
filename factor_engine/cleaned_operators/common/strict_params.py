@@ -196,8 +196,13 @@ def normalize_and_validate_scalar_param(
             f"unknown phase {phase!r}; expected 'planning' | 'runtime' | 'hash'"
         )
     if isinstance(value, (list, tuple, dict, set, frozenset)):
-        # Structured / vector param: owned by the vector / structured path.
-        return value
+        # Legacy vectors keep their dedicated path. Explicit structured scalar
+        # declarations must be validated identically in planning/runtime/hash.
+        declared_structure = spec is not None and (
+            getattr(spec,"items",None) is not None or getattr(spec,"alternatives",None) is not None
+        )
+        if not declared_structure:
+            return value
     coerced = _coerce_declared_numeric_string(value, param_name, declared_type, spec)
     try:
         return _normalise_integer(coerced, param_name, declared_type, spec)

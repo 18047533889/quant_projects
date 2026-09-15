@@ -371,7 +371,7 @@ class CandlestickPatternEngine(SeriesOperator):
             "semantic_family:adaptive_custom",  # R4-92: not byte-for-byte TA-Lib
         ],
         param_specs={
-            "pattern": ParamSpec(dtype=str, searchable=True),
+            "pattern": ParamSpec(dtype=str, searchable=False, param_role=ParamRole.POLICY),
             # R4-91: each window/penetration knob only enters the search/GP
             # grammar for the patterns that actually read it (dead knobs are
             # excluded via active_when).
@@ -379,7 +379,7 @@ class CandlestickPatternEngine(SeriesOperator):
             # scale dimensions (engine convention: window -> HORIZON, full search).
             "body_window": ParamSpec(dtype=int, min=2, active_when=("pattern", _CANDLE_BODY_ACTIVE), param_role=ParamRole.HORIZON),
             "shadow_window": ParamSpec(dtype=int, min=2, active_when=("pattern", _CANDLE_SHADOW_ACTIVE), param_role=ParamRole.HORIZON),
-            "penetration": ParamSpec(dtype=float, min=0.0, max=1.0, active_when=("pattern", _CANDLE_PENETRATION_ACTIVE)),
+            "penetration": ParamSpec(dtype=float, min=0.0, max=1.0, active_when=("pattern", _CANDLE_PENETRATION_ACTIVE), param_role=ParamRole.STATE_THRESHOLD),
         },
     )
 

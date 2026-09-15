@@ -77,9 +77,9 @@ def test_ts_skew_min_periods_enforcement(window: int, min_periods: int) -> None:
             np.testing.assert_allclose(g, e, equal_nan=True, atol=1e-10)
 
 
-@pytest.mark.parametrize("window,min_periods", [(6, 6), (6, 4), (5, 5), (5, 3)])
-def test_ts_kurt_min_periods_enforcement(window: int, min_periods: int) -> None:
-    """ts_kurt must enforce min_periods and minimum 4 data points."""
+@pytest.mark.parametrize("window", [4, 5, 6])
+def test_ts_kurt_full_finite_window(window: int) -> None:
+    """Canonical kurtosis requires a full physical finite window."""
     frame = pd.DataFrame(
         {
             "ts": pd.date_range("2024-01-01", periods=10),
@@ -92,7 +92,7 @@ def test_ts_kurt_min_periods_enforcement(window: int, min_periods: int) -> None:
     plan = PlanNode(
         op="ts_kurt",
         inputs=[column("x"), literal(window)],
-        attrs={"min_periods": min_periods},
+        attrs={},
     )
     compiled = compile_plan_to_sql(
         plan, dataset="panel", time_column="ts", instrument_column="inst"
@@ -100,11 +100,11 @@ def test_ts_kurt_min_periods_enforcement(window: int, min_periods: int) -> None:
     assert compiled is not None
 
     # Pandas reference
-    expected = frame["x"].rolling(window, min_periods=min_periods).kurt()
+    expected = frame["x"].rolling(window, min_periods=window).kurt()
     got = _execute(compiled, frame).reset_index(drop=True)
 
     # Kurt requires minimum 4 points
-    effective_min = max(min_periods, 4)
+    effective_min = window
     for i, (g, e) in enumerate(zip(got, expected)):
         if i < effective_min - 1:
             assert pd.isna(g), f"idx={i}: expected NaN, got {g}"
@@ -147,10 +147,7 @@ def test_ts_skew_inf_handling() -> None:
 
 
 def test_ts_kurt_inf_handling() -> None:
-    """ts_kurt: pandas rolling.kurt() skips Inf (not propagate to NaN).
-
-    Same behavior as skew - rolling uses optimized code that silently skips Inf.
-    """
+    """Missing/nonfinite observations invalidate the full physical window."""
     frame = pd.DataFrame(
         {
             "ts": pd.date_range("2024-01-01", periods=10),
@@ -163,15 +160,15 @@ def test_ts_kurt_inf_handling() -> None:
     plan = PlanNode(
         op="ts_kurt",
         inputs=[column("x"), literal(5)],
-        attrs={"min_periods": 4},
+        attrs={},
     )
     compiled = compile_plan_to_sql(
         plan, dataset="panel", time_column="ts", instrument_column="inst"
     )
     assert compiled is not None
 
-    # Pandas rolling skips Inf values
-    expected = frame["x"].rolling(5, min_periods=4).kurt()
+    # Full finite-window oracle, matching StableTsKurt rather than partial rolling.kurt.
+    expected = frame["x"].rolling(5, min_periods=5).kurt()
     got = _execute(compiled, frame).reset_index(drop=True)
 
     np.testing.assert_allclose(got, expected, equal_nan=True, atol=1e-10)
@@ -205,7 +202,7 @@ def test_ts_skew_nan_handling() -> None:
 
 
 def test_ts_kurt_nan_handling() -> None:
-    """ts_kurt with NaN: COUNT excludes NULL, min_periods enforced."""
+    """Missing/nonfinite observations invalidate the full physical window."""
     frame = pd.DataFrame(
         {
             "ts": pd.date_range("2024-01-01", periods=10),
@@ -218,14 +215,33 @@ def test_ts_kurt_nan_handling() -> None:
     plan = PlanNode(
         op="ts_kurt",
         inputs=[column("x"), literal(5)],
-        attrs={"min_periods": 4},
+        attrs={},
     )
     compiled = compile_plan_to_sql(
         plan, dataset="panel", time_column="ts", instrument_column="inst"
     )
     assert compiled is not None
 
-    expected = frame["x"].rolling(5, min_periods=4).kurt()
+    expected = frame["x"].rolling(5, min_periods=5).kurt()
     got = _execute(compiled, frame).reset_index(drop=True)
 
     np.testing.assert_allclose(got, expected, equal_nan=True, atol=1e-10)
+
+@pytest.mark.parametrize("values", [
+    [-1e308, -5e307, 5e307, 1e308],
+    [1e-300, 2e-300, 3e-300, 4e-300],
+    [1e300, 2e300, 3e300, 4e300],
+    [7., 7., 7., 7.],
+])
+def test_ts_kurt_scale_safe_sql_oracle(values):
+    from scipy.stats import kurtosis
+    reset_sql_template_cache()
+    plan = PlanNode(op="ts_kurt",inputs=[column("x"),literal(4)],attrs={})
+    compiled = compile_plan_to_sql(plan,dataset="panel",time_column="ts",instrument_column="inst")
+    assert compiled is not None
+    frame = pd.DataFrame({"ts":pd.date_range("2025-01-01",periods=4),"inst":["A"]*4,"x":values})
+    got = _execute(compiled,frame).to_numpy()
+    scaled = np.asarray(values)/max(abs(v) for v in values)
+    expected = np.nan if np.ptp(scaled)==0 else kurtosis(scaled,bias=False,fisher=True)
+    assert np.isnan(got[:3]).all()
+    np.testing.assert_allclose(got[-1],expected,equal_nan=True,atol=1e-12)

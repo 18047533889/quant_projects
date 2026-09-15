@@ -48,3 +48,20 @@ def test_tampered_config_cannot_reuse_checkpoint_plan_hash(tmp_path):
 
     with pytest.raises(ValueError, match="execution plan hash"):
         SearchSession.resume(path)
+
+
+def test_resume_rejects_mutated_config_shared_by_session_and_runner(monkeypatch):
+    from factor_optimizer.contracts.splits import EvaluationProtocol, SplitPlan
+    from factor_optimizer.search.runner import SearchRunner
+
+    session = _session()
+    session.config.plateau_threshold = 0.5
+    protocol = EvaluationProtocol(
+        SplitPlan("search", [True], [False], [False], {}),
+        lambda trial, fidelity: None,
+    )
+    runner = SearchRunner(session.config, lambda: None, protocol)
+    monkeypatch.setattr(runner, "_run_session", lambda value: value)
+
+    with pytest.raises(ValueError, match="configuration changed"):
+        runner.resume(session, resume_same_budget=True)

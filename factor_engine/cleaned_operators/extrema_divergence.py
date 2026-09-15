@@ -36,7 +36,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata, ParamRole, ParamSpec, RelationalParamSpec,
+    SeriesOperator, register_operator,
+)
+from factor_engine.cleaned_operators.common.strict_params import strict_enum, strict_float, strict_int
 from factor_engine.cleaned_operators.common._pivot_ledger import (
     PivotLedgerResult,
     confirmed_pivot_events,
@@ -59,6 +63,11 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
             f"signature:{','.join(params)}->series", "domain:price_geometry",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        panel_params=("x", "y"),
+        panel_arity=2,
+        scalar_params=tuple(params[2:]),
+        input_units={"x": "level", "y": "level"},
+        output_unit="dimensionless",
     )
 
 
@@ -278,6 +287,17 @@ class TsExtremaDivergenceStrength(SeriesOperator):
         unit="ratio",
         cost=6,
     )
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=3, default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+        "prominence": ParamSpec(dtype=float, min=float(np.nextafter(0.0, 1.0)), default=0.02, param_role=ParamRole.STATE_THRESHOLD),
+        "confirmation": ParamSpec(dtype=int, min=1, default=3, param_role=ParamRole.MODEL_ORDER),
+        "match_lag": ParamSpec(dtype=int, min=0, default=4, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "side": ParamSpec(dtype=str, choices=("peak", "trough"), default="peak", param_role=ParamRole.POLICY),
+    }
+    metadata.relational_specs = [RelationalParamSpec(
+        "2 * confirmation + 1 <= window",
+        "window must contain a complete confirmation neighbourhood",
+    )]
 
     def _calculate_series(
         self,
@@ -290,20 +310,11 @@ class TsExtremaDivergenceStrength(SeriesOperator):
         side: str = "peak",
         **_: Any,
     ) -> pd.DataFrame:
-        if side not in ("peak", "trough"):
-            raise ValueError("side must be 'peak' or 'trough'")
-        w = int(window)
-        if w < 2:
-            raise ValueError("window must be >= 2")
-        prom = float(prominence)
-        if not prom > 0:
-            raise ValueError("prominence must be > 0")
-        conf = int(confirmation)
-        if conf < 1:
-            raise ValueError("confirmation must be >= 1")
-        lag = int(match_lag)
-        if lag < 0:
-            raise ValueError("match_lag must be >= 0")
+        side = strict_enum(side, "side", ("peak", "trough"))
+        w = strict_int(window, "window", minimum=3)
+        prom = strict_float(prominence, "prominence", minimum=float(np.nextafter(0.0, 1.0)))
+        conf = strict_int(confirmation, "confirmation", minimum=1)
+        lag = strict_int(match_lag, "match_lag", minimum=0)
         return frame_like(
             x,
             _divergence_series(
@@ -333,6 +344,17 @@ class TsExtremaConfirmationRate(SeriesOperator):
         unit="ratio",
         cost=6,
     )
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=3, default=120, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+        "prominence": ParamSpec(dtype=float, min=float(np.nextafter(0.0, 1.0)), default=0.02, param_role=ParamRole.STATE_THRESHOLD),
+        "confirmation": ParamSpec(dtype=int, min=1, default=3, param_role=ParamRole.MODEL_ORDER),
+        "tolerance": ParamSpec(dtype=int, min=0, default=3, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "side": ParamSpec(dtype=str, choices=("peak", "trough"), default="peak", param_role=ParamRole.POLICY),
+    }
+    metadata.relational_specs = [RelationalParamSpec(
+        "2 * confirmation + 1 <= window",
+        "window must contain a complete confirmation neighbourhood",
+    )]
 
     def _calculate_series(
         self,
@@ -345,20 +367,11 @@ class TsExtremaConfirmationRate(SeriesOperator):
         side: str = "peak",
         **_: Any,
     ) -> pd.DataFrame:
-        if side not in ("peak", "trough"):
-            raise ValueError("side must be 'peak' or 'trough'")
-        w = int(window)
-        if w < 2:
-            raise ValueError("window must be >= 2")
-        prom = float(prominence)
-        if not prom > 0:
-            raise ValueError("prominence must be > 0")
-        conf = int(confirmation)
-        if conf < 1:
-            raise ValueError("confirmation must be >= 1")
-        tol = int(tolerance)
-        if tol < 0:
-            raise ValueError("tolerance must be >= 0")
+        side = strict_enum(side, "side", ("peak", "trough"))
+        w = strict_int(window, "window", minimum=3)
+        prom = strict_float(prominence, "prominence", minimum=float(np.nextafter(0.0, 1.0)))
+        conf = strict_int(confirmation, "confirmation", minimum=1)
+        tol = strict_int(tolerance, "tolerance", minimum=0)
         return frame_like(
             x,
             _confirmation_rate_series(

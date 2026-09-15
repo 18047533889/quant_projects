@@ -147,6 +147,151 @@ def test_ts_corr_current_row_policy_matches_numba_fastpath():
     np.testing.assert_allclose(slow, fast[:, 0], rtol=1e-12, atol=1e-12)
 
 
+def test_ts_corr_near_collinear_window_uses_stable_centered_moments():
+    x = _frame(
+        [92.43375523375845, 91.98859600763024, 91.7081225979806,
+         91.12375496059099, 91.47093163594087]
+    )
+    y = _frame(
+        [92.2691037481206, 91.62319529998702, 91.34733809417956,
+         90.72515839854378, 91.33346172880964]
+    )
+
+    actual = _get("ts_corr").calculate(x, y, 5)["A"].iloc[-1]
+
+    assert actual == pytest.approx(0.9789532438259935, rel=1e-14, abs=1e-14)
+
+
+@pytest.mark.parametrize("scale", [1e-100, 1e100])
+def test_ts_corr_centered_normalization_is_positive_scale_invariant(scale):
+    x = _frame(np.asarray([1.0, 2.0, 4.0, 7.0, 11.0]) * scale)
+    y = _frame(np.asarray([3.0, 1.0, 5.0, 2.0, 9.0]) * scale)
+    actual = _get("ts_corr").calculate(x, y, 5)["A"].iloc[-1]
+    expected = np.corrcoef(
+        np.asarray([1.0, 2.0, 4.0, 7.0, 11.0]),
+        np.asarray([3.0, 1.0, 5.0, 2.0, 9.0]),
+    )[0, 1]
+    assert actual == pytest.approx(expected, rel=1e-14, abs=1e-14)
+
+
+def test_ts_corr_opposite_sign_finite_extremes_are_centered_safely():
+    values = _frame([-1e308, 0.0, 1e308])
+    actual = _get("ts_corr").calculate(values, values, 3)["A"].iloc[-1]
+    assert actual == pytest.approx(1.0, abs=1e-15)
+
+
+def test_ts_skew_symmetric_window_is_exact_zero():
+    x = _frame([1.0, 2.0, 3.0, 5.0, np.nan, 8.0])
+    actual = _get("ts_skew").calculate(x, window=5)["A"]
+
+    assert actual.iloc[2] == 0.0
+    assert actual.iloc[4] == pytest.approx(0.7528371991317256, abs=1e-15)
+
+
+@pytest.mark.parametrize("scale", [1e-100, 1.0, 1e100])
+def test_ts_skew_is_stable_under_positive_scale(scale):
+    base = np.asarray([1.0, 2.0, 4.0, 7.0, 11.0])
+    actual = _get("ts_skew").calculate(_frame(base * scale), window=5)["A"].iloc[-1]
+    expected = pd.Series(base).skew()
+    assert actual == pytest.approx(expected, rel=1e-14, abs=1e-14)
+
+
+def test_ts_skew_is_stable_under_large_translation():
+    base = np.asarray([1.0, 2.0, 4.0, 7.0, 11.0])
+    actual = _get("ts_skew").calculate(_frame(base + 1e12), window=5)["A"].iloc[-1]
+    expected = pd.Series(base).skew()
+    assert actual == pytest.approx(expected, rel=1e-14, abs=1e-14)
+
+
+def test_ts_skew_constant_and_finite_sample_masks():
+    op = _get("ts_skew")
+    constant = op.calculate(_frame([4.0, 4.0, 4.0]), window=3)["A"]
+    masked = op.calculate(
+        _frame([1.0, np.inf, 2.0, np.nan, 3.0]), window=5
+    )["A"]
+
+    assert constant.iloc[-1] == 0.0
+    assert masked.iloc[:4].isna().all()
+    assert masked.iloc[-1] == 0.0
+
+
+def test_ts_skew_opposite_sign_finite_extremes_do_not_overflow():
+    actual = _get("ts_skew").calculate(
+        _frame([-1e308, 0.0, 1e308]), window=3
+    )["A"].iloc[-1]
+
+    assert actual == 0.0
+
+
+@pytest.mark.parametrize("scale", [1e-100, 1.0, 1e100])
+def test_ts_cov_var_std_are_translation_and_scale_stable(scale):
+    x_base = np.asarray([1.0, 2.0, 4.0, 7.0, 11.0])
+    y_base = np.asarray([3.0, 1.0, 5.0, 2.0, 9.0])
+    translation = 1e12 if scale == 1.0 else 0.0
+    x = _frame(x_base * scale + translation)
+    y = _frame(y_base * scale + translation)
+
+    cov = _get("ts_cov").calculate(x, y, window=5).iloc[-1, 0]
+    var = _get("ts_var").calculate(x, window=5).iloc[-1, 0]
+    std = _get("ts_std").calculate(x, window=5).iloc[-1, 0]
+
+    assert cov == pytest.approx(9.5 * scale**2, rel=1e-14, abs=0.0)
+    assert var == pytest.approx(16.5 * scale**2, rel=1e-14, abs=0.0)
+    assert std == pytest.approx(np.sqrt(16.5) * scale, rel=1e-14, abs=0.0)
+
+
+def test_ts_cov_var_std_masks_constants_and_short_windows():
+    x = _frame([1.0, np.inf, 2.0, np.nan, 3.0])
+    y = _frame([3.0, 7.0, 1.0, 9.0, 5.0])
+    cov = _get("ts_cov").calculate(x, y, window=5)
+    var = _get("ts_var").calculate(x, window=5)
+    std = _get("ts_std").calculate(x, window=5)
+
+    assert cov.iloc[0, 0] != cov.iloc[0, 0]
+    assert cov.iloc[-1, 0] == pytest.approx(1.0, abs=1e-15)
+    assert var.iloc[0, 0] != var.iloc[0, 0]
+    assert var.iloc[-1, 0] == pytest.approx(1.0, abs=1e-15)
+    assert std.iloc[-1, 0] == pytest.approx(1.0, abs=1e-15)
+    constant = _frame([4.0, 4.0, 4.0])
+    assert _get("ts_var").calculate(constant, window=3).iloc[-1, 0] == 0.0
+    assert _get("ts_std").calculate(constant, window=3).iloc[-1, 0] == 0.0
+    strict_var = _get("ts_var").calculate(x, window=5, min_periods=3)
+    assert strict_var.iloc[2, 0] != strict_var.iloc[2, 0]
+
+
+def test_ts_cov_rejects_permuted_or_mismatched_axes():
+    x = _frame([1.0, 2.0, 3.0], cols=["A", "B"])
+    with pytest.raises(ValueError, match="columns are misaligned"):
+        _get("ts_cov").calculate(x, x[["B", "A"]], window=2)
+    with pytest.raises(ValueError, match="index is misaligned"):
+        _get("ts_cov").calculate(x, x.rename(index={x.index[0]: "other"}), window=2)
+
+
+def test_ts_std_finite_extreme_window_does_not_overflow_centering():
+    actual = _get("ts_std").calculate(
+        _frame([-1e308, 0.0, 1e308]), window=3
+    ).iloc[-1, 0]
+    assert actual == pytest.approx(1e308, rel=1e-15)
+
+
+def test_ts_std_numba_flag_does_not_select_unstable_raw_updates(monkeypatch):
+    monkeypatch.setenv("FACTOR_ENGINE_USE_NUMBA", "1")
+    base = np.asarray([1.0, 2.0, 4.0, 7.0, 11.0])
+    actual = _get("ts_std").calculate(
+        _frame(base + 1e12), window=5
+    ).iloc[-1, 0]
+    assert actual == pytest.approx(np.std(base, ddof=1), rel=1e-14)
+
+
+@pytest.mark.parametrize("scale", [1e-100, 1.0, 1e100])
+def test_ts_kurt_is_scale_stable_and_constant_remains_undefined(scale):
+    base = np.asarray([1.0, 2.0, 4.0, 7.0, 11.0])
+    actual = _get("ts_kurt").calculate(_frame(base * scale), window=5).iloc[-1, 0]
+    assert actual == pytest.approx(pd.Series(base).kurt(), rel=1e-14, abs=1e-14)
+    constant = _get("ts_kurt").calculate(_frame([4.0] * 5), window=5).iloc[-1, 0]
+    assert constant != constant
+
+
 def test_ts_cov_current_row_missing_keeps_window_statistic():
     x = _frame([1.0, 2.0, 3.0, 4.0, 5.0], cols=["A"])
     y = _frame([2.0, 4.0, 6.0, np.nan, 10.0], cols=["A"])

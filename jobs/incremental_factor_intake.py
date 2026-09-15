@@ -107,7 +107,7 @@ CLUSTERS_JSON = ROOT / "weekly_backtest_output/factor_clusters.json"
 OPT_META_JSON = ROOT / "weekly_backtest_output/optimized_meta.json"
 MATRICES_DIR = ROOT / "weekly_backtest_output/factor_matrices_all"
 OPT_DIR = ROOT / "weekly_backtest_output/optimized_factors"
-REPORTS_DIR = ROOT / "factor_engine/docs/reports/2026-08-23"
+REPORTS_DIR = ROOT / "../quant_project_archives/factor_engine-docs/reports/2026-08-23"
 FACTORS_DIR = REPORTS_DIR / "factors"
 INDEX_HTML = REPORTS_DIR / "index.html"
 REPORT_MANIFEST_JSON = REPORTS_DIR / "report_manifest.json"
@@ -2364,6 +2364,14 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
             return {"page": str(out), "mode": "minimal", "banned_in_full": banned}
         # Preserve source verbatim (HTML escaped), outside presentation-name filters.
         html = html.replace("</body>", formula_source_html(factor) + "</body>")
+        # Report-owned final projection: both DSLs come from the submission
+        # ledger only when its FE formula matches this evaluation's raw formula.
+        if str(REPORTS_DIR) not in sys.path:
+            sys.path.insert(0, str(REPORTS_DIR))
+        from report_lqtp_display import finalize as finalize_report_dsl
+        html = finalize_report_dsl(html, dict(factor_name=page,
+            raw_formula=factor.get("fe_formula", ""), is_flipped=is_flipped,
+            direction=-1 if is_flipped else 1))
         out.write_text(evaluation_banner(html, factor.get("evaluation_provenance")), encoding="utf-8")
         return {"page": str(out), "mode": "full"}
     except Exception as exc:

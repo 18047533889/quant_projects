@@ -312,8 +312,13 @@ def test_recovery_min_events_via_operator():
     ev[5] = 1.0  # a single shock
     evf = pd.DataFrame({"S0": ev}, index=idx)
     op = SessionEventRecoveryScore()
-    assert np.isfinite(op._calculate_series(x, evf, horizon=5, residual_fraction=0.25, min_events=1).iloc[0, 0])
-    assert np.isnan(op._calculate_series(x, evf, horizon=5, residual_fraction=0.25, min_events=2).iloc[0, 0])
+    with pytest.raises(ValueError, match="min_events.*>= 3"):
+        op.calculate(x, evf, horizon=5, residual_fraction=0.25, min_events=1)
+    assert np.isnan(
+        op.calculate(
+            x, evf, horizon=5, residual_fraction=0.25, min_events=3
+        ).iloc[0, 0]
+    ), "one effective event must not bypass the reviewed three-event support floor"
 
 
 # ---------------------------------------------------------------------------

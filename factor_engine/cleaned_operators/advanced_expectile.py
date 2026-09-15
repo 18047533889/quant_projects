@@ -71,7 +71,26 @@ def _metadata(
             f"signature:{','.join(params)}->series", f"domain:{domain}",
             f"unit:{unit}", f"cost:{cost}",
         ],
-        param_specs=dict(param_specs) if param_specs else {},
+        panel_params=("y","x") if name == "ts_expectile_beta" else ("x",),
+        scalar_params=("window","tau","n_min"),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=4 if name == "ts_expectile_beta" else 3,
+                              default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "tau": ParamSpec(dtype=float, min=float(np.nextafter(0.,1.)),
+                            max=float(np.nextafter(1.,0.)), default=.1,
+                            param_role=ParamRole.NUMERICAL, searchable=False),
+            "n_min": ParamSpec(dtype=int,min=1,default=_DEFAULT_N_MIN,
+                              param_role=ParamRole.SUPPORT_POLICY,searchable=False),
+        },
+    )
+
+
+def _parameters(window, tau, n_min, minimum):
+    from factor_engine.cleaned_operators.common.strict_params import strict_int, strict_float
+    return (
+        strict_int(window,"window",minimum=minimum),
+        strict_float(tau,"tau",minimum=float(np.nextafter(0.,1.)),maximum=float(np.nextafter(1.,0.))),
+        strict_int(n_min,"n_min",minimum=1),
     )
 
 
@@ -163,15 +182,7 @@ class TsExpectile(SeriesOperator):
         n_min: int = _DEFAULT_N_MIN,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
-        tt = float(tau)
-        nmin = int(n_min)
-        if not (0.0 < tt < 1.0):
-            raise ValueError("ts_expectile requires 0 < tau < 1")
-        if w < 3:
-            raise ValueError("ts_expectile requires window >= 3")
-        if nmin < 1:
-            raise ValueError("ts_expectile requires n_min >= 1")
+        w, tt, nmin = _parameters(window, tau, n_min, 3)
         return frame_like(
             x,
             map_rolling(x.to_numpy(dtype=float), w, lambda c: _expectile_chunk(c, tt, nmin)),
@@ -294,15 +305,9 @@ class TsExpectileBeta(SeriesOperator):
         n_min: int = _DEFAULT_N_MIN,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
-        tt = float(tau)
-        nmin = int(n_min)
-        if not (0.0 < tt < 1.0):
-            raise ValueError("ts_expectile_beta requires 0 < tau < 1")
-        if w < 4:
-            raise ValueError("ts_expectile_beta requires window >= 4")
-        if nmin < 1:
-            raise ValueError("ts_expectile_beta requires n_min >= 1")
+        w, tt, nmin = _parameters(window, tau, n_min, 4)
+        if not y.index.equals(x.index) or not y.columns.equals(x.columns):
+            raise ValueError("expectile regression inputs must have identical axes")
         return frame_like(
             y,
             map_pair_rolling(

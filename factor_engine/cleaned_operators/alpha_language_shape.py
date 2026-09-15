@@ -25,7 +25,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import (
     check_window,
     frame_like,
@@ -34,6 +34,32 @@ from factor_engine.cleaned_operators.rolling_pack import (
 )
 
 _EPS = 1e-12
+
+_SHAPE_DEFAULTS = {
+    "ts_monotonicity": {"window": 20, "min_periods": 3},
+    "ts_turning_rate": {"window": 20, "epsilon": 0.0, "min_periods": 2},
+    "ts_effective_turning_rate": {"window": 20, "epsilon": 0.0, "min_periods": 2},
+    "ts_turning_intensity": {"window": 20, "min_periods": 3},
+    "ts_path_efficiency": {"window": 20, "min_periods": 2},
+    "ts_roughness": {"window": 20, "min_periods": 3},
+    "ts_trend_break_score": {"window": 60, "split": 0.5, "min_periods": 4},
+    "ts_weighted_time_centroid": {"window": 20, "min_periods": 2},
+    "ts_endpoint_deviation": {"window": 20, "min_periods": 3},
+    "ts_mass_concentration": {"window": 20, "min_periods": 2},
+    "ts_chord_excursion_area": {"window": 20, "min_periods": 2},
+    "ts_max_chord_excursion": {"window": 20, "min_periods": 2},
+}
+
+def _shape_specs(name: str) -> dict[str, ParamSpec]:
+    specs: dict[str, ParamSpec] = {}
+    for key, default in _SHAPE_DEFAULTS[name].items():
+        if key in ("window", "min_periods"):
+            specs[key] = ParamSpec(dtype=int, min=1, default=default, param_role=ParamRole.HORIZON)
+        elif key == "epsilon":
+            specs[key] = ParamSpec(dtype=float, min=0.0, default=default, param_role=ParamRole.ESTIMATOR_RESOLUTION)
+        elif key == "split":
+            specs[key] = ParamSpec(dtype=float, min=0.0, max=1.0, default=default, param_role=ParamRole.ESTIMATOR_RESOLUTION)
+    return specs
 
 
 def _metadata(
@@ -56,6 +82,9 @@ def _metadata(
             f"unit:{unit}", "cost:1",
             *extra_tags,
         ],
+        panel_params=tuple(p for p in params if p not in _SHAPE_DEFAULTS[name]),
+        scalar_params=tuple(_SHAPE_DEFAULTS[name]),
+        param_specs=_shape_specs(name),
     )
 
 

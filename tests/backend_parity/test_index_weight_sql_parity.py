@@ -67,7 +67,9 @@ def _sql_reference(panel: pd.DataFrame, *, normalize: bool = True) -> pd.DataFra
     sql = compiled.query.replace("{{panel}}", "panel")
     out = con.execute(sql).fetchdf()
     pivoted = out.pivot(index="ts", columns="inst", values="value").sort_index()
-    pivoted.index = pd.DatetimeIndex(pivoted.index).as_unit("ns")
+    # Preserve the reference panel's axis contract.  The former unconditional
+    # ns cast changed a valid pandas 3 datetime64[us] fixture into a different axis.
+    pivoted.index = pd.DatetimeIndex(pivoted.index).astype(panel.index.dtype)
     pivoted.index.name = "date"
     pivoted.columns.name = None
     return pivoted[panel.columns]
@@ -118,7 +120,7 @@ def test_index_weight_sql_parity_handles_nan_and_zero_total():
     assert compiled is not None
     sql = compiled.query.replace("{{panel}}", "panel")
     out = con.execute(sql).fetchdf().pivot(index="ts", columns="inst", values="value")
-    out.index = pd.DatetimeIndex(out.index).as_unit("ns")
+    out.index = pd.DatetimeIndex(out.index).astype(panel.index.dtype)
     out.index.name = "date"
     out.columns.name = None
     out = out[panel.columns]

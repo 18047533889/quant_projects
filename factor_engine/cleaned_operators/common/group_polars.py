@@ -20,6 +20,8 @@ from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 
 _SKIP = frozenset({"date", "stock_code"})
+_FALLBACK_POLICY_SPEC = ParamSpec(dtype=str, choices=("nan", "error", "global", "keep_original"), default="nan", searchable=False)
+_DEAD_WINDOW_SPEC = ParamSpec(dtype=int, min=1, default=5, searchable=False, param_role=ParamRole.POLICY)
 
 
 def _numeric_cols(df: pl.DataFrame) -> list[str]:
@@ -531,11 +533,17 @@ class GroupDecayLinearPolars(SeriesOperator):
         param_names=["x", "group", "window", "fallback_policy"],
         return_type="series",
         tags=["cross_sectional", "polars"],
-        param_specs={"window": ParamSpec(dtype=int, searchable=False, param_role=ParamRole.POLICY)},
+        param_specs={"window": _DEAD_WINDOW_SPEC, "fallback_policy": _FALLBACK_POLICY_SPEC},
+        panel_params=("x", "group"),
+        scalar_params=("window", "fallback_policy"),
     )
 
     def _calculate_series(
         self, x: pl.DataFrame, group: pl.DataFrame = None, window: int = 5,
         fallback_policy: str = "nan", **kwargs
     ) -> pl.DataFrame:
-        return _group_rowwise(x, group, _decay_linear_row)
+        if isinstance(window, (bool, np.bool_)) or not isinstance(window, (int, np.integer)) or int(window) < 1:
+            raise ValueError("window must be an integer >= 1")
+        if fallback_policy not in {"nan", "error", "global", "keep_original"}:
+            raise ValueError("invalid fallback_policy")
+        return _group_rowwise(x, group, _decay_linear_row, fallback_policy=fallback_policy)

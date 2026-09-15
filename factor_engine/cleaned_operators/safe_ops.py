@@ -26,6 +26,7 @@ from factor_engine.cleaned_operators.overhaul.base import (
     positive_int,
 )
 from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.cleaned_operators.common import safe_kernels as _safe
 
 EPS = 1e-12
 SOURCE = "safe_ops"
@@ -59,7 +60,7 @@ def _check_ffill_lineage(lineage: str | None) -> None:
             f"ts_ffill_limited: lineage must be a string or None, got {lineage!r}"
         )
     allowed = FFILL_LINEAGE_POLICY.get(lineage)
-    if allowed is False:
+    if allowed is not True:
         raise ValueError(
             f"ts_ffill_limited: forward-fill is not permitted for value lineage "
             f"{lineage!r} (limited_ffill=False); only price/level series may be "
@@ -76,8 +77,16 @@ def _register(
     polars_fn=None,
     param_specs: dict | None = None,
 ) -> None:
-    pandas_op = PandasFunctionOperator(name, category, params, description, pandas_fn)
-    if param_specs:
+    safe_names = (*_safe.EXTREMES, "group_impute_median", "ts_ffill_limited")
+    authored = _safe.contract(name) if name in safe_names else {}
+    pandas_op = PandasFunctionOperator(
+        name, category, params, description, pandas_fn,
+        panel_params=authored.get("panel_params",()),
+        scalar_params=authored.get("scalar_params",()),
+    )
+    if authored:
+        pandas_op.metadata.param_specs = authored["param_specs"]
+    elif param_specs:
         pandas_op.metadata.param_specs = dict(param_specs)
     OperatorRegistry.register(
         pandas_op,
@@ -88,8 +97,19 @@ def _register(
         backend_explicit=True,
     )
     if polars_fn is not None:
+        polars_op=PolarsFunctionOperator(
+            name, category, params, description, polars_fn,
+            panel_params=authored.get("panel_params",()),
+            scalar_params=authored.get("scalar_params",()),
+        )
+        if authored:
+            polars_op.metadata.param_specs=authored["param_specs"]
+            polars_op._physical_spec=_safe.physical_spec(name)
+            polars_op._contract_callable=polars_fn
+        elif param_specs:
+            polars_op.metadata.param_specs=dict(param_specs)
         OperatorRegistry.register(
-            PolarsFunctionOperator(name, category, params, description, polars_fn),
+            polars_op,
             canonical=name,
             backend="polars",
             source=SOURCE,
@@ -299,27 +319,8 @@ _register(
 
 
 def pd_group_impute_median(x, group, min_group_size=3, **_):
-    x, group = aligned_pd(x, group)
-    arr = x.to_numpy(dtype=float)
-    garr = group.to_numpy(dtype=object)
-    out = arr.copy()
-    for col in range(x.shape[1]):
-        for row in range(x.shape[0]):
-            g = garr[row, col]
-            if g is None or pd.isna(g):
-                continue
-            mask = garr[row] == g
-            group_vals = arr[row][mask]
-            finite = group_vals[np.isfinite(group_vals)]
-            if finite.size < int(min_group_size):
-                continue
-            median = float(np.median(finite))
-            out[row] = np.where(
-                np.isfinite(out[row]),
-                out[row],
-                np.where(garr[row] == g, median, np.nan),
-            )
-    return frame_pd(x, out)
+    x,group=aligned_pd(x,group)
+    return frame_pd(x,_safe.group_values(x.to_numpy(dtype=float),group.to_numpy(dtype=object),min_group_size))
 
 
 _register(
@@ -328,6 +329,7 @@ _register(
     ["x", "group", "min_group_size"],
     "组内中位数填补缺失值（组内有限样本不足 min_group_size 时不填）。",
     pd_group_impute_median,
+    _safe.polars_group_impute_median,
 )
 
 
@@ -344,7 +346,7 @@ def pd_ts_ffill_limited(x, max_gap, lineage: str | None = None, **_):
 def _pl_ts_ffill_limited(x, max_gap, lineage: str | None = None, **_):
     limit = positive_int(max_gap, "max_gap")
     _check_ffill_lineage(lineage)
-    return x.with_columns([pl.col(c).forward_fill(limit=limit).alias(c) for c in pl_cols(x)])
+    return x.with_columns([pl.col(c).fill_nan(None).forward_fill(limit=limit).alias(c) for c in pl_cols(x)])
 
 
 def pd_log_positive_or_nan(x, **_):
@@ -385,26 +387,7 @@ _register(
 # --------------------------------------------------------------------------
 
 def _pd_argext(x, window, pick, min_periods):
-    w = positive_int(window, "window")
-    arr = x.to_numpy(dtype=float)
-    out = np.full(x.shape, np.nan, dtype=float)
-    for col in range(arr.shape[1]):
-        for row in range(arr.shape[0]):
-            start = max(0, row - w + 1)
-            seg = arr[start : row + 1, col]
-            valid = np.isfinite(seg)
-            if valid.sum() < int(min_periods):
-                continue
-            # NEW-074: the target extreme is computed ONLY on the finite subset.
-            # ``np.nanmax(seg)`` still sees +Inf (it is not NaN), so a window
-            # with both finite and +Inf would make target=Inf, ``valid &
-            # (seg == target)`` empty, and ``hits[-1]`` IndexError.  An Inf is
-            # never a valid extreme position.
-            target = float(np.max(seg[valid])) if pick == "max" else float(np.min(seg[valid]))
-            hits = np.flatnonzero(valid & (seg == target))
-            age = (seg.size - 1) - hits[-1]          # ties -> most recent
-            out[row, col] = float(age)
-    return frame_pd(x, out)
+    return frame_pd(x,_safe.arg_values(x.to_numpy(dtype=float),window,min_periods,pick,True))
 
 
 def pd_ts_argmax_age(x, window, min_periods=1, **_):
@@ -416,21 +399,7 @@ def pd_ts_argmin_age(x, window, min_periods=1, **_):
 
 
 def _pd_argidx(x, window, pick, min_periods):
-    """Position of the extreme measured from the window's OLDEST bar."""
-    w = positive_int(window, "window")
-    arr = x.to_numpy(dtype=float)
-    out = np.full(x.shape, np.nan, dtype=float)
-    for col in range(arr.shape[1]):
-        for row in range(arr.shape[0]):
-            start = max(0, row - w + 1)
-            seg = arr[start : row + 1, col]
-            valid = np.isfinite(seg)
-            if valid.sum() < int(min_periods):
-                continue
-            target = np.nanmax(seg) if pick == "max" else np.nanmin(seg)
-            hits = np.flatnonzero(valid & (seg == target))
-            out[row, col] = float(hits[-1])  # 0 = window oldest
-    return frame_pd(x, out)
+    return frame_pd(x,_safe.arg_values(x.to_numpy(dtype=float),window,min_periods,pick,False))
 
 
 def pd_ts_argmax_index_from_oldest(x, window, min_periods=1, **_):
@@ -447,6 +416,7 @@ _register(
     ["x", "window", "min_periods"],
     "距窗口内最近一次最大值的 bar 数（0=当前行即极值）。",
     pd_ts_argmax_age,
+    lambda x,window,min_periods=1: _safe.polars_arg(x,window,min_periods,pick="max",age=True),
 )
 _register(
     "ts_argmin_age",
@@ -454,6 +424,7 @@ _register(
     ["x", "window", "min_periods"],
     "距窗口内最近一次最小值的 bar 数（0=当前行即极值）。",
     pd_ts_argmin_age,
+    lambda x,window,min_periods=1: _safe.polars_arg(x,window,min_periods,pick="min",age=True),
 )
 _register(
     "ts_argmax_index_from_oldest",
@@ -461,6 +432,7 @@ _register(
     ["x", "window", "min_periods"],
     "窗口内最大值位置，0=窗口最旧 bar。",
     pd_ts_argmax_index_from_oldest,
+    lambda x,window,min_periods=1: _safe.polars_arg(x,window,min_periods,pick="max",age=False),
 )
 _register(
     "ts_argmin_index_from_oldest",
@@ -468,6 +440,7 @@ _register(
     ["x", "window", "min_periods"],
     "窗口内最小值位置，0=窗口最旧 bar。",
     pd_ts_argmin_index_from_oldest,
+    lambda x,window,min_periods=1: _safe.polars_arg(x,window,min_periods,pick="min",age=False),
 )
 
 

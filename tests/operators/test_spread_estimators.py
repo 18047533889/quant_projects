@@ -36,7 +36,7 @@ def test_ohlc_corwin_schultz_spread_basic() -> None:
 
     op = _op("ohlc_corwin_schultz_spread")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x.abs()+2., x.abs()+1.)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -50,7 +50,7 @@ def test_ohlc_corwin_schultz_spread_handles_nans() -> None:
 
     op = _op("ohlc_corwin_schultz_spread")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x.abs()+2., x.abs()+1.)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -63,12 +63,10 @@ def test_ohlc_corwin_schultz_spread_deterministic() -> None:
     x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
 
     op = _op("ohlc_corwin_schultz_spread")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    result1 = op.calculate(x.abs()+2., x.abs()+1.)
+    result2 = op.calculate(x.abs()+2., x.abs()+1.)
+    assert result1.notna().any().any()
+    pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
 
 
 # ---------------------------------------------------------------------------
@@ -110,12 +108,10 @@ def test_ts_roll_effective_spread_deterministic() -> None:
     x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
 
     op = _op("ts_roll_effective_spread")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+    price=np.exp(x*.01)
+    result1 = op.calculate(price)
+    result2 = op.calculate(price)
+    pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
 
 
 

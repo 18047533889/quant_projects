@@ -48,13 +48,6 @@ def _cs_long_transform(x: pl.DataFrame, transform) -> pl.DataFrame:
     return _with_meta(wide, x)
 
 
-@register_operator(
-    name="relation_hhi",
-    category="relation",
-    business_category="relation",
-    canonical="relation_hhi",
-    source=_SRC,
-    backend="polars")
 class RelationHHINative(SeriesOperator):
     """Herfindahl-Hirschman Index: sum of squared shares."""
 

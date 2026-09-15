@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from data_access.core.exceptions import ValidationError
-from data_access.read.sql_escape import _rewrite_query_tables
+from data_access.read.sql_escape import _rewrite_query_tables, assert_sql_from_scope
 
 
 def test_rewrite_query_tables_placeholder_syntax():
@@ -53,3 +53,46 @@ def test_rewrite_query_tables_does_not_touch_comments_or_string_placeholder():
     assert "'{{factor_lake}}'" in out
     assert "-- {{factor_lake}}" in out
     assert out.endswith("FROM __da_x_factor_lake")
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "WITH c AS (SELECT * FROM _sub) SELECT * FROM c",
+        "WITH C AS (SELECT * FROM _sub) SELECT * FROM c",
+        "WITH C AS (SELECT * FROM _sub) SELECT * FROM c AS d",
+        (
+            "WITH a AS (SELECT * FROM _sub), b AS (SELECT * FROM a) "
+            "SELECT * FROM b"
+        ),
+        (
+            "WITH shadowed_external AS (SELECT * FROM _sub) "
+            "SELECT $$FROM real_external$$ AS note FROM shadowed_external "
+            "-- JOIN another_external"
+        ),
+    ],
+)
+def test_relation_scope_allows_local_cte_aliases(query):
+    assert_sql_from_scope(query, allowed=("_sub",))
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "WITH c AS (SELECT * FROM real_external) SELECT * FROM c",
+        "WITH c AS (SELECT * FROM _sub) SELECT * FROM c JOIN real_external ON TRUE",
+        (
+            "WITH real_external AS (SELECT * FROM real_external) "
+            "SELECT * FROM real_external"
+        ),
+        "WITH a AS (SELECT * FROM later), later AS (SELECT * FROM _sub) SELECT * FROM a",
+        (
+            "SELECT * FROM (WITH c AS (SELECT * FROM real_external) SELECT * FROM c) q"
+        ),
+        "WITH C AS (SELECT * FROM _sub) SELECT * FROM real_external AS c",
+        "WITH C AS (SELECT * FROM _sub) SELECT * FROM evil.c AS c",
+    ],
+)
+def test_relation_scope_rejects_external_tables_inside_or_beside_cte(query):
+    with pytest.raises(ValidationError, match="scope 外"):
+        assert_sql_from_scope(query, allowed=("_sub",))

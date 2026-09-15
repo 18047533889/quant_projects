@@ -9,6 +9,49 @@ import math
 
 
 @dataclass(frozen=True)
+class ExecutionPurpose:
+    """Request-scoped computation purpose, not a data or publication grant.
+
+    Keep this separate from resource policy: concurrent research and production
+    share one broker, but never share admission evidence or receipt identity.
+    """
+    purpose: str = "research_compute"
+    input_integrity: str = "strict"
+    schema_version: str = "factor_engine.execution_purpose.v1"
+
+    def __post_init__(self):
+        if self.purpose not in {"research_compute", "production_compute"}:
+            raise ValueError("unsupported execution purpose")
+        if self.input_integrity != "strict":
+            raise ValueError("execution purpose cannot weaken input integrity")
+        if self.schema_version != "factor_engine.execution_purpose.v1":
+            raise ValueError("unsupported execution purpose schema")
+
+    @property
+    def admission_mode(self):
+        return "production" if self.purpose == "production_compute" else "research"
+
+    def to_dict(self):
+        return {**asdict(self), "assurance": "UNVERIFIED",
+                "publication_authorized": False}
+
+    @property
+    def digest(self):
+        return hashlib.sha256(json.dumps(self.to_dict(), sort_keys=True,
+                                        separators=(",", ":")).encode()).hexdigest()
+
+
+def operator_admission_mode(owner):
+    """Resolve only operator certification; callers retain strict run_mode."""
+    purpose = getattr(owner, "execution_purpose", None)
+    if purpose is None:
+        return getattr(owner, "run_mode", "research")
+    if not isinstance(purpose, ExecutionPurpose):
+        raise TypeError("validated ExecutionPurpose required")
+    return purpose.admission_mode
+
+
+@dataclass(frozen=True)
 class DefaultExecutionPolicy:
     policy_id: str = "ashare_auto_durable_v2"
     schema_version: str = "factor_engine.auto80_policy.v1"

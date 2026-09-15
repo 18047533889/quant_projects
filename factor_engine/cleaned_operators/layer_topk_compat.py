@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.cleaned_operators.overhaul.base import (
     Spec,
     frame_pd,
@@ -58,13 +59,13 @@ def _spec(top, stat):
     # ts_topk_sum canonical params are ``["x","d","k"]`` (R19-050 aliases); the
     # DSL binder always passes the CANONICAL key (``d``), so the wrapped kernels
     # must accept that spelling instead of requiring positional ``window``.
-    def _pand(x, window=None, k=None, min_periods=None, *, d=None, n=None, **kw):
-        w = window if window is not None else d
+    def _pand(x, window=None, k=5, min_periods=1, *, d=None, n=None, **kw):
+        w = window if window is not None else (d if d is not None else 20)
         kk = k if k is not None else n
         return _pd(x, w, kk, min_periods, top=top, stat=stat, **kw)
 
-    def _pola(x, window=None, k=None, min_periods=None, *, d=None, n=None, **kw):
-        w = window if window is not None else d
+    def _pola(x, window=None, k=5, min_periods=1, *, d=None, n=None, **kw):
+        w = window if window is not None else (d if d is not None else 20)
         kk = k if k is not None else n
         return _pl(x, w, kk, min_periods, top=top, stat=stat, **kw)
 
@@ -91,6 +92,20 @@ def register():
             description,
             pandas_fn,
             polars_fn,
+            {
+                "d" if name == "ts_topk_sum" else "window": ParamSpec(
+                    dtype=int, min=2 if stat == "std" else 1, default=20, param_role=ParamRole.HORIZON
+                ),
+                "k": (
+                    ParamSpec(dtype=int, min=1, default=None, param_role=ParamRole.ECONOMIC)
+                    if name == "ts_topk_sum" else
+                    ParamSpec(dtype=int, min=2 if stat == "std" else 1, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY)
+                ),
+                "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            },
+            ("x",),
+            (("d", "k", "min_periods") if name == "ts_topk_sum"
+             else ("window", "k", "min_periods")),
         )
     register_specs(specs)
 

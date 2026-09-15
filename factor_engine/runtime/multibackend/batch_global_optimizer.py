@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -199,11 +201,20 @@ class BatchOptimizationResult:
     shared_benefits: dict[str, SharedNodeBenefit]
     total_shared_benefit_ms: float
     optimization_basis: str  # "dp_global_exact" | "dp_global_approximate"
+    # Exact bound logical roots and their planner-discovered identities.  Node
+    # IDs on PlanNode are debug-only and commonly None; execution must consume
+    # the same object graph the physical optimizer assigned to regions.
+    logical_roots: dict[str, PlanNode] = field(default_factory=dict)
+    logical_shared_nodes: dict[str, PlanNode] = field(default_factory=dict)
+    discovered_node_ids: dict[int, str] = field(default_factory=dict)
+    execution_index_cache: Any = field(default=None, repr=False, compare=False)
     production_ready: bool = False
     readiness_reason: str = ""
     optimization_elapsed_ms: float = 0.0
     candidate_plan_count: int = 0
     selected_incumbent: str = ""
+    execution_ready: bool = False
+    execution_readiness_reason: str = ""
 
 
 class PhysicalBatchGlobalOptimizer:
@@ -413,6 +424,7 @@ class PhysicalBatchGlobalOptimizer:
             node_graph,
             tuple(roots),
             node_estimates,
+            all_nodes,
         )
         # P2 split-brain closure: a production region must never be routed to a
         # backend the runtime cannot execute.  The optimizer's candidate filter
@@ -433,6 +445,18 @@ class PhysicalBatchGlobalOptimizer:
             node_graph=node_graph,
             run_mode=getattr(ctx, "run_mode", None),
         )
+        execution_ready, execution_readiness_reason = self._readiness(
+            roots=roots,
+            all_nodes=all_nodes,
+            choices=per_node_choices,
+            plan=plan,
+            rows=rows,
+            estimated_bytes=estimated_bytes,
+            estimated_memory=estimated_memory,
+            node_graph=node_graph,
+            run_mode=getattr(ctx, "run_mode", None),
+            require_production=False,
+        )
 
         return BatchOptimizationResult(
             physical_plan=plan,
@@ -440,8 +464,17 @@ class PhysicalBatchGlobalOptimizer:
             shared_benefits=shared_benefits,
             total_shared_benefit_ms=total_benefit,
             optimization_basis=optimization_basis,
+            logical_roots=dict(roots),
+            logical_shared_nodes=dict(shared_nodes),
+            discovered_node_ids={id(node): node_id for node_id, node in all_nodes.items()},
+            execution_index_cache=__import__(
+                "factor_engine.runtime.physical_execution_index",
+                fromlist=["PhysicalExecutionIndexCache"],
+            ).PhysicalExecutionIndexCache(),
             production_ready=production_ready,
             readiness_reason=readiness_reason,
+            execution_ready=execution_ready,
+            execution_readiness_reason=execution_readiness_reason,
             optimization_elapsed_ms=(time.monotonic() - optimization_started) * 1000.0,
             candidate_plan_count=candidate_plan_count,
             selected_incumbent=selected_incumbent,
@@ -604,23 +637,34 @@ class PhysicalBatchGlobalOptimizer:
                 for backend, representation in backends
             )
 
-        mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
+        from factor_engine.runtime.default_execution_policy import operator_admission_mode
+
+        mode = str(operator_admission_mode(ctx) or "research").lower()
         candidates: list[NodeBackendChoice] = []
         bound_params = self._bound_parameter_identity(node)
         kernel_signature = self._kernel_signature(node)
+
+        def candidate_cost(backend: str) -> float:
+            """Return a conservative bounded cost when calibration is absent/bad."""
+            try:
+                value = float(
+                    estimate_backend_cost(op, backend, row_count_estimate=rows)
+                )
+            except Exception:
+                return 1.0e12
+            return value if math.isfinite(value) and value >= 0.0 else 1.0e12
+
         if supports_pandas(op, mode=mode):
             capability = capability_for(op, "pandas_numpy")
             candidates.append(NodeBackendChoice(
                 node_id=node_id,
                 backend=PhysicalBackend.PANDAS_NUMPY,
-                compute_cost_ms=estimate_backend_cost(
-                    op, PhysicalBackend.PANDAS_NUMPY.value, row_count_estimate=rows
-                ),
+                compute_cost_ms=candidate_cost(PhysicalBackend.PANDAS_NUMPY.value),
                 transfer_from_children_ms=0.0,
                 total_cost_ms=0.0,
                 representation=infer_representation(PhysicalBackend.PANDAS_NUMPY),
                 execution_kind=capability.execution_kind,
-                production_certified=capability.is_production_eligible() or mode != "production",
+                production_certified=capability.is_production_eligible(),
                 physical_implementation_id=self._capability_pi_id(capability),
                 bound_parameter_identity=bound_params,
                 kernel_signature=kernel_signature,
@@ -634,10 +678,7 @@ class PhysicalBatchGlobalOptimizer:
                 candidates.append(NodeBackendChoice(
                     node_id=node_id,
                     backend=PhysicalBackend.POLARS_PANEL,
-                    compute_cost_ms=estimate_backend_cost(
-                        op, PhysicalBackend.POLARS_PANEL.value,
-                        row_count_estimate=rows,
-                    ),
+                    compute_cost_ms=candidate_cost(PhysicalBackend.POLARS_PANEL.value),
                     transfer_from_children_ms=0.0,
                     total_cost_ms=0.0,
                     representation=infer_representation(PhysicalBackend.POLARS_PANEL),
@@ -647,7 +688,7 @@ class PhysicalBatchGlobalOptimizer:
                     ),
                     production_certified=(
                         capability.is_production_eligible() and not is_delegate
-                    ) or mode != "production",
+                    ),
                     physical_implementation_id=self._capability_pi_id(capability),
                     bound_parameter_identity=bound_params,
                     kernel_signature=kernel_signature,
@@ -658,14 +699,12 @@ class PhysicalBatchGlobalOptimizer:
             candidates.append(NodeBackendChoice(
                 node_id=node_id,
                 backend=PhysicalBackend.DUCKDB_SQL,
-                compute_cost_ms=estimate_backend_cost(
-                    op, PhysicalBackend.DUCKDB_SQL.value, row_count_estimate=rows
-                ),
+                compute_cost_ms=candidate_cost(PhysicalBackend.DUCKDB_SQL.value),
                 transfer_from_children_ms=0.0,
                 total_cost_ms=0.0,
                 representation=infer_representation(PhysicalBackend.DUCKDB_SQL),
                 execution_kind=capability.execution_kind,
-                production_certified=capability.is_production_eligible() or mode != "production",
+                production_certified=capability.is_production_eligible(),
                 physical_implementation_id=self._capability_pi_id(capability),
                 bound_parameter_identity=bound_params,
                 kernel_signature=kernel_signature,
@@ -683,14 +722,12 @@ class PhysicalBatchGlobalOptimizer:
             candidates.append(NodeBackendChoice(
                 node_id=node_id,
                 backend=PhysicalBackend.CLICKHOUSE_SQL,
-                compute_cost_ms=estimate_backend_cost(
-                    op, PhysicalBackend.CLICKHOUSE_SQL.value, row_count_estimate=rows
-                ),
+                compute_cost_ms=candidate_cost(PhysicalBackend.CLICKHOUSE_SQL.value),
                 transfer_from_children_ms=0.0,
                 total_cost_ms=0.0,
                 representation=infer_representation(PhysicalBackend.CLICKHOUSE_SQL),
                 execution_kind=capability.execution_kind,
-                production_certified=capability.is_production_eligible() or mode != "production",
+                production_certified=capability.is_production_eligible(),
                 physical_implementation_id=self._capability_pi_id(capability),
                 bound_parameter_identity=bound_params,
                 kernel_signature=kernel_signature,
@@ -737,14 +774,12 @@ class PhysicalBatchGlobalOptimizer:
                 candidates.append(NodeBackendChoice(
                     node_id=node_id,
                     backend=PhysicalBackend.Q_KDB,
-                    compute_cost_ms=estimate_backend_cost(
-                        op, PhysicalBackend.Q_KDB.value, row_count_estimate=rows
-                    ),
+                    compute_cost_ms=candidate_cost(PhysicalBackend.Q_KDB.value),
                     transfer_from_children_ms=0.0,
                     total_cost_ms=0.0,
                     representation=infer_representation(PhysicalBackend.Q_KDB),
                     execution_kind=capability.execution_kind,
-                    production_certified=capability.is_production_eligible() or mode != "production",
+                    production_certified=capability.is_production_eligible(),
                     physical_implementation_id=self._capability_pi_id(capability),
                     bound_parameter_identity=bound_params,
                     kernel_signature=kernel_signature,
@@ -786,14 +821,12 @@ class PhysicalBatchGlobalOptimizer:
                 candidates.append(NodeBackendChoice(
                     node_id=node_id,
                     backend=PhysicalBackend.PANDAS_NUMPY,  # Numba runs on the pandas_numpy data plane
-                    compute_cost_ms=estimate_backend_cost(
-                        op, "numba", row_count_estimate=rows
-                    ),
+                    compute_cost_ms=candidate_cost("numba"),
                     transfer_from_children_ms=0.0,
                     total_cost_ms=0.0,
                     representation=infer_representation(PhysicalBackend.PANDAS_NUMPY),
                     execution_kind=ExecutionKind.NUMBA_CPU_KERNEL,
-                    production_certified=numba_certified or mode != "production",
+                    production_certified=numba_certified,
                     physical_implementation_id=numba_pi_id,
                     bound_parameter_identity=bound_params,
                     kernel_signature=kernel_signature,
@@ -1260,8 +1293,9 @@ class PhysicalBatchGlobalOptimizer:
         estimated_memory: int | None,
         node_graph: dict[str, list[str]],
         run_mode: str | None,
+        require_production: bool = True,
     ) -> tuple[bool, str]:
-        """Apply complete fail-closed production-readiness gates."""
+        """Apply structural execution gates and optional production gates."""
         if not roots or not all_nodes:
             return False, "empty logical plan"
         if not choices or not plan.regions or not plan.root_region_ids:
@@ -1279,7 +1313,7 @@ class PhysicalBatchGlobalOptimizer:
                 ExecutionKind.POLARS_PANDAS_DELEGATE,
             }
         )
-        if delegates:
+        if require_production and delegates:
             return False, f"delegate fallback assigned: {', '.join(delegates)}"
         if rows is None:
             return False, "row-count estimate unavailable"
@@ -1287,7 +1321,11 @@ class PhysicalBatchGlobalOptimizer:
             return False, "byte estimate unavailable"
         if estimated_memory is None:
             return False, "memory estimate unavailable"
-        if any(not choice.production_certified for choice in choices.values()):
+        if require_production and run_mode != "production":
+            return False, "production readiness requires production run mode"
+        if require_production and any(
+            not choice.production_certified for choice in choices.values()
+        ):
             return False, "non-production-certified backend assignment"
         if any(
             choice.execution_kind == ExecutionKind.UNSUPPORTED
@@ -1348,8 +1386,6 @@ class PhysicalBatchGlobalOptimizer:
             return False, "transfer estimate unavailable"
         if plan.peak_memory_bytes <= 0 or plan.logical_node_count != len(all_nodes):
             return False, "plan estimates or node coverage incomplete"
-        if run_mode != "production":
-            return False, "production readiness requires production run mode"
         return True, ""
 
     def _recompute_shared_benefits_after_assignment(
@@ -1453,6 +1489,7 @@ class PhysicalBatchGlobalOptimizer:
         node_graph: dict[str, list[str]],
         root_ids: tuple[str, ...],
         node_estimates: dict[str, tuple[int, int, int]],
+        all_nodes: dict[str, PlanNode],
     ) -> PhysicalRegionPlan:
         """Build PhysicalRegionPlan from optimization results."""
         import hashlib
@@ -1525,8 +1562,8 @@ class PhysicalBatchGlobalOptimizer:
             region_rows = max(
                 (node_estimates[node_id][0] for node_id in node_ids), default=0
             )
-            region_memory = max(
-                (node_estimates[node_id][2] for node_id in node_ids), default=0
+            region_memory = self._region_execution_memory_bytes(
+                node_ids, all_nodes, per_node_choices, node_estimates
             )
             region = BackendRegion(
                 region_id=region_id,
@@ -1633,6 +1670,85 @@ class PhysicalBatchGlobalOptimizer:
             ),
             routing_basis="estimated",
         )
+
+    @staticmethod
+    def _node_execution_memory_bytes(
+        node: PlanNode, choice: NodeBackendChoice, rows: int, base_memory: int
+    ) -> int:
+        """Conservative materialization bound for backend-specific kernels."""
+        workspace = PhysicalBatchGlobalOptimizer._node_additional_workspace_bytes(
+            node, choice, rows
+        )
+        return min(sys.maxsize, max(0, int(base_memory)) + workspace)
+
+    @staticmethod
+    def _node_additional_workspace_bytes(
+        node: PlanNode, choice: NodeBackendChoice, rows: int
+    ) -> int:
+        """Additional live window buffers beyond the node's base panel estimate."""
+        op = getattr(node, "op", "")
+        if op == "ts_corr" and choice.backend in {
+            PhysicalBackend.POLARS_LONG,
+            PhysicalBackend.POLARS_PANEL,
+        }:
+            try:
+                from factor_engine.backend.pair_window_spec import PairWindowSpec
+                window = int(PairWindowSpec.from_plan_node(node).size)
+            except Exception:
+                window = max(20, PhysicalBatchGlobalOptimizer._bound_window(node))
+            # Native centered correlation keeps raw pair shifts plus centered /
+            # recentered square and cross-product expressions live per trailing
+            # window.  Twelve Float64-equivalent payloads (96 bytes/pair) plus
+            # input/output/mask headroom (24 bytes/row) is a conservative
+            # planning bound supplied by the implementation owner, not RSS.
+            return min(
+                sys.maxsize,
+                max(0, int(rows)) * (96 * max(1, window) + 24),
+            )
+        if choice.backend == PhysicalBackend.POLARS_LONG:
+            bytes_per_window_row = {"ts_cov": 192, "ts_var": 128, "ts_std": 128}.get(op)
+        elif choice.backend == PhysicalBackend.DUCKDB_SQL:
+            bytes_per_window_row = {
+                "ts_cov": 160, "ts_kurt": 160, "ts_var": 96, "ts_std": 96,
+            }.get(op)
+        else:
+            bytes_per_window_row = None
+        if bytes_per_window_row is None:
+            return 0
+        try:
+            if op == "ts_cov":
+                from factor_engine.backend.pair_window_spec import PairWindowSpec
+                window = int(PairWindowSpec.from_plan_node(node).size)
+            else:
+                from factor_engine.backend.plan_params import window_spec_from_plan_node
+                window = int(window_spec_from_plan_node(node, default=20).size)
+        except Exception:
+            window = max(20, PhysicalBatchGlobalOptimizer._bound_window(node))
+        # Centered statistics materialize raw, finite-filtered, anchored/scaled
+        # and product lists together. Bounds include staging/mask/offset
+        # headroom supplied by the kernel owner, not measured peak RSS. Charge
+        # them even for shared-region nodes; base panels alone are insufficient.
+        return min(
+            sys.maxsize,
+            max(0, int(rows)) * (bytes_per_window_row * max(1, window) + 64),
+        )
+
+    @staticmethod
+    def _region_execution_memory_bytes(
+        node_ids: list[str],
+        all_nodes: dict[str, PlanNode],
+        choices: dict[str, NodeBackendChoice],
+        estimates: dict[str, tuple[int, int, int]],
+    ) -> int:
+        """Peak base materialization plus concurrently live list workspaces."""
+        base = max((max(0, int(estimates[node_id][2])) for node_id in node_ids), default=0)
+        workspace = sum(
+            PhysicalBatchGlobalOptimizer._node_additional_workspace_bytes(
+                all_nodes[node_id], choices[node_id], estimates[node_id][0]
+            )
+            for node_id in node_ids
+        )
+        return min(sys.maxsize, base + workspace)
 
 
 def optimize_batch_global(

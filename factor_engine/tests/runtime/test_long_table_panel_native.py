@@ -11,6 +11,23 @@ from factor_engine.storage.long_table_source import LongTableDataSource
 from tests.helpers import InMemorySeriesSource
 
 
+def test_long_scan_preserves_one_batched_inner_read():
+    idx = pd.MultiIndex.from_product([pd.date_range('2024-01-01', periods=2), ['A']],
+                                     names=['timestamp','instrument'])
+    class Source:
+        calls = 0
+        def load_column(self, name):
+            raise AssertionError('must use the batch source boundary')
+        def load_columns(self, names):
+            self.calls += 1
+            assert set(names) == {'close','open'}
+            return {name: pd.Series([1.,2.], index=idx) for name in names}
+    inner = Source()
+    frame = LongTableDataSource(inner).scan_polars_long(['close','open']).collect()
+    assert inner.calls == 1
+    assert frame.height == 2 and set(frame.columns) == {'ts','inst','close','open'}
+
+
 @pytest.fixture
 def long_table_source():
     idx = pd.MultiIndex.from_product(

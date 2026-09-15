@@ -53,7 +53,10 @@ from __future__ import annotations
 from types import MappingProxyType
 
 from factor_engine.cleaned_operators.registry import OperatorRegistry
-from factor_engine.cleaned_operators.rolling_pack import register_polars_udf
+from factor_engine.cleaned_operators.rolling_pack import (
+    _DYNAMIC_REGRESSION_DELEGATES,
+    register_polars_udf,
+)
 
 # Deliberately skipped: ``arg`` sits on the ``unsafe`` surface (its
 # argmax-index semantics are flagged non-production and it has never had a
@@ -153,6 +156,12 @@ def register_polars_gap_coverage() -> int:
     counted as a success.
     """
     count = 0
+    # These multi-panel regressions must replace any legacy single-series
+    # pseudo-native backend staged earlier in bootstrap, not merely fill a
+    # missing slot.  register_polars_udf binds each delegate to the final
+    # pandas authority and records a content-derived physical identity.
+    for canonical in sorted(_DYNAMIC_REGRESSION_DELEGATES):
+        register_polars_udf(canonical)
     for canonical in sorted(OperatorRegistry.list_canonical()):
         if canonical in _SKIP_UNSAFE:
             continue

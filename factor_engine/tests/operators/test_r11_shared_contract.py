@@ -207,20 +207,10 @@ def test_dsl_string_category_kept_for_string_param():
     from factor_engine.api.dsl_parser import parse_expr
 
     # find an operator with a declared str param to prove no blind coercion
-    from factor_engine.cleaned_operators.registry import OperatorRegistry
-
-    target = None
-    for canon in OperatorRegistry.list_canonical():
-        meta = OperatorRegistry.get(canon).metadata
-        specs = getattr(meta, "param_specs", None) or {}
-        if any(getattr(s, "dtype", None) is str for s in specs.values()):
-            target = (canon, specs)
-            break
-    assert target is not None, "no str-param operator found for coercion probe"
-    canon, specs = target
-    str_name = next(n for n, s in specs.items() if getattr(s, "dtype", None) is str)
-    # the DSL keeps an enum-looking string exactly as written
-    expr = parse_expr(f'{canon}(col("close"), {str_name}="doji")')
+    # Fixed daily-surface fixture: cross_event has a declared string enum and
+    # is in the DSL allowlist.  Never select an arbitrary registry operator,
+    # because extended-only string operators are correctly rejected by DSL.
+    expr = parse_expr('cross_event(col("close"), col("open"), direction="up")')
     assert expr is not None
 
 

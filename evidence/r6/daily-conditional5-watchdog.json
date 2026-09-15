@@ -1,0 +1,12 @@
+WARNING: logical-contract divergence for backend of canonical 'ts_mean': field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=1, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>)} (P0-23 — continuing despite divergence for compatibility)
+/home/sunhaiwei/quant_projects/factor_engine/tests/conftest.py:149: UserWarning: P0-14: late-surface module factor_engine.cleaned_operators.common.polars_ts_basic failed to stage: ValueError: operator 'ts_sum': ParamSpec keys ['min_periods'] are not in param_names (R6-157 registry invariant).  Declare the parameter on the canonical or narrow the ParamSpec dict to the parameters this canonical actually takes.
+  warnings.warn(
+........                                                                 [100%]
+=============================== warnings summary ===============================
+factor_engine/tests/runtime/test_r6_daily_finite_history.py::test_argext_ignores_infinity_preserves_original_age[ts_argmax-pandas_numpy]
+factor_engine/tests/runtime/test_r6_daily_finite_history.py::test_argext_ignores_infinity_preserves_original_age[ts_argmax-pandas_numpy]
+  /home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 2 warnings in 44.29s

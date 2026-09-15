@@ -56,6 +56,14 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         category="dependence_ext",
         description=description,
         param_names=params,
+        panel_params=tuple(k for k in params if k in ("x", "y", "z")),
+        scalar_params=tuple(k for k in params if k not in ("x", "y", "z")),
+        param_specs={
+            "window": ParamSpec(dtype=int,min=2,default=60 if name=="ts_hsic" else 120,
+                                param_role=ParamRole.HORIZON,history_semantics="max_rows"),
+            **({"bins":ParamSpec(dtype=int,min=2,max=3,choices=(2,3),default=3,
+                                param_role=ParamRole.ESTIMATOR_RESOLUTION)} if "bins" in params else {}),
+        },
         return_type="series",
         tags=[
             "dependence_ext", "daily", "pit_safe", "causal", "typed_v2",
@@ -87,6 +95,8 @@ def _rankdata(v: np.ndarray) -> np.ndarray:
 
 def _value_bins(values: np.ndarray, bins: int) -> np.ndarray:
     """Window-local quantile buckets over the values (side='right', clip to [0,bins-1])."""
+    magnitude = float(np.max(np.abs(values)))
+    values = values / magnitude if magnitude else values
     cuts = np.quantile(values, np.linspace(0.0, 1.0, bins + 1)[1:-1])
     bucket = np.searchsorted(cuts, values, side="right")
     return np.clip(bucket.astype(np.int64), 0, bins - 1)
@@ -101,7 +111,7 @@ def _chatterjee_xi(xv: np.ndarray, yv: np.ndarray) -> float:
     n = xv.size
     if n < 3:
         return np.nan
-    if float(np.std(xv)) <= _EPS or float(np.std(yv)) <= _EPS:
+    if np.all(xv == xv[0]) or np.all(yv == yv[0]):
         return np.nan
     # Tie-aware Chatterjee ξ (review R4-49, R26-005..007).  The no-tie formula
     # 1 - 3·Σ|Δr|/(n²-1) assumes continuous data; A-share series have many
@@ -128,6 +138,10 @@ def _chatterjee_xi(xv: np.ndarray, yv: np.ndarray) -> float:
 
 def _rbf_kernel(v: np.ndarray) -> np.ndarray | None:
     n = v.size
+    magnitude = float(np.max(np.abs(v)))
+    if not np.isfinite(magnitude) or magnitude == 0.0:
+        return None
+    v = v / magnitude
     d = np.abs(v[:, None] - v[None, :])
     tri = d[np.triu_indices(n, 1)]
     if tri.size == 0:
@@ -139,13 +153,14 @@ def _rbf_kernel(v: np.ndarray) -> np.ndarray | None:
     # rate, not genuine dependence.  Positive distances give the real scale of
     # the non-constant structure.  If too few positive distances exist the
     # series is (near-)constant -> fail closed to NaN.
-    pos = tri[tri > _EPS]
+    pos = tri[tri > 0.0]
     if pos.size < max(2, int(np.sqrt(n))):
         return None
     sigma = float(np.median(pos))
-    if sigma <= _EPS:
+    if sigma <= 0.0:
         return None
-    return np.exp(-(d * d) / (2.0 * sigma * sigma))
+    with np.errstate(over="ignore"):
+        return np.exp(-0.5 * np.square(d / sigma))
 
 
 def _hsic(xv: np.ndarray, yv: np.ndarray) -> float:
@@ -156,16 +171,15 @@ def _hsic(xv: np.ndarray, yv: np.ndarray) -> float:
     L = _rbf_kernel(yv)
     if K is None or L is None:
         return np.nan
-    H = np.eye(n) - np.ones((n, n)) / n
-    # Centered kernel alignment (review R4-14): Kc = H K H, Lc = H L H and
-    # HSIC_norm = <Kc,Lc>_F / (||Kc||_F·||Lc||_F).  For symmetric kernels,
-    # <Kc,Lc>_F = tr(K H L H) and ||Kc||_F² = tr(K H K H) — the old denominator
-    # tr(K H K)·tr(L H L) was missing one centering H on each side.
-    num = float(np.trace(K @ H @ L @ H))
-    denom = float(np.sqrt(np.trace(K @ H @ K @ H) * np.trace(L @ H @ L @ H)))
-    if denom <= _EPS:
+    # H K H equals row/column mean subtraction. This computes the same
+    # centered Frobenius alignment in O(n²), without dense O(n³) products.
+    Kc = K - K.mean(axis=0,keepdims=True) - K.mean(axis=1,keepdims=True) + K.mean()
+    Lc = L - L.mean(axis=0,keepdims=True) - L.mean(axis=1,keepdims=True) + L.mean()
+    num = float(np.sum(Kc * Lc))
+    denom = float(np.sqrt(np.sum(Kc * Kc) * np.sum(Lc * Lc)))
+    if not np.isfinite(denom) or denom <= 0.0:
         return np.nan
-    return float(num / denom)
+    return float(np.clip(num / denom, 0.0, 1.0))
 
 
 def _cmi(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray, bins: int) -> float:
@@ -205,6 +219,8 @@ def _cmi(xv: np.ndarray, yv: np.ndarray, zv: np.ndarray, bins: int) -> float:
 
 
 def _double_center(v: np.ndarray) -> np.ndarray:
+    magnitude = float(np.max(np.abs(v)))
+    v = v / magnitude if magnitude else v
     d = np.abs(v[:, None] - v[None, :])
     return d - d.mean(axis=0, keepdims=True) - d.mean(axis=1, keepdims=True) + d.mean()
 
@@ -212,10 +228,14 @@ def _double_center(v: np.ndarray) -> np.ndarray:
 def _normalized_dcov(A: np.ndarray, B: np.ndarray) -> float:
     """Normalized distance covariance: dcov/sqrt(dvar_x * dvar_y) (distance corr)."""
     n = A.shape[0]
+    ma, mb = float(np.max(np.abs(A))), float(np.max(np.abs(B)))
+    if ma == 0.0 or mb == 0.0:
+        return np.nan
+    A, B = A / ma, B / mb
     dcov2 = float(np.sum(A * B)) / float(n * n)
     dvar2_a = float(np.sum(A * A)) / float(n * n)
     dvar2_b = float(np.sum(B * B)) / float(n * n)
-    if dvar2_a <= _EPS or dvar2_b <= _EPS:
+    if dvar2_a <= 0.0 or dvar2_b <= 0.0:
         return np.nan
     return float(np.sqrt(max(dcov2, 0.0) / np.sqrt(dvar2_a * dvar2_b)))
 
@@ -365,15 +385,13 @@ class TsConditionalMutualInformation(SeriesOperator):
         unit="ratio",
         cost=6,
     )
-    metadata.param_specs = {
-        # R4-50: bins^3 plug-in cells need large N; production grid is {2, 3}.
-        "bins": ParamSpec(dtype=int, min=2, max=3, choices=(2, 3), param_role=ParamRole.ESTIMATOR_RESOLUTION),
-        "window": ParamSpec(dtype=int, min=2),
-    }
+    # R4-50: bins^3 plug-in cells retain the bounded {2,3} grid. The shared
+    # metadata above also supplies true defaults and finite history semantics.
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, z: pd.DataFrame, window: int = 120, bins: int = 3, **_: Any) -> pd.DataFrame:
         w = check_window(window)
-        b = int(bins)
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+        b = strict_int(bins,"bins",minimum=2)
         if b not in (2, 3):
             raise ValueError("bins must be 2 or 3 (production grid, review R4-50)")
         return frame_like(
@@ -447,8 +465,9 @@ def _register_surface() -> None:
             OperatorRegistry.register_alias(_old, _new)
         except (KeyError, ValueError):
             pass  # already registered
+    from factor_engine.cleaned_operators.common.dependence_delegate import register
     for _canon in _NEW_CANONICALS:
-        register_polars_bridge(_canon)
+        register(_canon)
 
 
 _register_surface()

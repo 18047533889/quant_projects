@@ -7,9 +7,11 @@ Per-column NumPy kernels over polars column arrays; results wrapped into
 """
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 
 import numpy as np
+from factor_engine.cleaned_operators.common.elementwise_scalar_contracts import scalar_contract
 import polars as pl
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, ScalarOperator, register_operator
@@ -86,39 +88,43 @@ def _validate_price_basis(**kwargs) -> None:
 
 
 def _ratio_op(a, b, name, *, price_basis=None):
+    from types import SimpleNamespace
     from factor_engine.cleaned_operators.return_decomp import _assert_shared_price_basis
+    from factor_engine.cleaned_operators.common._polars_bridge import numeric_cols, verify_frames_share_identity
 
-    _assert_shared_price_basis(a, b, price_basis=price_basis)
-    cols = _cols(a, b)
-    rows = a.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        numerator, denominator = a[c].to_numpy(), b[c].to_numpy()
-        value = _safe_ratio_1d(numerator, denominator) - 1.0
+    verify_frames_share_identity(name,a,b)
+    cols = numeric_cols(a)
+    _assert_shared_price_basis(SimpleNamespace(columns=cols),
+                              SimpleNamespace(columns=numeric_cols(b)),price_basis=price_basis)
+    outputs = []
+    for c in cols:
+        numerator, denominator = a[c].to_numpy().astype(float), b[c].to_numpy().astype(float)
+        with np.errstate(over="ignore",divide="ignore",invalid="ignore"):
+            value = numerator / denominator - 1.0
         valid = np.isfinite(numerator) & np.isfinite(denominator) & (numerator > 0) & (denominator > 0)
-        value[~valid] = np.nan
-        out[:, i] = value
-    return _make(a, cols, out)
+        value[~valid | ~np.isfinite(value)] = np.nan
+        outputs.append(pl.Series(c,value,dtype=pl.Float64))
+    return a.with_columns(outputs)
 
 
-def open_close_return(open_px, close, **kwargs):
-    _validate_price_basis(**kwargs)
-    return _ratio_op(close, open_px, "open_close_return", price_basis=kwargs.get("price_basis"))
+def open_close_return(open_px, close, price_basis=None, **kwargs):
+    _validate_price_basis(price_basis=price_basis)
+    return _ratio_op(close, open_px, "open_close_return", price_basis=price_basis)
 
 
-def open_to_vwap_return(open_px, vwap, **kwargs):
-    _validate_price_basis(**kwargs)
-    return _ratio_op(vwap, open_px, "open_to_vwap_return", price_basis=kwargs.get("price_basis"))
+def open_to_vwap_return(open_px, vwap, price_basis=None, **kwargs):
+    _validate_price_basis(price_basis=price_basis)
+    return _ratio_op(vwap, open_px, "open_to_vwap_return", price_basis=price_basis)
 
 
-def overnight_return(open_px, pre_close, **kwargs):
-    _validate_price_basis(**kwargs)
-    return _ratio_op(open_px, pre_close, "overnight_return", price_basis=kwargs.get("price_basis"))
+def overnight_return(open_px, pre_close, price_basis=None, **kwargs):
+    _validate_price_basis(price_basis=price_basis)
+    return _ratio_op(open_px, pre_close, "overnight_return", price_basis=price_basis)
 
 
-def vwap_to_close_return(vwap, close, **kwargs):
-    _validate_price_basis(**kwargs)
-    return _ratio_op(close, vwap, "vwap_to_close_return", price_basis=kwargs.get("price_basis"))
+def vwap_to_close_return(vwap, close, price_basis=None, **kwargs):
+    _validate_price_basis(price_basis=price_basis)
+    return _ratio_op(close, vwap, "vwap_to_close_return", price_basis=price_basis)
 
 
 # ---------------------------------------------------------------------------
@@ -379,14 +385,32 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
 
 
 def _register(name: str, params: tuple[str, ...], function: Callable, description: str) -> None:
-    metadata = OperatorMetadata(
-        name=name,
-        category="time_series_event",
-        description=description,
-        param_names=list(params),
-        return_type="series",
-        tags=["pit_safe", "causal", "polars", "native"],
-    )
+    if name in {"open_close_return","open_to_vwap_return","overnight_return","vwap_to_close_return"}:
+        from factor_engine.cleaned_operators.common.return_decomp_native import make
+        cls = make(name)
+        register_operator(name=name,canonical=name,source="polars_state_event",backend="polars",status="production")(cls)
+        return
+    if name in {"ts_transition_count", "ts_time_since_change", "ts_event_spacing_mean", "ts_event_spacing_cv"}:
+        from factor_engine.cleaned_operators.state_event import (
+            TsEventSpacingCv, TsEventSpacingMean, TsTimeSinceChange, TsTransitionCount,
+        )
+        references = {
+            "ts_transition_count": TsTransitionCount,
+            "ts_time_since_change": TsTimeSinceChange,
+            "ts_event_spacing_mean": TsEventSpacingMean,
+            "ts_event_spacing_cv": TsEventSpacingCv,
+        }
+        metadata = copy.deepcopy(references[name].metadata)
+        metadata.tags = list(metadata.tags or []) + ["polars", "native"]
+    else:
+        metadata = OperatorMetadata(
+            name=name,
+            category="time_series_event",
+            description=description,
+            param_names=list(params),
+            return_type="series",
+            tags=["pit_safe", "causal", "polars", "native"],
+        )
 
     def _calculate_series(self, *args, **kwargs):
         return function(*args, **kwargs)
@@ -416,13 +440,15 @@ def _register_constant() -> None:
         name="constant",
         category="math",
         description="Return a constant value.",
+        **scalar_contract("constant"),
         param_names=["c"],
         return_type="scalar",
         tags=["math", "utility", "scalar", "polars", "native"],
     )
 
-    def _calculate_scalar(self, c=0.0, **kwargs):
-        return float(c)
+    def _calculate_scalar(self, c: float = 0.0, **kwargs):
+        from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar
+        return strict_finite_scalar(c, "c")
 
     cls = type(
         "PolarsStateEvent_constant",

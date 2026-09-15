@@ -1009,11 +1009,11 @@ def _rank_pct_rowwise_np(x: np.ndarray) -> np.ndarray:
     out = np.full_like(x, np.nan, dtype=float)
     for i in range(x.shape[0]):
         row = x[i]
-        finite = np.isfinite(row)
-        n = int(finite.sum())
+        valid = ~np.isnan(row)
+        n = int(valid.sum())
         if n == 0:
             continue
-        vals = row[finite]
+        vals = row[valid]
         order = vals.argsort(kind="stable")
         ranks = np.empty(n, dtype=float)
         ranks[order] = np.arange(1, n + 1, dtype=float)
@@ -1022,7 +1022,7 @@ def _rank_pct_rowwise_np(x: np.ndarray) -> np.ndarray:
         for u in range(cnt.size):
             m = inv == u
             avg[m] = ranks[m].mean()
-        out[i, finite] = avg / n
+        out[i, valid] = avg / n
     return out
 
 
@@ -1181,20 +1181,29 @@ def _rolling_cov_ref(x: np.ndarray, y: np.ndarray, window: int,
                      *, ddof: int = 1, min_periods: int = 2) -> np.ndarray:
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
-    n = min(x.shape[0], y.shape[0])
-    out = np.full(n, np.nan, dtype=float)
+    if x.ndim != 1 or y.ndim != 1:
+        raise ValueError("rolling covariance reference requires 1-D inputs")
+    if x.shape[0] != y.shape[0]:
+        raise ValueError("rolling covariance reference requires equal-length inputs")
     if window <= 0:
-        return out
+        raise ValueError("window must be positive")
+    if min_periods <= 0 or min_periods > window:
+        raise ValueError("min_periods must satisfy 1 <= min_periods <= window")
+    if ddof < 0:
+        raise ValueError("ddof must be non-negative")
+    n = x.shape[0]
+    out = np.full(n, np.nan, dtype=float)
     for i in range(n):
         lo = max(0, i - window + 1)
         xw = x[lo : i + 1]
         yw = y[lo : i + 1]
         m = np.isfinite(xw) & np.isfinite(yw)
-        if int(m.sum()) <= 1:
+        count = int(m.sum())
+        if count < min_periods or count <= ddof:
             continue
         xc = xw[m] - xw[m].mean()
         yc = yw[m] - yw[m].mean()
-        out[i] = float((xc * yc).sum() / (int(m.sum()) - ddof))
+        out[i] = float((xc * yc).sum() / (count - ddof))
     return out
 
 

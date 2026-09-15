@@ -27,6 +27,7 @@ class ExecutionCacheSession:
     panel_cache: dict[Any, Any] | None = None
     stats: CacheHitStats | None = None
     cse_budget_bytes: int | None = None
+    cse_budget_authority: Any | None = None
     panel_budget_bytes: int | None = None
     # R40 #124: 默认 execution_id 必须是每 session 唯一的 —— 历史默认 ``"session"``
     # 让并发 session 的 governor layer 名（``{execution_id}:l0_cse``）互相碰撞，
@@ -70,6 +71,8 @@ class ExecutionCacheSession:
             spill_store=SpillStore(),
             execution_id=self.execution_id,
         )
+        if self.cse_budget_authority is not None:
+            self._buffer_store.bind_budget_authority(self.cse_budget_authority)
         # R38 P0-038（P0-014）：L0 **唯一 owner 是 GovernedBufferStore**。
         # ExpressionCache 只作 adapter（governed_store 模式）——不再双套 accounting。
         self._expression_cache = ExpressionCache(

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 import math
+import hashlib
+from pathlib import Path
+from factor_engine.cleaned_operators.base import ParamSpec, ParamRole
+from factor_engine.cleaned_operators.common.strict_params import strict_int, strict_bool, strict_enum
 
 import numpy as np
 import pandas as pd
@@ -73,6 +77,21 @@ def pl_staleness(available_at, decision_time, **_):
     return available_at.with_columns([(((decision_time[c].cast(pl.Datetime, strict=False) - available_at[c].cast(pl.Datetime, strict=False)).dt.total_seconds() / 86400.0).cast(pl.Float64).alias(c)) for c in cols])
 
 
+def _finite_float(value):
+    return float(value) if np.isfinite(value) and abs(value) <= np.finfo(float).max else np.nan
+
+
+def _strict_axes(*panels):
+    if all(isinstance(v, pd.DataFrame) for v in panels):
+        first = panels[0]
+        if any(not v.index.is_unique or not v.columns.is_unique or
+            not first.index.equals(v.index) or not first.columns.equals(v.columns) for v in panels):
+            raise ValueError("Fiscal panels must have unique exactly aligned axes")
+    else:
+        from factor_engine.cleaned_operators.common._polars_bridge import verify_frames_share_identity
+        verify_frames_share_identity("fiscal_period", *panels)
+
+
 def _revision_array(values, periods, revisions, mode):
     out = np.full(values.shape, np.nan)
     for col in range(values.shape[1]):
@@ -85,23 +104,27 @@ def _revision_array(values, periods, revisions, mode):
             previous = last.get(ordinal)
             if previous is not None and revision != previous[0]:
                 if mode == "absolute":
-                    out[row, col] = value - previous[1]
-                elif abs(previous[1]) > EPS:
-                    out[row, col] = value / previous[1] - 1.0
+                    change = np.longdouble(value) - np.longdouble(previous[1])
+                    out[row, col] = float(change) if abs(change) <= np.finfo(float).max else np.nan
+                elif previous[1] != 0:
+                    change = np.longdouble(value) / np.longdouble(previous[1]) - 1
+                    out[row, col] = float(change) if abs(change) <= np.finfo(float).max else np.nan
             last[ordinal] = (revision, float(value))
     return out
 
 
 def pd_revision_delta(x, period_id, revision_id, mode="absolute", **_):
+    _strict_axes(x, period_id, revision_id)
     x, period_id, revision_id = aligned_pd(x, period_id, revision_id)
-    mode = str(mode).lower()
+    mode = strict_enum(mode, "mode", ("absolute", "ratio"))
     if mode not in {"absolute", "ratio"}:
         raise ValueError("mode must be absolute or ratio")
     return frame_pd(x, _revision_array(x.to_numpy(dtype=float), period_id.to_numpy(dtype=object), revision_id.to_numpy(dtype=object), mode))
 
 
 def pl_revision_delta(x, period_id, revision_id, mode="absolute", **_):
-    mode = str(mode).lower()
+    _strict_axes(x, period_id, revision_id)
+    mode = strict_enum(mode, "mode", ("absolute", "ratio"))
     if mode not in {"absolute", "ratio"}:
         raise ValueError("mode must be absolute or ratio")
     cols = [c for c in pl_cols(x) if c in period_id.columns and c in revision_id.columns]
@@ -124,21 +147,24 @@ def _stability_column(values, periods, count, method, consecutive):
         sample = [known[key] for key in [ordinal - lag for lag in range(count)] if key in known]
         if (consecutive and len(sample) != count) or len(sample) < 2:
             continue
-        array = np.asarray(sample)
+        array = np.asarray(sample, dtype=np.longdouble)
         if method == "std":
-            out[row] = np.std(array, ddof=1)
+            out[row] = _finite_float(np.std(array, ddof=1))
         elif method == "mad":
-            out[row] = np.median(np.abs(array - np.median(array)))
+            out[row] = _finite_float(np.median(np.abs(array - np.median(array))))
         else:
             mean = np.mean(array)
-            if abs(mean) > EPS:
-                out[row] = np.std(array, ddof=1) / abs(mean)
+            if mean != 0:
+                out[row] = _finite_float(np.std(array, ddof=1) / abs(mean))
     return out
 
 
 def pd_period_stability(x, period_id, periods=8, method="mad", require_consecutive=True, **_):
+    _strict_axes(x, period_id)
     x, period_id = aligned_pd(x, period_id)
-    count, method = positive_int(periods, "periods"), str(method).lower()
+    count = strict_int(periods, "periods", minimum=2)
+    method = strict_enum(method, "method", ("std", "mad", "cv"))
+    require_consecutive = strict_bool(require_consecutive, "require_consecutive")
     if method not in {"std", "mad", "cv"}:
         raise ValueError("method must be std, mad, or cv")
     out = np.full(x.shape, np.nan)
@@ -148,7 +174,10 @@ def pd_period_stability(x, period_id, periods=8, method="mad", require_consecuti
 
 
 def pl_period_stability(x, period_id, periods=8, method="mad", require_consecutive=True, **_):
-    count, method = positive_int(periods, "periods"), str(method).lower()
+    _strict_axes(x, period_id)
+    count = strict_int(periods, "periods", minimum=2)
+    method = strict_enum(method, "method", ("std", "mad", "cv"))
+    require_consecutive = strict_bool(require_consecutive, "require_consecutive")
     if method not in {"std", "mad", "cv"}:
         raise ValueError("method must be std, mad, or cv")
     cols = [c for c in pl_cols(x) if c in period_id.columns]
@@ -156,6 +185,9 @@ def pl_period_stability(x, period_id, periods=8, method="mad", require_consecuti
 
 
 def pd_safe_div(x, y, epsilon=EPS, **_):
+    epsilon = float(epsilon)
+    if not np.isfinite(epsilon) or epsilon <= 0:
+        raise ValueError("epsilon must be finite and positive")
     if not isinstance(x, pd.DataFrame) and isinstance(y, pd.DataFrame):
         x = pd.DataFrame(x, index=y.index, columns=y.columns, dtype=float)
     elif not isinstance(y, pd.DataFrame) and isinstance(x, pd.DataFrame):
@@ -165,7 +197,6 @@ def pd_safe_div(x, y, epsilon=EPS, **_):
         # NaN literal branch (``where(cond, x, safe_div(0,0))`` ≡ NaN when
         # cond false).  Return the platform NaN scalar; the surrounding
         # ``where`` scalar-broadcast turns it into a constant NaN panel.
-        epsilon = float(epsilon)
         try:
             if epsilon > 0 and float(y) != 0 and abs(float(y)) > epsilon:
                 return float(x) / float(y)
@@ -173,9 +204,6 @@ def pd_safe_div(x, y, epsilon=EPS, **_):
             pass
         return float("nan")
     x, y = aligned_pd(x, y)
-    epsilon = float(epsilon)
-    if not np.isfinite(epsilon) or epsilon <= 0:
-        raise ValueError("epsilon must be finite and positive")
     xv, yv = x.to_numpy(dtype=float), y.to_numpy(dtype=float)
     valid = np.isfinite(xv) & np.isfinite(yv) & (np.abs(yv) > epsilon)
     out = np.full(x.shape, np.nan)
@@ -187,20 +215,98 @@ def pl_safe_div(x, y, epsilon=EPS, **_):
     epsilon = float(epsilon)
     if not math.isfinite(epsilon) or epsilon <= 0:
         raise ValueError("epsilon must be finite and positive")
-    cols = [c for c in pl_cols(x) if c in y.columns]
-    return x.with_columns([pl.when(x[c].cast(pl.Float64, strict=False).is_finite() & y[c].cast(pl.Float64, strict=False).is_finite() & (y[c].cast(pl.Float64, strict=False).abs() > epsilon)).then(x[c].cast(pl.Float64, strict=False) / y[c].cast(pl.Float64, strict=False)).otherwise(None).alias(c) for c in cols])
+    x_panel, y_panel = isinstance(x, pl.DataFrame), isinstance(y, pl.DataFrame)
+    if not x_panel and not y_panel:
+        try:
+            return float(x) / float(y) if np.isfinite(float(x)) and np.isfinite(float(y)) and abs(float(y)) > epsilon else float("nan")
+        except (TypeError, ValueError, ZeroDivisionError, OverflowError):
+            return float("nan")
+    template = x if x_panel else y
+    if x_panel and y_panel:
+        _strict_axes(x, y)
+    cols = [c for c in pl_cols(template) if (not x_panel or c in x.columns) and (not y_panel or c in y.columns)]
+    expressions = []
+    for c in cols:
+        left = x[c].cast(pl.Float64, strict=False) if x_panel else pl.lit(float(x))
+        right = y[c].cast(pl.Float64, strict=False) if y_panel else pl.lit(float(y))
+        expressions.append(pl.when(left.is_finite() & right.is_finite() & (right.abs() > epsilon)).then(left / right).otherwise(None).alias(c))
+    return template.with_columns(expressions)
+
+
+def _register_period_contracts():
+    from factor_engine.cleaned_operators.overhaul.base import PandasFunctionOperator, PolarsFunctionOperator
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+    from factor_engine.runtime.execution_contract import declare_stateful
+    entries = (
+        ("revision_delta", ["x", "period_id", "revision_id", "mode"],
+            ("x", "period_id", "revision_id"), pd_revision_delta, pl_revision_delta,
+            {"mode": ParamSpec(dtype=str, choices=("absolute", "ratio"), default="absolute", param_role=ParamRole.POLICY)}),
+        ("period_stability", ["x", "period_id", "periods", "method", "require_consecutive"],
+            ("x", "period_id"), pd_period_stability, pl_period_stability,
+            {"periods": ParamSpec(dtype=int, min=2, default=8, param_role=ParamRole.HORIZON),
+             "method": ParamSpec(dtype=str, choices=("mad", "std", "cv"), default="mad", param_role=ParamRole.POLICY),
+             "require_consecutive": ParamSpec(dtype=bool, default=True, searchable=False, param_role=ParamRole.SUPPORT_POLICY)}),
+    )
+    for name, params, panels, pd_fn, pl_fn, specs in entries:
+        for backend, cls, fn in (("pandas_numpy", PandasFunctionOperator, pd_fn),
+                                ("polars", PolarsFunctionOperator, pl_fn)):
+            if backend == "polars" and pl is None:
+                continue
+            op = cls(name, "fundamental_period", params, fn.__name__, fn,
+                param_specs=specs, panel_params=panels,
+                scalar_params=tuple(k for k in params if k not in panels))
+            op.metadata.window_semantics = "full_history"
+            op.metadata.checkpointable = False
+            op.metadata.available_at = "report_date"
+            op.metadata.same_session_usable = False
+            if backend == "polars":
+                from factor_engine.cleaned_operators import fiscal_strict
+                digest = hashlib.sha256(Path(__file__).read_bytes() +
+                    Path(fiscal_strict.__file__).read_bytes()).hexdigest()
+                op._physical_spec = PhysicalImplementationSpec(canonical=name, backend="polars",
+                    execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
+                    materializes_full_panel=True, supports_nan=True, supports_nulls=True,
+                    supports_inf=True, implementation_source_hash=digest,
+                    kernel_identity="layer_cos_fundamental." + name,
+                    notes="CPU per-period state over NumPy arrays; scalar fiscal parsing; full replay, no GPU.")
+            prior = (OperatorRegistry._catalog.get(name, {}).get("backend_meta") or {}).get(backend, {})
+            OperatorRegistry.register(op, canonical=name, backend=backend,
+                source="fiscal_period_exact", status="implemented", backend_explicit=True,
+                replace=bool(prior), expected_old_source=prior.get("source") if prior else None,
+                replacement_reason="Exact fiscal state and shared contracts")
+        declare_stateful(name, state_model="recursive", chunking="required_full_history")
 
 
 def register() -> None:
     register_specs({
         "true_range": Spec("price_volume", ["high", "low", "close"], "true range with explicit first-row high-low fallback", pd_true_range, pl_true_range),
         "fundamental_staleness": Spec("fundamental_period", ["available_at", "decision_time"], "calendar-day age of visible fundamental data", pd_staleness, pl_staleness),
-        "revision_delta": Spec("fundamental_period", ["x", "period_id", "revision_id", "mode"], "change between visible revisions of the same fiscal period", pd_revision_delta, pl_revision_delta),
-        "period_stability": Spec("fundamental_period", ["x", "period_id", "periods", "method", "require_consecutive"], "stability over exact fiscal periods", pd_period_stability, pl_period_stability),
-        "safe_div_null": Spec("elementwise", ["x", "y", "epsilon"], "finite safe division returning null for near-zero denominator", pd_safe_div, pl_safe_div),
+        "safe_div_null": Spec(
+            "elementwise", ["x", "y", "epsilon"],
+            "finite safe division returning null for near-zero denominator",
+            pd_safe_div, pl_safe_div,
+            param_specs={"epsilon": ParamSpec(dtype=float, min=0.0, default=EPS, searchable=False, param_role=ParamRole.NUMERICAL)},
+            scalar_params=("epsilon",), mixed_params=("x", "y"),
+        ),
         "ttm_from_quarterly": Spec("fundamental_period", ["x", "period_id", "periods", "require_consecutive", "revision_policy"], "strict consecutive-period TTM", pd_ttm_from_quarterly),
         "yoy_by_period": Spec("fundamental_period", ["x", "period_id", "periods", "denominator", "require_consecutive", "revision_policy"], "strict fiscal-period growth", pd_yoy_by_period),
     })
+
+    from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    safe_div_polars = OperatorRegistry.get("safe_div_null", "polars")
+    if safe_div_polars is not None:
+        safe_div_polars._physical_spec = PhysicalImplementationSpec(
+            canonical="safe_div_null", backend="polars",
+            execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+            supports_lazy=False, supports_streaming=False,
+            materializes_full_panel=False, supports_nulls=True,
+            supports_nan=True, supports_inf=True,
+            notes="Direct eager Polars expressions with scalar/panel broadcasting.",
+        )
+
+    _register_period_contracts()
 
 
 register()

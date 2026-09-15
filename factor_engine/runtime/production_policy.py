@@ -204,6 +204,9 @@ def assert_production_fastpath_runtime(
     mode: str | None = None,
     context: str = "execute",
 ) -> None:
+    if getattr(ctx, "execution_purpose", None) is not None:
+        from factor_engine.runtime.default_execution_policy import operator_admission_mode
+        mode = operator_admission_mode(ctx)
     if not is_production_mode(mode) or not _fastpath_gate_enabled():
         return
     from factor_engine.backend.production_fastpath_gate import audit_runtime_fastpath_violations
@@ -255,7 +258,12 @@ def assert_no_unapproved_map_groups_in_production(
 def record_production_fastpath_check(
     ctx: Any, plan: Any, *, mode: str | None = None
 ) -> None:
-    if not _fastpath_gate_enabled():
+    if getattr(ctx, "execution_purpose", None) is not None:
+        from factor_engine.runtime.default_execution_policy import operator_admission_mode
+        mode = operator_admission_mode(ctx)
+    if not _fastpath_gate_enabled() or (
+        getattr(ctx, "execution_purpose", None) is not None and not is_production_mode(mode)
+    ):
         runtime = dict(getattr(ctx, "runtime_stats", None) or {})
         runtime["production_fastpath_required"] = False
         ctx.runtime_stats = runtime
@@ -281,9 +289,15 @@ def assert_production_factors(
     *,
     mode: str | None = None,
     context: str = "run",
+    execution_purpose: Any = None,
 ) -> None:
     if not is_production_mode(mode):
         return
+    from factor_engine.runtime.default_execution_policy import ExecutionPurpose
+    if execution_purpose is not None and not isinstance(execution_purpose, ExecutionPurpose):
+        raise TypeError("validated ExecutionPurpose required")
+    research_compute = (execution_purpose is not None
+                        and execution_purpose.admission_mode == "research")
     from factor_engine.api.mining_integration import validate_production_dsl
     from factor_engine.api.dsl_parser import parse_expr
     from factor_engine.ir.analyzer import Analyzer
@@ -307,6 +321,11 @@ def assert_production_factors(
     for factor in factors:
         source = getattr(factor, "source_expr", None)
         if not source:
+            if research_compute:
+                # Python Expr is already the submitted formula. Compile still
+                # performs strict typed/PIT validation; no invented DSL text is
+                # required. When text exists, exact consistency is mandatory.
+                continue
             violations.append(
                 f"{getattr(factor, 'name', '?')}: missing source_expr required for production validation"
             )
@@ -319,14 +338,15 @@ def assert_production_factors(
                 "market=None 只在 research/compat 模式合法（R40 #174）"
             )
             continue
-        ok, message = validate_production_dsl(str(source), market=market)
-        if not ok:
-            violations.append(f"{getattr(factor, 'name', '?')}: {message}")
-            continue
+        if not research_compute:
+            ok, message = validate_production_dsl(str(source), market=market)
+            if not ok:
+                violations.append(f"{getattr(factor, 'name', '?')}: {message}")
+                continue
         try:
             source_hash = compute_ir_hash(
                 Analyzer(production=True, market=market).lower(
-                    parse_expr(str(source), surface="daily")
+                    parse_expr(str(source), surface="all" if research_compute else "daily")
                 ).ir,
                 structural_only=True
             )

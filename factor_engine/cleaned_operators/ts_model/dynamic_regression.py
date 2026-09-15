@@ -60,15 +60,15 @@ _MULTI_CONFIGURED_HISTORY_CANONICALS: list[str] = []
 # ARE the economic tail mechanism in quantile/expectile regression, so they are
 # declared ECONOMIC and searched.
 _MULTI_PARAM_SPECS: dict[str, ParamSpec] = {
-    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
-    "coefficient_index": ParamSpec(dtype=int, min=0, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
-    "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
-    "add_intercept": ParamSpec(dtype=bool, param_role=ParamRole.POLICY, searchable=False),
+    "window": ParamSpec(dtype=int, min=2, default=60, param_role=ParamRole.HORIZON, searchable=True),
+    "coefficient_index": ParamSpec(dtype=int, min=0, default=1, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+    "min_periods": ParamSpec(dtype=int, min=1, default=10, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+    "add_intercept": ParamSpec(dtype=bool, default=True, param_role=ParamRole.POLICY, searchable=False),
     # P1: window semantics governance — ``window`` is a MAX LOOKBACK, NOT a
     # strict full window; ``warmup_policy`` is catalog-visible (part of the
     # semantic identity), with ``"full"`` opting into a strict full-history floor.
     "warmup_policy": ParamSpec(dtype=str, choices=("expanding", "full"),
-                               param_role=ParamRole.POLICY, searchable=False),
+                               default="expanding", param_role=ParamRole.POLICY, searchable=False),
 }
 # P1 window-semantics contract for the rolling multi regression family.
 _MULTI_WINDOW_SEMANTICS = "max_lookback"
@@ -118,6 +118,19 @@ _QUANTILE_SPREAD_PARAM_SPECS: dict[str, ParamSpec] = {
     "q_high": ParamSpec(dtype=float, min=0.0, max=1.0, param_role=ParamRole.ECONOMIC, searchable=True),
     "q_low": ParamSpec(dtype=float, min=0.0, max=1.0, param_role=ParamRole.ECONOMIC, searchable=True),
     "min_periods": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+}
+_QUANTILE_PARAM_SPECS_DEFAULTED = {
+    **_QUANTILE_PARAM_SPECS,
+    "window": ParamSpec(dtype=int, min=2, default=60, param_role=ParamRole.HORIZON, searchable=True),
+    "q": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, param_role=ParamRole.ECONOMIC, searchable=True),
+    "min_periods": ParamSpec(dtype=int, min=1, default=10, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+}
+_QUANTILE_SPREAD_PARAM_SPECS_DEFAULTED = {
+    **_QUANTILE_SPREAD_PARAM_SPECS,
+    "window": ParamSpec(dtype=int, min=2, default=60, param_role=ParamRole.HORIZON, searchable=True),
+    "q_high": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.9, param_role=ParamRole.ECONOMIC, searchable=True),
+    "q_low": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.1, param_role=ParamRole.ECONOMIC, searchable=True),
+    "min_periods": ParamSpec(dtype=int, min=1, default=10, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
 }
 
 
@@ -402,6 +415,7 @@ def _register_multi(name: str, description: str, fit_fn: Callable[..., Any], ext
             diagnostic_only=diagnostic_only,
             param_specs=_MULTI_PARAM_SPECS,
         )
+        metadata.panel_params = ("y", "x1", "x2", "x3", "x4")
         # P1: window = max lookback (documented, machine-readable contract).
         metadata.window_semantics = _MULTI_WINDOW_SEMANTICS
         if stat != "coeff":
@@ -573,6 +587,7 @@ def _expectile_op(name: str, description: str, stat: str, *, fit_lag: int = 0, d
             diagnostic_only=diagnostic_only,
             param_specs=_QUANTILE_PARAM_SPECS,
         )
+        metadata.panel_params = ("y", "x")
 
         def _calculate_series(self, y, x, window=60, q=0.5, min_periods=10, **_):
             qv = float(q)
@@ -620,7 +635,9 @@ class TsExpectileBetaSpread(SeriesOperator):
         input_units={"y": "target", "x": "predictor"},
         output_unit="unit(y)/unit(x)",
         diagnostic_only=True,
+        param_specs=_QUANTILE_SPREAD_PARAM_SPECS_DEFAULTED,
     )
+    metadata.panel_params = ("y", "x")
 
     def _calculate_series(self, y, x, window=60, q_high=0.9, q_low=0.1, min_periods=10, **_):
         qh, ql = float(q_high), float(q_low)
@@ -655,7 +672,9 @@ class TsQuantileRegressionCoeff(SeriesOperator):
         input_units={"y": "target", "x": "predictor"},
         output_unit="unit(y)/unit(x) (intercept: unit(y))",
         diagnostic_only=True,
+        param_specs=_QUANTILE_PARAM_SPECS_DEFAULTED,
     )
+    metadata.panel_params = ("y", "x")
 
     def _calculate_series(self, y, x, window=60, q=0.5, min_periods=10, **_):
         quantile = float(q)
@@ -693,6 +712,7 @@ class TsQuantileRegressionCoeffPrior(SeriesOperator):
         output_unit="unit(y)/unit(x) (intercept: unit(y))",
         param_specs=_QUANTILE_PARAM_SPECS,
     )
+    metadata.panel_params = ("y", "x")
 
     def _calculate_series(self, y, x, window=60, q=0.5, min_periods=10, **_):
         quantile = float(q)
@@ -721,7 +741,9 @@ class TsQuantileRegressionResid(SeriesOperator):
         input_units={"y": "target", "x": "predictor"},
         output_unit="unit(y)",
         diagnostic_only=True,
+        param_specs=_QUANTILE_PARAM_SPECS_DEFAULTED,
     )
+    metadata.panel_params = ("y", "x")
 
     def _calculate_series(self, y, x, window=60, q=0.5, min_periods=10, **_):
         quantile = float(q)
@@ -756,7 +778,9 @@ class TsQuantileBetaSpread(SeriesOperator):
         input_units={"y": "target", "x": "predictor"},
         output_unit="unit(y)/unit(x)",
         diagnostic_only=True,
+        param_specs=_QUANTILE_SPREAD_PARAM_SPECS_DEFAULTED,
     )
+    metadata.panel_params = ("y", "x")
 
     def _calculate_series(self, y, x, window=60, q_high=0.9, q_low=0.1, min_periods=10, **_):
         qh, ql = float(q_high), float(q_low)
@@ -800,6 +824,7 @@ class TsQuantileBetaSpreadPrior(SeriesOperator):
         output_unit="unit(y)/unit(x)",
         param_specs=_QUANTILE_SPREAD_PARAM_SPECS,
     )
+    metadata.panel_params = ("y", "x")
 
     def _calculate_series(self, y, x, window=60, q_high=0.9, q_low=0.1, min_periods=10, **_):
         qh, ql = float(q_high), float(q_low)

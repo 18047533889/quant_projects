@@ -20,12 +20,42 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+    strict_int_param,
+)
 from factor_engine.cleaned_operators.common.daily_panel import _aligned
 from factor_engine.cleaned_operators.rolling_pack import frame_like
 from factor_engine.cleaned_operators.stateful._common import assert_condition_bool, metadata
 
 _EPS = 1e-12
+
+
+def _sequential_metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    domain: str,
+    unit: str,
+    category: str,
+    panel_params: tuple[str, ...],
+    param_specs: dict[str, ParamSpec],
+    relational_specs: list[RelationalParamSpec] | None = None,
+) -> OperatorMetadata:
+    result = metadata(name, description, params, domain=domain, unit=unit, category=category)
+    result.param_specs = param_specs
+    result.panel_params = panel_params
+    result.panel_arity = len(panel_params)
+    result.scalar_params = tuple(param for param in params if param not in panel_params)
+    result.relational_specs = relational_specs or []
+    result.output_unit = "dimensionless" if unit == "ratio" else "same_as:x"
+    return result
 
 
 @register_operator(
@@ -46,13 +76,20 @@ class TsCusumPressure(SeriesOperator):
     undersized baseline emits NaN and re-baselines the recursion.
     """
 
-    metadata = metadata(
+    metadata = _sequential_metadata(
         "ts_cusum_pressure",
         "递归双端 CUSUM: 标准化冲击对历史基线的累积压力。",
         ["x", "reference_window", "drift", "min_periods"],
         domain="price_volume",
-        unit="level",
+        unit="ratio",
         category="time_series_regression",
+        panel_params=("x",),
+        param_specs={
+            "reference_window": ParamSpec(dtype=int, min=2, default=20, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "drift": ParamSpec(dtype=float, min=0.0, default=0.5, param_role=ParamRole.STATE_THRESHOLD),
+            "min_periods": ParamSpec(dtype=int, min=2, default=None, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        },
+        relational_specs=[RelationalParamSpec(expression="min_periods is None or min_periods <= reference_window")],
     )
 
     def _calculate_series(
@@ -63,14 +100,14 @@ class TsCusumPressure(SeriesOperator):
         min_periods: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
-        w = max(2, int(reference_window))
+        w = strict_int_param(reference_window, "reference_window", lower=2)
         k = float(drift)
         # P1-71: a negative drift would *accelerate* the accumulation of both
         # S+ and S- (it appears in both update laws) instead of being the
         # dead-zone allowance the docstring promises — reject it explicitly.
         if not np.isfinite(k) or k < 0.0:
             raise ValueError("drift must be a finite number >= 0")
-        mp = int(min_periods) if min_periods is not None else max(5, w // 2)
+        mp = strict_int_param(min_periods, "min_periods", lower=2) if min_periods is not None else min(w, max(5, w // 2))
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
@@ -92,19 +129,26 @@ class TsCusumPressure(SeriesOperator):
                     sp = 0.0
                     sm = 0.0
                     continue
-                med = float(np.median(valid))
-                mad = float(np.median(np.abs(valid - med)))
+                magnitude = float(np.max(np.abs(valid)))
+                if magnitude == 0.0:
+                    out[row, col] = np.nan
+                    sp = 0.0
+                    sm = 0.0
+                    continue
+                normalized = valid / magnitude
+                med = float(np.median(normalized))
+                mad = float(np.median(np.abs(normalized - med)))
                 # P1-71: a zero-spread baseline (robust scale == 0) makes the
                 # standardised shock z = (x - med)/scale undefined.  Dividing
                 # by the epsilon floor produced enormous bogus pressure.  A
                 # degenerate window must emit NaN and re-baseline.
-                if mad <= _EPS:
+                if mad == 0.0:
                     out[row, col] = np.nan
                     sp = 0.0
                     sm = 0.0
                     continue
                 scale = 1.4826 * mad
-                z = (float(xt) - med) / scale
+                z = (float(xt) / magnitude - med) / scale
                 sp = max(0.0, sp + z - k)
                 sm = min(0.0, sm + z + k)
                 out[row, col] = sp + sm
@@ -128,13 +172,19 @@ class TsRankIf(SeriesOperator):
     or the current value is missing.
     """
 
-    metadata = metadata(
+    metadata = _sequential_metadata(
         "ts_rank_if",
         "条件成立子窗口内当前值的百分位排名。",
         ["x", "condition", "window", "min_periods"],
         domain="price_volume",
         unit="ratio",
         category="time_series_condition",
+        panel_params=("x", "condition"),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=20, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=2, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        },
+        relational_specs=[RelationalParamSpec(expression="min_periods <= window")],
     )
 
     def _calculate_series(
@@ -145,8 +195,8 @@ class TsRankIf(SeriesOperator):
         min_periods: int = 5,
         **_: Any,
     ) -> pd.DataFrame:
-        w = max(2, int(window))
-        mp = max(2, int(min_periods))
+        w = strict_int_param(window, "window", lower=2)
+        mp = strict_int_param(min_periods, "min_periods", lower=2)
         x, condition = _aligned(x, condition)
         assert_condition_bool(condition)
         xv = x.to_numpy(dtype=float)
@@ -185,12 +235,17 @@ class StateEwmIf(SeriesOperator):
     ``half_life``.  A NaN input emits NaN and re-baselines the memory.
     """
 
-    metadata = metadata(
+    metadata = _sequential_metadata(
         "state_ewm_if",
         "仅条件成立时更新的指数移动记忆。",
         ["x", "condition", "half_life"],
         domain="price_volume",
         unit="level",
+        category="time_series_state",
+        panel_params=("x", "condition"),
+        param_specs={
+            "half_life": ParamSpec(dtype=float, min=np.nextafter(0.0, 1.0), default=10.0, param_role=ParamRole.HORIZON),
+        },
     )
 
     def _calculate_series(
@@ -245,13 +300,23 @@ class TsLagOfPeakCorr(SeriesOperator):
     sample size.
     """
 
-    metadata = metadata(
+    metadata = _sequential_metadata(
         "ts_lag_of_peak_corr",
         "最强绝对滞后相关的滞后阶(归一化)。",
         ["x", "y", "window", "max_lag", "min_periods"],
         domain="price_volume",
         unit="ratio",
         category="time_series_risk",
+        panel_params=("x", "y"),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=3, default=20, history_semantics="max_rows", history_formula="window + max_lag", param_role=ParamRole.HORIZON),
+            "max_lag": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=2, default=None, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        },
+        relational_specs=[
+            RelationalParamSpec(expression="max_lag + 2 <= window"),
+            RelationalParamSpec(expression="min_periods is None or min_periods <= window"),
+        ],
     )
 
     def _calculate_series(
@@ -263,9 +328,9 @@ class TsLagOfPeakCorr(SeriesOperator):
         min_periods: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
-        w = max(3, int(window))
-        ml = max(1, int(max_lag))
-        mp = int(min_periods) if min_periods is not None else max(ml + 2, w // 2)
+        w = strict_int_param(window, "window", lower=3)
+        ml = strict_int_param(max_lag, "max_lag", lower=1)
+        mp = strict_int_param(min_periods, "min_periods", lower=2) if min_periods is not None else max(ml + 2, w // 2)
         x, y = _aligned(x, y)
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
@@ -299,13 +364,12 @@ class TsLagOfPeakCorr(SeriesOperator):
 
 def _register_surface() -> None:
     from factor_engine.cleaned_operators.stateful._common import register_stateful_surface
+    from factor_engine.cleaned_operators.rolling_pack import register_polars_udf
 
-    register_stateful_surface(
-        [
-            "ts_cusum_pressure", "ts_rank_if", "state_ewm_if",
-            "ts_lag_of_peak_corr",
-        ]
-    )
+    canonicals = ["ts_cusum_pressure", "ts_rank_if", "state_ewm_if", "ts_lag_of_peak_corr"]
+    register_stateful_surface(canonicals)
+    for canonical in canonicals:
+        register_polars_udf(canonical)
 
 
 _register_surface()
@@ -323,4 +387,11 @@ declare_stateful(
     "ts_cusum_pressure",
     state_model="recursive",
     chunking="required_full_history",
+    history_kind="full_history",
+)
+declare_stateful(
+    "state_ewm_if",
+    state_model="recursive",
+    chunking="required_full_history",
+    history_kind="full_history",
 )

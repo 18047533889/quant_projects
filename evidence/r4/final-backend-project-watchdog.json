@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "tests/backend_parity", "-q", "--tb=short", "--show-capture=no", "--junitxml=evidence/r4/final-backend-project.xml"], "returncode": 0, "sampled_peak_family_rss_bytes": 710975488, "sampling_seconds": 0.1, "seconds": 342.56410880805925, "test_guard_reason": null, "hard_memory_cap": false}

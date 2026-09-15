@@ -29,11 +29,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
-from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
-
-_EPS = 1e-12
-
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.rolling_pack import check_window, frame_like, register_polars_bridge
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
     return OperatorMetadata(
@@ -42,6 +39,17 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         description=description,
         param_names=params,
         return_type="series",
+        param_specs={
+            "lower": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
+            "upper": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
+            "window": ParamSpec(dtype=int, min=2, default=120, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+        },
+        relational_specs=[RelationalParamSpec("lower < upper", "lower must be < upper")],
+        input_units={"x": "level", "lower": "level", "upper": "level"},
+        output_unit="bars" if unit == "bars" else "dimensionless",
+        panel_params=("x",),
+        panel_arity=1,
+        scalar_params=("lower", "upper", "window"),
         tags=[
             "threshold_cycle", "daily", "pit_safe", "causal", "typed_v2",
             "deterministic",
@@ -167,7 +175,7 @@ def _cycle_asymmetry_series(x2d: np.ndarray, lower: float, upper: float, window:
                 continue
             tlu = float(np.median(up))  # median L→U leg (U-run) duration
             tul = float(np.median(down))  # median U→L leg (L-run) duration
-            out[r, c] = (tlu - tul) / (tlu + tul + _EPS)
+            out[r, c] = (tlu - tul) / (tlu + tul)
     return out
 
 
@@ -204,14 +212,13 @@ class TsThresholdCyclePeriod(SeriesOperator):
         window: int = 120,
         **_: Any,
     ) -> pd.DataFrame:
-        if not upper > lower:
+        lower_f, upper_f = float(lower), float(upper)
+        if not (np.isfinite(lower_f) and np.isfinite(upper_f) and upper_f > lower_f):
             raise ValueError("upper must be > lower")
-        w = int(window)
-        if w < 2:
-            raise ValueError("window must be >= 2")
+        w = check_window(window)
         return frame_like(
             x,
-            _cycle_period_series(x.to_numpy(dtype=float), float(lower), float(upper), w),
+            _cycle_period_series(x.to_numpy(dtype=float), lower_f, upper_f, w),
         )
 
 
@@ -245,14 +252,13 @@ class TsThresholdCycleAsymmetry(SeriesOperator):
         window: int = 120,
         **_: Any,
     ) -> pd.DataFrame:
-        if not upper > lower:
+        lower_f, upper_f = float(lower), float(upper)
+        if not (np.isfinite(lower_f) and np.isfinite(upper_f) and upper_f > lower_f):
             raise ValueError("upper must be > lower")
-        w = int(window)
-        if w < 2:
-            raise ValueError("window must be >= 2")
+        w = check_window(window)
         return frame_like(
             x,
-            _cycle_asymmetry_series(x.to_numpy(dtype=float), float(lower), float(upper), w),
+            _cycle_asymmetry_series(x.to_numpy(dtype=float), lower_f, upper_f, w),
         )
 
 

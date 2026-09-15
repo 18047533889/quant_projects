@@ -13,7 +13,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.ts_model._rolling_core import (
     frame_like,
     metadata,
@@ -47,6 +47,34 @@ _AR_PARAM_SPECS: dict[str, ParamSpec] = {
     "warmup_policy": ParamSpec(dtype=str, choices=(_AR_WARMUP_POLICY, _AR_FULL_WARMUP),
                                param_role=ParamRole.POLICY, searchable=False),
 }
+
+
+def _declare_single(metadata_obj, specs: dict[str, ParamSpec], relations=()):
+    metadata_obj.panel_params = ("x",)
+    metadata_obj.panel_arity = 1
+    metadata_obj.scalar_params = tuple(p for p in metadata_obj.param_names if p != "x")
+    metadata_obj.param_specs = specs
+    metadata_obj.relational_specs = list(relations)
+    return metadata_obj
+
+
+def _half_life_specs(*, prior: bool = False) -> dict[str, ParamSpec]:
+    return {
+        "window": ParamSpec(
+            dtype=int, min=5, default=120, history_semantics="max_rows",
+            history_formula="window + 1" if prior else None,
+            param_role=ParamRole.HORIZON,
+        ),
+        "min_periods": ParamSpec(
+            dtype=int, min=4, default=20, searchable=False,
+            param_role=ParamRole.SUPPORT_POLICY,
+        ),
+    }
+
+
+_HALF_LIFE_RELATIONS = (
+    RelationalParamSpec("min_periods < window", message="window must be greater than min_periods"),
+)
 
 
 def validate_ar_configured_history(window: int, order: int, *, fit_lag: int = 0) -> int:
@@ -223,7 +251,12 @@ _ar_op("ts_ar_coeff_stability", "AR 一阶滞后系数在最近 K 个严格截�
 def _mean_reversion_half_life(vals: np.ndarray, window: int, min_periods: int) -> float:
     n = len(vals)
     start = max(0, n - window)
-    seg = vals[start:]
+    seg = np.asarray(vals[start:], dtype=float)
+    finite = seg[np.isfinite(seg)]
+    magnitude = float(np.max(np.abs(finite))) if finite.size else 0.0
+    if not np.isfinite(magnitude) or magnitude == 0.0:
+        return np.nan
+    seg = seg / magnitude
     xprev = seg[:-1]
     d = np.diff(seg)
     valid = np.isfinite(xprev) & np.isfinite(d)
@@ -265,6 +298,10 @@ def _warn_if_trending_input(panel: np.ndarray, operator_name: str) -> None:
         finite = vals[np.isfinite(vals)]
         if finite.size < 4:
             continue
+        magnitude = float(np.max(np.abs(finite)))
+        if not np.isfinite(magnitude) or magnitude == 0.0:
+            continue
+        finite = finite / magnitude
         x = np.arange(finite.size, dtype=float)
         xc = x - x.mean()
         denom = float(np.dot(xc, xc))
@@ -312,13 +349,13 @@ class TsMeanReversionHalfLife(SeriesOperator):
     runtime warning is raised when the input looks trending (research gate).
     """
 
-    metadata = metadata(
+    metadata = _declare_single(metadata(
         "ts_mean_reversion_half_life",
         "均值回复半衰期（AR(1) 精确离散）。输入必须为 spread/residual/stationary 序列；raw trending price 会给出无意义半衰期（研究 gate）。",
         ["x", "window", "min_periods"],
         unit="count", cost=3,
         input_units={"x": "spread_or_residual_or_stationary"},
-    )
+    ), _half_life_specs(), _HALF_LIFE_RELATIONS)
 
     def _calculate_series(self, x, window=120, min_periods=20, **_):
         xv = x.to_numpy(dtype=float)
@@ -339,7 +376,12 @@ def _mean_reversion_ou_half_life(vals: np.ndarray, window: int, min_periods: int
     if fit_end < 0:
         return np.nan
     start = max(0, fit_end - window + 1)
-    seg = vals[start : fit_end + 1]
+    seg = np.asarray(vals[start : fit_end + 1], dtype=float)
+    finite = seg[np.isfinite(seg)]
+    magnitude = float(np.max(np.abs(finite))) if finite.size else 0.0
+    if not np.isfinite(magnitude) or magnitude == 0.0:
+        return np.nan
+    seg = seg / magnitude
     xprev = seg[:-1]
     d = np.diff(seg)
     valid = np.isfinite(xprev) & np.isfinite(d)
@@ -378,14 +420,14 @@ class TsMeanReversionOuApproxHalfLife(SeriesOperator):
     trending (research gate).
     """
 
-    metadata = metadata(
+    metadata = _declare_single(metadata(
         "ts_mean_reversion_ou_approx_half_life",
         "均值回复半衰期（OU 连续近似 -ln2/beta）。输入必须为 spread/residual/stationary 序列；raw trending price 会给出无意义半衰期（研究 gate）。",
         ["x", "window", "min_periods"],
         unit="count",
         cost=3,
         input_units={"x": "spread_or_residual_or_stationary"},
-    )
+    ), _half_life_specs(), _HALF_LIFE_RELATIONS)
 
     def _calculate_series(self, x, window=120, min_periods=20, **_):
         xv = x.to_numpy(dtype=float)
@@ -424,14 +466,14 @@ class TsMeanReversionOuApproxHalfLifePrior(SeriesOperator):
     trending (research gate).
     """
 
-    metadata = metadata(
+    metadata = _declare_single(metadata(
         "ts_mean_reversion_ou_approx_half_life_prior",
         "均值回复半衰期（OU 连续近似 -ln2/beta，严格截至 t-1 训练）。输入必须为 spread/residual/stationary 序列；raw trending price 会给出无意义半衰期（研究 gate）。",
         ["x", "window", "min_periods"],
         unit="count",
         cost=3,
         input_units={"x": "spread_or_residual_or_stationary"},
-    )
+    ), _half_life_specs(prior=True), _HALF_LIFE_RELATIONS)
 
     def _calculate_series(self, x, window=120, min_periods=20, **_):
         xv = x.to_numpy(dtype=float)
@@ -466,6 +508,10 @@ def _variance_ratio_slope(vals: np.ndarray, window: int, max_q: int, min_periods
     finite = trailing_contiguous_finite(seg)
     if finite.size < max(min_periods, 6):
         return np.nan
+    magnitude = float(np.max(np.abs(finite)))
+    if not np.isfinite(magnitude) or magnitude == 0.0:
+        return np.nan
+    finite = finite / magnitude
     rets = np.diff(finite)
     if rets.size < max(min_periods, 3):
         return np.nan
@@ -513,9 +559,16 @@ class TsVarianceRatioSlope(SeriesOperator):
     tendency; ~0 slope is consistent with a random walk.
     """
 
-    metadata = metadata(
-        "ts_variance_ratio_slope", "方差比相对 log(q) 的斜率（正=趋势，负=均值回复）。", ["x", "window", "max_q", "min_periods"], unit="level", cost=4,
-    )
+    metadata = _declare_single(metadata(
+        "ts_variance_ratio_slope", "方差比相对 log(q) 的斜率（正=趋势，负=均值回复）。", ["x", "window", "max_q", "min_periods"], unit="dimensionless", output_unit="dimensionless", cost=4,
+    ), {
+        "window": ParamSpec(dtype=int, min=6, default=120, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+        "max_q": ParamSpec(dtype=int, min=3, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "min_periods": ParamSpec(dtype=int, min=3, default=20, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+    }, (
+        RelationalParamSpec("min_periods < window", message="window must be greater than min_periods"),
+        RelationalParamSpec("max_q + 2 <= window", message="window must be at least max_q + 2"),
+    ))
 
     def _calculate_series(self, x, window=120, max_q=10, min_periods=20, **_):
         xv = x.to_numpy(dtype=float)

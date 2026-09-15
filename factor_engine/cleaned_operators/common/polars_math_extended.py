@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from factor_engine.cleaned_operators.common.elementwise_scalar_contracts import scalar_contract
 
 try:
     import polars as pl
@@ -109,7 +110,7 @@ class FloorPolars(SeriesOperator):
 @register_operator(name="round", category="math", business_category="elementwise_math", canonical="round", source="factor_dsl_polars")
 class RoundPolars(SeriesOperator):
     """Polars 四舍五入"""
-    metadata = OperatorMetadata(
+    metadata = OperatorMetadata(**scalar_contract("round"),
         name="round", category="math", description="四舍五入", param_names=["x", "decimals"], tags=["math", "polars"],
     )
 
@@ -118,13 +119,21 @@ class RoundPolars(SeriesOperator):
 
         d = strict_integer(decimals, "decimals", minimum=-18, maximum=18)
         cols = numeric_cols(x)
-        return x.with_columns([pl.col(c).round(d).alias(c) for c in cols])
+        def rounded(c):
+            value = pl.col(c)
+            if d >= 0:
+                result = value.round(d)
+            else:
+                scale = 10.0 ** (-d)
+                result = (value / scale).round(0) * scale
+            return pl.when(value.is_finite() & ~result.is_finite()).then(value).otherwise(result).alias(c)
+        return x.with_columns([rounded(c) for c in cols])
 
 
 @register_operator(name="truncate", category="math", business_category="elementwise_math", canonical="truncate", source="factor_dsl_polars")
 class TruncatePolars(SeriesOperator):
     """Polars 向零截断到指定小数位。"""
-    metadata = OperatorMetadata(
+    metadata = OperatorMetadata(**scalar_contract("truncate"),
         name="truncate", category="math", description="向零截断",
         param_names=["x", "decimals"], tags=["math", "polars"],
     )
@@ -135,7 +144,12 @@ class TruncatePolars(SeriesOperator):
         value = strict_integer(decimals, "decimals", minimum=-18, maximum=18)
         scale = 10.0 ** value
         cols = numeric_cols(x)
-        return x.with_columns([((pl.col(c) * scale).truncate() / scale).alias(c) for c in cols])
+        def truncated(c):
+            original = pl.col(c)
+            scaled = original * scale
+            result = pl.when(scaled >= 0).then(scaled.floor()).otherwise(scaled.ceil()) / scale
+            return pl.when(original.is_finite() & ~result.is_finite()).then(original).otherwise(result).alias(c)
+        return x.with_columns([truncated(c) for c in cols])
 
 
 @register_operator(name="inv", category="math", business_category="elementwise_math", canonical="inv", source="factor_dsl_polars")
@@ -228,12 +242,17 @@ class Atan2Polars(SeriesOperator):
 @register_operator(name="lerp", category="math", business_category="elementwise_math", canonical="lerp", source="factor_dsl_polars")
 class LerpPolars(SeriesOperator):
     """Polars 线性插值"""
-    metadata = OperatorMetadata(name="lerp", category="math", description="线性插值", param_names=["a", "b", "fraction"], tags=["math", "polars"])
+    metadata = OperatorMetadata(**scalar_contract("lerp"),name="lerp", category="math", description="线性插值", param_names=["a", "b", "fraction"], tags=["math", "polars"])
 
     def _calculate_series(self, a: pl.DataFrame, b: pl.DataFrame, fraction: float = 0.5, **kwargs) -> pl.DataFrame:
-        frac = float(fraction)
+        from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar
+        frac = strict_finite_scalar(fraction, "fraction")
         cols = align_cols(a, b)
-        return a.with_columns([(pl.col(c) + frac * (b[c] - pl.col(c))).alias(c) for c in cols])
+        expressions = []
+        for c in cols:
+            result = pl.col(c) + frac * (b[c] - pl.col(c))
+            expressions.append(pl.when(result.is_finite()).then(result).otherwise(None).alias(c))
+        return a.with_columns(expressions)
 
 
 @register_operator(name="blom_transform", category="math", business_category="elementwise_math", canonical="blom_transform", source="factor_dsl_polars")

@@ -53,7 +53,8 @@ VALUATION_CANONICALS = (
 
 def _period_frame(n: int = 120, seed: int = 0, cols: int = 2) -> tuple[pd.DataFrame, ...]:
     dates = pd.date_range("2023-04-01", periods=n, freq="D")
-    periods = np.repeat(pd.to_datetime(["2022-12-31", "2023-03-31", "2023-06-30", "2023-09-30"]), n // 4)
+    report_dates = pd.date_range("2021-03-31", periods=12, freq="QE")
+    periods = np.repeat(report_dates, n // len(report_dates))
     period_id = pd.DataFrame({"A": periods, "B": periods}, index=dates)
     rng = np.random.default_rng(seed)
 
@@ -88,9 +89,9 @@ def test_accrual_operators_shape() -> None:
         "fin_earnings_persistence": [npf, period_id],
         "fin_core_earnings_ratio": [ocf, std, tp, cash, cl, ta, period_id],
         "fin_noncore_income_ratio": [std, tp, cash, cl, ca, cl, npf, period_id],
-        "piotroski_f_score": [npf, ocf, npf, tl, cl, ta, ca, std, period_id],
-        "piotroski_partial_score": [npf, ocf, npf, tl, cl, ta, ca, std, period_id],
-        "piotroski_observed_count": [npf, ocf, npf, tl, cl, ta, ca, std, period_id],
+        "piotroski_f_score": [npf, ocf, npf, tl, cl, ta, ca, std, period_id, mask],
+        "piotroski_partial_score": [npf, ocf, npf, tl, cl, ta, ca, std, period_id, mask],
+        "piotroski_observed_count": [npf, ocf, npf, tl, cl, ta, ca, std, period_id, mask],
         "altman_z_score": [ca, npf, ocf, ta, equity, tl, cl, period_id, mask],
         "zmijewski_score": [npf, ta, tl, ca, cl, period_id, mask],
     }
@@ -107,7 +108,8 @@ def test_piotroski_f_score_bounded() -> None:
     comps = []
     for _ in range(8):
         comps.append(pd.DataFrame(rng.uniform(-1, 1, (120, 2)), index=dates, columns=["A", "B"]))
-    out = OperatorRegistry.get("piotroski_f_score").calculate(*comps, period_id)
+    mask = pd.DataFrame(1.0, index=dates, columns=["A", "B"])
+    out = OperatorRegistry.get("piotroski_f_score").calculate(*comps, period_id, mask)
     valid = out.dropna().to_numpy()
     assert (valid >= 0).all() and (valid <= 9).all()
 

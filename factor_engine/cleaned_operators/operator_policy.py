@@ -1820,7 +1820,8 @@ class OperatorPolicy:
         return asdict(self)
 
 
-def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorPolicy:
+def infer_operator_policy(op: Any, *, canonical: str | None = None,
+                          certification_required: bool = True) -> OperatorPolicy:
     """从算子实例 metadata/category/tags 推断默认 policy。
 
 参数:
@@ -1867,9 +1868,12 @@ def infer_operator_policy(op: Any, *, canonical: str | None = None) -> OperatorP
         # experimental lifecycle and the manifest/catalog surfaces stay
         # consistent (audit P0-A03 / convergence test).
         try:
-            from factor_engine.cleaned_operators.semantic_certification import should_fail_closed
+            from factor_engine.cleaned_operators.semantic_certification import (
+                should_fail_closed, is_isolated_from_default_mining,
+            )
 
-            if should_fail_closed(canon):
+            if (should_fail_closed(canon) if certification_required
+                    else is_isolated_from_default_mining(canon)):
                 policy.pit_safe = False
         except Exception:  # pragma: no cover - module not importable
             pass

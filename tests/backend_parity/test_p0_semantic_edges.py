@@ -82,7 +82,7 @@ test_daily:
   time_column: TradeDate
   instrument_column: Symbol
   schema:
-    TradeDate: date
+    TradeDate: timestamp
     Symbol: string
     Close: double
     Exp: double
@@ -112,7 +112,7 @@ def _seed_duckdb(root: Path, mem: InMemorySeriesSource) -> None:
     }
     rows = []
     for (ts, sym) in mem.data["close"].index:
-        row = {"TradeDate": ts.date(), "Symbol": sym}
+        row = {"TradeDate": ts, "Symbol": sym}
         for src, dst in mapping.items():
             val = mem.data[src].loc[(ts, sym)]
             row[dst] = float(val) if pd.notna(val) else None
@@ -327,7 +327,7 @@ def test_normalize_constant_and_single_valid(edge_source, duckdb_edge_source, mo
     root = tmp_path / "single_data"
     root.mkdir()
     pd.DataFrame(
-        [{"TradeDate": single_ts.date(), "Symbol": sub_idx[0][1], "Close": 42.0}]
+        [{"TradeDate": single_ts, "Symbol": sub_idx[0][1], "Close": 42.0}]
     ).to_parquet(root / "single.parquet")
     reg = tmp_path / "single.yaml"
     reg.write_text(
@@ -343,7 +343,7 @@ test_single:
   time_column: TradeDate
   instrument_column: Symbol
   schema:
-    TradeDate: date
+    TradeDate: timestamp
     Symbol: string
     Close: double
 """.strip()

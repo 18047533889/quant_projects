@@ -974,6 +974,75 @@ def _run_materialize(job: JobRecord) -> None:
     _job_wrapper(job, phase_target=JobPhase.MATERIALIZING)
 
 
+_MAX_FAILURE_RECEIPT_BYTES = 1024 * 1024
+
+
+def _preserve_default_failure_receipt(job: JobRecord, exc: BaseException) -> None:
+    """Attach a bounded, identity-checked ABORTED receipt to a failed job."""
+    execution = job.request.get("execution") if isinstance(job.request, dict) else None
+    raw_path = getattr(exc, "receipt_path", None)
+    service_job_run_id = getattr(exc, "service_job_run_id", None)
+    durable_run_id = getattr(exc, "durable_run_id", None)
+    exception_identity_digest = getattr(exc, "run_identity_digest", None)
+    if (not isinstance(execution, dict)
+            or execution.get("entrypoint") != "default_durable"
+            or not isinstance(raw_path, str)
+            or service_job_run_id != job.run_id):
+        return
+    try:
+        approved_root = Path(str(execution["artifact_root"])).resolve(strict=True)
+        receipt_path = Path(raw_path).resolve(strict=True)
+        if not receipt_path.is_relative_to(approved_root) or receipt_path.name != "receipt.json":
+            return
+        stat = receipt_path.stat()
+        if not receipt_path.is_file() or stat.st_size > _MAX_FAILURE_RECEIPT_BYTES:
+            return
+        with receipt_path.open("rb") as handle:
+            raw = handle.read(_MAX_FAILURE_RECEIPT_BYTES + 1)
+        if len(raw) > _MAX_FAILURE_RECEIPT_BYTES:
+            return
+        receipt = json.loads(raw.decode("utf-8"))
+        if not isinstance(receipt, dict):
+            return
+        run_identity = receipt.get("run_identity")
+        if not isinstance(run_identity, dict):
+            return
+        canonical_identity = json.dumps(
+            run_identity, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+        if hashlib.sha256(canonical_identity).hexdigest() != receipt.get("run_identity_digest"):
+            return
+        if (durable_run_id != receipt.get("run_id")
+                or receipt_path.parent.name != durable_run_id
+                or exception_identity_digest != receipt.get("run_identity_digest")):
+            return
+        if (receipt.get("schema_version") != "factor_engine.artifact_receipt.v2"
+                or receipt.get("status") != "ABORTED"
+                or receipt.get("deployment_digest") != execution["deployment_digest"]
+                or receipt.get("policy_digest") != execution["default_policy_digest"]
+                or receipt.get("execution_purpose") != execution["execution_purpose"]
+                or run_identity.get("profile_id") != execution["profile_id"]
+                or run_identity.get("approval_id") != execution["approval_id"]):
+            return
+        counts = receipt.get("counts")
+        if not isinstance(counts, dict) or any(
+            not isinstance(key, str) or type(value) is not int or value < 0
+            for key, value in counts.items()
+        ):
+            return
+        job.artifacts["failure_receipt_path"] = str(receipt_path)
+        job.result_summary = {
+            "mode": "default_durable",
+            "receipt": {
+                "status": "ABORTED",
+                "counts": dict(counts),
+                "receipt_path": str(receipt_path),
+            },
+        }
+    except (KeyError, OSError, UnicodeError, ValueError, TypeError, json.JSONDecodeError):
+        return
+
+
 def _job_wrapper(job: JobRecord, *, phase_target: str) -> None:
     """Run a job worker with full lifecycle: phases, heartbeat, deadline,
     cancel, sanitized errors (R21-055..060, 087..090).
@@ -1024,13 +1093,15 @@ def _job_wrapper(job: JobRecord, *, phase_target: str) -> None:
             job.finished_at = _utc_now()
             METRICS.incr("job_succeeded", labels={"job_type": job.job_type})
             info("job.end", run_id=job.run_id, status="succeeded")
-        except (JobCancelledError, Cancellation):
+        except (JobCancelledError, Cancellation) as exc:
+            _preserve_default_failure_receipt(job, exc)
             job.status = JobStatus.CANCELLED
             job.error_code = "JOB_CANCELLED"
             job.finished_at = _utc_now()
             METRICS.incr("job_cancel", labels={"job_type": job.job_type})
             info("job.cancelled", run_id=job.run_id)
-        except (JobDeadlineExceeded, DeadlineExceeded):
+        except (JobDeadlineExceeded, DeadlineExceeded) as exc:
+            _preserve_default_failure_receipt(job, exc)
             job.status = JobStatus.TIMED_OUT
             job.error_code = "JOB_DEADLINE_EXCEEDED"
             job.finished_at = _utc_now()
@@ -1043,6 +1114,7 @@ def _job_wrapper(job: JobRecord, *, phase_target: str) -> None:
             job.error_id = se.error_id
             job.error = sanitize_message(se.message)
             job.finished_at = _utc_now()
+            _preserve_default_failure_receipt(job, exc)
             job.artifacts["traceback"] = traceback.format_exc(limit=15)
             METRICS.incr("error_total", labels={"error_code": se.code, "job_type": job.job_type})
             info("job.failed", run_id=job.run_id, error_code=se.code, error_id=se.error_id)
@@ -1057,6 +1129,38 @@ def _job_wrapper(job: JobRecord, *, phase_target: str) -> None:
 
 
 def _dispatch_execution(job: JobRecord, execution: dict[str, Any] | None) -> dict[str, Any]:
+    if execution and execution.get("entrypoint") == "default_durable":
+        expected_digest = hashlib.sha256(json.dumps(execution, sort_keys=True,
+            separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+        if job.job_type != "compute" or expected_digest != job.request_digest:
+            raise ServiceError("STALE_EXECUTION_IDENTITY", "validated durable request changed", status=409)
+        from factor_engine.runtime.default_engine import get_engine, iter_parsed_factor_definitions
+        from factor_engine.api.dsl_parser import parse_factor
+        from factor_engine.runtime.operator_snapshot import get_cached_runtime_operator_snapshot
+        if not EndpointExecutionPolicy(job.endpoint_policy).is_production:
+            raise ServiceError("POLICY", "default durable jobs require strict endpoint governance", status=403)
+        if get_cached_runtime_operator_snapshot()["catalog_digest"] != execution["catalog_digest"]:
+            raise ServiceError("STALE_EXECUTION_IDENTITY", "operator catalog changed after submission", status=409)
+        with get_engine() as engine:
+            if engine.deployment.digest != execution["deployment_digest"]:
+                raise ServiceError("STALE_EXECUTION_IDENTITY", "approved deployment changed after submission", status=409)
+            if (engine.policy.policy_id != execution["default_policy_id"]
+                    or engine.policy.digest != execution["default_policy_digest"]):
+                raise ServiceError("STALE_EXECUTION_IDENTITY", "approved execution policy changed after submission", status=409)
+            if engine.execution_purpose.to_dict() != execution["execution_purpose"]:
+                raise ServiceError("STALE_EXECUTION_IDENTITY", "execution purpose changed after submission", status=409)
+            # No user-selected backend, resource ratios, scope or writer. This
+            # is the same managed entry used by Python, not legacy research mode.
+            factors = tuple(iter_parsed_factor_definitions(
+                execution["factors"], surface="all"
+            ))
+            try:
+                receipt = engine.run_many(
+                    factors, cancellation_token=_get_job_cancellation_token(job.run_id))
+            except BaseException as exc:
+                exc.service_job_run_id = job.run_id
+                raise
+        return {"out": receipt, "mode": "default_durable"}
     if job.job_type == "materialize":
         return _execute_materialize(job)
     config_path = execution.get("config_path") if execution else None
@@ -1161,6 +1265,12 @@ def _redact_preview_for_access(source_cfg: Any, job: JobRecord) -> str | None:
 def _summarize_result(payload: dict[str, Any], job: JobRecord) -> dict[str, Any]:
     mode = payload.get("mode")
     out = payload.get("out") or {}
+    if mode == "default_durable":
+        # Run completion is not a claim that every factor succeeded. Preserve
+        # the bounded durable receipt's per-item status/error summary verbatim.
+        if not isinstance(out, dict):
+            raise ServiceError("WORKER_PROTOCOL_INTEGRITY", "invalid durable receipt", status=500)
+        return {"mode": mode, "receipt": out}
     execution = job.request.get("execution") if isinstance(job.request, dict) else {}
     source_cfg = execution.get("data_source") if isinstance(execution, dict) else None
 
@@ -1212,6 +1322,105 @@ def _scoped_idempotency_key(principal: Principal, job_type: str, key: str) -> st
     return f"{principal.scope_key()}|{job_type}|{key}"
 
 
+def _principal_owns_job(principal: Principal, job: JobRecord) -> bool:
+    return (
+        job.owner_principal == principal.identity
+        and job.tenant == principal.tenant
+        and job.project == principal.project
+    )
+
+
+def _principal_can_access_job(principal: Principal, job: JobRecord) -> bool:
+    return _principal_owns_job(principal, job) or principal.has_role("ADMIN")
+
+
+def _retry_existing_job(original: JobRecord) -> JobRecord:
+    """Create a new attempt with the original immutable execution identity."""
+    execution = original.request.get("execution") if isinstance(original.request, dict) else None
+    if isinstance(execution, dict) and execution.get("entrypoint") == "default_durable":
+        expected_digest = hashlib.sha256(json.dumps(
+            execution, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode()).hexdigest()
+        if (expected_digest != original.request_digest
+                or original.policy_id != execution.get("default_policy_id")
+                or original.policy_digest != execution.get("default_policy_digest")
+                or original.execution_policy_digest != execution.get("default_policy_digest")
+                or original.timeout_seconds != execution.get("timeout_seconds")):
+            raise ServiceError(
+                "STALE_EXECUTION_IDENTITY", "retry identity differs from original job", status=409
+            )
+    retry = STORE.retry_job(original.run_id, retry_reason="manual_retry", reconcile=False)
+    retry.request_metadata = dict(original.request_metadata)
+    retry.execution_policy_digest = original.execution_policy_digest
+    retry.policy_id = original.policy_id
+    retry.policy_version = original.policy_version
+    retry.policy_digest = original.policy_digest
+    retry.timeout_seconds = float(original.timeout_seconds or QUEUE.timeout_default)
+    retry.cost_estimate = dict(original.cost_estimate)
+    import datetime as _dt
+    import time as _time
+
+    retry.deadline_at = (
+        _dt.datetime.now(_dt.timezone.utc)
+        + _dt.timedelta(seconds=retry.timeout_seconds)
+    ).isoformat()
+    retry.deadline_monotonic = _time.monotonic() + retry.timeout_seconds
+    from factor_engine.runtime.exceptions import CancellationToken
+
+    _set_job_cancellation_token(
+        retry.run_id,
+        CancellationToken(deadline_monotonic=retry.deadline_monotonic),
+    )
+    STORE.update(retry)
+    target = _run_compute if retry.job_type == "compute" else _run_materialize
+    QUEUE.submit(retry, run_fn=target)
+    return retry
+
+
+def _validate_default_durable_request(payload, *, endpoint_policy):
+    from factor_engine.runtime.default_engine import load_deployment_profile
+    from factor_engine.runtime.operator_snapshot import get_cached_runtime_operator_snapshot
+    if not endpoint_policy.is_production:
+        raise ServiceError("POLICY", "strict endpoint governance is required", status=403)
+    if set(payload) - {"factors", "idempotency_key", "request_metadata"}:
+        raise ServiceError("MALFORMED_REQUEST", "default compute accepts factors and idempotency_key only", status=422)
+    deployment = load_deployment_profile()
+    from factor_engine.runtime.default_execution_policy import resolve_default_policy
+    policy = resolve_default_policy(profile=deployment.to_dict().get("execution"))
+    business = deployment.to_dict()
+    entries = payload.get("factors")
+    if type(entries) is not list or not 1 <= len(entries) <= policy.max_manifest_factors:
+        raise ServiceError("MALFORMED_REQUEST", "a nonempty bounded factors list is required", status=422)
+    budget, names, factors = size_budget(), set(), []
+    for item in entries:
+        if type(item) is not dict or set(item) != {"name", "formula"}:
+            raise ServiceError("MALFORMED_REQUEST", "each factor requires name and formula", status=422)
+        name, formula = item["name"], item["formula"]
+        if (not isinstance(name, str) or not name.strip() or name in names
+                or len(name) > budget["max_name_length"]
+                or not isinstance(formula, str) or not formula.strip()
+                or len(formula) > budget["max_formula_chars"]
+                or len(formula.encode("utf-8")) > budget["max_formula_bytes"]):
+            raise ServiceError("MALFORMED_REQUEST", "invalid, duplicate or oversized factor definition", status=422)
+        names.add(name)
+        factors.append({"name": name, "formula": formula})
+    execution = {
+        "entrypoint": "default_durable", "factors": factors,
+        "deployment_digest": deployment.digest,
+        "execution_purpose": deployment.execution_purpose.to_dict(),
+        "default_policy_id": policy.policy_id,
+        "default_policy_digest": policy.digest,
+        "profile_id": business["profile_id"],
+        "approval_id": business["approval_id"],
+        "timeout_seconds": policy.job_max_seconds,
+        "artifact_root": business["artifact_root"],
+        "catalog_digest": get_cached_runtime_operator_snapshot()["catalog_digest"],
+    }
+    digest = hashlib.sha256(json.dumps(execution, sort_keys=True,
+        separators=(",", ":"), allow_nan=False).encode()).hexdigest()
+    return execution, digest
+
+
 def _submit_job(
     job_type: JobType,
     payload: dict[str, Any],
@@ -1219,6 +1428,7 @@ def _submit_job(
     principal: Principal,
     endpoint_policy: EndpointExecutionPolicy,
     sync: bool = False,
+    default_durable: bool = False,
 ) -> dict[str, Any]:
     budget = size_budget()
     idem_key = str(payload.get("idempotency_key") or "").strip() or None
@@ -1235,7 +1445,11 @@ def _submit_job(
         )
 
     # Validate + build the immutable request + digest (R21-008..010).
-    if job_type == "materialize":
+    if default_durable:
+        if job_type != "compute":
+            raise ServiceError("POLICY", "default durable entry only computes", status=422)
+        execution, digest = _validate_default_durable_request(payload, endpoint_policy=endpoint_policy)
+    elif job_type == "materialize":
         execution, digest = _validate_materialize_request(payload, endpoint_policy=endpoint_policy)
     else:
         execution, digest = _validate_and_build_request(payload, endpoint_policy=endpoint_policy, principal=principal)
@@ -1265,9 +1479,14 @@ def _submit_job(
     # R40 #95: 提交时快照当前 policy 的 id/version/digest —— 之后 reload_policies()
     # 刷新全局 policy 不影响在途 job 的不可变绑定。
     _ensure_runtime(start=True)
-    policy_id = "runtime_feature_policy"
-    policy_version = _POLICY_VERSION
-    policy_digest = FEATURE_POLICY.digest()
+    if default_durable:
+        policy_id = str(execution["default_policy_id"])
+        policy_version = None
+        policy_digest = str(execution["default_policy_digest"])
+    else:
+        policy_id = "runtime_feature_policy"
+        policy_version = _POLICY_VERSION
+        policy_digest = FEATURE_POLICY.digest()
     job = JobRecord(
         run_id=run_id,
         requested_by=principal.identity,
@@ -1470,7 +1689,7 @@ def create_app():
             raise HTTPException(status_code=exc.status, detail=exc.to_public()) from exc
 
     def _owner_check(request: Request, job: JobRecord, principal: Principal) -> None:
-        if job.owner_principal != principal.identity and not principal.has_role("ADMIN"):
+        if not _principal_can_access_job(principal, job):
             raise HTTPException(
                 status_code=403,
                 detail=ServiceError("OWNER_ONLY", "job access is owner-or-admin only", status=403).to_public(),
@@ -1519,7 +1738,16 @@ def create_app():
             "operator_counts": snapshot["counts"],
             "inline_compute": {"default_backend": "pandas", "backends": ["pandas"],
                                "requires_operator_and_source_admission": True},
-            "auto": {"supported": False, "reason": "public PhysicalRegionPlan consumer not connected"},
+            "auto": {"supported": False, "reason": "legacy inline route is pandas-only; use the approved default durable endpoint"},
+            "default_durable": {
+                "method": "POST", "endpoint": "/factor-engine/default/compute",
+                "backend_policy": "auto", "requires_approved_deployment": True,
+                "profile_configured": bool(os.environ.get("FACTOR_ENGINE_V2_PROFILE")),
+                "input_integrity": "strict", "default_assurance": "UNVERIFIED",
+                "request_fields": {"factors": "list of {name, formula}",
+                                   "idempotency_key": "optional string"},
+                "performance_parameters_required": False,
+            },
             "production_fast": {"supported": False, "reason": "PhysicalRegionPlan admission required"},
             "production_segmented_checkpoint": {"supported": False, "reason": "immutable historical checkpoint context required"},
             "resource_scope": "single service process; not a distributed tenant quota",
@@ -1530,7 +1758,7 @@ def create_app():
         request: Request, capability: str = "discoverable", backend: str | None = None,
         market: str | None = None, frequency: str | None = None,
         data_capability: str | None = None, budget_class: str | None = None,
-        offset: int = 0, limit: int = 50,
+        canonical: str | None = None, offset: int = 0, limit: int = 50,
     ) -> dict[str, Any]:
         _auth_http(request, policy=EndpointExecutionPolicy.RESEARCH, role="READ")
         from factor_engine.runtime.operator_snapshot import (
@@ -1544,6 +1772,7 @@ def create_app():
                 get_cached_runtime_operator_snapshot(), actor=capability,
                 backend=backend, market=market, frequency=frequency,
                 data_capability=data_capability, budget_class=budget_class,
+                canonical=canonical,
                 offset=offset, limit=limit,
             )
         except ValueError as exc:
@@ -1554,6 +1783,26 @@ def create_app():
         _auth_http(request, policy=EndpointExecutionPolicy.RESEARCH, role="COMPUTE")
         payload = await _read_json_body(request)
         return validate_spec(payload)
+
+    @app.post("/factor-engine/default/compute")
+    async def default_compute(request: Request) -> dict[str, Any]:
+        principal = _auth_http(request, policy=EndpointExecutionPolicy.PRODUCTION, role="COMPUTE")
+        payload = dict(await _read_json_body(request))
+        payload["request_metadata"] = principal.to_public()
+        try:
+            return _submit_job(
+                "compute", payload, principal=principal,
+                endpoint_policy=EndpointExecutionPolicy.PRODUCTION,
+                sync=False, default_durable=True)
+        except ServiceError as exc:
+            raise HTTPException(status_code=exc.status, detail=exc.to_public()) from exc
+        except Exception as exc:
+            from factor_engine.runtime.default_engine import DeploymentConfigurationError
+            if isinstance(exc, DeploymentConfigurationError):
+                raise HTTPException(status_code=503, detail={"code": exc.reason_code,
+                    "missing_fields": list(exc.missing_fields),
+                    "message": sanitize_message(exc)}) from exc
+            raise
 
     @app.post("/factor-engine/research/compute")
     async def research_compute(request: Request) -> dict[str, Any]:
@@ -1688,22 +1937,22 @@ def create_app():
             raise HTTPException(status_code=409, detail="job not retryable from terminal state")
         if job.error_code and job.error_code in {"VALIDATION_FAILED", "PIT_VIOLATION", "OUTPUT_DOMAIN_VIOLATION", "SOURCE_EMPTY", "POLICY"}:
             raise HTTPException(status_code=422, detail="validation/PIT/DQ/policy errors are never retried")
-        return _submit_job(
-            job.job_type,
-            {"request_metadata": principal.to_public(), **job.request.get("execution", {})},
-            principal=principal,
-            endpoint_policy=EndpointExecutionPolicy(job.endpoint_policy or "research"),
-            sync=False,
-        )
+        return _retry_existing_job(job).to_public()
 
     return app
 
 
 def list_operators() -> Dict[str, Any]:
-    from factor_engine.api.operator_registry import build_dsl_allowlist
+    from factor_engine.runtime.operator_snapshot import get_cached_runtime_operator_snapshot
 
-    names = sorted(build_dsl_allowlist().keys())
+    snapshot = get_cached_runtime_operator_snapshot()
+    names = sorted(
+        {r["canonical"] for r in snapshot["operators"]}
+        | {r["alias"] for r in snapshot["aliases"]}
+        | {"col", "field"}
+    )
     return {"count": len(names), "operators": names,
+            "counts": snapshot["counts"], "catalog_digest": snapshot["catalog_digest"],
             "scope": "DSL discovery names including aliases; not an execution allowlist",
             "descriptions_url": "/factor-engine/operator-descriptions"}
 

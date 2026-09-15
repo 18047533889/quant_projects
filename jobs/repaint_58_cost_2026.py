@@ -32,7 +32,7 @@ plt.rcParams['font.family'] = 'Noto Sans CJK SC'
 plt.rcParams['axes.unicode_minus'] = False
 
 PROJ = '/home/sunhaiwei/quant_projects'
-FAC = PROJ + '/factor_engine/docs/reports/2026-08-23/factors'
+FAC = PROJ + '/../quant_project_archives/factor_engine-docs/reports/2026-08-23/factors'
 MATDIRS = ['factor_matrices_all_2026r2', 'factor_matrices_all_2026daily', 'factor_matrices_all']
 COST_BPS = float(os.environ.get("TRADING_COST_BPS", "10"))
 TOTAL_COST = COST_BPS / 1e4          # 双边费率 10 bp

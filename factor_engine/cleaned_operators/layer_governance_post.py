@@ -9,7 +9,20 @@ _APPLIED = False
 def _restore_compiler_internal(canonical: str) -> None:
     implementations = ResearchToolRegistry._tools.pop(canonical, {})
     metadata = ResearchToolRegistry._catalog.pop(canonical, {})
+    reference = implementations.get("pandas_numpy") or (OperatorRegistry._operators.get(canonical) or {}).get("pandas_numpy")
     for backend, operator in implementations.items():
+        if reference is not None:
+            # A compiler-internal physical implementation must retain the
+            # canonical call topology instead of reviving its pre-contract
+            # panel-only metadata when it is moved back into the registry.
+            for field in (
+                "param_names", "param_specs", "param_aliases", "panel_params",
+                "scalar_params", "mixed_params", "nullable_mixed_params",
+                "variadic_mixed_param", "panel_arity", "input_arity",
+                "total_positional_arity", "relational_specs",
+            ):
+                if hasattr(reference.metadata, field):
+                    setattr(operator.metadata, field, getattr(reference.metadata, field))
         OperatorRegistry.register(
             operator,
             canonical=canonical,
@@ -21,6 +34,17 @@ def _restore_compiler_internal(canonical: str) -> None:
             replace=True,
             replacement_reason="restore compiler-internal lowering node after research-tool migration",
         )
+    final_reference = (OperatorRegistry._operators.get(canonical) or {}).get("pandas_numpy")
+    if final_reference is not None:
+        for operator in (OperatorRegistry._operators.get(canonical) or {}).values():
+            for field in (
+                "param_names", "param_specs", "param_aliases", "panel_params",
+                "scalar_params", "mixed_params", "nullable_mixed_params",
+                "variadic_mixed_param", "panel_arity", "input_arity",
+                "total_positional_arity", "relational_specs",
+            ):
+                if hasattr(final_reference.metadata, field):
+                    setattr(operator.metadata, field, getattr(final_reference.metadata, field))
     if canonical in OperatorRegistry._catalog:
         OperatorRegistry._catalog[canonical].update({
             "surface": "internal",

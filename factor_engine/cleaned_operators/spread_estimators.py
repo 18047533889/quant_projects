@@ -28,7 +28,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, ParamRole, RelationalParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_udf
 
 _EPS = 1e-12
@@ -49,6 +49,22 @@ def _metadata(
         category="spread_estimator",
         description=description,
         param_names=params,
+        panel_params=("high","low") if name=="ohlc_corwin_schultz_spread" else ("price",),
+        scalar_params=("smooth_window",) if name=="ohlc_corwin_schultz_spread" else ("window","min_periods"),
+        input_units={"high":"price","low":"price"} if name=="ohlc_corwin_schultz_spread" else {"price":"price"},
+        output_unit="dimensionless",
+        param_specs={
+            "smooth_window": ParamSpec(dtype=int,min=1,default=5,param_role=ParamRole.HORIZON,
+                                      history_formula="smooth_window + 1"),
+        } if name=="ohlc_corwin_schultz_spread" else {
+            "window": ParamSpec(dtype=int,min=5,default=20,param_role=ParamRole.HORIZON,
+                                history_formula="window + 1"),
+            "min_periods": ParamSpec(dtype=int,min=4,default=None,param_role=ParamRole.SUPPORT_POLICY,
+                                    searchable=False),
+        },
+        relational_specs=[] if name=="ohlc_corwin_schultz_spread" else [
+            RelationalParamSpec("min_periods is None or min_periods <= window - 1",
+                                "min_periods must not exceed window - 1 adjacent pairs")],
         return_type="series",
         tags=[
             "spread_estimator", "daily", "pit_safe", "causal", "typed_v2",
@@ -57,6 +73,13 @@ def _metadata(
             f"unit:{unit}", f"cost:{cost}",
         ],
     )
+
+
+def _log_ratio(a: float,b: float) -> float:
+    ratio=a/b
+    if .5 <= ratio <= 2.:
+        return float(np.log1p((a-b)/b))
+    return float(np.log(a)-np.log(b))
 
 
 def _cs_pair_spread(h1: float, h2: float, l1: float, l2: float) -> float:
@@ -84,12 +107,12 @@ def _cs_pair_spread(h1: float, h2: float, l1: float, l2: float) -> float:
     # mathematically valid and falls through to the alpha <= 0 -> 0.0 spread
     # branch below (review P1-18).  Only H < L is rejected.
     c = 3.0 - 2.0 * np.sqrt(2.0)  # ~0.171573
-    beta = np.log(h1 / l1) ** 2.0 + np.log(h2 / l2) ** 2.0
-    gamma = np.log(H / L) ** 2.0
+    beta = _log_ratio(h1,l1) ** 2.0 + _log_ratio(h2,l2) ** 2.0
+    gamma = _log_ratio(H,L) ** 2.0
     alpha = (np.sqrt(2.0 * beta) - np.sqrt(beta)) / c - np.sqrt(gamma / c)
     if alpha <= 0.0:
         return 0.0  # negative alpha -> zero spread (as in the paper)
-    return float(2.0 * (np.exp(alpha) - 1.0) / (1.0 + np.exp(alpha)))
+    return float(2.0 * np.tanh(alpha / 2.0))
 
 
 def _rolling_mean_trailing(v: np.ndarray, w: int) -> np.ndarray:
@@ -152,9 +175,10 @@ class OhlcCorwinSchultzSpread(SeriesOperator):
     def _calculate_series(
         self, high: pd.DataFrame, low: pd.DataFrame, smooth_window: int = 5, **_: Any
     ) -> pd.DataFrame:
-        sm = int(smooth_window)
-        if sm < 1:
-            raise ValueError("ohlc_corwin_schultz_spread requires smooth_window >= 1")
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+        sm = strict_int(smooth_window,"smooth_window",minimum=1)
+        if not high.index.equals(low.index) or not high.columns.equals(low.columns):
+            raise ValueError("OHLC spread inputs must have identical axes")
         return frame_like(
             high,
             _cs_spread_series(high.to_numpy(dtype=float), low.to_numpy(dtype=float), sm),
@@ -173,8 +197,10 @@ def _roll_spread_series(xv: np.ndarray, window: int, min_periods: int) -> np.nda
         # min_periods coverage gate, not silently dropped here).
         if np.any(x <= 0.0):
             continue
-        with np.errstate(invalid="ignore", divide="ignore"):
-            dx = np.diff(np.log(x), prepend=np.nan)
+        dx = np.full(len(x),np.nan)
+        for t in range(1,len(x)):
+            if np.isfinite(x[t]) and np.isfinite(x[t-1]):
+                dx[t]=_log_ratio(float(x[t]),float(x[t-1]))
         for r in range(rows):
             lo = max(1, r - window + 1)
             seg = dx[lo : r + 1]
@@ -239,18 +265,15 @@ class TsRollEffectiveSpread(SeriesOperator):
         min_periods: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
-        if w < 5:
-            raise ValueError("ts_roll_effective_spread requires window >= 5")
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+        w = strict_int(window,"window",minimum=5)
         # R5 P1-44: coverage gate.  Default = half the window (at least 4 pairs):
         # a "20d spread" must actually be estimated from a meaningful share of
         # the window, not from a handful of valid trades.
         if min_periods is None:
             mp = max(4, w // 2)
         else:
-            mp = int(min_periods)
-            if mp < 4:
-                raise ValueError("ts_roll_effective_spread requires min_periods >= 4")
+            mp = strict_int(min_periods,"min_periods",minimum=4,maximum=w-1)
         # The kernel is ``2*sqrt(max(-Cov(d log P), 0))`` and requires a POSITIVE
         # price series: feeding a signed return series silently produces NaN for
         # every negative log(·) (a data-understanding footgun).  The param is

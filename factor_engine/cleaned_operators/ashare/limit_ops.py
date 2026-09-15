@@ -22,9 +22,31 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from factor_engine.market.price_basis import PriceBasis, validate_limit_ops_price_basis
 from factor_engine.market.price_grid import price_grid_for_market
+
+
+_TICK_TOLERANCE_SPEC = ParamSpec(
+    dtype=float,
+    min=0.0,
+    default=0.005,
+    searchable=False,
+    param_role=ParamRole.NUMERICAL,
+)
+_SIDE_SPEC = ParamSpec(
+    dtype=str,
+    choices=("up", "down"),
+    default="up",
+    searchable=False,
+    param_role=ParamRole.POLICY,
+)
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str = "ratio") -> OperatorMetadata:
@@ -107,6 +129,10 @@ class AshareLimitUpTouch(SeriesOperator):
         ["high", "upper_limit", "tick_tolerance"],
         unit="boolean",
     )
+    metadata.panel_params = ("high", "upper_limit")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("tick_tolerance",)
+    metadata.param_specs = {"tick_tolerance": _TICK_TOLERANCE_SPEC}
 
     def _calculate_series(self, high: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, price_basis: dict | None = None, market: str | None = None, **_: Any) -> pd.DataFrame:
         _check_price_basis(price_basis)
@@ -132,6 +158,10 @@ class AshareLimitDownTouch(SeriesOperator):
         ["low", "lower_limit", "tick_tolerance"],
         unit="boolean",
     )
+    metadata.panel_params = ("low", "lower_limit")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("tick_tolerance",)
+    metadata.param_specs = {"tick_tolerance": _TICK_TOLERANCE_SPEC}
 
     def _calculate_series(self, low: pd.DataFrame, lower_limit: pd.DataFrame, tick_tolerance: float = 0.005, price_basis: dict | None = None, market: str | None = None, **_: Any) -> pd.DataFrame:
         _check_price_basis(price_basis)
@@ -157,10 +187,14 @@ class AshareLimitOnePrice(SeriesOperator):
         ["open", "high", "low", "close", "upper_limit", "lower_limit", "side", "tick_tolerance"],
         unit="boolean",
     )
+    metadata.panel_params = ("open", "high", "low", "close", "upper_limit", "lower_limit")
+    metadata.panel_arity = 6
+    metadata.scalar_params = ("side", "tick_tolerance")
+    metadata.param_specs = {"side": _SIDE_SPEC, "tick_tolerance": _TICK_TOLERANCE_SPEC}
 
     def _calculate_series(
         self,
-        open_px: pd.DataFrame,
+        open: pd.DataFrame,
         high: pd.DataFrame,
         low: pd.DataFrame,
         close: pd.DataFrame,
@@ -177,11 +211,11 @@ class AshareLimitOnePrice(SeriesOperator):
         direction = str(side).lower()
         limit = upper_limit if direction == "up" else lower_limit
         valid = (
-            open_px.notna() & high.notna() & low.notna() & close.notna() & limit.notna()
+            open.notna() & high.notna() & low.notna() & close.notna() & limit.notna()
         )
         at = (
-            (open_px >= limit - tolerance)
-            & (open_px <= limit + tolerance)
+            (open >= limit - tolerance)
+            & (open <= limit + tolerance)
             & (high >= limit - tolerance)
             & (high <= limit + tolerance)
             & (low >= limit - tolerance)
@@ -215,6 +249,10 @@ class AshareLimitFailed(SeriesOperator):
         ["high", "close", "upper_limit", "tick_tolerance"],
         unit="boolean",
     )
+    metadata.panel_params = ("high", "close", "upper_limit")
+    metadata.panel_arity = 3
+    metadata.scalar_params = ("tick_tolerance",)
+    metadata.param_specs = {"tick_tolerance": _TICK_TOLERANCE_SPEC}
 
     def _calculate_series(self, high: pd.DataFrame, close: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, price_basis: dict | None = None, market: str | None = None, **_: Any) -> pd.DataFrame:
         _check_price_basis(price_basis)
@@ -242,12 +280,16 @@ class AshareOpenAtUpperLimit(SeriesOperator):
         ["open", "upper_limit", "tick_tolerance"],
         unit="boolean",
     )
+    metadata.panel_params = ("open", "upper_limit")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("tick_tolerance",)
+    metadata.param_specs = {"tick_tolerance": _TICK_TOLERANCE_SPEC}
 
-    def _calculate_series(self, open_px: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, price_basis: dict | None = None, market: str | None = None, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, open: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, price_basis: dict | None = None, market: str | None = None, **_: Any) -> pd.DataFrame:
         _check_price_basis(price_basis)
         tolerance = _tolerance(tick_tolerance, market)
-        valid = open_px.notna() & upper_limit.notna()
-        return (open_px >= upper_limit - tolerance).astype(float).where(valid)
+        valid = open.notna() & upper_limit.notna()
+        return (open >= upper_limit - tolerance).astype(float).where(valid)
 
 
 @register_operator(
@@ -267,11 +309,15 @@ class AshareLimitOpenFailed(SeriesOperator):
         ["open", "low", "upper_limit", "tick_tolerance"],
         unit="boolean",
     )
+    metadata.panel_params = ("open", "low", "upper_limit")
+    metadata.panel_arity = 3
+    metadata.scalar_params = ("tick_tolerance",)
+    metadata.param_specs = {"tick_tolerance": _TICK_TOLERANCE_SPEC}
 
-    def _calculate_series(self, open_px: pd.DataFrame, low: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, price_basis: dict | None = None, market: str | None = None, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, open: pd.DataFrame, low: pd.DataFrame, upper_limit: pd.DataFrame, tick_tolerance: float = 0.005, price_basis: dict | None = None, market: str | None = None, **_: Any) -> pd.DataFrame:
         _check_price_basis(price_basis)
         tolerance = _tolerance(tick_tolerance, market)
-        valid = open_px.notna() & low.notna() & upper_limit.notna()
-        opened_at_limit = open_px >= upper_limit - tolerance
+        valid = open.notna() & low.notna() & upper_limit.notna()
+        opened_at_limit = open >= upper_limit - tolerance
         broke = low < upper_limit - tolerance
         return (opened_at_limit & broke).astype(float).where(valid)

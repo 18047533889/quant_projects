@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from factor_engine.cleaned_operators.fiscal_strict import (
     pd_quarter_from_cumulative,
     pd_ttm_from_quarterly,
@@ -80,11 +86,19 @@ def fin_ttm_cumulative(x, period_id, fiscal_quarter, periods_per_year=4):
 
 
 def _register(name: str, params: Iterable[str], function, description: str) -> None:
+    params = list(params)
+    scalar_specs = {}
+    if "periods_per_year" in params:
+        scalar_specs["periods_per_year"] = ParamSpec(
+            dtype=int, min=1, default=4, param_role=ParamRole.HORIZON
+        )
     metadata = OperatorMetadata(
         name=name,
         category="fundamental_period",
         description=description,
-        param_names=list(params),
+        param_names=params,
+        panel_params=tuple(param for param in params if param not in scalar_specs),
+        param_specs=scalar_specs,
         return_type="series",
         tags=[
             "fundamental",

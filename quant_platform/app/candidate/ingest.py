@@ -118,7 +118,7 @@ def _pick_first(raw: Mapping[str, Any], keys: Iterable[str]) -> Any:
     """First present, non-empty scalar among ``keys``, else ``None``."""
     for key in keys:
         value = raw.get(key)
-        if value is None or value == "":
+        if value is None or isinstance(value, str) and value == "":
             continue
         return value
     return None
@@ -222,7 +222,10 @@ def _normalize_parameter_domain(raw: Mapping[str, Any]) -> tuple[tuple[str, floa
             raise CandidateNormalizationError("bad_parameter_domain", raw_record=raw)
         if not isinstance(lo, _DOMAIN_ATOM_TYPES) or not isinstance(hi, _DOMAIN_ATOM_TYPES):
             raise CandidateNormalizationError("bad_parameter_domain", raw_record=raw)
-        lo_f, hi_f = float(lo), float(hi)
+        try:
+            lo_f, hi_f = float(lo), float(hi)
+        except (ValueError, OverflowError) as exc:
+            raise CandidateNormalizationError("bad_parameter_domain", raw_record=raw) from exc
         if math.isnan(lo_f) or math.isinf(lo_f) or math.isnan(hi_f) or math.isinf(hi_f):
             raise CandidateNormalizationError("bad_parameter_domain", raw_record=raw)
         if abs(lo_f) >= _MAX_WINDOW_OR_COEF or abs(hi_f) >= _MAX_WINDOW_OR_COEF:
@@ -284,6 +287,8 @@ def normalize_candidate(raw: Mapping[str, Any]) -> FactorCandidateManifest:
     ``semantic_family_hint`` carries the domain semantic identity — the two
     seeds of the subsequent dual-key reconciliation.
     """
+    if not isinstance(raw, Mapping):
+        raise CandidateNormalizationError("bad_record_type")
     # 1. content hash — the primary identity key.
     content_hash_value = _pick_first(raw, _CONTENT_HASH_SOURCES)
     if content_hash_value is None:
@@ -313,6 +318,18 @@ def normalize_candidate(raw: Mapping[str, Any]) -> FactorCandidateManifest:
     _normalize_parameter_domain(raw)
 
     # 4. required strings + timestamp.
+    for key in ("schema_version", "candidate_id", "campaign_id", "attempt_id",
+                "factor_definition_ref", "factor_value_ref"):
+        value = raw.get(key)
+        if value is not None and (not isinstance(value, str) or not value):
+            raise CandidateNormalizationError("bad_string_field:" + key, raw_record=raw)
+    for key in ("parent_factor_ids", "required_fields"):
+        value = raw.get(key)
+        if value is not None and (
+            not isinstance(value, (tuple, list))
+            or any(not isinstance(item, str) or not item for item in value)
+        ):
+            raise CandidateNormalizationError("bad_string_sequence:" + key, raw_record=raw)
     generator_type = _required_string(raw, "generator_type")
     generator_version = _required_string(raw, "generator_version")
     submitted_by = _required_string(raw, "submitted_by")
@@ -390,10 +407,12 @@ class ReconcileReport:
     counts: Mapping[str, int]
     conflicts: tuple[ReconciliationConflict, ...]
     batch_fingerprint: str
+    classifications: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "counts", MappingProxyType(dict(self.counts)))
         object.__setattr__(self, "conflicts", tuple(self.conflicts))
+        object.__setattr__(self, "classifications", tuple(self.classifications))
 
     def __getitem__(self, reason: ReconcileReason) -> int:
         """Return the candidate count for a ``ReconcileReason``.
@@ -466,6 +485,7 @@ def reconcile_candidates(
     ``known_registry`` may be ``None`` (empty registry) or an iterable of
     previously-normalized manifests / key-addressable mappings.
     """
+    candidates = tuple(candidates)  # callers may provide a one-shot iterator
     registry_keys = [(_entry_keys(entry)) for entry in (known_registry or ())]
     registry_contents: set[str] = {ch for ch, _ in registry_keys}
     registry_semantics: dict[str, list[str]] = {}
@@ -475,6 +495,15 @@ def reconcile_candidates(
 
     conflicts: list[ReconciliationConflict] = []
     counts: dict[str, int] = {reason.value: 0 for reason in ReconcileReason}
+    classifications = []
+    incoming_content: dict[str, set[str]] = {}
+    incoming_semantics: dict[str, set[str]] = {}
+    for candidate in candidates:
+        ch, sh = _entry_keys(candidate)
+        incoming_content.setdefault(ch, set()).add(sh)
+        if sh:
+            incoming_semantics.setdefault(sh, set()).add(ch)
+    seen = set()
 
     for candidate in candidates:
         content = candidate.factor_spec_sha256
@@ -486,7 +515,21 @@ def reconcile_candidates(
             (ch, sh) for ch, sh in registry_keys if sh and sh == semantic
         ]
 
-        if content_matches and any(sh == semantic for _, sh in content_matches):
+        # Ambiguous claims in one batch reject every involved record, not
+        # whichever happened to appear last. The platform only compares the
+        # carried refs; it does not invent domain semantics.
+        batch_hash_conflict = len(incoming_content[content]) > 1
+        batch_semantic_conflict = len(incoming_semantics.get(semantic, ())) > 1
+        if batch_hash_conflict or batch_semantic_conflict:
+            reason = (ReconcileReason.CONFLICT_HASH_TO_SEMANTIC if batch_hash_conflict
+                      else ReconcileReason.CONFLICT_SEMANTIC_TO_HASH)
+            peers = (tuple((content, sh) for sh in sorted(incoming_content[content]) if sh != semantic)
+                     if batch_hash_conflict else
+                     tuple((ch, semantic) for ch in sorted(incoming_semantics[semantic]) if ch != content))
+            conflicts.append(ReconciliationConflict(candidate.candidate_id, content, semantic,
+                                                    reason.value, peers))
+        elif (content_matches and any(sh == semantic for _, sh in content_matches)
+              or (content, semantic) in seen):
             reason = ReconcileReason.DUPLICATE_EXACT
             conflicts.append(
                 ReconciliationConflict(
@@ -522,9 +565,12 @@ def reconcile_candidates(
         else:
             reason = ReconcileReason.NEW
         counts[reason.value] += 1
+        classifications.append(reason.value)
+        seen.add((content, semantic))
 
     fingerprint = batch_fingerprint(candidates)
-    return ReconcileReport(counts=counts, conflicts=tuple(conflicts), batch_fingerprint=fingerprint)
+    return ReconcileReport(counts=counts, conflicts=tuple(conflicts), batch_fingerprint=fingerprint,
+                           classifications=tuple(classifications))
 
 
 # --------------------------------------------------------------------------- #
@@ -535,23 +581,25 @@ def reconcile_candidates(
 def batch_fingerprint(candidates: Iterable[FactorCandidateManifest]) -> str:
     """Order-independent merkle-style batch fingerprint.
 
-    Collapses the per-candidate ``content_hash`` values: each candidate's
-    contribution is ``content_hash(candidate.content_hash)`` (length-prefixed
-    canonical sha256, per the platform codec), then the leaves are *sorted* and
+    Collapses per-candidate carried spec and semantic references with the
+    length-prefixed canonical operational hash, then the leaves are *sorted* and
     folded with a plain sha256 chain. The fingerprint is:
 
     * order-independent — reordering the batch does not change it;
     * content-sensitive — a change to any candidate's content hash changes it;
     * idempotent — the same batch fingerprints identically every time.
 
-    Concrete serialization is ``merkle-v1:<hex>`` so a future codec can bump
-    the version without ambiguity.
+    Version 2 binds both producer-carried spec and semantic refs. A changed
+    semantic claim must reach reconciliation, not short-circuit as a replay.
+    Historical v1 batch keys remain intact; durable consumed identities are
+    still consulted when replaying an older batch.
     """
     leaves = sorted(
-        content_hash(cand.factor_spec_sha256) if cand.factor_spec_sha256 else ""
+        content_hash(cand.factor_spec_sha256, cand.semantic_family_hint or "")
+        if cand.factor_spec_sha256 else ""
         for cand in candidates
     )
     digest = hashlib.sha256()
     for leaf in leaves:
         digest.update(leaf.encode("ascii"))
-    return "merkle-v1:" + digest.hexdigest()
+    return "merkle-v2:" + digest.hexdigest()

@@ -29,6 +29,8 @@ avoids.
 """
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -43,6 +45,7 @@ from factor_engine.cleaned_operators.base import (
     register_operator,
 )
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_udf
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 _EPS = 1e-12
 
@@ -542,6 +545,19 @@ class RelationDiffusionScore(SeriesOperator):
         unit="same_as:x",
         cost=6,
     )
+    metadata.panel_params = ("x", "group")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("alpha", "steps")
+    metadata.total_positional_arity = 4
+    metadata.param_specs = {
+        "alpha": ParamSpec(
+            dtype=float, min=np.nextafter(0.0, 1.0), max=np.nextafter(1.0, 0.0),
+            default=0.5, param_role=ParamRole.STATE_THRESHOLD,
+        ),
+        "steps": ParamSpec(
+            dtype=int, min=1, max=5, default=2, param_role=ParamRole.HORIZON,
+        ),
+    }
 
     def _calculate_series(
         self,
@@ -551,6 +567,9 @@ class RelationDiffusionScore(SeriesOperator):
         steps: int = 2,
         **_: Any,
     ) -> pd.DataFrame:
+        from factor_engine.cleaned_operators.relation.ops import strict_relation_align
+
+        x, group = strict_relation_align(x.copy(), group.copy())
         al = float(alpha)
         st = int(steps)
         if not (0.0 < al < 1.0):
@@ -565,11 +584,25 @@ class RelationDiffusionScore(SeriesOperator):
 
 def _register_surface() -> None:
     import factor_engine.cleaned_operators.operator_surface as _surface
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
 
     _surface.extend_extended_only({"group_tail_centrality"})
     _surface.extend_research_only({"group_tail_lead_score", "relation_diffusion_score"})
     for _canon in ("group_tail_centrality", "group_tail_lead_score", "relation_diffusion_score"):
         register_polars_udf(_canon)
+    _polars = OperatorRegistry.get("relation_diffusion_score", "polars")
+    if _polars is not None:
+        from factor_engine.cleaned_operators import rolling_pack as _rolling_pack
+        _polars._physical_spec = PhysicalImplementationSpec(
+            canonical="relation_diffusion_score", backend="polars",
+            execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+            supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+            supports_nulls=True, supports_nan=True, supports_inf=True,
+            implementation_source_hash=hashlib.sha256(
+                Path(__file__).read_bytes() + Path(_rolling_pack.__file__).read_bytes()
+            ).hexdigest(),
+            kernel_identity="tail_systemic.RelationDiffusionScore+rolling_pack.delegate",
+        )
 
 
 _register_surface()

@@ -277,7 +277,7 @@ def _register() -> None:
         # searchable window (their normalized entropy is N-invariant).
         if canonical == "ts_dominant_cycle_period":
             window_spec = PandasParamSpec(
-                dtype=int, min=_MIN_WINDOW, searchable=False,
+                dtype=int, min=_MIN_WINDOW, default=60, searchable=False,
                 param_role=ParamRole.ESTIMATOR_RESOLUTION,
             )
         else:
@@ -290,6 +290,10 @@ def _register() -> None:
                 description=canonical,
                 examples=[],
                 param_names=params,
+                panel_params=("x",),
+                panel_arity=1,
+                scalar_params=tuple(params[1:]),
+                total_positional_arity=len(params),
                 return_type="series",
                 tags=["daily", "panel", "pit_safe", "causal", "deterministic",
                       f"signature:{','.join(params)}->series",
@@ -297,7 +301,10 @@ def _register() -> None:
                 window_semantics=_WINDOW_SEMANTICS[canonical],
                 input_units=_INPUT_UNITS[canonical],
                 output_unit=output_unit,
-                param_specs={"window": window_spec, **({"input_kind": PandasParamSpec(
+                param_specs={"window": window_spec, **({"min_peak_share": PandasParamSpec(
+                    dtype=float, min=0.0, max=1.0, default=0.10,
+                    param_role=ParamRole.STATE_THRESHOLD,
+                )} if canonical == "ts_dominant_cycle_period" else {}), **({"input_kind": PandasParamSpec(
                     dtype=str, searchable=False,
                     choices=("PriceContinuous",) if canonical == "ts_detrended_level_spectral_entropy"
                     else ("ReturnDecimal",),
@@ -322,7 +329,26 @@ def _register() -> None:
             # polars slot carries the SAME param_names as the pandas/duckdb
             # metadata (not an empty list), so the binder/search grammar sees a
             # uniform parameter contract across backends.
-            metadata = PolarsMetadata(name=canonical, category="spectral_ext", param_names=list(params))
+            metadata = PolarsMetadata(
+                name=canonical,
+                category="spectral_ext",
+                param_names=list(params),
+                panel_params=("x",),
+                panel_arity=1,
+                scalar_params=tuple(params[1:]),
+                total_positional_arity=len(params),
+                param_specs={"window": window_spec, **({"min_peak_share": PandasParamSpec(
+                    dtype=float, min=0.0, max=1.0, default=0.10,
+                    param_role=ParamRole.STATE_THRESHOLD,
+                )} if canonical == "ts_dominant_cycle_period" else {}), **({"input_kind": PandasParamSpec(
+                    dtype=str, searchable=False,
+                    choices=("PriceContinuous",) if canonical == "ts_detrended_level_spectral_entropy"
+                    else ("ReturnDecimal",),
+                )} if "input_kind" in params else {})},
+                window_semantics=_WINDOW_SEMANTICS[canonical],
+                input_units=_INPUT_UNITS[canonical],
+                output_unit=output_unit,
+            )
 
             def _calculate_series(self, *frames, _fn=fn, **params):
                 import polars as pl  # noqa: F401

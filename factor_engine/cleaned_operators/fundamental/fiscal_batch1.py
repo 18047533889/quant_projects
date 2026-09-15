@@ -11,10 +11,48 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.fiscal_event_ops import FiscalEventView, _align, _finite, _positive, _policy
 
 _EPS = 1e-12
+_REVISION_SPEC = ParamSpec(dtype=str, choices=("latest_available", "first_available"), default="latest_available", searchable=False, param_role=ParamRole.POLICY)
+_CONSECUTIVE_SPEC = ParamSpec(dtype=bool, default=True, searchable=False, param_role=ParamRole.POLICY)
+_LAG_SPEC = ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON)
+_PERIODS_SPEC = ParamSpec(dtype=int, min=1, default=8, param_role=ParamRole.HORIZON)
+_ACCEL_MIN_SPEC = ParamSpec(dtype=int, min=1, default=3, searchable=False, param_role=ParamRole.SUPPORT_POLICY)
+_PCT_MIN_SPEC = ParamSpec(dtype=int, min=1, default=2, searchable=False, param_role=ParamRole.SUPPORT_POLICY)
+_STD_MIN_SPEC = ParamSpec(dtype=int, min=1, default=3, searchable=False, param_role=ParamRole.SUPPORT_POLICY)
+_DDOF_SPEC = ParamSpec(dtype=int, min=0, default=1, searchable=False, param_role=ParamRole.NUMERICAL)
+
+
+def _strict_positive_int(value, name: str) -> int:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be a positive integer")
+    result = int(value)
+    if result < 1:
+        raise ValueError(f"{name} must be a positive integer")
+    return result
+
+
+def _strict_nonnegative_int(value, name: str) -> int:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be a non-negative integer")
+    result = int(value)
+    if result < 0:
+        raise ValueError(f"{name} must be a non-negative integer")
+    return result
+
+
+def _strict_bool(value, name: str) -> bool:
+    if not isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"{name} must be boolean")
+    return bool(value)
+
+
+def _strict_revision_policy(value) -> str:
+    if not isinstance(value, str) or value not in {"latest_available", "first_available"}:
+        raise ValueError("revision_policy must be 'latest_available' or 'first_available'")
+    return value
 
 
 def pd_fiscal_acceleration(
@@ -51,25 +89,28 @@ def pd_fiscal_acceleration(
         - Extended surface only
     """
     value, period_id = _align(value, period_id)
-    lag = _positive(lag, "lag")
-    periods = _positive(periods, "periods")
-    min_periods = _positive(min_periods, "min_periods")
-    if min_periods < 2 * lag + 1:
-        raise ValueError(f"min_periods must be at least {2 * lag + 1} for lag={lag}")
+    lag = _strict_positive_int(lag, "lag")
+    periods = _strict_positive_int(periods, "periods")
+    min_periods = _strict_positive_int(min_periods, "min_periods")
+    require_consecutive = _strict_bool(require_consecutive, "require_consecutive")
+    required = 2 * lag + 1
+    if min_periods < required:
+        raise ValueError(f"min_periods must be at least {required} for lag={lag}")
+    if periods < min_periods:
+        raise ValueError("periods must be greater than or equal to min_periods")
 
-    policy = _policy(revision_policy)
+    policy = _strict_revision_policy(revision_policy)
     view = FiscalEventView.from_panel(value, period_id, revision_policy=policy)
     out = np.full(value.shape, np.nan, dtype=float)
 
     for row in range(value.shape[0]):
         for col in range(value.shape[1]):
-            history = view.history(row, col, require_consecutive=bool(require_consecutive))
-            if len(history) < min_periods:
+            history = view.history(row, col, require_consecutive=require_consecutive)
+            window = history[-periods:]
+            if len(window) < min_periods:
                 continue
 
-            by_ordinal = dict(history[-periods:])
-            if not history:
-                continue
+            by_ordinal = dict(window)
 
             current_ord, current_val = history[-1]
             lag1_val = by_ordinal.get(current_ord - lag)
@@ -80,8 +121,10 @@ def pd_fiscal_acceleration(
             if not _finite(current_val) or not _finite(lag1_val) or not _finite(lag2_val):
                 continue
 
-            # acceleration = value_t - 2*value_{t-lag} + value_{t-2*lag}
-            out[row, col] = float(current_val - 2 * lag1_val + lag2_val)
+            scale = max(abs(current_val), abs(lag1_val), abs(lag2_val))
+            result = 0.0 if scale == 0.0 else ((current_val / scale) - 2.0 * (lag1_val / scale) + (lag2_val / scale)) * scale
+            if _finite(result):
+                out[row, col] = float(result)
 
     return pd.DataFrame(out, index=value.index, columns=value.columns)
 
@@ -118,25 +161,28 @@ def pd_fiscal_pct_change(
         - TRUE_GAP: works on distinct fiscal events
     """
     value, period_id = _align(value, period_id)
-    lag = _positive(lag, "lag")
-    periods = _positive(periods, "periods")
-    min_periods = _positive(min_periods, "min_periods")
-    if min_periods < lag + 1:
-        raise ValueError(f"min_periods must be at least {lag + 1} for lag={lag}")
+    lag = _strict_positive_int(lag, "lag")
+    periods = _strict_positive_int(periods, "periods")
+    min_periods = _strict_positive_int(min_periods, "min_periods")
+    require_consecutive = _strict_bool(require_consecutive, "require_consecutive")
+    required = lag + 1
+    if min_periods < required:
+        raise ValueError(f"min_periods must be at least {required} for lag={lag}")
+    if periods < min_periods:
+        raise ValueError("periods must be greater than or equal to min_periods")
 
-    policy = _policy(revision_policy)
+    policy = _strict_revision_policy(revision_policy)
     view = FiscalEventView.from_panel(value, period_id, revision_policy=policy)
     out = np.full(value.shape, np.nan, dtype=float)
 
     for row in range(value.shape[0]):
         for col in range(value.shape[1]):
-            history = view.history(row, col, require_consecutive=bool(require_consecutive))
-            if len(history) < min_periods:
+            history = view.history(row, col, require_consecutive=require_consecutive)
+            window = history[-periods:]
+            if len(window) < min_periods:
                 continue
 
-            by_ordinal = dict(history[-periods:])
-            if not history:
-                continue
+            by_ordinal = dict(window)
 
             current_ord, current_val = history[-1]
             lag_val = by_ordinal.get(current_ord - lag)
@@ -150,7 +196,9 @@ def pd_fiscal_pct_change(
             if denom <= _EPS:
                 continue
 
-            out[row, col] = float((current_val - lag_val) / denom)
+            result = (current_val / denom) - (lag_val / denom)
+            if _finite(result):
+                out[row, col] = float(result)
 
     return pd.DataFrame(out, index=value.index, columns=value.columns)
 
@@ -184,21 +232,22 @@ def pd_fiscal_rolling_std(
         - TRUE_GAP: computed over distinct fiscal events
     """
     value, period_id = _align(value, period_id)
-    periods = _positive(periods, "periods")
-    min_periods = _positive(min_periods, "min_periods")
-    ddof = int(ddof)
-    if ddof < 0:
-        raise ValueError("ddof must be non-negative")
+    periods = _strict_positive_int(periods, "periods")
+    min_periods = _strict_positive_int(min_periods, "min_periods")
+    ddof = _strict_nonnegative_int(ddof, "ddof")
+    require_consecutive = _strict_bool(require_consecutive, "require_consecutive")
     if min_periods <= ddof:
         raise ValueError(f"min_periods must be greater than ddof={ddof}")
+    if periods < min_periods:
+        raise ValueError("periods must be greater than or equal to min_periods")
 
-    policy = _policy(revision_policy)
+    policy = _strict_revision_policy(revision_policy)
     view = FiscalEventView.from_panel(value, period_id, revision_policy=policy)
     out = np.full(value.shape, np.nan, dtype=float)
 
     for row in range(value.shape[0]):
         for col in range(value.shape[1]):
-            history = view.history(row, col, require_consecutive=bool(require_consecutive))
+            history = view.history(row, col, require_consecutive=require_consecutive)
             window = history[-periods:]
 
             values = [v for _, v in window if _finite(v)]
@@ -208,7 +257,14 @@ def pd_fiscal_rolling_std(
             if len(values) <= ddof:
                 continue
 
-            std_val = float(np.std(values, ddof=ddof))
+            array = np.asarray(values, dtype=float)
+            scale = float(np.max(np.abs(array)))
+            if scale == 0.0:
+                std_val = 0.0
+            else:
+                normalized = array / scale
+                centered = normalized - normalized[0]
+                std_val = float(np.std(centered, ddof=ddof) * scale)
             if _finite(std_val):
                 out[row, col] = std_val
 
@@ -494,6 +550,9 @@ class _FiscalAcceleration(SeriesOperator):
             "require_consecutive",
             "revision_policy",
         ],
+        param_specs={"lag": _LAG_SPEC, "periods": _PERIODS_SPEC, "min_periods": _ACCEL_MIN_SPEC, "require_consecutive": _CONSECUTIVE_SPEC, "revision_policy": _REVISION_SPEC},
+        panel_params=("value", "period_id"),
+        scalar_params=("lag", "periods", "min_periods", "require_consecutive", "revision_policy"),
         return_type="series",
         tags=[
             "fundamental",
@@ -524,6 +583,9 @@ class _FiscalPctChange(SeriesOperator):
             "require_consecutive",
             "revision_policy",
         ],
+        param_specs={"lag": _LAG_SPEC, "periods": _PERIODS_SPEC, "min_periods": _PCT_MIN_SPEC, "require_consecutive": _CONSECUTIVE_SPEC, "revision_policy": _REVISION_SPEC},
+        panel_params=("value", "period_id"),
+        scalar_params=("lag", "periods", "min_periods", "require_consecutive", "revision_policy"),
         return_type="series",
         tags=[
             "fundamental",
@@ -554,6 +616,9 @@ class _FiscalRollingStd(SeriesOperator):
             "require_consecutive",
             "revision_policy",
         ],
+        param_specs={"periods": _PERIODS_SPEC, "min_periods": _STD_MIN_SPEC, "ddof": _DDOF_SPEC, "require_consecutive": _CONSECUTIVE_SPEC, "revision_policy": _REVISION_SPEC},
+        panel_params=("value", "period_id"),
+        scalar_params=("periods", "min_periods", "ddof", "require_consecutive", "revision_policy"),
         return_type="series",
         tags=[
             "fundamental",

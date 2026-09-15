@@ -12,6 +12,7 @@
 用于数据质量与数值稳定；不改变时间/截面维度，只替换或标记元素值。
 """
 from __future__ import annotations
+from factor_engine.cleaned_operators.common import cleaning_scalar_contracts as _clean
 
 from dataclasses import dataclass
 from typing import Any
@@ -226,51 +227,20 @@ class EWMMean(SeriesOperator):
 # canonical=ewm_std backend=pandas_numpy selected=ewm_std source=data_handling/window_ops.py
 @register_operator(name="ewm_std", category="data_handling", business_category="data_cleaning", canonical="ewm_std", source="factor_dsl_np")
 class EWMStd(SeriesOperator):
-    """EW标准差"""
-
-    metadata = OperatorMetadata(
-        name="ewm_std",
-        category="data_handling",
-        description="EW标准差",
-        examples=["ewm_std(returns, 20)"],
-        param_names=["x", "span"],
-        return_type="series",
-        tags=["data_handling", "ewm", "std"]
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, span: int = 20, **kwargs) -> pd.DataFrame:
-        # LQTP 平台语义（2026-08-29）：``ts_ewm_std(x, 0.2)`` 的第二参数是
-        # 0<alpha<=1 的衰减比率（alpha 语义），不是 span。与 ts_ema 一致，
-        # 把 <1 的正小数按 alpha 语义映射：pandas ewm(alpha=a) ≡
-        # ewm(span=1/a)。span>=1 的正常值走原 span 槽。
-        span_f = float(span)
-        if 0.0 < span_f < 1.0:
-            return x.ewm(alpha=span_f, adjust=False).std()
-        return x.ewm(span=span_f, adjust=False).std()
+    """ewm_std: explicit scalar contract and preserved panel coordinates."""
+    metadata=OperatorMetadata(name="ewm_std",category="data_handling",**_clean.contract("ewm_std"))
+    def _calculate_series(self,x,span=20.,**kwargs):
+        return x.ewm(alpha=_clean.alpha(span),adjust=False).std()
 
 
 
 # canonical=ewm_var backend=pandas_numpy selected=ewm_var source=data_handling/window_ops.py
 @register_operator(name="ewm_var", category="data_handling", business_category="data_cleaning", canonical="ewm_var", source="factor_dsl_np")
 class EWMVar(SeriesOperator):
-    """指数加权方差"""
-    metadata = OperatorMetadata(
-        name="ewm_var",
-        category="data_handling",
-        description="指数加权方差",
-        examples=["ewm_var(returns, 20)"],
-        param_names=["x", "span"],
-        return_type="series",
-        tags=["data_handling", "ewm", "var"]
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, span: int = 20, **kwargs) -> pd.DataFrame:
-        # LQTP 平台语义（2026-08-29）：``ts_ewm_var(x, 0.2)`` 的 <1 正小数
-        # 第二参数按 alpha 语义映射（同 ts_ema / ewm_std）。
-        span_f = float(span)
-        if 0.0 < span_f < 1.0:
-            return x.ewm(alpha=span_f, adjust=False).var()
-        return x.ewm(span=span_f, adjust=False).var()
+    """ewm_var: explicit scalar contract and preserved panel coordinates."""
+    metadata=OperatorMetadata(name="ewm_var",category="data_handling",**_clean.contract("ewm_var"))
+    def _calculate_series(self,x,span=20.,**kwargs):
+        return x.ewm(alpha=_clean.alpha(span),adjust=False).var()
 
 
 
@@ -465,14 +435,20 @@ class FillNA(SeriesOperator):
         category="data_handling",
         description="缺失值填充（method: 'mean', 'median', 'zero', 'ffill'）",
         examples=["fillna(close, 'mean')", "fillna(close, 0)"],
-        param_names=["x", "method"],
-        param_specs={"x": ParamSpec(dtype=Any, param_role=ParamRole.ECONOMIC),
-                     "method": ParamSpec(dtype=Any, param_role=ParamRole.STATE_THRESHOLD)},
+        param_names=["x", "method", "forward_fill_allowed", "max_ffill_gap"],
+        param_specs={
+            "method": ParamSpec(
+                alternatives=(ParamSpec(dtype=str), ParamSpec(dtype=float)),
+                default="zero", param_role=ParamRole.STATE_THRESHOLD,
+            ),
+            "forward_fill_allowed": ParamSpec(dtype=bool, default=True, searchable=False, param_role=ParamRole.MISSING_POLICY),
+            "max_ffill_gap": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.MISSING_POLICY),
+        },
         return_type="series",
         tags=["data_handling", "missing", "fill"]
     )
 
-    def _calculate_series(self, x: pd.DataFrame, method='zero', **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, method='zero', forward_fill_allowed: bool = True, max_ffill_gap: int = 0, **kwargs) -> pd.DataFrame:
         if isinstance(method, (int, float)) and not isinstance(method, bool):
             return x.fillna(method)
         if isinstance(method, str) and method.strip().lower() in _FFILL_METHOD_ALIASES:
@@ -482,17 +458,13 @@ class FillNA(SeriesOperator):
             # ``x.fillna(method='ffill')`` directly and bypassed the gate.
             return _forward_fill_panel(
                 x,
-                forward_fill_allowed=bool(
-                    kwargs.get("forward_fill_allowed", _FORWARD_FILL_ALLOWED_DEFAULT)
-                ),
-                max_ffill_gap=int(
-                    kwargs.get("max_ffill_gap", _MAX_FFILL_GAP_DEFAULT)
-                ),
+                forward_fill_allowed=forward_fill_allowed,
+                max_ffill_gap=max_ffill_gap,
             )
         if method == 'mean':
-            return x.fillna(x.mean(axis=1), axis=0)
+            return x.T.fillna(x.mean(axis=1)).T
         elif method == 'median':
-            return x.fillna(x.median(axis=1), axis=0)
+            return x.T.fillna(x.median(axis=1)).T
         elif method == 'zero':
             return x.fillna(0)
         elif method == 'bfill':
@@ -513,20 +485,10 @@ class FillNA(SeriesOperator):
 # canonical=fillna_const backend=pandas_numpy selected=fillna_const source=data_handling/missing_values.py
 @register_operator(name="fillna_const", category="data_handling", business_category="data_cleaning", canonical="fillna_const", source="factor_dsl_np")
 class FillNAConst(SeriesOperator):
-    """常量填充"""
-
-    metadata = OperatorMetadata(
-        name="fillna_const",
-        category="data_handling",
-        description="常量填充",
-        examples=["fillna_const(close, 0)"],
-        param_names=["x", "value"],
-        return_type="series",
-        tags=["data_handling", "missing", "fill"]
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, value: float = 0, **kwargs) -> pd.DataFrame:
-        return x.fillna(value)
+    """fillna_const: explicit scalar contract and preserved panel coordinates."""
+    metadata=OperatorMetadata(name="fillna_const",category="data_handling",**_clean.contract("fillna_const"))
+    def _calculate_series(self,x,value=0.,**kwargs):
+        return x.fillna(_clean.strict_finite_scalar(value,"value"))
 
 
 
@@ -700,22 +662,11 @@ class NaNToNum(SeriesOperator):
 # canonical=nonfinite_to_num backend=pandas_numpy
 @register_operator(name="nonfinite_to_num", category="data_handling", business_category="data_cleaning", canonical="nonfinite_to_num", source="factor_dsl_np", status="research")
 class NonFiniteToNum(SeriesOperator):
-    """NaN 与 ±Inf 全部转为 num（旧 nan_to_num 行为，显式命名）。"""
-
-    metadata = OperatorMetadata(
-        name="nonfinite_to_num",
-        category="data_handling",
-        description="把 NaN 与 ±Inf 全部转为 num（旧 nan_to_num 行为；R40 #192 语义澄清）",
-        examples=["nonfinite_to_num(close, 0)"],
-        param_names=["x", "num"],
-        return_type="series",
-        tags=["data_handling", "missing", "fill"]
-    )
-
-    def _calculate_series(self, x: pd.DataFrame, num: float = 0, **kwargs) -> pd.DataFrame:
-        arr = x.to_numpy(dtype=float, copy=True)
-        filled = _nonfinite_to_num(arr, num)
-        return pd.DataFrame(filled, index=x.index, columns=x.columns)
+    """nonfinite_to_num: explicit scalar contract and preserved panel coordinates."""
+    metadata=OperatorMetadata(name="nonfinite_to_num",category="data_handling",**_clean.contract("nonfinite_to_num"))
+    def _calculate_series(self,x,num=0.,**kwargs):
+        value=_clean.strict_finite_scalar(num,"num")
+        return pd.DataFrame(_nonfinite_to_num(x.to_numpy(dtype=float),value),index=x.index,columns=x.columns)
 
 
 

@@ -61,7 +61,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    ParamRole, ParamSpec, SeriesOperator, register_operator,
+)
 from factor_engine.cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
@@ -375,12 +377,25 @@ def _run_all(
 def _metadata(name: str, description: str, params: list[str], *, unit: str) -> Any:
     from factor_engine.cleaned_operators.base import OperatorMetadata
 
+    panel_params = tuple(param for param in params if param in {"price", "turnover"})
+    scalar_params = tuple(param for param in params if param not in panel_params)
+    specs = {
+        "window": ParamSpec(dtype=int, min=2, default=60, param_role=ParamRole.HORIZON),
+        "band": ParamSpec(dtype=float, min=0.0, default=0.05, param_role=ParamRole.STATE_THRESHOLD),
+        "q_high": ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12, default=0.75, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "q_low": ParamSpec(dtype=float, min=1e-12, max=1.0 - 1e-12, default=0.25, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    }
     return OperatorMetadata(
         name=name,
         category="time_series_chip_cost",
         description=description,
         param_names=params,
         return_type="series",
+        param_specs={param: specs[param] for param in scalar_params},
+        panel_params=panel_params,
+        panel_arity=len(panel_params),
+        scalar_params=scalar_params,
+        total_positional_arity=len(params),
         tags=[
             "time_series_chip_cost", "daily", "pit_safe", "causal", "typed_v2",
             "turnover_survival", f"signature:{','.join(params)}->series",

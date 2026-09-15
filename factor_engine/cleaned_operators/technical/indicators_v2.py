@@ -34,8 +34,12 @@ def _tr(high,low,close):
     return pd.DataFrame(arr,index=high.index,columns=high.columns)
 
 def _register(name,params,fn,desc,*,tags=(),param_specs=None,relational_specs=None,expected_old_source=""):
+    specs=dict(param_specs or {})
+    panel_params=tuple(param for param in params if param not in specs)
     meta=OperatorMetadata(name=name,category="technical_signal",description=desc,param_names=list(params),return_type="series",
-        tags=["pit_safe","causal","production_extension",*tags], param_specs=dict(param_specs or {}),
+        tags=["pit_safe","causal","production_extension",*tags], param_specs=specs,
+        panel_params=panel_params, panel_arity=len(panel_params),
+        scalar_params=tuple(param for param in params if param in specs), total_positional_arity=len(params),
         relational_specs=list(relational_specs or []))
     def _calculate_series(self,*args,**kwargs): return fn(*args,**kwargs)
     cls=type(f"TechnicalV2_{name}",(SeriesOperator,),{"metadata":meta,"_calculate_series":_calculate_series,"__module__":__name__})

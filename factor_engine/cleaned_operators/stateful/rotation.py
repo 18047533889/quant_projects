@@ -37,7 +37,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar, strict_integer
 from factor_engine.cleaned_operators.rolling_pack import frame_like
 from factor_engine.cleaned_operators.stateful._common import metadata
 
@@ -86,7 +87,7 @@ def _group_pct_ranks(values: np.ndarray, group: np.ndarray) -> np.ndarray:
 
 def _tail_quantile(q: float, name: str) -> float:
     """Validate a tail quantile: ``0 < q <= 0.5`` (R11 #155)."""
-    q = float(q)
+    q = strict_finite_scalar(q, "quantile")
     if not (0.0 < q <= 0.5):
         raise ValueError(
             f"{name}: quantile must be a real tail in (0, 0.5], got {q} "
@@ -189,6 +190,9 @@ class CsRankChurn(SeriesOperator):
     )
     metadata.role = "group_state"
     metadata.tags = list(metadata.tags) + ["group_state"]
+    metadata.param_specs = {"lag": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.HORIZON), "group": ParamSpec(default=None, searchable=False, param_role=ParamRole.POLICY)}
+    metadata.panel_params = ("x", "group")
+    metadata.scalar_params = ("lag",)
 
     def _calculate_series(
         self,
@@ -197,7 +201,7 @@ class CsRankChurn(SeriesOperator):
         group: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
-        lk = max(1, int(lag))
+        lk = strict_integer(lag, "lag", minimum=1)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         rank_panel = np.full_like(xv, np.nan, dtype=float)
@@ -286,6 +290,9 @@ class CsRankCompositionChurn(SeriesOperator):
     )
     metadata.role = "group_state"
     metadata.tags = list(metadata.tags) + ["group_state"]
+    metadata.param_specs = {"lag": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.HORIZON), "group": ParamSpec(default=None, searchable=False, param_role=ParamRole.POLICY)}
+    metadata.panel_params = ("x", "group")
+    metadata.scalar_params = ("lag",)
 
     def _calculate_series(
         self,
@@ -294,7 +301,7 @@ class CsRankCompositionChurn(SeriesOperator):
         group: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
-        lk = max(1, int(lag))
+        lk = strict_integer(lag, "lag", minimum=1)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         if group is not None and isinstance(group, pd.DataFrame):
@@ -359,6 +366,9 @@ class CsRankCombinedChurn(SeriesOperator):
     )
     metadata.role = "group_state"
     metadata.tags = list(metadata.tags) + ["group_state"]
+    metadata.param_specs = {"lag": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.HORIZON), "group": ParamSpec(default=None, searchable=False, param_role=ParamRole.POLICY)}
+    metadata.panel_params = ("x", "group")
+    metadata.scalar_params = ("lag",)
 
     def _calculate_series(
         self,
@@ -401,6 +411,15 @@ class CsTailRetention(SeriesOperator):
     )
     metadata.role = "group_state"
     metadata.tags = list(metadata.tags) + ["group_state"]
+    metadata.param_specs = {
+        "group": ParamSpec(default=None, searchable=False, param_role=ParamRole.POLICY),
+        "lag": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.HORIZON),
+        "quantile": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, param_role=ParamRole.THRESHOLD),
+        "side": ParamSpec(dtype=str, choices=("top", "bottom"), default="top", searchable=False, param_role=ParamRole.POLICY),
+        "cohort": ParamSpec(dtype=str, choices=("current", "historical", "intersection"), default="intersection", searchable=False, param_role=ParamRole.POLICY),
+    }
+    metadata.panel_params = ("x", "group")
+    metadata.scalar_params = ("lag", "quantile", "side", "cohort")
 
     def _calculate_series(
         self,
@@ -412,7 +431,7 @@ class CsTailRetention(SeriesOperator):
         cohort: str = "intersection",
         **_: Any,
     ) -> pd.DataFrame:
-        lk = max(1, int(lag))
+        lk = strict_integer(lag, "lag", minimum=1)
         q = _tail_quantile(quantile, "cs_tail_retention")
         side_s = str(side).lower()
         if side_s not in ("top", "bottom"):
@@ -503,6 +522,13 @@ class CsTailBreadth(SeriesOperator):
     )
     metadata.role = "group_state"
     metadata.tags = list(metadata.tags) + ["group_state"]
+    metadata.param_specs = {
+        "group": ParamSpec(default=None, searchable=False, param_role=ParamRole.POLICY),
+        "quantile": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, param_role=ParamRole.THRESHOLD),
+        "side": ParamSpec(dtype=str, choices=("top", "bottom"), default="top", searchable=False, param_role=ParamRole.POLICY),
+    }
+    metadata.panel_params = ("x", "group")
+    metadata.scalar_params = ("quantile", "side")
 
     def _calculate_series(
         self,

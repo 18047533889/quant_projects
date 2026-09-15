@@ -399,22 +399,49 @@ if not _has_polars("fillna"):
         """NaN 填充"""
         metadata = OperatorMetadata(
             name="fillna", category="data_handling", description="NaN 填充",
-            param_names=["x", "method"], return_type="series",
-            param_specs={"x": ParamSpec(dtype=Any, param_role=ParamRole.ECONOMIC),
-                         "method": ParamSpec(dtype=Any, param_role=ParamRole.THRESHOLD)},
+            param_names=["x", "method", "forward_fill_allowed", "max_ffill_gap"], return_type="series",
+            param_specs={
+                "method": ParamSpec(
+                    alternatives=(ParamSpec(dtype=str), ParamSpec(dtype=float)),
+                    default="zero", param_role=ParamRole.THRESHOLD,
+                ),
+                "forward_fill_allowed": ParamSpec(dtype=bool, default=True, searchable=False, param_role=ParamRole.MISSING_POLICY),
+                "max_ffill_gap": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.MISSING_POLICY),
+            },
             tags=["data_handling", "polars"],
         )
 
-        def _calculate_series(self, x: pl.DataFrame, value: float = 0.0, **kwargs) -> pl.DataFrame:
-            method = kwargs.get("method", value)
+        def _calculate_series(self, x: pl.DataFrame, method="zero", forward_fill_allowed=True, max_ffill_gap=0, **kwargs) -> pl.DataFrame:
             if isinstance(method, str) and method.strip().lower() in _FFILL_METHOD_ALIASES:
                 # R13 P1-12: canonical rewrite onto the gated polars ffill so
                 # ``fillna(x, method="ffill")`` cannot bypass the gate.
-                return _ffill(self, x, **kwargs)
-            fill = float(kwargs.get("v", value))
+                return _ffill(self, x, forward_fill_allowed=forward_fill_allowed, max_ffill_gap=max_ffill_gap)
             cols = _numeric_cols(x)
+            if isinstance(method, (int, float)) and not isinstance(method, bool):
+                fill = float(method)
+                return x.with_columns([
+                    pl.col(c).fill_nan(fill).fill_null(fill).alias(c) for c in cols
+                ])
+            kind = method.strip().lower() if isinstance(method, str) else method
+            if kind == "zero":
+                return x.with_columns([
+                    pl.col(c).fill_nan(0.0).fill_null(0.0).alias(c) for c in cols
+                ])
+            finite = [pl.when(pl.col(c).is_finite()).then(pl.col(c)).otherwise(None) for c in cols]
+            if kind == "mean":
+                row_fill = pl.mean_horizontal(finite)
+            elif kind == "median":
+                row_fill = pl.concat_list(finite).list.drop_nulls().list.median()
+            elif kind == "bfill":
+                raise ValueError("fillna(method='bfill') was removed because it is not point-in-time safe")
+            else:
+                raise ValueError(
+                    f"unknown fillna method: {method!r} "
+                    "(supported: 'mean', 'median', 'zero', 'ffill' or a constant value)"
+                )
             return x.with_columns([
-                pl.col(c).fill_nan(fill).fill_null(fill).alias(c) for c in cols
+                pl.when(pl.col(c).is_null() | pl.col(c).is_nan())
+                .then(row_fill).otherwise(pl.col(c)).alias(c) for c in cols
             ])
 
     register_operator(

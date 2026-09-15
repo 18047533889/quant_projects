@@ -116,6 +116,9 @@ def _broadcast_pair(left, right) -> tuple[pd.DataFrame, pd.DataFrame]:
     template = left if isinstance(left, pd.DataFrame) else right if isinstance(right, pd.DataFrame) else None
     if template is None:
         raise TypeError("at least one protected-div input must be a DataFrame")
+    if isinstance(left, pd.DataFrame) and isinstance(right, pd.DataFrame):
+        if not left.index.equals(right.index) or not left.columns.equals(right.columns):
+            raise ValueError("protected-div panel inputs must have identical axes")
 
     def as_frame(value) -> pd.DataFrame:
         if isinstance(value, pd.DataFrame):
@@ -132,6 +135,17 @@ def _broadcast_pair(left, right) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def _safe_divide(left, right, *, epsilon: float, default: float, missing_default: bool) -> pd.DataFrame:
+    if not isinstance(left, (pd.DataFrame, pd.Series)) and not isinstance(right, (pd.DataFrame, pd.Series)):
+        try:
+            x, y = float(left), float(right)
+            if not np.isfinite(x) or not np.isfinite(y):
+                return float(default) if missing_default else float("nan")
+            if abs(y) <= float(epsilon):
+                return float(default)
+            out = x / y
+            return out if np.isfinite(out) else float(default)
+        except (TypeError, ValueError, ZeroDivisionError, OverflowError):
+            return float(default) if missing_default else float("nan")
     x, y = _broadcast_pair(left, right)
     xarr = x.to_numpy(dtype=float, copy=False)
     yarr = y.to_numpy(dtype=float, copy=False)
@@ -153,15 +167,15 @@ class GTJATSArgmax(SeriesOperator):
     kernel ``rolling_days_since_extreme`` 一致；需要 "0=窗口最旧 bar" 的 index
     语义请用 ``ts_argmax_index_from_oldest``。"""
 
-    metadata = OperatorMetadata(name="ts_argmax", category="time_series", description="窗口最大值距当前 bar 的 bar 数（0=当前，并列取最近）", examples=["ts_argmax(high, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "gtja", "pit_safe"], param_aliases={"d": "window"}, param_specs={"window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON)})
+    metadata = OperatorMetadata(name="ts_argmax", category="time_series", description="窗口最大值距当前 bar 的 bar 数（0=当前，并列取最近）", examples=["ts_argmax(high, 20)"], param_names=["x", "window", "min_periods"], return_type="series", tags=["time_series", "gtja", "pit_safe"], param_aliases={"d": "window"}, param_specs={"window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON), "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY)})
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 1, **kwargs) -> pd.DataFrame:
         from factor_engine.cleaned_operators._rolling_fast import rolling_days_since_extreme
         from factor_engine.cleaned_operators.common.strict_params import strict_int
 
         # ``d`` is a declared parser-level alias for ``window`` (param_aliases).
         w = strict_int(kwargs.get("d", window), "window", minimum=1)
-        return rolling_days_since_extreme(x, w, maximum=True)
+        return rolling_days_since_extreme(x, w, maximum=True, min_periods=min_periods)
 
 
 @register_operator(name="ts_argmin", category="time_series", business_category="time_series", canonical="ts_argmin", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="R19-039..042: ts_argmin canonical = age (0=current, tie=latest); index_from_oldest lives in ts_argmin_index_from_oldest")
@@ -172,15 +186,15 @@ class GTJATSArgmin(SeriesOperator):
     最新 occurrence；需要 "0=窗口最旧 bar" 的 index 语义请用
     ``ts_argmin_index_from_oldest``。"""
 
-    metadata = OperatorMetadata(name="ts_argmin", category="time_series", description="窗口最小值距当前 bar 的 bar 数（0=当前，并列取最近）", examples=["ts_argmin(low, 20)"], param_names=["x", "window"], return_type="series", tags=["time_series", "gtja", "pit_safe"], param_aliases={"d": "window"}, param_specs={"window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON)})
+    metadata = OperatorMetadata(name="ts_argmin", category="time_series", description="窗口最小值距当前 bar 的 bar 数（0=当前，并列取最近）", examples=["ts_argmin(low, 20)"], param_names=["x", "window", "min_periods"], return_type="series", tags=["time_series", "gtja", "pit_safe"], param_aliases={"d": "window"}, param_specs={"window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON), "min_periods": ParamSpec(dtype=int, min=1, default=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY)})
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 1, **kwargs) -> pd.DataFrame:
         from factor_engine.cleaned_operators._rolling_fast import rolling_days_since_extreme
         from factor_engine.cleaned_operators.common.strict_params import strict_int
 
         # ``d`` is a declared parser-level alias for ``window`` (param_aliases).
         w = strict_int(kwargs.get("d", window), "window", minimum=1)
-        return rolling_days_since_extreme(x, w, maximum=False)
+        return rolling_days_since_extreme(x, w, maximum=False, min_periods=min_periods)
 
 
 @register_operator(name="ts_regression", category="time_series", business_category="time_series", canonical="ts_regression", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")
@@ -215,7 +229,18 @@ class GTJATSProduct(SeriesOperator):
 
 @register_operator(name="protected_div", category="data_cleaning", business_category="data_cleaning", canonical="protected_div", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")
 class GTJAProtectedDiv(SeriesOperator):
-    metadata = OperatorMetadata(name="protected_div", category="data_cleaning", description="支持 Series/标量双向广播的安全除法", examples=["x / 20", "1 / x"], param_names=["x", "y", "epsilon", "default"], return_type="series", tags=["data_cleaning", "gtja", "scalar_broadcast"])
+    metadata = OperatorMetadata(
+        name="protected_div", category="data_cleaning",
+        description="支持 Series/标量双向广播的安全除法",
+        examples=["x / 20", "1 / x"],
+        param_names=["x", "y", "epsilon", "default"], return_type="series",
+        tags=["data_cleaning", "gtja", "scalar_broadcast"],
+        mixed_params=("x", "y"), scalar_params=("epsilon", "default"),
+        param_specs={
+            "epsilon": ParamSpec(dtype=float, min=0.0, default=1e-8, searchable=False, param_role=ParamRole.NUMERICAL),
+            "default": ParamSpec(dtype=float, default=0.0, searchable=False, param_role=ParamRole.POLICY),
+        },
+    )
 
     def _calculate_series(self, x, y, epsilon: float = 1e-8, default: float = 0.0, **kwargs) -> pd.DataFrame:
         return _safe_divide(x, y, epsilon=float(epsilon), default=float(default), missing_default=False)

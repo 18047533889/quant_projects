@@ -24,6 +24,13 @@ def _op(name: str, backend: str = "pandas_numpy"):
     return op
 
 
+@pytest.mark.parametrize("name", ["event_frequency", "event_cluster_count", "event_cluster_mean_size"])
+def test_event_operators_reject_non_boolean_finite_values(name: str) -> None:
+    x = pd.DataFrame({"A": [0.0, 1.0, 2.0]})
+    with pytest.raises(ValueError, match="ConditionBool"):
+        _op(name).calculate(x)
+
+
 
 # ---------------------------------------------------------------------------
 # 1. event_frequency
@@ -35,7 +42,7 @@ def test_event_frequency_basic() -> None:
     cols = [f"S{i}" for i in range(10)]
 
     # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    x = pd.DataFrame((np.random.randn(20, 10) > 0).astype(float), index=idx, columns=cols)
 
     op = _op("event_frequency")
     # Get param names from metadata
@@ -62,7 +69,7 @@ def test_event_frequency_handles_nans() -> None:
     cols = ["A", "B", "C"]
 
     # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
+    data = [[1.0, np.nan, 0.0]] * 10
     x = pd.DataFrame(data, index=idx, columns=cols)
 
     op = _op("event_frequency")
@@ -88,13 +95,8 @@ def test_event_frequency_handles_inf() -> None:
 
     op = _op("event_frequency")
 
-    try:
-        result = op.calculate(x)
-
-        # Should handle inf gracefully (typically return NaN)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"{op} failed on inf input: {e}")
+    with pytest.raises(ValueError, match="ConditionBool"):
+        op.calculate(x)
 
 
 def test_event_frequency_empty_input() -> None:
@@ -117,7 +119,7 @@ def test_event_frequency_empty_input() -> None:
 def test_event_frequency_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
+    x = pd.DataFrame({"A": (np.arange(20) % 2).astype(float)}, index=idx)
 
     op = _op("event_frequency")
 
@@ -140,7 +142,7 @@ def test_event_cluster_count_basic() -> None:
     cols = [f"S{i}" for i in range(10)]
 
     # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    x = pd.DataFrame((np.random.randn(20, 10) > 0).astype(float), index=idx, columns=cols)
 
     op = _op("event_cluster_count")
     # Get param names from metadata
@@ -167,7 +169,7 @@ def test_event_cluster_count_handles_nans() -> None:
     cols = ["A", "B", "C"]
 
     # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
+    data = [[1.0, np.nan, 0.0]] * 10
     x = pd.DataFrame(data, index=idx, columns=cols)
 
     op = _op("event_cluster_count")
@@ -193,13 +195,8 @@ def test_event_cluster_count_handles_inf() -> None:
 
     op = _op("event_cluster_count")
 
-    try:
-        result = op.calculate(x)
-
-        # Should handle inf gracefully (typically return NaN)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"{op} failed on inf input: {e}")
+    with pytest.raises(ValueError, match="ConditionBool"):
+        op.calculate(x)
 
 
 def test_event_cluster_count_empty_input() -> None:
@@ -222,7 +219,7 @@ def test_event_cluster_count_empty_input() -> None:
 def test_event_cluster_count_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
+    x = pd.DataFrame({"A": (np.arange(20) % 2).astype(float)}, index=idx)
 
     op = _op("event_cluster_count")
 
@@ -245,7 +242,7 @@ def test_event_cluster_mean_size_basic() -> None:
     cols = [f"S{i}" for i in range(10)]
 
     # Create sample data
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    x = pd.DataFrame((np.random.randn(20, 10) > 0).astype(float), index=idx, columns=cols)
 
     op = _op("event_cluster_mean_size")
     # Get param names from metadata
@@ -272,7 +269,7 @@ def test_event_cluster_mean_size_handles_nans() -> None:
     cols = ["A", "B", "C"]
 
     # Data with NaNs
-    data = [[1.0, np.nan, 3.0]] * 10
+    data = [[1.0, np.nan, 0.0]] * 10
     x = pd.DataFrame(data, index=idx, columns=cols)
 
     op = _op("event_cluster_mean_size")
@@ -298,13 +295,8 @@ def test_event_cluster_mean_size_handles_inf() -> None:
 
     op = _op("event_cluster_mean_size")
 
-    try:
-        result = op.calculate(x)
-
-        # Should handle inf gracefully (typically return NaN)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"{op} failed on inf input: {e}")
+    with pytest.raises(ValueError, match="ConditionBool"):
+        op.calculate(x)
 
 
 def test_event_cluster_mean_size_empty_input() -> None:
@@ -327,7 +319,7 @@ def test_event_cluster_mean_size_empty_input() -> None:
 def test_event_cluster_mean_size_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
-    x = pd.DataFrame({"A": range(20)}, index=idx)
+    x = pd.DataFrame({"A": (np.arange(20) % 2).astype(float)}, index=idx)
 
     op = _op("event_cluster_mean_size")
 

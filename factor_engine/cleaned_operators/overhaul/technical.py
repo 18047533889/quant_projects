@@ -5,7 +5,11 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
+from factor_engine.cleaned_operators.base import (
+    ParamRole,
+    ParamSpec,
+    RelationalParamSpec,
+)
 
 from factor_engine.cleaned_operators.overhaul.base import (
     EPS,
@@ -20,6 +24,54 @@ from factor_engine.cleaned_operators.overhaul.base import (
     register_specs,
 )
 from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+
+_MACD_RELATION = RelationalParamSpec(
+    "fast < slow", "fast must be smaller than slow"
+)
+
+
+def _macd_param_specs(*, line: bool) -> dict[str, ParamSpec]:
+    return {
+        "fast": ParamSpec(dtype=int, min=1, default=12, param_role=ParamRole.HORIZON),
+        "slow": ParamSpec(dtype=int, min=1, default=26, param_role=ParamRole.HORIZON),
+        "signal": ParamSpec(
+            dtype=int,
+            min=1,
+            default=9,
+            searchable=not line,
+            param_role=ParamRole.POLICY if line else ParamRole.HORIZON,
+        ),
+    }
+
+
+def _upgrade_macd_logical_contract(name: str, *, line: bool) -> None:
+    """Install the complete contract before the overhaul replacement.
+
+    MACD is recursive from the beginning of the series. Its parameters control
+    decay rates, not a sufficient finite warm-up. Checkpoint capability is
+    declared separately by the execution-contract registry.
+    """
+    specs = _macd_param_specs(line=line)
+    catalog = OperatorRegistry._catalog.setdefault(name, {})
+    contract = {
+        "param_names": ["x", "fast", "slow", "signal"],
+        "param_specs": dict(specs),
+        "panel_params": ("x",),
+        "panel_arity": 1,
+        "scalar_params": ("fast", "slow", "signal"),
+        "total_positional_arity": 4,
+        "relational_specs": [_MACD_RELATION],
+        "input_units": {"x": "level"},
+        "output_unit": "level",
+    }
+    catalog.update(contract)
+    for operator in OperatorRegistry._operators.get(name, {}).values():
+        metadata = getattr(operator, "metadata", None)
+        if metadata is None:
+            continue
+        for field, value in contract.items():
+            setattr(metadata, field, value.copy() if isinstance(value, dict) else value)
 
 
 def call_registered(name, backend, *args, **kwargs):
@@ -213,12 +265,14 @@ def pl_adx(high, low, close, window=14, **_):
 
 
 def register() -> None:
+    for name in ("MACD_line", "MACD_signal", "MACD_hist"):
+        _upgrade_macd_logical_contract(name, line=name == "MACD_line")
     register_specs({
         # NEW-040: ``signal`` is a declared non-searchable compatibility knob
         # (the historical MACD(x,fast,slow,signal) call aliases to MACD_line).
-        "MACD_line": Spec("technical_signal", ["x", "fast", "slow", "signal"], "快慢 EMA 之差；复用 ts_ema 与 subtract（signal 为兼容 no-op）", pd_macd_line, pl_macd_line),
-        "MACD_signal": Spec("technical_signal", ["x", "fast", "slow", "signal"], "MACD 信号线；复用 ts_ema", pd_macd_signal, pl_macd_signal),
-        "MACD_hist": Spec("technical_signal", ["x", "fast", "slow", "signal"], "MACD 柱；复用已有基础算子", pd_macd_hist, pl_macd_hist),
+        "MACD_line": Spec("technical_signal", ["x", "fast", "slow", "signal"], "快慢 EMA 之差；复用 ts_ema 与 subtract（signal 为兼容 no-op）", pd_macd_line, pl_macd_line, param_specs=_macd_param_specs(line=True), panel_params=("x",), scalar_params=("fast", "slow", "signal")),
+        "MACD_signal": Spec("technical_signal", ["x", "fast", "slow", "signal"], "MACD 信号线；复用 ts_ema", pd_macd_signal, pl_macd_signal, param_specs=_macd_param_specs(line=False), panel_params=("x",), scalar_params=("fast", "slow", "signal")),
+        "MACD_hist": Spec("technical_signal", ["x", "fast", "slow", "signal"], "MACD 柱；复用已有基础算子", pd_macd_hist, pl_macd_hist, param_specs=_macd_param_specs(line=False), panel_params=("x",), scalar_params=("fast", "slow", "signal")),
         "AROON": Spec("technical_signal", ["close", "window"], "Aroon Up-Down，并列极值取最近一次", pd_aroon, pl_aroon),
         "AROON_up": Spec("technical_signal", ["close", "window"], "Aroon Up，并列极值取最近一次", pd_aroon_up, pl_aroon_up),
         "AROON_down": Spec("technical_signal", ["close", "window"], "Aroon Down，并列极值取最近一次", pd_aroon_down, pl_aroon_down),

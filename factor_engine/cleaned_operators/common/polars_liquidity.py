@@ -337,35 +337,16 @@ class TSAbdiRanaldoSpreadNative(SeriesOperator):
     backend="polars",
 )
 class TSRollEffectiveSpreadNative(SeriesOperator):
-    """Rolling effective spread: rolling average of 2 * |r_t|."""
-
-    metadata = OperatorMetadata(
-        name="ts_roll_effective_spread",
-        category="liquidity",
-        description="Roll有效价差时序",
-        param_names=["returns", "window"],
-        return_type="series",
-        tags=["liquidity", "spread", "time_series", "polars", "native"],
-        param_specs={
-            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
-        },
-    )
-
-    def _calculate_series(
-        self, returns: pl.DataFrame, window: int = 20, **kwargs
-    ) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.parameter_validation import strict_integer
-
-        w = strict_integer(window, "window", minimum=1)
-        cols = _numeric_cols(returns)
-        exprs = []
-        for c in cols:
-            ret = returns[c]
-            exprs.append(
-                (pl.lit(2.0) * ret.abs()).rolling_mean(window_size=w).alias(c)
-            )
-        result = returns.with_columns(exprs)
-        return result
+    """Actual log-price covariance Roll estimator, not mean absolute returns."""
+    from factor_engine.cleaned_operators.common import spread_native as _spread
+    metadata=_spread.metadata("ts_roll_effective_spread")
+    @property
+    def _contract_callable(self):
+        return self._spread.reference("ts_roll_effective_spread")._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._spread.calculate("ts_roll_effective_spread",*args,**kwargs)
+    def physical_spec(self):
+        return self._spread.physical_spec("ts_roll_effective_spread")
 
 
 @register_operator(

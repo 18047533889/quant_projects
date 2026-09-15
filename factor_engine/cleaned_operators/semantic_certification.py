@@ -786,13 +786,9 @@ def reconcile_operator_certification(
     # False (that would deadlock the primitive/factor certifier bootstrap,
     # whose convergence stage runs before the artifact is written).
     #
-    # Exception: an intentionally-experimental / isolated canonical (the
-    # in-sample diagnostic family — ts_ar_forecast/innovation*, *_resid without
-    # the *_prior / forecast_error suffix, etc.) must stay pit_safe=False even
-    # though it carries an explicit structural policy entry: those operators are
-    # reviewed *not to be admitted*, so ``should_fail_closed`` wins over the
-    # structural table.  ``infer_operator_policy`` then agrees with the
-    # fail-closed lifecycle and the manifest/catalog surfaces stay consistent.
+    # Known semantic isolation still denies research. Experimental lifecycle
+    # alone restricts production admission, not an existing structural contract;
+    # infer_operator_policy applies that production restriction at query time.
     try:
         import factor_engine.cleaned_operators.operator_policy as _operator_policy_mod
     except ImportError:
@@ -805,7 +801,7 @@ def reconcile_operator_certification(
     if _operator_policy_mod is not None:
         _EXPLICIT_POLICIES = _operator_policy_mod._EXPLICIT_POLICIES
         existing = dict(_EXPLICIT_POLICIES.get(canonical) or {})
-        if should_fail_closed(canonical):
+        if is_isolated_from_default_mining(canonical):
             existing["pit_safe"] = False
         else:
             existing["pit_safe"] = existing.get("pit_safe", False) or bool(certified)

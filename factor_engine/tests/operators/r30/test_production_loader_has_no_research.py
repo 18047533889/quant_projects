@@ -46,5 +46,6 @@ def test_production_loader_excludes_research_modules():
 
     src = inspect.getsource(_load_all_impl)
     assert "include_research" in src
-    assert "RESEARCH_LOAD_MODULES" in src
+    assert "BOOTSTRAP_MODULE_SPECS" in src
+    assert "BootstrapModuleRole.RESEARCH_EXTENSION and not include_research" in src
     assert "continue" in src

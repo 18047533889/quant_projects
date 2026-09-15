@@ -12,6 +12,8 @@ import math
 import numpy as np
 import polars as pl
 
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 
 
@@ -133,10 +135,38 @@ class SaturateNativePolars(SeriesOperator):
 
 @register_operator(name="signed_power", category="signal", business_category="technical_signal", canonical="signed_power", source="factor_dsl_polars")
 class SignedPowerNativePolars(SeriesOperator):
-    metadata = OperatorMetadata(name="signed_power", category="signal", description="Sign-preserving power", param_names=["x", "c"], tags=["polars", "pit_safe"])
+    metadata = OperatorMetadata(
+        name="signed_power", category="signal", description="Sign-preserving power",
+        param_names=["x", "c"], mixed_params=("x", "c"),
+        param_specs={"c": ParamSpec(dtype=float, default=2.0, param_role=ParamRole.NUMERICAL)},
+        tags=["polars", "pit_safe"],
+    )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="signed_power", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=False, supports_streaming=False,
+        materializes_full_panel=False, supports_nulls=True,
+        supports_nan=True, supports_inf=True,
+        notes="Direct eager Polars expressions with scalar/panel broadcasting.",
+    )
 
-    def _calculate_series(self, x: pl.DataFrame, c: float = 2.0, **kwargs) -> pl.DataFrame:
-        c = float(c)
-        if not math.isfinite(c):
-            raise ValueError("c must be finite")
-        return x.with_columns([(pl.col(col).sign() * pl.col(col).abs().pow(c)).alias(col) for col in _numeric_cols(x)])
+    def _calculate_series(self, x, c=2.0, **kwargs):
+        x_panel, c_panel = isinstance(x, pl.DataFrame), isinstance(c, pl.DataFrame)
+        if not x_panel and not c_panel:
+            try:
+                with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+                    out = float(np.sign(float(x)) * np.power(abs(float(x)), float(c)))
+                return out if np.isfinite(out) else float("nan")
+            except (TypeError, ValueError, ZeroDivisionError, OverflowError):
+                return float("nan")
+        template = x if x_panel else c
+        if x_panel and c_panel and (x.columns != c.columns or x.height != c.height):
+            raise ValueError("signed_power panel inputs must have identical axes")
+        cols = _numeric_cols(template)
+        expressions = []
+        for col in cols:
+            base = x[col].cast(pl.Float64, strict=False) if x_panel else pl.lit(float(x))
+            exponent = c[col].cast(pl.Float64, strict=False) if c_panel else pl.lit(float(c))
+            value = base.sign() * base.abs().pow(exponent)
+            expressions.append(pl.when(value.is_finite()).then(value).otherwise(None).alias(col))
+        return template.with_columns(expressions)

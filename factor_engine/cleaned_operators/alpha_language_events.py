@@ -25,7 +25,7 @@ from typing import Any, Iterable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.fiscal_strict import fiscal_period_key, period_ordinal
 from factor_engine.cleaned_operators.fundamental.transforms_v2 import (
     _lag_value,
@@ -41,6 +41,7 @@ from factor_engine.cleaned_operators.rolling_pack import (
     register_polars_bridge,
     valid_values,
 )
+from factor_engine.cleaned_operators.stateful._common import assert_condition_bool
 
 _EPS = 1e-12
 _MAD_CONST = 1.4826
@@ -93,8 +94,16 @@ class EventFrequency(SeriesOperator):
         ["condition", "window", "min_periods"],
         unit="ratio",
     )
+    metadata.panel_params = ("condition",)
+    metadata.panel_arity = 1
+    metadata.scalar_params = ("window", "min_periods")
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    }
 
     def _calculate_series(self, condition: pd.DataFrame, window: int = 20, min_periods: int = 1, **_: Any) -> pd.DataFrame:
+        assert_condition_bool(condition, name="condition")
         w = check_window(window)
         mp = max(1, int(min_periods))
         cv = condition.to_numpy(dtype=float)
@@ -125,8 +134,16 @@ class EventClusterCount(SeriesOperator):
         ["condition", "window", "max_gap"],
         unit="count",
     )
+    metadata.panel_params = ("condition",)
+    metadata.panel_arity = 1
+    metadata.scalar_params = ("window", "max_gap")
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        "max_gap": ParamSpec(dtype=int, min=0, default=3, param_role=ParamRole.HORIZON),
+    }
 
     def _calculate_series(self, condition: pd.DataFrame, window: int = 60, max_gap: int = 3, **_: Any) -> pd.DataFrame:
+        assert_condition_bool(condition, name="condition")
         w = check_window(window)
         gap = int(max_gap)
         if gap < 0:
@@ -162,8 +179,16 @@ class EventClusterMeanSize(SeriesOperator):
         ["condition", "window", "max_gap"],
         unit="count",
     )
+    metadata.panel_params = ("condition",)
+    metadata.panel_arity = 1
+    metadata.scalar_params = ("window", "max_gap")
+    metadata.param_specs = {
+        "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        "max_gap": ParamSpec(dtype=int, min=0, default=3, param_role=ParamRole.HORIZON),
+    }
 
     def _calculate_series(self, condition: pd.DataFrame, window: int = 60, max_gap: int = 3, **_: Any) -> pd.DataFrame:
+        assert_condition_bool(condition, name="condition")
         w = check_window(window)
         gap = int(max_gap)
         if gap < 0:
@@ -193,6 +218,16 @@ def _register_report_operator(
     name: str, params: Iterable[str], fn: Any, description: str, *, unit: str = "level"
 ) -> None:
     metadata = _fundamental_metadata(name, description, list(params), unit=unit)
+    panels = tuple(p for p in params if p in {"x", "period_id", "f1", "f2", "f3"})
+    metadata.panel_params = panels
+    metadata.panel_arity = len(panels)
+    metadata.scalar_params = tuple(p for p in params if p not in panels)
+    metadata.param_specs = {
+        "periods": ParamSpec(dtype=int, min=2 if name == "report_rolling_mean" else 1, default=8 if name == "report_rolling_mean" else 1, param_role=ParamRole.HORIZON),
+        "periods_per_year": ParamSpec(dtype=int, min=1, default=4, searchable=False, param_role=ParamRole.POLICY),
+        "eps": ParamSpec(dtype=float, min=0.0, default=0.5, param_role=ParamRole.STATE_THRESHOLD),
+    }
+    metadata.param_specs = {p: metadata.param_specs[p] for p in metadata.scalar_params}
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -317,6 +352,8 @@ def _report_change_z3(f1, f2, f3, period_id, periods):
 def _report_change_breadth(f1, f2, f3, period_id, periods=1, eps=0.5):
     p = _pos_int(periods, "periods")
     eps_v = float(eps)
+    if not np.isfinite(eps_v) or eps_v < 0.0:
+        raise ValueError("eps must be finite and >= 0")
     a = _report_change_z3(f1, f2, f3, period_id, p)
     K = a.shape[0]
     pos = np.sum(a > eps_v, axis=0)

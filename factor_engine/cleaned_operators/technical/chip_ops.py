@@ -28,6 +28,7 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
     ParamSpec,
     SeriesOperator,
     register_operator,
@@ -226,10 +227,10 @@ class TurnoverChipAgeCostSurface(SeriesOperator):
         ["close", "turnover", "window", "price_bins", "age_bins", "output"],
         unit="ratio",
         param_specs={
-            "window": ParamSpec(dtype=int, min=2),
-            "price_bins": ParamSpec(dtype=int, min=2),
-            "age_bins": ParamSpec(dtype=int, min=2),
-            "output": ParamSpec(dtype=str, choices=_SURFACE_OUTPUTS),
+            "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+            "price_bins": ParamSpec(dtype=int, min=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "age_bins": ParamSpec(dtype=int, min=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "output": ParamSpec(dtype=str, choices=_SURFACE_OUTPUTS, searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
@@ -365,9 +366,9 @@ class TurnoverChipOverhangSurface(SeriesOperator):
         ["close", "turnover", "window", "bins", "output"],
         unit="ratio",
         param_specs={
-            "window": ParamSpec(dtype=int, min=2),
-            "bins": ParamSpec(dtype=int, min=2),
-            "output": ParamSpec(dtype=str, choices=_OVERHANG_OUTPUTS),
+            "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+            "bins": ParamSpec(dtype=int, min=2, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "output": ParamSpec(dtype=str, choices=_OVERHANG_OUTPUTS, searchable=False, param_role=ParamRole.POLICY),
         },
     )
 

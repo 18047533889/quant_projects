@@ -15,7 +15,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+    strict_int_param,
+)
 from factor_engine.cleaned_operators.rolling_pack import frame_like
 from factor_engine.cleaned_operators.stateful._common import (
     assert_condition_bool,
@@ -50,11 +56,21 @@ class EventRefractory(SeriesOperator):
         unit="state",
         category="time_series_event",
     )
+    metadata.param_specs = {
+        "cooldown": ParamSpec(
+            dtype=int, min=0, default=5, searchable=False,
+            param_role=ParamRole.POLICY,
+        ),
+    }
+    metadata.panel_params = ("condition",)
+    metadata.panel_arity = 1
+    metadata.scalar_params = ("cooldown",)
+    metadata.output_unit = "state"
 
-    def _calculate_series(self, condition: pd.DataFrame, cooldown: float = 5, **_: Any) -> pd.DataFrame:
+    def _calculate_series(self, condition: pd.DataFrame, cooldown: int = 5, **_: Any) -> pd.DataFrame:
         assert_condition_bool(condition)
         cv = condition.to_numpy(dtype=float)
-        cd = max(0, int(cooldown))
+        cd = strict_int_param(cooldown, "cooldown", lower=0)
         rows, cols = cv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
@@ -101,6 +117,16 @@ class CrossEvent(SeriesOperator):
         unit="state",
         category="time_series_event",
     )
+    metadata.param_specs = {
+        "direction": ParamSpec(
+            dtype=str, choices=("up", "down"), default="up",
+            searchable=False, param_role=ParamRole.POLICY,
+        ),
+    }
+    metadata.panel_params = ("x", "y")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("direction",)
+    metadata.output_unit = "state"
 
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, direction: str = "up", **_: Any) -> pd.DataFrame:
         xv = x.to_numpy(dtype=float)

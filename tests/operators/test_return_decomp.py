@@ -18,6 +18,15 @@ from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 ensure_cleaned_loaded()
 
+def _calculate_prices(op,x):
+    """Two aligned positive price panels, with explicitly known RAW basis."""
+    first=x.abs()+10.
+    second=first+1.
+    got=op.calculate(first,second,price_basis="RAW")
+    expected=(first/second if op.metadata.name=="overnight_return" else second/first)-1.
+    pd.testing.assert_frame_equal(got,expected)
+    return got
+
 
 def _op(name: str, backend: str = "pandas_numpy"):
     op = OperatorRegistry.get(name, backend)
@@ -38,7 +47,7 @@ def test_overnight_return_basic() -> None:
 
     op = _op("overnight_return")
     try:
-        result = op.calculate(x)
+        result = _calculate_prices(op,x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -52,7 +61,7 @@ def test_overnight_return_handles_nans() -> None:
 
     op = _op("overnight_return")
     try:
-        result = op.calculate(x)
+        result = _calculate_prices(op,x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -66,8 +75,8 @@ def test_overnight_return_deterministic() -> None:
 
     op = _op("overnight_return")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = _calculate_prices(op,x)
+        result2 = _calculate_prices(op,x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception as e:
         pytest.fail(f"Determinism check failed: {e}")
@@ -85,7 +94,7 @@ def test_open_close_return_basic() -> None:
 
     op = _op("open_close_return")
     try:
-        result = op.calculate(x)
+        result = _calculate_prices(op,x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -99,7 +108,7 @@ def test_open_close_return_handles_nans() -> None:
 
     op = _op("open_close_return")
     try:
-        result = op.calculate(x)
+        result = _calculate_prices(op,x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -113,8 +122,8 @@ def test_open_close_return_deterministic() -> None:
 
     op = _op("open_close_return")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = _calculate_prices(op,x)
+        result2 = _calculate_prices(op,x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception as e:
         pytest.fail(f"Determinism check failed: {e}")
@@ -132,7 +141,7 @@ def test_open_to_vwap_return_basic() -> None:
 
     op = _op("open_to_vwap_return")
     try:
-        result = op.calculate(x)
+        result = _calculate_prices(op,x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -146,7 +155,7 @@ def test_open_to_vwap_return_handles_nans() -> None:
 
     op = _op("open_to_vwap_return")
     try:
-        result = op.calculate(x)
+        result = _calculate_prices(op,x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -160,8 +169,8 @@ def test_open_to_vwap_return_deterministic() -> None:
 
     op = _op("open_to_vwap_return")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = _calculate_prices(op,x)
+        result2 = _calculate_prices(op,x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception as e:
         pytest.fail(f"Determinism check failed: {e}")
@@ -179,7 +188,7 @@ def test_vwap_to_close_return_basic() -> None:
 
     op = _op("vwap_to_close_return")
     try:
-        result = op.calculate(x)
+        result = _calculate_prices(op,x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -193,7 +202,7 @@ def test_vwap_to_close_return_handles_nans() -> None:
 
     op = _op("vwap_to_close_return")
     try:
-        result = op.calculate(x)
+        result = _calculate_prices(op,x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -207,8 +216,8 @@ def test_vwap_to_close_return_deterministic() -> None:
 
     op = _op("vwap_to_close_return")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = _calculate_prices(op,x)
+        result2 = _calculate_prices(op,x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception as e:
         pytest.fail(f"Determinism check failed: {e}")

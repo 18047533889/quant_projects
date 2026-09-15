@@ -164,6 +164,21 @@ def create_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESEARCH_
             def __init__(self):
                 self._evidence_store = evidence_store
 
+            @staticmethod
+            def _content_identity(evidence: Mapping[str, Any]) -> str:
+                identity_payload = {
+                    key: value for key, value in evidence.items()
+                    if key not in {"evaluation_id", "content_identity"}
+                }
+                return hashlib.sha256(
+                    json.dumps(
+                        identity_payload,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        default=str,
+                    ).encode("utf-8")
+                ).hexdigest()
+
             def evaluate(
                 self,
                 factor_batch: Any,
@@ -320,16 +335,7 @@ def create_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESEARCH_
                     "requested_backend": plain(backend),
                     "requested_gpu_policy": plain(gpu_policy),
                 }
-                identity_payload = dict(evidence)
-                identity_payload.pop("evaluation_id")
-                evidence["content_identity"] = hashlib.sha256(
-                    json.dumps(
-                        identity_payload,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                        default=str,
-                    ).encode("utf-8")
-                ).hexdigest()
+                evidence["content_identity"] = self._content_identity(evidence)
                 self._evidence_store.put(evaluation_id, evidence)
                 return {
                     "evaluation_id": evaluation_id,
@@ -363,6 +369,18 @@ def create_qe_adapter(*, execution_mode: ExecutionMode = ExecutionMode.RESEARCH_
                     raise EvidenceUnavailableError(
                         f"evidence not found for evaluation '{evaluation_id}'"
                     )
+                if not isinstance(evidence, Mapping):
+                    raise TypeError("evidence store returned a non-mapping payload")
+                if evidence.get("evaluation_id") != evaluation_id:
+                    raise ValueError(
+                        "evidence store returned an evaluation with a mismatched identity"
+                    )
+                stored_identity = evidence.get("content_identity")
+                if (
+                    not isinstance(stored_identity, str)
+                    or stored_identity != self._content_identity(evidence)
+                ):
+                    raise ValueError("stored QE evidence content identity does not verify")
                 return evidence
 
             def list_metrics(self, tier: Optional[str] = None) -> List[Dict[str, Any]]:

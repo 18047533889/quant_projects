@@ -51,8 +51,31 @@ class ExecutionContext:
     # Created only after the context reaches a worker-local execution boundary.
     # The default None preserves existing cross-process pickle paths.
     fit_failure_sink: Any | None = None
+    execution_purpose: Any | None = None
+    execution_scope: Any | None = None
 
     def __post_init__(self) -> None:
+        if self.execution_scope is not None:
+            from factor_engine.api.factor import FactorExecutionScopeHint
+            if not isinstance(self.execution_scope, FactorExecutionScopeHint):
+                raise TypeError("validated FactorExecutionScopeHint required")
+            missing = tuple(
+                name for name in ("market", "calendar_id", "frequency", "universe_id")
+                if not isinstance(getattr(self.execution_scope, name), str)
+                or not getattr(self.execution_scope, name).strip()
+            )
+            if missing:
+                raise ValueError(
+                    "execution scope requires nonempty " + ", ".join(missing)
+                )
+        if self.execution_purpose is not None:
+            from factor_engine.runtime.default_execution_policy import ExecutionPurpose
+            if not isinstance(self.execution_purpose, ExecutionPurpose):
+                raise TypeError("validated ExecutionPurpose required")
+            if str(self.run_mode).lower() != "production":
+                raise ValueError("managed purpose requires strict production input governance")
+            if self.execution_scope is None:
+                raise ValueError("managed purpose requires a complete execution scope")
         if not self.execution_id:
             self.execution_id = uuid4().hex
         self.run_mode = str(self.run_mode).lower()
@@ -73,6 +96,8 @@ class ExecutionContext:
                 # or snapshot boundaries.
                 wrapper = LQTPLogicalDataSource(inner)
                 setattr(wrapper, "_execution_id", self.execution_id)
+                wrapper.execution_purpose = self.execution_purpose
+                wrapper.execution_scope = self.execution_scope
                 try:
                     from factor_engine.storage.sources.data_access_source import (
                         register_logical_wrapper,
@@ -87,6 +112,10 @@ class ExecutionContext:
                 # Explicitly supplied wrappers are still bound to this context;
                 # execution-local caches from a previous context are cleared.
                 wrapper = self.data_source
+                if getattr(wrapper, "execution_purpose", None) != self.execution_purpose:
+                    raise ValueError("logical source wrapper cannot cross execution purposes")
+                if getattr(wrapper, "execution_scope", None) != self.execution_scope:
+                    raise ValueError("logical source wrapper cannot cross execution scopes")
                 previous = str(getattr(wrapper, "_execution_id", ""))
                 if previous and previous != self.execution_id:
                     for name in tuple(vars(wrapper)):

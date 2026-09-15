@@ -476,9 +476,8 @@ class FinActualExpectationDivergencePolarsNative(SeriesOperator):
         )
 
 
-@register_operator(name="fin_cash_earnings_gap", canonical="fin_cash_earnings_gap", backend="polars")
 class FinCashEarningsGapPolarsNative(SeriesOperator):
-    """Operating cash flow minus net income (accruals proxy)."""
+    """Legacy two-input accrual proxy; not the four-parameter canonical."""
     
     metadata = OperatorMetadata(
         name="fin_cash_earnings_gap",
@@ -1360,31 +1359,12 @@ class FinCommonSizePolarsNative(SeriesOperator):
 
 
 @register_operator(name="fin_component_score", canonical="fin_component_score", backend="polars")
-class FinComponentScorePolarsNative(SeriesOperator):
-    """Weighted component contribution to aggregate metric."""
-    
-    metadata = OperatorMetadata(
-        name="fin_component_score",
-        category="fundamental",
-        description="Weighted component contribution to aggregate metric.",
-        param_names=["component", "weight"],
-        return_type="series",
-        tags=["fundamental", "financial", "polars_native", "pit_safe"],
-    )
-
-    def _calculate_series(self, component, weight, **kwargs):
-        return (
-            pl.DataFrame({
-                "comp": component,
-                "w": weight,
-            })
-            .lazy()
-            .select([
-                (pl.col("comp") * pl.col("w")).alias("result")
-            ])
-            .collect()
-            .to_series()
-        )
+class FinComponentScorePolarsNative(
+    __import__("factor_engine.cleaned_operators.fundamental.polars_component_score",
+               fromlist=["PolarsComponentScore"]).PolarsComponentScore
+):
+    """Exact optional multi-component scoring, not component-times-weight proxy."""
+    pass
 
 
 @register_operator(name="fin_fundamental_strength_score", canonical="fin_fundamental_strength_score", backend="polars")

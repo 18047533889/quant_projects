@@ -567,7 +567,7 @@ def compile_filter_arrow(f: Filter | None, *, pc: Any = None):
     if isinstance(f, Between):
         lo = pc.greater_equal(field(f.column), scalar(f.lower)) if f.lower_inclusive else pc.greater(field(f.column), scalar(f.lower))
         hi = pc.less_equal(field(f.column), scalar(f.upper)) if f.upper_inclusive else pc.less(field(f.column), scalar(f.upper))
-        return pc.and_(lo, hi)
+        return pc.and_kleene(lo, hi)
     if isinstance(f, In):
         return pc.is_in(field(f.column), value_set(f.values))
     if isinstance(f, NotIn):

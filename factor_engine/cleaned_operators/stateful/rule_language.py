@@ -16,12 +16,20 @@ missing observation is never treated as False / no-change.
 """
 from __future__ import annotations
 
+from numbers import Real
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+    validate_operator_call,
+)
 from factor_engine.cleaned_operators.common.daily_panel import _aligned
 from factor_engine.cleaned_operators.rolling_pack import frame_like
 from factor_engine.cleaned_operators.stateful._common import (
@@ -31,6 +39,41 @@ from factor_engine.cleaned_operators.stateful._common import (
 )
 
 _EPS = 1e-12
+
+
+def _nonnegative_scalar_or_panel(value: Any, name: str) -> None:
+    """Validate scalar controls without rejecting supported panel controls."""
+    if isinstance(value, (pd.DataFrame, pd.Series)):
+        return
+    if isinstance(value, bool) or not isinstance(value, Real):
+        raise TypeError(f"{name} must be a finite nonnegative real or a panel")
+    if not np.isfinite(float(value)) or float(value) < 0.0:
+        raise ValueError(f"{name} must be finite and >= 0")
+
+
+def _state_metadata(
+    name: str,
+    description: str,
+    params: list[str],
+    *,
+    panel_params: tuple[str, ...],
+    param_specs: dict[str, ParamSpec],
+    unit: str,
+) -> OperatorMetadata:
+    """Build the complete call topology for a recursive state operator."""
+    result = metadata(
+        name, description, params, domain="trading_state", unit=unit,
+    )
+    result.param_specs = param_specs
+    result.panel_params = panel_params
+    result.panel_arity = len(panel_params)
+    result.scalar_params = tuple(name for name in params if name not in panel_params)
+    if unit == "state":
+        result.output_unit = "dimensionless"
+    else:
+        result.output_unit = "same_as:value" if name == "state_hold" else "same_as:x"
+    result.window_semantics = "causal_unbounded"
+    return result
 
 
 @register_operator(
@@ -47,11 +90,17 @@ class StateLatch(SeriesOperator):
     any event and the value a NaN input re-baselines to.
     """
 
-    metadata = metadata(
+    metadata = _state_metadata(
         "state_latch",
         "SR 锁存状态: reset 优先, 其次 set, 否则保持。",
         ["set_condition", "reset_condition", "initial_state"],
-        domain="trading_state",
+        panel_params=("set_condition", "reset_condition"),
+        param_specs={
+            "initial_state": ParamSpec(
+                dtype=float, choices=(0.0, 1.0), default=0.0, searchable=False,
+                param_role=ParamRole.POLICY,
+            ),
+        },
         unit="state",
     )
 
@@ -107,11 +156,16 @@ class StateHold(SeriesOperator):
     ``Y_t = Y_{t-1}`` (the last snapshot is remembered).
     """
 
-    metadata = metadata(
+    metadata = _state_metadata(
         "state_hold",
         "条件触发时记录 x, 之后一直保持最近一次记录值, reset 清空。",
         ["value", "update_condition", "reset_condition"],
-        domain="trading_state",
+        panel_params=("value", "update_condition", "reset_condition"),
+        param_specs={
+            "reset_condition": ParamSpec(
+                default=None, searchable=False, param_role=ParamRole.POLICY,
+            ),
+        },
         unit="level",
     )
 
@@ -171,15 +225,41 @@ class StateSlewLimit(SeriesOperator):
     output directly.
     """
 
-    metadata = metadata(
+    metadata = _state_metadata(
         "state_slew_limit",
         "输出每行最多向目标移动 limit, 实现慢调整信号控制。",
         ["x", "limit"],
-        domain="trading_state",
+        panel_params=("x", "limit"),
+        param_specs={
+            "limit": ParamSpec(
+                dtype=float,
+                min=0.0,
+                default=0.01,
+                param_role=ParamRole.STATE_THRESHOLD,
+            ),
+        },
         unit="level",
     )
 
+    _HANDLES_CALL_CONTRACT = True
+
+    def calculate(self, x: pd.DataFrame, limit: Any = 0.01, **kwargs: Any) -> pd.DataFrame:
+        # Backward-compatible dynamic threshold panel.  The formal factor
+        # parameter remains the scalar ``limit``; a labelled panel is a data
+        # input and is validated/aligned cell-wise by the kernel.
+        if isinstance(limit, (pd.DataFrame, pd.Series)):
+            processed, processed_kwargs = validate_operator_call(
+                self, (x,), {"limit": 0.01, **kwargs},
+            )
+            x = processed[0]
+            return self._calculate_series(x, limit=limit, **kwargs)
+        processed, processed_kwargs = validate_operator_call(
+            self, (x,), {"limit": limit, **kwargs},
+        )
+        return self._calculate_series(*processed, **processed_kwargs)
+
     def _calculate_series(self, x: pd.DataFrame, limit: Any = 0.01, **_: Any) -> pd.DataFrame:
+        _nonnegative_scalar_or_panel(limit, "limit")
         if isinstance(limit, pd.DataFrame):
             x, limit = _aligned(x, limit)
         xv = x.to_numpy(dtype=float)
@@ -219,15 +299,40 @@ class StateDeadband(SeriesOperator):
     per-row panel.  The first finite observation initialises the output.
     """
 
-    metadata = metadata(
+    metadata = _state_metadata(
         "state_deadband",
         "连续迟滞: 变化小于 band 不动, 超过部分才移动。",
         ["x", "band"],
-        domain="trading_state",
+        panel_params=("x", "band"),
+        param_specs={
+            "band": ParamSpec(
+                dtype=float,
+                min=0.0,
+                default=0.0,
+                param_role=ParamRole.STATE_THRESHOLD,
+            ),
+        },
         unit="level",
     )
 
+    _HANDLES_CALL_CONTRACT = True
+
+    def calculate(self, x: pd.DataFrame, band: Any = 0.0, **kwargs: Any) -> pd.DataFrame:
+        # See StateSlewLimit.calculate: panel thresholds are supported data
+        # inputs, while scalar ``band`` is the declared search parameter.
+        if isinstance(band, (pd.DataFrame, pd.Series)):
+            processed, processed_kwargs = validate_operator_call(
+                self, (x,), {"band": 0.0, **kwargs},
+            )
+            x = processed[0]
+            return self._calculate_series(x, band=band, **kwargs)
+        processed, processed_kwargs = validate_operator_call(
+            self, (x,), {"band": band, **kwargs},
+        )
+        return self._calculate_series(*processed, **processed_kwargs)
+
     def _calculate_series(self, x: pd.DataFrame, band: Any = 0.0, **_: Any) -> pd.DataFrame:
+        _nonnegative_scalar_or_panel(band, "band")
         if isinstance(band, pd.DataFrame):
             x, band = _aligned(x, band)
         xv = x.to_numpy(dtype=float)
@@ -257,10 +362,26 @@ class StateDeadband(SeriesOperator):
 
 def _register_surface() -> None:
     from factor_engine.cleaned_operators.stateful._common import register_stateful_surface
+    from factor_engine.cleaned_operators.rolling_pack import register_polars_udf
 
-    register_stateful_surface(
-        ["state_latch", "state_hold", "state_slew_limit", "state_deadband"]
-    )
+    canonicals = ["state_latch", "state_hold", "state_slew_limit", "state_deadband"]
+    register_stateful_surface(canonicals)
+    for canonical in canonicals:
+        register_polars_udf(canonical)
 
 
 _register_surface()
+
+
+# These recurrences have no checkpoint adapter.  Starting them at an arbitrary
+# shard boundary changes their output, so incremental execution must replay the
+# complete instrument history.
+from factor_engine.runtime.execution_contract import declare_stateful  # noqa: E402
+
+for _canonical in ("state_latch", "state_hold", "state_slew_limit", "state_deadband"):
+    declare_stateful(
+        _canonical,
+        state_model="recursive",
+        chunking="required_full_history",
+        history_kind="full_history",
+    )

@@ -34,6 +34,7 @@ from factor_engine.cleaned_operators.base import (
     ParamSpec,
     SeriesOperator,
     register_operator,
+    strict_int_param,
 )
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_udf
 
@@ -79,6 +80,29 @@ def _tri_rolling(a: np.ndarray, b: np.ndarray, c: np.ndarray, w: int, fn) -> np.
     return out
 
 
+def _declare(metadata: OperatorMetadata, panels: tuple[str, ...], specs: dict[str, ParamSpec]) -> OperatorMetadata:
+    metadata.panel_params = panels
+    metadata.panel_arity = len(panels)
+    metadata.scalar_params = tuple(p for p in metadata.param_names if p not in panels)
+    metadata.param_specs.update(specs)
+    return metadata
+
+
+def _window(value: Any, name: str) -> int:
+    result = strict_int_param(value, name)
+    if result < 5:
+        raise ValueError(f"{name} must be >= 5")
+    return result
+
+
+def _window_spec(default: int, *, combined: bool = False) -> ParamSpec:
+    return ParamSpec(
+        dtype=int, min=5, default=default, param_role=ParamRole.HORIZON,
+        history_semantics="max_rows",
+        history_formula="recent_window + prior_window" if combined else None,
+    )
+
+
 def _robust_scale(col: np.ndarray) -> float | None:
     """Median/MAD robust scale with a std fallback (R5 P1-42(a)).
 
@@ -106,13 +130,20 @@ def _feature_matrix(c1: np.ndarray, c2: np.ndarray, c3: np.ndarray, min_rows: in
     Z = F[complete]
     z = np.empty_like(Z)
     for j in range(3):
-        med = float(np.median(Z[:, j]))
-        scale = _robust_scale(Z[:, j])
+        # Scale into a bounded coordinate system before median/subtraction.
+        # Raw values near ±float_max can overflow in ``col - median`` even
+        # though their correlation geometry is perfectly well-defined.
+        magnitude = float(np.max(np.abs(Z[:, j])))
+        if not np.isfinite(magnitude) or magnitude == 0.0:
+            return None
+        col = Z[:, j] / magnitude
+        med = float(np.median(col))
+        scale = _robust_scale(col)
         if scale is None:
             # R5 P1-42(a): a constant feature carries no information — fail
             # closed to NaN rather than emitting a degenerate all-zero column.
             return None
-        z[:, j] = (Z[:, j] - med) / scale
+        z[:, j] = (col - med) / scale
     return z
 
 
@@ -459,21 +490,19 @@ class TsFeatureModeShare(SeriesOperator):
     （risk-on/off mode）；低 = 字段各自独立。P1。
     """
 
-    metadata = _metadata(
+    metadata = _declare(_metadata(
         "ts_feature_mode_share",
         "特征相关矩阵最大特征值占比 λ1/Σλ（共同 mode 强度）。",
         ["f1", "f2", "f3", "window"],
         domain="price_volume",
         unit="ratio",
         cost=5,
-    )
+    ), ("f1", "f2", "f3"), {"window": _window_spec(60)})
 
     def _calculate_series(
         self, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, window: int = 60, **_: Any
     ) -> pd.DataFrame:
-        w = int(window)
-        if w < 5:
-            raise ValueError("ts_feature_mode_share requires window >= 5")
+        w = _window(window, "window")
         return frame_like(
             f1,
             _tri_rolling(
@@ -500,7 +529,7 @@ class TsFeatureEffectiveRank(SeriesOperator):
     latent mode 压制；高 = 字段自由。日频 liquidity/noise state 的天然代理。P1。
     """
 
-    metadata = _metadata(
+    metadata = _declare(_metadata(
         "ts_feature_effective_rank",
         "特征谱有效秩 exp(-Σ p log p)（多字段有效自由度；effective dimension，"
         "dimensionless，非序数 rank）。",
@@ -509,14 +538,12 @@ class TsFeatureEffectiveRank(SeriesOperator):
         unit="dimensionless",
         cost=5,
         extra_tags=("semantic_kind:effective_dimension",),
-    )
+    ), ("f1", "f2", "f3"), {"window": _window_spec(60)})
 
     def _calculate_series(
         self, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, window: int = 60, **_: Any
     ) -> pd.DataFrame:
-        w = int(window)
-        if w < 5:
-            raise ValueError("ts_feature_effective_rank requires window >= 5")
+        w = _window(window, "window")
         return frame_like(
             f1,
             _tri_rolling(
@@ -549,7 +576,7 @@ class TsFeatureSubspaceRotation(SeriesOperator):
     （如 0.0）可承认近简并方向，会改变输出并进入语义身份。
     """
 
-    metadata = _metadata(
+    metadata = _declare(_metadata(
         "ts_feature_subspace_rotation",
         "recent vs prior 特征主导方向夹角（regime rotation；eigen_gap=0.02 可识别性门槛，"
         "ESTIMATOR_RESOLUTION searchable=False）。",
@@ -561,7 +588,10 @@ class TsFeatureSubspaceRotation(SeriesOperator):
             "eigen_gap": _EIGENGAP_SPEC,
         },
         extra_tags=(f"eigen_gap:{_MIN_EIGENGAP}",),
-    )
+    ), ("f1", "f2", "f3"), {
+        "recent_window": _window_spec(30, combined=True),
+        "prior_window": _window_spec(90),
+    })
 
     def _calculate_series(
         self,
@@ -576,10 +606,8 @@ class TsFeatureSubspaceRotation(SeriesOperator):
         # P1-32: ``window`` was redundant — the kernel only ever uses the last
         # ``recent + prior`` rows, so any window >= recent+prior produced the
         # exact same output and only inflated the search surface.
-        r = int(recent_window)
-        p = int(prior_window)
-        if r < 5 or p < 5:
-            raise ValueError("ts_feature_subspace_rotation requires recent/prior >= 5")
+        r = _window(recent_window, "recent_window")
+        p = _window(prior_window, "prior_window")
         if not (0.0 <= float(eigen_gap) <= 1.0):
             raise ValueError("ts_feature_subspace_rotation requires 0 <= eigen_gap <= 1")
         w = r + p
@@ -613,7 +641,7 @@ class TsBetaBreakScore(SeriesOperator):
     y/x 组合间仍是相对变化。P1。
     """
 
-    metadata = _metadata(
+    metadata = _declare(_metadata(
         "ts_beta_break_score",
         "recent vs prior 真实 beta=Cov(y,x)/Var(x) 变化 (Δβ)/(|β_prior|+median|β_recent|)。",
         ["y", "x", "recent_window", "prior_window"],
@@ -621,7 +649,10 @@ class TsBetaBreakScore(SeriesOperator):
         unit="dimensionless",
         output_unit="dimensionless",
         cost=5,
-    )
+    ), ("y", "x"), {
+        "recent_window": _window_spec(30, combined=True),
+        "prior_window": _window_spec(90),
+    })
 
     def _calculate_series(
         self,
@@ -633,10 +664,8 @@ class TsBetaBreakScore(SeriesOperator):
     ) -> pd.DataFrame:
         # P1-33: ``window`` was redundant — the kernel only uses the last
         # ``recent + prior`` rows, so it is dropped from the search surface.
-        r = int(recent_window)
-        p = int(prior_window)
-        if r < 5 or p < 5:
-            raise ValueError("ts_beta_break_score requires recent/prior >= 5")
+        r = _window(recent_window, "recent_window")
+        p = _window(prior_window, "prior_window")
         w = r + p
         yv = y.to_numpy(dtype=float)
         xv = x.to_numpy(dtype=float)

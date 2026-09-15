@@ -6,7 +6,11 @@ All operators use pure Polars lazy API where feasible.
 Complex algorithms (matrix profile, multifractal, path signatures) have skeleton implementations.
 """
 
+import copy
 import polars as pl
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+from factor_engine.cleaned_operators.common import direction_risk_polars as _risk_kernels
 import numpy as np
 from typing import Optional, Union
 
@@ -331,125 +335,52 @@ class TSMeanExcessSlopePolarsNative(SeriesOperator):
 
 @register_operator(name="ts_mean_reversion_half_life", canonical="ts_mean_reversion_half_life", backend="polars")
 class TSMeanReversionHalfLifePolarsNative(SeriesOperator):
-    """Estimated half-life of mean reversion"""
-
-    metadata = OperatorMetadata(
-        name="ts_mean_reversion_half_life",
-        category="time_series",
-        description="Half-life of reversion to mean",
-        param_names=["feature", "window"],
-        return_type="series",
-        tags=["time_series", "mean_reversion", "pit_safe"],
+    """Exact pandas reference delegate; not a native Polars expression."""
+    from factor_engine.cleaned_operators.ts_model.ar_meanrev import TsMeanReversionHalfLife as _Reference
+    metadata = copy.deepcopy(_Reference.metadata)
+    metadata.tags = list(metadata.tags or []) + ["polars", "delegate:pandas_numpy"]
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_mean_reversion_half_life", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
 
-    def _calculate_series(self, feature, window, **kwargs):
-        # Fit AR(1): x_t = phi * x_{t-1} + eps
-        # Half-life = -log(2) / log(phi)
-        # Use rolling regression
-        df = feature.to_frame().with_row_count("_idx")
-
-        result = (
-            df.lazy()
-            .with_columns([
-                pl.col(feature.name).shift(1).alias("_lag1"),
-                pl.col(feature.name).alias("_y"),
-            ])
-            .with_columns([
-                # Rolling correlation between y and lag1
-                (pl.col("_y") * pl.col("_lag1")).rolling_mean(window).alias("_cov_proxy"),
-                pl.col("_lag1").pow(2).rolling_mean(window).alias("_var_lag1"),
-                pl.col("_lag1").rolling_mean(window).alias("_mean_lag1"),
-                pl.col("_y").rolling_mean(window).alias("_mean_y"),
-            ])
-            .with_columns([
-                # phi = cov(y, lag1) / var(lag1)
-                ((pl.col("_cov_proxy") - pl.col("_mean_y") * pl.col("_mean_lag1")) /
-                 (pl.col("_var_lag1") - pl.col("_mean_lag1").pow(2) + 1e-10)).alias("_phi")
-            ])
-            .with_columns([
-                # Half-life = -ln(2) / ln(phi), only when 0 < phi < 1
-                pl.when((pl.col("_phi") > 0) & (pl.col("_phi") < 1))
-                .then(-0.693147 / pl.col("_phi").log())
-                .otherwise(None)
-                .alias("_half_life")
-            ])
-            .select("_half_life")
-            .collect()
-        )
-        return result.to_series()
+    def _calculate_series(self, x, window=120, min_periods=20, **kwargs):
+        return _call_pandas_delegate("ts_mean_reversion_half_life", (x,),
+                                     {"window": window, "min_periods": min_periods, **kwargs})
 
 
 @register_operator(name="ts_mean_reversion_ou_approx_half_life", canonical="ts_mean_reversion_ou_approx_half_life", backend="polars")
 class TSMeanReversionOUApproxHalfLifePolarsNative(SeriesOperator):
-    """Ornstein-Uhlenbeck approximation of mean reversion half-life"""
-
-    metadata = OperatorMetadata(
-        name="ts_mean_reversion_ou_approx_half_life",
-        category="time_series",
-        description="OU process half-life estimate",
-        param_names=["feature", "window"],
-        return_type="series",
-        tags=["time_series", "mean_reversion", "ou_process", "pit_safe"],
+    """Exact pandas reference delegate; not a native Polars expression."""
+    from factor_engine.cleaned_operators.ts_model.ar_meanrev import TsMeanReversionOuApproxHalfLife as _Reference
+    metadata = copy.deepcopy(_Reference.metadata)
+    metadata.tags = list(metadata.tags or []) + ["polars", "delegate:pandas_numpy"]
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_mean_reversion_ou_approx_half_life", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
 
-    def _calculate_series(self, feature, window, **kwargs):
-        # Similar to above but with OU-specific estimation
-        # theta = -log(phi) / dt, half_life = log(2) / theta
-        return (
-            feature.to_frame()
-            .lazy()
-            .with_columns([
-                pl.col(feature.name).shift(1).alias("_lag1"),
-            ])
-            .with_columns([
-                # Simplified: use autocorrelation at lag 1
-                pl.corr(pl.col(feature.name), pl.col("_lag1")).over_rolling(window).alias("_rho")
-            ])
-            .with_columns([
-                pl.when(pl.col("_rho") > 0)
-                .then(0.693147 / (-pl.col("_rho").log()))
-                .otherwise(None)
-            ])
-            .select(pl.col(feature.name))
-            .collect()
-            .to_series()
-        )
+    def _calculate_series(self, x, window=120, min_periods=20, **kwargs):
+        return _call_pandas_delegate("ts_mean_reversion_ou_approx_half_life", (x,),
+                                     {"window": window, "min_periods": min_periods, **kwargs})
 
 
 @register_operator(name="ts_median3_causal", canonical="ts_median3_causal", backend="polars")
 class TSMedian3CausalPolarsNative(SeriesOperator):
-    """Causal 3-period median filter"""
-
-    metadata = OperatorMetadata(
-        name="ts_median3_causal",
-        category="time_series",
-        description="Median of [t-2, t-1, t] (causal)",
-        param_names=["feature"],
-        return_type="series",
-        tags=["time_series", "median", "filter", "pit_safe"],
-    )
-
-    def _calculate_series(self, feature, **kwargs):
-        return (
-            feature.to_frame()
-            .lazy()
-            .with_columns([
-                pl.col(feature.name).shift(2).alias("_t2"),
-                pl.col(feature.name).shift(1).alias("_t1"),
-                pl.col(feature.name).alias("_t0"),
-            ])
-            .select([
-                pl.concat_list(["_t2", "_t1", "_t0"]).list.median().alias(feature.name)
-            ])
-            .collect()
-            .to_series()
-        )
+    """Exact causal despike CPU kernel, preserving canonical defaults."""
+    from factor_engine.cleaned_operators.common import despike_native as _despike
+    metadata=_despike.metadata("ts_median3_causal")
+    @property
+    def _contract_callable(self):
+        return self._despike.reference("ts_median3_causal")._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._despike.calculate("ts_median3_causal",*args,**kwargs)
+    def physical_spec(self):
+        return self._despike.physical_spec("ts_median3_causal")
 
 
 # ============================================================================
@@ -726,23 +657,17 @@ class TSMultiscaleTrendDispersionPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_nearest_structural_level_distance", canonical="ts_nearest_structural_level_distance", backend="polars")
 class TSNearestStructuralLevelDistancePolarsNative(SeriesOperator):
-    """Distance to nearest support/resistance level"""
-
-    metadata = OperatorMetadata(
-        name="ts_nearest_structural_level_distance",
-        category="time_series",
-        description="Distance to closest structural price level",
-        param_names=["feature", "window"],
-        return_type="series",
-        tags=["time_series", "support_resistance", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=10, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, feature, window, **kwargs):
-        # TODO: Identify structural levels (local extrema clusters) and compute distance
-        return pl.lit(None).cast(pl.Float64)
+    """Confirmed structural levels from the immutable pivot ledger."""
+    from factor_engine.cleaned_operators.common.structural_delegate import metadata as _metadata, physical_spec as _spec
+    metadata = _metadata("ts_nearest_structural_level_distance")
+    _physical_spec = _spec("ts_nearest_structural_level_distance")
+    @property
+    def _contract_callable(self):
+        from factor_engine.cleaned_operators.common.structural_delegate import reference
+        return reference("ts_nearest_structural_level_distance")._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        from factor_engine.cleaned_operators.common.structural_delegate import calculate
+        return calculate("ts_nearest_structural_level_distance",*args,**kwargs)
 
 
 @register_operator(name="ts_nth_pivot_high", canonical="ts_nth_pivot_high", backend="polars")
@@ -1086,72 +1011,56 @@ class TSPathEfficiencyPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_path_leadlag_area", canonical="ts_path_leadlag_area", backend="polars")
 class TSPathLeadlagAreaPolarsNative(SeriesOperator):
-    """Signed area between two paths (lead-lag relationship)"""
-
-    metadata = OperatorMetadata(
-        name="ts_path_leadlag_area",
-        category="time_series",
-        description="Integrated difference between two series",
-        param_names=["x", "y", "window"],
-        return_type="series",
-        tags=["time_series", "leadlag", "path", "pit_safe"],
+    """Exact pandas reference delegate; path area is not a native expression."""
+    from factor_engine.cleaned_operators.ts_model.path_signature import _CANONICALS as _loaded
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as _Registry
+    metadata = copy.deepcopy(_Registry.get("ts_path_leadlag_area", "pandas_numpy", mode="any").metadata)
+    metadata.tags = list(metadata.tags or []) + ["polars", "delegate:pandas_numpy"]
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_path_leadlag_area", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-    }
 
-    def _calculate_series(self, x, y, window, **kwargs):
-        df = pl.DataFrame({"x": x, "y": y})
-        return (
-            df.lazy()
-            .with_columns([
-                (pl.col("x") - pl.col("y")).rolling_sum(window).alias("area")
-            ])
-            .select("area")
-            .collect()["area"]
-        )
+    def _calculate_series(self, x, y, window=60, lag=1, **kwargs):
+        return _call_pandas_delegate("ts_path_leadlag_area", (x, y), {"window": window, "lag": lag, **kwargs})
 
 
 @register_operator(name="ts_path_signature_area", canonical="ts_path_signature_area", backend="polars")
 class TSPathSignatureAreaPolarsNative(SeriesOperator):
-    """Path signature level 2 area term"""
-
-    metadata = OperatorMetadata(
-        name="ts_path_signature_area",
-        category="time_series",
-        description="Second-level path signature (area)",
-        param_names=["feature", "window"],
-        return_type="series",
-        tags=["time_series", "path_signature", "pit_safe"],
+    """Exact pandas reference delegate; iterated integrals require full paths."""
+    from factor_engine.cleaned_operators.ts_model.path_signature import _CANONICALS as _loaded
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as _Registry
+    metadata = copy.deepcopy(_Registry.get("ts_path_signature_area", "pandas_numpy", mode="any").metadata)
+    metadata.tags = list(metadata.tags or []) + ["polars", "delegate:pandas_numpy"]
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_path_signature_area", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=3, param_role=ParamRole.HORIZON),
-    }
 
-    def _calculate_series(self, feature, window, **kwargs):
-        # TODO: Requires path signature computation (iterated integrals)
-        return pl.lit(None).cast(pl.Float64)
+    def _calculate_series(self, x, y, window=60, **kwargs):
+        return _call_pandas_delegate("ts_path_signature_area", (x, y), {"window": window, **kwargs})
 
 
 @register_operator(name="ts_path_signature_depth2_norm", canonical="ts_path_signature_depth2_norm", backend="polars")
 class TSPathSignatureDepth2NormPolarsNative(SeriesOperator):
-    """Norm of depth-2 path signature"""
-
-    metadata = OperatorMetadata(
-        name="ts_path_signature_depth2_norm",
-        category="time_series",
-        description="Magnitude of second-order signature terms",
-        param_names=["feature", "window"],
-        return_type="series",
-        tags=["time_series", "path_signature", "pit_safe"],
+    """Exact pandas reference delegate; iterated integrals require full paths."""
+    from factor_engine.cleaned_operators.ts_model.path_signature import _CANONICALS as _loaded
+    from factor_engine.cleaned_operators.registry import OperatorRegistry as _Registry
+    metadata = copy.deepcopy(_Registry.get("ts_path_signature_depth2_norm", "pandas_numpy", mode="any").metadata)
+    metadata.tags = list(metadata.tags or []) + ["polars", "delegate:pandas_numpy"]
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_path_signature_depth2_norm", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=3, param_role=ParamRole.HORIZON),
-    }
 
-    def _calculate_series(self, feature, window, **kwargs):
-        # TODO: Requires path signature computation
-        return pl.lit(None).cast(pl.Float64)
+    def _calculate_series(self, x, y, window=60, **kwargs):
+        return _call_pandas_delegate("ts_path_signature_depth2_norm", (x, y), {"window": window, **kwargs})
 
 
 @register_operator(name="ts_pattern_symmetry", canonical="ts_pattern_symmetry", backend="polars")
@@ -1470,29 +1379,17 @@ class TSPivotLowSpacingPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_price_delay", canonical="ts_price_delay", backend="polars")
 class TSPriceDelayPolarsNative(SeriesOperator):
-    """Price delay measure (fraction of R² from lagged returns)"""
-
+    """Authored finite-support ts_price_delay; see shared numerical kernel."""
     metadata = OperatorMetadata(
-        name="ts_price_delay",
-        category="time_series",
-        description="Measure of price adjustment speed",
-        param_names=["returns", "window", "max_lag"],
-        return_type="series",
-        tags=["time_series", "microstructure", "delay", "pit_safe"],
+        name="ts_price_delay",category="time_series",
+        description="Canonical ts_price_delay with validated input and window semantics.",
+        **_risk_kernels.contract("ts_price_delay"),
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=30, param_role=ParamRole.HORIZON),
-        "max_lag": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    _contract_callable = staticmethod(_risk_kernels.ts_price_delay)
+    _physical_spec = _risk_kernels.physical_spec("ts_price_delay")
 
-    def _calculate_series(self, returns, window, max_lag=5, **kwargs):
-        # TODO: Regress returns on lagged market returns and compute incremental R²
-        return pl.lit(None).cast(pl.Float64)
-
-
-# ============================================================================
-# Sample Entropy and Quantile Metrics
-# ============================================================================
+    def _calculate_series(self, *args, **kwargs):
+        return _risk_kernels.ts_price_delay(*args, **kwargs)
 
 @register_operator(name="ts_pseudocount_sample_entropy", canonical="ts_pseudocount_sample_entropy", backend="polars")
 class TSPseudocountSampleEntropyPolarsNative(SeriesOperator):
@@ -2270,88 +2167,42 @@ class TSRobustEMAPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_robust_zscore_inclusive", canonical="ts_robust_zscore_inclusive", backend="polars")
 class TSRobustZscoreInclusivePolarsNative(SeriesOperator):
-    """Robust z-score using median and MAD (inclusive of current point)"""
-
-    metadata = OperatorMetadata(
-        name="ts_robust_zscore_inclusive",
-        category="time_series",
-        description="(X - median) / MAD including current value",
-        param_names=["feature", "window"],
-        return_type="series",
-        tags=["time_series", "zscore", "robust", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=5, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, feature, window, **kwargs):
-        return (
-            feature.to_frame()
-            .lazy()
-            .with_columns([
-                pl.col(feature.name).rolling_median(window).alias("_med"),
-                (pl.col(feature.name) - pl.col(feature.name).rolling_median(window)).abs().rolling_median(window).alias("_mad"),
-            ])
-            .with_columns([
-                pl.when(pl.col("_mad") != 0).then((pl.col(feature.name) - pl.col("_med")) / (pl.col("_mad") * 1.4826 + 1e-10)).otherwise(None).alias("robust_z")
-            ])
-            .select("robust_z")
-            .collect()
-            .to_series()
-        )
+    """Canonical robust statistics, shared stable per-column NumPy kernels."""
+    from factor_engine.cleaned_operators.common import robust_stats_native as _native
+    metadata = _native.metadata("ts_robust_zscore_inclusive")
+    _physical_spec = _native.physical_spec("ts_robust_zscore_inclusive")
+    @property
+    def _contract_callable(self):
+        return self._native.reference(self.metadata.name)._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._native.calculate(self.metadata.name,*args,**kwargs)
 
 
 @register_operator(name="ts_robust_zscore_prior", canonical="ts_robust_zscore_prior", backend="polars")
 class TSRobustZscorePriorPolarsNative(SeriesOperator):
-    """Robust z-score using only prior data (causal)"""
-
-    metadata = OperatorMetadata(
-        name="ts_robust_zscore_prior",
-        category="time_series",
-        description="(X - median_prior) / MAD_prior",
-        param_names=["feature", "window"],
-        return_type="series",
-        tags=["time_series", "zscore", "robust", "causal", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=5, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, feature, window, **kwargs):
-        return (
-            feature.to_frame()
-            .lazy()
-            .with_columns([
-                pl.col(feature.name).shift(1).rolling_median(window).alias("_med"),
-                (pl.col(feature.name).shift(1) - pl.col(feature.name).shift(1).rolling_median(window)).abs().rolling_median(window).alias("_mad"),
-            ])
-            .with_columns([
-                pl.when(pl.col("_mad") != 0).then((pl.col(feature.name) - pl.col("_med")) / (pl.col("_mad") * 1.4826 + 1e-10)).otherwise(None).alias("robust_z")
-            ])
-            .select("robust_z")
-            .collect()
-            .to_series()
-        )
+    """Canonical robust statistics, shared stable per-column NumPy kernels."""
+    from factor_engine.cleaned_operators.common import robust_stats_native as _native
+    metadata = _native.metadata("ts_robust_zscore_prior")
+    _physical_spec = _native.physical_spec("ts_robust_zscore_prior")
+    @property
+    def _contract_callable(self):
+        return self._native.reference(self.metadata.name)._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._native.calculate(self.metadata.name,*args,**kwargs)
 
 
 @register_operator(name="ts_rolling_median_causal", canonical="ts_rolling_median_causal", backend="polars")
 class TSRollingMedianCausalPolarsNative(SeriesOperator):
-    """Rolling median using only prior data"""
-
-    metadata = OperatorMetadata(
-        name="ts_rolling_median_causal",
-        category="time_series",
-        description="Causal rolling median",
-        param_names=["feature", "window"],
-        return_type="series",
-        tags=["time_series", "median", "causal", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
-    }
-
-    def _calculate_series(self, feature, window, **kwargs):
-        return feature.shift(1).rolling_median(window)
+    """Exact causal despike CPU kernel, preserving canonical defaults."""
+    from factor_engine.cleaned_operators.common import despike_native as _despike
+    metadata=_despike.metadata("ts_rolling_median_causal")
+    @property
+    def _contract_callable(self):
+        return self._despike.reference("ts_rolling_median_causal")._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._despike.calculate("ts_rolling_median_causal",*args,**kwargs)
+    def physical_spec(self):
+        return self._despike.physical_spec("ts_rolling_median_causal")
 
 
 @register_operator(name="ts_rolling_sr_gaussian_mean_shift_score", canonical="ts_rolling_sr_gaussian_mean_shift_score", backend="polars")
@@ -2508,6 +2359,4 @@ class TSRunEfficiencyPolarsNative(SeriesOperator):
 
 
 # End of batch 3 - operators 533-632
-
-
 

@@ -8358,6 +8358,9 @@ class ProtectedDivPolars(SeriesOperator):
         name="protected_div",
         category="general",
         description="Auto-generated Polars bridge",
+        param_names=["x", "y", "epsilon", "default"],
+        mixed_params=("x", "y"),
+        scalar_params=("epsilon", "default"),
         tags=["auto_generated", "polars", "registry_bridge"],
     )
 

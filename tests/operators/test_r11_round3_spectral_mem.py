@@ -97,9 +97,10 @@ def test_wavelet_fixed_window_anchor_rounding():
     assert _ws._fixed_window_anchor(64) == 64
     assert _ws._fixed_window_anchor(128) == 128
     assert _ws._fixed_window_anchor(256) == 256
-    assert _ws._fixed_window_anchor(127) == 128  # no longer drops to 64
-    assert _ws._fixed_window_anchor(100) == 128
-    assert _ws._fixed_window_anchor(60) == 64
+    # Declared anchors are exact; silently rounding changes the requested horizon.
+    for invalid in (127, 100, 60):
+        with pytest.raises(ValueError, match="window must be one of"):
+            _ws._fixed_window_anchor(invalid)
 
 
 def test_wavelet_haar_requires_full_fixed_anchor():
@@ -155,7 +156,7 @@ def test_wavelet_entropy_single_band_is_zero():
 def test_spectral_entropy_no_partial_warmup():
     rng = np.random.default_rng(3)
     ret = rng.normal(0.0, 1.0, 100)
-    out = _calc("ts_return_spectral_entropy", ret, window=60)
+    out = _calc("ts_return_spectral_entropy", ret, window=60, input_kind="ReturnDecimal")
     assert np.isnan(out[:59]).all(), "startup rows must be NaN (no partial spectrum)"
     assert np.isfinite(out[59])
 

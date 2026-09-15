@@ -13,7 +13,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.intraday._core import (
     _EPS,
     daily_agg,
@@ -29,6 +29,29 @@ from factor_engine.cleaned_operators.intraday._core import (
 )
 
 _CANONICALS: list[str] = []
+
+_SESSION_TZ_SPEC = ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY)
+_START_SPEC = ParamSpec(dtype=int, min=0, max=1440, default=570, param_role=ParamRole.STATE_THRESHOLD)
+_END_SPEC = ParamSpec(dtype=int, min=0, max=1440, default=900, param_role=ParamRole.STATE_THRESHOLD)
+_WINDOW_SPEC = ParamSpec(dtype=int, min=2, default=20, param_role=ParamRole.HORIZON)
+
+
+def _interval_metadata(name, description, panels, unit):
+    return metadata(
+        name, description, [*panels, "start_minute", "end_minute", "session_tz"],
+        unit=unit, panel_params=tuple(panels), scalar_params={
+            "start_minute": _START_SPEC, "end_minute": _END_SPEC,
+            "session_tz": _SESSION_TZ_SPEC,
+        },
+    )
+
+
+def _window_metadata(name, description, panel, unit):
+    return metadata(
+        name, description, [panel, "window", "session_tz"], unit=unit, cost=7,
+        available_at="session_close", same_session_usable=False,
+        panel_params=(panel,), scalar_params={"window": _WINDOW_SPEC, "session_tz": _SESSION_TZ_SPEC},
+    )
 
 
 def _interval_mask(times: np.ndarray, start_minute: int, end_minute: int) -> np.ndarray:
@@ -57,10 +80,7 @@ def _interval_return(close_v: np.ndarray, times: np.ndarray, start: int, end: in
 class IntraIntervalReturn(SeriesOperator):
     """指定分钟区间收益：区间末价/区间首价 - 1。"""
 
-    metadata = metadata(
-        "intra_interval_return", "指定 [start_minute, end_minute] 区间收益。",
-        ["close", "start_minute", "end_minute"], unit="return",
-    )
+    metadata = _interval_metadata("intra_interval_return", "指定 [start_minute, end_minute] 区间收益。", ("close",), "return")
 
     def _calculate_series(self, close, start_minute=570, end_minute=900, session_tz=None, **_):
         s, e = int(start_minute), int(end_minute)
@@ -92,9 +112,7 @@ def _interval_share(vals: np.ndarray, times: np.ndarray, start: int, end: int) -
 class IntraIntervalVolumeShare(SeriesOperator):
     """指定区间成交量占全天比例。"""
 
-    metadata = metadata(
-        "intra_interval_volume_share", "区间成交量占比。", ["volume", "start_minute", "end_minute"], unit="ratio",
-    )
+    metadata = _interval_metadata("intra_interval_volume_share", "区间成交量占比。", ("volume",), "ratio")
 
     def _calculate_series(self, volume, start_minute=570, end_minute=900, session_tz=None, **_):
         s, e = int(start_minute), int(end_minute)
@@ -114,9 +132,7 @@ class IntraIntervalVolumeShare(SeriesOperator):
 class IntraIntervalAmountShare(SeriesOperator):
     """指定区间成交额占全天比例。"""
 
-    metadata = metadata(
-        "intra_interval_amount_share", "区间成交额占比。", ["amount", "start_minute", "end_minute"], unit="ratio",
-    )
+    metadata = _interval_metadata("intra_interval_amount_share", "区间成交额占比。", ("amount",), "ratio")
 
     def _calculate_series(self, amount, start_minute=570, end_minute=900, session_tz=None, **_):
         s, e = int(start_minute), int(end_minute)
@@ -148,9 +164,7 @@ def _interval_rv(close_v: np.ndarray, times: np.ndarray, start: int, end: int) -
 class IntraIntervalRealizedVariance(SeriesOperator):
     """指定区间已实现方差。"""
 
-    metadata = metadata(
-        "intra_interval_realized_variance", "区间已实现方差。", ["close", "start_minute", "end_minute"], unit="variance",
-    )
+    metadata = _interval_metadata("intra_interval_realized_variance", "区间已实现方差。", ("close",), "variance")
 
     def _calculate_series(self, close, start_minute=570, end_minute=900, session_tz=None, **_):
         s, e = int(start_minute), int(end_minute)
@@ -183,10 +197,7 @@ def _interval_vwap_dev(close_v, amt_v, vol_v, times, start, end):
 class IntraIntervalVwapDeviation(SeriesOperator):
     """区间末价相对区间累计 VWAP 的偏差。"""
 
-    metadata = metadata(
-        "intra_interval_vwap_deviation", "区间 VWAP 偏离。",
-        ["close", "amount", "volume", "start_minute", "end_minute"], unit="ratio",
-    )
+    metadata = _interval_metadata("intra_interval_vwap_deviation", "区间 VWAP 偏离。", ("close", "amount", "volume"), "ratio")
 
     def _calculate_series(self, close, amount, volume, start_minute=570, end_minute=900, session_tz=None, **_):
         s, e = int(start_minute), int(end_minute)
@@ -243,10 +254,7 @@ def _interval_illiq(close_v: np.ndarray, amt_v: np.ndarray, times: np.ndarray, s
 class IntraIntervalIlliquidity(SeriesOperator):
     """区间内 Amihud 非流动性 mean(|r|/max(amount,eps))。"""
 
-    metadata = metadata(
-        "intra_interval_illiquidity", "区间 Amihud 非流动性。",
-        ["close", "amount", "start_minute", "end_minute"], unit="illiquidity",
-    )
+    metadata = _interval_metadata("intra_interval_illiquidity", "区间 Amihud 非流动性。", ("close", "amount"), "illiquidity")
 
     def _calculate_series(self, close, amount, start_minute=570, end_minute=900, session_tz=None, **_):
         s, e = int(start_minute), int(end_minute)
@@ -313,9 +321,7 @@ def _same_slot_score(close: pd.DataFrame, window: int, reverse: bool) -> pd.Data
 class IntraSameSlotMomentum(SeriesOperator):
     """同日段跨日延续：Σ_m r_t,m * mean_k(r_{t-k,m})。"""
 
-    metadata = metadata(
-        "intra_same_slot_momentum", "同日段跨日延续得分。", ["close", "window"], unit="level", cost=7,
-    )
+    metadata = _window_metadata("intra_same_slot_momentum", "同日段跨日延续得分。", "close", "level")
 
     def _calculate_series(self, close, window=20, session_tz=None, **_):
         from factor_engine.cleaned_operators.intraday._core import session_local
@@ -334,9 +340,7 @@ class IntraSameSlotMomentum(SeriesOperator):
 class IntraSameSlotReversal(SeriesOperator):
     """同日段反向匹配：只统计与历史同槽位符号相反的槽位。"""
 
-    metadata = metadata(
-        "intra_same_slot_reversal", "同日段反向得分。", ["close", "window"], unit="level", cost=7,
-    )
+    metadata = _window_metadata("intra_same_slot_reversal", "同日段反向得分。", "close", "level")
 
     def _calculate_series(self, close, window=20, session_tz=None, **_):
         from factor_engine.cleaned_operators.intraday._core import session_local
@@ -446,7 +450,7 @@ def _mk_profile_close_op(name: str, description: str, absolute: bool):
         status="experimental",
     )
     class _ProfileCloseOp(SeriesOperator):
-        metadata = metadata(name, description, ["close", "window"], unit="cosine", cost=7, available_at="session_close", same_session_usable=False)
+        metadata = _window_metadata(name, description, "close", "cosine")
 
         def _calculate_series(self, close, window=20, session_tz=None, **_):
             from factor_engine.cleaned_operators.intraday._core import session_local
@@ -486,7 +490,7 @@ def _mk_profile_op(name: str, description: str, unit: str, fn):
         status="experimental",
     )
     class _ProfileOp(SeriesOperator):
-        metadata = metadata(name, description, ["x", "window"], unit=unit, cost=7, available_at="session_close", same_session_usable=False)
+        metadata = _window_metadata(name, description, "x", unit)
 
         def _calculate_series(self, x, window=20, session_tz=None, **_):
             from factor_engine.cleaned_operators.intraday._core import session_local

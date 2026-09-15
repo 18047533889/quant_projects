@@ -11,14 +11,19 @@ structure.  ``damping`` is fixed (default 0.85), never searched.
 """
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator,
+)
 from factor_engine.cleaned_operators.common.group_key import is_missing_group_key
 from factor_engine.cleaned_operators.rolling_pack import frame_like
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 _EPS = 1e-12
 _DAMPING_DEFAULT = 0.85
@@ -122,6 +127,14 @@ class GroupSignalAttractionShare(SeriesOperator):
         ["x", "group", "damping"],
         param_types={"damping": float},
     )
+    metadata.panel_params = ("x", "group")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("damping",)
+    metadata.total_positional_arity = 3
+    metadata.param_specs = {"damping": ParamSpec(
+        dtype=float, min=np.nextafter(0.0, 1.0), max=np.nextafter(1.0, 0.0),
+        default=_DAMPING_DEFAULT, searchable=False, param_role=ParamRole.STATE_THRESHOLD,
+    )}
 
     def _calculate_series(
         self,
@@ -166,6 +179,19 @@ def _register_surface() -> None:
     # would resurrect it as an active canonical with no explicit policy and break
     # finalize_layer_governance for every session.
     register_polars_udf("group_signal_attraction_share")
+    _polars = OperatorRegistry.get("group_signal_attraction_share", "polars")
+    if _polars is not None:
+        from factor_engine.cleaned_operators import rolling_pack as _rolling_pack
+        _polars._physical_spec = PhysicalImplementationSpec(
+            canonical="group_signal_attraction_share", backend="polars",
+            execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+            supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+            supports_nulls=True, supports_nan=True, supports_inf=True,
+            implementation_source_hash=hashlib.sha256(
+                Path(__file__).read_bytes() + Path(_rolling_pack.__file__).read_bytes()
+            ).hexdigest(),
+            kernel_identity="relation.ops_ext.GroupSignalAttractionShare+rolling_pack.delegate",
+        )
     try:
         OperatorRegistry.register_alias(
             "relation_pagerank_centrality",

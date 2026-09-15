@@ -1,0 +1,29 @@
+WARNING: logical-contract divergence for backend of canonical 'ts_confirmed_pivot_high': field 'param_specs' declares {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} but the canonical contract holds {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula='left_window + right_window', default=MISSING, equivalence=None, param_role=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'ts_confirmed_pivot_low': field 'param_specs' declares {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} but the canonical contract holds {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula='left_window + right_window', default=MISSING, equivalence=None, param_role=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=None)} (P0-23 — continuing despite divergence for compatibility)
+/home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+  return polars_backend_kind(op, source=source, production_mode=production_mode)
+/home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+  return polars_backend_kind(op, source=source, production_mode=production_mode)
+	Command being timed: "/usr/bin/python3 evidence/r4/snapshot_summary.py"
+	User time (seconds): 54.09
+	System time (seconds): 4.13
+	Percent of CPU this job got: 110%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:52.70
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 384580
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 2583843
+	Voluntary context switches: 2679
+	Involuntary context switches: 3488
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 16
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

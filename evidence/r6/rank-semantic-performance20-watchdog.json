@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/r6/rank_semantic_performance.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 436756480, "sampling_seconds": 0.1, "seconds": 54.852881266037, "test_guard_reason": null, "hard_memory_cap": false}

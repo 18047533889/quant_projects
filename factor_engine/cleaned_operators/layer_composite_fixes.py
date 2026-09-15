@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import hashlib
+from pathlib import Path
+from factor_engine.cleaned_operators.base import ParamSpec, ParamRole
+from factor_engine.cleaned_operators.common.strict_params import strict_int
 
 # Imported here because this module is deliberately the last runtime layer in
 # cleaned_operators.load_all. Their registrations therefore override historical
@@ -26,25 +30,10 @@ from factor_engine.cleaned_operators.overhaul.base import (
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
-def _assert_condition_bool(condition: pd.DataFrame, name: str = "condition") -> None:
-    """R11 #144: the condition input must be a ConditionBool.
-
-    Accepted values: {0, 1} (or boolean True/False); NaN/null = missing and is
-    excluded from selection.  Any other finite numeric value (e.g. 5.0, -3.0) is
-    neither a probability nor a boolean — silently treating it as "truthy" is a
-    hidden semantic the operator contract forbids.  Fail the call (raise) instead
-    of guessing.
-
-    Mirrors ``cleaned_operators.common.daily_panel._assert_condition_bool``.
-    """
-    cv = condition.to_numpy()
-    finite = np.isfinite(cv)
-    bad = finite & (cv != 0.0) & (cv != 1.0)
-    if np.any(bad):
-        raise ValueError(
-            f"{name} must be a ConditionBool (values in {{0, 1}} with NaN as "
-            f"missing); found {int(bad.sum())} finite value(s) outside {{0, 1}}"
-        )
+def _assert_condition_bool(condition, name="condition"):
+    from factor_engine.cleaned_operators.common.strict_params import strict_condition_bool
+    values = condition.select(pl_cols(condition)).to_numpy() if pl is not None and isinstance(condition, pl.DataFrame) else condition
+    strict_condition_bool(values, name)
 
 
 def pl_adx_strict(high, low, close, window=14, **_):
@@ -97,6 +86,25 @@ def pl_adx_strict(high, low, close, window=14, **_):
     return pl_base_with(high, replacements)
 
 
+def _days_since_op(cls, fn):
+    op = cls("ts_days_since", "time_series_condition", ["condition", "max_lookback"],
+        "distance to latest true observation; max_lookback is inclusive", fn,
+        panel_params=("condition",), scalar_params=("max_lookback",),
+        param_specs={"max_lookback": ParamSpec(dtype=int, min=1, default=None,
+            param_role=ParamRole.HORIZON, history_semantics="max_rows",
+            history_formula="max_lookback + 1")})
+    if cls is PolarsFunctionOperator:
+        from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+        op._physical_spec = PhysicalImplementationSpec(canonical="ts_days_since",backend="polars",
+            execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,materializes_full_panel=True,
+            stateful=True, requires_sorted=True,
+            supports_nulls=True,supports_nan=True,supports_inf=True,
+            implementation_source_hash=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            kernel_identity="layer_composite_fixes.pl_days_since_inclusive",
+            notes="CPU event-age state, explicit unknown reset; no Pandas panel conversion.")
+    return op
+
+
 def pd_days_since_inclusive(condition: pd.DataFrame, max_lookback=None, **_):
     """Distance to latest true observation; max_lookback is an inclusive distance.
 
@@ -107,7 +115,7 @@ def pd_days_since_inclusive(condition: pd.DataFrame, max_lookback=None, **_):
     semantics, kept here for the inclusive max_lookback variant).
     """
     _assert_condition_bool(condition)
-    limit = None if max_lookback is None else positive_int(max_lookback, "max_lookback")
+    limit = None if max_lookback is None else strict_int(max_lookback, "max_lookback", minimum=1)
     values = condition.to_numpy(dtype=float)
     out = np.full(values.shape, np.nan, dtype=float)
     for col in range(values.shape[1]):
@@ -133,7 +141,7 @@ def pl_days_since_inclusive(condition, max_lookback=None, **_):
     event restarts from 0.
     """
     _assert_condition_bool(condition)
-    limit = None if max_lookback is None else positive_int(max_lookback, "max_lookback")
+    limit = None if max_lookback is None else strict_int(max_lookback, "max_lookback", minimum=1)
     replacements = {}
     for col in pl_cols(condition):
         arr = condition[col].cast(pl.Float64, strict=False).to_numpy()
@@ -153,13 +161,7 @@ def pl_days_since_inclusive(condition, max_lookback=None, **_):
 
 
 OperatorRegistry.register(
-    PandasFunctionOperator(
-        "ts_days_since",
-        "time_series_condition",
-        ["condition", "max_lookback"],
-        "distance to latest true observation; max_lookback is inclusive",
-        pd_days_since_inclusive,
-    ),
+    _days_since_op(PandasFunctionOperator, pd_days_since_inclusive),
     canonical="ts_days_since",
     backend="pandas_numpy",
     source="layer_composite_fixes",
@@ -189,13 +191,7 @@ if pl is not None:
         expected_old_source="operator_overhaul_native_polars",
     )
     OperatorRegistry.register(
-        PolarsFunctionOperator(
-            "ts_days_since",
-            "time_series_condition",
-            ["condition", "max_lookback"],
-            "distance to latest true observation; max_lookback is inclusive",
-            pl_days_since_inclusive,
-        ),
+        _days_since_op(PolarsFunctionOperator, pl_days_since_inclusive),
         canonical="ts_days_since",
         backend="polars",
         source="layer_governance_native_polars",

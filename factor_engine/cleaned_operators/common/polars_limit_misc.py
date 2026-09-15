@@ -7,6 +7,7 @@ wrapped into ``pl.DataFrame`` without constructing pandas DataFrames.
 """
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 
 import numpy as np
@@ -284,6 +285,9 @@ def event_decay_asof(event, half_life=20.0, missing_policy="carry", event_kind="
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         ev = event[c].to_numpy()
+        if kind == "bool":
+            from factor_engine.cleaned_operators.common.polars_state_event import _truth
+            _truth(ev)
         acc = 0.0
         seen = False
         for t in range(rows):
@@ -333,14 +337,19 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
 
 
 def _register(name: str, params: tuple[str, ...], function: Callable, description: str) -> None:
-    metadata = OperatorMetadata(
-        name=name,
-        category="math",
-        description=description,
-        param_names=list(params),
-        return_type="series",
-        tags=["pit_safe", "causal", "polars", "native"],
-    )
+    if name == "event_decay_asof":
+        from factor_engine.cleaned_operators.state_event import EventDecayAsOf
+        metadata = copy.deepcopy(EventDecayAsOf.metadata)
+        metadata.tags = list(metadata.tags or []) + ["polars", "native"]
+    else:
+        metadata = OperatorMetadata(
+            name=name,
+            category="math",
+            description=description,
+            param_names=list(params),
+            return_type="series",
+            tags=["pit_safe", "causal", "polars", "native"],
+        )
 
     def _calculate_series(self, *args, **kwargs):
         return function(*args, **kwargs)

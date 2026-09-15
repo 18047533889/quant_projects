@@ -38,6 +38,14 @@ def _register_rolling_operator(**kwargs):
 _SKIP = frozenset({"date", "stock_code"})
 _SRC = "factor_dsl_polars_native"
 
+_REGRESSION_CONTRACT_SPECS = {
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+    "min_periods": ParamSpec(dtype=int, min=1, default=None, searchable=False,
+                             param_role=ParamRole.SUPPORT_POLICY),
+    "add_intercept": ParamSpec(dtype=bool, default=True, searchable=False,
+                               param_role=ParamRole.POLICY),
+}
+
 
 def _numeric_cols(df: pl.DataFrame) -> list[str]:
     return [c for c in df.columns if c not in _SKIP]
@@ -579,6 +587,9 @@ class TSRegressionInterceptNative(SeriesOperator):
         param_names=["y", "x", "window", "min_periods", "add_intercept"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_specs=_REGRESSION_CONTRACT_SPECS,
+        panel_params=("y", "x"),
+        scalar_params=("window", "min_periods", "add_intercept"),
     )
 
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame | None = None,
@@ -635,6 +646,9 @@ class TSRegressionResidNative(SeriesOperator):
         param_names=["y", "x", "window", "min_periods", "add_intercept"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_specs=_REGRESSION_CONTRACT_SPECS,
+        panel_params=("y", "x"),
+        scalar_params=("window", "min_periods", "add_intercept"),
     )
 
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame | None = None,
@@ -696,6 +710,9 @@ class TSRegressionR2Native(SeriesOperator):
         param_names=["y", "x", "window", "min_periods", "add_intercept"],
         return_type="series",
         tags=["time_series", "polars", "native"],
+        param_specs=_REGRESSION_CONTRACT_SPECS,
+        panel_params=("y", "x"),
+        scalar_params=("window", "min_periods", "add_intercept"),
     )
 
     def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame | None = None,

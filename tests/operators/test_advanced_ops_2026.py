@@ -612,8 +612,9 @@ def test_bures_min_pairs_fails_closed():
     x = _frame(rng.normal(0.0, 1.0, (40, 2)))
     y = _frame(rng.normal(0.0, 1.0, (40, 2)))
     op = OperatorRegistry.get("ts_bures_corr_shift", "pandas_numpy")
-    out = op.calculate(x, y, recent_window=8, prior_window=20, min_pairs=10)
-    assert np.isnan(out.to_numpy(dtype=float)).all()  # 8 pairs < 10 -> fail closed
+    # Structurally impossible support is rejected before numerical work.
+    with pytest.raises(ValueError, match="min_pairs"):
+        op.calculate(x, y, recent_window=8, prior_window=20, min_pairs=10)
     out2 = op.calculate(x, y, recent_window=15, prior_window=20, min_pairs=10)
     assert np.isfinite(out2.to_numpy(dtype=float)).any()
 

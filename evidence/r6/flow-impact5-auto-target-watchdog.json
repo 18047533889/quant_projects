@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/operators/test_auto_polars_all.py", "-q", "--tb=short", "--show-capture=no", "-k", "flow_impact_generated_contract_cases"], "returncode": 0, "sampled_peak_family_rss_bytes": 1012056064, "sampling_seconds": 0.1, "seconds": 66.19734870200045, "test_guard_reason": null, "hard_memory_cap": false}

@@ -528,6 +528,16 @@ class CsKnnLocalMoran(SeriesOperator):
         unit="ratio",
         cost=7,
     )
+    metadata.param_specs = {
+        "k": ParamSpec(
+            dtype=int,
+            min=1,
+            default=5,
+            param_role=ParamRole.ESTIMATOR_RESOLUTION,
+        ),
+    }
+    metadata.panel_params = ("target", "f1", "f2", "f3")
+    metadata.scalar_params = ("k",)
 
     def _calculate_series(
         self, target: pd.DataFrame, f1: pd.DataFrame, f2: pd.DataFrame, f3: pd.DataFrame, k: int = 5, **_: Any

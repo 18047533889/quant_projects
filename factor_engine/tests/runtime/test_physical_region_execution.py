@@ -54,6 +54,8 @@ class HybridBackend:
 @dataclass
 class _Context:
     runtime_stats: dict[str, object]
+    task_id: str | None = None
+    factor_id: str | None = None
     shared_result_cache: object = None
     shared_long_lazy_cache: object = None
     materialized_long_lazy: object = None
@@ -261,6 +263,7 @@ def test_batch_admission_accepts_two_regions_with_valid_topology() -> None:
         _plan(
             _region(region_id="r1", node_ids=("a",)),
             _region(region_id="r2", node_ids=("b",)),
+            roots=("r1", "r2"),
         )
     )
 
@@ -305,6 +308,8 @@ def test_execute_root_with_path_uses_real_snapshot_and_records_provenance(
         "actual_backend": "pandas_numpy",
         "region_id": "r1",
         "backend_switch_count": 0,
+        "estimated_peak_memory_bytes": 8,
+        "memory_basis": "estimated-not-measured",
         "materialization_count": 0,
         "resident_reuse_count": 0,
         "python_to_q_bytes": 0,
@@ -380,6 +385,7 @@ def test_eager_shared_materialization_reports_one() -> None:
 def test_serial_scheduler_shared_and_root_use_fixed_concrete_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from factor_engine.runtime.task_resource_contract import TaskResourceContract
     shared = PlanNode(op="literal", attrs={"value": 1}, node_id="shared")
     root = PlanNode(op="literal", attrs={"value": 2}, node_id="root")
     dag = PhysicalFactorDAG(roots=("root:a",))
@@ -390,6 +396,7 @@ def test_serial_scheduler_shared_and_root_use_fixed_concrete_backend(
             task_type=TASK_CSE_SHARED,
             consumers=("root:a",),
             node_ref=shared,
+            resource_contract=TaskResourceContract(peak_memory_bytes=1024 * 1024),
         )
     )
     dag.add_task(
@@ -400,6 +407,7 @@ def test_serial_scheduler_shared_and_root_use_fixed_concrete_backend(
             inputs=("cse:shared",),
             node_ref=root,
             factor_name="a",
+            resource_contract=TaskResourceContract(peak_memory_bytes=1024 * 1024),
         )
     )
     backend = HybridBackend()

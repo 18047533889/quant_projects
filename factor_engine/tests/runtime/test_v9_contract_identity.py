@@ -44,9 +44,12 @@ from factor_engine.runtime.execution_contract import execution_contract, own_his
 ])
 def test_changed_semantics_reach_public_contract_identity(canonical):
     load_all()
-    assert semantic_version(canonical) == 2
+    # v9 established a minimum version, not a permanent freeze at version 2.
+    # Later numerical repairs must propagate their current version exactly.
+    current = semantic_version(canonical)
+    assert current >= 2
     digest = OperatorSemanticContractDigest.for_canonical(canonical)
-    assert digest.semantic_version == "2.0"
+    assert digest.semantic_version == f"{current}.0"
     assert digest.backend_hashes, "changed kernel lacks implementation fingerprint"
 
 

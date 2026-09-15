@@ -328,7 +328,14 @@ def relative_strength_group_pct(
 # registration (event_state_v2 spec-driven table + single loop idiom)
 # ---------------------------------------------------------------------------
 
-_WIN_GE5 = ParamSpec(dtype=int, min=5, default=20, searchable=True, param_role=ParamRole.HORIZON)
+_WIN_GE5 = ParamSpec(
+    dtype=int,
+    min=5,
+    default=20,
+    searchable=True,
+    history_semantics="max_rows",
+    param_role=ParamRole.HORIZON,
+)
 
 _SPECS = [
     (
@@ -359,6 +366,7 @@ _PARAM_SPECS = {
 
 
 def _register(name, params, fn, desc, *, param_specs=None):
+    panel_params = tuple(params[:2])
     meta = OperatorMetadata(
         name=name,
         category="technical_signal",
@@ -367,6 +375,10 @@ def _register(name, params, fn, desc, *, param_specs=None):
         return_type="series",
         tags=["pit_safe", "causal", "production_extension"],
         param_specs=dict(param_specs or {}),
+        panel_params=panel_params,
+        panel_arity=len(panel_params),
+        scalar_params=tuple(params[2:]),
+        output_unit="dimensionless",
     )
 
     def _calculate_series(self, *args, **kwargs):
@@ -375,7 +387,12 @@ def _register(name, params, fn, desc, *, param_specs=None):
     cls = type(
         f"GroupStateV1_{name}",
         (SeriesOperator,),
-        {"metadata": meta, "_calculate_series": _calculate_series, "__module__": __name__},
+        {
+            "metadata": meta,
+            "_calculate_series": _calculate_series,
+            "_contract_callable": staticmethod(fn),
+            "__module__": __name__,
+        },
     )
     register_operator(
         name=name,

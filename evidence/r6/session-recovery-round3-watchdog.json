@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "factor_engine/tests/operators/test_round3_audit_fixes_2026_08.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 793759744, "sampling_seconds": 0.1, "seconds": 52.232955019921064, "test_guard_reason": null, "hard_memory_cap": false}

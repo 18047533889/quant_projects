@@ -263,6 +263,11 @@ def validate_factor_engine_dsl(
         return False, str(exc)
 
 
+def validate_recommended_factor_engine_dsl(formula: str) -> tuple[bool, str]:
+    """Validate the recommended Agent/research DSL without a daily whitelist."""
+    return validate_factor_engine_dsl(formula, surface="all")
+
+
 def validate_syntax_only_dsl(formula: str, *, surface: str = "daily") -> tuple[bool, str]:
     """仅做 factor_engine DSL **语法** + 白名单解析校验。
 
@@ -1205,6 +1210,19 @@ def default_mining_operator_allowlist(*, tier: str = "production_fastpath") -> l
     )
     direct = [r for r in rows if lane == "all" or r.mining_lane == lane]
     return sorted(r.canonical for r in direct)
+
+
+def recommended_research_operator_allowlist() -> list[str]:
+    """Public research discovery without production, role, or fastpath hiding."""
+    from factor_engine.market.context import Market
+    from factor_engine.mining.direct_use import DirectUseContext, get_direct_use_mining_operators
+
+    return sorted(
+        row.canonical
+        for row in get_direct_use_mining_operators(
+            DirectUseContext(market=Market.ASHARE), admission="research"
+        )
+    )
 
 
 def resolve_mining_allowlist_tier(tier: str | None = None) -> str:

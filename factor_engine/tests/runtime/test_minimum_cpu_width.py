@@ -74,6 +74,23 @@ def test_hard_limit_memory_and_running_work_not_bypassed(broker):
         lease.release()
 
 
+def test_serial_scheduler_recovers_soft_cpu_width_without_weakening_contract(broker, monkeypatch):
+    from factor_engine.runtime.adaptive_batch_scheduler import AdaptiveBatchScheduler
+    scheduler = AdaptiveBatchScheduler.__new__(AdaptiveBatchScheduler)
+    scheduler.broker, scheduler.job_lease, scheduler._lease_scope = broker, None, "serial-test"
+    broker._cpu.set_soft_budget(1)
+    monkeypatch.setattr(broker, "resource_decision", lambda **kwargs: decision())
+    contract = task(2)
+    lease = scheduler._reserve_serial_task(contract, task_id="root")
+    assert lease is not None and broker._cpu.in_use == 2
+    assert contract.cpu_tokens == 2
+    lease.release()
+    broker._cpu.set_soft_budget(1)
+    assert scheduler._reserve_serial_task(task(5), task_id="too-wide") is None
+    assert scheduler._reserve_serial_task(replace(task(2), peak_memory_bytes=16*1024**3), task_id="too-large") is None
+    assert broker._cpu.in_use == 0
+
+
 def test_static_swap_occupancy_does_not_repeatedly_throttle(broker):
     controller = broker._resource_controller()
     for _ in range(20):

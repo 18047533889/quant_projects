@@ -28,32 +28,30 @@ def _op(name: str, backend: str = "pandas_numpy"):
 # 1. intraday_volume_clock_path_efficiency
 # ---------------------------------------------------------------------------
 def test_intraday_volume_clock_path_efficiency_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    """A monotone intraday path has unit efficiency and emits one daily row."""
+    idx = pd.date_range("2024-01-02 09:30", periods=18, freq="min")
+    price = pd.DataFrame({"A": np.exp(np.linspace(0.0, 0.1, 18))}, index=idx)
+    activity = pd.DataFrame({"A": np.ones(18)}, index=idx)
 
     op = _op("intraday_volume_clock_path_efficiency")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} basic test failed: {e}")
+    result = op.calculate(price, activity, 16)
+    assert result.shape == (1, 1)  # minute -> daily aggregation
+    assert result.iloc[0, 0] == pytest.approx(1.0)
+    with pytest.raises((TypeError, ValueError), match="activity|required|missing"):
+        op.calculate(price)
 
 
 def test_intraday_volume_clock_path_efficiency_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
+    """An interior missing price fails the physical day's path closed."""
+    idx = pd.date_range("2024-01-02 09:30", periods=18, freq="min")
+    price = pd.DataFrame({"A": np.linspace(10.0, 11.0, 18)}, index=idx)
+    price.iloc[8, 0] = np.nan
+    activity = pd.DataFrame({"A": np.ones(18)}, index=idx)
 
     op = _op("intraday_volume_clock_path_efficiency")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"NaN test failed: {e}")
+    result = op.calculate(price, activity, 16)
+    assert result.shape == (1, 1)
+    assert np.isnan(result.iloc[0, 0])
 
 
 def test_intraday_volume_clock_path_efficiency_deterministic() -> None:
@@ -75,32 +73,30 @@ def test_intraday_volume_clock_path_efficiency_deterministic() -> None:
 # 2. intraday_volume_clock_roughness
 # ---------------------------------------------------------------------------
 def test_intraday_volume_clock_roughness_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    """Pin roughness with the explicit Q=0 session-open anchor."""
+    idx = pd.date_range("2024-01-02 09:30", periods=18, freq="min")
+    price = pd.DataFrame({"A": np.exp(np.linspace(0.0, 0.1, 18))}, index=idx)
+    activity = pd.DataFrame({"A": np.ones(18)}, index=idx)
 
     op = _op("intraday_volume_clock_roughness")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} basic test failed: {e}")
+    result = op.calculate(price, activity, 16)
+    assert result.shape == (1, 1)  # minute -> daily aggregation
+    # Q=0 and the first positive-activity point share the opening price, so the
+    # first equal-clock segment is flat before the otherwise log-linear path.
+    assert result.iloc[0, 0] == pytest.approx(1.0 / 19.0)
 
 
 def test_intraday_volume_clock_roughness_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
+    """An interior missing activity observation fails the day closed."""
+    idx = pd.date_range("2024-01-02 09:30", periods=18, freq="min")
+    price = pd.DataFrame({"A": np.linspace(10.0, 11.0, 18)}, index=idx)
+    activity = pd.DataFrame({"A": np.ones(18)}, index=idx)
+    activity.iloc[8, 0] = np.nan
 
     op = _op("intraday_volume_clock_roughness")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"NaN test failed: {e}")
+    result = op.calculate(price, activity, 16)
+    assert result.shape == (1, 1)
+    assert np.isnan(result.iloc[0, 0])
 
 
 def test_intraday_volume_clock_roughness_deterministic() -> None:

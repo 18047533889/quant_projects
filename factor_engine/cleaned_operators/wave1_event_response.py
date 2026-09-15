@@ -18,7 +18,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.common.daily_panel import _aligned, _check_int
 
 
@@ -73,7 +73,7 @@ class ErdHalfLifeDecayCount(SeriesOperator):
 
     def _calculate_series(self, event: pd.DataFrame, half_life: float = 10.0, min_periods: int = 2, **_: Any) -> pd.DataFrame:
         hl = float(half_life)
-        if hl < 1.0:
+        if not np.isfinite(hl) or hl < 1.0:
             raise ValueError("half_life must be >= 1")
         mp = _check_int(min_periods, "min_periods", 1)
         weight = 0.5 ** (1.0 / hl)
@@ -125,7 +125,7 @@ class ErdRecencyDecay(SeriesOperator):
 
     def _calculate_series(self, event: pd.DataFrame, half_life: float = 10.0, **_: Any) -> pd.DataFrame:
         hl = float(half_life)
-        if hl < 1.0:
+        if not np.isfinite(hl) or hl < 1.0:
             raise ValueError("half_life must be >= 1")
         ev = event.to_numpy(dtype=float)
         rows, cols = ev.shape
@@ -228,7 +228,7 @@ class ErdMarkedEventDecay(SeriesOperator):
 
     def _calculate_series(self, mark: pd.DataFrame, half_life: float = 10.0, min_periods: int = 2, **_: Any) -> pd.DataFrame:
         hl = float(half_life)
-        if hl < 1.0:
+        if not np.isfinite(hl) or hl < 1.0:
             raise ValueError("half_life must be >= 1")
         mp = _check_int(min_periods, "min_periods", 1)
         weight = 0.5 ** (1.0 / hl)
@@ -393,13 +393,14 @@ class ErdPostEventHazard(SeriesOperator):
                 if ok.sum() < w // 2:
                     continue
                 vals = chunk
-                positions = np.flatnonzero(vals != 0)
+                positions = np.flatnonzero(np.isfinite(vals) & (vals != 0))
                 if positions.size < me:
                     continue
                 followed = 0
                 for p in positions:
                     if p + kk < vals.size:
-                        if np.any(vals[p + 1:p + kk + 1] != 0):
+                        nxt = vals[p + 1:p + kk + 1]
+                        if np.any(np.isfinite(nxt) & (nxt != 0)):
                             followed += 1
                 out[row, col] = followed / positions.size
         return _frame_like(event, out)
@@ -444,19 +445,19 @@ class ErdEventWindowReturnGradient(SeriesOperator):
         out = np.full((rows, cols), np.nan, dtype=float)
         for col in range(cols):
             for row in range(rows):
-                lo = max(0, row - post + 1)
-                post_chunk = rv[lo:row + 1, col]
+                post_start = max(0, row - post + 1)
+                post_chunk = rv[post_start:row + 1, col]
                 ok_post = np.isfinite(post_chunk)
                 if ok_post.sum() < 1:
                     continue
                 # 事件前基线：回溯 pre_window 行的收益
-                pre_lo = max(0, row - pre - post + 1)
-                pre_chunk = rv[pre_lo:row - post + 1, col]
+                pre_end = post_start
+                pre_lo = max(0, pre_end - pre)
+                pre_chunk = rv[pre_lo:pre_end, col]
                 ok_pre = np.isfinite(pre_chunk)
-                event_chunk = ev[max(0, lo - k if False else pre_lo):row + 1 if True else row + 1, col]
                 # 使用最近窗口内事件计数满足 min_events
-                ev_ok = np.isfinite(ev[max(0, pre_lo):row + 1, col])
-                ev_vals = ev[max(0, pre_lo):row + 1, col][ev_ok]
+                ev_ok = np.isfinite(ev[pre_lo:row + 1, col])
+                ev_vals = ev[pre_lo:row + 1, col][ev_ok]
                 if np.sum(ev_vals != 0) < me:
                     continue
                 if ok_pre.sum() < 1:
@@ -491,7 +492,7 @@ class ErdEventResponseAmplitude(SeriesOperator):
 
     def _calculate_series(self, mark: pd.DataFrame, half_life: float = 10.0, min_periods: int = 2, **_: Any) -> pd.DataFrame:
         hl = float(half_life)
-        if hl < 1.0:
+        if not np.isfinite(hl) or hl < 1.0:
             raise ValueError("half_life must be >= 1")
         mp = _check_int(min_periods, "min_periods", 1)
         weight = 0.5 ** (1.0 / hl)
@@ -555,3 +556,23 @@ class ErdBurstDuration(SeriesOperator):
                     streak = 0
                 out[row, col] = float(streak)
         return _frame_like(event, out)
+
+
+_HL = lambda default=10.0: ParamSpec(dtype=float, min=1.0, default=default, param_role=ParamRole.HORIZON)
+_H = lambda default, minimum=1: ParamSpec(dtype=int, min=minimum, default=default, param_role=ParamRole.HORIZON)
+_N = lambda default, minimum=1: ParamSpec(dtype=int, min=minimum, default=default, param_role=ParamRole.ESTIMATOR_RESOLUTION)
+
+ErdHalfLifeDecayCount.metadata.param_specs = {"half_life": _HL(), "min_periods": _N(2)}
+ErdRecencyDecay.metadata.param_specs = {"half_life": _HL()}
+ErdEventRateDecaySlope.metadata.param_specs = {"window": _H(40, 6), "min_events": _N(4, 2)}
+ErdMarkedEventDecay.metadata.param_specs = {"half_life": _HL(), "min_periods": _N(2)}
+ErdSignConsistentDecay.metadata.param_specs = {
+    "direction": ParamSpec(dtype=int, choices=(1, -1), default=1, searchable=False, param_role=ParamRole.POLICY),
+    "half_life": _HL(), "min_periods": _N(2),
+}
+ErdCrossEventsSpacing.metadata.param_specs = {"window": _H(60, 3), "min_events": _N(3, 2)}
+ErdPostEventHazard.metadata.param_specs = {"window": _H(60, 4), "k": _H(5), "min_events": _N(4, 2)}
+ErdEventWindowReturnGradient.metadata.param_specs = {
+    "pre_window": _H(10), "post_window": _H(10), "min_events": _N(2),
+}
+ErdEventResponseAmplitude.metadata.param_specs = {"half_life": _HL(), "min_periods": _N(2)}

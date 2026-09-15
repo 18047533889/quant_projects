@@ -208,6 +208,23 @@ def _series_from_sql_table(table, *, timestamp_col: str, instrument_col: str) ->
     )
 
 
+def _align_to_explicit_template(series: pd.Series, ctx: ExecutionContext) -> pd.Series:
+    """Adopt an explicit authoritative axis without changing its key set."""
+    template = getattr(ctx, "template_index", None)
+    if template is None:
+        return series
+    if not isinstance(template, pd.MultiIndex) or not isinstance(series.index, pd.MultiIndex):
+        raise SqlResultSchemaError("explicit SQL template and result must both be MultiIndex")
+    if len(template) != len(series.index) or not template.is_unique or not series.index.is_unique:
+        raise SqlResultSchemaError("explicit SQL template must have the exact unique result key set")
+    indexer = series.index.get_indexer(template)
+    if (indexer < 0).any():
+        raise SqlResultSchemaError("explicit SQL template differs from the result key set")
+    out = series.take(indexer)
+    out.index = template.copy()
+    return out
+
+
 def materialized_sql_result_lazy_wrapper(table) -> Any:
     """Arrow/SQL 结果 → long-table LazyFrame（``ts, inst, _v``），无 pandas 往返。
 
@@ -886,9 +903,10 @@ def try_execute_sql_pushdown(
         return None
 
     try:
-        return execute_compiled_sql(
+        result = execute_compiled_sql(
             compiled, pctx, ctx.data_source, query_budget=getattr(ctx, "query_budget", None)
         )
+        return _align_to_explicit_template(result, ctx)
     except Exception as exc:
         if not _sql_fallback_allowed(exc, ctx):
             raise
@@ -943,12 +961,13 @@ def try_execute_sql_pushdown_batch(
         return None
 
     try:
-        return execute_batch_compiled_sql(
+        result = execute_batch_compiled_sql(
             compiled,
             pctx,
             ctx.data_source,
             query_budget=getattr(ctx, "query_budget", None),
         )
+        return {sid: _align_to_explicit_template(value, ctx) for sid, value in result.items()}
     except SqlResultSchemaError:
         # #369：missing expected alias 是 schema 契约违约，fail-closed，不回退。
         raise

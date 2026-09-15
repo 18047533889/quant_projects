@@ -29,7 +29,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import ParamSpec
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata as PolarsMetadata
 from factor_engine.cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
 from factor_engine.cleaned_operators.closure import SameAxisError
@@ -92,22 +92,14 @@ def _activity_clock_kernel(
     rows = activity.shape[0]
     min_scale = max(5, int(scale_window) // 2)
     scaled = np.full(rows, np.nan, dtype=float)
-    for s in range(rows):
-        if s < 1:
-            continue
-        lo = max(0, s - scale_window)
-        past = activity[lo:s]
-        finite_past = past[np.isfinite(past)]
-        # negative activity invalidates the scale window (not silently dropped)
-        if np.any(finite_past < 0.0) or finite_past.size < min_scale:
-            continue
-        scale = float(np.median(finite_past))
-        if not np.isfinite(scale) or scale <= _EPS:
-            continue
-        a = activity[s]
-        if not np.isfinite(a) or a < 0.0:
-            continue
-        scaled[s] = a / scale
+    if scale_window >= min_scale:
+        finite = np.isfinite(activity)
+        prior = pd.Series(np.where(finite, activity, np.nan)).shift(1)
+        scale = prior.rolling(scale_window, min_periods=min_scale).median().to_numpy()
+        negative = pd.Series(finite & (activity < 0)).shift(1).rolling(
+            scale_window, min_periods=1).max().fillna(0).to_numpy().astype(bool)
+        valid = finite & (activity >= 0) & ~negative & np.isfinite(scale) & (scale > _EPS)
+        scaled[valid] = activity[valid] / scale[valid]
     k = np.full(rows, np.nan, dtype=float)
     start = 0 if include_current else 1
     for r in range(rows):
@@ -331,23 +323,72 @@ _UNITS: dict[str, str] = {
 # ``scale_window`` so the compound formula drives prefetch / warmup / cache.
 _PARAM_SPECS: dict[str, dict[str, ParamSpec]] = {
     "ts_activity_clock_lagged_value": {
-        "scale_window": ParamSpec(
-            dtype=int, min=5, history_formula="scale_window + max_lookback"
+        "budget": ParamSpec(
+            dtype=float, min=np.nextafter(_EPS, np.inf), default=1.0,
+            param_role=ParamRole.HORIZON,
         ),
-        "include_current": ParamSpec(dtype=bool, choices=(True, False)),
+        "scale_window": ParamSpec(
+            dtype=int, min=5, default=20,
+            history_formula="scale_window + max_lookback",
+            param_role=ParamRole.HORIZON,
+        ),
+        "max_lookback": ParamSpec(
+            dtype=int, min=1, default=60, param_role=ParamRole.HORIZON,
+        ),
+        "include_current": ParamSpec(
+            dtype=bool, choices=(True, False), default=True,
+            searchable=False, param_role=ParamRole.POLICY,
+        ),
     },
     "ts_activity_clock_lagged_value_prior": {
+        "budget": ParamSpec(
+            dtype=float, min=np.nextafter(_EPS, np.inf), default=1.0,
+            param_role=ParamRole.HORIZON,
+        ),
         "scale_window": ParamSpec(
-            dtype=int, min=5, history_formula="scale_window + max_lookback"
+            dtype=int, min=5, default=20,
+            history_formula="scale_window + max_lookback",
+            param_role=ParamRole.HORIZON,
+        ),
+        "max_lookback": ParamSpec(
+            dtype=int, min=1, default=60, param_role=ParamRole.HORIZON,
         ),
     },
     "ts_activity_clock_age": {
-        "scale_window": ParamSpec(
-            dtype=int, min=5, history_formula="scale_window + max_lookback"
+        "budget": ParamSpec(
+            dtype=float, min=np.nextafter(_EPS, np.inf), default=1.0,
+            param_role=ParamRole.HORIZON,
         ),
-        "include_current": ParamSpec(dtype=bool, choices=(True, False)),
+        "scale_window": ParamSpec(
+            dtype=int, min=5, default=20,
+            history_formula="scale_window + max_lookback",
+            param_role=ParamRole.HORIZON,
+        ),
+        "max_lookback": ParamSpec(
+            dtype=int, min=1, default=60, param_role=ParamRole.HORIZON,
+        ),
+        "include_current": ParamSpec(
+            dtype=bool, choices=(True, False), default=True,
+            searchable=False, param_role=ParamRole.POLICY,
+        ),
     },
-    "ts_max_drawdown_activity_cost": {},
+    "ts_max_drawdown_activity_cost": {
+        "window": ParamSpec(
+            dtype=int, min=2, default=60, param_role=ParamRole.HORIZON,
+        ),
+    },
+}
+
+_PANEL_PARAMS: dict[str, tuple[str, ...]] = {
+    "ts_activity_clock_lagged_value": ("x", "activity"),
+    "ts_activity_clock_lagged_value_prior": ("x", "activity"),
+    "ts_activity_clock_age": ("activity",),
+    "ts_max_drawdown_activity_cost": ("x", "activity"),
+}
+
+_SCALAR_PARAMS: dict[str, tuple[str, ...]] = {
+    canonical: tuple(name for name in params if name not in _PANEL_PARAMS[canonical])
+    for canonical, params in _PARAMS.items()
 }
 
 # R4-98: explicit input unit contracts (enforced as documentation metadata and
@@ -402,6 +443,9 @@ def _register() -> None:
                 description=canonical,
                 examples=[],
                 param_names=params,
+                panel_params=_PANEL_PARAMS[canonical],
+                panel_arity=len(_PANEL_PARAMS[canonical]),
+                scalar_params=_SCALAR_PARAMS[canonical],
                 return_type="series",
                 tags=["daily", "panel", "pit_safe", "causal", "deterministic",
                       f"signature:{','.join(params)}->series",
@@ -426,7 +470,15 @@ def _register() -> None:
         )
 
         class _PolarsOp(PolarsSeriesOperator):
-            metadata = PolarsMetadata(name=canonical, category="activity_clock", param_names=[])
+            metadata = PolarsMetadata(
+                name=canonical,
+                category="activity_clock",
+                param_names=params,
+                panel_params=_PANEL_PARAMS[canonical],
+                panel_arity=len(_PANEL_PARAMS[canonical]),
+                scalar_params=_SCALAR_PARAMS[canonical],
+                param_specs=_PARAM_SPECS[canonical],
+            )
 
             def _calculate_series(self, *frames, _fn=fn, **params):
                 import polars as pl  # noqa: F401

@@ -1,0 +1,253 @@
+{
+  "canonical_inspected": 1756,
+  "schema_status_counts": {
+    "SCOPED_CHECKED_SCHEMA_DISCOVERY": 429,
+    "UNVERIFIED": 1327
+  },
+  "unresolved_reason_counts": {
+    "NONE": 429,
+    "MISSING_AUTHORITATIVE_PARAM_SPEC": 775,
+    "NO_CONCRETE_SIGNATURE_OR_PANEL_DECLARATION;MISSING_AUTHORITATIVE_PARAM_SPEC": 552
+  },
+  "snapshot_counts": {
+    "canonical": 1756,
+    "aliases": 287,
+    "public_recipes": 248,
+    "runtime_bindings": 4057,
+    "implementation_available": 1756,
+    "research_callable": 429,
+    "executable_unverified": 429,
+    "known_failed_bindings": 0,
+    "production_callable": 0
+  },
+  "newly_discovered_vs_prior_final": [
+    "ADX",
+    "ElderRay",
+    "FisherTransform",
+    "candlestick_pattern",
+    "cash_flow_lifecycle_stage",
+    "cdl_dark_cloud_cover",
+    "cdl_dragonfly_doji",
+    "cdl_evening_star",
+    "cdl_gravestone_doji",
+    "cdl_hanging_man",
+    "cdl_harami",
+    "cdl_harami_cross",
+    "cdl_morning_star",
+    "cdl_piercing",
+    "cdl_three_black_crows",
+    "cdl_three_white_soldiers",
+    "cdl_tweezer_bottom",
+    "cdl_tweezer_top",
+    "cs_bucket_fixed",
+    "cs_coverage_ratio",
+    "cs_fill_mean",
+    "cs_fill_median",
+    "cs_impute_mean",
+    "cs_impute_median",
+    "cs_valid_count",
+    "date_diff_days",
+    "ffill_limit",
+    "fundamental_staleness",
+    "group_count",
+    "group_max",
+    "group_mean",
+    "group_min",
+    "group_neutralize",
+    "group_normalize",
+    "group_rank",
+    "group_rank_weighted_value",
+    "group_std",
+    "group_sum",
+    "group_valid_count",
+    "group_zscore",
+    "industry_size_neutralize",
+    "intra_high_time",
+    "intra_low_time",
+    "intraday_volume_clock_path_efficiency",
+    "intraday_volume_clock_roughness",
+    "log_positive_or_nan",
+    "relation_rank_mobility",
+    "relation_share_mobility",
+    "relation_topk_concentration",
+    "size_neutralize",
+    "state_quantile_hysteresis",
+    "state_rank_deadband",
+    "true_range",
+    "ts_coverage_ratio",
+    "ts_ewm_corr",
+    "ts_ewm_cov",
+    "ts_last_if",
+    "ts_regression_forecast_error",
+    "ts_regression_forecast_error_z",
+    "ts_staleness",
+    "ts_true_streak",
+    "ts_valid_count"
+  ],
+  "regressed_vs_prior_final": [],
+  "top_unknown_parameters": [
+    [
+      "window",
+      422
+    ],
+    [
+      "min_periods",
+      222
+    ],
+    [
+      "x",
+      166
+    ],
+    [
+      "close",
+      162
+    ],
+    [
+      "high",
+      147
+    ],
+    [
+      "low",
+      147
+    ],
+    [
+      "period_id",
+      119
+    ],
+    [
+      "history_window",
+      62
+    ],
+    [
+      "volume",
+      57
+    ],
+    [
+      "periods",
+      57
+    ],
+    [
+      "open",
+      56
+    ],
+    [
+      "left_window",
+      41
+    ],
+    [
+      "right_window",
+      41
+    ],
+    [
+      "x2",
+      36
+    ],
+    [
+      "flow_type",
+      36
+    ],
+    [
+      "x1",
+      35
+    ],
+    [
+      "x3",
+      34
+    ],
+    [
+      "x4",
+      33
+    ],
+    [
+      "revision_policy",
+      31
+    ],
+    [
+      "y",
+      30
+    ],
+    [
+      "ret",
+      29
+    ],
+    [
+      "side",
+      29
+    ],
+    [
+      "points",
+      27
+    ],
+    [
+      "s1",
+      26
+    ],
+    [
+      "s2",
+      26
+    ],
+    [
+      "s3",
+      26
+    ],
+    [
+      "s4",
+      26
+    ],
+    [
+      "s5",
+      26
+    ],
+    [
+      "s6",
+      26
+    ],
+    [
+      "s7",
+      26
+    ],
+    [
+      "s8",
+      26
+    ],
+    [
+      "group",
+      24
+    ],
+    [
+      "lag",
+      24
+    ],
+    [
+      "require_consecutive",
+      24
+    ],
+    [
+      "s10",
+      24
+    ],
+    [
+      "s9",
+      24
+    ],
+    [
+      "event",
+      21
+    ],
+    [
+      "threshold",
+      20
+    ],
+    [
+      "k",
+      19
+    ],
+    [
+      "q",
+      18
+    ]
+  ],
+  "ledger_sha256": "b6d038f07ac70c6e3b22a10cb93a314fda6358bdcfb4cabf3bcb9a1b31754f2f",
+  "scope": "Contract metadata/topology/schema discovery only. No numerical, semantic, production, or deployment certification.",
+  "missing_role_reconciliation": "Initial 44 count came from a mixed mutable-registry test process. Clean-process reproduction found 37 unique canonical.parameter violations: 36 repaired in five metadata files and ts_cov.ddof repaired by the common/time_series owner. Standalone R30 now passes."
+}

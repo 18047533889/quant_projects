@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/r6/default_regression_model_probe.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 441372672, "sampling_seconds": 0.1, "seconds": 54.257685313001275, "test_guard_reason": null, "hard_memory_cap": false}

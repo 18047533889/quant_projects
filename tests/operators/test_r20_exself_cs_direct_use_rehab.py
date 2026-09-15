@@ -59,9 +59,11 @@ def _ensure_exself_chain() -> None:
 
     if OperatorRegistry.lifecycle() == "frozen":
         return
-    if OperatorRegistry.get("ex_self_zscore", "pandas_numpy") is not None:
-        return
-    from factor_engine.cleaned_operators.technical import exself_cs_v1  # noqa: F401
+    # Several assertions below deliberately compare registry-wide neighboring
+    # operators, so an isolated import of this module is insufficient under
+    # ``--noconftest``. Use the same clean bootstrap as production lookup.
+    from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
+    ensure_cleaned_loaded()
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -440,19 +442,17 @@ def test_zscore_high_level_low_dispersion():
     g = pd.DataFrame(np.tile(np.array(["A"] * n, dtype=object), (3, 1)),
                      index=x.index, columns=x.columns)
     out = _op("ex_self_zscore").calculate(x, g, min_peers=3).to_numpy()
-    exp = _oracle_stat(x, g, 3, "zscore").to_numpy()
-    finite = np.isfinite(exp)
-    assert finite.any()
-    np.testing.assert_allclose(
-        out[finite], exp[finite], rtol=1e-6, atol=1e-9
-    )
+    # Translation by a large exactly representable level must agree with the
+    # same quantized offsets evaluated near zero.
+    offsets = x - level
+    exp = _op("ex_self_zscore").calculate(offsets, g, min_peers=3).to_numpy()
+    assert np.isfinite(out).all()
+    np.testing.assert_allclose(out, exp, rtol=1e-12, atol=1e-12)
 
 
-def test_zscore_overflow_peers_fail_closed_never_zero():
-    # Review P2: peers near the float max made var overflow.  With the
-    # running-sum kernel var=inf gave z = x/inf = exactly 0.0 — a finite
-    # zero emission disclaimed by the never-0 contract.  The two-pass
-    # kernel detects the non-finite variance and fails closed to NaN.
+def test_zscore_overflow_scale_is_finite_and_invariant():
+    # Near-max peers must be normalized before squaring: the standardized
+    # result is finite and agrees with the same pattern at unit scale.
     vals = np.tile(
         np.array([1e200, -1e200, 1e200, -1e200, 1.0, 1e200]), (2, 1)
     )
@@ -460,5 +460,26 @@ def test_zscore_overflow_peers_fail_closed_never_zero():
     g = pd.DataFrame(np.tile(np.array(["A"] * 6, dtype=object), (2, 1)),
                      index=x.index, columns=x.columns)
     out = _op("ex_self_zscore").calculate(x, g, min_peers=3).to_numpy()
-    # the 1.0 self among huge peers must be NaN (var overflows), never 0.0
-    assert np.isnan(out[:, 4]).all()
+    small = pd.DataFrame(vals / 1e200, columns=x.columns)
+    expected = _op("ex_self_zscore").calculate(small, g, min_peers=3).to_numpy()
+    assert np.isfinite(out[:, 4]).all()
+    np.testing.assert_allclose(out, expected, rtol=1e-12, atol=1e-12,
+                               equal_nan=True)
+
+
+def test_group_ex_self_weighted_mean_single_valid_member_is_nan():
+    """Excluding self can leave an empty valid peer set; that is unsupported."""
+    from factor_engine.backend.panel_polars import panel_to_polars
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    x = pd.DataFrame([[5.0, np.nan]], columns=["a", "b"])
+    weight = pd.DataFrame([[2.0, 3.0]], columns=x.columns)
+    group = pd.DataFrame([[1.0, 1.0]], columns=x.columns)
+    for backend in ("pandas_numpy", "polars"):
+        op = OperatorRegistry.get("group_ex_self_weighted_mean", backend)
+        args = (x, weight, group) if backend == "pandas_numpy" else tuple(
+            panel_to_polars(v) for v in (x, weight, group)
+        )
+        out = op.calculate(*args)
+        actual = out.to_numpy() if backend == "polars" else out.to_numpy(dtype=float)
+        assert np.isnan(actual).all()

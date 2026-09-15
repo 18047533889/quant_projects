@@ -808,6 +808,20 @@ def _window_plus_lag_extension(canonical: str, params: Mapping[str, Any]) -> int
     return w + lag
 
 
+def _event_interval_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
+    """Prior rows for a trailing event window plus its bounded pre-window reach."""
+    specs = _specs(canonical)
+    window = _bound_param(params, "window", specs, canonical=canonical)
+    pre = _bound_param(params, "max_pre_window_age", specs, canonical=canonical)
+    if window is _UNKNOWN or pre is _UNKNOWN:
+        return _UNKNOWN
+    if window is None:
+        return _UNKNOWN
+    if pre is None:
+        pre = window
+    return max(0, window - 1) + pre
+
+
 def _event_response_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     specs = _specs(canonical)
     w = _w1(params, specs, "history_window", canonical=canonical)
@@ -991,6 +1005,8 @@ _HISTORY_TRANSFORMS["cross_event"] = HistoryTransform(kind="lag", fixed=1)
 # Window + lag kernels.
 for _canon in ("volume_autocorr", "turnover_autocorr", "ts_autocorr"):
     _HISTORY_TRANSFORMS[_canon] = _compound_transform(_window_plus_lag_extension)
+for _canon in ("event_interval_memory", "event_local_variation"):
+    _HISTORY_TRANSFORMS[_canon] = _compound_transform(_event_interval_extension)
 for _canon in (
     "event_historical_response_mean",
     "event_historical_response_sign_balance",

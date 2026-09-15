@@ -23,11 +23,13 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
     ParamSpec,
     RelationalParamSpec,
     SeriesOperator,
     register_operator,
 )
+from factor_engine.cleaned_operators.common.strict_params import strict_float, strict_int
 from factor_engine.cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
@@ -142,17 +144,19 @@ def _state_density_series(series: np.ndarray, window: int, bandwidth: float, min
             continue
         med = float(np.median(finite))
         mad = 1.4826 * float(np.median(np.abs(finite - med)))
-        scale = mad if mad > _EPS else float(np.std(finite))
+        scale = mad if mad > 0.0 else float(np.std(finite))
         # R14 P2 (reject-not-clamp): the kernel's own bandwidth h = bandwidth*s
         # must be a strictly positive finite number.  An all-identical / point-mass
         # history (zero spread) or a non-finite spread estimate has no kernel
         # density — the old arbitrary 1.0 was discontinuous with the kernel's peak
         # (P1-05).  Fail closed to NaN instead of clamping to an epsilon.
-        if not np.isfinite(scale) or scale <= _EPS:
+        if not np.isfinite(scale) or scale <= 0.0:
             out[t] = np.nan
             continue
-        h = bw * scale
-        u = (finite - cur) / (h + _EPS)
+        # Divide in two stages so tiny-but-valid physical scales are not
+        # dominated by an absolute epsilon; the standardized density is scale
+        # invariant by definition.
+        u = ((finite - cur) / scale) / bw
         kern = 0.75 * (1.0 - u * u) * (np.abs(u) <= 1.0)
         # Proper kernel-density normalisation: f̂(x) = (1/n) Σ K(u)/h, NOT the
         # raw kernel mass mean(K) — otherwise this is a "local proximity" score,
@@ -192,14 +196,33 @@ class TsStateDensity(SeriesOperator):
         ["x", "window", "bandwidth", "min_periods"],
         unit="ratio",
         cost=3,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=60, history_semantics="exact_rows", param_role=ParamRole.HORIZON),
+            "bandwidth": ParamSpec(dtype=float, min=float(np.nextafter(0.0, 1.0)), default=1.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": ParamSpec(dtype=int, min=2, default=5, param_role=ParamRole.SUPPORT_POLICY),
+        },
+        relational_specs=[RelationalParamSpec(
+            "min_periods <= window",
+            "min_periods must not exceed the strictly-past reference window",
+        )],
     )
+    metadata.panel_params = ("x",)
+    metadata.panel_arity = 1
+    metadata.scalar_params = ("window", "bandwidth", "min_periods")
+    metadata.input_units = {"x": "level"}
+    metadata.output_unit = "dimensionless"
 
     def _calculate_series(
         self, x: pd.DataFrame, window: int = 60, bandwidth: float = 1.0, min_periods: int = 5, **_: Any
     ) -> pd.DataFrame:
+        w = strict_int(window, "window", minimum=2)
+        bw = strict_float(bandwidth, "bandwidth", minimum=float(np.nextafter(0.0, 1.0)))
+        mp = strict_int(min_periods, "min_periods", minimum=2)
+        if mp > w:
+            raise ValueError("ts_state_density requires min_periods <= window")
         return _frame_like(
             x,
-            _column_map(x.to_numpy(dtype=float), lambda s: _state_density_series(s, window, bandwidth, min_periods)),
+            _column_map(x.to_numpy(dtype=float), lambda s: _state_density_series(s, w, bw, mp)),
         )
 
 

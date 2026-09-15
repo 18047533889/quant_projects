@@ -34,31 +34,15 @@ def _numeric_cols(df: pl.DataFrame) -> list[str]:
     source=_SRC,
     backend="polars")
 class OpenCloseReturnNative(SeriesOperator):
-    """Intraday return: (close - open) / open."""
-
-    metadata = OperatorMetadata(
-        name="open_close_return",
-        category="ohlc",
-        description="日内收益",
-        param_names=["open", "close"],
-        return_type="series",
-        tags=["ohlc", "polars", "native"],
-    )
-
-    def _calculate_series(self, open: pl.DataFrame, close: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(open)
-        exprs = []
-        for c in cols:
-            if c not in close.columns:
-                exprs.append(pl.lit(None).alias(c))
-            else:
-                exprs.append(
-                    pl.when(pl.col(c).is_null() | (pl.col(c) == 0))
-                    .then(None)
-                    .otherwise((close[c] - pl.col(c)) / pl.col(c))
-                    .alias(c)
-                )
-        return open.with_columns(exprs)
+    """Canonical supplied-price return; genuine per-column NumPy kernel."""
+    from factor_engine.cleaned_operators.common import return_decomp_native as _native
+    metadata = _native.metadata("open_close_return")
+    _physical_spec = _native.physical_spec("open_close_return")
+    @property
+    def _contract_callable(self):
+        return self._native.reference(self.metadata.name)._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._native.calculate(self.metadata.name,*args,**kwargs)
 
 
 @register_operator(
@@ -69,32 +53,15 @@ class OpenCloseReturnNative(SeriesOperator):
     source=_SRC,
     backend="polars")
 class OvernightReturnNative(SeriesOperator):
-    """Overnight return: (open_t - close_{t-1}) / close_{t-1}."""
-
-    metadata = OperatorMetadata(
-        name="overnight_return",
-        category="ohlc",
-        description="隔夜收益",
-        param_names=["open", "close"],
-        return_type="series",
-        tags=["ohlc", "polars", "native"],
-    )
-
-    def _calculate_series(self, open: pl.DataFrame, close: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(open)
-        exprs = []
-        for c in cols:
-            if c not in close.columns:
-                exprs.append(pl.lit(None).alias(c))
-            else:
-                prev_close = close[c].shift(1)
-                exprs.append(
-                    pl.when(prev_close.is_null() | (prev_close == 0))
-                    .then(None)
-                    .otherwise((pl.col(c) - prev_close) / prev_close)
-                    .alias(c)
-                )
-        return open.with_columns(exprs)
+    """Canonical supplied-price return; genuine per-column NumPy kernel."""
+    from factor_engine.cleaned_operators.common import return_decomp_native as _native
+    metadata = _native.metadata("overnight_return")
+    _physical_spec = _native.physical_spec("overnight_return")
+    @property
+    def _contract_callable(self):
+        return self._native.reference(self.metadata.name)._calculate_series
+    def _calculate_series(self,*args,**kwargs):
+        return self._native.calculate(self.metadata.name,*args,**kwargs)
 
 
 @register_operator(

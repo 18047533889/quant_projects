@@ -40,7 +40,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from factor_engine.cleaned_operators.fiscal_strict import period_ordinal
 
 _EPS = 1e-12
@@ -266,11 +272,19 @@ def _register(
     unit: str,
     extra_tags: Iterable[str] = (),
 ) -> None:
+    params = list(params)
+    scalar_specs = {}
+    if "max_days" in params:
+        scalar_specs["max_days"] = ParamSpec(
+            dtype=int, min=1, default=504, param_role=ParamRole.HORIZON
+        )
     metadata = OperatorMetadata(
         name=name,
         category="fundamental_period",
         description=description,
-        param_names=list(params),
+        param_names=params,
+        panel_params=tuple(param for param in params if param not in scalar_specs),
+        param_specs=scalar_specs,
         return_type="series",
         tags=[
             "fundamental",

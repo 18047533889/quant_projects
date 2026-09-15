@@ -69,7 +69,7 @@ test_daily:
   time_column: TradeDate
   instrument_column: Symbol
   schema:
-    TradeDate: date
+    TradeDate: timestamp
     Symbol: string
     Close: double
     Open: double
@@ -88,7 +88,7 @@ def _seed_duckdb_panel(root: Path, mem: InMemorySeriesSource) -> None:
     for (ts, sym), close in mem.data["close"].items():
         rows.append(
             {
-                "TradeDate": ts.date(),
+                "TradeDate": ts,
                 "Symbol": sym,
                 "Close": float(close) if pd.notna(close) else None,
                 "Open": float(mem.data["open"].loc[(ts, sym)]),

@@ -115,6 +115,54 @@ def test_fit_cutoff_must_precede_decision_boundary():
         _apply(_state(), start="2023-12-31")
 
 
+def test_production_state_identity_binds_actual_fit_window():
+    baseline = _state()
+    changed_start = _state(fit_start_time=datetime(2023, 2, 1))
+    changed_end = _state(fit_end_time=datetime(2023, 11, 30))
+    assert len({baseline.state_id, changed_start.state_id, changed_end.state_id}) == 3
+
+
+def test_panel_cannot_predate_claimed_decision_start_or_fit_cutoff():
+    state = _state()
+    recipe = _recipe(state.state_id)
+    fitted = {state.state_id: state}
+    disguised_training_row = pd.DataFrame(
+        [[2.0]], index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])
+    )
+    with pytest.raises(ValueError, match="before the declared decision segment"):
+        apply_frozen_fitted_recipe(
+            disguised_training_row, recipe=recipe, fitted_states=fitted,
+            factor_definition_hash=DEFINITION, decision_start="2024-01-02",
+        )
+    at_cutoff = pd.DataFrame(
+        [[2.0]], index=pd.DatetimeIndex([pd.Timestamp("2023-12-31")])
+    )
+    with pytest.raises(ValueError, match="at or before the fitted-state cutoff"):
+        apply_frozen_fitted_recipe(
+            at_cutoff, recipe=recipe, fitted_states=fitted,
+            factor_definition_hash=DEFINITION, decision_start="2023-12-31 12:00",
+        )
+
+
+@pytest.mark.parametrize(
+    "index",
+    [
+        pd.Index([1]),
+        pd.DatetimeIndex([pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-02")]),
+        pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")]),
+    ],
+)
+def test_fitted_apply_requires_explicit_unique_increasing_time_axis(index):
+    state = _state()
+    recipe = _recipe(state.state_id)
+    panel = pd.DataFrame(np.ones((len(index), 1)), index=index)
+    with pytest.raises(ValueError, match="DatetimeIndex|unique and increasing"):
+        apply_frozen_fitted_recipe(
+            panel, recipe=recipe, fitted_states={state.state_id: state},
+            factor_definition_hash=DEFINITION, decision_start="2024-01-02",
+        )
+
+
 @pytest.mark.parametrize("bad", [True, "2.0", [2.0], np.array([2.0])])
 @pytest.mark.parametrize("field", ["mean", "scale"])
 def test_learned_parameters_require_real_nonboolean_numeric_scalars(field, bad):

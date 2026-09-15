@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "/tmp/probe_corr_resource.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 361189376, "sampling_seconds": 0.1, "seconds": 2.410704507958144, "test_guard_reason": null, "hard_memory_cap": false}

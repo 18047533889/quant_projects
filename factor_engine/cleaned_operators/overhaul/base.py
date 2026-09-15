@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from collections.abc import Mapping
 from typing import Any, Callable
 
 import numpy as np
@@ -132,6 +133,10 @@ class PandasFunctionOperator(PandasOperator):
         fn: Callable[..., pd.DataFrame],
         *,
         param_specs: dict[str, Any] | None = None,
+        panel_params: tuple[str, ...] = (),
+        scalar_params: tuple[str, ...] = (),
+        mixed_params: tuple[str, ...] = (),
+        nullable_mixed_params: tuple[str, ...] = (),
     ):
         self._fn = fn
         # R13 NEW-P0-05: a backend implementation must NOT self-declare
@@ -147,6 +152,10 @@ class PandasFunctionOperator(PandasOperator):
             param_names=params,
             return_type="series",
             param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
+            panel_params=panel_params,
+            scalar_params=scalar_params,
+            mixed_params=mixed_params,
+            nullable_mixed_params=nullable_mixed_params,
             tags=["daily", "panel", category],
         )
 
@@ -168,6 +177,10 @@ class PolarsFunctionOperator(PolarsOperator):
         fn: Callable[..., "pl.DataFrame"],
         *,
         param_specs: dict[str, Any] | None = None,
+        panel_params: tuple[str, ...] = (),
+        scalar_params: tuple[str, ...] = (),
+        mixed_params: tuple[str, ...] = (),
+        nullable_mixed_params: tuple[str, ...] = (),
     ):
         self._fn = fn
         # R13 NEW-P0-05: no self-declared ``pit_safe`` / ``audited`` tags — those
@@ -180,6 +193,10 @@ class PolarsFunctionOperator(PolarsOperator):
             param_names=params,
             return_type="series",
             param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
+            panel_params=panel_params,
+            scalar_params=scalar_params,
+            mixed_params=mixed_params,
+            nullable_mixed_params=nullable_mixed_params,
             tags=["daily", "panel", "polars_native", category],
         )
 
@@ -203,6 +220,10 @@ class Spec:
     # carried onto the operator metadata by register_specs (subset-filtered to the
     # declared ``params``).  ``None`` keeps the legacy empty contract.
     param_specs: dict[str, Any] | None = None
+    panel_params: tuple[str, ...] = ()
+    scalar_params: tuple[str, ...] = ()
+    mixed_params: tuple[str, ...] = ()
+    nullable_mixed_params: tuple[str, ...] = ()
 
 
 # R13 NEW-P0-04: logical-contract fields a replacement implementation may ONLY
@@ -229,6 +250,8 @@ _CONTRACT_FIELDS: tuple[tuple[str, Any], ...] = (
     ("total_positional_arity", None),
     ("scalar_params", ()),
     ("panel_params", ()),
+    ("mixed_params", ()),
+    ("nullable_mixed_params", ()),
     ("input_fields", []),
     ("output_field", None),
     ("broadcast_specs", ()),
@@ -243,7 +266,19 @@ def _contract_field_equal(left: Any, right: Any) -> bool:
     same specs compare equal despite different object identities); scalars and
     ``None`` compare directly.
     """
-    if isinstance(left, dict) and isinstance(right, dict):
+    left_frozen_fields = getattr(left, "fields", None)
+    left_frozen_type = getattr(left, "original_type", None)
+    right_frozen_fields = getattr(right, "fields", None)
+    right_frozen_type = getattr(right, "original_type", None)
+    if isinstance(left_frozen_fields, Mapping) and left_frozen_type is not None:
+        if not isinstance(right, left_frozen_type):
+            return False
+        return all(_contract_field_equal(value, getattr(right, name)) for name, value in left_frozen_fields.items())
+    if isinstance(right_frozen_fields, Mapping) and right_frozen_type is not None:
+        if not isinstance(left, right_frozen_type):
+            return False
+        return all(_contract_field_equal(getattr(left, name), value) for name, value in right_frozen_fields.items())
+    if isinstance(left, Mapping) and isinstance(right, Mapping):
         if set(left.keys()) != set(right.keys()):
             return False
         return all(_contract_field_equal(left[k], right[k]) for k in left)
@@ -319,6 +354,10 @@ def register_specs(specs: dict[str, Spec]) -> None:
         pandas_op = PandasFunctionOperator(
             name, spec.category, spec.params, spec.description, spec.pandas_fn,
             param_specs=spec.param_specs,
+            panel_params=spec.panel_params,
+            scalar_params=spec.scalar_params,
+            mixed_params=spec.mixed_params,
+            nullable_mixed_params=spec.nullable_mixed_params,
         )
         # R13 NEW-P0-04: a replacement may change only the implementation — the
         # canonical logical contract must be inherited / verified, never rebuilt.
@@ -341,6 +380,10 @@ def register_specs(specs: dict[str, Spec]) -> None:
             polars_op = PolarsFunctionOperator(
                 name, spec.category, spec.params, spec.description, spec.polars_fn,
                 param_specs=spec.param_specs,
+                panel_params=spec.panel_params,
+                scalar_params=spec.scalar_params,
+                mixed_params=spec.mixed_params,
+                nullable_mixed_params=spec.nullable_mixed_params,
             )
             _inherit_canonical_logical_contract(name, polars_op)
             OperatorRegistry.register(

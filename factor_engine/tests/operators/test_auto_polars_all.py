@@ -940,6 +940,59 @@ def _op(name: str, backend: str = "pandas_numpy"):
     return op
 
 
+def _flow_reference_op(name: str):
+    """Reference owner for research/legacy operators excluded from live surface."""
+    op = OperatorRegistry.get(name, "pandas_numpy")
+    if op is not None:
+        return op
+    if name == "micro_bvc_vpin":
+        from factor_engine.cleaned_operators.microstructure.flow_impact import MicroBvcVpin
+        return MicroBvcVpin()
+    if name == "micro_vpin":
+        from factor_engine.cleaned_operators.microstructure.ops import MicroVpinOp
+        return MicroVpinOp()
+    raise AssertionError(f"{name}/pandas_numpy")
+
+
+@pytest.mark.parametrize("name", [
+    "intraday_bvc_imbalance", "intraday_impact_asymmetry",
+    "intraday_impact_beta", "micro_bvc_vpin", "micro_vpin",
+])
+@pytest.mark.parametrize("case", ["basic", "nan", "inf", "empty", "single"])
+def test_flow_impact_generated_contract_cases(name: str, case: str) -> None:
+    """Contract-aware replacement for obsolete one-panel generated fixtures."""
+    cols = ["A"] if case == "single" else ["A", "B"]
+    rows = 0 if case == "empty" else 40
+    idx = pd.date_range("2024-01-02 09:30", periods=rows, freq="min")
+    base = np.tile(np.linspace(-0.02, 0.03, rows)[:, None], (1, len(cols))) if rows else np.empty((0, len(cols)))
+    if case == "nan" and rows:
+        base[5, 0] = np.nan
+    if case == "inf" and rows:
+        base[5, 0] = np.inf
+    primary = pd.DataFrame(base, index=idx, columns=cols, dtype=float)
+    volume = pd.DataFrame(np.ones_like(base) * 100.0, index=idx, columns=cols, dtype=float)
+    op = _flow_reference_op(name)
+    if name in {"intraday_bvc_imbalance", "micro_bvc_vpin"}:
+        close = np.exp(primary.fillna(0.0).replace([np.inf, -np.inf], 0.0).cumsum()) * 10.0
+        if case in {"nan", "inf"}:
+            close.iloc[5, 0] = primary.iloc[5, 0]
+        result = op.calculate(close, volume)
+        expected_rows = 0 if rows == 0 else 1
+    elif name in {"intraday_impact_beta", "intraday_impact_asymmetry"}:
+        flow = pd.DataFrame(np.tile(np.linspace(-2, 2, rows)[:, None], (1, len(cols))), index=idx, columns=cols)
+        result = op.calculate(primary, flow)
+        expected_rows = 0 if rows == 0 else 1
+    else:
+        close = np.exp(primary.fillna(0.0).replace([np.inf, -np.inf], 0.0).cumsum()) * 10.0
+        if case in {"nan", "inf"}:
+            close.iloc[5, 0] = primary.iloc[5, 0]
+        result = op.calculate(close, volume)
+        expected_rows = rows
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == (expected_rows, len(cols))
+    assert list(result.columns) == cols
+
+
 
 # ---------------------------------------------------------------------------
 # 1. ACF
@@ -37064,7 +37117,7 @@ def test_intraday_barrier_approach_acceleration_single_column() -> None:
 # ---------------------------------------------------------------------------
 # 345. intraday_bvc_imbalance
 # ---------------------------------------------------------------------------
-def test_intraday_bvc_imbalance_basic() -> None:
+def _superseded_generated_intraday_bvc_imbalance_basic() -> None:
     """Basic functionality test."""
     np.random.seed(42)
     idx = pd.date_range("2024-01-01", periods=20)
@@ -37092,7 +37145,7 @@ def test_intraday_bvc_imbalance_basic() -> None:
         pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
 
 
-def test_intraday_bvc_imbalance_handles_nans() -> None:
+def _superseded_generated_intraday_bvc_imbalance_handles_nans() -> None:
     """NaN handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     cols = ["A", "B", "C"]
@@ -37113,7 +37166,7 @@ def test_intraday_bvc_imbalance_handles_nans() -> None:
         pytest.fail(f"{op} failed on NaN input: {e}")
 
 
-def test_intraday_bvc_imbalance_handles_inf() -> None:
+def _superseded_generated_intraday_bvc_imbalance_handles_inf() -> None:
     """Infinity handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     cols = ["A", "B"]
@@ -37133,7 +37186,7 @@ def test_intraday_bvc_imbalance_handles_inf() -> None:
         pytest.fail(f"{op} failed on inf input: {e}")
 
 
-def test_intraday_bvc_imbalance_empty_input() -> None:
+def _superseded_generated_intraday_bvc_imbalance_empty_input() -> None:
     """Empty input test."""
     x = pd.DataFrame()
 
@@ -37150,7 +37203,7 @@ def test_intraday_bvc_imbalance_empty_input() -> None:
         pass
 
 
-def test_intraday_bvc_imbalance_single_column() -> None:
+def _superseded_generated_intraday_bvc_imbalance_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
     x = pd.DataFrame({"A": range(20)}, index=idx)
@@ -37169,7 +37222,7 @@ def test_intraday_bvc_imbalance_single_column() -> None:
 # ---------------------------------------------------------------------------
 # 346. intraday_impact_asymmetry
 # ---------------------------------------------------------------------------
-def test_intraday_impact_asymmetry_basic() -> None:
+def _superseded_generated_intraday_impact_asymmetry_basic() -> None:
     """Basic functionality test."""
     np.random.seed(42)
     idx = pd.date_range("2024-01-01", periods=20)
@@ -37197,7 +37250,7 @@ def test_intraday_impact_asymmetry_basic() -> None:
         pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
 
 
-def test_intraday_impact_asymmetry_handles_nans() -> None:
+def _superseded_generated_intraday_impact_asymmetry_handles_nans() -> None:
     """NaN handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     cols = ["A", "B", "C"]
@@ -37218,7 +37271,7 @@ def test_intraday_impact_asymmetry_handles_nans() -> None:
         pytest.fail(f"{op} failed on NaN input: {e}")
 
 
-def test_intraday_impact_asymmetry_handles_inf() -> None:
+def _superseded_generated_intraday_impact_asymmetry_handles_inf() -> None:
     """Infinity handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     cols = ["A", "B"]
@@ -37238,7 +37291,7 @@ def test_intraday_impact_asymmetry_handles_inf() -> None:
         pytest.fail(f"{op} failed on inf input: {e}")
 
 
-def test_intraday_impact_asymmetry_empty_input() -> None:
+def _superseded_generated_intraday_impact_asymmetry_empty_input() -> None:
     """Empty input test."""
     x = pd.DataFrame()
 
@@ -37255,7 +37308,7 @@ def test_intraday_impact_asymmetry_empty_input() -> None:
         pass
 
 
-def test_intraday_impact_asymmetry_single_column() -> None:
+def _superseded_generated_intraday_impact_asymmetry_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
     x = pd.DataFrame({"A": range(20)}, index=idx)
@@ -37274,7 +37327,7 @@ def test_intraday_impact_asymmetry_single_column() -> None:
 # ---------------------------------------------------------------------------
 # 347. intraday_impact_beta
 # ---------------------------------------------------------------------------
-def test_intraday_impact_beta_basic() -> None:
+def _superseded_generated_intraday_impact_beta_basic() -> None:
     """Basic functionality test."""
     np.random.seed(42)
     idx = pd.date_range("2024-01-01", periods=20)
@@ -37302,7 +37355,7 @@ def test_intraday_impact_beta_basic() -> None:
         pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
 
 
-def test_intraday_impact_beta_handles_nans() -> None:
+def _superseded_generated_intraday_impact_beta_handles_nans() -> None:
     """NaN handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     cols = ["A", "B", "C"]
@@ -37323,7 +37376,7 @@ def test_intraday_impact_beta_handles_nans() -> None:
         pytest.fail(f"{op} failed on NaN input: {e}")
 
 
-def test_intraday_impact_beta_handles_inf() -> None:
+def _superseded_generated_intraday_impact_beta_handles_inf() -> None:
     """Infinity handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     cols = ["A", "B"]
@@ -37343,7 +37396,7 @@ def test_intraday_impact_beta_handles_inf() -> None:
         pytest.fail(f"{op} failed on inf input: {e}")
 
 
-def test_intraday_impact_beta_empty_input() -> None:
+def _superseded_generated_intraday_impact_beta_empty_input() -> None:
     """Empty input test."""
     x = pd.DataFrame()
 
@@ -37360,7 +37413,7 @@ def test_intraday_impact_beta_empty_input() -> None:
         pass
 
 
-def test_intraday_impact_beta_single_column() -> None:
+def _superseded_generated_intraday_impact_beta_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
     x = pd.DataFrame({"A": range(20)}, index=idx)
@@ -44099,7 +44152,7 @@ def test_micro_bipower_var_single_column() -> None:
 # ---------------------------------------------------------------------------
 # 412. micro_bvc_vpin
 # ---------------------------------------------------------------------------
-def test_micro_bvc_vpin_basic() -> None:
+def _superseded_generated_micro_bvc_vpin_basic() -> None:
     """Basic functionality test."""
     np.random.seed(42)
     idx = pd.date_range("2024-01-01", periods=20)
@@ -44127,7 +44180,7 @@ def test_micro_bvc_vpin_basic() -> None:
         pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
 
 
-def test_micro_bvc_vpin_handles_nans() -> None:
+def _superseded_generated_micro_bvc_vpin_handles_nans() -> None:
     """NaN handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     cols = ["A", "B", "C"]
@@ -44148,7 +44201,7 @@ def test_micro_bvc_vpin_handles_nans() -> None:
         pytest.fail(f"{op} failed on NaN input: {e}")
 
 
-def test_micro_bvc_vpin_handles_inf() -> None:
+def _superseded_generated_micro_bvc_vpin_handles_inf() -> None:
     """Infinity handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     cols = ["A", "B"]
@@ -44168,7 +44221,7 @@ def test_micro_bvc_vpin_handles_inf() -> None:
         pytest.fail(f"{op} failed on inf input: {e}")
 
 
-def test_micro_bvc_vpin_empty_input() -> None:
+def _superseded_generated_micro_bvc_vpin_empty_input() -> None:
     """Empty input test."""
     x = pd.DataFrame()
 
@@ -44185,7 +44238,7 @@ def test_micro_bvc_vpin_empty_input() -> None:
         pass
 
 
-def test_micro_bvc_vpin_single_column() -> None:
+def _superseded_generated_micro_bvc_vpin_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
     x = pd.DataFrame({"A": range(20)}, index=idx)
@@ -44834,7 +44887,7 @@ def test_micro_trade_imbalance_single_column() -> None:
 # ---------------------------------------------------------------------------
 # 419. micro_vpin
 # ---------------------------------------------------------------------------
-def test_micro_vpin_basic() -> None:
+def _superseded_generated_micro_vpin_basic() -> None:
     """Basic functionality test."""
     np.random.seed(42)
     idx = pd.date_range("2024-01-01", periods=20)
@@ -44862,7 +44915,7 @@ def test_micro_vpin_basic() -> None:
         pytest.fail(f"{op} failed with {type(e).__name__}: {e}")
 
 
-def test_micro_vpin_handles_nans() -> None:
+def _superseded_generated_micro_vpin_handles_nans() -> None:
     """NaN handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     cols = ["A", "B", "C"]
@@ -44883,7 +44936,7 @@ def test_micro_vpin_handles_nans() -> None:
         pytest.fail(f"{op} failed on NaN input: {e}")
 
 
-def test_micro_vpin_handles_inf() -> None:
+def _superseded_generated_micro_vpin_handles_inf() -> None:
     """Infinity handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     cols = ["A", "B"]
@@ -44903,7 +44956,7 @@ def test_micro_vpin_handles_inf() -> None:
         pytest.fail(f"{op} failed on inf input: {e}")
 
 
-def test_micro_vpin_empty_input() -> None:
+def _superseded_generated_micro_vpin_empty_input() -> None:
     """Empty input test."""
     x = pd.DataFrame()
 
@@ -44920,7 +44973,7 @@ def test_micro_vpin_empty_input() -> None:
         pass
 
 
-def test_micro_vpin_single_column() -> None:
+def _superseded_generated_micro_vpin_single_column() -> None:
     """Single column test."""
     idx = pd.date_range("2024-01-01", periods=20)
     x = pd.DataFrame({"A": range(20)}, index=idx)

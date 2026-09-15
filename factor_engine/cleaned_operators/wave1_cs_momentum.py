@@ -17,7 +17,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator,
+)
 from factor_engine.cleaned_operators.common.daily_panel import _aligned, _check_int
 
 
@@ -25,12 +27,41 @@ def _metadata(
     name: str, description: str, params: list[str], *, domain: str, unit: str,
     cost: int = 1, category: str,
 ) -> OperatorMetadata:
+    panel_names = {
+        "amihud", "amount", "market_ret", "market_signed_volume", "ret",
+        "signed_volume", "turnover",
+    }
+    panel_params = tuple(param for param in params if param in panel_names)
+    scalar_params = tuple(param for param in params if param not in panel_names)
+    float_params = {"half_life", "penalty", "threshold"}
+    param_specs = {
+        param: ParamSpec(
+            dtype=float if param in float_params else int,
+            min=(
+                1e-12 if param == "half_life"
+                else 0.0 if param in {"penalty", "threshold"}
+                else 1 if param in {"min_periods", "min_breadth"}
+                else 2
+            ),
+            param_role=(
+                ParamRole.HORIZON if "window" in param or param == "half_life"
+                else ParamRole.SUPPORT_POLICY if param in {"min_periods", "min_breadth"}
+                else ParamRole.STATE_THRESHOLD
+            ),
+        )
+        for param in scalar_params
+    }
     return OperatorMetadata(
         name=name,
         category=category,
         description=description,
         param_names=params,
         return_type="series",
+        param_specs=param_specs,
+        panel_params=panel_params,
+        panel_arity=len(panel_params),
+        scalar_params=scalar_params,
+        total_positional_arity=len(params),
         tags=[
             category, "wave1", "daily", "pit_safe", "causal", "typed_v2",
             f"signature:{','.join(params)}->series", f"domain:{domain}",

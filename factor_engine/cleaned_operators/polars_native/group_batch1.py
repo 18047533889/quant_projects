@@ -10,7 +10,10 @@ from __future__ import annotations
 
 import polars as pl
 
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
+from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
 
 
 def _metadata(name: str, description: str, params: list[str]) -> OperatorMetadata:
@@ -379,39 +382,34 @@ class GroupSkewnessPolarsNative(SeriesOperator):
     backend="polars",
     source="polars_native.group_batch1")
 class GroupTopkMeanPolarsNative(SeriesOperator):
-    """组内前 k 个最大值的均值."""
+    """Honest eager delegate for score-ranked, fractional-tie Top-K means."""
 
     metadata = _metadata(
         "group_topk_mean",
         "组内前 k 个最大值的均值",
-        ["x", "group", "k"],
+        ["target", "score", "group", "k", "exclude_self"],
+    )
+    metadata.panel_params = ("target", "score", "group")
+    metadata.panel_arity = 3
+    metadata.scalar_params = ("k", "exclude_self")
+    metadata.param_specs = {
+        "k": ParamSpec(dtype=int, min=1, default=3, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+        "exclude_self": ParamSpec(dtype=bool, default=True, param_role=ParamRole.POLICY, searchable=False),
+    }
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="group_topk_mean", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False,
+        materializes_full_panel=True, requires_sorted=False,
+        supports_nulls=True, supports_nan=True, supports_inf=False,
+        notes="Eager pandas reference delegate; not native Polars or production eligible.",
     )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame, k: int = 5, **kwargs) -> pl.DataFrame:
-        x_cols = [c for c in x.columns if not c.startswith("__")]
-        g_col = [c for c in group.columns if not c.startswith("__")][0]
-
-        result_frames = []
-        for col in x_cols:
-            temp = pl.DataFrame({
-                "_value": x[col],
-                "_group": group[g_col],
-            })
-
-            # Use sort and head within group (approximation via rank)
-            result = temp.with_columns([
-                pl.col("_value").rank(method="ordinal", descending=True).over("_group").alias("_rank")
-            ]).with_columns([
-                pl.when(pl.col("_rank") <= k)
-                .then(pl.col("_value"))
-                .otherwise(None)
-                .mean().over("_group")
-                .alias(col)
-            ])
-
-            result_frames.append(result.select(col))
-
-        return pl.concat(result_frames, how="horizontal")
+    def _calculate_series(self, target, score, group, k=3, exclude_self=True, **kwargs):
+        return _call_pandas_delegate(
+            "group_topk_mean", [target, score, group],
+            {"k": k, "exclude_self": exclude_self},
+        )
 
 
 @register_operator(
@@ -587,34 +585,15 @@ class GroupTailRatioPolarsNative(SeriesOperator):
     backend="polars",
     source="polars_native.group_batch1")
 class GroupImputeMedianPolarsNative(SeriesOperator):
-    """组内中位数填充缺失值."""
+    """Source-safe group_impute_median, with real panel roles and strict support policy."""
+    from factor_engine.cleaned_operators.common import safe_kernels as _safe
+    metadata = OperatorMetadata(name="group_impute_median",category="data_cleaning",
+                                **_safe.contract("group_impute_median"))
+    _contract_callable = staticmethod(_safe.polars_group_impute_median)
+    _physical_spec = _safe.physical_spec("group_impute_median")
 
-    metadata = _metadata(
-        "group_impute_median",
-        "组内中位数填充",
-        ["x", "group"],
-    )
-
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        x_cols = [c for c in x.columns if not c.startswith("__")]
-        g_col = [c for c in group.columns if not c.startswith("__")][0]
-
-        result_frames = []
-        for col in x_cols:
-            temp = pl.DataFrame({
-                "_value": x[col],
-                "_group": group[g_col],
-            })
-
-            result = temp.with_columns([
-                pl.col("_value").median().over("_group").alias("_median"),
-            ]).with_columns([
-                pl.col("_value").fill_null(pl.col("_median")).alias(col)
-            ])
-
-            result_frames.append(result.select(col))
-
-        return pl.concat(result_frames, how="horizontal")
+    def _calculate_series(self,*args,**kwargs):
+        return self._safe.polars_group_impute_median(*args,**kwargs)
 
 
 @register_operator(

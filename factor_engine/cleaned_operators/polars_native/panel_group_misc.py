@@ -10,14 +10,20 @@ Implementation of ~70 operators including:
 All operators use genuine Polars API with .over() for group operations.
 """
 from __future__ import annotations
+import hashlib
+from pathlib import Path
+from factor_engine.cleaned_operators.common.elementwise_scalar_contracts import scalar_contract, polars_winsorize
 import polars as pl
 import numpy as np
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 from factor_engine.cleaned_operators.base_polars import (
     SeriesOperator,
     OperatorMetadata,
     register_operator,
     PANEL_SKIP_COLUMNS,
 )
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
+from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
 
 
 def _apply_to_panel(df: pl.DataFrame, expr_fn) -> pl.DataFrame:
@@ -452,23 +458,18 @@ class directional_change_extent(SeriesOperator):
 class winsorize_mean(SeriesOperator):
     """Winsorized Mean"""
 
-    metadata = OperatorMetadata(
+    metadata = OperatorMetadata(**scalar_contract("winsorize_mean"),
         name="winsorize_mean",
         category="statistics",
         description="Mean after winsorizing extreme values",
-        param_names=["x", "period", "lower", "upper"],
-        param_types={"x": pl.DataFrame, "period": int, "lower": float, "upper": float},
+        param_names=["x", "trim_pct"],
+        param_types={"x": pl.DataFrame, "trim_pct": float},
     )
 
-    def _calculate_series(self, x: pl.DataFrame, period: int = 20, lower: float = 0.05, upper: float = 0.95, **kwargs) -> pl.DataFrame:
-        def winsorize_expr(col_name):
-            col = pl.col(col_name)
-            lower_q = col.rolling_quantile(quantile=lower, window_size=period)
-            upper_q = col.rolling_quantile(quantile=upper, window_size=period)
-            winsorized = col.clip(lower_bound=lower_q, upper_bound=upper_q)
-            return winsorized.rolling_mean(window_size=period).alias(col_name)
-
-        return _apply_to_panel(x, lambda c: winsorize_expr(c.meta.output_name()))
+    def _calculate_series(self, x: pl.DataFrame, trim_pct: float = 0.1, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar
+        trim_pct = strict_finite_scalar(trim_pct, "trim_pct", minimum=0, maximum=0.49)
+        return polars_winsorize(x, trim_pct, 1 - trim_pct, mean=True)
 
 
 @register_operator(
@@ -949,28 +950,32 @@ class panel_async_beta_ex_self(SeriesOperator):
     canonical="panel_factor_pocket_strength",
     source="polars_native_phase6")
 class panel_factor_pocket_strength(SeriesOperator):
-    """Factor pocket strength"""
-
+    """Exact full-panel delegate to factor-payout pocket persistence."""
+    from factor_engine.cleaned_operators.cross_section.panel_gap import PanelFactorPocketStrength as _reference
+    _meta = _reference.metadata
     metadata = OperatorMetadata(
-        name="panel_factor_pocket_strength",
-        category="panel_feature",
-        description="Strength of local factor pocket in panel",
-        param_names=["x", "period"],
-        param_types={"x": pl.DataFrame, "period": int},
+        name=_meta.name, category=_meta.category, description=_meta.description,
+        param_names=list(_meta.param_names), panel_params=_meta.panel_params,
+        scalar_params=_meta.scalar_params, param_specs=dict(_meta.param_specs),
+        relational_specs=list(_meta.relational_specs),
+        tags=[*_meta.tags, "polars", "pandas_delegate"], output_unit=_meta.output_unit,
+    )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="panel_factor_pocket_strength", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        materializes_full_panel=True, supports_nulls=True, supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash=hashlib.sha256(
+            Path(__file__).read_bytes()
+            + Path(__import__("factor_engine.cleaned_operators.cross_section.panel_gap", fromlist=["x"]).__file__).read_bytes()
+        ).hexdigest(),
+        kernel_identity="cross_section.panel_gap.PanelFactorPocketStrength",
+        notes="Exact CPU full-panel pandas delegate; not native Polars acceleration.",
     )
 
-    def _calculate_series(self, x: pl.DataFrame, period: int = 20, **kwargs) -> pl.DataFrame:
-        def pocket_expr(col_name):
-            col = pl.col(col_name)
-            # Pocket strength = correlation with cross-sectional median
-            cs_median = col.median().over("date")
-            col_demean = col - col.rolling_mean(window_size=period)
-            med_demean = cs_median - cs_median.rolling_mean(window_size=period)
-            cov = (col_demean * med_demean).rolling_mean(window_size=period)
-            std = col.rolling_std(window_size=period) * cs_median.rolling_std(window_size=period)
-            return np.where(std.alias(col_name) != 0, ((cov) / (std).alias(col_name)), np.nan)
-
-        return _apply_to_panel(x, lambda c: pocket_expr(c.meta.output_name()))
+    def _calculate_series(self, *args, **kwargs):
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate("panel_factor_pocket_strength", args, kwargs)
 
 
 @register_operator(
@@ -1267,25 +1272,39 @@ class group_current_members_tail_coexceedance(SeriesOperator):
     canonical="group_distribution_js_divergence",
     source="polars_native_phase6")
 class group_distribution_js_divergence(SeriesOperator):
-    """Jensen-Shannon divergence between group and universe"""
+    """Honest delegate for quantile-bin Jensen-Shannon divergence."""
 
     metadata = OperatorMetadata(
         name="group_distribution_js_divergence",
         category="group_feature",
         description="JS divergence of group distribution from universe",
-        param_names=["x", "group"],
+        param_names=["x", "group", "bins", "min_group_size", "exclude_group_from_reference"],
         param_types={"x": pl.DataFrame, "group": pl.DataFrame},
     )
+    metadata.panel_params = ("x", "group")
+    metadata.panel_arity = 2
+    metadata.scalar_params = ("bins", "min_group_size", "exclude_group_from_reference")
+    metadata.param_specs = {
+        "bins": ParamSpec(dtype=int, min=2, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION, searchable=False),
+        "min_group_size": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+        "exclude_group_from_reference": ParamSpec(dtype=bool, default=True, param_role=ParamRole.POLICY, searchable=False),
+    }
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="group_distribution_js_divergence", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False,
+        materializes_full_panel=True, requires_sorted=False,
+        supports_nulls=True, supports_nan=True, supports_inf=False,
+        notes="Eager pandas reference delegate; not native Polars or production eligible.",
+    )
 
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        # Simplified: use variance ratio as proxy for distribution divergence
-        def js_div_expr(col_name):
-            col = pl.col(col_name)
-            group_var = col.var().over("group")
-            total_var = col.var()
-            return np.where(total_var.alias(col_name) != 0, ((group_var) / (total_var).alias(col_name)), np.nan)
-
-        return _apply_to_panel(x, lambda c: js_div_expr(c.meta.output_name()))
+    def _calculate_series(self, x, group, bins=10, min_group_size=5,
+                          exclude_group_from_reference=True, **kwargs):
+        return _call_pandas_delegate(
+            "group_distribution_js_divergence", [x, group],
+            {"bins": bins, "min_group_size": min_group_size,
+             "exclude_group_from_reference": exclude_group_from_reference},
+        )
 
 
 @register_operator(
@@ -1435,11 +1454,6 @@ class group_multi_level_rank_consistency(SeriesOperator):
         return _apply_to_panel(x, lambda c: rank_consistency_expr(c.meta.output_name()))
 
 
-@register_operator(
-    name="group_peer_information_diffusion",
-    category="group_feature",
-    canonical="group_peer_information_diffusion",
-    source="polars_native_phase6")
 class group_peer_information_diffusion(SeriesOperator):
     """Peer information diffusion rate"""
 
@@ -1663,26 +1677,13 @@ class group_wasserstein_barycenter_distance(SeriesOperator):
     canonical="group_spd_feature_structure_shift",
     source="polars_native_phase6")
 class group_spd_feature_structure_shift(SeriesOperator):
-    """Feature structure shift in SPD manifold"""
+    """Causal canonical reference with explicit Pandas conversion."""
+    from factor_engine.cleaned_operators.common import structure_delegate as _delegate
+    metadata = _delegate.metadata("group_spd_feature_structure_shift")
+    _physical_spec = _delegate.physical_spec("group_spd_feature_structure_shift")
 
-    metadata = OperatorMetadata(
-        name="group_spd_feature_structure_shift",
-        category="group_feature",
-        description="Shift in feature structure on SPD manifold",
-        param_names=["x", "group", "period"],
-        param_types={"x": pl.DataFrame, "group": pl.DataFrame, "period": int},
-    )
-
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame, period: int = 20, **kwargs) -> pl.DataFrame:
-        # Simplified: use variance change as structure shift proxy
-        def structure_shift_expr(col_name):
-            col = pl.col(col_name)
-            current_var = col.var().over("group")
-            past_var = col.var().over("group").shift(period)
-            shift = (current_var - past_var) / (past_var + 1e-8)
-            return shift.alias(col_name)
-
-        return _apply_to_panel(x, lambda c: structure_shift_expr(c.meta.output_name()))
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("group_spd_feature_structure_shift", *args, **kwargs)
 
 
 # ==================== Additional Miscellaneous Operators ====================

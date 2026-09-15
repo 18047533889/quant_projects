@@ -10,6 +10,7 @@
 - **expanding_rank**：当前值在 **前缀窗口** 内的百分位排名（与 ``cum_rank`` 别名同义）。
 """
 from __future__ import annotations
+from factor_engine.cleaned_operators.common import cleaning_scalar_contracts as _clean
 
 try:
     import polars as pl
@@ -75,85 +76,22 @@ class EWMPolars(SeriesOperator):
 
 @register_operator(name="ewm_std", category="data_handling", business_category="data_cleaning", canonical="ewm_std", source="factor_dsl_polars")
 class EWMStdPolars(SeriesOperator):
-    """Polars EWM 标准差"""
-    # 100k GO P0#1: native polars EWM operators carry an explicit
-    # PhysicalImplementationSpec (POLARS_NATIVE_EXPR) so production-capability
-    # classification is authoritative rather than source-inspection.
-    _physical_spec = PhysicalImplementationSpec(
-        canonical="ewm_std",
-        backend="polars",
-        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
-        supports_lazy=True,
-        supports_streaming=False,
-        stateful=False,
-        materializes_full_panel=True,
-        requires_sorted=True,
-        supports_nulls=True,
-        supports_nan=False,
-        supports_inf=True,
-        implementation_source_hash="cleaned_operators.common.polars_data_cleaning:EWMStdPolars:v1",
-        emitter_identity="polars.Expr.ewm_std:v1",
-        parameter_domain_hash="ewm_std.span:int:min=1",
-        semantic_contract_hash="ewm_std:min_samples=2:axis=time:v1",
-    )
-    metadata = OperatorMetadata(
-        name="ewm_std", category="data_handling", description="EWM 标准差",
-        param_names=["x", "span"], return_type="series", tags=["data_handling", "polars"],
-    )
-
-    def _calculate_series(self, x: pl.DataFrame, span: int = 20, **kwargs) -> pl.DataFrame:
-        span_i = int(kwargs.get("d", span))
-        cols = _numeric_cols(x)
-        return x.with_columns([
-            pl.when(pl.col(c).is_not_null().cum_sum() < 2)
-            .then(None)
-            .otherwise(
-                pl.col(c).ewm_std(span=span_i, adjust=False, bias=False, min_samples=1)
-                .fill_null(strategy="forward")
-            ).alias(c)
-            for c in cols
-        ])
+    """ewm_std: explicit scalar contract and preserved panel coordinates."""
+    metadata=OperatorMetadata(name="ewm_std",category="data_handling",**_clean.contract("ewm_std"))
+    _physical_spec=_clean.physical_spec("ewm_std")
+    _contract_callable=staticmethod(_clean.ewm_std)
+    def _calculate_series(self,*args,**kwargs):
+        return _clean.ewm_std(*args,**kwargs)
 
 
 @register_operator(name="ewm_var", category="data_handling", business_category="data_cleaning", canonical="ewm_var", source="factor_dsl_polars")
 class EWMVarPolars(SeriesOperator):
-    """Polars EWM 方差"""
-    # 100k GO P0#1: explicit native-polars PhysicalImplementationSpec (see
-    # EWMStdPolars above for the rationale).
-    _physical_spec = PhysicalImplementationSpec(
-        canonical="ewm_var",
-        backend="polars",
-        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
-        supports_lazy=True,
-        supports_streaming=False,
-        stateful=False,
-        materializes_full_panel=True,
-        requires_sorted=True,
-        supports_nulls=True,
-        supports_nan=False,
-        supports_inf=True,
-        implementation_source_hash="cleaned_operators.common.polars_data_cleaning:EWMVarPolars:v1",
-        emitter_identity="polars.Expr.ewm_var:v1",
-        parameter_domain_hash="ewm_var.span:int:min=1",
-        semantic_contract_hash="ewm_var:min_samples=2:axis=time:v1",
-    )
-    metadata = OperatorMetadata(
-        name="ewm_var", category="data_handling", description="EWM 方差",
-        param_names=["x", "span"], return_type="series", tags=["data_handling", "polars"],
-    )
-
-    def _calculate_series(self, x: pl.DataFrame, span: int = 20, **kwargs) -> pl.DataFrame:
-        span_i = int(kwargs.get("d", span))
-        cols = _numeric_cols(x)
-        return x.with_columns([
-            pl.when(pl.col(c).is_not_null().cum_sum() < 2)
-            .then(None)
-            .otherwise(
-                pl.col(c).ewm_var(span=span_i, adjust=False, bias=False, min_samples=1)
-                .fill_null(strategy="forward")
-            ).alias(c)
-            for c in cols
-        ])
+    """ewm_var: explicit scalar contract and preserved panel coordinates."""
+    metadata=OperatorMetadata(name="ewm_var",category="data_handling",**_clean.contract("ewm_var"))
+    _physical_spec=_clean.physical_spec("ewm_var")
+    _contract_callable=staticmethod(_clean.ewm_var)
+    def _calculate_series(self,*args,**kwargs):
+        return _clean.ewm_var(*args,**kwargs)
 
 
 @register_operator(name="ewm_corr", category="data_handling", business_category="data_cleaning", canonical="ewm_corr", source="factor_dsl_polars")
@@ -232,18 +170,24 @@ class ExpandingSumPolars(SeriesOperator):
         return x.with_columns([pl.col(c).cum_sum().alias(c) for c in cols])
 
 
+@register_operator(name="nonfinite_to_num",category="data_handling",business_category="data_cleaning",
+                   canonical="nonfinite_to_num",source="factor_dsl_polars",status="research")
+class NonFiniteToNumPolars(SeriesOperator):
+    metadata=OperatorMetadata(name="nonfinite_to_num",category="data_handling",**_clean.contract("nonfinite_to_num"))
+    _physical_spec=_clean.physical_spec("nonfinite_to_num")
+    _contract_callable=staticmethod(_clean.nonfinite_to_num)
+    def _calculate_series(self,*args,**kwargs):
+        return _clean.nonfinite_to_num(*args,**kwargs)
+
+
 @register_operator(name="fillna_const", category="data_handling", business_category="data_cleaning", canonical="fillna_const", source="factor_dsl_polars")
 class FillNAConstPolars(SeriesOperator):
-    """Polars 常量填充"""
-    metadata = OperatorMetadata(
-        name="fillna_const", category="data_handling", description="常量填充",
-        param_names=["x", "value"], return_type="series", tags=["data_handling", "polars"],
-    )
-
-    def _calculate_series(self, x: pl.DataFrame, value: float = 0, **kwargs) -> pl.DataFrame:
-        v = float(kwargs.get("fill_value", value))
-        cols = _numeric_cols(x)
-        return x.with_columns([pl.col(c).fill_null(v).alias(c) for c in cols])
+    """fillna_const: explicit scalar contract and preserved panel coordinates."""
+    metadata=OperatorMetadata(name="fillna_const",category="data_handling",**_clean.contract("fillna_const"))
+    _physical_spec=_clean.physical_spec("fillna_const")
+    _contract_callable=staticmethod(_clean.fillna_const)
+    def _calculate_series(self,*args,**kwargs):
+        return _clean.fillna_const(*args,**kwargs)
 
 
 @register_operator(name="causal_linear_extrapolate", category="data_handling", business_category="data_cleaning", canonical="causal_linear_extrapolate", source="factor_dsl_polars", status="research")

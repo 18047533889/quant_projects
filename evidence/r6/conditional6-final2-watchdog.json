@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-c", "import json,subprocess; d=json.load(open(\"evidence/r6/conditional6-final-watchdog.json\")); raise SystemExit(subprocess.run(d[\"command\"]).returncode)"], "returncode": 0, "sampled_peak_family_rss_bytes": 751243264, "sampling_seconds": 0.1, "seconds": 52.457698308164254, "test_guard_reason": null, "hard_memory_cap": false}

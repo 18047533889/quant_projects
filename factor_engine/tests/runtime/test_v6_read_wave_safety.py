@@ -15,6 +15,13 @@ from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
 from factor_engine.storage.sources.read_session import DataSourceReadSession
 
 
+@pytest.fixture(autouse=True)
+def initialize_manual_scheduler_lease_fields(monkeypatch):
+    # These focused tests bypass __init__; mirror its no-job lease defaults.
+    monkeypatch.setattr(AdaptiveBatchScheduler, "job_lease", None, raising=False)
+    monkeypatch.setattr(AdaptiveBatchScheduler, "_lease_scope", "test", raising=False)
+
+
 def _register(planner, task_id, column, time_range=None):
     planner.register_scan_task(
         task_id, dataset="d", source_scope="dataset:d", snapshot_id="s",
@@ -217,6 +224,29 @@ def test_physical_lowering_resolves_nested_cse_source_closure_and_native_backend
     assert all(scan_ids & set(t.inputs) for t in cse)
 
 
+def test_column_only_root_keeps_source_dependency_and_native_wave_consumer():
+    from factor_engine.planner.dag import DAGPlan, FactorPlan
+    from factor_engine.planner.logical_plan import PlanNode
+    from factor_engine.planner.physical_lowerer import lower_batch_dag
+    from factor_engine.planner.read_wave_planner import build_waves_from_dag
+
+    class Source:
+        dataset = "d"
+        def scan_polars_long(self, columns):
+            raise AssertionError("planning must not read")
+
+    ctx = SimpleNamespace(data_source=Source(), selected_backend="hybrid_long", market="")
+    dag = DAGPlan(roots=[FactorPlan("direct", PlanNode("column", attrs={"name": "close"}))], shared_nodes={})
+    physical = lower_batch_dag(dag, ctx=ctx, rows=6)
+    scan = next(t for t in physical.tasks.values() if t.task_type == TASK_SOURCE_SCAN)
+    root = physical.tasks["root:direct"]
+    assert scan.task_id in root.inputs
+    assert root.task_id in scan.consumers
+    waves = build_waves_from_dag(physical)
+    assert any(root.task_id in w.consumer_tasks and w.preferred_representation != "pandas_columns"
+               for w in waves.waves)
+
+
 def test_two_waves_make_progress_in_small_pool_after_first_consumer_releases():
     class Lease:
         def __init__(self, broker):
@@ -342,6 +372,8 @@ def test_serial_fused_interleaves_two_waves_in_one_wave_pool():
         denials = 0
         hard_memory_limit = 80
         def execution_budget(self): return 80
+        def try_reserve(self, contract, *, task_id):
+            return SimpleNamespace(release=lambda: None)
         def acquire_memory(self, kind, nbytes, lease_id=""):
             if self.busy:
                 self.denials += 1

@@ -15,6 +15,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
+
 from factor_engine.cleaned_operators.overhaul.base import (
     EPS,
     Spec,
@@ -27,6 +29,21 @@ from factor_engine.cleaned_operators.overhaul.base import (
 )
 
 _REVISION_POLICIES = frozenset({"latest_available", "first_available"})
+
+_REVISION_SPEC = ParamSpec(
+    dtype=str,
+    choices=("latest_available", "first_available"),
+    searchable=False,
+    default="latest_available",
+    param_role=ParamRole.POLICY,
+)
+_REQUIRE_CONSECUTIVE_SPEC = ParamSpec(
+    dtype=bool, searchable=False, default=True, param_role=ParamRole.POLICY
+)
+
+
+def _positive_spec(default: int) -> ParamSpec:
+    return ParamSpec(dtype=int, min=1, default=default, param_role=ParamRole.HORIZON)
 
 
 # ---------------------------------------------------------------------------
@@ -1114,6 +1131,10 @@ def register() -> None:
                 "exact fiscal ordinal lag with visible revision policy",
                 pd_period_lag,
                 pl_period_lag,
+                param_specs={
+                    "periods": ParamSpec(dtype=int, min=0, default=1, param_role=ParamRole.HORIZON),
+                    "revision_policy": _REVISION_SPEC,
+                },
             ),
             "period_change": Spec(
                 "fundamental_period",
@@ -1128,6 +1149,12 @@ def register() -> None:
                 "strict fiscal-period change",
                 pd_period_change,
                 pl_period_change,
+                param_specs={
+                    "periods": _positive_spec(1),
+                    "mode": ParamSpec(dtype=str, choices=("absolute", "ratio", "log"), default="absolute", searchable=False, param_role=ParamRole.POLICY),
+                    "require_consecutive": _REQUIRE_CONSECUTIVE_SPEC,
+                    "revision_policy": _REVISION_SPEC,
+                },
             ),
             "period_average": Spec(
                 "fundamental_period",
@@ -1141,6 +1168,11 @@ def register() -> None:
                 "strict fiscal-period average",
                 pd_period_average,
                 pl_period_average,
+                param_specs={
+                    "periods": _positive_spec(2),
+                    "require_consecutive": _REQUIRE_CONSECUTIVE_SPEC,
+                    "revision_policy": _REVISION_SPEC,
+                },
             ),
             "period_cagr": Spec(
                 "fundamental_period",
@@ -1156,6 +1188,13 @@ def register() -> None:
                 "strict fiscal-period compound growth",
                 pd_period_cagr,
                 pl_period_cagr,
+                param_specs={
+                    "periods": _positive_spec(12),
+                    "periods_per_year": _positive_spec(4),
+                    "sign_policy": ParamSpec(dtype=str, choices=("strict", "absolute"), default="strict", searchable=False, param_role=ParamRole.POLICY),
+                    "require_consecutive": _REQUIRE_CONSECUTIVE_SPEC,
+                    "revision_policy": _REVISION_SPEC,
+                },
             ),
             "quarter_from_cumulative": Spec(
                 "fundamental_period",
@@ -1163,6 +1202,7 @@ def register() -> None:
                 "strict cumulative-to-quarter conversion",
                 pd_quarter_from_cumulative,
                 pl_quarter_from_cumulative,
+                param_specs={"revision_policy": _REVISION_SPEC},
             ),
             "ttm_from_quarterly": Spec(
                 "fundamental_period",
@@ -1176,6 +1216,11 @@ def register() -> None:
                 "strict consecutive-period TTM",
                 pd_ttm_from_quarterly,
                 pl_ttm_from_quarterly,
+                param_specs={
+                    "periods": _positive_spec(4),
+                    "require_consecutive": _REQUIRE_CONSECUTIVE_SPEC,
+                    "revision_policy": _REVISION_SPEC,
+                },
             ),
             "ttm_from_cumulative": Spec(
                 "fundamental_period",
@@ -1183,6 +1228,7 @@ def register() -> None:
                 "strict cumulative-to-TTM",
                 pd_ttm_from_cumulative,
                 pl_ttm_from_cumulative,
+                param_specs={"revision_policy": _REVISION_SPEC},
             ),
             "yoy_by_period": Spec(
                 "fundamental_period",
@@ -1197,9 +1243,35 @@ def register() -> None:
                 "strict fiscal-period growth",
                 pd_yoy_by_period,
                 pl_yoy_by_period,
+                param_specs={
+                    "periods": _positive_spec(4),
+                    "denominator": ParamSpec(dtype=str, choices=("signed", "absolute"), default="signed", searchable=False, param_role=ParamRole.POLICY),
+                    "require_consecutive": _REQUIRE_CONSECUTIVE_SPEC,
+                    "revision_policy": _REVISION_SPEC,
+                },
             ),
         }
     )
+
+    panel_contracts = {
+        "period_lag": ("x", "period_id"),
+        "period_change": ("x", "period_id"),
+        "period_average": ("x", "period_id"),
+        "period_cagr": ("x", "period_id"),
+        "quarter_from_cumulative": ("x", "period_id", "fiscal_quarter"),
+        "ttm_from_quarterly": ("x", "period_id"),
+        "ttm_from_cumulative": ("x", "period_id", "fiscal_quarter"),
+        "yoy_by_period": ("x", "period_id"),
+    }
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    for canonical, panel_params in panel_contracts.items():
+        for operator in OperatorRegistry._operators.get(canonical, {}).values():
+            metadata = getattr(operator, "metadata", None)
+            names = tuple(getattr(metadata, "param_names", ()) or ())
+            declared = tuple(name for name in panel_params if name in names)
+            if metadata is not None:
+                metadata.panel_params = declared
 
 
 register()

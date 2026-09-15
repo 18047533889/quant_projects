@@ -12,7 +12,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.parameter_validation import strict_integer, strict_finite_scalar
 
 
 def _metadata(
@@ -32,6 +33,15 @@ def _metadata(
         category="time_series",
         description=description,
         param_names=params,
+        panel_params=("x",),
+        scalar_params=tuple(p for p in params if p != "x"),
+        param_specs={
+            "window": ParamSpec(dtype=int,min=1,default=20,param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int,min=1,default=1,param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            **({"threshold": ParamSpec(dtype=float,min=0.,default=0.,param_role=ParamRole.STATE_THRESHOLD)} if "threshold" in params else {}),
+            **({"tolerance": ParamSpec(dtype=float,min=0.,default=0.,param_role=ParamRole.STATE_THRESHOLD)} if "tolerance" in params else {}),
+            **({"normalize": ParamSpec(dtype=bool,choices=(True,),default=True,searchable=False,param_role=ParamRole.NUMERICAL)} if "normalize" in params else {}),
+        },
         return_type="series",
         tags=[
             "time_series", "daily", "pit_safe", "causal", "typed_v2",
@@ -64,6 +74,25 @@ def _strict_bool(value: Any, name: str = "normalize") -> bool:
     from factor_engine.cleaned_operators.base import strict_bool_param
 
     return strict_bool_param(value, name)
+
+
+def _window_contract(window, min_periods):
+    w = strict_integer(window,"window",minimum=1)
+    mp = strict_integer(min_periods,"min_periods",minimum=1)
+    if mp > w:
+        raise ValueError("min_periods must be <= window")
+    return w,mp
+
+
+def _ratio_panel(x,window,threshold,min_periods,sign):
+    """Linear-time rolling counts; missing/nonfinite observations never enter support."""
+    w,mp = _window_contract(window,min_periods)
+    threshold = strict_finite_scalar(threshold,"tolerance" if sign==0 else "threshold",minimum=0.)
+    frame = x.to_frame(name=x.name) if isinstance(x,pd.Series) else x
+    valid = np.isfinite(frame)
+    hits = frame.gt(threshold) if sign>0 else frame.lt(threshold) if sign<0 else frame.abs().le(threshold)
+    count = valid.astype(float).rolling(w,min_periods=1).sum()
+    return ((hits & valid).astype(float).rolling(w,min_periods=1).sum()/count).where(count>=mp)
 
 
 def _rolling_apply_2d(values: np.ndarray, window: int, fn: Any, min_periods: int = 1) -> np.ndarray:
@@ -127,15 +156,7 @@ class TsPositiveRatio(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, threshold: float = 0.0, min_periods: int = 1, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        thr = float(threshold)
-        mp = max(1, int(min_periods))
-        return _frame_like(
-            x,
-            _rolling_apply_2d(
-                x.to_numpy(dtype=float), w, lambda c: _sign_ratio(c, 1, thr, mp), mp
-            ),
-        )
+        return _ratio_panel(x,window,threshold,min_periods,1)
 
 
 @register_operator(
@@ -166,15 +187,7 @@ class TsNegativeRatio(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, threshold: float = 0.0, min_periods: int = 1, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        thr = float(threshold)
-        mp = max(1, int(min_periods))
-        return _frame_like(
-            x,
-            _rolling_apply_2d(
-                x.to_numpy(dtype=float), w, lambda c: _sign_ratio(c, -1, thr, mp), mp
-            ),
-        )
+        return _ratio_panel(x,window,threshold,min_periods,-1)
 
 
 @register_operator(
@@ -205,21 +218,17 @@ class TsZeroRatio(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, tolerance: float = 0.0, min_periods: int = 1, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        tol = float(tolerance)
-        mp = max(1, int(min_periods))
-        return _frame_like(
-            x,
-            _rolling_apply_2d(
-                x.to_numpy(dtype=float), w, lambda c: _sign_ratio(c, 0, tol, mp), mp
-            ),
-        )
+        return _ratio_panel(x,window,tolerance,min_periods,0)
 
 
 def _abs_concentration(values: np.ndarray, min_periods: int) -> float:
     abs_values = np.abs(values[np.isfinite(values)])
     if abs_values.size < min_periods:
         return np.nan
+    peak = float(abs_values.max())
+    if peak <= 0.:
+        return np.nan
+    abs_values = abs_values / peak
     total = float(abs_values.sum())
     if total <= 0.0 or not np.isfinite(total):
         return np.nan
@@ -258,8 +267,7 @@ class TsAbsConcentration(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 1, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        mp = max(1, int(min_periods))
+        w, mp = _window_contract(window,min_periods)
         return _frame_like(
             x, _rolling_apply_2d(x.to_numpy(dtype=float), w, lambda c: _abs_concentration(c, mp), mp)
         )
@@ -269,6 +277,10 @@ def _abs_entropy(values: np.ndarray, min_periods: int, normalize: bool) -> float
     abs_values = np.abs(values[np.isfinite(values)])
     if abs_values.size < min_periods:
         return np.nan
+    peak = float(abs_values.max())
+    if peak <= 0.:
+        return np.nan
+    abs_values = abs_values / peak
     total = float(abs_values.sum())
     if total <= 0.0 or not np.isfinite(total):
         return np.nan
@@ -309,8 +321,7 @@ class TsAbsEntropy(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, normalize: bool = True, min_periods: int = 1, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        mp = max(1, int(min_periods))
+        w, mp = _window_contract(window,min_periods)
         # R5 P1-35(b): strict bool — a bare ``bool("false")`` would silently be
         # True; reject anything that is not a genuine true/false/1/0 value.
         norm = _strict_bool(normalize, "normalize")
@@ -355,8 +366,7 @@ class TsAbsEntropyNormalized(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 1, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        mp = max(1, int(min_periods))
+        w, mp = _window_contract(window,min_periods)
         return _frame_like(
             x,
             _rolling_apply_2d(x.to_numpy(dtype=float), w, lambda c: _abs_entropy(c, mp, True), mp),
@@ -388,8 +398,7 @@ class TsAbsEntropyNats(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 1, **_: Any) -> pd.DataFrame:
-        w = int(window)
-        mp = max(1, int(min_periods))
+        w, mp = _window_contract(window,min_periods)
         return _frame_like(
             x,
             _rolling_apply_2d(x.to_numpy(dtype=float), w, lambda c: _abs_entropy(c, mp, False), mp),

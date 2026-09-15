@@ -26,6 +26,19 @@ from quant_evaluator.contracts.metric_artifacts import FrozenMapping
 __all__ = ["FactorValueRef", "LabelBundleRef"]
 
 
+def _plain_metadata(value):
+    """Detach frozen containers for JSON without weakening stored immutability.
+
+    Leaf types retain the existing JSON encoder contract: unsupported raw
+    arrays/objects are not stringified or silently assigned a new identity.
+    """
+    if isinstance(value, Mapping):
+        return {key: _plain_metadata(item) for key, item in value.items()}
+    if isinstance(value, (tuple, list)):
+        return [_plain_metadata(item) for item in value]
+    return value
+
+
 @dataclass(frozen=True)
 class FactorValueRef:
     """Reference to a factor-value artifact (the factor panel / batch).
@@ -60,7 +73,7 @@ class FactorValueRef:
         if self.source_ref is not None:
             payload["source_ref"] = self.source_ref
         if self.metadata:
-            payload["metadata"] = dict(self.metadata)
+            payload["metadata"] = _plain_metadata(self.metadata)
         return payload
 
     @classmethod
@@ -119,7 +132,7 @@ class LabelBundleRef:
         if self.source_ref is not None:
             payload["source_ref"] = self.source_ref
         if self.metadata:
-            payload["metadata"] = dict(self.metadata)
+            payload["metadata"] = _plain_metadata(self.metadata)
         return payload
 
     @classmethod

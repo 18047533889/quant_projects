@@ -25,11 +25,38 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.common.daily_panel import _aligned
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 _EPS = 1e-12
+
+_CROSS_PANELS = {
+    "cs_neighbor_gap": ("x", "group"), "cs_local_density": ("x", "group"),
+    "cs_isolation": ("x", "group"), "cs_local_curvature": ("x", "group"),
+    "group_ex_self_std": ("x", "group"), "group_ex_self_mad": ("x", "group"),
+    "group_ex_self_quantile": ("x", "group"),
+    "relation_weighted_std_ex_self": ("x", "weight", "group"),
+}
+_CROSS_DEFAULTS = {
+    "cs_neighbor_gap": {"k": 5, "group": None},
+    "cs_local_density": {"k": 5, "group": None},
+    "cs_isolation": {"k": 5, "group": None},
+    "cs_local_curvature": {"k": 5, "group": None},
+    "group_ex_self_std": {"min_peers": 2}, "group_ex_self_mad": {"min_peers": 3},
+    "group_ex_self_quantile": {"q": 0.5, "min_peers": 2},
+    "relation_weighted_std_ex_self": {"min_peers": 2},
+}
+def _cross_specs(name: str) -> dict[str, ParamSpec]:
+    out = {}
+    for key, default in _CROSS_DEFAULTS[name].items():
+        if key == "group":
+            continue
+        if key in ("k", "min_peers"):
+            out[key] = ParamSpec(dtype=int, min=1, default=default, param_role=ParamRole.ESTIMATOR_RESOLUTION)
+        elif key == "q":
+            out[key] = ParamSpec(dtype=float, min=0.0, max=1.0, default=default, param_role=ParamRole.ESTIMATOR_RESOLUTION)
+    return out
 
 
 def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str) -> OperatorMetadata:
@@ -44,6 +71,9 @@ def _metadata(name: str, description: str, params: list[str], *, domain: str, un
             f"signature:{','.join(params)}->series", f"domain:{domain}",
             f"unit:{unit}", "cost:1",
         ],
+        panel_params=_CROSS_PANELS[name],
+        scalar_params=tuple(k for k in _CROSS_DEFAULTS[name] if k not in _CROSS_PANELS[name]),
+        param_specs=_cross_specs(name),
     )
 
 

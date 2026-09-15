@@ -1257,6 +1257,7 @@ _CONTEXT_SLOTS: dict[str, tuple[str, ...]] = {
     "cs_bucket": ("group",),
     "size_neutralize": ("size",),
     "industry_neutralize": ("group",),
+    "panel_peer_graph_aggregate": ("similarity",),
 }
 # condition slots map to the panel param that carries the condition.
 _CONDITION_SLOT_NAMES: dict[str, str] = {
@@ -1310,8 +1311,8 @@ class InputSlotSpec:
     allowed_semantic_kinds: tuple[str, ...] = ("field",)
     allowed_units: tuple[str, ...] = ()
     allowed_roles: tuple[str, ...] = ("data",)
-    cardinality: str = "panel"  # panel | broadcast | scalar | condition | event | group
-    axis_semantics: str = "per_instrument"  # per_instrument | cross_section | group | session | global
+    cardinality: str = "panel"  # panel | broadcast | scalar | condition | event | group | adjacency
+    axis_semantics: str = "per_instrument"  # includes source_symbol_x_destination_symbol for adjacency
     context: str = "data"  # data | context | group | event | condition | scalar
 
 
@@ -1381,14 +1382,15 @@ def input_slot_specs(
             )
             continue
         if name in context_names:
+            is_adjacency = canonical == "panel_peer_graph_aggregate" and name == "similarity"
             slots.append(
                 InputSlotSpec(
                     parameter=name,
-                    allowed_semantic_kinds=("context", "group", "broadcast"),
+                    allowed_semantic_kinds=("adjacency",) if is_adjacency else ("context", "group", "broadcast"),
                     allowed_units=(),
                     allowed_roles=("context",),
-                    cardinality="broadcast",
-                    axis_semantics="cross_section" if name == "group" else "global",
+                    cardinality="adjacency" if is_adjacency else "broadcast",
+                    axis_semantics="source_symbol_x_destination_symbol" if is_adjacency else ("cross_section" if name == "group" else "global"),
                     context="group" if name == "group" else "context",
                 )
             )
@@ -2599,8 +2601,9 @@ def get_direct_use_mining_operators(
 
     Only DIRECT_* statuses are returned.  ``admission`` mirrors the mining
     layer: ``eligible`` (production_certified + role-admissible + sources +
-    cost contract) or ``all`` (every retained DIRECT_* row, including not-yet-
-    certified — used by the DirectUse Matrix / manifests).
+    cost contract), ``all`` (retained DIRECT_* rows), or ``research`` (public
+    DIRECT_* plus research tools, without treating certification/cost labels as
+    execution denial).
 
     R21-P033: context is required; market=None is not allowed.
     """
@@ -2610,16 +2613,15 @@ def get_direct_use_mining_operators(
     load_all()
     ctx = context
     mode = str(admission or "eligible").strip().lower()
-    if mode not in {"eligible", "all"}:
-        raise ValueError("admission must be eligible or all")
+    if mode not in {"eligible", "all", "research"}:
+        raise ValueError("admission must be eligible, all, or research")
     out: list[DirectUseOperator] = []
     for canonical in sorted(OperatorRegistry._catalog):
         catalog = OperatorRegistry._catalog[canonical]
         row = build_direct_use_operator(canonical, catalog)
-        if row.direct_use_status.value.startswith("delete_") or row.direct_use_status in (
-            DirectUseStatus.RESEARCH_TOOL,
-            DirectUseStatus.MOVE_INTERNAL,
-        ):
+        if row.direct_use_status.value.startswith("delete_") or row.direct_use_status is DirectUseStatus.MOVE_INTERNAL:
+            continue
+        if mode != "research" and row.direct_use_status is DirectUseStatus.RESEARCH_TOOL:
             continue
         if ctx.market not in row.supported_markets:
             continue

@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-c", "import factor_engine.cleaned_operators as c; c.load_all(); print(\"LOAD_OK\")"], "returncode": 0, "sampled_peak_family_rss_bytes": 407683072, "sampling_seconds": 0.1, "seconds": 52.62980901100673, "test_guard_reason": null, "hard_memory_cap": false}

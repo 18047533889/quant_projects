@@ -34,6 +34,7 @@ __all__ = [
     "QuantileReturnArtifact",
     "DailyQuantileReturnArtifact",
     "ProbePortfolioArtifact",
+    "ExecutablePortfolioArtifact",
     "ExposureArtifact",
 ]
 
@@ -350,10 +351,14 @@ class ProbePortfolioArtifact:
         object.__setattr__(self, "values", values)
         object.__setattr__(self, "time_index", _freeze_tuple(self.time_index))
         object.__setattr__(self, "factor_ids", _freeze_tuple(self.factor_ids))
-        if self.time_index and len(self.time_index) != values.shape[0]:
+        if len(self.time_index) != values.shape[0]:
             raise ValueError(
                 f"ProbePortfolioArtifact.time_index length {len(self.time_index)} "
                 f"does not match T={values.shape[0]}"
+            )
+        if len(self.factor_ids) != values.shape[1] or len(set(self.factor_ids)) != len(self.factor_ids):
+            raise ValueError(
+                "ProbePortfolioArtifact.factor_ids must be unique and match the F axis"
             )
         object.__setattr__(self, "provenance", FrozenMapping(self.provenance))
 
@@ -388,6 +393,7 @@ class ProbePortfolioArtifact:
     def to_dict(self) -> dict:
         """Serialize to a JSON-friendly plain dict (lossless ndarray codec)."""
         return {
+            "artifact_type": type(self).__name__,
             "values": encode_value(self.values),
             "time_index": encode_value(self.time_index),
             "factor_ids": list(self.factor_ids),
@@ -398,6 +404,11 @@ class ProbePortfolioArtifact:
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> "ProbePortfolioArtifact":
         """Deserialize from the payload produced by :meth:`to_dict`."""
+        encoded_type = data.get("artifact_type")
+        if encoded_type is not None and encoded_type != cls.__name__:
+            raise ValueError(
+                f"artifact_type {encoded_type!r} cannot be loaded as {cls.__name__}"
+            )
         return cls(
             values=decode_value(data["values"]),
             time_index=tuple(decode_value(data.get("time_index", ()))),
@@ -405,6 +416,38 @@ class ProbePortfolioArtifact:
             metric_id=data.get("metric_id", "probe_portfolio"),
             provenance=decode_value(data.get("provenance", {})),
         )
+
+
+@dataclass(frozen=True, eq=False)
+class ExecutablePortfolioArtifact(ProbePortfolioArtifact):
+    """Returns from an execution-certified holdings/cash/fill trajectory."""
+
+    metric_id: str = "executable_portfolio"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.provenance.get("execution_certified") is not True:
+            raise ValueError("ExecutablePortfolioArtifact requires execution certification")
+        if self.provenance.get("cost_scope") != "NET_EXECUTABLE":
+            raise ValueError("ExecutablePortfolioArtifact requires NET_EXECUTABLE cost scope")
+        per_factor = self.provenance.get("per_factor_execution_refs")
+        execution_ref = self.provenance.get("execution_ref")
+        if len(self.factor_ids) == 1:
+            if not isinstance(execution_ref, str) or not execution_ref:
+                raise ValueError("ExecutablePortfolioArtifact requires an execution ledger ref")
+        else:
+            if not isinstance(per_factor, Mapping):
+                raise ValueError("batched executable artifacts require per-factor execution refs")
+            if set(per_factor) != set(self.factor_ids) or any(
+                not isinstance(per_factor[fid], str) or not per_factor[fid]
+                for fid in self.factor_ids
+            ):
+                raise ValueError("per-factor execution refs must exactly cover the factor axis")
+            if execution_ref != per_factor:
+                raise ValueError("batched execution_ref must be the factor-keyed ledger mapping")
+
+    def __hash__(self) -> int:
+        return stable_hash(stable_content_hex(tag="ExecutablePortfolioArtifact", fields=self.to_dict()))
 
 
 @dataclass(frozen=True, eq=False)

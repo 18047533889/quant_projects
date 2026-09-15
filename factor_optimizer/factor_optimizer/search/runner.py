@@ -138,8 +138,17 @@ class SearchConfig:
                 self.execution_mode = ExecutionMode(self.execution_mode)
             except ValueError as exc:
                 raise ValueError(f"unsupported execution_mode: {self.execution_mode}") from exc
+        if not isinstance(self.execution_mode, ExecutionMode):
+            raise TypeError("execution_mode must be an ExecutionMode or a supported string")
         if self.execution_mode is ExecutionMode.PRODUCTION:
             require_production_capability()
+        for name in ("plateau_window", "max_concurrency"):
+            if type(getattr(self, name)) is not int:
+                raise TypeError(f"{name} must be an integer")
+        if type(self.plateau_threshold) not in (int, float):
+            raise TypeError("plateau_threshold must be a real number")
+        if isinstance(self.plateau_threshold, float) and not isfinite(self.plateau_threshold):
+            raise ValueError("plateau_threshold must be finite")
         if self.plateau_window < 1:
             raise ValueError("plateau_window must be >= 1")
         if self.plateau_threshold < 0:
@@ -150,6 +159,8 @@ class SearchConfig:
             raise ValueError(
                 "max_concurrency > 1 is unsupported while SearchRunner is serialized"
             )
+        if isinstance(self.evaluation_cost_units, bool):
+            raise TypeError("evaluation_cost_units must be a numeric cost, not a bool")
         if self.evaluation_cost_units is not None and (
             not isfinite(self.evaluation_cost_units) or self.evaluation_cost_units < 0
         ):
@@ -159,8 +170,9 @@ class SearchConfig:
             or not self.durable_campaign_store_path.strip()
         ):
             raise ValueError("durable_campaign_store_path must be a non-empty path")
-        if not isinstance(self.screening_only, bool):
-            raise TypeError("screening_only must be a bool")
+        for name in ("screening_only", "enable_multifidelity", "require_evaluation_protocol"):
+            if not isinstance(getattr(self, name), bool):
+                raise TypeError(f"{name} must be a bool")
         if self.objective_direction is not None:
             if self.objective_direction not in OBJECTIVE_DIRECTIONS:
                 raise ValueError(
@@ -1351,10 +1363,14 @@ class SearchRunner:
 
     def _finish(self, session: SearchSession, reason: str) -> None:
         """Run the sole authoritative final decision before sealing."""
+        self._assert_live_configuration(session)
         if self.decision_provider is not None:
             from factor_optimizer.ports.factor_intelligence import require_bound_decision_receipt
             request = self.decision_request_factory(session)
-            receipt = require_bound_decision_receipt(request, self.decision_provider.decide(request))
+            self._assert_live_configuration(session)
+            raw_receipt = self.decision_provider.decide(request)
+            self._assert_live_configuration(session)
+            receipt = require_bound_decision_receipt(request, raw_receipt)
             status = getattr(receipt.status, "value", receipt.status)
             if status == "SELECTED":
                 if receipt.winner_id not in {
@@ -1446,6 +1462,10 @@ class SearchRunner:
         """
         if not isinstance(session, SearchSession):
             raise TypeError("session must be a SearchSession")
+        if session.execution_plan_hash != _execution_plan_hash(session.config):
+            raise ValueError(
+                "session configuration changed after its execution plan was bound"
+            )
         if (
             session.is_finished()
             and session.strategy is None
@@ -1548,16 +1568,26 @@ class SearchRunner:
         """
         return SealedTestExecutor(self, self._test_authority_broker)
 
+    def _assert_live_configuration(self, session: SearchSession) -> None:
+        if any(
+            _execution_plan_hash(config) != session.execution_plan_hash
+            for config in (self.config, session.config)
+        ):
+            raise ValueError("search configuration changed during active session")
+
     def _run_session(self, session: SearchSession) -> SearchSession:
         """Execute a session from its current quiescent state."""
         budget_tracker = session.budget_tracker
         recent_scores = session.recent_scores
 
         while not session.is_finished():
+            self._assert_live_configuration(session)
             if budget_tracker.is_exhausted():
                 self._finish(session, "budget_exhausted")
                 break
-            if self._check_plateau(recent_scores):
+            plateau_detected = self._check_plateau(recent_scores)
+            self._assert_live_configuration(session)
+            if plateau_detected:
                 self._finish(session, "plateau_detected")
                 break
             if not budget_tracker.can_propose_trial():
@@ -1584,6 +1614,7 @@ class SearchRunner:
                     f"proposal_fn error: {exc}"
                 )
                 continue
+            self._assert_live_configuration(session)
             budget_tracker.record_trial()
             if not isinstance(trial, Trial):
                 # FO-P0-04: a proposal that returned a non-Trial is an
@@ -1607,6 +1638,7 @@ class SearchRunner:
 
             trial.update_status(TrialStatus.VALIDATING)
             legality = self._validate_trial(trial)
+            self._assert_live_configuration(session)
             if not legality["is_legal"]:
                 trial.update_status(TrialStatus.ILLEGAL, legality_check=legality)
                 session.ledger.append_trial("ILLEGAL", trial.trial_id)
@@ -1667,6 +1699,7 @@ class SearchRunner:
                     raw_result = self._evaluate_with_capability(
                         train_capability, trial, fidelity
                     )
+                    self._assert_live_configuration(session)
                     # FO-P1-25: every evaluation output is normalized into a
                     # typed TrialEvaluationArtifact.  The runner reads ONLY the
                     # artifact's fields (never bare magic dict keys), so an
@@ -1716,6 +1749,9 @@ class SearchRunner:
                     session.ledger.append_trial(
                         "EVALUATION_FAILED", trial.trial_id, failure_reason=str(exc)
                     )
+                    # Settle the executed attempt before propagating plan
+                    # drift; it must not become an ordinary retryable failure.
+                    self._assert_live_configuration(session)
                     break
 
                 try:
@@ -1778,8 +1814,11 @@ class SearchRunner:
                         stage_request = self.stage_decision_request_factory(
                             session, trial, artifact, issued_tier_job
                         )
+                        self._assert_live_configuration(session)
+                        raw_stage_receipt = self.decision_provider.decide(stage_request)
+                        self._assert_live_configuration(session)
                         stage_receipt = require_bound_decision_receipt(
-                            stage_request, self.decision_provider.decide(stage_request)
+                            stage_request, raw_stage_receipt
                         )
                         stage_status = getattr(stage_receipt.status, "value", stage_receipt.status)
                         passed = (

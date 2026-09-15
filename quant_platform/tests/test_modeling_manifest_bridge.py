@@ -93,11 +93,16 @@ def test_model_compatibility_selection_rejects_incomplete_manifest():
 def test_same_ref_with_spoofed_schema_hash_or_different_fields_is_rejected():
     deployed = version("v1")
     changed = version("v1", "cluster:A@v2#different")
-    spoofed = FeatureSetVersion(
-        feature_set_id=changed.feature_set_id, version=changed.version,
-        ordered_members=changed.ordered_members, consumer_profile=changed.consumer_profile,
-        schema_hash=deployed.schema_hash,
-    )
+    with pytest.raises(ValueError, match="schema_hash does not match"):
+        FeatureSetVersion(
+            feature_set_id=changed.feature_set_id, version=changed.version,
+            ordered_members=changed.ordered_members, consumer_profile=changed.consumer_profile,
+            schema_hash=deployed.schema_hash,
+        )
+    # Retain the downstream defensive check for an object bypassing the DTO
+    # constructor (e.g. corrupt legacy in-memory state).
+    spoofed = changed
+    object.__setattr__(spoofed, "schema_hash", deployed.schema_hash)
     with pytest.raises(ValueError, match="schema_hash is not canonical"):
         select_model_compatible_manifest(
             deployed, spoofed, deployed_model_artifact_ref="model:old"

@@ -274,7 +274,37 @@ def test_pair_bundle_reused_for_two_panel_ops(leased_ss_cache) -> None:
 
 
 # ---------------------------------------------------------------------------
-# (c) fail-closed bind
+# (c) joint-positive support contract
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("kernel", [sso._ts_vwap, sso._ts_amount_weighted_mean])
+@pytest.mark.parametrize("min_finite", [1, 2, 3])
+def test_weighted_mean_scalar_vector_joint_positive_support(kernel, min_finite):
+    idx = pd.to_datetime([
+        "2024-01-02 09:30", "2024-01-02 09:31", "2024-01-02 09:32"
+    ])
+    price = pd.DataFrame({"x": [100.0, 101.0, 102.0]}, index=idx)
+    cases = [
+        ([1.0, np.nan, np.nan], 100.0, 1),
+        ([1.0, 2.0, np.nan], (100.0 + 202.0) / 3.0, 2),
+        ([1.0, 2.0, 3.0], 608.0 / 6.0, 3),
+        ([0.0, -1.0, np.inf], np.nan, 0),
+    ]
+    vec = getattr(kernel, "__vec__")
+    for weights, expected, support in cases:
+        weight = pd.DataFrame({"x": weights}, index=idx)
+        scalar = _core.daily_agg_two(price, weight, kernel, min_finite=min_finite)
+        vector = vec(price, weight, min_finite=min_finite)
+        if support < min_finite:
+            assert np.isnan(scalar.iloc[0, 0])
+            assert np.isnan(vector.iloc[0, 0])
+        else:
+            assert scalar.iloc[0, 0] == pytest.approx(expected)
+            assert vector.iloc[0, 0] == pytest.approx(expected)
+
+
+# ---------------------------------------------------------------------------
+# (d) fail-closed bind
 # ---------------------------------------------------------------------------
 
 def test_fail_closed_bind_count() -> None:

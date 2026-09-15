@@ -48,7 +48,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.runtime.session_calendar import EXCHANGE_CERTIFIED, SessionCalendar
 from factor_engine.runtime.session_panel import (
     AxisMismatchError,
@@ -84,6 +84,18 @@ _DEFAULT_SESSION_TZ = "Asia/Shanghai"
 # R26-038: documented storage convention for the A-share minute pipeline (UTC).
 _DEFAULT_SOURCE_TZ = {"ashare": "UTC", "cn": "UTC", "a": "UTC"}
 _COVERAGE_FLOOR = 0.9  # official-slot coverage required for RV / share / limits
+_SEGMENT_SPEC = ParamSpec(dtype=str, choices=("morning", "afternoon"), default="morning", searchable=False, param_role=ParamRole.POLICY)
+_TZ_SPEC = ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY)
+_ENDPOINT_SPEC = ParamSpec(dtype=str, choices=("exact", "recent_valid"), default="exact", searchable=False, param_role=ParamRole.POLICY)
+_UP_DOWN_SPEC = ParamSpec(dtype=str, choices=("up", "down"), default="up", searchable=False, param_role=ParamRole.POLICY)
+_MARKET_SPEC = ParamSpec(dtype=str, default="ashare", searchable=False, param_role=ParamRole.MARKET_POLICY)
+
+
+def _require_positive_finite(value: Any, name: str) -> float:
+    value = float(value)
+    if not np.isfinite(value) or value <= 0.0:
+        raise ValueError(f"{name} must be finite and > 0")
+    return value
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str) -> OperatorMetadata:
@@ -441,7 +453,8 @@ class IntraSegmentReturn(SeriesOperator):
         unit="return",
     )
     metadata.param_specs = {
-        "endpoint_policy": ParamSpec(dtype=str, choices=("exact", "recent_valid"), searchable=False),
+        "segment": _SEGMENT_SPEC, "session_tz": _TZ_SPEC,
+        "endpoint_policy": _ENDPOINT_SPEC,
     }
 
     def _calculate_series(self, close, segment="morning", session_tz=None,
@@ -482,20 +495,30 @@ def _make_seg_share(unit: str):
         # required positional``.  Bind the panel from the canonical keyword name
         # (``volume`` / ``amount``) when not passed positionally.  (segment /
         # session_tz arrive as scalar kwargs.)
+        if len(panels) > 4:
+            raise TypeError(f"{self.metadata.name}: expected at most 4 positional arguments")
+        if len(panels) > 1 and "segment" in kwargs:
+            raise TypeError(f"{self.metadata.name}: segment passed both positionally and by keyword")
+        if len(panels) > 2 and "session_tz" in kwargs:
+            raise TypeError(f"{self.metadata.name}: session_tz passed both positionally and by keyword")
+        if len(panels) > 3 and "market" in kwargs:
+            raise TypeError(f"{self.metadata.name}: market passed both positionally and by keyword")
         panel = panels[0] if panels else kwargs.get(unit)
         if panel is None:
             raise TypeError(
                 f"{self.metadata.name}: missing panel input {unit!r} (pass "
                 f"{unit}=... or positionally)"
             )
-        segment = kwargs.get("segment", "morning")
-        session_tz = kwargs.get("session_tz")
+        segment = panels[1] if len(panels) > 1 else kwargs.get("segment", "morning")
+        session_tz = panels[2] if len(panels) > 2 else kwargs.get("session_tz")
+        market = panels[3] if len(panels) > 3 else kwargs.get("market", "ashare")
         if segment not in _SEGMENT_RANGES:
             raise ValueError(f"segment must be in {{morning, afternoon}}, got {segment!r}")
         return _daily_agg(
             panel,
             lambda p: _seg_volume_share(p, segment),
             session_tz=session_tz,
+            market=market,
         )
     return _calculate_series
 
@@ -513,9 +536,12 @@ class IntraSegmentVolumeShare(SeriesOperator):
     metadata = _metadata(
         "intra_segment_volume_share",
         "指定时段成交量占全天比例（完整日 denominator 才有效）。",
-        ["volume", "segment", "session_tz"], unit="ratio",
+        ["volume", "segment", "session_tz", "market"], unit="ratio",
     )
-    metadata.param_specs = {}
+    metadata.panel_params = ("volume",)
+    metadata.panel_arity = 1
+    metadata.scalar_params = ("segment", "session_tz", "market")
+    metadata.param_specs = {"segment": _SEGMENT_SPEC, "session_tz": _TZ_SPEC, "market": _MARKET_SPEC}
 
     _calculate_series = _make_seg_share("volume")
 
@@ -533,9 +559,12 @@ class IntraSegmentAmountShare(SeriesOperator):
     metadata = _metadata(
         "intra_segment_amount_share",
         "指定时段成交额占全天比例（完整日 denominator 才有效）。",
-        ["amount", "segment", "session_tz"], unit="ratio",
+        ["amount", "segment", "session_tz", "market"], unit="ratio",
     )
-    metadata.param_specs = {}
+    metadata.panel_params = ("amount",)
+    metadata.panel_arity = 1
+    metadata.scalar_params = ("segment", "session_tz", "market")
+    metadata.param_specs = {"segment": _SEGMENT_SPEC, "session_tz": _TZ_SPEC, "market": _MARKET_SPEC}
 
     _calculate_series = _make_seg_share("amount")
 
@@ -577,7 +606,7 @@ class IntraSegmentVwapDeviation(SeriesOperator):
         ["close", "amount", "volume", "segment", "session_tz"],
         unit="ratio",
     )
-    metadata.param_specs = {}
+    metadata.param_specs = {"segment": _SEGMENT_SPEC, "session_tz": _TZ_SPEC}
 
 
     def _calculate_series(self, close, amount, volume, segment="morning", session_tz=None, **_):
@@ -615,7 +644,7 @@ class IntraSegmentRealizedVol(SeriesOperator):
         "指定时段已实现波动率 sqrt(sum(r_t^2))。",
         ["close", "segment", "session_tz"], unit="volatility",
     )
-    metadata.param_specs = {}
+    metadata.param_specs = {"segment": _SEGMENT_SPEC, "session_tz": _TZ_SPEC}
 
 
     def _calculate_series(self, close, segment="morning", session_tz=None, **_):
@@ -690,7 +719,9 @@ class IntraRealizedSemivariance(SeriesOperator):
         "日内上/下半方差 sum(r_t^2 * 1(sign))。",
         ["close", "side"], unit="variance",
     )
-    metadata.param_specs = {}
+    metadata.param_specs = {
+        "side": ParamSpec(dtype=str, choices=("up", "down"), default="down", searchable=False, param_role=ParamRole.POLICY),
+    }
 
 
     def _calculate_series(self, close, side="down", **_):
@@ -1015,7 +1046,7 @@ class IntraEntropy(SeriesOperator):
         ["value", "normalize"], unit="entropy",
     )
     metadata.param_specs = {
-        "normalize": ParamSpec(dtype=bool, searchable=False),
+        "normalize": ParamSpec(dtype=bool, default=True, searchable=False, param_role=ParamRole.POLICY),
     }
 
     def _calculate_series(self, value, normalize=True, **_):
@@ -1086,7 +1117,7 @@ class IntraReturnActivityCorr(SeriesOperator):
         ["close", "activity", "absolute_return"], unit="corr",
     )
     metadata.param_specs = {
-        "absolute_return": ParamSpec(dtype=bool, searchable=False),
+        "absolute_return": ParamSpec(dtype=bool, default=False, searchable=False, param_role=ParamRole.POLICY),
     }
 
     def _calculate_series(self, close, activity, absolute_return=False, **_):
@@ -1129,12 +1160,13 @@ class IntraAmihud(SeriesOperator):
     )
     # R6-189: ``scale`` is a pure output-unit rescaling — never a search param.
     metadata.param_specs = {
-        "scale": ParamSpec(dtype=float, searchable=False),
+        "scale": ParamSpec(dtype=float, min=0.0, default=1e8, searchable=False, param_role=ParamRole.NUMERICAL),
     }
 
     def _calculate_series(self, close, amount, scale=1e8, **_):
         return _pair_agg(
-            close, amount, lambda pa, pb: _intra_amihud(pa, pb, float(scale)),
+            close, amount,
+            lambda pa, pb: _intra_amihud(pa, pb, _require_positive_finite(scale, "scale")),
         )
 
 
@@ -1199,7 +1231,9 @@ class IntraExtremeBarReturn(SeriesOperator):
         "日内单分钟最大/最小收益。",
         ["close", "side"], unit="return",
     )
-    metadata.param_specs = {}
+    metadata.param_specs = {
+        "side": ParamSpec(dtype=str, choices=("max", "min"), default="max", searchable=False, param_role=ParamRole.POLICY),
+    }
 
 
     def _calculate_series(self, close, side="max", **_):
@@ -1263,15 +1297,16 @@ class IntraLunchGapReturn(SeriesOperator):
         unit="return",
     )
     metadata.param_specs = {  # config knobs, not search parameters
-        "morning_cutoff": ParamSpec(dtype=str, searchable=False),
-        "afternoon_start": ParamSpec(dtype=str, searchable=False),
-        "endpoint_policy": ParamSpec(dtype=str, choices=("exact", "recent_valid"), searchable=False),
+        "morning_cutoff": ParamSpec(dtype=str, default="11:30", searchable=False, param_role=ParamRole.POLICY),
+        "afternoon_start": ParamSpec(dtype=str, default="13:01", searchable=False, param_role=ParamRole.POLICY),
+        "session_tz": _TZ_SPEC,
+        "endpoint_policy": _ENDPOINT_SPEC,
     }
 
-    def _calculate_series(self, close, open_px, morning_cutoff="11:30", afternoon_start="13:01",
+    def _calculate_series(self, close, open, morning_cutoff="11:30", afternoon_start="13:01",
                           session_tz=None, endpoint_policy="exact", **_):
         return _pair_agg(
-            close, open_px,
+            close, open,
             lambda pc, po: _lunch_gap_return(pc, po, morning_cutoff, afternoon_start, endpoint_policy),
             session_tz=session_tz,
         )
@@ -1383,7 +1418,10 @@ class IntraLimitFirstHitTime(SeriesOperator):
         unit="position",
     )
     metadata.tags.append("allow_panel_broadcast")
-    metadata.param_specs = {}
+    metadata.panel_params = ("close", "high", "low", "high_limit", "low_limit")
+    metadata.panel_arity = 5
+    metadata.scalar_params = ("side",)
+    metadata.param_specs = {"side": _UP_DOWN_SPEC}
 
 
     def _calculate_series(self, close, high=None, low=None, high_limit=None, low_limit=None,
@@ -1425,7 +1463,10 @@ class IntraLimitDuration(SeriesOperator):
         ["close", "high_limit", "low_limit", "side"], unit="ratio",
     )
     metadata.tags.append("allow_panel_broadcast")
-    metadata.param_specs = {}
+    metadata.panel_params = ("close", "high_limit", "low_limit")
+    metadata.panel_arity = 3
+    metadata.scalar_params = ("side",)
+    metadata.param_specs = {"side": _UP_DOWN_SPEC}
 
 
     def _calculate_series(self, close, high_limit=None, low_limit=None, side="up", **_):
@@ -1466,7 +1507,13 @@ class IntraLimitReopenCount(SeriesOperator):
         ["close", "high_limit", "low_limit", "side", "transition"], unit="count",
     )
     metadata.tags.append("allow_panel_broadcast")
-    metadata.param_specs = {}
+    metadata.panel_params = ("close", "high_limit", "low_limit")
+    metadata.panel_arity = 3
+    metadata.scalar_params = ("side", "transition")
+    metadata.param_specs = {
+        "side": _UP_DOWN_SPEC,
+        "transition": ParamSpec(dtype=str, choices=("open", "reseal"), default="open", searchable=False, param_role=ParamRole.POLICY),
+    }
 
 
     def _calculate_series(self, close, high_limit=None, low_limit=None, side="up",

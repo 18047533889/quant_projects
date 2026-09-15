@@ -174,6 +174,18 @@ class TaxonomyPolicy:
             self, "structure_tag_vocab", tuple(dict.fromkeys(self.structure_tag_vocab))
         )
         object.__setattr__(self, "domain_vocab", tuple(dict.fromkeys(self.domain_vocab)))
+        object.__setattr__(
+            self,
+            "display_family_tokens",
+            tuple(dict.fromkeys(self.display_family_tokens)),
+        )
+        display_groups = {
+            str(label): tuple(dict.fromkeys(group))
+            for label, group in self.display_family_label_groups.items()
+        }
+        object.__setattr__(
+            self, "display_family_label_groups", MappingProxyType(display_groups)
+        )
         if not set(self.display_family_label_groups).issubset(
             set(self.display_family_tokens)
         ):
@@ -194,7 +206,7 @@ class TaxonomyPolicy:
 TAXONOMY_POLICY_CURRENT_ID = "CN_A_SHARE_DAILY_TAXONOMY_V1"
 TAXONOMY_POLICY_CURRENT_VERSION = "2.0.0"
 
-TAXONOMY_POLICIES: Mapping[str, tuple[TaxonomyPolicy, ...]] = {
+TAXONOMY_POLICIES: Mapping[str, tuple[TaxonomyPolicy, ...]] = MappingProxyType({
     TAXONOMY_POLICY_CURRENT_ID: (
         TaxonomyPolicy(
             policy_id=TAXONOMY_POLICY_CURRENT_ID,
@@ -209,7 +221,7 @@ TAXONOMY_POLICIES: Mapping[str, tuple[TaxonomyPolicy, ...]] = {
             mechanism_sources="alpha_only",
         ),
     ),
-}
+})
 
 
 def get_taxonomy_policy(
@@ -706,6 +718,21 @@ class FactorHealthPolicy:
             raise ValueError("policy_id is required")
         if not self.policy_version:
             raise ValueError("policy_version is required")
+        # A frozen dataclass does not freeze caller-owned list containers.
+        # Copy every sequence into an immutable canonical shape before any
+        # validation or hashing so later mutation of constructor inputs cannot
+        # alter an already-created policy.
+        object.__setattr__(self, "grade_alphabet", tuple(self.grade_alphabet))
+        object.__setattr__(
+            self,
+            "display_score_bands",
+            tuple((str(grade), float(min_score)) for grade, min_score in self.display_score_bands),
+        )
+        for field_name in ("rank_ic_anchors", "icir_anchors", "retention_anchors"):
+            anchors = tuple(getattr(self, field_name))
+            if any(not isinstance(anchor, GradeAnchor) for anchor in anchors):
+                raise TypeError(f"{field_name} must contain GradeAnchor values")
+            object.__setattr__(self, field_name, anchors)
         if not self.grade_alphabet:
             raise ValueError("grade_alphabet must be non-empty")
         mins = [float(b[1]) for b in self.display_score_bands]
@@ -780,15 +807,79 @@ class FactorHealthPolicy:
 
     @property
     def policy_hash(self) -> str:
+        def anchors_payload(anchors: Sequence[GradeAnchor]) -> list[dict[str, object]]:
+            return [
+                {"grade": anchor.grade, "threshold": anchor.ge,
+                 "desirability": anchor.desirability}
+                for anchor in anchors
+            ]
+
+        def metric_rule_payload(rule: MetricGradeRule) -> dict[str, object]:
+            return {
+                "metric_id": rule.metric_id,
+                "anchors": anchors_payload(rule.anchors),
+                "higher_is_better": rule.higher_is_better,
+                "missing_desirability": rule.missing_desirability,
+                "evaluation_role": rule.evaluation_role,
+                "applicability": rule.applicability,
+                "unit": rule.unit,
+                "runtime_metric_id": rule.runtime_metric_id,
+            }
+
+        def dimension_rule_payload(rule: DimensionRule) -> dict[str, object]:
+            return {
+                "dimension_id": rule.dimension_id,
+                "metric_ids": rule.metric_ids,
+                "min_weight": rule.min_weight,
+                "geo_weight": rule.geo_weight,
+                "missing_desirability": rule.missing_desirability,
+                "repairable": rule.repairable,
+                "required_metric_ids": rule.required_metric_ids,
+                "optional_metric_ids": rule.optional_metric_ids,
+                "alternative_metric_groups": rule.alternative_metric_groups,
+                "applicable_use_cases": rule.applicable_use_cases,
+            }
+
+        def admission_payload(floors: AdmissionFloors) -> dict[str, object]:
+            return {
+                "dimension_floors": dict(floors.dimension_floors),
+                "hard_gate_dimensions": floors.hard_gate_dimensions,
+                "integrity_gate_ids": floors.integrity_gate_ids,
+                "require_all_dimensions_graded": floors.require_all_dimensions_graded,
+                "use_case": floors.use_case,
+                "required_dimension_ids": floors.required_dimension_ids,
+            }
+
         payload = {
             "id": self.policy_id, "version": self.policy_version,
-            "scope": [self.market, self.frequency, self.target_id, self.universe_class],
+            "scope": [self.market, self.frequency, self.target_id,
+                      self.universe_class, self.factor_family_scope],
+            "description": self.description,
+            "grade_alphabet": self.grade_alphabet,
+            "display_score_bands": self.display_score_bands,
+            "rank_ic_anchors": anchors_payload(self.rank_ic_anchors),
+            "icir_anchors": anchors_payload(self.icir_anchors),
+            "retention_anchors": anchors_payload(self.retention_anchors),
+            "metric_grade_rules": {
+                key: metric_rule_payload(value)
+                for key, value in self.metric_grade_rules.items()
+            },
+            "dimension_rules": {
+                key: dimension_rule_payload(value)
+                for key, value in self.dimension_rules.items()
+            },
+            "admission_floors": admission_payload(self.admission_floors),
             "calibration_ref": self.calibration_ref,
+            "policy_status": self.policy_status,
             "aliases": dict(self.metric_aliases),
-            "use_cases": {k: {"floors": dict(v.dimension_floors), "required": v.required_dimension_ids,
-                               "gates": v.integrity_gate_ids} for k, v in self.use_case_admission_floors.items()},
+            "use_cases": {
+                key: admission_payload(value)
+                for key, value in self.use_case_admission_floors.items()
+            },
         }
-        return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
 
     def grade_and_desirability(
         self, metric_id: str, value: float | None
@@ -1054,7 +1145,7 @@ def _v5_dimension_rules() -> dict[str, DimensionRule]:
     )
     return rules
 
-FACTOR_HEALTH_POLICIES: Mapping[str, tuple[FactorHealthPolicy, ...]] = {
+FACTOR_HEALTH_POLICIES: Mapping[str, tuple[FactorHealthPolicy, ...]] = MappingProxyType({
     FACTOR_HEALTH_POLICY_CURRENT_ID: (
         FactorHealthPolicy(
             policy_id=FACTOR_HEALTH_POLICY_CURRENT_ID,
@@ -1135,7 +1226,7 @@ FACTOR_HEALTH_POLICIES: Mapping[str, tuple[FactorHealthPolicy, ...]] = {
             policy_status="CALIBRATION_REQUIRED",
         ),
     ),
-}
+})
 
 
 def get_health_policy(
@@ -1247,11 +1338,14 @@ class DiagnosisPolicy:
             raise ValueError("policy_id is required")
         if not self.policy_version:
             raise ValueError("policy_version is required")
-        object.__setattr__(self, "severity_by_tag", dict(self.severity_by_tag))
+        severity = dict(self.severity_by_tag)
+        repairability = dict(self.repairability_by_tag)
+        confidence = {tag: float(value) for tag, value in self.confidence_by_tag.items()}
+        object.__setattr__(self, "severity_by_tag", MappingProxyType(severity))
         object.__setattr__(
-            self, "repairability_by_tag", dict(self.repairability_by_tag)
+            self, "repairability_by_tag", MappingProxyType(repairability)
         )
-        object.__setattr__(self, "confidence_by_tag", dict(self.confidence_by_tag))
+        object.__setattr__(self, "confidence_by_tag", MappingProxyType(confidence))
         for tag, severity in self.severity_by_tag.items():
             if severity not in (
                 "CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO", "UNKNOWN",
@@ -1266,13 +1360,11 @@ class DiagnosisPolicy:
                 raise ValueError(
                     f"unknown repairability {repairability!r} for tag {tag!r}"
                 )
-        for tag, confidence in self.confidence_by_tag.items():
-            conf = float(confidence)
+        for tag, conf in self.confidence_by_tag.items():
             if not 0.0 <= conf <= 1.0:
                 raise ValueError(
                     f"confidence for tag {tag!r} must be in [0, 1]"
                 )
-            object.__setattr__(self, "confidence_by_tag", self.confidence_by_tag)
 
     # -- lookup helpers ------------------------------------------------------
 
@@ -1400,11 +1492,11 @@ def _default_diagnosis_policy() -> DiagnosisPolicy:
     )
 
 
-DIAGNOSIS_POLICIES: Mapping[str, tuple[DiagnosisPolicy, ...]] = {
+DIAGNOSIS_POLICIES: Mapping[str, tuple[DiagnosisPolicy, ...]] = MappingProxyType({
     DIAGNOSIS_POLICY_CURRENT_ID: (
         _default_diagnosis_policy(),
     ),
-}
+})
 
 
 def get_diagnosis_policy(

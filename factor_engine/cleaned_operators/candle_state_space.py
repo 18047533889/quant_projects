@@ -42,6 +42,7 @@ from factor_engine.cleaned_operators.base import (
     RelationalParamSpec,
     SeriesOperator,
     register_operator,
+    strict_int_param,
 )
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
@@ -134,7 +135,10 @@ def _set_mahalanobis_telemetry(
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int,
               param_specs: dict[str, ParamSpec] | None = None,
-              relational_specs: list[Any] | None = None) -> OperatorMetadata:
+              relational_specs: list[Any] | None = None,
+              panel_params: tuple[str, ...] = (),
+              scalar_params: tuple[str, ...] = (),
+              output_unit: str | None = None) -> OperatorMetadata:
     return OperatorMetadata(
         name=name,
         category="candle_state_space",
@@ -143,6 +147,10 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         return_type="series",
         param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
         relational_specs=list(relational_specs) if relational_specs else [],
+        panel_params=panel_params,
+        panel_arity=len(panel_params) if panel_params else None,
+        scalar_params=scalar_params,
+        output_unit=output_unit,
         tags=[
             "candle_state_space", "daily", "pit_safe", "causal", "typed_v2",
             "deterministic",
@@ -161,12 +169,14 @@ def _mahalanobis_series(
 ) -> np.ndarray:
     rows, cols = f1.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    w = int(window)
+    w = strict_int_param(window, "window", lower=5)
+    if isinstance(shrinkage, (bool, np.bool_)) or not isinstance(
+        shrinkage, (int, float, np.integer, np.floating)
+    ):
+        raise ValueError("shrinkage must be a real number in [0, 1]")
     lam = float(shrinkage)
     if not (0.0 <= lam <= 1.0):
         raise ValueError("shrinkage must be in [0, 1]")
-    if w < 2:
-        raise ValueError("window must be >= 2")
     feat = (f1, f2, f3, f4)
     p = len(feat)
     # M-142: reset per kernel call so a fresh call starts at "not_run" and the
@@ -177,7 +187,7 @@ def _mahalanobis_series(
     )
     for c in range(cols):
         for r in range(rows):
-            i0 = max(0, r - w + 1)
+            i0 = max(0, r - w)
             # R6-145: the mean/covariance are estimated on the HISTORY
             # [i0, r) only; the current row is the query, never part of its own
             # reference.  Including the current vector pulled the anomaly back
@@ -362,17 +372,15 @@ def _local_density_series(
 ) -> np.ndarray:
     rows, cols = f1.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    w = int(window)
-    kk = int(k)
-    if w < 2:
-        raise ValueError("window must be >= 2")
-    if kk < 1:
-        raise ValueError("k must be >= 1")
+    w = strict_int_param(window, "window", lower=5)
+    kk = strict_int_param(k, "k", lower=1)
+    if kk > w:
+        raise ValueError("k must be <= window")
     feat = (f1, f2, f3, f4)
     p = len(feat)
     for c in range(cols):
         for r in range(rows):
-            i0 = max(0, r - w + 1)
+            i0 = max(0, r - w)
             # R6-145: scale (mean/std) is estimated on the HISTORY [i0, r) only;
             # the current row is the query and must not pull the density back
             # toward its own value.
@@ -552,6 +560,19 @@ class TsVectorStateMahalanobis(SeriesOperator):
         ["f1", "f2", "f3", "f4", "window", "shrinkage"],
         unit="ratio",
         cost=6,
+        param_specs={
+            "window": ParamSpec(
+                dtype=int, min=5, default=60, searchable=True,
+                history_semantics="max_rows", param_role=ParamRole.HORIZON,
+            ),
+            "shrinkage": ParamSpec(
+                dtype=float, min=0.0, max=1.0, default=0.5,
+                searchable=True, param_role=ParamRole.ESTIMATOR_RESOLUTION,
+            ),
+        },
+        panel_params=("f1", "f2", "f3", "f4"),
+        scalar_params=("window", "shrinkage"),
+        output_unit="dimensionless",
     )
 
     def _calculate_series(
@@ -591,6 +612,23 @@ class TsVectorStateLocalDensity(SeriesOperator):
         ["f1", "f2", "f3", "f4", "window", "k"],
         unit="log",
         cost=6,
+        param_specs={
+            "window": ParamSpec(
+                dtype=int, min=5, default=60, searchable=True,
+                history_semantics="max_rows", param_role=ParamRole.HORIZON,
+            ),
+            "k": ParamSpec(
+                dtype=int, min=1, default=5, searchable=False,
+                param_role=ParamRole.ESTIMATOR_RESOLUTION,
+            ),
+        },
+        relational_specs=[RelationalParamSpec(
+            "k <= window",
+            "ts_vector_state_local_density requires k <= window (k={k}, window={window})",
+        )],
+        panel_params=("f1", "f2", "f3", "f4"),
+        scalar_params=("window", "k"),
+        output_unit="dimensionless",
     )
 
     def _calculate_series(

@@ -35,3 +35,47 @@ class TSZScoreSpec:
         if spec.nan_policy not in {"ignore", "propagate"}:
             raise ValueError("ts_zscore nan_policy supports only ignore/propagate")
         return cls(spec, includes_current_bar, zero_std_policy)
+
+
+def polars_zscore(
+    x: pl.DataFrame,
+    window: int = 20,
+    min_periods: int = 1,
+    null_policy: str = "ignore",
+    nan_policy: str = "propagate",
+    includes_current_bar: bool = True,
+    ddof: int = 1,
+    zero_std_policy: str = "zero",
+    **kwargs,
+) -> pl.DataFrame:
+    import polars as pl
+
+    spec = TSZScoreSpec.resolve(
+        window=window, min_periods=min_periods, null_policy=null_policy,
+        nan_policy=nan_policy, includes_current_bar=includes_current_bar,
+        ddof=ddof, zero_std_policy=zero_std_policy,
+    )
+    exprs = []
+    propagate = (
+        spec.window.nan_policy == "propagate"
+        or spec.window.null_policy.value == "propagate"
+    )
+    for c in (c for c in x.columns if c not in {"date", "stock_code"}):
+        current = pl.col(c).cast(pl.Float64).fill_nan(None)
+        current = pl.when(current.is_finite()).then(current).otherwise(None)
+        stats = current if spec.includes_current_bar else current.shift(1)
+        mean = stats.rolling_mean(spec.window.size, min_samples=spec.window.min_periods)
+        std = stats.rolling_std(
+            spec.window.size, min_samples=spec.window.min_periods,
+            ddof=spec.window.ddof,
+        )
+        value = pl.when(current.is_null() | std.is_null()).then(None)
+        if propagate:
+            bad = stats.is_null().cast(pl.Int64).rolling_sum(
+                spec.window.size, min_samples=1
+            ) > 0
+            value = value.when(bad).then(None)
+        zero_value = 0.0 if spec.zero_std_policy == "zero" else None
+        value = value.when(std == 0).then(zero_value).otherwise((current - mean) / std)
+        exprs.append(value.alias(c))
+    return x.with_columns(exprs)

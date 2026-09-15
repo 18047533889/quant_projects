@@ -7,7 +7,9 @@ Cross-sectional/group kernels that unpivot and pivot are explicitly classified a
 ``polars_eager_native``; they are not advertised as lazy or streaming expressions.
 """
 from __future__ import annotations
+from factor_engine.cleaned_operators.common.elementwise_scalar_contracts import scalar_contract, polars_winsorize
 
+from numbers import Real
 from typing import Callable
 
 try:
@@ -21,6 +23,7 @@ from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementatio
 
 _SKIP = frozenset({"date", "stock_code"})
 _SRC = "factor_dsl_polars_native"
+_WINSOR_TAIL_SPEC = ParamSpec(dtype=float, min=0.0, max=0.5, default=0.05)
 
 
 def _numeric_cols(df: pl.DataFrame) -> list[str]:
@@ -459,7 +462,7 @@ class NormalizeNative(SeriesOperator):
     backend="polars",
 )
 class WinsorizeNative(SeriesOperator):
-    metadata = OperatorMetadata(
+    metadata = OperatorMetadata(**scalar_contract("winsorize"),
         name="winsorize",
         category="math",
         description="截面缩尾",
@@ -468,23 +471,8 @@ class WinsorizeNative(SeriesOperator):
         tags=["math", "polars", "native"],
     )
 
-    def _calculate_series(
-        self,
-        x: pl.DataFrame,
-        lower: float = 0.05,
-        upper: float = 0.95,
-        **kwargs,
-    ) -> pl.DataFrame:
-        lo_q = float(lower)
-        hi_q = float(upper)
-
-        def _xform(long: pl.DataFrame) -> pl.DataFrame:
-            lo = pl.col("_v").quantile(lo_q, interpolation="linear").over("_r")
-            hi = pl.col("_v").quantile(hi_q, interpolation="linear").over("_r")
-            return long.with_columns(pl.col("_v").clip(lo, hi).alias("_v"))
-
-        return _cs_long_transform(x, _xform)
-
+    def _calculate_series(self, x: pl.DataFrame, lower: float = 0.05, upper: float = 0.95, **kwargs) -> pl.DataFrame:
+        return polars_winsorize(x, lower, upper)
 
 # ---------------------------------------------------------------------------
 # Group ops
@@ -644,6 +632,9 @@ class GroupWinsorizeNative(SeriesOperator):
         category="cross_sectional",
         description="组内缩尾",
         param_names=["x", "group", "a"],
+        param_specs={"a": _WINSOR_TAIL_SPEC},
+        panel_params=("x", "group"),
+        scalar_params=("a",),
         return_type="series",
         tags=["group", "polars", "native"],
     )
@@ -659,8 +650,13 @@ class GroupWinsorizeNative(SeriesOperator):
         # quantiles Q_a / Q_{1-a}).  The old native signature exposed ``lower/
         # upper`` at position 3 — positional drift against the pandas ``a``.
         # Explicit ``lower=/upper=`` kwargs remain honored for existing callers.
-        lo_q = float(kwargs.get("lower", a))
-        hi_q = float(kwargs.get("upper", 1.0 - a))
+        if isinstance(a, bool) or not isinstance(a, Real):
+            raise ValueError("a must be a finite number in [0, 0.5]")
+        alpha = float(a)
+        if not 0.0 <= alpha <= 0.5 or alpha != alpha or abs(alpha) == float("inf"):
+            raise ValueError("a must be a finite number in [0, 0.5]")
+        lo_q = float(kwargs.get("lower", alpha))
+        hi_q = float(kwargs.get("upper", 1.0 - alpha))
 
         def _xform(long: pl.DataFrame) -> pl.DataFrame:
             key = ["_r", "_g"] if "_g" in long.columns else ["_r"]

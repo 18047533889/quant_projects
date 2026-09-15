@@ -10,7 +10,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 
 _EPS = 1e-12
 
@@ -466,6 +471,8 @@ class _ReportAsof(SeriesOperator):
         description="Report date lookup with staleness constraint. Finds most recent value "
         "whose report_date <= asof_date within max_staleness_days.",
         param_names=["value", "report_date", "asof_date", "max_staleness_days"],
+        panel_params=("value", "report_date", "asof_date"),
+        param_specs={"max_staleness_days": ParamSpec(dtype=int, min=1, default=90)},
         return_type="series",
         tags=["time_semantic", "pit_safe", "causal", "daily", "typed_v2", "deterministic"],
     )
@@ -482,6 +489,11 @@ class _EventWindowReturnAsof(SeriesOperator):
         "[event_date - window_before] to [event_date + window_after]. "
         "Result only available after window closes (PIT-safe).",
         param_names=["ret", "event_date", "window_before", "window_after"],
+        panel_params=("ret", "event_date"),
+        param_specs={
+            "window_before": ParamSpec(dtype=int, min=0, default=5),
+            "window_after": ParamSpec(dtype=int, min=0, default=5),
+        },
         return_type="series",
         tags=["time_semantic", "pit_safe", "causal", "daily", "typed_v2", "deterministic"],
     )
@@ -497,6 +509,8 @@ class _FinancialSnapshotLag(SeriesOperator):
         description="Financial snapshot lag by fiscal periods. Returns value from "
         "lag_periods fiscal periods ago, matching on period_id.",
         param_names=["x", "period_id", "fiscal_date", "lag_periods"],
+        panel_params=("x", "period_id", "fiscal_date"),
+        param_specs={"lag_periods": ParamSpec(dtype=int, min=1, default=1)},
         return_type="series",
         tags=["time_semantic", "pit_safe", "causal", "daily", "typed_v2", "deterministic"],
     )
@@ -512,6 +526,8 @@ class _SameCalendarDayMean(SeriesOperator):
         description="Same calendar day mean (weekly seasonality). Computes trailing mean "
         "of values on same day-of-week over past window weeks.",
         param_names=["x", "window"],
+        panel_params=("x",),
+        param_specs={"window": ParamSpec(dtype=int, min=1, default=52)},
         return_type="series",
         tags=["time_semantic", "pit_safe", "causal", "daily", "typed_v2", "deterministic"],
     )
@@ -527,6 +543,8 @@ class _SameCalendarMonthReturn(SeriesOperator):
         description="Same calendar month return (monthly seasonality). Computes trailing "
         "mean return for same calendar month over past window years.",
         param_names=["x", "window"],
+        panel_params=("x",),
+        param_specs={"window": ParamSpec(dtype=int, min=1, default=12)},
         return_type="series",
         tags=["time_semantic", "pit_safe", "causal", "daily", "typed_v2", "deterministic"],
     )
@@ -542,6 +560,8 @@ class _SameClockLag(SeriesOperator):
         description="Minute-level clock lag (intraday temporal lag). Returns value from "
         "lag_minutes ago based on clock_time.",
         param_names=["x", "clock_time", "lag_minutes"],
+        panel_params=("x", "clock_time"),
+        param_specs={"lag_minutes": ParamSpec(dtype=int, min=1, default=5)},
         return_type="series",
         tags=["time_semantic", "pit_safe", "causal", "intraday", "typed_v2", "deterministic"],
     )
@@ -554,10 +574,6 @@ def register() -> None:
     """Register time semantic operators."""
     from factor_engine.cleaned_operators.registry import OperatorRegistry
 
-    # Check if already registered
-    if "same_clock_lag" in OperatorRegistry._operators:
-        return
-
     # Register pandas_numpy backend
     for name, cls in [
         ("report_asof", _ReportAsof),
@@ -567,6 +583,16 @@ def register() -> None:
         ("same_calendar_month_return", _SameCalendarMonthReturn),
         ("same_clock_lag", _SameClockLag),
     ]:
+        # ``same_clock_lag`` is owned by cleaned_operators.same_clock_lag and
+        # has the public signature (x, lag, clock_unit).  The helper in this
+        # module is a distinct clock-panel/minute-offset calculation retained
+        # for direct callers only.  Registering it during pytest collection
+        # creates an early pandas authority and a stale generated polars
+        # delegate with an incompatible positional topology.
+        if name == "same_clock_lag":
+            continue
+        if OperatorRegistry.get(name, "pandas_numpy", mode="any") is not None:
+            continue
         register_operator(
             name=name,
             category="time_semantic",

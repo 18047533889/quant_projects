@@ -183,90 +183,52 @@ def pd_fiscal_delta(
 
 
 def pd_fiscal_pct_change(
-    x: pd.DataFrame,
+    value: pd.DataFrame,
     period_id: pd.DataFrame,
     lag: int = 1,
+    periods: int = 8,
+    min_periods: int = 2,
     require_consecutive: bool = True,
     revision_policy: str = "latest_available",
-    **_
+    **kwargs,
 ) -> pd.DataFrame:
-    """Fiscal period percentage change: (x[t] - x[t-lag]) / abs(x[t-lag])."""
-    x, period_id = _align(x, period_id)
-    lag = _positive(lag, "lag")
-    view = FiscalEventView.from_panel(x, period_id, revision_policy=revision_policy)
-    out = np.full(x.shape, np.nan)
-    for row in range(x.shape[0]):
-        for col in range(x.shape[1]):
-            history = view.history(row, col, require_consecutive=require_consecutive)
-            if len(history) <= lag:
-                continue
-            current_ord, current_val = history[-1]
-            lag_ord = current_ord - lag
-            history_dict = dict(history)
-            if lag_ord in history_dict:
-                lag_val = history_dict[lag_ord]
-                if _finite(current_val) and _finite(lag_val) and abs(lag_val) > _EPS:
-                    out[row, col] = ((current_val - lag_val)) / abs(lag_val) if abs(lag_val) != 0 else np.nan
-    return pd.DataFrame(out, index=x.index, columns=x.columns)
-
+    """Canonical fiscal-event percentage change (compatibility entrypoint)."""
+    from factor_engine.cleaned_operators.fundamental.fiscal_batch1 import pd_fiscal_pct_change as _canonical
+    return _canonical(value, period_id, lag=lag, periods=periods, min_periods=min_periods,
+                      require_consecutive=require_consecutive,
+                      revision_policy=revision_policy, **kwargs)
 
 def pd_fiscal_acceleration(
-    x: pd.DataFrame,
+    value: pd.DataFrame,
     period_id: pd.DataFrame,
     lag: int = 1,
+    periods: int = 8,
+    min_periods: int = 3,
     require_consecutive: bool = True,
     revision_policy: str = "latest_available",
-    **_
+    **kwargs,
 ) -> pd.DataFrame:
-    """Fiscal period acceleration (second derivative): delta[t] - delta[t-lag]."""
-    x, period_id = _align(x, period_id)
-    lag = _positive(lag, "lag")
-    view = FiscalEventView.from_panel(x, period_id, revision_policy=revision_policy)
-    out = np.full(x.shape, np.nan)
-    for row in range(x.shape[0]):
-        for col in range(x.shape[1]):
-            history = view.history(row, col, require_consecutive=require_consecutive)
-            if len(history) <= 2 * lag:
-                continue
-            current_ord, current_val = history[-1]
-            history_dict = dict(history)
-            lag1_ord = current_ord - lag
-            lag2_ord = current_ord - 2 * lag
-            if lag1_ord in history_dict and lag2_ord in history_dict:
-                lag1_val = history_dict[lag1_ord]
-                lag2_val = history_dict[lag2_ord]
-                if _finite(current_val) and _finite(lag1_val) and _finite(lag2_val):
-                    delta_current = current_val - lag1_val
-                    delta_lag = lag1_val - lag2_val
-                    out[row, col] = delta_current - delta_lag
-    return pd.DataFrame(out, index=x.index, columns=x.columns)
-
+    """Canonical fiscal-event acceleration (compatibility entrypoint)."""
+    from factor_engine.cleaned_operators.fundamental.fiscal_batch1 import pd_fiscal_acceleration as _canonical
+    return _canonical(value, period_id, lag=lag, periods=periods, min_periods=min_periods,
+                      require_consecutive=require_consecutive,
+                      revision_policy=revision_policy, **kwargs)
 
 def pd_fiscal_rolling_std(
-    x: pd.DataFrame,
+    value: pd.DataFrame,
     period_id: pd.DataFrame,
-    window: int = 8,
-    min_periods: int = 4,
+    periods: int = 8,
+    min_periods: int = 3,
+    ddof: int = 1,
     require_consecutive: bool = True,
     revision_policy: str = "latest_available",
-    **_
+    **kwargs,
 ) -> pd.DataFrame:
-    """Rolling standard deviation over fiscal periods."""
-    x, period_id = _align(x, period_id)
-    window = _positive(window, "window")
-    min_periods = _positive(min_periods, "min_periods")
-    if min_periods > window:
-        raise ValueError("min_periods must not exceed window")
-    view = FiscalEventView.from_panel(x, period_id, revision_policy=revision_policy)
-    out = np.full(x.shape, np.nan)
-    for row in range(x.shape[0]):
-        for col in range(x.shape[1]):
-            history = view.history(row, col, require_consecutive=require_consecutive)
-            values = [v for _, v in history[-window:] if _finite(v)]
-            if len(values) >= min_periods:
-                out[row, col] = float(np.std(values, ddof=1))
-    return pd.DataFrame(out, index=x.index, columns=x.columns)
-
+    """Canonical fiscal-event rolling std (compatibility entrypoint)."""
+    from factor_engine.cleaned_operators.fundamental.fiscal_batch1 import pd_fiscal_rolling_std as _canonical
+    return _canonical(value, period_id, periods=periods, min_periods=min_periods, ddof=ddof,
+                      require_consecutive=require_consecutive,
+                      revision_policy=revision_policy, **kwargs)
 
 def pd_fiscal_rolling_slope(
     x: pd.DataFrame,
@@ -499,6 +461,12 @@ def _register(name, params, fn, description):
 
 def register() -> None:
     """Register all TRUE_GAP batch 1 operators."""
+    # Load the authoritative implementations first.  This compatibility module
+    # may be staged before the normal loader; importing the canonical module
+    # here makes that order deterministic instead of publishing reduced
+    # x/window contracts for the same names.
+    from factor_engine.cleaned_operators.fundamental import fiscal_batch1 as _canonical_batch1  # noqa: F401
+
     if "fiscal_delta" in OperatorRegistry._operators:
         return
 

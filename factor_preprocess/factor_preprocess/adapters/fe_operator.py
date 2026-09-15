@@ -43,7 +43,6 @@ import inspect
 
 import numpy as np
 import pandas as pd
-import inspect
 
 #: Non-panel (scalar/flag) parameters that must NOT be interpreted as value
 #: columns when mapping a long frame onto an FE operator call.
@@ -90,6 +89,12 @@ def _long_to_wide(
         raise ValueError(f"long factor frame missing columns: {sorted(missing)}")
     if values[[time_col, asset_col]].isna().any().any():
         raise ValueError("time and asset identity columns cannot contain nulls")
+    asset_types = {type(value) for value in values[asset_col]}
+    if len(asset_types) > 1:
+        raise ValueError(
+            "mixed asset identity types require canonicalization by the "
+            "security catalog before FP/FE execution"
+        )
     duplicate = values.duplicated([time_col, asset_col], keep=False)
     if duplicate.any():
         keys = values.loc[duplicate, [time_col, asset_col]].drop_duplicates()

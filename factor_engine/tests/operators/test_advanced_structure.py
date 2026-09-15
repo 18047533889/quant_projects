@@ -21,6 +21,22 @@ from factor_engine.cleaned_operators.registry import OperatorRegistry
 ensure_cleaned_loaded()
 
 
+def _calculate_fixture(op, x):
+    """Supply every genuine panel; never fabricate missing production inputs."""
+    name=op.metadata.name
+    if name=="ts_bures_corr_shift":
+        return op.calculate(x, x.shift(1))
+    if name=="cs_sliced_wasserstein_copula_shift":
+        return op.calculate(x, x.shift(1), x.shift(2))
+    if name=="group_spd_feature_structure_shift":
+        group=pd.DataFrame(1.,index=x.index,columns=x.columns)
+        return op.calculate(x, x.shift(1), x.shift(2), group)
+    if name=="holder_class_js_shift":
+        shares=x.abs()
+        return op.calculate(*([shares]*5+[shares.shift(1)]*5))
+    return op.calculate(x)
+
+
 def _op(name: str, backend: str = "pandas_numpy"):
     op = OperatorRegistry.get(name, backend)
     assert op is not None, f"{name}/{backend}"
@@ -46,7 +62,7 @@ def test_ts_bures_corr_shift_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -71,7 +87,7 @@ def test_ts_bures_corr_shift_handles_nans() -> None:
     op = _op("ts_bures_corr_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -92,7 +108,7 @@ def test_ts_bures_corr_shift_handles_inf() -> None:
     op = _op("ts_bures_corr_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -107,7 +123,7 @@ def test_ts_bures_corr_shift_empty_input() -> None:
     op = _op("ts_bures_corr_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -125,7 +141,7 @@ def test_ts_bures_corr_shift_single_column() -> None:
     op = _op("ts_bures_corr_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -151,7 +167,7 @@ def test_ts_kramers_moyal_drift_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -176,7 +192,7 @@ def test_ts_kramers_moyal_drift_handles_nans() -> None:
     op = _op("ts_kramers_moyal_drift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -197,7 +213,7 @@ def test_ts_kramers_moyal_drift_handles_inf() -> None:
     op = _op("ts_kramers_moyal_drift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -212,7 +228,7 @@ def test_ts_kramers_moyal_drift_empty_input() -> None:
     op = _op("ts_kramers_moyal_drift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -230,7 +246,7 @@ def test_ts_kramers_moyal_drift_single_column() -> None:
     op = _op("ts_kramers_moyal_drift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -256,7 +272,7 @@ def test_ts_kramers_moyal_diffusion_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -281,7 +297,7 @@ def test_ts_kramers_moyal_diffusion_handles_nans() -> None:
     op = _op("ts_kramers_moyal_diffusion")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -302,7 +318,7 @@ def test_ts_kramers_moyal_diffusion_handles_inf() -> None:
     op = _op("ts_kramers_moyal_diffusion")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -317,7 +333,7 @@ def test_ts_kramers_moyal_diffusion_empty_input() -> None:
     op = _op("ts_kramers_moyal_diffusion")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -335,7 +351,7 @@ def test_ts_kramers_moyal_diffusion_single_column() -> None:
     op = _op("ts_kramers_moyal_diffusion")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -361,7 +377,7 @@ def test_cs_sliced_wasserstein_copula_shift_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -386,7 +402,7 @@ def test_cs_sliced_wasserstein_copula_shift_handles_nans() -> None:
     op = _op("cs_sliced_wasserstein_copula_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -407,7 +423,7 @@ def test_cs_sliced_wasserstein_copula_shift_handles_inf() -> None:
     op = _op("cs_sliced_wasserstein_copula_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -422,7 +438,7 @@ def test_cs_sliced_wasserstein_copula_shift_empty_input() -> None:
     op = _op("cs_sliced_wasserstein_copula_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -440,7 +456,7 @@ def test_cs_sliced_wasserstein_copula_shift_single_column() -> None:
     op = _op("cs_sliced_wasserstein_copula_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -466,7 +482,7 @@ def test_group_spd_feature_structure_shift_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -491,7 +507,7 @@ def test_group_spd_feature_structure_shift_handles_nans() -> None:
     op = _op("group_spd_feature_structure_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -512,7 +528,7 @@ def test_group_spd_feature_structure_shift_handles_inf() -> None:
     op = _op("group_spd_feature_structure_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -527,7 +543,7 @@ def test_group_spd_feature_structure_shift_empty_input() -> None:
     op = _op("group_spd_feature_structure_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -545,7 +561,7 @@ def test_group_spd_feature_structure_shift_single_column() -> None:
     op = _op("group_spd_feature_structure_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -571,7 +587,7 @@ def test_holder_class_js_shift_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -596,7 +612,7 @@ def test_holder_class_js_shift_handles_nans() -> None:
     op = _op("holder_class_js_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -617,7 +633,7 @@ def test_holder_class_js_shift_handles_inf() -> None:
     op = _op("holder_class_js_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -632,7 +648,7 @@ def test_holder_class_js_shift_empty_input() -> None:
     op = _op("holder_class_js_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -650,7 +666,7 @@ def test_holder_class_js_shift_single_column() -> None:
     op = _op("holder_class_js_shift")
 
     try:
-        result = op.calculate(x)
+        result = _calculate_fixture(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1

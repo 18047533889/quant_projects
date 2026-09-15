@@ -1024,13 +1024,6 @@ class TSPoly2ResidNative(SeriesOperator):
 # ---------------------------------------------------------------------------
 
 
-@register_operator(
-    name="ts_ridge_regression_coeff",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_ridge_regression_coeff",
-    source=_SRC,
-    backend="polars")
 class TSRidgeRegressionCoeffNative(SeriesOperator):
     """Ridge regression coefficient (L2 regularized linear regression)."""
 
@@ -1082,13 +1075,6 @@ class TSRidgeRegressionCoeffNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_ridge_regression_coeff_prior",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_ridge_regression_coeff_prior",
-    source=_SRC,
-    backend="polars")
 class TSRidgeRegressionCoeffPriorNative(SeriesOperator):
     """Ridge regression coefficient from prior window."""
 
@@ -1140,13 +1126,6 @@ class TSRidgeRegressionCoeffPriorNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_ridge_regression_forecast_error",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_ridge_regression_forecast_error",
-    source=_SRC,
-    backend="polars")
 class TSRidgeRegressionForecastErrorNative(SeriesOperator):
     """Ridge regression forecast error."""
 
@@ -1202,13 +1181,6 @@ class TSRidgeRegressionForecastErrorNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_ridge_regression_forecast_error_z",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_ridge_regression_forecast_error_z",
-    source=_SRC,
-    backend="polars")
 class TSRidgeRegressionForecastErrorZNative(SeriesOperator):
     """Standardized ridge regression forecast error."""
 
@@ -1370,13 +1342,6 @@ class TSRidgeRegressionPredictiveResidNative(SeriesOperator):
         return y.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_ridge_regression_resid_z",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_ridge_regression_resid_z",
-    source=_SRC,
-    backend="polars")
 class TSRidgeRegressionResidZNative(SeriesOperator):
     """Current value as z-score of ridge residuals."""
 
@@ -1444,13 +1409,6 @@ class TSRidgeRegressionResidZNative(SeriesOperator):
 # ---------------------------------------------------------------------------
 
 
-@register_operator(
-    name="ts_huber_regression_coeff",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_huber_regression_coeff",
-    source=_SRC,
-    backend="polars")
 class TSHuberRegressionCoeffNative(SeriesOperator):
     """Huber robust regression coefficient (simplified IRLS)."""
 
@@ -1514,13 +1472,6 @@ class TSHuberRegressionCoeffNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_huber_regression_coeff_prior",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_huber_regression_coeff_prior",
-    source=_SRC,
-    backend="polars")
 class TSHuberRegressionCoeffPriorNative(SeriesOperator):
     """Huber robust regression coefficient from prior window."""
 
@@ -1587,13 +1538,6 @@ class TSHuberRegressionCoeffPriorNative(SeriesOperator):
 # Implementing key ones for completeness
 
 
-@register_operator(
-    name="ts_huber_regression_forecast_error",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_huber_regression_forecast_error",
-    source=_SRC,
-    backend="polars")
 class TSHuberRegressionForecastErrorNative(SeriesOperator):
     """Huber robust regression forecast error."""
 
@@ -1660,13 +1604,6 @@ class TSHuberRegressionForecastErrorNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_huber_regression_forecast_error_z",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_huber_regression_forecast_error_z",
-    source=_SRC,
-    backend="polars")
 class TSHuberRegressionForecastErrorZNative(SeriesOperator):
     """Standardized Huber robust regression forecast error."""
 
@@ -1854,13 +1791,6 @@ class TSHuberRegressionPredictiveResidNative(SeriesOperator):
         return y.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_huber_regression_resid_z",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_huber_regression_resid_z",
-    source=_SRC,
-    backend="polars")
 class TSHuberRegressionResidZNative(SeriesOperator):
     """Current value as z-score of Huber residuals."""
 
@@ -1939,13 +1869,6 @@ class TSHuberRegressionResidZNative(SeriesOperator):
 # ---------------------------------------------------------------------------
 
 
-@register_operator(
-    name="ts_quantile_regression_coeff",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_quantile_regression_coeff",
-    source=_SRC,
-    backend="polars")
 class TSQuantileRegressionCoeffNative(SeriesOperator):
     """Quantile regression coefficient (simplified via weighted least squares approximation)."""
 
@@ -2063,13 +1986,6 @@ class TSQuantileRegressionCoeffPriorNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_quantile_regression_resid",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_quantile_regression_resid",
-    source=_SRC,
-    backend="polars")
 class TSQuantileRegressionResidNative(SeriesOperator):
     """Quantile regression in-sample residual std."""
 
@@ -2128,64 +2044,19 @@ class TSQuantileRegressionResidNative(SeriesOperator):
     source=_SRC,
     backend="polars")
 class TSQuantileRegressionSlopeNative(SeriesOperator):
-    """Quantile regression slope coefficient (coef_index=1)."""
-
-    metadata = OperatorMetadata(
-        name="ts_quantile_regression_slope",
-        category="time_series",
-        description="分位数回归斜率",
-        param_names=["x", "window", "quantile"],
-        return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
-        param_specs={
-            "window": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
-            "quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.5, searchable=True, param_role=ParamRole.THRESHOLD),
-        },
-    )
-
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, quantile: float = 0.5, **kwargs) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
-        q = strict_finite_scalar(quantile, "quantile", minimum=0.0, maximum=1.0)
-        cols = _numeric_cols(x)
-
-        def _quantile_slope(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < 3:
-                return np.nan
-            y = arr[valid]
-            t = np.arange(len(y))
-            X = np.column_stack([np.ones(len(t)), t])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                for _ in range(2):
-                    fitted = X @ coef
-                    resid = y - fitted
-                    weights = np.where(resid >= 0, q, 1 - q)
-                    W = np.diag(weights)
-                    coef = np.linalg.lstsq(W @ X, W @ y, rcond=None)[0]
-                return float(coef[1])
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_quantile_slope, window_size=w, min_samples=3).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
+    """ts_quantile_regression_slope: exact canonical estimator with finite-support policy."""
+    from factor_engine.cleaned_operators.common import regression_model_polars as _model
+    metadata=OperatorMetadata(name="ts_quantile_regression_slope",category="time_series",**_model.contract("ts_quantile_regression_slope"))
+    _physical_spec=_model.physical_spec("ts_quantile_regression_slope")
+    _contract_callable=staticmethod(_model.ts_quantile_regression_slope)
+    def _calculate_series(self,*args,**kwargs):
+        return self._model.ts_quantile_regression_slope(*args,**kwargs)
 
 
 # Multi-variable regression operators would require multiple input series,
 # which requires a different operator signature. Implementing simplified versions.
 
 
-@register_operator(
-    name="ts_multi_regression_coeff",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_multi_regression_coeff",
-    source=_SRC,
-    backend="polars")
 class TSMultiRegressionCoeffNative(SeriesOperator):
     """Multi-variable regression coefficient (uses polynomial features from single series)."""
 
@@ -2242,13 +2113,6 @@ class TSMultiRegressionCoeffNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_multi_regression_coeff_prior",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_multi_regression_coeff_prior",
-    source=_SRC,
-    backend="polars")
 class TSMultiRegressionCoeffPriorNative(SeriesOperator):
     """Multi-variable regression coefficient from prior window."""
 
@@ -2301,13 +2165,6 @@ class TSMultiRegressionCoeffPriorNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_multi_regression_r2",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_multi_regression_r2",
-    source=_SRC,
-    backend="polars")
 class TSMultiRegressionR2Native(SeriesOperator):
     """Multi-variable regression R-squared."""
 
@@ -2361,13 +2218,6 @@ class TSMultiRegressionR2Native(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_multi_regression_r2_prior",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_multi_regression_r2_prior",
-    source=_SRC,
-    backend="polars")
 class TSMultiRegressionR2PriorNative(SeriesOperator):
     """Multi-variable regression R-squared from prior window."""
 
@@ -2421,13 +2271,6 @@ class TSMultiRegressionR2PriorNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_multi_regression_forecast_error",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_multi_regression_forecast_error",
-    source=_SRC,
-    backend="polars")
 class TSMultiRegressionForecastErrorNative(SeriesOperator):
     """Multi-variable regression forecast error."""
 
@@ -2484,13 +2327,6 @@ class TSMultiRegressionForecastErrorNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_multi_regression_forecast_error_z",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_multi_regression_forecast_error_z",
-    source=_SRC,
-    backend="polars")
 class TSMultiRegressionForecastErrorZNative(SeriesOperator):
     """Standardized multi-variable regression forecast error."""
 
@@ -2553,13 +2389,6 @@ class TSMultiRegressionForecastErrorZNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_multi_regression_resid",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_multi_regression_resid",
-    source=_SRC,
-    backend="polars")
 class TSMultiRegressionResidNative(SeriesOperator):
     """Multi-variable regression in-sample residual std."""
 
@@ -2610,13 +2439,6 @@ class TSMultiRegressionResidNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_multi_regression_resid_z",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_multi_regression_resid_z",
-    source=_SRC,
-    backend="polars")
 class TSMultiRegressionResidZNative(SeriesOperator):
     """Current value as z-score of multi-regression residuals."""
 
@@ -2680,13 +2502,6 @@ class TSMultiRegressionResidZNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_multi_regression_coeff_stability",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_multi_regression_coeff_stability",
-    source=_SRC,
-    backend="polars")
 class TSMultiRegressionCoeffStabilityNative(SeriesOperator):
     """Multi-regression coefficient stability over sub-windows."""
 
@@ -2759,13 +2574,6 @@ class TSMultiRegressionCoeffStabilityNative(SeriesOperator):
         return x.with_columns(exprs)
 
 
-@register_operator(
-    name="ts_multi_regression_adjusted_r2_prior",
-    category="time_series",
-    business_category="time_series_regression",
-    canonical="ts_multi_regression_adjusted_r2_prior",
-    source=_SRC,
-    backend="polars")
 class TSMultiRegressionAdjustedR2PriorNative(SeriesOperator):
     """Multi-variable regression adjusted R-squared from prior window."""
 

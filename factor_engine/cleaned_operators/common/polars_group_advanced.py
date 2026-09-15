@@ -675,25 +675,15 @@ class GroupTailRatioNative(SeriesOperator):
     source=_SRC,
     backend="polars")
 class GroupImputeMedianNative(SeriesOperator):
-    """Impute missing values with group median."""
+    """Source-safe group_impute_median, with real panel roles and strict support policy."""
+    from factor_engine.cleaned_operators.common import safe_kernels as _safe
+    metadata = OperatorMetadata(name="group_impute_median",category="data_cleaning",
+                                **_safe.contract("group_impute_median"))
+    _contract_callable = staticmethod(_safe.polars_group_impute_median)
+    _physical_spec = _safe.physical_spec("group_impute_median")
 
-    metadata = OperatorMetadata(
-        name="group_impute_median",
-        category="cross_sectional",
-        description="组内中位数填充",
-        param_names=["x", "group"],
-        return_type="series",
-        tags=["group", "polars", "native"],
-    )
-
-    def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
-        def _xform(long: pl.DataFrame) -> pl.DataFrame:
-            key = ["_r", "_g"]
-            med = pl.col("_v").median().over(key)
-            imputed = pl.col("_v").fill_null(med)
-            return long.with_columns(imputed.alias("_v"))
-
-        return _group_long_transform(x, group, _xform)
+    def _calculate_series(self,*args,**kwargs):
+        return self._safe.polars_group_impute_median(*args,**kwargs)
 
 
 @register_operator(

@@ -10,7 +10,7 @@ ROOT = Path("/home/sunhaiwei/quant_projects")
 sys.path.insert(0, str(ROOT / "jobs"))
 from factor_report_sources import resolve_raw_matrix
 
-REPORT_DIR = ROOT / "factor_engine/docs/reports/2026-08-23/factors"
+REPORT_DIR = ROOT / "../quant_project_archives/factor_engine-docs/reports/2026-08-23/factors"
 OUT = ROOT / "weekly_backtest_output/full_window_value_audit.json"
 
 

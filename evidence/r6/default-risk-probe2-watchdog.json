@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/r6/default_risk_probe.py"], "returncode": 1, "sampled_peak_family_rss_bytes": 748519424, "sampling_seconds": 0.1, "seconds": 55.753280421951786, "test_guard_reason": null, "hard_memory_cap": false}

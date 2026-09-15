@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "--noconftest", "factor_engine/tests/operators/test_r41_mi_spectral_authority.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 0, "sampled_peak_family_rss_bytes": 307425280, "sampling_seconds": 0.1, "seconds": 3.009276536060497, "test_guard_reason": null, "hard_memory_cap": false}

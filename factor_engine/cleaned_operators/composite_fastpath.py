@@ -15,6 +15,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.cleaned_operators.overhaul.base import (
     EPS,
     PandasFunctionOperator,
@@ -59,6 +60,36 @@ FASTPATH_CANONICALS = frozenset(
         "vwap",
     }
 )
+
+
+def _upgrade_rsi_wilder_logical_contract() -> None:
+    """Publish RSI's scalar schema without claiming a finite warm-up.
+
+    Wilder averages are recursive from the beginning of the series. Segmented
+    execution is exact only through the separately declared checkpoint state.
+    """
+    specs = {
+        "window": ParamSpec(
+            dtype=int, min=1, default=14, param_role=ParamRole.HORIZON
+        )
+    }
+    contract = {
+        "param_names": ["x", "window"],
+        "param_specs": specs,
+        "panel_params": ("x",),
+        "panel_arity": 1,
+        "scalar_params": ("window",),
+        "total_positional_arity": 2,
+        "input_units": {"x": "level"},
+        "output_unit": "dimensionless",
+    }
+    OperatorRegistry._catalog.setdefault("RSI_WILDER", {}).update(contract)
+    for operator in OperatorRegistry._operators.get("RSI_WILDER", {}).values():
+        metadata = getattr(operator, "metadata", None)
+        if metadata is None:
+            continue
+        for field, value in contract.items():
+            setattr(metadata, field, value.copy() if isinstance(value, dict) else value)
 
 
 def _call(name: str, backend: str, *args: Any, **kwargs: Any):
@@ -857,6 +888,7 @@ def register_composite_fastpaths() -> None:
     )
     for spec in specs:
         _register(*spec)
+    _upgrade_rsi_wilder_logical_contract()
     # Pandas WMA already uses the optimized rolling kernel; only replace the
     # Polars Python rolling_map implementation with the native weighted kernel.
     _register("WMA", "time_series", ["x", "window"], "Polars 原生加权 rolling_mean", None, pl_wma)

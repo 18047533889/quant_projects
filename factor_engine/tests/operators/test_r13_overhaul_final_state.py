@@ -304,15 +304,9 @@ def test_overhaul_replacements_inherit_canonical_logical_contract() -> None:
 
 
 def _contract_equal(left, right) -> bool:
-    if isinstance(left, dict) and isinstance(right, dict):
-        if set(left.keys()) != set(right.keys()):
-            return False
-        return all(_contract_equal(left[k], right[k]) for k in left)
-    if isinstance(left, (list, tuple)) and isinstance(right, (list, tuple)):
-        if len(left) != len(right):
-            return False
-        return all(_contract_equal(a, b) for a, b in zip(left, right))
-    return left == right
+    from factor_engine.cleaned_operators.overhaul.base import _contract_field_equal
+
+    return _contract_field_equal(left, right)
 
 
 # --- NEW-P0-05: no self-declared pit_safe / audited tags on backend impls ---

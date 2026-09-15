@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "tests/operators/test_r6_overhaul_regression_contracts.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 1, "sampled_peak_family_rss_bytes": 476536832, "sampling_seconds": 0.1, "seconds": 52.22479183692485, "test_guard_reason": null, "hard_memory_cap": false}

@@ -471,6 +471,68 @@ def _infer_shape_contract(resolved: str, policy: OperatorPolicy) -> tuple[bool, 
     return bool(sp), bool(ip), bool(cp)
 
 
+def _operator_contract_signature(op: Any) -> Any | None:
+    """Return the most concrete declared callable signature for ``op``.
+
+    Function-backed adapters deliberately expose a generic ``calculate(*args,
+    **kwargs)`` transport method while retaining the real implementation in
+    ``_fn``.  Contract discovery must inspect that implementation before the
+    transport wrapper.  A callable containing only variadic parameters carries
+    no parameter-role authority and is ignored.
+    """
+    import inspect
+
+    for fn in (
+        getattr(op, "_contract_callable", None),
+        getattr(op, "_fn", None),
+        getattr(op, "_calculate_series", None),
+        getattr(op, "calculate", None),
+    ):
+        if fn is None:
+            continue
+        try:
+            signature = inspect.signature(fn)
+        except (TypeError, ValueError):
+            continue
+        # Some generated adapters retain the authored kernel only in the
+        # private _fn default, not as an instance attribute. Its transport
+        # signature (*args, _fn=kernel, **kwargs) is not an input contract.
+        bridge = signature.parameters.get("_fn")
+        if bridge is not None and callable(bridge.default):
+            try:
+                signature = inspect.signature(bridge.default)
+            except (TypeError, ValueError):
+                continue
+        if any(
+            parameter.kind
+            not in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD)
+            and name not in {"self", "_fn"}
+            for name, parameter in signature.parameters.items()
+        ):
+            return signature
+    return None
+
+
+def _annotation_contract_role(annotation: Any) -> str | None:
+    """Classify an explicit kernel annotation as panel or primitive scalar."""
+    import inspect
+
+    if annotation is inspect.Parameter.empty:
+        return None
+    if annotation in (int, float, str, bool):
+        return "scalar"
+    text = str(annotation).replace(" ", "").lower()
+    if any(token in text for token in ("dataframe", "series", "ndarray", "lazyframe")):
+        return "panel"
+    primitive_tokens = ("int", "float", "str", "bool")
+    normalized = text.replace("none", "").replace("|", "").replace("optional[", "").replace("]", "")
+    if normalized in primitive_tokens or normalized.startswith("<class'") and any(
+        token in normalized for token in primitive_tokens
+    ):
+        return "scalar"
+    return None
+
+
 def _infer_panel_params(op: Any, meta: Any, catalog: dict[str, Any]) -> tuple[str, ...]:
     """Panel-input names for an operator (round-7, audit item 10).
 
@@ -492,32 +554,25 @@ def _infer_panel_params(op: Any, meta: Any, catalog: dict[str, Any]) -> tuple[st
         return matched or ifields
     import inspect
 
-    fn = getattr(op, "_calculate_series", None) or getattr(op, "calculate", None)
-    if fn is None:
+    sig = _operator_contract_signature(op)
+    if sig is None:
         return ()
-    try:
-        sig = inspect.signature(fn)
-    except (TypeError, ValueError):
-        return ()
-    # R30 §9: a positional parameter with NO default is not necessarily a panel
-    # input — scalar thresholds / bounds (``lower`` / ``upper`` / ``threshold``)
-    # are required scalars that legitimately have no default.  Treating them as
-    # panels misroutes the kernel (e.g. ``ts_threshold_cycle_period(x, lower,
-    # upper, window)`` would feed ``lower`` as a second price panel).  These
-    # names are semantically scalar and are never panel inputs.
-    _SCALAR_THRESHOLD_NAMES = frozenset({
-        "lower", "upper", "threshold", "low", "high", "min_value", "max_value",
-        "alpha", "beta", "gamma", "theta", "sigma", "mu", "rho", "phi",
-        "eps", "epsilon", "tol", "tolerance", "k", "q", "p", "n", "seed",
-    })
+    specs = getattr(meta, "param_specs", None) or {}
     panels: list[str] = []
     for n in names:
-        if n in _SCALAR_THRESHOLD_NAMES:
-            continue  # required scalar threshold / bound, never a panel
         param = sig.parameters.get(n)
         if param is None:
             continue
-        if param.default is inspect.Parameter.empty:
+        role = _annotation_contract_role(param.annotation)
+        if role == "panel":
+            panels.append(n)
+        elif role == "scalar" or n in specs:
+            continue
+        elif param.default is inspect.Parameter.empty:
+            # Legacy unannotated required positional inputs remain panel inputs;
+            # an explicit primitive annotation or ParamSpec is required to call
+            # a required value scalar.  This removes name-based guesses such as
+            # treating every ``high``/``low`` argument as a threshold.
             panels.append(n)
     return tuple(panels)
 

@@ -44,7 +44,11 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import register_operator
+from factor_engine.cleaned_operators.base import (
+    ParamRole,
+    ParamSpec,
+    register_operator,
+)
 from factor_engine.cleaned_operators.intraday._core import (
     DataDegeneracy,
     SessionAggregationOperator,
@@ -257,8 +261,13 @@ def _detect_impulse_episodes(
         ev = fin & (np.abs(r) > thr_t)
     else:
         raise ValueError(f"unknown direction {direction!r}")
-    ev_idx = np.flatnonzero(ev)
-    episodes = _merge_episodes(ev_idx, merge_gap)
+    # Episode adjacency is meaningful only inside a contiguous trading
+    # segment.  In particular, two event bars on opposite sides of the lunch
+    # break must never be joined merely because their row positions are close.
+    episodes: list[tuple[int, int]] = []
+    for seg_start, seg_end in _bar_segments(times, max_gap_minutes):
+        seg_idx = np.flatnonzero(ev[seg_start:seg_end]) + seg_start
+        episodes.extend(_merge_episodes(seg_idx, merge_gap))
     return episodes, ev
 
 
@@ -1419,6 +1428,80 @@ class IntraLiquidityResilienceCurveFit(SessionAggregationOperator):
             [price, activity],
             lambda a, b, t: _liquidity_resilience_day(a, b, t, shock_threshold, int(horizon), output),
         )
+
+
+# Scalar contracts are attached explicitly so the finalized registry validates
+# canonical positional and keyword calls before a minute kernel is entered.
+_INT_H = lambda default, minimum=1: ParamSpec(
+    dtype=int, min=minimum, default=default, param_role=ParamRole.HORIZON,
+)
+_INT_E = lambda default, minimum=1: ParamSpec(
+    dtype=int, min=minimum, default=default, param_role=ParamRole.ESTIMATOR_RESOLUTION,
+)
+_POLICY = lambda default, choices: ParamSpec(
+    dtype=str, choices=tuple(choices), default=default,
+    searchable=False, param_role=ParamRole.POLICY,
+)
+_THRESH = lambda default: ParamSpec(
+    dtype=float, min=0.0, default=default, param_role=ParamRole.STATE_THRESHOLD,
+)
+
+IntraEventWindowReduce.metadata.param_specs = {
+    "pre": _INT_H(5, 0), "post": _INT_H(15, 0),
+    "reducer": _POLICY("mean", ("mean", "sum", "std", "max", "min", "last", "slope")),
+    "event_select": _POLICY("first", ("first", "last", "strongest")),
+    "min_obs": _INT_E(3),
+}
+IntraEventPrePostContrast.metadata.param_specs = {
+    "pre": _INT_H(10, 0), "post": _INT_H(10, 0),
+    "metric": _POLICY("mean_diff", ("mean_diff", "median_diff", "vol_ratio", "slope_diff", "range_ratio", "activity_ratio")),
+    "event_select": _POLICY("first", ("first", "last", "strongest")),
+    "min_obs": _INT_E(5),
+}
+IntraImpulseEventDetector.metadata.param_specs = {
+    "event": _POLICY("up", ("up", "down", "both")),
+    "threshold": _POLICY("robust_z", ("robust_z", "vol_scaled", "quantile")),
+    "z": _THRESH(3.0), "min_bars": _INT_E(1), "merge_gap": _INT_E(2, 0),
+    "output": _POLICY("count", ("count", "strength", "max_strength", "first_time", "last_time", "duration")),
+}
+IntraImpulseEventDetector.metadata.panel_params = ("price", "volume")
+IntraImpulseEventDetector.metadata.panel_arity = 2
+IntraImpulseEventDetector.metadata.scalar_params = (
+    "event", "threshold", "z", "min_bars", "merge_gap", "output"
+)
+IntraImpulseEventDetector.metadata.total_positional_arity = 8
+IntraImpulseEventDetector.metadata.available_at = "session_close"
+IntraImpulseEventDetector.metadata.same_session_usable = False
+IntraPostImpulseResponse.metadata.param_specs = {
+    "direction": _POLICY("up", ("up", "down", "both")),
+    "threshold": _POLICY("robust_z", ("robust_z", "vol_scaled", "quantile")),
+    "z": _THRESH(3.0), "horizon": _INT_H(30),
+    "output": _POLICY("retention", ("retention", "giveback", "max_drawdown", "vol_ratio", "volume_ratio", "amount_ratio", "vwap_hold", "recovery_half_life")),
+}
+IntraProbeOutcomeScore.metadata.param_specs = {
+    "direction": _POLICY("up", ("up", "down", "both")), "z": _THRESH(3.0),
+    "probe_horizon": _INT_H(10), "response_horizon": _INT_H(30),
+    "output": _POLICY("score", ("score", "failure", "holding", "second_push")),
+}
+IntraSupplyAbsorptionScore.metadata.param_specs = {
+    "event": _POLICY("all", ("up_impulse", "down_impulse", "all")),
+    "horizon": _INT_H(30),
+    "output": _POLICY("absorption", ("absorption", "price_per_amount", "volume_no_drop", "downside_resilience")),
+}
+IntraConsolidationQuality.metadata.param_specs = {
+    "trigger": _POLICY("impulse", ("impulse",)), "trigger_z": _THRESH(3.0),
+    "horizon": _INT_H(30),
+    "output": _POLICY("tightness", ("tightness", "level", "vol_compression", "volume_dryup", "rising_floor", "breakout_readiness")),
+}
+IntraResponseCurveFeatures.metadata.param_specs = {
+    "trigger": _POLICY("impulse", ("impulse",)), "horizon": _INT_H(30),
+    "curve": _POLICY("price", ("price", "drawdown", "volatility", "activity")),
+    "output": _POLICY("slope", ("slope", "curvature", "auc", "half_life", "monotonicity", "change_count")),
+}
+IntraLiquidityResilienceCurveFit.metadata.param_specs = {
+    "shock_threshold": _THRESH(2.5), "horizon": _INT_H(30),
+    "output": _POLICY("half_life", ("half_life", "residual", "asymptote", "slope", "r2")),
+}
 
 
 _CANONICALS.extend(

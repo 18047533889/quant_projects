@@ -33,7 +33,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator,
+)
 from factor_engine.cleaned_operators.rolling_pack import (
     frame_like,
     map_pair_rolling,
@@ -54,12 +56,29 @@ def _metadata(
     cost: int,
     extra_tags: tuple[str, ...] = (),
 ) -> OperatorMetadata:
+    defaults = {
+        "window": ParamSpec(dtype=int, min=1, default=120, param_role=ParamRole.HORIZON),
+        "quantile": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, param_role=ParamRole.THRESHOLD),
+        "target_q": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, param_role=ParamRole.THRESHOLD),
+        "source_q": ParamSpec(dtype=float, min=0.0, max=0.5, default=0.1, param_role=ParamRole.THRESHOLD),
+        "lag": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
+        "max_lag": ParamSpec(dtype=int, min=2, default=5, param_role=ParamRole.HORIZON),
+        "side": ParamSpec(dtype=str, choices=("lower", "upper"), default="lower", searchable=False, param_role=ParamRole.POLICY),
+        "target_side": ParamSpec(dtype=str, choices=("lower", "upper"), default="lower", searchable=False, param_role=ParamRole.POLICY),
+        "source_side": ParamSpec(dtype=str, choices=("lower", "upper"), default="lower", searchable=False, param_role=ParamRole.POLICY),
+        "fixed_threshold": ParamSpec(dtype=bool, default=False, searchable=False, param_role=ParamRole.POLICY),
+    }
+    specs = {param: defaults[param] for param in params if param in defaults}
+    panels = tuple(param for param in params if param not in specs)
     return OperatorMetadata(
         name=name,
         category="quantile_dynamics",
         description=description,
         param_names=params,
         return_type="series",
+        panel_params=panels,
+        scalar_params=tuple(specs),
+        param_specs=specs,
         tags=[
             "quantile_dynamics", "daily", "pit_safe", "causal", "typed_v2",
             "deterministic", *extra_tags,

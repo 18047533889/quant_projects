@@ -90,6 +90,28 @@ class ManifestRecord:
     error_code: str | None
 
 
+
+_REJECTED_DEFINITION_CODES = frozenset({"INVALID_DSL", "OPERATOR_UNKNOWN"})
+
+
+@dataclass(frozen=True)
+class RejectedFactorDefinition:
+    """A bounded definition that must become a real manifest REJECTED row."""
+
+    name: str
+    definition_digest: str
+    definition_bytes: int
+    error_code: str
+
+    def __post_init__(self) -> None:
+        if type(self.definition_bytes) is not int or self.definition_bytes < 0:
+            raise ValueError("definition_bytes must be a non-negative integer")
+        if self.error_code not in _REJECTED_DEFINITION_CODES:
+            raise ValueError("unsupported rejected factor definition error code")
+        if (len(self.definition_digest) != 64
+                or any(char not in "0123456789abcdef" for char in self.definition_digest)):
+            raise ValueError("definition_digest must be a lowercase SHA-256 hex digest")
+
 class FiniteFactorManifest:
     """SQLite manifest retaining definitions and indexes outside Python RAM.
 
@@ -426,6 +448,7 @@ class FiniteFactorManifest:
                     if ordinal >= max_factors:
                         raise ManifestLimitExceeded(f"factor count exceeds {max_factors}")
                     valid, error = True, None
+                    provided_digest = None
                     try:
                         name = getattr(factor, "name", None)
                         if name is None and isinstance(factor, dict):
@@ -440,7 +463,17 @@ class FiniteFactorManifest:
                         name, valid, error = (
                             f"<invalid:{ordinal}>", False, "FACTOR_NAME_TOO_LARGE"
                         )
-                    payload, size, oversize = None, 0, False
+                    if valid and isinstance(factor, RejectedFactorDefinition):
+                        valid = False
+                        error = (
+                            "DEFINITION_TOO_LARGE"
+                            if factor.definition_bytes > max_definition_bytes
+                            else factor.error_code
+                        )
+                        provided_digest = factor.definition_digest
+                        payload, size, oversize = None, factor.definition_bytes, False
+                    else:
+                        payload, size, oversize = None, 0, False
                     if valid:
                         try:
                             payload, size, oversize = _bounded_pickle(
@@ -515,7 +548,8 @@ class FiniteFactorManifest:
                             "UPDATE factors SET valid=0,error_code='DUPLICATE_FACTOR_NAME' WHERE name=?",
                             (name,),
                         )
-                    digest = hashlib.sha256(payload).hexdigest() if payload is not None else ""
+                    digest = (provided_digest or
+                              (hashlib.sha256(payload).hexdigest() if payload is not None else ""))
                     manifest._db.execute(
                         "INSERT INTO factors VALUES(?,?,?,?,?,?,?)",
                         (ordinal, name, payload, size, digest, int(valid), error),

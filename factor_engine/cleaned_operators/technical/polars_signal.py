@@ -10,6 +10,7 @@ except ImportError:
     pl = None  # type: ignore
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 
 _SKIP = frozenset({"date", "stock_code"})
 
@@ -773,48 +774,55 @@ class SignedPowerPolars(SeriesOperator):
 class TradeWhenPolars(SeriesOperator):
     """Polars 条件信号"""
     metadata = OperatorMetadata(
-        name="trade_when", category="signal", description="条件信号",
+        name="trade_when", category="signal", description="条件选择；NaN/NULL=false，非零有限值与±Inf=true",
         param_names=["condition", "signal", "fallback"], return_type="series", tags=["signal", "polars"],
+        mixed_params=("condition", "signal", "fallback"),
+        param_specs={
+            "signal": ParamSpec(dtype=float, param_role=ParamRole.ECONOMIC),
+            "fallback": ParamSpec(dtype=float, default=0.0, param_role=ParamRole.POLICY),
+        },
     )
 
     def _calculate_series(
         self,
-        condition: pl.DataFrame,
-        signal: pl.DataFrame,
-        fallback: pl.DataFrame | float = 0,
+        condition,
+        signal,
+        fallback=0,
         **kwargs,
     ) -> pl.DataFrame:
-        cols = [c for c in _numeric_cols(condition) if c in signal.columns]
-        if isinstance(fallback, pl.DataFrame):
-            return condition.select([
-                pl.when(pl.col(c).cast(pl.Boolean, strict=False))
-                .then(signal[c])
-                .otherwise(fallback[c])
-                .alias(c)
-                for c in cols
-                if c in fallback.columns
-            ] + ([condition["date"]] if "date" in condition.columns else []))
-        fb = float(fallback)
-        return condition.select([
-            pl.when(pl.col(c).cast(pl.Boolean, strict=False))
-            .then(signal[c])
-            .otherwise(fb)
-            .alias(c)
-            for c in cols
-        ] + ([condition["date"]] if "date" in condition.columns else []))
+        panels = [value for value in (condition, signal, fallback) if isinstance(value, pl.DataFrame)]
+        if not panels:
+            truth = bool(condition is not None and not (isinstance(condition, float) and np.isnan(condition)) and condition != 0)
+            return signal if truth else fallback
+        template = panels[0]
+        for panel in panels[1:]:
+            if template.columns != panel.columns or template.height != panel.height:
+                raise ValueError("trade_when panel inputs must have identical axes")
+        expressions = []
+        for c in _numeric_cols(template):
+            if isinstance(condition, pl.DataFrame):
+                raw_condition = condition[c].cast(pl.Float64, strict=False)
+                predicate = raw_condition.is_not_null() & ~raw_condition.is_nan() & (raw_condition != 0)
+            else:
+                predicate = pl.lit(bool(condition is not None and not (isinstance(condition, float) and np.isnan(condition)) and condition != 0))
+            selected = signal[c] if isinstance(signal, pl.DataFrame) else pl.lit(signal)
+            rejected = fallback[c] if isinstance(fallback, pl.DataFrame) else pl.lit(fallback)
+            expressions.append(pl.when(predicate).then(selected).otherwise(rejected).alias(c))
+        return template.with_columns(expressions)
 
 
 def _hump_decay_1d(values: np.ndarray, hump: float) -> np.ndarray:
     out = values.astype(np.float64, copy=True)
     if len(out) == 0:
         return out
-    prev = out[0]
-    for i in range(1, len(out)):
+    prev = np.nan
+    for i in range(len(out)):
         curr = out[i]
-        if np.isnan(curr):
+        if not np.isfinite(curr):
             out[i] = prev
-        elif np.isnan(prev):
+        elif not np.isfinite(prev):
             prev = curr
+            out[i] = curr
         elif abs(curr - prev) > hump:
             prev = curr
         else:
@@ -856,10 +864,15 @@ class HumpDecayPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="hump_decay", category="signal", description="阈值衰减",
         param_names=["x", "hump"], return_type="series", tags=["signal", "polars"],
+        panel_params=("x",), scalar_params=("hump",),
+        param_specs={"hump": ParamSpec(dtype=float, min=0.0, default=0.05, param_role=ParamRole.STATE_THRESHOLD)},
+        window_semantics="full_history",
     )
 
     def _calculate_series(self, x: pl.DataFrame, hump: float = 0.05, **kwargs) -> pl.DataFrame:
         h = float(kwargs.get("threshold", hump))
+        if not np.isfinite(h) or h < 0.0:
+            raise ValueError("hump must be finite and non-negative")
         cols = _numeric_cols(x)
         out: dict[str, np.ndarray] = {}
         for c in cols:

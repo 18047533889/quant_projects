@@ -11,7 +11,7 @@ except ImportError:  # pragma: no cover
     pl = None  # type: ignore
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
-from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, strict_bool_param
 
 _SKIP = frozenset({"date", "stock_code"})
 _SRC = "factor_dsl_polars_native"
@@ -233,21 +233,24 @@ class CSBucketNative(SeriesOperator):
         name="cs_bucket",
         category="cross_sectional",
         description="截面分桶",
-        param_names=["x", "n"],
+        param_names=["x", "buckets", "ascending"],
         return_type="series",
         tags=["cross_sectional", "polars", "native"],
         param_specs={
-            "n": ParamSpec(dtype=int, min=2, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "buckets": ParamSpec(dtype=int, min=1, default=10, searchable=True, param_role=ParamRole.ECONOMIC),
+            "ascending": ParamSpec(dtype=bool, default=True, searchable=False, param_role=ParamRole.POLICY),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, n: int = 5, **kwargs) -> pl.DataFrame:
+    def _calculate_series(self, x: pl.DataFrame, buckets: int = 10, ascending: bool = True, **kwargs) -> pl.DataFrame:
         from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
-        bins = strict_integer(n, "n", minimum=2)
+        bins = strict_integer(buckets, "buckets", minimum=1)
+        ascending = strict_bool_param(ascending, "ascending")
 
         def _xform(long: pl.DataFrame) -> pl.DataFrame:
-            rank = pl.col("_v").rank(method="average").over("_r")
+            rank_input = pl.col("_v") if ascending else -pl.col("_v")
+            rank = rank_input.rank(method="average").over("_r")
             count = pl.col("_v").is_not_null().cast(pl.Float64).sum().over("_r")
             return long.with_columns(
                 pl.when(pl.col("_v").is_null())
@@ -306,29 +309,51 @@ class CSBucketHistoricalNative(SeriesOperator):
         name="cs_bucket_historical",
         category="cross_sectional",
         description="历史分位分桶",
-        param_names=["x", "n", "lookback"],
+        param_names=["x", "window", "quantiles", "min_periods"],
         return_type="series",
         tags=["cross_sectional", "polars", "native"],
         param_specs={
-            "n": ParamSpec(dtype=int, min=2, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
-            "lookback": ParamSpec(dtype=int, min=20, default=252, searchable=True, param_role=ParamRole.HORIZON),
+            "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+            "quantiles": ParamSpec(
+                alternatives=(
+                    ParamSpec(dtype=tuple, items=ParamSpec(dtype=float, min=0.0, max=1.0), min_items=1),
+                    ParamSpec(dtype=list, items=ParamSpec(dtype=float, min=0.0, max=1.0), min_items=1),
+                ), default=(0.2, 0.4, 0.6, 0.8), param_role=ParamRole.THRESHOLD,
+            ),
+            "min_periods": ParamSpec(dtype=int, min=1, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
+        panel_params=("x",),
+        scalar_params=("window", "quantiles", "min_periods"),
     )
 
-    def _calculate_series(self, x: pl.DataFrame, n: int = 5, lookback: int = 252, **kwargs) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.parameter_validation import strict_integer
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20,
+                          quantiles=(0.2, 0.4, 0.6, 0.8),
+                          min_periods: int = 5, **kwargs) -> pl.DataFrame:
+        import numpy as np
+        from factor_engine.cleaned_operators.overhaul.base import window_params
+        from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar
 
-        bins = strict_integer(n, "n", minimum=2)
-        window = strict_integer(lookback, "lookback", minimum=20)
+        window, min_periods = window_params(window, min_periods)
+        quantiles = tuple(strict_finite_scalar(v, "quantile") for v in quantiles)
+        if (not quantiles or any(not 0 < v < 1 for v in quantiles)
+                or any(a >= b for a, b in zip(quantiles, quantiles[1:]))):
+            raise ValueError("quantiles must be strictly increasing inside (0, 1)")
         cols = _numeric_cols(x)
-        exprs = []
+        exprs: list[pl.Series] = []
         for c in cols:
-            quantiles = [pl.col(c).rolling_quantile(i / bins, window_size=window) for i in range(1, bins)]
-            bucket_expr = pl.lit(0.0)
-            for i, q in enumerate(quantiles):
-                bucket_expr = pl.when(pl.col(c) > q).then(pl.lit(float(i + 2))).otherwise(bucket_expr)
-            exprs.append(bucket_expr.alias(c))
-        return x.lazy().with_columns(exprs).collect()
+            values = x[c].cast(pl.Float64, strict=False).to_numpy()
+            out = np.full(values.shape, np.nan, dtype=float)
+            for row, value in enumerate(values):
+                if not np.isfinite(value):
+                    continue
+                history = values[max(0, row - window):row]
+                valid = history[np.isfinite(history)]
+                if valid.size < min_periods:
+                    continue
+                breaks = np.quantile(valid, quantiles)
+                out[row] = float(np.searchsorted(breaks, value, side="right") + 1)
+            exprs.append(pl.Series(c, out))
+        return x.with_columns(exprs)
 
 
 # ---------------------------------------------------------------------------

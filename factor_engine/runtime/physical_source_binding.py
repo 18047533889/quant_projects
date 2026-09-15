@@ -223,7 +223,7 @@ def bind_batch_sources(
     column_authorities: dict[str, tuple[Any, str, Any, Any]] = {}
 
     def prepare_authority(actual_source: Any, fields: set[str]) -> tuple[Any, Any]:
-        from factor_engine.storage.sources.data_access_source import DataAccessSource
+        from factor_engine.storage.sources.data_access_source import DataAccessSource, MissingDataDependencyError
         if not isinstance(actual_source, DataAccessSource):
             raise TypeError("resolved source scope is not a strict DataAccessSource")
         if not actual_source.production or not actual_source.pit_enforce:
@@ -232,13 +232,15 @@ def bind_batch_sources(
         if approved:
             token = approved.get(actual_source.dataset)
             if token is None:
-                raise ValueError("approved snapshot set omits a dependent source dataset")
+                raise MissingDataDependencyError(
+                    f"approved snapshot set omits dependent source {actual_source.dataset!r}")
             actual_source.bind_approved_snapshot_token(token)
         approved_content = getattr(source, "_approved_source_content_digests", {})
         if approved_content:
             digest = approved_content.get(actual_source.dataset)
             if digest is None:
-                raise ValueError("approved content digest set omits a dependent source dataset")
+                raise MissingDataDependencyError(
+                    f"approved content digest set omits dependent source {actual_source.dataset!r}")
             actual_source.bind_approved_content_digest(digest)
         actual_source.assert_approved_snapshot()
         field_plans = actual_source._ensure_field_plans(sorted(fields))
@@ -402,6 +404,12 @@ def preflight_batch_sources(
         MissingDataDependencyError, UnknownField, UnknownFieldSemanticError,
     )
 
+    def local_error(exc):
+        return RootPhysicalPreflightError(
+            str(getattr(exc, "reason_code", None) or "UNKNOWN_FIELD"),
+            type(exc).__name__, str(exc),
+        )
+
     from factor_engine.planner.batch_data_request import BatchSourceResolver
 
     root_errors: dict[str, RootPhysicalPreflightError] = {}
@@ -427,9 +435,7 @@ def preflight_batch_sources(
                     (binding.source_scope, binding.field), set()
                 ).add(fp.factor_name)
         except local_field_errors as exc:
-            root_errors[fp.factor_name] = RootPhysicalPreflightError(
-                "UNKNOWN_FIELD", type(exc).__name__, str(exc)
-            )
+            root_errors[fp.factor_name] = local_error(exc)
         except Exception as exc:
             return BatchSourcePreflightResult(
                 {}, {}, root_errors,
@@ -442,9 +448,7 @@ def preflight_batch_sources(
             source._ensure_field_plans([field])
         except local_field_errors as exc:
             for name in consumers:
-                root_errors[name] = RootPhysicalPreflightError(
-                    "UNKNOWN_FIELD", type(exc).__name__, str(exc)
-                )
+                root_errors[name] = local_error(exc)
         except Exception as exc:
             return BatchSourcePreflightResult(
                 {}, {}, root_errors,
@@ -469,9 +473,7 @@ def preflight_batch_sources(
             adapter._ensure_field_plans([field])
         except local_field_errors as exc:
             for name in consumers:
-                root_errors[name] = RootPhysicalPreflightError(
-                    "UNKNOWN_FIELD", type(exc).__name__, str(exc)
-                )
+                root_errors[name] = local_error(exc)
         except Exception as exc:
             return BatchSourcePreflightResult(
                 {}, {}, root_errors,
@@ -501,9 +503,8 @@ def preflight_batch_sources(
             _diagnostics=diagnostics,
         )
     except Exception as exc:
-        error = RootPhysicalPreflightError(
-            "SOURCE_SCOPE_UNAVAILABLE", type(exc).__name__, str(exc)
-        )
+        error = local_error(exc) if isinstance(exc, local_field_errors) else RootPhysicalPreflightError(
+            "SOURCE_SCOPE_UNAVAILABLE", type(exc).__name__, str(exc))
         return BatchSourcePreflightResult({}, {}, root_errors, error)
 
     from factor_engine.runtime.multibackend.batch_global_optimizer import validate_root_physical_support

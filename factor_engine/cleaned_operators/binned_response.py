@@ -60,6 +60,8 @@ def _metadata(
             f"unit:{unit}", f"cost:{cost}",
         ],
         param_specs=dict(param_specs) if param_specs else {},
+        panel_params=("y", "x"),
+        scalar_params=tuple(p for p in params if p not in {"y", "x"}),
         relational_specs=[RelationalParamSpec(
             expression="window >= bins * min_per_bin",
             message="INFEASIBLE_PARAMETER_DOMAIN: window must be >= bins * min_per_bin",
@@ -99,8 +101,10 @@ def _spearman(a: np.ndarray, b: np.ndarray) -> float:
 
 def _quantile_groups(xv: np.ndarray, bins: int) -> np.ndarray:
     """Window-local quantile buckets over the values of ``x``."""
-    cuts = np.quantile(xv, np.linspace(0.0, 1.0, bins + 1)[1:-1])
-    bucket = np.searchsorted(cuts, xv, side="right")
+    scale = float(np.max(np.abs(xv)))
+    normalized = xv if scale == 0.0 else xv / scale
+    cuts = np.quantile(normalized, np.linspace(0.0, 1.0, bins + 1)[1:-1])
+    bucket = np.searchsorted(cuts, normalized, side="right")
     return np.clip(bucket.astype(np.int64), 0, bins - 1)
 
 
@@ -195,22 +199,59 @@ def _curvature_series(y2d: np.ndarray, x2d: np.ndarray, window: int, bins: int, 
             # degenerate; fail closed.
             if not np.all(np.isfinite(qq)) or np.unique(qq).size < 4:
                 continue
+            # The reported coefficient is normalized by dispersion, so fit in
+            # origin-relative normalized y coordinates. This avoids overflow
+            # and preserves tiny response variation around a large level.
+            with np.errstate(over="ignore", invalid="ignore"):
+                delta = mm - mm[0]
+            if not np.all(np.isfinite(delta)):
+                scale = float(np.max(np.abs(mm)))
+                if scale == 0.0 or not np.isfinite(scale):
+                    continue
+                normalized = mm / scale
+                delta = normalized - normalized[0]
+            scale = float(np.max(np.abs(delta)))
+            if scale == 0.0:
+                continue
+            mn = delta / scale
             X = np.column_stack([np.ones_like(qq), qq, qq ** 2])
-            coeff, *_ = np.linalg.lstsq(X, mm, rcond=None)
-            sd = float(np.std(mm))
-            out[r, c] = float(coeff[2]) / (sd + _EPS)
+            coeff, *_ = np.linalg.lstsq(X, mn, rcond=None)
+            sd = float(np.std(mn))
+            if sd > 0.0 and np.isfinite(sd):
+                out[r, c] = float(coeff[2]) / sd
     return out
 
 
-def _ols_beta(xv: np.ndarray, yv: np.ndarray) -> float:
+def _stable_corr(xv: np.ndarray, yv: np.ndarray) -> float:
     n = xv.size
     if n < 2:
         return np.nan
-    xm, ym = float(xv.mean()), float(yv.mean())
-    sxx = float(np.dot(xv - xm, xv - xm))
-    if sxx <= _EPS:
+    xs = float(np.max(np.abs(xv)))
+    ys = float(np.max(np.abs(yv)))
+    if xs == 0.0 or ys == 0.0:
         return np.nan
-    return float(np.dot(xv - xm, yv - ym) / sxx)
+    xn, yn = xv / xs, yv / ys
+    xc, yc = xn - np.mean(xn), yn - np.mean(yn)
+    denom = float(np.sqrt(np.dot(xc, xc) * np.dot(yc, yc)))
+    return np.nan if denom == 0.0 or not np.isfinite(denom) else float(np.dot(xc, yc) / denom)
+
+
+def _strict_int(value: Any, name: str, minimum: int) -> int:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be an integer")
+    out = int(value)
+    if out < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+    return out
+
+
+def _strict_probability(value: Any, name: str) -> float:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, float, np.integer, np.floating)):
+        raise ValueError(f"{name} must be a finite real number in (0, 1)")
+    out = float(value)
+    if not np.isfinite(out) or not 0.0 < out < 1.0:
+        raise ValueError(f"{name} must be in (0, 1)")
+    return out
 
 
 def _balanced_quantile_split(xv: np.ndarray, qq: float) -> tuple[np.ndarray, np.ndarray]:
@@ -250,22 +291,17 @@ def _slope_asymmetry_series(y2d: np.ndarray, x2d: np.ndarray, window: int, split
             lo, hi = _balanced_quantile_split(xv, qq)
             if lo.sum() < 2 or hi.sum() < 2:
                 continue
-            bL = _ols_beta(xv[lo], yv[lo])
-            bH = _ols_beta(xv[hi], yv[hi])
-            if not (np.isfinite(bL) and np.isfinite(bH)):
-                continue
-            sxL, syL = float(np.std(xv[lo])), float(np.std(yv[lo]))
-            sxH, syH = float(np.std(xv[hi])), float(np.std(yv[hi]))
-            if not (sxL > _EPS and syL > _EPS and sxH > _EPS and syH > _EPS):
+            bLn = _stable_corr(xv[lo], yv[lo])
+            bHn = _stable_corr(xv[hi], yv[hi])
+            if not (np.isfinite(bLn) and np.isfinite(bHn)):
                 continue
             # R4-48: standardised slope β·σx/σy (a within-side correlation), NOT
             # β/residual-RMSE.  The old denominator mixed residual-volatility
             # asymmetry into the "slope asymmetry": β_L == β_H with different
             # residual spreads produced a spurious non-zero asymmetry.
-            bLn = bL * sxL / syL
-            bHn = bH * sxH / syH
-            denom = abs(bHn) + abs(bLn) + _EPS
-            out[r, c] = (bHn - bLn) / denom
+            denom = abs(bHn) + abs(bLn)
+            if denom > 0.0:
+                out[r, c] = (bHn - bLn) / denom
     return out
 
 
@@ -297,8 +333,12 @@ class TsBinnedResponseMonotonicity(SeriesOperator):
         # changes economic scale, plug-in bias and finite-sample variance together.
         # Only a small verified grid {3, 5} is allowed.
         param_specs={
-            "bins": ParamSpec(dtype=int, min=3, choices=(3, 5), param_role=ParamRole.ESTIMATOR_RESOLUTION),
-            "min_per_bin": ParamSpec(dtype=int, min=3, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, default=120, searchable=True,
+                                param_role=ParamRole.HORIZON),
+            "bins": ParamSpec(dtype=int, min=3, choices=(3, 5), default=5,
+                              searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_per_bin": ParamSpec(dtype=int, min=3, default=3,
+                                     searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
@@ -306,12 +346,10 @@ class TsBinnedResponseMonotonicity(SeriesOperator):
         self, y: pd.DataFrame, x: pd.DataFrame, window: int = 120, bins: int = 5, min_per_bin: int = 3, **_: Any
     ) -> pd.DataFrame:
         w = check_window(window)
-        b = int(bins)
-        if b < 2:
-            raise ValueError("bins must be >= 2")
-        mpb = int(min_per_bin)
-        if mpb < 3:
-            raise ValueError("min_per_bin must be >= 3")
+        b = _strict_int(bins, "bins", 3)
+        if b not in (3, 5):
+            raise ValueError("bins must be one of {3, 5}")
+        mpb = _strict_int(min_per_bin, "min_per_bin", 3)
         return frame_like(
             y, _monotonicity_series(y.to_numpy(dtype=float), x.to_numpy(dtype=float), w, b, mpb)
         )
@@ -340,8 +378,12 @@ class TsBinnedResponseCurvature(SeriesOperator):
         # Master-Audit item (P1): a quadratic fit has 3 parameters, so 3 bins is
         # EXACT interpolation (zero residual DOF) — the grid must start at 4.
         param_specs={
-            "bins": ParamSpec(dtype=int, min=4, choices=(4, 5), param_role=ParamRole.ESTIMATOR_RESOLUTION),
-            "min_per_bin": ParamSpec(dtype=int, min=3, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "window": ParamSpec(dtype=int, min=2, default=120, searchable=True,
+                                param_role=ParamRole.HORIZON),
+            "bins": ParamSpec(dtype=int, min=4, choices=(4, 5), default=5,
+                              searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "min_per_bin": ParamSpec(dtype=int, min=3, default=3,
+                                     searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
     )
 
@@ -349,12 +391,10 @@ class TsBinnedResponseCurvature(SeriesOperator):
         self, y: pd.DataFrame, x: pd.DataFrame, window: int = 120, bins: int = 5, min_per_bin: int = 3, **_: Any
     ) -> pd.DataFrame:
         w = check_window(window)
-        b = int(bins)
-        if b < 4:
-            raise ValueError("bins must be >= 4 for a non-degenerate quadratic fit (>= 4 empirical points)")
-        mpb = int(min_per_bin)
-        if mpb < 3:
-            raise ValueError("min_per_bin must be >= 3")
+        b = _strict_int(bins, "bins", 4)
+        if b not in (4, 5):
+            raise ValueError("bins must be one of {4, 5}")
+        mpb = _strict_int(min_per_bin, "min_per_bin", 3)
         return frame_like(
             y, _curvature_series(y.to_numpy(dtype=float), x.to_numpy(dtype=float), w, b, mpb)
         )
@@ -381,13 +421,18 @@ class TsResponseSlopeAsymmetry(SeriesOperator):
         ["y", "x", "window", "split_quantile"],
         unit="ratio",
         cost=4,
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=120, searchable=True,
+                                param_role=ParamRole.HORIZON),
+            "split_quantile": ParamSpec(dtype=float, min=0.0, max=1.0,
+                                        default=0.5, searchable=False,
+                                        param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        },
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, window: int = 120, split_quantile: float = 0.5, **_: Any) -> pd.DataFrame:
         w = check_window(window)
-        q = float(split_quantile)
-        if not 0.0 < q < 1.0:
-            raise ValueError("split_quantile must be in (0, 1)")
+        q = _strict_probability(split_quantile, "split_quantile")
         return frame_like(y, _slope_asymmetry_series(y.to_numpy(dtype=float), x.to_numpy(dtype=float), w, q))
 
 

@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "--noconftest", "-q", "factor_engine/tests/operators/test_r6_moments_ext_contract.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 458907648, "sampling_seconds": 0.1, "seconds": 53.9600182690192, "test_guard_reason": null, "hard_memory_cap": false}

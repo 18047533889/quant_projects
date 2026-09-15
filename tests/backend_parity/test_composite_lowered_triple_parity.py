@@ -178,7 +178,7 @@ test_daily:
   time_column: TradeDate
   instrument_column: Symbol
   schema:
-    TradeDate: date
+    TradeDate: timestamp
     Symbol: string
     Close: double
     High: double
@@ -216,7 +216,9 @@ def _seed_duckdb(root: Path, mem: InMemorySeriesSource) -> None:
     }
     rows = []
     for (ts, sym) in mem.data["close"].index:
-        row = {"TradeDate": ts.date(), "Symbol": sym}
+        # Preserve the in-memory source's timestamp unit.  Converting to DATE
+        # silently changes a valid pandas 3 datetime64[us] axis to datetime64[s].
+        row = {"TradeDate": ts, "Symbol": sym}
         for src, dst in mapping.items():
             val = mem.data[src].loc[(ts, sym)]
             row[dst] = float(val) if pd.notna(val) else None

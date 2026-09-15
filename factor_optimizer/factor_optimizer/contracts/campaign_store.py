@@ -152,7 +152,17 @@ class SQLiteCampaignStore:
         """Test seam for proving ALTER/backfill transaction crash safety."""
         return None
 
+    @staticmethod
+    def _validate_budget_identifier(value: str, name: str) -> None:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{name} must be a non-empty string")
+
     def create_campaign(self, campaign_id: str, *, max_evaluations: int, max_cost: float) -> None:
+        self._validate_budget_identifier(campaign_id, "campaign_id")
+        if type(max_evaluations) is not int:
+            raise TypeError("max_evaluations must be an integer")
+        if isinstance(max_cost, bool):
+            raise TypeError("max_cost must not be a bool")
         if not campaign_id or max_evaluations < 1 or not math.isfinite(max_cost) or max_cost <= 0:
             raise ValueError("invalid durable campaign budget")
         with self._connect() as db:
@@ -171,7 +181,15 @@ class SQLiteCampaignStore:
             db.commit()
 
     def reserve(self, campaign_id: str, attempt_id: str, estimated_cost: float, *, lease_seconds: float = 60) -> bool:
-        if not attempt_id or not math.isfinite(estimated_cost) or estimated_cost < 0 or lease_seconds <= 0:
+        self._validate_budget_identifier(campaign_id, "campaign_id")
+        self._validate_budget_identifier(attempt_id, "attempt_id")
+        if isinstance(estimated_cost, bool):
+            raise TypeError("estimated_cost must not be a bool")
+        if isinstance(lease_seconds, bool):
+            raise TypeError("lease_seconds must not be a bool")
+        if not math.isfinite(lease_seconds) or lease_seconds <= 0:
+            raise ValueError("lease_seconds must be finite and positive")
+        if not attempt_id or not math.isfinite(estimated_cost) or estimated_cost < 0:
             raise ValueError("invalid reservation")
         now = time.time()
         with self._connect() as db:
@@ -182,10 +200,12 @@ class SQLiteCampaignStore:
                 (campaign_id, now),
             )
             prior = db.execute(
-                "SELECT state FROM reservations WHERE campaign_id=? AND attempt_id=?",
+                "SELECT state,estimated_cost FROM reservations WHERE campaign_id=? AND attempt_id=?",
                 (campaign_id, attempt_id),
             ).fetchone()
             if prior is not None:
+                if prior["estimated_cost"] != estimated_cost:
+                    raise CampaignStateError("reservation replay cost cannot change")
                 db.commit()
                 return prior["state"] in ("RESERVED", "STARTED", "SETTLED")
             campaign = db.execute("SELECT * FROM campaigns WHERE campaign_id=?", (campaign_id,)).fetchone()
@@ -208,10 +228,26 @@ class SQLiteCampaignStore:
     def start(self, campaign_id: str, attempt_id: str) -> None:
         self._transition_reservation(campaign_id, attempt_id, "RESERVED", "STARTED")
 
-    def release(self, campaign_id: str, attempt_id: str) -> None:
-        self._transition_reservation(campaign_id, attempt_id, "RESERVED", "RELEASED")
+    @staticmethod
+    def _validate_reserved_cost(reserved_cost: float) -> None:
+        if isinstance(reserved_cost, bool):
+            raise TypeError("reserved_cost must not be a bool")
+        if not math.isfinite(reserved_cost) or reserved_cost < 0:
+            raise ValueError("reserved_cost must be finite and non-negative")
 
-    def settle(self, campaign_id: str, attempt_id: str, actual_cost: float) -> None:
+    def release(self, campaign_id: str, attempt_id: str, *, expected_reserved_cost: Optional[float] = None) -> None:
+        self._transition_reservation(
+            campaign_id, attempt_id, "RESERVED", "RELEASED",
+            expected_reserved_cost=expected_reserved_cost,
+        )
+
+    def settle(self, campaign_id: str, attempt_id: str, actual_cost: float, *, expected_reserved_cost: Optional[float] = None) -> None:
+        self._validate_budget_identifier(campaign_id, "campaign_id")
+        self._validate_budget_identifier(attempt_id, "attempt_id")
+        if expected_reserved_cost is not None:
+            self._validate_reserved_cost(expected_reserved_cost)
+        if isinstance(actual_cost, bool):
+            raise TypeError("actual_cost must not be a bool")
         if not math.isfinite(actual_cost) or actual_cost < 0:
             raise ValueError("actual_cost must be finite and non-negative")
         with self._connect() as db:
@@ -222,6 +258,8 @@ class SQLiteCampaignStore:
             ).fetchone()
             if row is None or row["state"] != "STARTED":
                 raise CampaignStateError("only a started reservation can settle")
+            if expected_reserved_cost is not None and row["estimated_cost"] != expected_reserved_cost:
+                raise CampaignStateError("reserved cost does not match reservation")
             db.execute(
                 "UPDATE reservations SET state='SETTLED',actual_cost=? WHERE campaign_id=? AND attempt_id=?",
                 (actual_cost, campaign_id, attempt_id),
@@ -232,9 +270,20 @@ class SQLiteCampaignStore:
             )
             db.commit()
 
-    def _transition_reservation(self, campaign_id: str, attempt_id: str, expected: str, target: str) -> None:
+    def _transition_reservation(self, campaign_id: str, attempt_id: str, expected: str, target: str, *, expected_reserved_cost: Optional[float] = None) -> None:
+        self._validate_budget_identifier(campaign_id, "campaign_id")
+        self._validate_budget_identifier(attempt_id, "attempt_id")
+        if expected_reserved_cost is not None:
+            self._validate_reserved_cost(expected_reserved_cost)
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
+            if expected_reserved_cost is not None:
+                row = db.execute(
+                    "SELECT estimated_cost FROM reservations WHERE campaign_id=? AND attempt_id=?",
+                    (campaign_id, attempt_id),
+                ).fetchone()
+                if row is None or row["estimated_cost"] != expected_reserved_cost:
+                    raise CampaignStateError("reserved cost does not match reservation")
             changed = db.execute(
                 "UPDATE reservations SET state=? WHERE campaign_id=? AND attempt_id=? AND state=?",
                 (target, campaign_id, attempt_id, expected),
@@ -377,6 +426,7 @@ class SQLiteCampaignStore:
             return dict(row)
 
     def budget_state(self, campaign_id: str) -> Mapping[str, Any]:
+        self._validate_budget_identifier(campaign_id, "campaign_id")
         with self._connect() as db:
             campaign = db.execute("SELECT * FROM campaigns WHERE campaign_id=?", (campaign_id,)).fetchone()
             if campaign is None:
@@ -418,6 +468,8 @@ class SQLiteCampaignStore:
 
     def freeze_supervised_parameter(self, campaign_id: str, state) -> None:
         from factor_optimizer.search.supervised_parameter import FrozenSupervisedParameter
+        if not isinstance(campaign_id, str) or not campaign_id.strip():
+            raise ValueError("campaign_id must be a non-empty string")
         if not isinstance(state, FrozenSupervisedParameter):
             raise TypeError("state must be FrozenSupervisedParameter")
         encoded = json.dumps(state.__dict__, sort_keys=True, separators=(",", ":"))
@@ -437,6 +489,8 @@ class SQLiteCampaignStore:
 
     def supervised_parameter(self, campaign_id: str, parent_factor_id: str, repair_family: str):
         from factor_optimizer.search.supervised_parameter import FrozenSupervisedParameter
+        if not all(isinstance(v, str) and v.strip() for v in (campaign_id, parent_factor_id, repair_family)):
+            raise ValueError("campaign/parent factor/repair family identities must be non-empty strings")
         with self._connect() as db:
             row = db.execute(
                 "SELECT state_json FROM frozen_parameters WHERE campaign_id=? AND parent_factor_id=? AND repair_family=?",
@@ -452,8 +506,14 @@ class SQLiteCampaignStore:
                                   executed: bool = False, has_pvalue: bool = False) -> None:
         if not all(isinstance(v, str) and v.strip() for v in (campaign_id, proposal_id, evaluation_intent_hash)):
             raise ValueError("campaign/proposal/evaluation intent identities are required")
+        if effective_spec_hash is not None and (
+            not isinstance(effective_spec_hash, str) or not effective_spec_hash.strip()
+        ):
+            raise ValueError("effective_spec_hash must be a non-empty string or None")
         if not isinstance(horizon, int) or isinstance(horizon, bool) or horizon <= 0:
             raise ValueError("horizon must be a positive integer")
+        if not isinstance(executed, bool) or not isinstance(has_pvalue, bool):
+            raise TypeError("executed and has_pvalue must be bool")
         if has_pvalue and not executed:
             raise ValueError("an unexecuted proposal cannot have a p-value")
         with self._connect() as db:
@@ -471,6 +531,8 @@ class SQLiteCampaignStore:
             db.commit()
 
     def hypothesis_family_summary(self, campaign_id: str) -> Mapping[str, int]:
+        if not isinstance(campaign_id, str) or not campaign_id.strip():
+            raise ValueError("campaign_id must be a non-empty string")
         with self._connect() as db:
             rows = db.execute("SELECT * FROM hypothesis_attempts WHERE campaign_id=?", (campaign_id,)).fetchall()
             effective = {(r["effective_spec_hash"], r["evaluation_intent_hash"], r["horizon"])
@@ -485,6 +547,8 @@ class SQLiteCampaignStore:
             }
 
     def require_complete_fdr_family(self, campaign_id: str, submitted_pvalue_count: int) -> None:
+        if type(submitted_pvalue_count) is not int:
+            raise TypeError("submitted_pvalue_count must be an integer")
         summary = self.hypothesis_family_summary(campaign_id)
         if submitted_pvalue_count != summary["pvalue_count"] or submitted_pvalue_count == 0:
             raise CampaignStateError("FDR input must contain the complete recorded p-value family")
@@ -598,7 +662,8 @@ class DurableBudgetTracker:
 
     def commit_evaluation(self, reserved_cost, actual_cost, attempt_id=None):
         if not attempt_id: raise ValueError("durable reservations require attempt_id")
-        self.store.settle(self.campaign_id, attempt_id, actual_cost)
+        self.store._validate_reserved_cost(reserved_cost)
+        self.store.settle(self.campaign_id, attempt_id, actual_cost, expected_reserved_cost=reserved_cost)
 
     def start_evaluation(self, attempt_id=None):
         if not attempt_id: raise ValueError("durable reservations require attempt_id")
@@ -606,11 +671,14 @@ class DurableBudgetTracker:
 
     def release_evaluation(self, reserved_cost, attempt_id=None):
         if not attempt_id: raise ValueError("durable reservations require attempt_id")
-        self.store.release(self.campaign_id, attempt_id)
+        self.store._validate_reserved_cost(reserved_cost)
+        self.store.release(self.campaign_id, attempt_id, expected_reserved_cost=reserved_cost)
 
     def has_reservation(self, attempt_id=None):
-        if not attempt_id:
+        self.store._validate_budget_identifier(self.campaign_id, "campaign_id")
+        if attempt_id is None or (isinstance(attempt_id, str) and attempt_id == ""):
             return False
+        self.store._validate_budget_identifier(attempt_id, "attempt_id")
         with self.store._connect() as db:
             row = db.execute(
                 "SELECT state FROM reservations WHERE campaign_id=? AND attempt_id=?",

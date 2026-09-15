@@ -16,6 +16,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from numbers import Integral, Real
+import math
 from typing import Any
 
 DEFAULT_UNCERTAINTY = 1.30
@@ -50,6 +52,23 @@ class TaskResourceContract:
     uncertainty: float = DEFAULT_UNCERTAINTY
     # 可解释性（R27-143：调度器必须可解释）
     estimate_basis: str = "static"
+
+    def __post_init__(self) -> None:
+        # Negative tokens used to skip acquisition but increase in_use during
+        # release; fractions/bools are not CPU/IO slot quantities either.
+        for name in ("cpu_tokens", "io_tokens", "input_bytes", "peak_memory_bytes", "output_bytes", "spill_bytes"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
+                raise ValueError(f"{name} must be a non-negative integer")
+            object.__setattr__(self, name, int(value))
+
+        # Uncertainty is safety headroom, never a discount. Zero/negative/NaN
+        # previously erased an otherwise oversized task's admission charge.
+        value = self.uncertainty
+        if (isinstance(value, bool) or not isinstance(value, Real)
+                or not math.isfinite(value) or value < 1.0):
+            raise ValueError("uncertainty must be finite and at least 1.0")
+        object.__setattr__(self, "uncertainty", float(value))
 
     @property
     def admissible_peak_bytes(self) -> int:

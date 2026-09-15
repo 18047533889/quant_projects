@@ -13,8 +13,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator,
+)
 from factor_engine.cleaned_operators.common.daily_panel import _aligned
+from factor_engine.cleaned_operators.common.strict_params import strict_int
 
 
 def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str) -> OperatorMetadata:
@@ -23,6 +26,20 @@ def _metadata(name: str, description: str, params: list[str], *, domain: str, un
     # the catalog / typed search see the real output dimension instead of an
     # opaque ``ratio`` tag.
     output_unit = unit if (unit.startswith("same_as:") or unit.startswith("unit(") or unit == "dimensionless") else None
+    scalar_specs = {
+        "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(
+            dtype=int, min=3 if name == "ts_regression_resid_if" else 2 if name in {"ts_corr_if", "ts_beta_if"} else 1,
+            default=3 if name == "ts_regression_resid_if" else 2 if name in {"ts_corr_if", "ts_beta_if"} else 1,
+            searchable=False, param_role=ParamRole.SUPPORT_POLICY,
+        ),
+    }
+    if name == "ts_quantile_if":
+        scalar_specs["q"] = ParamSpec(
+            dtype=float, min=0.0, max=1.0, default=0.5,
+            param_role=ParamRole.THRESHOLD,
+        )
+    panel_params = tuple(p for p in params if p not in scalar_specs)
     return OperatorMetadata(
         name=name,
         category="time_series_condition",
@@ -35,6 +52,9 @@ def _metadata(name: str, description: str, params: list[str], *, domain: str, un
             f"unit:{unit}", "cost:1",
         ],
         output_unit=output_unit,
+        panel_params=panel_params,
+        scalar_params=tuple(scalar_specs),
+        param_specs=scalar_specs,
     )
 
 
@@ -115,8 +135,10 @@ class TsMinIf(SeriesOperator):
         x, condition = _aligned(x, condition)
         # R11 #144: condition must be a ConditionBool.
         _assert_condition_bool(condition)
-        w = int(window)
-        mp = max(1, int(min_periods))
+        w = strict_int(window, "window", minimum=1)
+        mp = strict_int(min_periods, "min_periods", minimum=1)
+        if mp > w:
+            raise ValueError("min_periods must be <= window")
         mask = _selected_mask(condition, x)
         return _frame_like(x, _min_max_rolling(x.to_numpy(dtype=float), mask, w, mp, "min"))
 
@@ -145,8 +167,10 @@ class TsMaxIf(SeriesOperator):
         x, condition = _aligned(x, condition)
         # R11 #144: condition must be a ConditionBool.
         _assert_condition_bool(condition)
-        w = int(window)
-        mp = max(1, int(min_periods))
+        w = strict_int(window, "window", minimum=1)
+        mp = strict_int(min_periods, "min_periods", minimum=1)
+        if mp > w:
+            raise ValueError("min_periods must be <= window")
         mask = _selected_mask(condition, x)
         return _frame_like(x, _min_max_rolling(x.to_numpy(dtype=float), mask, w, mp, "max"))
 
@@ -175,11 +199,13 @@ class TsQuantileIf(SeriesOperator):
         x, condition = _aligned(x, condition)
         # R11 #144: condition must be a ConditionBool.
         _assert_condition_bool(condition)
-        w = int(window)
+        w = strict_int(window, "window", minimum=1)
         quantile = float(q)
         if not (0.0 <= quantile <= 1.0):
             raise ValueError("ts_quantile_if requires 0 <= q <= 1")
-        mp = max(1, int(min_periods))
+        mp = strict_int(min_periods, "min_periods", minimum=1)
+        if mp > w:
+            raise ValueError("min_periods must be <= window")
         mask = _selected_mask(condition, x)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
@@ -272,8 +298,10 @@ class TsCorrIf(SeriesOperator):
         x, y, condition = _aligned(x, y, condition)
         # R11 #144: condition must be a ConditionBool.
         _assert_condition_bool(condition)
-        w = int(window)
-        mp = max(2, int(min_periods))
+        w = strict_int(window, "window", minimum=1)
+        mp = strict_int(min_periods, "min_periods", minimum=2)
+        if mp > w:
+            raise ValueError("min_periods must be <= window")
         mask = _selected_mask(condition, x, y)
         return _frame_like(
             x,
@@ -306,8 +334,10 @@ class TsBetaIf(SeriesOperator):
         x, y, condition = _aligned(x, y, condition)
         # R11 #144: condition must be a ConditionBool.
         _assert_condition_bool(condition)
-        w = int(window)
-        mp = max(2, int(min_periods))
+        w = strict_int(window, "window", minimum=1)
+        mp = strict_int(min_periods, "min_periods", minimum=2)
+        if mp > w:
+            raise ValueError("min_periods must be <= window")
         mask = _selected_mask(condition, x, y)
         return _frame_like(
             y,
@@ -340,8 +370,10 @@ class TsRegressionResidIf(SeriesOperator):
         x, y, condition = _aligned(x, y, condition)
         # R11 #144: condition must be a ConditionBool.
         _assert_condition_bool(condition)
-        w = int(window)
-        mp = max(3, int(min_periods))
+        w = strict_int(window, "window", minimum=1)
+        mp = strict_int(min_periods, "min_periods", minimum=3)
+        if mp > w - 1:
+            raise ValueError("min_periods must be <= window - 1 for prior-only training")
         mask = _selected_mask(condition, x, y)
         return _frame_like(
             y,

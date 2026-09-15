@@ -12,10 +12,33 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 
 _EPS = 1e-12
 _CANONICALS: list[str] = []
+
+_ROBUST_SCALARS = {
+    "cs_ridge_resid": {"alpha": (float, 0.0, None, 0.1), "add_intercept": (bool, None, None, True)},
+    "cs_quantile_resid": {"q": (float, 0.0, 1.0, 0.5)},
+    "cs_spline_resid": {"knots": (int, 2, None, 4)},
+    "cs_mahalanobis_distance": {},
+    "cs_knn_distance": {"k": (int, 2, None, 5)},
+    "cs_local_density_score": {"k": (int, 2, None, 5)},
+    "cs_shrinkage_mahalanobis": {"shrinkage": (float, 0.0, 1.0, 0.1)},
+    "cs_robust_mahalanobis_mad": {},
+    "cs_actual_lof_score": {"k": (int, 2, None, 20)},
+    "cs_relative_density_ratio": {"k": (int, 2, None, 20)},
+    "cs_residual_percentile": {},
+}
+
+def _robust_specs(name: str) -> dict[str, ParamSpec]:
+    out = {}
+    for key, (dtype, minimum, maximum, default) in _ROBUST_SCALARS[name].items():
+        role = ParamRole.ESTIMATOR_RESOLUTION
+        if key == "add_intercept":
+            role = ParamRole.POLICY
+        out[key] = ParamSpec(dtype=dtype, min=minimum, max=maximum, default=default, param_role=role)
+    return out
 
 
 def _meta(name: str, description: str, params: list[str], *, unit: str = "level") -> OperatorMetadata:
@@ -30,6 +53,9 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "level"
             f"signature:{','.join(params)}->series", "domain:cs",
             f"unit:{unit}", "cost:4",
         ],
+        panel_params=tuple(p for p in params if p not in _ROBUST_SCALARS[name]),
+        scalar_params=tuple(_ROBUST_SCALARS[name]),
+        param_specs=_robust_specs(name),
     )
 
 
@@ -280,8 +306,9 @@ _mk(
 
 
 def _cs_local_density_score(*features, k=5, radius=1.0):
-    knn = _cs_knn_distance(*features, k=int(k)).to_numpy(dtype=float)
-    return -np.log(knn + _EPS)
+    knn_frame = _cs_knn_distance(*features, k=int(k))
+    values = -np.log(knn_frame.to_numpy(dtype=float) + _EPS)
+    return _frame_like(features[0], values)
 
 
 _mk(

@@ -1,0 +1,13 @@
+Independent finite translation probe (2026-09-12, project pandas 2.3.3)
+fixture x=[1,2,4,7,11], y=[3,1,5,2,9], translated by exactly representable 1e12
+ts_cov actual=0.0 independent sample covariance=9.5
+ts_var actual=16.49993896484375 independent sample variance=16.5
+ts_std actual=4.062011689402647 independent sample std=4.06201920231798
+ts_moment(k=2) actual untranslated=13.2 translated=13.2
+ts_moment(k=3) actual untranslated=26.4 translated=26.4
+ts_moment(k=4) actual untranslated=330.0 translated=330.0
+
+This is the retained pre-fix failure record. Values were obtained from the
+selected pandas implementations in common/time_series.py; references use
+explicit centered scalar/NumPy calculations on the untranslated integer
+fixtures.

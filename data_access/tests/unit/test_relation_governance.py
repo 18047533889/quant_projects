@@ -109,6 +109,57 @@ def test_relation_handle_sql_fragment_param_order(store):
     assert tbl.column("value").to_pylist() == [2.0]
 
 
+def test_relation_handle_expression_param_order(store):
+    """表达式列表的外层占位符位于 inner SQL 之前，绑定值不得互换。"""
+    rh = RelationHandle(
+        store,
+        "SELECT ? AS inner_value",
+        params=[11],
+    )
+
+    table = rh.sql(
+        "? AS outer_value, inner_value",
+        params=[22],
+    ).collect()
+
+    assert table.to_pylist() == [{"outer_value": 22, "inner_value": 11}]
+
+
+def test_relation_handle_dollar_quote_param_order(store):
+    """Dollar-quoted 字符串中的问号不是绑定占位符。"""
+    rh = RelationHandle(
+        store,
+        "SELECT ? AS inner_value",
+        params=[11],
+    )
+
+    table = rh.sql(
+        "SELECT $$?$$ AS literal, $tag$?x$tag$ AS tagged, "
+        "? AS first, inner_value, ? AS second FROM _sub",
+        params=[22, 33],
+    ).collect()
+
+    assert table.to_pylist() == [{"literal": "?", "tagged": "?x", "first": 22, "inner_value": 11, "second": 33}]
+
+
+def test_relation_handle_cte_param_order(store):
+    """WITH 完整查询保留 CTE、inner 与尾部参数的词法绑定顺序。"""
+    rh = RelationHandle(
+        store,
+        "SELECT ? AS inner_value",
+        params=[11],
+    )
+
+    table = rh.sql(
+        "WITH c AS (SELECT ? AS label, inner_value FROM _sub "
+        "WHERE inner_value < ?) "
+        "SELECT label, inner_value FROM c WHERE label = ?",
+        params=[22, 20, 22],
+    ).collect()
+
+    assert table.to_pylist() == [{"label": 22, "inner_value": 11}]
+
+
 def test_read_handle_lazy_rows_no_collect(store):
     """#28：lazy 形态 rows 不触发 collect（避免 repr 意外物化）。"""
     lf = store.sql_relation(

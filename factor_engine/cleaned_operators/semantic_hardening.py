@@ -22,6 +22,7 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamSpec, ParamRole, RelationalParamSpec,
     SeriesOperator,
     TwoVarOperator,
     register_operator,
@@ -35,11 +36,43 @@ except ImportError:  # pragma: no cover - optional backend
 _FLOAT_LOG_MAX = math.log(np.finfo(np.float64).max)
 
 
+def _contract(name):
+    if name == "group_percentile":
+        return dict(panel_params=("x", "group"), scalar_params=("p", "side", "missing_group_policy"),
+            param_specs={
+                "p": ParamSpec(dtype=float, min=0, max=1, default=.5, param_role=ParamRole.ECONOMIC),
+                "side": ParamSpec(dtype=str, choices=("top", "bottom"), default="top", param_role=ParamRole.POLICY),
+                "missing_group_policy": ParamSpec(dtype=str, choices=("raise", "null", "global"),
+                    default="raise", searchable=False, param_role=ParamRole.MISSING_POLICY)},
+            relational_specs=[RelationalParamSpec("p > 0")])
+    control = ("skipna" if name == "ts_product" else "scale")
+    specs = {
+        "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        "min_periods": ParamSpec(dtype=int, min=1, default=None, searchable=False, param_role=ParamRole.SUPPORT_POLICY)}
+    specs[control] = (ParamSpec(dtype=bool, default=True, searchable=False, param_role=ParamRole.MISSING_POLICY)
+        if name == "ts_product" else ParamSpec(dtype=float, min=0, default=1.,
+            searchable=False, param_role=ParamRole.NUMERICAL))
+    return dict(panel_params=("x",), scalar_params=("window", "min_periods", control),
+        param_specs=specs, window_semantics="exact_rows",
+        relational_specs=[RelationalParamSpec("min_periods is None or min_periods <= window")])
+
+
+def _strict_skipna(value):
+    from factor_engine.cleaned_operators.common.strict_params import strict_bool
+    return strict_bool(value, "skipna")
+
+
+def _strict_scale(value):
+    from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar
+    return strict_finite_scalar(value, "scale", minimum=0)
+
+
 def _validate_window(window: int, min_periods: int | None) -> tuple[int, int]:
-    w = int(window)
+    from factor_engine.cleaned_operators.common.strict_params import strict_int
+    w = strict_int(window, "window", minimum=1)
     if w < 1:
         raise ValueError("window must be >= 1")
-    mp = w if min_periods is None else int(min_periods)
+    mp = w if min_periods is None else strict_int(min_periods, "min_periods", minimum=1, maximum=w)
     if mp < 1 or mp > w:
         raise ValueError("min_periods must satisfy 1 <= min_periods <= window")
     return w, mp
@@ -62,14 +95,19 @@ def _stable_product(values: np.ndarray, *, skipna: bool = True) -> float:
         return 0.0
 
     if np.isinf(arr).any():
-        sign = -1.0 if np.count_nonzero(arr < 0.0) % 2 else 1.0
-        return sign * np.inf
-
-    sign = -1.0 if np.count_nonzero(arr < 0.0) % 2 else 1.0
-    log_abs = float(np.log(np.abs(arr)).sum())
-    if not np.isfinite(log_abs) or log_abs > _FLOAT_LOG_MAX:
         return np.nan
-    return sign * math.exp(log_abs)
+    # Keep a normalized mantissa and an unbounded integer exponent. This
+    # avoids both log cancellation and overflow of intermediate products.
+    mantissa, exponent = 1.0, 0
+    for value in arr:
+        part, power = math.frexp(float(value))
+        mantissa, carry = math.frexp(mantissa * part)
+        exponent += power + carry
+    try:
+        result = math.ldexp(mantissa, exponent)
+    except OverflowError:
+        return np.nan
+    return result if math.isfinite(result) else np.nan
 
 
 def _median_abs_deviation(values: np.ndarray, *, scale: float = 1.0) -> float:
@@ -79,8 +117,10 @@ def _median_abs_deviation(values: np.ndarray, *, scale: float = 1.0) -> float:
     arr = arr[~np.isnan(arr)]
     if arr.size == 0:
         return np.nan
-    median = float(np.median(arr))
-    return float(scale) * float(np.median(np.abs(arr - median)))
+    arr = arr.astype(np.longdouble)
+    median = np.median(arr)
+    result = np.longdouble(scale) * np.median(np.abs(arr - median))
+    return float(result) if np.isfinite(result) and abs(result) <= np.finfo(float).max else np.nan
 
 
 def _rolling_numpy_panel(
@@ -124,6 +164,7 @@ class TimeSeriesProductAudited(SeriesOperator):
         ),
         examples=["ts_product(1 + returns, 20)"],
         param_names=["x", "window", "min_periods", "skipna"],
+        **_contract("ts_product"),
         return_type="series",
         tags=["time_series", "product", "pit_safe", "audited"],
     )
@@ -137,11 +178,10 @@ class TimeSeriesProductAudited(SeriesOperator):
         **kwargs,
     ) -> pd.DataFrame:
         w, mp = _validate_window(window, min_periods)
-        out = x.rolling(window=w, min_periods=mp).apply(
-            lambda values: _stable_product(values, skipna=bool(skipna)),
-            raw=True,
-        )
-        return out.replace([np.inf, -np.inf], np.nan)
+        skipna = _strict_skipna(skipna)
+        out = _rolling_numpy_panel(x.to_numpy(dtype=float), window=w, min_periods=mp,
+            func=lambda values: _stable_product(values, skipna=skipna))
+        return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
 @register_operator(
@@ -160,6 +200,7 @@ class TimeSeriesMedianAbsoluteDeviationAudited(SeriesOperator):
         description="滚动中位绝对偏差 median(|x-median(x)|)。",
         examples=["ts_mad(returns, 20)", "ts_mad(returns, 20, scale=1.4826)"],
         param_names=["x", "window", "min_periods", "scale"],
+        **_contract("ts_mad"),
         return_type="series",
         tags=["time_series", "mad", "robust", "pit_safe", "audited"],
     )
@@ -173,10 +214,10 @@ class TimeSeriesMedianAbsoluteDeviationAudited(SeriesOperator):
         **kwargs,
     ) -> pd.DataFrame:
         w, mp = _validate_window(window, min_periods)
-        return x.rolling(window=w, min_periods=mp).apply(
-            lambda values: _median_abs_deviation(values, scale=float(scale)),
-            raw=True,
-        )
+        scale = _strict_scale(scale)
+        out = _rolling_numpy_panel(x.to_numpy(dtype=float), window=w, min_periods=mp,
+            func=lambda values: _median_abs_deviation(values, scale=scale))
+        return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
 def _group_percentile_numpy(
@@ -207,7 +248,7 @@ def _group_percentile_numpy(
             gv = pd.Series(np.zeros(len(xv), dtype=int))
 
         for label in gv.dropna().unique():
-            mask = gv.eq(label) & xv.notna()
+            mask = gv.eq(label) & np.isfinite(xv)
             if not mask.any():
                 continue
             values = xv[mask]
@@ -241,6 +282,7 @@ class GroupPercentileAudited(SeriesOperator):
             "group_percentile(PE, industry, 0.2, side='bottom')",
         ],
         param_names=["x", "group", "p", "side", "missing_group_policy"],
+        **_contract("group_percentile"),
         return_type="series",
         tags=["cross_sectional", "group", "percentile", "pit_safe", "audited"],
     )
@@ -256,7 +298,10 @@ class GroupPercentileAudited(SeriesOperator):
     ) -> pd.DataFrame:
         group_arr = None
         if group is not None:
-            group = group.reindex(index=x.index, columns=x.columns)
+            if (not x.index.is_unique or not x.columns.is_unique or
+                not group.index.is_unique or not group.columns.is_unique or
+                not x.index.equals(group.index) or not x.columns.equals(group.columns)):
+                raise ValueError("x and group axes must be unique and exactly aligned")
             group_arr = group.to_numpy()
         out = _group_percentile_numpy(
             x.to_numpy(dtype=float),
@@ -324,6 +369,7 @@ if pl is not None:
             category="time_series",
             description="滚动乘积；与 pandas 审计实现语义一致。",
             param_names=["x", "window", "min_periods", "skipna"],
+            **_contract("ts_product"),
             return_type="series",
             tags=["time_series", "product", "pit_safe", "audited"],
         )
@@ -336,16 +382,12 @@ if pl is not None:
             skipna: bool = True,
             **kwargs,
         ) -> pl.DataFrame:
-            w, mp = _validate_window(window, min_periods)
-            arr = x.to_numpy().astype(float)
-            out = _rolling_numpy_panel(
-                arr,
-                window=w,
-                min_periods=mp,
-                func=lambda values: _stable_product(values, skipna=bool(skipna)),
-            )
-            out[~np.isfinite(out)] = np.nan
-            return pl.DataFrame(out, schema=x.columns)
+            from factor_engine.cleaned_operators.common.semantic_hardening_native import calculate
+            return calculate("ts_product", x, window=window, min_periods=min_periods, skipna=skipna)
+
+        def physical_spec(self):
+            from factor_engine.cleaned_operators.common.semantic_hardening_native import physical_spec
+            return physical_spec("ts_product")
 
     @register_polars_operator(
         name="ts_mad",
@@ -361,6 +403,7 @@ if pl is not None:
             category="time_series",
             description="滚动中位绝对偏差；与 pandas 审计实现语义一致。",
             param_names=["x", "window", "min_periods", "scale"],
+            **_contract("ts_mad"),
             return_type="series",
             tags=["time_series", "mad", "robust", "pit_safe", "audited"],
         )
@@ -373,16 +416,12 @@ if pl is not None:
             scale: float = 1.0,
             **kwargs,
         ) -> pl.DataFrame:
-            w, mp = _validate_window(window, min_periods)
-            out = _rolling_numpy_panel(
-                x.to_numpy().astype(float),
-                window=w,
-                min_periods=mp,
-                func=lambda values: _median_abs_deviation(
-                    values, scale=float(scale)
-                ),
-            )
-            return pl.DataFrame(out, schema=x.columns)
+            from factor_engine.cleaned_operators.common.semantic_hardening_native import calculate
+            return calculate("ts_mad", x, window=window, min_periods=min_periods, scale=scale)
+
+        def physical_spec(self):
+            from factor_engine.cleaned_operators.common.semantic_hardening_native import physical_spec
+            return physical_spec("ts_mad")
 
     @register_polars_operator(
         name="group_percentile",
@@ -398,6 +437,7 @@ if pl is not None:
             category="cross_sectional",
             description="组内 top/bottom 分位掩码；与 pandas 审计实现语义一致。",
             param_names=["x", "group", "p", "side", "missing_group_policy"],
+            **_contract("group_percentile"),
             return_type="series",
             tags=["cross_sectional", "group", "percentile", "pit_safe", "audited"],
         )
@@ -411,15 +451,13 @@ if pl is not None:
             missing_group_policy: str = "raise",
             **kwargs,
         ) -> pl.DataFrame:
-            group_arr = None if group is None else group.to_numpy()
-            out = _group_percentile_numpy(
-                x.to_numpy().astype(float),
-                group_arr,
-                p=float(p),
-                side=str(side),
-                missing_group_policy=str(missing_group_policy),
-            )
-            return pl.DataFrame(out, schema=x.columns)
+            from factor_engine.cleaned_operators.common.semantic_hardening_native import calculate
+            return calculate("group_percentile", x, group=group, p=p, side=side,
+                missing_group_policy=missing_group_policy)
+
+        def physical_spec(self):
+            from factor_engine.cleaned_operators.common.semantic_hardening_native import physical_spec
+            return physical_spec("group_percentile")
 
     @register_polars_operator(
         name="div_or_null",

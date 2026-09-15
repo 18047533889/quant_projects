@@ -16,13 +16,31 @@
 ## 它是什么 / 不是什么
 
 **做什么：** DSL 解析 → AST → IR 分析 → 规划（Lowerer/Optimizer/CSE）→ 多后端执行
-（SQL 下推 → Polars → Pandas）→ 因子值落盘因子湖。支持批量 `run_many`（共享子树只算一次）、
+（SQL 下推 → Polars → Pandas）→ 因子值落盘因子湖。支持批量 `run_many`（同一执行 DAG 内复用共享子树，跨分批不保证）、
 增量物化、shard 物化、因子矩阵物化、HTTP 服务、挖掘集成、公式身份。
 
 **不做什么：** 不做数据清洗（data_access 提供）、不做因子评估（quant_evaluator 做）、
 不训练模型（modeling 做）。它只负责**算因子 + 写因子湖**，且这是唯一实现。
 
-## 安装与第一个因子
+## 默认批量落值：不需要手动开性能选项
+
+管理员已配置批准的 `FACTOR_ENGINE_V2_PROFILE` 后，推荐入口是：
+
+```python
+from factor_engine import get_engine
+
+with get_engine() as engine:
+    receipt = engine.run_many(all_factors)  # 有限 Factor 集合或迭代器，一次提交
+```
+
+此入口默认启用 auto、DAG/CSE、面板执行、融合与自动调度，资源池目标为有效剩余
+内存的 80%；返回持久化回执和结果索引，不把全部面板留在返回值中。
+整任务图与回执通过内存准入才合为同一 DAG，否则自动有界分批。
+业务日期、范围和授权目标由配置确定，不自动发布生产因子。
+详细行为、真实验证范围和跨批次复用限制见
+[`默认 auto 批量落值`](docs/DEFAULT_AUTO_RUN_MANY_R5.md)。
+
+## 安装与第一个参考因子
 
 ```bash
 # Python >= 3.10；团队源码安装先准备匹配版本的内部依赖
@@ -57,13 +75,11 @@ out = engine.run(factor)
 print(out["result"].head())   # MultiIndex Series (TradeDate, Symbol)
 ```
 
-公共入口和配置的默认后端为 `pandas` 参考路径，数据源须支持列读取契约。
-需要原生性能时可显式选择 `polars`，但数据源必须满足其长表扫描契约；
-仅提供 `load_column` 的数据源不可假定兼容 Polars。
-这只修复默认入口的可用性，不代表全部算子已认证，也不改变 production 的
-PIT、DQ、物理计划及后端认证门禁。显式 `auto`/`hybrid` 不会静默 fallback：
-当前公共 `run`、`run_many`、`run_many_iter`、`run_many_parallel`、
-`run_many_stream` 尚未接通 auto 物理执行，会抛 `PhysicalPlanRequiredError`。
+上述显式构造 `FactorEngine(PandasBackend, ...)` 的示例是研究参考接口，
+不等价于前面的 `get_engine().run_many(...)` 持久化默认入口。
+多后端执行仍要求对应数据源读取契约及物理计划准入；只有 `load_column`
+不能证明具备 Polars 长表或 SQL 下推能力。未通过准入的计划仍会明确失败，
+不会因开启 auto 就绕过 PIT、DQ 或算子语义门禁。
 
 或 YAML 一键跑：`FactorEngine.run_from_config("examples/config_driven_factor.yaml")`。
 或 HTTP 服务：`pip install -e ".[service]"` 后 `factor-engine-serve --port 8088`。

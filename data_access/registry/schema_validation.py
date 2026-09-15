@@ -380,26 +380,38 @@ def _missing_required_columns_per_file(
     required = [c for c in declared if c not in partition_cols]
     if not required:
         return []
-    missing: list[str] = []
-    for p in paths:
-        # glob 路径逐个展开到文件
-        import glob as _glob
+    def files():
+        seen = set()
+        for p in paths:
+            import glob as _glob
+            matches = _glob.glob(p, recursive=True) if "*" in p or "?" in p else [p]
+            for fp in matches:
+                if str(fp).endswith(".parquet") and fp not in seen:
+                    seen.add(fp)
+                    yield fp
 
-        if "*" in p or "?" in p:
-            matches = _glob.glob(p, recursive=True)
-        else:
-            matches = [p]
-        for fp in matches:
-            if not str(fp).endswith(".parquet"):
-                continue
-            try:
-                schema_names = set(pq.read_metadata(fp).schema.names)
-            except Exception:
-                continue  # 读 footer 失败不在这里判（构建 manifest 路径已 fail-closed）
-            absent = [c for c in required if c not in schema_names]
-            for c in absent:
-                if c not in missing:
-                    missing.append(c)
+    def absent_columns(fp):
+        try:
+            schema_names = set(pq.read_metadata(fp).schema.names)
+        except Exception:
+            # Keep the existing manifest-owned failure policy.
+            return []
+        return [c for c in required if c not in schema_names]
+
+    # Footer checks are independent I/O. Bound both workers and queued futures;
+    # executor.map over the entire history would eagerly allocate all futures.
+    from concurrent.futures import ThreadPoolExecutor
+    from itertools import islice
+    import os
+    workers = min(4, os.cpu_count() or 1)
+    missing: list[str] = []
+    iterator = iter(files())
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="schema-footer") as pool:
+        while batch := list(islice(iterator, workers * 2)):
+            for absent in pool.map(absent_columns, batch):
+                for c in absent:
+                    if c not in missing:
+                        missing.append(c)
     return missing
 
 

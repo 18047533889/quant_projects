@@ -12,7 +12,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator,
+)
 from factor_engine.cleaned_operators.common.daily_panel import _aligned
 from factor_engine.cleaned_operators.ts_model._rolling_core import huber_fit
 
@@ -25,7 +27,9 @@ _MIN_BREADTH = 10
 _BREADTH_PARAM_RATIO = 5.0
 
 
-def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str) -> OperatorMetadata:
+def _metadata(name: str, description: str, params: list[str], *, domain: str, unit: str,
+              param_specs: dict[str, ParamSpec] | None = None,
+              panel_params: tuple[str, ...] | None = None) -> OperatorMetadata:
     # R11 #135/#136: unit-algebra honesty.  Algebraic units (``same_as:`` /
     # ``unit(...)`` / ``dimensionless``) are propagated to ``output_unit`` so
     # the catalog / typed search see the real output dimension instead of an
@@ -43,6 +47,9 @@ def _metadata(name: str, description: str, params: list[str], *, domain: str, un
             f"unit:{unit}", "cost:1",
         ],
         output_unit=output_unit,
+        param_specs=param_specs or {},
+        panel_params=panel_params or (),
+        scalar_params=tuple(p for p in params if panel_params and p not in panel_params),
     )
 
 
@@ -54,7 +61,7 @@ def _valid_membership_label(label: Any) -> bool:
     join a composite ``(group, subgroup)`` demeaning key (P0-9).  Mirrors
     ``cleaned_operators.common.polars_group._valid_membership_label``.
     """
-    if label is None:
+    if label is None or label is pd.NA or label is pd.NaT:
         return False
     if isinstance(label, str):
         return label != ""
@@ -70,19 +77,65 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
 
 
+def _stable_mean(values: np.ndarray) -> float:
+    """Finite mean without an overflowing raw sum."""
+    scale = float(np.max(np.abs(values)))
+    if scale == 0.0:
+        return 0.0
+    return float(scale * np.mean(values / scale))
+
+
+def _stable_weighted_mean(values: np.ndarray, weights: np.ndarray) -> float | None:
+    """Nonnegative weighted mean with bounded products and sums."""
+    if values.size == 0 or weights.size == 0:
+        return None
+    wscale = float(np.max(weights))
+    if wscale <= 0.0:
+        return None
+    xscale = float(np.max(np.abs(values)))
+    if xscale == 0.0:
+        return 0.0
+    wn = weights / wscale
+    denom = float(np.sum(wn))
+    if not np.isfinite(denom) or denom <= 0.0:
+        return None
+    value = float(xscale * (np.sum(wn * (values / xscale)) / denom))
+    return value if np.isfinite(value) else None
+
+
+def _strict_bool(value: Any, name: str) -> bool:
+    if not isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"{name} must be bool")
+    return bool(value)
+
+
+def _strict_optional_positive_int(value: Any, name: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+        raise ValueError(f"{name} must be a positive integer or None")
+    if int(value) < 1:
+        raise ValueError(f"{name} must be >= 1")
+    return int(value)
+
+
 def _group_ex_self_mean_row(x_row: np.ndarray, g_row: np.ndarray, finite: np.ndarray) -> np.ndarray:
     out = np.full(x_row.shape, np.nan, dtype=float)
     labels = pd.unique(g_row)
     for label in labels:
-        idx = (g_row == label) & finite
+        if not _valid_membership_label(label):
+            continue
+        members = pd.Series(g_row, copy=False).eq(label).fillna(False).to_numpy(dtype=bool)
+        idx = members & finite
         count = int(np.sum(idx))
         if count <= 1:
             continue
-        total = float(np.sum(x_row[idx]))
-        for j in np.flatnonzero(g_row == label):
+        for j in np.flatnonzero(members):
             if not finite[j]:
                 continue
-            out[j] = (total - x_row[j]) / (count - 1.0)
+            peers = idx.copy()
+            peers[j] = False
+            out[j] = _stable_mean(x_row[peers])
     return out
 
 
@@ -149,24 +202,23 @@ class GroupExSelfWeightedMean(SeriesOperator):
             x_row = xv[row]
             labels = pd.unique(g_row)
             for label in labels:
-                idx = g_row == label
+                if not _valid_membership_label(label):
+                    continue
+                idx = pd.Series(g_row, copy=False).eq(label).fillna(False).to_numpy(dtype=bool)
                 # R5 P1-37(a): numerator and denominator MUST use the *same*
                 # mask `finite(x) & finite(w) & w >= 0`.  The previous code
                 # included peers whose x was missing in the denominator, making
                 # `sum(w_j x_j) / sum(w_j)` inconsistent (denominator counted
                 # missing-x peers, numerator silently dropped them to NaN).
                 mask = idx & np.isfinite(w_row) & np.isfinite(x_row) & (w_row >= 0)
-                total_w = float(np.sum(w_row[mask]))
-                if not np.isfinite(total_w) or total_w <= 0.0:
-                    continue
-                weighted = float(np.sum(w_row[mask] * x_row[mask]))
                 for j in np.flatnonzero(idx):
                     if not mask[j]:
                         continue
-                    denom = total_w - w_row[j]
-                    if denom <= 0.0:
-                        continue
-                    out[row][j] = (weighted - w_row[j] * x_row[j]) / denom
+                    peers = mask.copy()
+                    peers[j] = False
+                    value = _stable_weighted_mean(x_row[peers], w_row[peers])
+                    if value is not None:
+                        out[row][j] = value
         return _frame_like(x, out)
 
 
@@ -290,11 +342,25 @@ class CsRobustResid(SeriesOperator):
             "unit:same_as:y", "cost:2",
         ],
         output_unit="same_as:y",
+        param_specs={
+            "trim_ratio": ParamSpec(dtype=float, min=0.0, max=0.499999999999,
+                                    default=0.1, searchable=True,
+                                    param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "add_intercept": ParamSpec(dtype=bool, default=True, searchable=False,
+                                       param_role=ParamRole.POLICY),
+        },
+        panel_params=("y", "x"),
+        scalar_params=("trim_ratio", "add_intercept"),
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, trim_ratio: float = 0.1, add_intercept: bool = True, **_: Any) -> pd.DataFrame:
         y, x = _aligned(y, x)
+        if isinstance(trim_ratio, (bool, np.bool_)):
+            raise ValueError("trim_ratio must be a finite real number")
         trim = float(trim_ratio)
+        if not np.isfinite(trim):
+            raise ValueError("trim_ratio must be finite")
+        add_intercept = _strict_bool(add_intercept, "add_intercept")
         if not (0.0 <= trim < 0.5):
             raise ValueError("cs_trimmed_ols_resid requires 0 <= trim_ratio < 0.5")
         yv = y.to_numpy(dtype=float)
@@ -649,10 +715,16 @@ class CsHuberResid(SeriesOperator):
             "unit:same_as:y", "cost:3",
         ],
         output_unit="same_as:y",
+        param_specs={"add_intercept": ParamSpec(dtype=bool, default=True,
+                                                searchable=False,
+                                                param_role=ParamRole.POLICY)},
+        panel_params=("y", "x"),
+        scalar_params=("add_intercept",),
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, add_intercept: bool = True, **_: Any) -> pd.DataFrame:
-        return _cs_robust_resid(y, x, _huber_irls_fit, bool(add_intercept))
+        return _cs_robust_resid(y, x, _huber_irls_fit,
+                                _strict_bool(add_intercept, "add_intercept"))
 
 
 @register_operator(
@@ -684,10 +756,16 @@ class CsLadResid(SeriesOperator):
             "unit:same_as:y", "cost:3",
         ],
         output_unit="same_as:y",
+        param_specs={"add_intercept": ParamSpec(dtype=bool, default=True,
+                                                searchable=False,
+                                                param_role=ParamRole.POLICY)},
+        panel_params=("y", "x"),
+        scalar_params=("add_intercept",),
     )
 
     def _calculate_series(self, y: pd.DataFrame, x: pd.DataFrame, add_intercept: bool = True, **_: Any) -> pd.DataFrame:
-        return _cs_robust_resid(y, x, _lad_fit, bool(add_intercept))
+        return _cs_robust_resid(y, x, _lad_fit,
+                                _strict_bool(add_intercept, "add_intercept"))
 
 
 def _group_multi_ols_fit(
@@ -862,6 +940,17 @@ class GroupMultiResid(SeriesOperator):
         ["y", "group", "x1", "x2", "x3", "x4", "x5", "add_intercept", "min_obs"],
         domain="price_volume",
         unit="same_as:y",
+        param_specs={
+            "x2": ParamSpec(dtype=object, default=None, searchable=False),
+            "x3": ParamSpec(dtype=object, default=None, searchable=False),
+            "x4": ParamSpec(dtype=object, default=None, searchable=False),
+            "x5": ParamSpec(dtype=object, default=None, searchable=False),
+            "add_intercept": ParamSpec(dtype=bool, default=True, searchable=False,
+                                       param_role=ParamRole.POLICY),
+            "min_obs": ParamSpec(dtype=int, min=1, default=None, searchable=False,
+                                 param_role=ParamRole.SUPPORT_POLICY),
+        },
+        panel_params=("y", "group", "x1", "x2", "x3", "x4", "x5"),
     )
 
     def _calculate_series(
@@ -877,6 +966,8 @@ class GroupMultiResid(SeriesOperator):
         min_obs: int | None = None,
         **_: Any
     ) -> pd.DataFrame:
+        add_intercept = _strict_bool(add_intercept, "add_intercept")
+        min_obs = _strict_optional_positive_int(min_obs, "min_obs")
         # Collect non-None features
         features = [x1]
         for x in [x2, x3, x4, x5]:

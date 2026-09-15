@@ -72,6 +72,25 @@ def _count_sql_placeholders(text: str, upto: int | None = None) -> int:
                     break
                 i += 1
             continue
+        if ch == "$":
+            # DuckDB/PostgreSQL dollar-quoted string: $$...? ...$$ or
+            # $tag$...? ...$tag$. Question marks inside are data, not bound
+            # placeholders. A bare "$1" parameter has no second "$" and is
+            # therefore left to the normal scanner path.
+            tag_end = segment.find("$", i + 1)
+            if tag_end != -1:
+                tag = segment[i + 1 : tag_end]
+                valid_tag = not tag or (
+                    (tag[0].isalpha() or tag[0] == "_")
+                    and all(c.isalnum() or c == "_" for c in tag[1:])
+                )
+                if valid_tag:
+                    delimiter = segment[i : tag_end + 1]
+                    close = segment.find(delimiter, tag_end + 1)
+                    if close != -1:
+                        i = close + len(delimiter)
+                        continue
+
         if ch == "-" and i + 1 < n and segment[i + 1] == "-":
             while i < n and segment[i] != "\n":
                 i += 1
@@ -133,7 +152,7 @@ class RelationHandle:
         """
         self._validate_sandbox(select_sql)
         text = select_sql.strip()
-        if text.lower().startswith("select"):
+        if text.lower().startswith(("select", "with")):
             import re
 
             # #P0-11 替换前先断言原 SQL 真的用 `FROM _sub` 引用子查询——之前替换后
@@ -165,9 +184,11 @@ class RelationHandle:
                 )
             combined = [*outer[:n_before], *self._params, *outer[n_before:]]
         else:
-            # 表达式列表：自动包成 `SELECT <expr> FROM (sub) AS _sub`，子查询参数在前
+            # 表达式列表：自动包成 `SELECT <expr> FROM (sub) AS _sub`。DuckDB 按
+            # SQL 词法位置绑定参数；<expr> 位于子查询之前，因此外层参数必须在
+            # inner params 之前，否则两者都会成功执行但值被静默互换。
             new_sql = f"SELECT {text} FROM ({self._sql}) AS _sub"
-            combined = [*self._params, *(list(params or []))]
+            combined = [*(list(params or [])), *self._params]
         return RelationHandle(
             self._store,
             new_sql,

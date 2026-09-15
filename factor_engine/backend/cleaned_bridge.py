@@ -576,10 +576,6 @@ def _resolve_operator(
         from factor_engine.cleaned_operators.registry import OperatorRegistry
 
         name = _rc(canonical)
-        try:
-            operator = OperatorRegistry.get(name)
-        except Exception:
-            operator = None
         # Map whole-plan backend labels to operator-level backend keys.
         _backend_map = {
             "polars_panel": "polars",
@@ -590,6 +586,12 @@ def _resolve_operator(
             "pandas_numpy": "pandas_numpy",
         }
         op_backend = _backend_map.get(selected_backend, selected_backend)
+        from factor_engine.runtime.default_execution_policy import operator_admission_mode
+        operator = OperatorRegistry.get(
+            name, op_backend,
+            mode="any" if operator_admission_mode(ctx) == "research" else "production")
+        if operator is None:
+            raise ValueError(f"NO_IMPLEMENTATION: {name} backend={op_backend}")
         _record_backend_route(
             ctx,
             canonical=name,
@@ -601,7 +603,8 @@ def _resolve_operator(
     from factor_engine.backend.backend_router import BackendRouter
 
     prefer = _operator_backend_preference(ctx)
-    run_mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
+    from factor_engine.runtime.default_execution_policy import operator_admission_mode
+    run_mode = operator_admission_mode(ctx)
     fallback = "allow" if getattr(ctx, "production_fallback_policy", "error") == "warn" else "error"
     selection = BackendRouter.select(
         canonical,
@@ -1010,7 +1013,8 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
         #   #159 semantic_version 缺失/解析失败 hard-fail（不是空串）；
         #   #160 认证 key 绑定有序输入 dtype 签名；
         #   #161 execution_variant 从实际选定实现产生。
-        _run_mode = str(getattr(ctx, "run_mode", "research") or "research").lower()
+        from factor_engine.runtime.default_execution_policy import operator_admission_mode
+        _run_mode = operator_admission_mode(ctx)
         _production = _run_mode == "production"
         try:
             from factor_engine.runtime.parameter_domain_store import (
@@ -1023,7 +1027,7 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
             # incomplete bind hard-fails production (defaults/positional/alias
             # dropped) and degrades research.
             _bound = _bound_scalar_parameters(operator, call_args, kw)
-            if _production and not _bound.complete:
+            if (_production or getattr(ctx, "execution_purpose", None) is not None) and not _bound.complete:
                 raise BoundOperatorCallIncompleteError(
                     f"production parameter bind incomplete for canonical "
                     f"{canonical!r}: missing {_bound.missing} (R40 #158 — an "
@@ -1047,6 +1051,17 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
             dtype_sig = _input_dtype(evaluated)
 
             # Phase 4: CheckMembership.
+            if store.exact_call_has_known_failure(
+                canonical, _point, backend=backend,
+                semantic_version=semantic_version,
+                execution_variant=variant.to_key(),
+                source_context=_data_source_kind(ctx), dtype=dtype_sig.to_key(),
+                grain=str(getattr(ctx, "grain", "daily") or "daily"),
+            ):
+                from factor_engine.runtime.exceptions import KnownBadImplementation
+                raise KnownBadImplementation(
+                    f"KNOWN_BAD_IMPLEMENTATION: {canonical} backend={backend} "
+                    "has a counterexample for this exact implementation/input/parameter identity")
             if store.operator_has_any_certified_region_by_backend(canonical, backend):
                 assert_parameter_point_certified(
                     canonical, _point, backend=backend,
@@ -1077,6 +1092,11 @@ def make_cleaned_kernel(eval_fn: Callable[[PlanNode, ExecutionContext], Any], op
         except BoundOperatorCallIncompleteError:
             raise  # production-only; re-raise typed path
         except Exception as exc:
+            from factor_engine.runtime.exceptions import KnownBadImplementation
+            if isinstance(exc, KnownBadImplementation):
+                raise
+            if getattr(ctx, "execution_purpose", None) is not None:
+                raise
             # Research-only degradation for unexpected infrastructure errors;
             # production already hard-failed above (every production error path
             # raises a typed exception that the except clause above re-raises).

@@ -88,11 +88,11 @@ def pl_group(x, group, weight, zscore):
 
 def register():
     register_specs({
-        "cs_weighted_mean": Spec("cross_sectional", ["x", "weight"], "weighted cross-sectional mean", lambda x, w, **kw: pd_weighted(x, w, "mean"), lambda x, w, **kw: pl_weighted(x, w, "mean")),
-        "cs_weighted_demean": Spec("cross_sectional", ["x", "weight"], "weighted cross-sectional demean", lambda x, w, **kw: pd_weighted(x, w, "demean"), lambda x, w, **kw: pl_weighted(x, w, "demean")),
-        "cs_weighted_zscore": Spec("cross_sectional", ["x", "weight"], "weighted cross-sectional zscore", lambda x, w, **kw: pd_weighted(x, w, "zscore"), lambda x, w, **kw: pl_weighted(x, w, "zscore")),
-        "group_weighted_mean": Spec("cross_sectional", ["x", "group", "weight"], "within-group weighted mean", lambda x, g, w, **kw: pd_group(x, g, w, False), lambda x, g, w, **kw: pl_group(x, g, w, False)),
-        "group_weighted_zscore": Spec("cross_sectional", ["x", "group", "weight"], "within-group weighted zscore", lambda x, g, w, **kw: pd_group(x, g, w, True), lambda x, g, w, **kw: pl_group(x, g, w, True)),
+        "cs_weighted_mean": Spec("cross_sectional", ["x", "weight"], "weighted cross-sectional mean", lambda x, weight, **kw: pd_weighted(x, weight, "mean"), lambda x, weight, **kw: pl_weighted(x, weight, "mean"), panel_params=("x", "weight")),
+        "cs_weighted_demean": Spec("cross_sectional", ["x", "weight"], "weighted cross-sectional demean", lambda x, weight, **kw: pd_weighted(x, weight, "demean"), lambda x, weight, **kw: pl_weighted(x, weight, "demean"), panel_params=("x", "weight")),
+        "cs_weighted_zscore": Spec("cross_sectional", ["x", "weight"], "weighted cross-sectional zscore", lambda x, weight, **kw: pd_weighted(x, weight, "zscore"), lambda x, weight, **kw: pl_weighted(x, weight, "zscore"), panel_params=("x", "weight")),
+        "group_weighted_mean": Spec("cross_sectional", ["x", "group", "weight"], "within-group weighted mean", lambda x, group, weight, **kw: pd_group(x, group, weight, False), lambda x, group, weight, **kw: pl_group(x, group, weight, False), panel_params=("x", "group", "weight")),
+        "group_weighted_zscore": Spec("cross_sectional", ["x", "group", "weight"], "within-group weighted zscore", lambda x, group, weight, **kw: pd_group(x, group, weight, True), lambda x, group, weight, **kw: pl_group(x, group, weight, True), panel_params=("x", "group", "weight")),
     })
 
 

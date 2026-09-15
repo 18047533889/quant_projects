@@ -29,6 +29,7 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
     ParamSpec,
     SeriesOperator,
     register_operator,
@@ -189,6 +190,41 @@ class HysteresisStateKernel:
             f"(UNKNOWN must be resolved by the caller)"
         )
 
+_STATE_PANELS = {
+    "ts_run_strength": ("x", "state"), "ts_run_efficiency": ("x", "state"),
+    "ts_run_concentration": ("x", "state"), "ts_hysteresis_state": ("z",),
+    "ts_hysteresis_age": ("z",), "ts_state_integral": ("z",),
+    "ts_state_entry_strength": ("z",), "ts_transition_intensity": ("x", "state"),
+    "ts_sign_persistence": ("x",), "ts_sign_cluster_index": ("x",),
+}
+_STATE_DEFAULTS = {
+    "ts_run_strength": {"max_run": 20, "normalize": False, "min_periods": 1},
+    "ts_run_efficiency": {"max_run": 20, "min_periods": 2},
+    "ts_run_concentration": {"max_run": 20, "min_periods": 2},
+    "ts_hysteresis_state": {"upper": 1.0, "lower": 0.0, "missing_policy": _DEFAULT_HYSTERESIS_MISSING_POLICY},
+    "ts_hysteresis_age": {"upper": 1.0, "lower": 0.0, "cap": 60, "missing_policy": _DEFAULT_HYSTERESIS_MISSING_POLICY},
+    "ts_state_integral": {"upper": 1.0, "lower": 0.0, "max_run": 120, "half_life": None, "missing_policy": _DEFAULT_HYSTERESIS_MISSING_POLICY},
+    "ts_state_entry_strength": {"upper": 1.0, "lower": 0.0, "missing_policy": _DEFAULT_HYSTERESIS_MISSING_POLICY},
+    "ts_transition_intensity": {"window": 20, "normalize": False},
+    "ts_sign_persistence": {"window": 20, "min_periods": 3},
+    "ts_sign_cluster_index": {"window": 20, "min_periods": 2},
+}
+
+def _state_specs(name: str) -> dict[str, ParamSpec]:
+    out: dict[str, ParamSpec] = {}
+    for key, default in _STATE_DEFAULTS[name].items():
+        if key in ("window", "max_run", "cap", "min_periods"):
+            out[key] = ParamSpec(dtype=int, min=1, default=default, param_role=ParamRole.HORIZON)
+        elif key == "normalize":
+            out[key] = ParamSpec(dtype=bool, default=default, param_role=ParamRole.POLICY)
+        elif key in ("upper", "lower"):
+            out[key] = ParamSpec(dtype=float, min=0.0, default=default, param_role=ParamRole.STATE_THRESHOLD)
+        elif key == "half_life":
+            out[key] = ParamSpec(dtype=float, min=0.0, default=default, param_role=ParamRole.HORIZON)
+        elif key == "missing_policy":
+            out[key] = _HYSTERESIS_POLICY_SPEC
+    return out
+
 
 def _metadata(
     name: str,
@@ -199,6 +235,8 @@ def _metadata(
     unit: str,
     param_specs: dict[str, ParamSpec] | None = None,
 ) -> OperatorMetadata:
+    specs = _state_specs(name)
+    specs.update(param_specs or {})
     return OperatorMetadata(
         name=name,
         category="time_series_state",
@@ -210,7 +248,9 @@ def _metadata(
             f"signature:{','.join(params)}->series", f"domain:{domain}",
             f"unit:{unit}", "cost:1",
         ],
-        param_specs=param_specs or {},
+        panel_params=_STATE_PANELS[name],
+        scalar_params=tuple(_STATE_DEFAULTS[name]),
+        param_specs=specs,
     )
 
 

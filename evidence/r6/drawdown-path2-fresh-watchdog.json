@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "--noconftest", "factor_engine/tests/operators/test_r6_drawdown_path_contract.py"], "returncode": 1, "sampled_peak_family_rss_bytes": 456646656, "sampling_seconds": 0.1, "seconds": 53.2501815429423, "test_guard_reason": null, "hard_memory_cap": false}

@@ -24,6 +24,18 @@ def _op(name: str, backend: str = "pandas_numpy"):
     assert op is not None, f"{name}/{backend}"
     return op
 
+def _calculate(op, x):
+    """Supply actual aligned covariates, not a single-panel placeholder call."""
+    t=np.arange(len(x),dtype=float)[:,None]
+    y=x*x+np.sin(t)*0.2
+    z=pd.DataFrame(np.broadcast_to(np.cos(t*.7),x.shape),index=x.index,columns=x.columns)
+    name=op.metadata.name
+    if name=="ts_conditional_mutual_information":
+        return op.calculate(x,y,z,window=20,bins=2)
+    if name=="ts_distance_correlation_partial_proxy":
+        return op.calculate(x,y,z,window=20)
+    return op.calculate(x,y,window=20)
+
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +50,7 @@ def test_ts_chatterjee_xi_basic() -> None:
 
     op = _op("ts_chatterjee_xi")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -52,7 +64,7 @@ def test_ts_chatterjee_xi_handles_nans() -> None:
 
     op = _op("ts_chatterjee_xi")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -66,8 +78,8 @@ def test_ts_chatterjee_xi_deterministic() -> None:
 
     op = _op("ts_chatterjee_xi")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = _calculate(op, x)
+        result2 = _calculate(op, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception as e:
         pytest.fail(f"Determinism check failed: {e}")
@@ -85,7 +97,7 @@ def test_ts_hsic_basic() -> None:
 
     op = _op("ts_hsic")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -99,7 +111,7 @@ def test_ts_hsic_handles_nans() -> None:
 
     op = _op("ts_hsic")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -113,8 +125,8 @@ def test_ts_hsic_deterministic() -> None:
 
     op = _op("ts_hsic")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = _calculate(op, x)
+        result2 = _calculate(op, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception as e:
         pytest.fail(f"Determinism check failed: {e}")
@@ -132,7 +144,7 @@ def test_ts_conditional_mutual_information_basic() -> None:
 
     op = _op("ts_conditional_mutual_information")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -146,7 +158,7 @@ def test_ts_conditional_mutual_information_handles_nans() -> None:
 
     op = _op("ts_conditional_mutual_information")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -160,8 +172,8 @@ def test_ts_conditional_mutual_information_deterministic() -> None:
 
     op = _op("ts_conditional_mutual_information")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = _calculate(op, x)
+        result2 = _calculate(op, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception as e:
         pytest.fail(f"Determinism check failed: {e}")
@@ -179,7 +191,7 @@ def test_ts_distance_correlation_partial_proxy_basic() -> None:
 
     op = _op("ts_distance_correlation_partial_proxy")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -193,7 +205,7 @@ def test_ts_distance_correlation_partial_proxy_handles_nans() -> None:
 
     op = _op("ts_distance_correlation_partial_proxy")
     try:
-        result = op.calculate(x)
+        result = _calculate(op, x)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -207,8 +219,8 @@ def test_ts_distance_correlation_partial_proxy_deterministic() -> None:
 
     op = _op("ts_distance_correlation_partial_proxy")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = _calculate(op, x)
+        result2 = _calculate(op, x)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception as e:
         pytest.fail(f"Determinism check failed: {e}")

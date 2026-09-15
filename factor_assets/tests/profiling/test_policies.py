@@ -17,6 +17,8 @@ Coverage:
    bound; the tag vocabulary covers the R61-FI-026 first batch.
 """
 
+from dataclasses import replace
+
 import pytest
 
 from factor_assets.profiling.policies import (
@@ -34,9 +36,32 @@ from factor_assets.profiling.policies import (
     HEALTH_DIMENSIONS,
     HealthGradeVocabulary,
     MetricGradeRule,
+    TAXONOMY_POLICIES,
+    TaxonomyPolicy,
     get_diagnosis_policy,
     get_health_policy,
 )
+
+
+def test_taxonomy_policy_display_groups_are_deeply_immutable_and_detached():
+    tokens = ["PRICE"]
+    price_group = ["PRICE"]
+    groups = {"PRICE": price_group}
+    policy = TaxonomyPolicy(
+        policy_id="detached-taxonomy-policy",
+        policy_version="1",
+        description="test",
+        display_family_tokens=tokens,
+        display_family_label_groups=groups,
+    )
+
+    tokens.append("VOLUME")
+    price_group[0] = "UNKNOWN"
+    groups["PRICE"] = ("UNKNOWN",)
+    assert policy.display_family_tokens == ("PRICE",)
+    assert policy.display_family_label_groups["PRICE"] == ("PRICE",)
+    with pytest.raises(TypeError):
+        policy.display_family_label_groups["PRICE"] = ("UNKNOWN",)
 
 
 def test_health_policy_rule_mappings_are_deeply_immutable():
@@ -45,6 +70,69 @@ def test_health_policy_rule_mappings_are_deeply_immutable():
         policy.metric_grade_rules["rank_ic"] = policy.metric_grade_rules["rank_ic"]
     with pytest.raises(TypeError):
         policy.dimension_rules["predictive_power"] = policy.dimension_rules["predictive_power"]
+
+
+def test_module_policy_registries_are_read_only():
+    with pytest.raises(TypeError):
+        TAXONOMY_POLICIES["replacement"] = ()
+    with pytest.raises(TypeError):
+        FACTOR_HEALTH_POLICIES["replacement"] = ()
+    with pytest.raises(TypeError):
+        DIAGNOSIS_POLICIES["replacement"] = ()
+
+
+def test_health_policy_hash_binds_actual_thresholds_and_admission_contract():
+    policy = get_health_policy()
+    changed_anchor = replace(policy.rank_ic_anchors[0], ge=policy.rank_ic_anchors[0].ge + 0.001)
+    changed_threshold = replace(
+        policy,
+        policy_version="threshold-change",
+        rank_ic_anchors=(changed_anchor, *policy.rank_ic_anchors[1:]),
+    )
+    changed_admission = replace(
+        policy,
+        policy_version="admission-change",
+        admission_floors=replace(
+            policy.admission_floors,
+            require_all_dimensions_graded=not policy.admission_floors.require_all_dimensions_graded,
+        ),
+    )
+
+    assert changed_threshold.policy_hash != policy.policy_hash
+    assert changed_admission.policy_hash != policy.policy_hash
+
+
+def test_health_policy_copies_all_caller_owned_sequence_containers():
+    current = get_health_policy()
+    alphabet = list(current.grade_alphabet)
+    bands = [list(item) for item in current.display_score_bands]
+    rank_anchors = list(current.rank_ic_anchors)
+    icir_anchors = list(current.icir_anchors)
+    retention_anchors = list(current.retention_anchors)
+    policy = replace(
+        current,
+        policy_id="external-container-alias-test",
+        grade_alphabet=alphabet,
+        display_score_bands=bands,
+        rank_ic_anchors=rank_anchors,
+        icir_anchors=icir_anchors,
+        retention_anchors=retention_anchors,
+    )
+    original_hash = policy.policy_hash
+
+    alphabet[0] = "D"
+    bands[0][1] = 99.0
+    rank_anchors[0] = replace(rank_anchors[0], ge=0.99)
+    icir_anchors[0] = replace(icir_anchors[0], ge=99.0)
+    retention_anchors[0] = replace(retention_anchors[0], ge=0.99)
+
+    assert policy.policy_hash == original_hash
+    assert isinstance(policy.grade_alphabet, tuple)
+    assert isinstance(policy.display_score_bands, tuple)
+    assert all(isinstance(item, tuple) for item in policy.display_score_bands)
+    assert isinstance(policy.rank_ic_anchors, tuple)
+    assert isinstance(policy.icir_anchors, tuple)
+    assert isinstance(policy.retention_anchors, tuple)
 
 
 class TestHealthPolicyRegistry:
@@ -204,6 +292,32 @@ class TestDimensionRulesVersioned:
 
 
 class TestDiagnosisPolicyRegistry:
+    def test_policy_mappings_are_deeply_immutable_and_detached(self):
+        severity = {"tag": "HIGH"}
+        repairability = {"tag": "REPAIRABLE"}
+        confidence = {"tag": 0.8}
+        policy = DiagnosisPolicy(
+            policy_id="detached-diagnosis-policy",
+            policy_version="1",
+            description="test",
+            severity_by_tag=severity,
+            repairability_by_tag=repairability,
+            confidence_by_tag=confidence,
+        )
+
+        severity["tag"] = "LOW"
+        repairability["tag"] = "UNREPAIRABLE"
+        confidence["tag"] = 0.1
+        assert policy.severity("tag") == "HIGH"
+        assert policy.repairability("tag") == "REPAIRABLE"
+        assert policy.confidence("tag") == 0.8
+        with pytest.raises(TypeError):
+            policy.severity_by_tag["tag"] = "LOW"
+        with pytest.raises(TypeError):
+            policy.repairability_by_tag["tag"] = "UNREPAIRABLE"
+        with pytest.raises(TypeError):
+            policy.confidence_by_tag["tag"] = 0.1
+
     def test_resolve_current(self):
         p = get_diagnosis_policy()
         assert p.policy_id == DIAGNOSIS_POLICY_CURRENT_ID

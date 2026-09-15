@@ -16,7 +16,9 @@ from collections.abc import Callable
 
 import numpy as np
 import polars as pl
+from factor_engine.cleaned_operators.price_volume.structure_extra_contracts import EXTRA_PATTERNS, extra_contract
 
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 
 _SKIP = frozenset({"date", "stock_code"})
@@ -49,7 +51,8 @@ def _cols(*frames: pl.DataFrame) -> list[str]:
 
 
 def _make(base: pl.DataFrame, cols: list[str], values: np.ndarray) -> pl.DataFrame:
-    return pl.DataFrame({c: values[:, i] for i, c in enumerate(cols)})
+    # Preserve the supplied time/metadata axis on every numerical output.
+    return base.with_columns([pl.Series(c, values[:, i]) for i, c in enumerate(cols)])
 
 
 def _sdiv(num, den) -> np.ndarray:
@@ -777,79 +780,23 @@ def ts_consolidation_slope(close, window):
 
 
 def pattern_double_top(high, low, left_window, right_window, history_window, tolerance, min_depth, min_spacing, max_spacing):
-    lw, rw, hw = _pi(left_window, "left_window"), _pi(right_window, "right_window"), _pi(history_window, "history_window")
-    tol = _pf(tolerance, "tolerance", 0)
-    md = _pf(min_depth, "min_depth", 0)
-    mn, mx = _pi(min_spacing, "min_spacing"), _pi(max_spacing, "max_spacing")
-    cols = _cols(high, low)
-    rows = high.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        h1 = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 1, True, "price")
-        h2 = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 2, True, "price")
-        l1 = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 1, False, "price")
-        depth = np.clip(_sdiv(h1, l1) - 1.0, 0.0, None)
-        spacing = _spacing_1d(high[c].to_numpy(), lw, rw, hw, True)
-        out[:, i] = _closeness(h1, h2, tol) * (depth >= md).astype(float) * _between(spacing, mn, mx)
-    return _make(high, cols, out)
+    from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+    return _call_pandas_delegate('pattern_double_top', (high, low,), {'left_window': left_window, 'right_window': right_window, 'history_window': history_window, 'tolerance': tolerance, 'min_depth': min_depth, 'min_spacing': min_spacing, 'max_spacing': max_spacing})
 
 
 def pattern_double_bottom(high, low, left_window, right_window, history_window, tolerance, min_depth, min_spacing, max_spacing):
-    lw, rw, hw = _pi(left_window, "left_window"), _pi(right_window, "right_window"), _pi(history_window, "history_window")
-    tol = _pf(tolerance, "tolerance", 0)
-    md = _pf(min_depth, "min_depth", 0)
-    mn, mx = _pi(min_spacing, "min_spacing"), _pi(max_spacing, "max_spacing")
-    cols = _cols(high, low)
-    rows = high.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        l1 = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 1, False, "price")
-        l2 = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 2, False, "price")
-        h1 = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 1, True, "price")
-        depth = np.clip(_sdiv(h1, l1) - 1.0, 0.0, None)
-        spacing = _spacing_1d(low[c].to_numpy(), lw, rw, hw, False)
-        out[:, i] = _closeness(l1, l2, tol) * (depth >= md).astype(float) * _between(spacing, mn, mx)
-    return _make(high, cols, out)
+    from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+    return _call_pandas_delegate('pattern_double_bottom', (high, low,), {'left_window': left_window, 'right_window': right_window, 'history_window': history_window, 'tolerance': tolerance, 'min_depth': min_depth, 'min_spacing': min_spacing, 'max_spacing': max_spacing})
 
 
 def pattern_head_shoulders(high, low, left_window, right_window, history_window, shoulder_tolerance, head_min_prominence, max_neckline_slope):
-    lw, rw, hw = _pi(left_window, "left_window"), _pi(right_window, "right_window"), _pi(history_window, "history_window")
-    st = _pf(shoulder_tolerance, "shoulder_tolerance", 0)
-    hp = _pf(head_min_prominence, "head_min_prominence", 0)
-    ms = _pf(max_neckline_slope, "max_neckline_slope", 0)
-    cols = _cols(high, low)
-    rows = high.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        r = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 1, True, "price")
-        h = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 2, True, "price")
-        l = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 3, True, "price")
-        shoulders = _closeness(l, r, st)
-        base = (np.abs(l) + np.abs(r)) / 2.0
-        prom = _sdiv(h, base) - 1.0
-        neckline = np.abs(_bounded_line_1d(low[c].to_numpy(), lw, rw, hw, 2, False, "slope"))
-        out[:, i] = shoulders * (prom >= hp).astype(float) * (neckline <= ms).astype(float)
-    return _make(high, cols, out)
+    from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+    return _call_pandas_delegate('pattern_head_shoulders', (high, low,), {'left_window': left_window, 'right_window': right_window, 'history_window': history_window, 'shoulder_tolerance': shoulder_tolerance, 'head_min_prominence': head_min_prominence, 'max_neckline_slope': max_neckline_slope})
 
 
 def pattern_inverse_head_shoulders(high, low, left_window, right_window, history_window, shoulder_tolerance, head_min_prominence, max_neckline_slope):
-    lw, rw, hw = _pi(left_window, "left_window"), _pi(right_window, "right_window"), _pi(history_window, "history_window")
-    st = _pf(shoulder_tolerance, "shoulder_tolerance", 0)
-    hp = _pf(head_min_prominence, "head_min_prominence", 0)
-    ms = _pf(max_neckline_slope, "max_neckline_slope", 0)
-    cols = _cols(high, low)
-    rows = high.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        r = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 1, False, "price")
-        h = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 2, False, "price")
-        l = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 3, False, "price")
-        shoulders = _closeness(l, r, st)
-        base = (np.abs(l) + np.abs(r)) / 2.0
-        prom = _sdiv(base, np.abs(h)) - 1.0
-        neckline = np.abs(_bounded_line_1d(high[c].to_numpy(), lw, rw, hw, 2, True, "slope"))
-        out[:, i] = shoulders * (prom >= hp).astype(float) * (neckline <= ms).astype(float)
-    return _make(high, cols, out)
+    from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+    return _call_pandas_delegate('pattern_inverse_head_shoulders', (high, low,), {'left_window': left_window, 'right_window': right_window, 'history_window': history_window, 'shoulder_tolerance': shoulder_tolerance, 'head_min_prominence': head_min_prominence, 'max_neckline_slope': max_neckline_slope})
 
 
 def _slope_pattern(high, low, left_window, right_window, history_window, points, slope_threshold, kind):
@@ -986,32 +933,60 @@ def _similar_1d(stack: np.ndarray, tol: float) -> np.ndarray:
     return np.where(complete, np.clip(1.0 - ratio, 0.0, 1.0), np.nan)
 
 
+def _ordered_pattern(high, low, left_window, right_window, history_window, *, top=None,
+                     tolerance=None, min_depth=None, min_spacing=None, max_spacing=None,
+                     bullish=None, min_swing=None):
+    """Use the last chronological confirmed pivots, not independent extrema lists."""
+    from factor_engine.cleaned_operators.parameter_validation import strict_integer, strict_finite_scalar
+    lw = strict_integer(left_window, "left_window", minimum=1)
+    rw = strict_integer(right_window, "right_window", minimum=1)
+    hw = strict_integer(history_window, "history_window", minimum=1)
+    triple = top is not None
+    n = 5 if triple else 3
+    sequence = (True,False,True,False,True) if top else (False,True,False,True,False)
+    if not triple:
+        sequence = (False,True,False) if bullish else (True,False,True)
+        swing = strict_finite_scalar(min_swing, "min_swing", minimum=0)
+    else:
+        tol = strict_finite_scalar(tolerance, "tolerance", minimum=1e-12)
+        depth_min = strict_finite_scalar(min_depth, "min_depth", minimum=0)
+        mn = strict_integer(min_spacing, "min_spacing", minimum=1)
+        mx = strict_integer(max_spacing, "max_spacing", minimum=1)
+        if mn > mx:
+            raise ValueError("min_spacing must be <= max_spacing")
+    cols = _cols(high,low)
+    out = np.full((high.height,len(cols)),np.nan if triple else 0.)
+    for cidx,c in enumerate(cols):
+        he = _recent_events_1d(high[c].to_numpy(),lw,rw,hw,True)
+        le = _recent_events_1d(low[c].to_numpy(),lw,rw,hw,False)
+        for t in range(high.height):
+            events = [(pos,True,price) for _,pos,price in he[t]]
+            events += [(pos,False,price) for _,pos,price in le[t]]
+            events.sort(key=lambda e:e[0])
+            if len(events) < n:
+                continue
+            tail = events[-n:]
+            ok = tuple(e[1] for e in tail)==sequence
+            prices = np.asarray([e[2] for e in tail])
+            if not triple:
+                if bullish:
+                    flag = prices[2]>prices[0] and prices[2]!=0 and prices[1]/prices[2]-1>=swing
+                else:
+                    flag = prices[2]<prices[0] and prices[1]!=0 and prices[2]/prices[1]-1>=swing
+                out[t,cidx] = float(ok and flag)
+                continue
+            edge = prices[[0,2,4]]
+            mean = edge.mean()
+            depth = mean/prices[3]-1 if top and prices[3]!=0 else prices[3]/mean-1 if not top and mean!=0 else np.nan
+            spacing = tail[4][0]-tail[2][0]
+            score = _similar_1d(edge[:,None],tol)[0]
+            out[t,cidx] = score*float(depth>=depth_min)*float(mn<=spacing<=mx)*float(ok)
+    return _make(high,cols,out)
+
+
 def _triple(high, low, left_window, right_window, history_window, tolerance, min_depth, min_spacing, max_spacing, *, top):
-    lw, rw, hw = _pi(left_window, "left_window"), _pi(right_window, "right_window"), _pi(history_window, "history_window")
-    tol = _pf(tolerance, "tolerance", 1e-12)
-    md = _pf(min_depth, "min_depth", 0)
-    mn, mx = _pi(min_spacing, "min_spacing"), _pi(max_spacing, "max_spacing")
-    cols = _cols(high, low)
-    rows = high.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        hc, lc = high[c].to_numpy(), low[c].to_numpy()
-        if top:
-            hs = np.stack([_event_stat_1d(hc, lw, rw, hw, k, True, "price") for k in (1, 2, 3)])
-            l1 = _event_stat_1d(lc, lw, rw, hw, 1, False, "price")
-            mean_high = hs.sum(axis=0) / 3.0
-            depth = (mean_high / l1 - 1.0)
-            spacing = _spacing_1d(hc, lw, rw, hw, True)
-            similar = _similar_1d(hs, tol)
-        else:
-            ls = np.stack([_event_stat_1d(lc, lw, rw, hw, k, False, "price") for k in (1, 2, 3)])
-            h1 = _event_stat_1d(hc, lw, rw, hw, 1, True, "price")
-            mean_low = ls.sum(axis=0) / 3.0
-            depth = _sdiv(h1, mean_low) - 1.0
-            spacing = _spacing_1d(lc, lw, rw, hw, False)
-            similar = _similar_1d(ls, tol)
-        out[:, i] = similar * (depth >= md).astype(float) * _between(spacing, mn, mx)
-    return _make(high, cols, out)
+    return _ordered_pattern(high,low,left_window,right_window,history_window,top=top,
+                            tolerance=tolerance,min_depth=min_depth,min_spacing=min_spacing,max_spacing=max_spacing)
 
 
 def pattern_triple_top(high, low, left_window, right_window, history_window, tolerance, min_depth, min_spacing, max_spacing):
@@ -1023,33 +998,13 @@ def pattern_triple_bottom(high, low, left_window, right_window, history_window, 
 
 
 def pattern_123_bull(high, low, left_window, right_window, history_window, min_swing):
-    lw, rw, hw = _pi(left_window, "left_window"), _pi(right_window, "right_window"), _pi(history_window, "history_window")
-    ms = _pf(min_swing, "min_swing", 0)
-    cols = _cols(high, low)
-    rows = high.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        h1 = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 1, True, "price")
-        l1 = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 1, False, "price")
-        l2 = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 2, False, "price")
-        flag = (l1 > l2) & (_sdiv(h1, l1) - 1.0 >= ms)
-        out[:, i] = flag.astype(float)
-    return _make(high, cols, out)
+    return _ordered_pattern(high,low,left_window,right_window,history_window,
+                            bullish=True,min_swing=min_swing)
 
 
 def pattern_123_bear(high, low, left_window, right_window, history_window, min_swing):
-    lw, rw, hw = _pi(left_window, "left_window"), _pi(right_window, "right_window"), _pi(history_window, "history_window")
-    ms = _pf(min_swing, "min_swing", 0)
-    cols = _cols(high, low)
-    rows = high.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        l1 = _event_stat_1d(low[c].to_numpy(), lw, rw, hw, 1, False, "price")
-        h1 = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 1, True, "price")
-        h2 = _event_stat_1d(high[c].to_numpy(), lw, rw, hw, 2, True, "price")
-        flag = (h1 < h2) & (_sdiv(h1, l1) - 1.0 >= ms)
-        out[:, i] = flag.astype(float)
-    return _make(high, cols, out)
+    return _ordered_pattern(high,low,left_window,right_window,history_window,
+                            bullish=False,min_swing=min_swing)
 
 
 def _quadratic_1d(arr: np.ndarray, window: int, up: bool) -> np.ndarray:
@@ -1081,7 +1036,7 @@ def pattern_rounding_bottom(close, window, min_fit):
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         score = _quadratic_1d(close[c].to_numpy(), w, True)
-        out[:, i] = np.where(score >= mf, score, 0.0)
+        out[:, i] = np.where(np.isfinite(score), np.where(score >= mf, score, 0.0), np.nan)
     return _make(close, cols, out)
 
 
@@ -1093,7 +1048,7 @@ def pattern_rounding_top(close, window, min_fit):
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
         score = _quadratic_1d(close[c].to_numpy(), w, False)
-        out[:, i] = np.where(score >= mf, score, 0.0)
+        out[:, i] = np.where(np.isfinite(score), np.where(score >= mf, score, 0.0), np.nan)
     return _make(close, cols, out)
 
 
@@ -1340,6 +1295,34 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
         return_type="series",
         tags=["pit_safe", "causal", "bounded_history", "polars", "native"],
     )
+    panels={"open","high","low","close","volume","ret","x"}
+    scalar_params=tuple(param for param in params if param not in panels)
+    int_params={
+        param for param in scalar_params
+        if param.endswith("_window") or param in {"window","n","points","min_spacing","max_spacing"}
+    }
+    metadata.param_specs={
+        param: ParamSpec(
+            dtype=int if param in int_params else float,
+            min=(3 if param == "points" and name in {"ts_resistance_fit_r2", "ts_support_fit_r2"} else 2) if param == "points" else (1 if param in int_params else 0.0),
+            param_role=(
+                ParamRole.HORIZON if param == "window" or param.endswith("_window")
+                else ParamRole.ESTIMATOR_RESOLUTION if param in {"n","points"}
+                else ParamRole.STATE_THRESHOLD
+            ),
+        )
+        for param in scalar_params
+    }
+    if {"left_window","right_window","history_window"} <= set(scalar_params):
+        metadata.param_specs["left_window"] = ParamSpec(
+            dtype=int, min=1,
+            history_formula="left_window + right_window + history_window",
+        )
+        metadata.param_specs["right_window"] = ParamSpec(dtype=int,min=1)
+
+    if name in EXTRA_PATTERNS:
+        for field, value in extra_contract(name, params).items():
+            setattr(metadata, field, value)
 
     def _calculate_series(self, *args, **kwargs):
         return function(*args, **kwargs)
@@ -1347,7 +1330,7 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
     cls = type(
         f"PolarsStructure_{name}",
         (SeriesOperator,),
-        {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
+        {"metadata": metadata, "_calculate_series": _calculate_series, "_contract_callable": staticmethod(function), "__module__": __name__},
     )
     register_operator(
         name=name,

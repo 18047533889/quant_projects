@@ -1,0 +1,72 @@
+WARNING: logical-contract divergence for backend of canonical 'ts_confirmed_pivot_high': field 'param_specs' declares {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} but the canonical contract holds {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula='left_window + right_window', default=MISSING, equivalence=None, param_role=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'ts_confirmed_pivot_low': field 'param_specs' declares {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>)} but the canonical contract holds {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula='left_window + right_window', default=MISSING, equivalence=None, param_role=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=None)} (P0-23 — continuing despite divergence for compatibility)
+/home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+  return polars_backend_kind(op, source=source, production_mode=production_mode)
+/home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+  return polars_backend_kind(op, source=source, production_mode=production_mode)
+{
+  "scope": "synthetic 128 rows x 4 securities, median 3; not 100k factors",
+  "default_bootstrap": true,
+  "records": [
+    {
+      "canonical": "ts_positive_ratio",
+      "pandas_seconds": 0.0010176890064030886,
+      "polars_seconds": 0.0010245188605040312,
+      "input_conversion_seconds": 0.0004725060425698757,
+      "speedup_kernel": 0.9933335984682775,
+      "speedup_including_input_conversion": 0.6798076667351513,
+      "max_abs_difference": 0.0,
+      "internal_pandas_panel_conversions": 0
+    },
+    {
+      "canonical": "ts_abs_concentration",
+      "pandas_seconds": 0.00410532602109015,
+      "polars_seconds": 0.004115956136956811,
+      "input_conversion_seconds": 0.0004725060425698757,
+      "speedup_kernel": 0.9974173398566583,
+      "speedup_including_input_conversion": 0.8947063003826755,
+      "max_abs_difference": 0.0,
+      "internal_pandas_panel_conversions": 0
+    },
+    {
+      "canonical": "ts_downside_deviation",
+      "pandas_seconds": 0.00524337193928659,
+      "polars_seconds": 0.006014499114826322,
+      "input_conversion_seconds": 0.0004725060425698757,
+      "speedup_kernel": 0.8717886293076628,
+      "speedup_including_input_conversion": 0.8082885417947183,
+      "max_abs_difference": 0.0,
+      "internal_pandas_panel_conversions": 0
+    },
+    {
+      "canonical": "ts_argmax_age",
+      "pandas_seconds": 0.003647659905254841,
+      "polars_seconds": 0.0038131950423121452,
+      "input_conversion_seconds": 0.0004725060425698757,
+      "speedup_kernel": 0.9565888617758898,
+      "speedup_including_input_conversion": 0.8511232661844067,
+      "max_abs_difference": 0.0,
+      "internal_pandas_panel_conversions": 0
+    },
+    {
+      "canonical": "ts_ewm_std",
+      "pandas_seconds": 0.0002795010805130005,
+      "polars_seconds": 0.0005367640405893326,
+      "input_conversion_seconds": 0.0004725060425698757,
+      "speedup_kernel": 0.520714987177841,
+      "speedup_including_input_conversion": 0.2769338804119792,
+      "max_abs_difference": 2.220446049250313e-16,
+      "internal_pandas_panel_conversions": 0
+    },
+    {
+      "canonical": "fillna_const",
+      "pandas_seconds": 0.00010582688264548779,
+      "polars_seconds": 0.0003952679689973593,
+      "input_conversion_seconds": 0.0004725060425698757,
+      "speedup_kernel": 0.2677345268171598,
+      "speedup_including_input_conversion": 0.12195212259740315,
+      "max_abs_difference": 0.0,
+      "internal_pandas_panel_conversions": 0
+    }
+  ]
+}

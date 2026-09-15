@@ -80,6 +80,7 @@ class DataAccessColumnPreflightError(ValueError):
 
 class MissingDataDependencyError(DataAccessColumnPreflightError):
     """A formula requires another logical dataset or an explicitly derived field."""
+    reason_code = "DATA_SOURCE_MISSING"
 
 
 class UnknownFieldSemanticError(DataAccessColumnPreflightError):
@@ -88,6 +89,7 @@ class UnknownFieldSemanticError(DataAccessColumnPreflightError):
     Raised only when the source runs with ``strict_unknown_fields`` (production).
     Research mode may explicitly allow raw physical columns instead.
     """
+    reason_code = "UNKNOWN_FIELD"
 
 
 class FieldNormalizationError(DataAccessColumnPreflightError):
@@ -112,6 +114,7 @@ class UnknownField(DataAccessColumnPreflightError):
     Raised by ``_field_spec`` in production (fail-closed) instead of returning
     ``None`` and silently falling back to a generic untyped column.
     """
+    reason_code = "UNKNOWN_FIELD"
 
 
 class FieldRegistryUnavailable(DataAccessColumnPreflightError):
@@ -121,6 +124,7 @@ class FieldRegistryUnavailable(DataAccessColumnPreflightError):
     distinct from a genuinely missing field: it must not be treated as
     "no contract" in production.
     """
+    reason_code = "FIELD_REGISTRY_UNAVAILABLE"
 
 
 class FieldSpecInvalid(DataAccessColumnPreflightError):

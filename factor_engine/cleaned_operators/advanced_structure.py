@@ -9,7 +9,8 @@ Deterministic, prefix-causal pandas-numpy references returning
   price-volume / return-volatility relationship break detector.
 * ``ts_kramers_moyal_drift`` / ``diffusion`` — state-conditioned first / second
   Kramers-Moyal coefficients (local drift / diffusion) evaluated at the current
-  state.  Deterministic equal-width state bins.
+  state. Deterministic historical quantile state bins; expanding history with
+  at least 10 finite past observations.
 * ``cs_sliced_wasserstein_copula_shift``     — Sliced-Wasserstein distance
   between today's cross-sectional rank copula (fixed seeded directions) and the
   trailing reference — a market/group regime state, broadcast to every stock.
@@ -25,13 +26,44 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator, ParamSpec, ParamRole
+from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
 _EPS = 1e-12
 _LAM = 0.05              # fixed correlation shrinkage / SPD regularization.
 _SEED = 20260807         # fixed seed -> deterministic projection directions.
 _LN2 = float(np.log(2.0))
 
+
+_STRUCTURE_TARGETS={
+    "ts_bures_corr_shift","ts_kramers_moyal_drift","ts_kramers_moyal_diffusion",
+    "cs_sliced_wasserstein_copula_shift","group_spd_feature_structure_shift",
+}
+def _structure_specs(params):
+    declared={
+        "recent_window":ParamSpec(dtype=int,min=2,default=20,param_role=ParamRole.HORIZON),
+        "prior_window":ParamSpec(dtype=int,min=2,default=60,param_role=ParamRole.HORIZON),
+        "min_pairs":ParamSpec(dtype=int,min=2,default=None,param_role=ParamRole.SUPPORT_POLICY,searchable=False),
+        "window":ParamSpec(dtype=int,min=10 if "bins" in params else 2,default=60,param_role=ParamRole.HORIZON),
+        "bins":ParamSpec(dtype=int,min=2,default=8,param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "lag":ParamSpec(dtype=int,min=1,default=1,param_role=ParamRole.HORIZON),
+        "min_bin_count":ParamSpec(dtype=int,min=1,default=None,param_role=ParamRole.SUPPORT_POLICY,searchable=False),
+        "directions":ParamSpec(dtype=int,min=4,default=32,param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        "reference_window":ParamSpec(dtype=int,min=2,default=60,param_role=ParamRole.HORIZON),
+        "min_peers":ParamSpec(dtype=int,min=3,default=None,param_role=ParamRole.SUPPORT_POLICY,searchable=False),
+        "min_reference_days":ParamSpec(dtype=int,min=2,default=None,param_role=ParamRole.SUPPORT_POLICY,searchable=False),
+        "composition_policy":ParamSpec(dtype=str,choices=("current","intersection"),default="current",param_role=ParamRole.POLICY,searchable=False),
+    }
+    return {key:declared[key] for key in params if key in declared}
+
+def _valid_group_label(label):
+    if label is None or pd.isna(label):
+        return False
+    if isinstance(label,str):
+        return bool(label.strip())
+    if isinstance(label,(int,float,np.number)):
+        return bool(np.isfinite(label))
+    return True
 
 def _metadata(
     name: str,
@@ -48,6 +80,9 @@ def _metadata(
         category="structure_shift",
         description=description,
         param_names=params,
+        panel_params=tuple(p for p in params if p not in _structure_specs(params)) if name in _STRUCTURE_TARGETS else (),
+        scalar_params=tuple(_structure_specs(params)) if name in _STRUCTURE_TARGETS else (),
+        param_specs=_structure_specs(params) if name in _STRUCTURE_TARGETS else {},
         return_type="series",
         tags=[
             "structure_shift", "daily", "pit_safe", "causal", "typed_v2",
@@ -79,9 +114,11 @@ def _corr_window(xv: np.ndarray, yv: np.ndarray, min_pairs: int) -> float | None
         return None
     x = xv[finite]
     y = yv[finite]
-    vx = float(np.var(x))
-    vy = float(np.var(y))
-    if vx <= _EPS or vy <= _EPS:
+    sx,sy=np.max(np.abs(x)),np.max(np.abs(y))
+    if sx==0 or sy==0:
+        return None
+    x,y=x/sx,y/sy
+    if np.var(x)<=0 or np.var(y)<=0:
         return None
     return float(np.corrcoef(x, y)[0, 1])
 
@@ -137,8 +174,8 @@ class TsBuresCorrShift(SeriesOperator):
         min_pairs: Any = None,
         **_: Any,
     ) -> pd.DataFrame:
-        r = int(recent_window)
-        p = int(prior_window)
+        r = strict_integer(recent_window,"recent_window",minimum=2)
+        p = strict_integer(prior_window,"prior_window",minimum=2)
         if r < 2 or p < 2:
             raise ValueError("ts_bures_corr_shift requires recent_window, prior_window >= 2")
         # A 2-point correlation is ±1 almost surely -> spurious "breaks"; require a
@@ -146,7 +183,9 @@ class TsBuresCorrShift(SeriesOperator):
         if min_pairs is None:
             mp = max(5, int(min(r, p) // 2))
         else:
-            mp = max(2, int(min_pairs))
+            mp = strict_integer(min_pairs,"min_pairs",minimum=2)
+        if mp>min(r,p):
+            raise ValueError("min_pairs must fit both recent and prior windows")
         xv = x.to_numpy(dtype=float)
         yv = y.to_numpy(dtype=float)
         rows, cols = xv.shape
@@ -176,7 +215,8 @@ def _km_series(vals_2d: np.ndarray, window: int, bins: int, lag: int, order: int
     out = np.full((rows, cols), np.nan, dtype=float)
     for col in range(cols):
         res = _state_dynamics_series(
-            vals_2d[:, col], int(window), int(bins), int(lag), max(1, int(min_bin_count))
+            vals_2d[:, col], int(window), int(bins), int(lag), int(min_bin_count),
+            min_state_support=int(min_bin_count)
         )
         d = res["D1"] if order == 1 else res["D2"]
         for t in range(rows):
@@ -202,7 +242,7 @@ class TsKramersMoyalDrift(SeriesOperator):
 
     用共享状态动力学核：严格过去窗口 ``[t-W, t-1]`` 的分位数状态分箱，滞后
     ``lag`` 增量 ``dx = x[s+lag]-x[s]``，每 bin ``min_bin_count`` 门槛；D1(bin)
-    = mean(dx)。输出当前状态所在 bin 的 D1。确定性。P1。
+    = mean(dx)/lag。输出当前状态所在 bin 的 D1。确定性。P1。
     """
 
     metadata = _metadata(
@@ -217,9 +257,9 @@ class TsKramersMoyalDrift(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, window: int = 60, bins: int = 8, lag: int = 1, min_bin_count: Any = None, **_: Any
     ) -> pd.DataFrame:
-        w = int(window)
-        b = int(bins)
-        lg = max(1, int(lag))
+        w = strict_integer(window,"window",minimum=10)
+        b = strict_integer(bins,"bins",minimum=2)
+        lg = strict_integer(lag,"lag",minimum=1)
         if b < 2:
             raise ValueError("ts_kramers_moyal_drift requires bins >= 2")
         if w <= lg:
@@ -227,7 +267,9 @@ class TsKramersMoyalDrift(SeriesOperator):
         if min_bin_count is None:
             mbc = max(3, int(np.ceil(w / b * 0.25)))
         else:
-            mbc = max(1, int(min_bin_count))
+            mbc = strict_integer(min_bin_count,"min_bin_count",minimum=1)
+        if mbc>w-lg:
+            raise ValueError("min_bin_count must fit available lagged transitions")
         return _frame_like(x, _km_series(x.to_numpy(dtype=float), w, b, lg, 1, mbc))
 
 
@@ -257,17 +299,19 @@ class TsKramersMoyalDiffusion(SeriesOperator):
     def _calculate_series(
         self, x: pd.DataFrame, window: int = 60, bins: int = 8, lag: int = 1, min_bin_count: Any = None, **_: Any
     ) -> pd.DataFrame:
-        w = int(window)
-        b = int(bins)
+        w = strict_integer(window,"window",minimum=10)
+        b = strict_integer(bins,"bins",minimum=2)
         if b < 2:
             raise ValueError("ts_kramers_moyal_diffusion requires bins >= 2")
-        lg = max(1, int(lag))
+        lg = strict_integer(lag,"lag",minimum=1)
         if w <= lg:
             raise ValueError("ts_kramers_moyal_diffusion requires window > lag")
         if min_bin_count is None:
             mbc = max(3, int(np.ceil(w / b * 0.25)))
         else:
-            mbc = max(1, int(min_bin_count))
+            mbc = strict_integer(min_bin_count,"min_bin_count",minimum=1)
+        if mbc>w-lg:
+            raise ValueError("min_bin_count must fit available lagged transitions")
         return _frame_like(x, _km_series(x.to_numpy(dtype=float), w, b, lg, 2, mbc))
 
 
@@ -375,8 +419,8 @@ class CsSlicedWassersteinCopulaShift(SeriesOperator):
         directions: int = 32,
         **_: Any,
     ) -> pd.DataFrame:
-        w = int(window)
-        d_l = int(directions)
+        w = strict_integer(window,"window",minimum=2)
+        d_l = strict_integer(directions,"directions",minimum=4)
         if w < 2 or d_l < 4:
             raise ValueError("cs_sliced_wasserstein_copula_shift requires window >= 2, directions >= 4")
         feats = np.stack(
@@ -396,13 +440,18 @@ def _robust_z_col(col: np.ndarray) -> np.ndarray | None:
     finite = np.isfinite(col)
     if int(finite.sum()) < 2:
         return None
-    med = float(np.median(col[finite]))
-    mad = float(np.median(np.abs(col[finite] - med))) * 1.4826
-    spread = mad if mad > _EPS else float(np.std(col[finite]))
-    if spread <= _EPS:
+    values=col[finite]
+    scale=np.max(np.abs(values))
+    if scale==0:
         return None
-    out = np.full_like(col, np.nan, dtype=float)
-    out[finite] = (col[finite] - med) / spread
+    values=values/scale
+    med=float(np.median(values))
+    mad=float(np.median(np.abs(values-med)))*1.4826
+    spread=mad if mad>0 else float(np.std(values))
+    if spread<=0:
+        return None
+    out=np.full_like(col,np.nan,dtype=float)
+    out[finite]=(values-med)/spread
     return out
 
 
@@ -450,6 +499,8 @@ def _group_spd_shift(
     labels = pd.unique(g_row)
     out = np.full(row.shape[0], np.nan, dtype=float)
     for label in labels:
+        if not _valid_group_label(label):
+            continue
         idx = np.flatnonzero(g_row == label)
         if idx.size < min_peers:
             continue
@@ -530,7 +581,7 @@ class GroupSpdFeatureStructureShift(SeriesOperator):
         composition_policy: str = "current",
         **_: Any,
     ) -> pd.DataFrame:
-        rw = int(reference_window)
+        rw = strict_integer(reference_window,"reference_window",minimum=2)
         if rw < 2:
             raise ValueError("group_spd_feature_structure_shift requires reference_window >= 2")
         if composition_policy not in ("current", "intersection"):
@@ -540,11 +591,13 @@ class GroupSpdFeatureStructureShift(SeriesOperator):
         if min_peers is None:
             mp = 5
         else:
-            mp = max(3, int(min_peers))
+            mp = strict_integer(min_peers,"min_peers",minimum=3)
         if min_reference_days is None:
             mrd = 5
         else:
-            mrd = max(2, int(min_reference_days))
+            mrd = strict_integer(min_reference_days,"min_reference_days",minimum=2)
+        if mrd>rw:
+            raise ValueError("min_reference_days must be <= reference_window")
         feats = np.stack(
             [f1.to_numpy(dtype=float), f2.to_numpy(dtype=float), f3.to_numpy(dtype=float)], axis=2
         )
@@ -556,6 +609,8 @@ class GroupSpdFeatureStructureShift(SeriesOperator):
             g_row = gv[t]
             day: dict[Any, tuple[np.ndarray, np.ndarray]] = {}
             for label in pd.unique(g_row):
+                if not _valid_group_label(label):
+                    continue
                 idx = np.flatnonzero(g_row == label)
                 if idx.size < mp:
                     continue

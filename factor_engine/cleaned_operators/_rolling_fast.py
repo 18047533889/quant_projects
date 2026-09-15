@@ -303,7 +303,9 @@ NEW-020: 对每个窗口，用**有效样本的实际物理行偏移**做 OLS：
     return pd.DataFrame(out, index=x.index, columns=x.columns)
 
 
-def _argextreme_1d(col: np.ndarray, window: int, *, maximum: bool, age: bool) -> np.ndarray:
+def _argextreme_1d(
+    col: np.ndarray, window: int, *, maximum: bool, age: bool, min_periods: int = 1
+) -> np.ndarray:
     """1-D rolling extreme position/age with ``latest`` tie-break.
 
     ``index_from_oldest`` (``age=False``): 0-based offset from the window's
@@ -317,7 +319,7 @@ def _argextreme_1d(col: np.ndarray, window: int, *, maximum: bool, age: bool) ->
         start = max(0, i - window + 1)
         seg = col[start : i + 1]
         valid = np.isfinite(seg)
-        if not valid.any():
+        if int(valid.sum()) < min_periods:
             continue
         extreme = float(np.max(seg[valid])) if maximum else float(np.min(seg[valid]))
         hits = np.flatnonzero(valid & (seg == extreme))
@@ -363,7 +365,9 @@ NEW-018/019: 同 :func:`rolling_argmax` —— 全 NaN 窗口输出 NaN；极值
     )
 
 
-def rolling_days_since_extreme(x: pd.DataFrame, window: int, *, maximum: bool) -> pd.DataFrame:
+def rolling_days_since_extreme(
+    x: pd.DataFrame, window: int, *, maximum: bool, min_periods: int = 1
+) -> pd.DataFrame:
     """滚动极值距当前 bar 的 bar 数（age，0=当前 bar，tie=latest）。
 
 R19-039..042/049: ``ts_argmax`` / ``ts_argmin`` canonical 语义为 **age**
@@ -379,8 +383,14 @@ R19-039..042/049: ``ts_argmax`` / ``ts_argmin`` canonical 语义为 **age**
 返回:
     极值 age panel。
 """
+    w = _strict_window_int(window, "window")
+    mp = _strict_window_int(min_periods, "min_periods")
+    if mp > w:
+        raise OperatorParameterError("min_periods must be <= window")
     return _apply_colwise_1d(
-        x, lambda col: _argextreme_1d(col, window, maximum=maximum, age=True)
+        x, lambda col: _argextreme_1d(
+            col, w, maximum=maximum, age=True, min_periods=mp
+        )
     )
 
 
@@ -527,6 +537,7 @@ def _rolling_top_bottom_1d_numpy(
     *,
     top: bool,
     stat: str,
+    min_periods: int = 1,
 ) -> np.ndarray:
     """一维窗口内 top/bottom-k 的 mean/sum/std（因果窗口）。
 
@@ -548,7 +559,7 @@ def _rolling_top_bottom_1d_numpy(
         valid = seg[np.isfinite(seg)]
         # NEW-025: valid < k -> NaN (Unknown, not "the best few we happen to
         # have").  Same topk_5 must mean top-5 everywhere, never top-2/3.
-        if valid.size < k or k < 1:
+        if valid.size < max(k, min_periods) or k < 1:
             out[i] = np.nan
             continue
         ordered = np.sort(valid)
@@ -739,7 +750,9 @@ def rolling_top_n_mean_window(x: pd.DataFrame, window: int, k: int) -> pd.DataFr
     )
 
 
-def rolling_top_n_sum_window(x: pd.DataFrame, window: int, k: int) -> pd.DataFrame:
+def rolling_top_n_sum_window(
+    x: pd.DataFrame, window: int, k: int, min_periods: int = 1
+) -> pd.DataFrame:
     """指定窗口内前 k 大值的求和。
 
 参数:
@@ -750,6 +763,12 @@ def rolling_top_n_sum_window(x: pd.DataFrame, window: int, k: int) -> pd.DataFra
 返回:
     窗口 top-k 求和 panel。
 """
+    w = _strict_window_int(window, "window")
+    mp = _strict_window_int(min_periods, "min_periods")
+    if mp > w:
+        raise OperatorParameterError("min_periods must be <= window")
     return _apply_colwise_1d(
-        x, lambda col: _rolling_top_bottom_1d_numpy(col, window, k, top=True, stat="sum")
+        x, lambda col: _rolling_top_bottom_1d_numpy(
+            col, w, k, top=True, stat="sum", min_periods=mp
+        )
     )

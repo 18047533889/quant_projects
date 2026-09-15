@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/runtime/test_r6_repaired_batch_integration.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 1, "sampled_peak_family_rss_bytes": 802115584, "sampling_seconds": 0.1, "seconds": 51.328744902973995, "test_guard_reason": null, "hard_memory_cap": false}

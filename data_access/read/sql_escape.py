@@ -836,16 +836,40 @@ def _try_sqlglot_table_refs(query: str) -> list[str] | None:
         return None
     if parsed is None:
         return None
-    # R28-18：CTE 别名集合（局部定义，非真实表引用）。
-    cte_names: set[str] = set()
+    # 必须逐作用域解析来源，不能全局跳过所有 CTE 同名 Table。CTE 定义体中的
+    # ``WITH real AS (SELECT * FROM real)`` 会把内层 real 绑定到真实 catalog
+    # 表，而主查询的 real 才绑定 CTE；全局名字集合会把二者一起放行。
     try:
-        cte_names = {
-            str(c.alias_or_name) for c in (getattr(parsed, "ctes", None) or ())
-        }
+        from sqlglot.optimizer.scope import traverse_scope
+
+        scopes = traverse_scope(parsed)
     except Exception:
-        pass
+        return None
+    tables: list[Any] = []
+    for scope in scopes:
+        try:
+            sources = scope.selected_sources.items()
+        except Exception:
+            return None
+        for _alias, (_node, source) in sources:
+            if isinstance(source, exp.Table):
+                # Only repair a case-sensitive miss when the unqualified table
+                # source name matches a same-scope local source. SQL output
+                # aliases are irrelevant and cannot disguise unrelated tables.
+                folded_source_name = str(source.name).lower()
+                for local_name, local_source in scope.sources.items():
+                    if (
+                        not getattr(source, "catalog", None)
+                        and not getattr(source, "db", None)
+                        and local_name.lower() == folded_source_name
+                        and not isinstance(local_source, exp.Table)
+                    ):
+                        source = local_source
+                        break
+            if isinstance(source, exp.Table):
+                tables.append(source)
     out: list[str] = []
-    for tbl in parsed.find_all(exp.Table):
+    for tbl in tables:
         # 表函数调用（FROM read_parquet(...)）不是裸表引用——由独立的函数
         # allowlist（_check_sql_function_allowlist）治理。
         if getattr(tbl, "expressions", None):
@@ -863,8 +887,6 @@ def _try_sqlglot_table_refs(query: str) -> list[str] | None:
             name = ".".join(qual + [name])
         if name in mapping:
             name = mapping[name]
-        if name in cte_names:
-            continue
         if name not in out:
             out.append(name)
     return out

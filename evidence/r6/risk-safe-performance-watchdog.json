@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/r6/risk_safe_performance.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 431964160, "sampling_seconds": 0.1, "seconds": 52.62487830314785, "test_guard_reason": null, "hard_memory_cap": false}

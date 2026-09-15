@@ -1,8 +1,12 @@
 from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
 
 from data_access.read.data_read_identity import DataReadIdentity, ResolvedFieldIdentity
 from factor_engine.planner.logical_plan import PlanNode
 from factor_engine.runtime.multibackend.batch_global_optimizer import PhysicalBatchGlobalOptimizer
+from factor_engine.runtime.default_execution_policy import ExecutionPurpose
 from factor_engine.runtime.physical_source_binding import (
     PhysicalSourceBinding, bind_batch_sources, bind_plan_sources,
     is_authoritative_source_binding,
@@ -30,6 +34,170 @@ def test_plain_attrs_cannot_forge_physical_source_binding():
         "n", node, 10, SimpleNamespace(run_mode="production", runtime_stats={})
     )
     assert choices and not any(choice.production_certified for choice in choices)
+
+
+def test_research_purpose_admits_executable_cpu_without_forging_certification(
+    monkeypatch,
+):
+    seen_modes = []
+    monkeypatch.setattr(
+        "factor_engine.backend.operator_capability.supports_pandas",
+        lambda op, mode: seen_modes.append(mode) or True,
+    )
+    monkeypatch.setattr(
+        "factor_engine.backend.operator_capability.supports_polars",
+        lambda *args, **kwargs: False,
+    )
+    monkeypatch.setattr(
+        "factor_engine.backend.operator_capability.supports_sql",
+        lambda *args, **kwargs: False,
+    )
+    capability = Mock()
+    capability.execution_kind = __import__(
+        "factor_engine.backend.contracts", fromlist=["ExecutionKind"]
+    ).ExecutionKind.PANDAS_REFERENCE
+    capability.is_production_eligible.return_value = False
+    capability.implementation_id = None
+    capability.canonical = "abs"
+    capability.backend = "pandas_numpy"
+    monkeypatch.setattr(
+        "factor_engine.backend.operator_capability.capability_for",
+        lambda *args, **kwargs: capability,
+    )
+    monkeypatch.setattr(
+        "factor_engine.backend.routing.numba_enabled_for_op",
+        lambda *args, **kwargs: False,
+    )
+    ctx = SimpleNamespace(
+        run_mode="production",
+        execution_purpose=ExecutionPurpose("research_compute"),
+        runtime_stats={},
+    )
+
+    choices = PhysicalBatchGlobalOptimizer()._eligible_choices(
+        "n", PlanNode("abs"), 10, ctx
+    )
+
+    assert choices
+    assert seen_modes == ["research"]
+    assert all(not choice.production_certified for choice in choices)
+
+
+def test_execution_readiness_does_not_mutate_production_readiness_contract():
+    result = __import__(
+        "factor_engine.runtime.multibackend.batch_global_optimizer",
+        fromlist=["BatchOptimizationResult"],
+    ).BatchOptimizationResult
+    fields = result.__dataclass_fields__
+    assert "execution_ready" in fields
+    assert "execution_readiness_reason" in fields
+    assert fields["production_ready"].default is False
+    names = list(fields)
+    assert names[-2:] == ["execution_ready", "execution_readiness_reason"]
+
+
+def test_duckdb_ts_kurt_list_workspace_enters_plan_memory_budget():
+    from factor_engine.planner.backend_region import PhysicalBackend
+
+    node = PlanNode(
+        "ts_kurt",
+        inputs=(PlanNode("column", attrs={"name": "close"}),
+                PlanNode("literal", attrs={"value": 20})),
+    )
+    choice = SimpleNamespace(backend=PhysicalBackend.DUCKDB_SQL)
+    memory = PhysicalBatchGlobalOptimizer._node_execution_memory_bytes(
+        node, choice, rows=1_000, base_memory=8_000
+    )
+    assert memory >= 8_000 + 1_000 * 20 * 8 * 4
+
+
+@pytest.mark.parametrize("backend_name", ["POLARS_LONG", "POLARS_PANEL"])
+def test_polars_ts_corr_centered_workspace_uses_bound_window(backend_name):
+    from factor_engine.planner.backend_region import PhysicalBackend
+
+    node = PlanNode(
+        "ts_corr",
+        inputs=(PlanNode("column", attrs={"name": "x"}),
+                PlanNode("column", attrs={"name": "y"}),
+                PlanNode("literal", attrs={"value": 7})),
+    )
+    choice = SimpleNamespace(backend=getattr(PhysicalBackend, backend_name))
+    memory = PhysicalBatchGlobalOptimizer._node_execution_memory_bytes(
+        node, choice, rows=1_000, base_memory=8_000
+    )
+    assert memory == 8_000 + 1_000 * (96 * 7 + 24)
+
+
+def test_same_region_list_workspaces_accumulate_over_shared_base():
+    from factor_engine.planner.backend_region import PhysicalBackend
+
+    def corr(window):
+        return PlanNode(
+            "ts_corr",
+            inputs=(PlanNode("column", attrs={"name": "x"}),
+                    PlanNode("column", attrs={"name": "y"}),
+                    PlanNode("literal", attrs={"value": window})),
+        )
+
+    nodes = {"a": corr(5), "b": corr(11)}
+    choices = {
+        key: SimpleNamespace(backend=PhysicalBackend.POLARS_LONG) for key in nodes
+    }
+    estimates = {"a": (100, 800, 1_000), "b": (200, 1_600, 2_000)}
+
+    memory = PhysicalBatchGlobalOptimizer._region_execution_memory_bytes(
+        ["a", "b"], nodes, choices, estimates
+    )
+
+    assert memory == 2_000 + 100 * (96 * 5 + 24) + 200 * (96 * 11 + 24)
+
+
+def test_unknown_cost_is_conservative_but_candidate_stays_executable(monkeypatch):
+    monkeypatch.setattr(
+        "factor_engine.backend.operator_capability.supports_pandas",
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr(
+        "factor_engine.backend.operator_capability.supports_polars",
+        lambda *args, **kwargs: False,
+    )
+    monkeypatch.setattr(
+        "factor_engine.backend.operator_capability.supports_sql",
+        lambda *args, **kwargs: False,
+    )
+    capability = Mock()
+    capability.execution_kind = __import__(
+        "factor_engine.backend.contracts", fromlist=["ExecutionKind"]
+    ).ExecutionKind.PANDAS_REFERENCE
+    capability.is_production_eligible.return_value = False
+    capability.implementation_id = None
+    capability.canonical = "abs"
+    capability.backend = "pandas_numpy"
+    monkeypatch.setattr(
+        "factor_engine.backend.operator_capability.capability_for",
+        lambda *args, **kwargs: capability,
+    )
+    monkeypatch.setattr(
+        "factor_engine.backend.operator_cost.estimate_backend_cost",
+        lambda *args, **kwargs: float("nan"),
+    )
+    monkeypatch.setattr(
+        "factor_engine.backend.routing.numba_enabled_for_op",
+        lambda *args, **kwargs: False,
+    )
+    ctx = SimpleNamespace(
+        run_mode="production",
+        execution_purpose=ExecutionPurpose("research_compute"),
+        runtime_stats={},
+    )
+
+    choices = PhysicalBatchGlobalOptimizer()._eligible_choices(
+        "n", PlanNode("abs"), 10, ctx
+    )
+
+    assert len(choices) == 1
+    assert choices[0].compute_cost_ms == 1.0e12
+    assert choices[0].production_certified is False
 
 
 def test_binding_path_replaces_caller_value_with_da_identity(monkeypatch):
@@ -265,6 +433,39 @@ def test_preflight_unknown_field_is_root_local_and_prepares_valid_batch_once(mon
     assert result.per_root_errors["bad"].code == "UNKNOWN_FIELD"
     assert set(result.root_plans) == {"a", "b"}
     assert counters["prepare"] == result.prepare_count == result.unique_source_count == 1
+
+
+def test_preflight_preserves_data_source_missing_reason(monkeypatch):
+    from factor_engine.runtime.physical_source_binding import preflight_batch_sources
+    from factor_engine.storage.sources.data_access_source import MissingDataDependencyError
+
+    source = object.__new__(DataAccessSource)
+    source.production = source.strict_unknown_fields = source.pit_enforce = True
+    source.dataset, source.params = "daily", {}
+    source.instrument_filter = ["000001.SZ"]
+    source.start_date, source.end_date = "2024-01-01", "2024-01-31"
+
+    def ensure(names):
+        if "Revenue" in names:
+            raise MissingDataDependencyError("approved stock_income dependency is absent")
+        return {}
+
+    source._ensure_field_plans = ensure
+    scope = SimpleNamespace(universe_id="CSI300", scope_key=lambda: "scope")
+    dag = SimpleNamespace(
+        roots=[SimpleNamespace(
+            factor_name="missing_financial",
+            root=PlanNode("column", attrs={"name": "Revenue"}),
+            execution_scope=scope,
+        )], shared_nodes={},
+    )
+    result = preflight_batch_sources(
+        dag, source=source,
+        execution_context=SimpleNamespace(run_mode="production", runtime_stats={}),
+    )
+    error = result.per_root_errors["missing_financial"]
+    assert error.code == "DATA_SOURCE_MISSING"
+    assert error.error_type == "MissingDataDependencyError"
 
 
 def test_preflight_unsupported_operator_is_root_local(monkeypatch):

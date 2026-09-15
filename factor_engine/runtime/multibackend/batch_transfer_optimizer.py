@@ -552,6 +552,11 @@ class BatchTransferOptimizer:
                 元组确定真实转换，且调用方未显式提供 transform。
         """
         if transform is None:
+            known_targets = {"arrow", "duckdb", "numpy", "pandas", "polars", "q"}
+            if target_backend not in known_targets:
+                raise UnknownTransferTargetError(
+                    f"unknown transfer target backend {target_backend!r}"
+                )
             transform = _infer_transform(source_representation, target_backend)
         if transform is None:
             from factor_engine.planning.transfer_edge import (

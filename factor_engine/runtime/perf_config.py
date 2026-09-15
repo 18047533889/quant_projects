@@ -66,7 +66,7 @@ def _env_backtest_engine(name: str, default: BacktestExecutionEngine) -> Backtes
 class PerfConfig:
     """并行与内存护栏（均为可选；未设置则由调用方使用合理默认）。"""
 
-    #: 多进程/线程 worker 数；``None`` 表示由 joblib 等使用默认
+    #: worker 上限；None 由自适应调度器按 CPU/内存准入动态选择，1 显式串行
     max_workers: int | None = None
     #: 按 instrument 分块求值时每块标的数量；``None`` 表示不分块
     instrument_chunk_size: int | None = None

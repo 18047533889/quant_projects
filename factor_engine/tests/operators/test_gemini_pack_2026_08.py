@@ -32,10 +32,12 @@ _DAILY_OPS = [
     "group_distribution_js_divergence",
     "event_level_survival_share",
     "ts_max_drawdown_activity_cost",
-    "cs_multi_robust_resid",
     "intraday_activity_duration_curvature",
 ]
-_RESEARCH_OPS = [
+_EXTENDED_OPS = [
+    # Honest canonical for the deprecated cs_multi_robust_resid alias.  The
+    # operator catalog and DirectUse classification place it on extended.
+    "cs_multi_ridge_resid",
     "ts_wavelet_lowpass_reconstruct",
     "ts_signature_mahalanobis_anomaly",
     "ts_persistence_birth_dispersion",
@@ -52,7 +54,7 @@ def _loaded():
     load_all()
 
 
-@pytest.mark.parametrize("op", _DAILY_OPS + _RESEARCH_OPS)
+@pytest.mark.parametrize("op", _DAILY_OPS + _EXTENDED_OPS)
 def test_registered_both_backends(_loaded, op):
     backends = OperatorRegistry.backends_for(op)
     assert "pandas_numpy" in backends, op
@@ -64,9 +66,12 @@ def test_daily_surface(_loaded, op):
     assert classify_canonical(op) == "daily"
 
 
-@pytest.mark.parametrize("op", _RESEARCH_OPS)
-def test_research_surface(_loaded, op):
-    assert classify_canonical(op) == "research"
+@pytest.mark.parametrize("op", _EXTENDED_OPS)
+def test_direct_use_research_authoring_ops_are_extended(_loaded, op):
+    # These operators originate in research modules, but each now has an
+    # explicit DIRECT_* role.  Classification intentionally exposes such
+    # reviewed DirectUse operators on the extended authoring tier.
+    assert classify_canonical(op) == "extended"
 
 
 def _panel(rows=40, cols=3, seed=7):
@@ -175,7 +180,7 @@ def test_spectral_entropy_bounds(_loaded):
     idx = list(range(90))
     x = pd.DataFrame({"A": rng.normal(0, 1, 90)}, index=idx)
     op = OperatorRegistry.get("ts_spectral_entropy", "pandas_numpy")
-    out = op.calculate(x, window=60)
+    out = op.calculate(x, window=60, input_kind="ReturnDecimal")
     v = out["A"].dropna()
     assert ((v >= 0.0) & (v <= 1.0)).all()
 
@@ -357,12 +362,14 @@ def test_wavelet_lowpass_reconstruct(_loaded):
 
 def test_signature_mahalanobis_anomaly(_loaded):
     rng = np.random.default_rng(9)
-    idx = list(range(100))
-    f1 = pd.DataFrame({"A": rng.normal(0, 1, 100)}, index=idx)
-    f2 = pd.DataFrame({"A": rng.normal(0, 1, 100)}, index=idx)
-    f3 = pd.DataFrame({"A": rng.normal(0, 1, 100)}, index=idx)
+    idx = list(range(180))
+    f1 = pd.DataFrame({"A": rng.normal(0, 1, 180)}, index=idx)
+    f2 = pd.DataFrame({"A": rng.normal(0, 1, 180)}, index=idx)
+    f3 = pd.DataFrame({"A": rng.normal(0, 1, 180)}, index=idx)
     op = OperatorRegistry.get("ts_signature_mahalanobis_anomaly", "pandas_numpy")
-    out = op.calculate(f1, f2, f3, path_window=20, history_window=60, depth=2)
+    # depth is fixed at 2 and deliberately absent from the public contract;
+    # history=120 supplies the required 24 stride-5 signature vectors.
+    out = op.calculate(f1, f2, f3, path_window=20, history_window=120)
     assert out.shape == f1.shape
     assert out["A"].iloc[-1] >= 0.0
 
@@ -374,7 +381,7 @@ def test_signature_mahalanobis_anomaly(_loaded):
 @pytest.mark.parametrize(
     "op,kwargs",
     [
-        ("ts_spectral_entropy", {"window": 20}),
+        ("ts_spectral_entropy", {"window": 20, "input_kind": "ReturnDecimal"}),
         ("ts_weighted_standardized_moment", {"window": 20, "order": 3}),
         ("ts_cov_if", {"window": 20, "min_periods": 2}),
         ("ts_activity_clock_age", {"budget": 2.0, "scale_window": 10, "max_lookback": 40}),

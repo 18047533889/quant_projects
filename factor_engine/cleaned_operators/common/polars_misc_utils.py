@@ -10,6 +10,7 @@ into ``pl.DataFrame`` without constructing pandas DataFrames.
 from __future__ import annotations
 
 from collections.abc import Callable
+from factor_engine.cleaned_operators.common import direction_risk_polars as _risk
 
 import numpy as np
 import polars as pl
@@ -94,25 +95,9 @@ def ts_ratio(x):
     return _result(x, values)
 
 
-def ts_sma_cn(x, n, m):
-    n_i = _pi(n, "n")
-    m_i = _pi(m, "m")
-    if m_i > n_i:
-        raise ValueError("sma m must satisfy 1 <= m <= n")
-    alpha = float(m_i) / float(n_i)
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        arr = x[c].to_numpy()
-        state = np.nan
-        for t in range(rows):
-            value = arr[t]
-            if not np.isfinite(value):
-                continue
-            state = float(value) if not np.isfinite(state) else alpha * float(value) + (1.0 - alpha) * state
-            out[t, i] = state
-    return _result(x, {c: pl.Series(name=c, values=out[:, i]) for i, c in enumerate(cols)})
+def ts_sma_cn(x, n=7, m=2):
+    from factor_engine.cleaned_operators.lqtp_compat import polars_calculate
+    return polars_calculate("ts_sma_cn",x,n=n,m=m)
 
 
 def _rolling_sign_ratio_1d(x: np.ndarray, w: int, sign: int, threshold: float, min_periods: int) -> np.ndarray:
@@ -147,40 +132,16 @@ def _sign_ratio_op(x, window, threshold, sign, name):
     return _result(x, {c: pl.Series(name=c, values=out[:, i]) for i, c in enumerate(cols)})
 
 
-def ts_positive_ratio(x, window, threshold=0.0, min_periods=1):
-    w = _pi(window, "window")
-    thr = _pf(threshold, "threshold", None)
-    mp = max(1, int(min_periods))
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        out[:, i] = _rolling_sign_ratio_1d(x[c].to_numpy(), w, 1, thr, mp)
-    return _result(x, {c: pl.Series(name=c, values=out[:, i]) for i, c in enumerate(cols)})
+def ts_positive_ratio(x, window=20, threshold=0.0, min_periods=1):
+    return _risk.ts_positive_ratio(x,window,threshold,min_periods)
 
 
-def ts_negative_ratio(x, window, threshold=0.0, min_periods=1):
-    w = _pi(window, "window")
-    thr = _pf(threshold, "threshold", None)
-    mp = max(1, int(min_periods))
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        out[:, i] = _rolling_sign_ratio_1d(x[c].to_numpy(), w, -1, thr, mp)
-    return _result(x, {c: pl.Series(name=c, values=out[:, i]) for i, c in enumerate(cols)})
+def ts_negative_ratio(x, window=20, threshold=0.0, min_periods=1):
+    return _risk.ts_negative_ratio(x,window,threshold,min_periods)
 
 
-def ts_zero_ratio(x, window, tolerance=0.0, min_periods=1):
-    w = _pi(window, "window")
-    tol = _pf(tolerance, "tolerance", None)
-    mp = max(1, int(min_periods))
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        out[:, i] = _rolling_sign_ratio_1d(x[c].to_numpy(), w, 0, tol, mp)
-    return _result(x, {c: pl.Series(name=c, values=out[:, i]) for i, c in enumerate(cols)})
+def ts_zero_ratio(x, window=20, tolerance=0.0, min_periods=1):
+    return _risk.ts_zero_ratio(x,window,tolerance,min_periods)
 
 
 _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
@@ -198,6 +159,10 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
 
 
 def _register(name: str, params: tuple[str, ...], function: Callable, description: str) -> None:
+    if name == "ts_sma_cn":
+        from factor_engine.cleaned_operators.lqtp_compat import register_polars
+        register_polars(name)
+        return
     metadata = OperatorMetadata(
         name=name,
         category="math",
@@ -207,6 +172,12 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
         tags=["pit_safe", "causal", "polars", "native"],
     )
 
+    risk_name=name in {"ts_positive_ratio","ts_negative_ratio","ts_zero_ratio"}
+    if risk_name:
+        for field,value in _risk.contract(name).items():
+            setattr(metadata,field,value)
+        function=getattr(_risk,name)
+
     def _calculate_series(self, *args, **kwargs):
         return function(*args, **kwargs)
 
@@ -215,6 +186,9 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
         (SeriesOperator,),
         {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
     )
+    if risk_name:
+        cls._physical_spec=_risk.physical_spec(name)
+        cls._contract_callable=staticmethod(function)
     register_operator(
         name=name,
         category="math",

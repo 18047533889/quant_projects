@@ -1,0 +1,1 @@
+{"command": ["/bin/sh", "-c", "PYTHONPATH=. .venv/bin/python evidence/r6/remaining_inventory.py 2> evidence/r6/remaining-current2.stderr"], "returncode": 0, "sampled_peak_family_rss_bytes": 443330560, "sampling_seconds": 0.1, "seconds": 54.460275140823796, "test_guard_reason": null, "hard_memory_cap": false}

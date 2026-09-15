@@ -25,7 +25,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import register_operator
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec, register_operator
 from factor_engine.cleaned_operators.intraday._core import (
     DataDegeneracy,
     SessionAggregationOperator,
@@ -34,7 +34,7 @@ from factor_engine.cleaned_operators.intraday._core import (
     daily_agg,
     daily_agg_two,
     daily_agg_three,
-    metadata,
+    metadata as _core_metadata,
     minute_of_day,
     np_errstate,
     register_surface,
@@ -45,6 +45,47 @@ from factor_engine.cleaned_operators.intraday._core import (
 )
 
 _CANONICALS: list[str] = []
+
+_TZ = ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.POLICY)
+_P = ParamRole.POLICY
+_H = ParamRole.HORIZON
+_E = ParamRole.ESTIMATOR_RESOLUTION
+
+
+def _s(dtype=None, *, default=None, min=None, max=None, choices=None, role=_P):
+    return ParamSpec(dtype=dtype, default=default, min=min, max=max, choices=choices, param_role=role)
+
+
+_WINDOW_ALL = ParamSpec(
+    alternatives=(
+        ParamSpec(dtype=str, choices=("All",)),
+        ParamSpec(dtype=int, min=1),
+    ),
+    default="All",
+    param_role=_H,
+)
+_SLICE = _s(float, default=None, min=0.0, max=1.0, role=ParamRole.STATE_THRESHOLD)
+_SLICE_CONTRACTS = {
+    "intra_slice_mask_reduce": (("x", "mask_field"), {"window": _WINDOW_ALL, "slice": _SLICE, "mask_side": _s(str, default="high", choices=("high", "low")), "mask_q": _s(float, default=.7, min=float(np.nextafter(0., 1.)), max=float(np.nextafter(1., 0.)), role=ParamRole.STATE_THRESHOLD), "reducer": _s(str, default="mean", choices=("mean", "std", "sum", "skew", "kurtosis", "median", "slope", "last_minus_first", "positive_share")), "min_bars": _s(int, default=10, min=1, role=_E), "session_tz": _TZ}),
+    "intra_slice_mask_pair_reduce": (("x", "y", "mask_field"), {"window": _WINDOW_ALL, "slice": _SLICE, "mask_side": _s(str, default="high", choices=("high", "low")), "mask_q": _s(float, default=.7, min=float(np.nextafter(0., 1.)), max=float(np.nextafter(1., 0.)), role=ParamRole.STATE_THRESHOLD), "y_lag": _s(int, default=0, min=0, role=_H), "reducer": _s(str, default="corr", choices=("corr", "cov", "slope", "intercept", "r2", "euclidean", "cosine")), "min_pairs": _s(int, default=10, min=1, role=_E), "session_tz": _TZ}),
+    "intra_multiresolution_resample_reduce": (("x",), {"bar_minutes": _s(int, default=10, min=1, role=_H), "lookback_days": _s(int, default=10, min=1, role=_H), "reducer": _s(str, default="mean", choices=("mean", "sum", "std", "last")), "session_split": _s(bool, default=True), "min_coverage": _s(float, default=.8, min=0., max=1., role=ParamRole.STATE_THRESHOLD), "session_tz": _TZ}),
+    "intra_same_slot_zscore": (("x",), {"history_days": _s(int, default=20, min=1, role=_H), "ddof": _s(int, default=1, choices=(0, 1), role=_E), "min_history": _s(int, default=10, min=1, role=_E), "session_tz": _TZ}),
+    "intra_session_boundary_jump": (("price", "volume", "pre_close"), {"boundary": _s(str, default="lunch_restart", choices=("open", "lunch_restart", "close")), "pre_bars": _s(int, default=5, min=1, role=_H), "post_bars": _s(int, default=5, min=1, role=_H), "output": _s(str, default="gap", choices=("gap", "volume_ratio", "reversal")), "session_tz": _TZ}),
+    "intra_volume_at_price_profile": (("price", "volume"), {"bins": _s(int, default=64, min=8, role=_E), "weighting": _s(str, default="volume", choices=("volume", "amount", "time")), "price_basis": _s(str, default="close", choices=("close", "ohlc_typical", "vwap")), "normalize": _s(bool, default=True), "output": _s(str, default="entropy"), "session_tz": _TZ}),
+    "intra_volume_profile_peak_geometry": (("price", "volume"), {"bins": _s(int, default=64, min=8, role=_E), "smooth": _s(int, default=2, min=0, role=_E), "min_prominence": _s(float, default=.05, min=0., max=1., role=ParamRole.STATE_THRESHOLD), "output": _s(str, default="peak_count"), "session_tz": _TZ}),
+    "intra_volume_profile_supply_structure": (("price", "volume"), {"bins": _s(int, default=64, min=8, role=_E), "decay": _s(float, default=20., min=0., role=_E), "output": _s(str, default="overhead_mass"), "session_tz": _TZ}),
+    "intra_volume_profile_value_area": (("price", "volume"), {"bins": _s(int, default=64, min=8, role=_E), "target_mass": _s(float, default=.7, min=0., max=1., role=ParamRole.STATE_THRESHOLD), "output": _s(str, default="value_area_width"), "session_tz": _TZ}),
+    "intra_round_price_clustering_share": (("price",), {"lattice": _s(float, default=1., min=float(np.nextafter(0., 1.)), role=ParamRole.ECONOMIC), "tolerance_ticks": _s(float, default=.25, min=float(np.nextafter(0., 1.)), role=ParamRole.STATE_THRESHOLD), "window": _WINDOW_ALL, "output": _s(str, default="share", choices=("share", "excess_share", "run_length")), "min_bars": _s(int, default=30, min=1, role=_E), "session_tz": _TZ}),
+    "intra_round_price_barrier_response": (("price",), {"lattice": _s(float, default=1., min=0., role=ParamRole.ECONOMIC), "lookback_days": _s(int, default=20, min=1, role=_H), "tolerance_ticks": _s(float, default=1., min=0., role=ParamRole.STATE_THRESHOLD), "output": _s(str, default="cross_rate"), "min_events": _s(int, default=5, min=1, role=_E), "session_tz": _TZ}),
+}
+
+
+def metadata(name, description, params, **kwargs):
+    panels, scalars = _SLICE_CONTRACTS[name]
+    declared = [*params]
+    if "session_tz" not in declared:
+        declared.append("session_tz")
+    return _core_metadata(name, description, declared, panel_params=panels, scalar_params=scalars, **kwargs)
 
 # A-share session structure: morning 09:30..11:30 (minute-of-day 570..690),
 # afternoon 13:00..15:00 (780..900).  Bar data normally starts at 09:31 / 13:01.
@@ -317,6 +358,7 @@ class IntraSliceMaskReduce(SessionAggregationOperator):
         "intra_slice_mask_reduce", "切片+mask 分位筛选后的日内归约。",
         ["x", "mask_field", "window", "slice", "mask_side", "mask_q", "reducer", "min_bars"],
         unit="level",
+        available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(
@@ -431,6 +473,7 @@ class IntraSliceMaskPairReduce(SessionAggregationOperator):
         "intra_slice_mask_pair_reduce", "切片+mask 筛选后的 x 与滞后 y 配对归约。",
         ["x", "y", "mask_field", "window", "slice", "mask_side", "mask_q", "y_lag", "reducer", "min_pairs"],
         unit="level",
+        available_at="session_close", same_session_usable=False,
     )
 
     def _calculate_series(

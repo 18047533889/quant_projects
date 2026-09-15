@@ -244,6 +244,23 @@ class ParameterDomainCertificationStore:
             cp = self._points.get(key.to_key())
         return bool(cp and cp.passed)
 
+    def exact_call_has_known_failure(self, canonical: str, kwargs: dict[str, Any], *,
+                                     semantic_version: str = "", backend: str = "pandas_numpy",
+                                     execution_variant: str = "reference", source_context: str = "",
+                                     dtype: str = "float64", grain: str = "daily") -> bool:
+        """An explicit counterexample is not merely absent certification.
+
+        Match the complete existing evidence key: another backend, parameter
+        point or implementation version is never quarantined by this record.
+        """
+        key = CertificationKey(
+            canonical=canonical, semantic_version=semantic_version, backend=backend,
+            execution_variant=execution_variant, source_context=source_context,
+            parameter_point=tuple(sorted(kwargs.items())), dtype=dtype, grain=grain)
+        with self._lock:
+            point = self._points.get(key.to_key())
+            return point is not None and point.passed is False
+
     def operator_has_any_certified_region(self, canonical: str) -> bool:
         """弱查询：该 operator 至少有一个 passed 认证点。禁止用于 production 准入。"""
         with self._lock:

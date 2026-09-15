@@ -149,13 +149,13 @@ def test_state_density_all_identical_degenerate_bandwidth_nan(_loaded):
 
 
 def test_state_density_bandwidth_param_reject_not_clamp(_loaded):
-    """A degenerate bandwidth parameter outputs NaN, not a clamped number."""
+    """A degenerate bandwidth parameter is rejected, never clamped."""
     rng = np.random.default_rng(1)
     op = OperatorRegistry.get("ts_state_density", "pandas_numpy")
-    out = op.calculate(
-        _frame(rng.normal(100.0, 2.0, 80)), window=60, bandwidth=0.0, min_periods=5
-    ).to_numpy()[:, 0]
-    assert np.isnan(out[-1])
+    with pytest.raises(ValueError, match="bandwidth"):
+        op.calculate(
+            _frame(rng.normal(100.0, 2.0, 80)), window=60, bandwidth=0.0, min_periods=5
+        )
 
 
 def test_state_density_healthy_finite_positive(_loaded):

@@ -152,6 +152,11 @@ class BackendBug(FactorEngineError):
     """backend 行为与参考不一致。backend quarantine。"""
 
 
+class KnownBadImplementation(BackendBug):
+    """An exact current binding has a recorded counterexample; never retry as-is."""
+    reason_code = "KNOWN_BAD_IMPLEMENTATION"
+
+
 class OptimizerMismatch(FactorEngineError):
     """优化前后语义不一致。optimizer quarantine。"""
 

@@ -23,12 +23,14 @@ def test_required_scalar_thresholds_not_misclassified_as_panels():
     assert "lower" not in panels and "upper" not in panels
 
 
-def test_envelope_scalars_not_panels():
+def test_envelope_bands_are_panels_and_window_is_scalar():
     for c in ("ts_envelope_boundary_dwell", "ts_envelope_pressure"):
         op = OperatorRegistry.get(c)
         meta = getattr(op, "metadata", None)
         panels = _infer_panel_params(op, meta, OperatorRegistry._catalog.get(c, {}))
-        assert "lower" not in panels and "upper" not in panels
+        # These are time-varying envelope bands, not fixed scalar thresholds.
+        assert tuple(panels) == ("x", "upper", "lower")
+        assert "window" not in panels and "quantile" not in panels
 
 
 def test_no_production_scalar_resolves_to_silent_economic():

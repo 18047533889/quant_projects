@@ -1,5 +1,7 @@
 import json
 from pathlib import Path
+import sqlite3
+import pandas as pd
 
 import pytest
 from contextlib import contextmanager
@@ -7,9 +9,13 @@ from contextlib import contextmanager
 from factor_engine.runtime import bounded_pipeline as pipeline
 from factor_engine.runtime.default_execution_policy import resolve_default_policy
 from factor_engine.tests.runtime.test_v6_bounded_pipeline import (
-    FakeEngine, FakeFactor, PreflightIsolationEngine,
+    FakeBroker, FakeEngine, FakeFactor, PreflightIsolationEngine,
 )
 
+from factor_engine.runtime.finite_manifest import RejectedFactorDefinition
+
+from factor_engine.runtime.default_engine import iter_parsed_factor_definitions
+from factor_engine.runtime.resume_validation import ResumeIdentityError, validate_resume_context
 
 @contextmanager
 def _isolated_worker_broker_globals(monkeypatch):
@@ -128,8 +134,141 @@ def test_run_identity_is_identical_in_returned_and_disk_receipts(
     assert created["policy_digest"] == receipt["policy_digest"]
 
 
+
+def test_typed_rejection_is_native_terminal_without_artifact(tmp_path):
+    rejected = RejectedFactorDefinition(
+        name="bad",
+        definition_bytes=7,
+        definition_digest="a" * 64,
+        error_code="INVALID_DSL",
+    )
+
+    receipt = pipeline.execute_run_many_durable(
+        FakeEngine(), [FakeFactor("good"), rejected],
+        policy=resolve_default_policy(), artifact_root=tmp_path,
+        run_identity=_identity(),
+    )
+
+    outcomes = {outcome["name"]: outcome for outcome in receipt["outcomes"]}
+    assert receipt["status"] == "COMPLETED_WITH_ERRORS"
+    assert receipt["requested_total"] == 2
+    assert receipt["counts"]["REJECTED"] == 1
+    assert outcomes["bad"]["state"] == "REJECTED"
+    assert outcomes["bad"]["error_code"] == "INVALID_DSL"
+    assert outcomes["bad"].get("artifact") is None
+    assert "bad" not in receipt.get("receipts", {})
+
+
+def test_actual_pandas_mixed_definitions_write_only_verified_good_artifacts(tmp_path):
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from tests.helpers import InMemorySeriesSource
+
+    idx = pd.MultiIndex.from_product(
+        [pd.to_datetime(["2025-01-02", "2025-01-03"]), ["A", "B"]],
+        names=["timestamp", "instrument"],
+    )
+    source = InMemorySeriesSource(data={
+        "close": pd.Series([1.0, 2.0, 3.0, 4.0], index=idx),
+        "open": pd.Series([2.0, 3.0, 4.0, 5.0], index=idx),
+    })
+    engine = FactorEngine(PandasBackend(), source)
+    engine.resource_broker = FakeBroker()
+    definitions = tuple(iter_parsed_factor_definitions([
+        {"name": "close_factor", "formula": "close"},
+        {"name": "syntax", "formula": "close +"},
+        {"name": "unknown", "formula": "not_an_operator(close)"},
+        {"name": "open_factor", "formula": "open"},
+    ]))
+
+    receipt = pipeline.execute_run_many_durable(
+        engine, definitions, policy=resolve_default_policy(), artifact_root=tmp_path,
+        execution_scope={"market": "ashare", "frequency": "1d", "universe_id": "all"},
+    )
+
+    assert receipt["counts"] == {"REJECTED": 2, "SUCCEEDED": 2}
+    db = sqlite3.connect(receipt["state_path"])
+    rows = db.execute(
+        "select name,state,error_code,artifact_json from outcomes order by ordinal"
+    ).fetchall()
+    db.close()
+    assert [(name, state, code) for name, state, code, _ in rows] == [
+        ("close_factor", "SUCCEEDED", None),
+        ("syntax", "REJECTED", "INVALID_DSL"),
+        ("unknown", "REJECTED", "OPERATOR_UNKNOWN"),
+        ("open_factor", "SUCCEEDED", None),
+    ]
+    assert rows[1][3] is None and rows[2][3] is None
+    for expected, artifact_json in (([1.0, 2.0, 3.0, 4.0], rows[0][3]),
+                                    ([2.0, 3.0, 4.0, 5.0], rows[3][3])):
+        artifact = json.loads(artifact_json)
+        manifest_path = Path(artifact["path"])
+        manifest = json.loads(manifest_path.read_text())
+        restored = pd.concat([
+            pd.read_parquet(manifest_path.parent / chunk["path"])
+            for chunk in manifest["chunks"]
+        ], ignore_index=True)
+        assert restored["factor_value"].tolist() == expected
+
+
+@pytest.mark.parametrize("tamper", ["digest", "error", "size", "valid"])
+def test_rejected_definition_manifest_tamper_fails_resume_identity(tmp_path, tamper):
+    policy = resolve_default_policy()
+    rejected = RejectedFactorDefinition(
+        name="bad", definition_bytes=7, definition_digest="a" * 64,
+        error_code="INVALID_DSL",
+    )
+    receipt = pipeline.execute_run_many_durable(
+        FakeEngine(), [rejected], policy=policy, artifact_root=tmp_path,
+        run_identity=_identity(),
+    )
+    assert receipt["counts"] == {"REJECTED": 1}
+    db = sqlite3.connect(receipt["manifest_path"])
+    updates = {
+        "digest": ("definition_digest=?", ("b" * 64,)),
+        "error": ("error_code=?", ("UNSUPPORTED_REJECTION",)),
+        "size": ("definition_bytes=?", (8,)),
+        "valid": ("valid=?", (1,)),
+    }
+    assignment, values = updates[tamper]
+    db.execute(f"update factors set {assignment} where ordinal=0", values)
+    db.commit()
+    db.close()
+
+    with pytest.raises(ResumeIdentityError):
+        validate_resume_context(
+            tmp_path, receipt["run_id"], policy=policy, run_identity=_identity()
+        )
+
+
+def test_oversized_duplicate_rejections_remain_bounded_native_terminals(tmp_path):
+    policy = resolve_default_policy({"max_definition_bytes": 5})
+    rejected = [
+        RejectedFactorDefinition(
+            name="same", definition_bytes=6,
+            definition_digest="a" * 64, error_code="INVALID_DSL",
+        ),
+        RejectedFactorDefinition(
+            name="same", definition_bytes=7,
+            definition_digest="b" * 64, error_code="OPERATOR_UNKNOWN",
+        ),
+    ]
+
+    receipt = pipeline.execute_run_many_durable(
+        FakeEngine(), rejected, policy=policy, artifact_root=tmp_path,
+        run_identity=_identity(),
+    )
+
+    assert receipt["counts"] == {"REJECTED": 2}
+    assert all(item["state"] == "REJECTED" for item in receipt["outcomes"])
+    assert all(item["error_code"] == "DUPLICATE_FACTOR_NAME"
+               for item in receipt["outcomes"])
+    assert all(item.get("artifact") is None for item in receipt["outcomes"])
+
+
 def test_abort_receipt_persists_same_run_identity_and_policy(tmp_path, monkeypatch):
     monkeypatch.setattr(pipeline, "_compile_wave", lambda engine, factors: {})
+
     with pytest.raises(pipeline.WorkerProtocolError) as caught:
         pipeline.execute_run_many_durable(
             FakeEngine(), [FakeFactor("alpha")], policy=resolve_default_policy(),
@@ -137,6 +276,8 @@ def test_abort_receipt_persists_same_run_identity_and_policy(tmp_path, monkeypat
         )
     persisted = json.loads(Path(caught.value.receipt_path).read_text())
     assert persisted["status"] == "ABORTED"
+    assert caught.value.durable_run_id == persisted["run_id"]
+    assert caught.value.run_identity_digest == persisted["run_identity_digest"]
     assert persisted["run_identity"] == _identity()
     assert persisted["deployment_digest"] == "d" * 64
     assert persisted["policy_digest"] == resolve_default_policy().digest

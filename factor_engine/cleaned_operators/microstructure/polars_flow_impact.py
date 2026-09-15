@@ -13,6 +13,7 @@ construction.
 """
 from __future__ import annotations
 
+import copy
 import math
 from typing import Any
 
@@ -55,14 +56,10 @@ def _pivot(df: pl.DataFrame, value: str) -> pl.DataFrame:
 
 
 def _mk(canonical: str, description: str, params: list[str], fn):
-    metadata = OperatorMetadata(
-        name=canonical,
-        category="intraday_microstructure",
-        description=description,
-        param_names=params,
-        return_type="series",
-        tags=["polars", "intraday", "minute", "native", "typed_v2"],
-    )
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    metadata = copy.deepcopy(OperatorRegistry.get(canonical, "pandas_numpy", mode="any").metadata)
+    metadata.description = description
+    metadata.tags = list(metadata.tags or []) + ["polars", "preserve_panel_time_coordinate"]
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -293,42 +290,25 @@ _mk(
 def _bvc_vpin_polars(
     close: pl.DataFrame, volume: pl.DataFrame, scale_window: int, bucket_count: int
 ) -> pl.DataFrame:
-    from factor_engine.cleaned_operators.microstructure.flow_impact import _vpin_series
+    from factor_engine.cleaned_operators.common._polars_bridge import to_pandas_panel
+    from factor_engine.cleaned_operators.microstructure.flow_impact import MicroBvcVpin
 
-    sw = max(2, int(scale_window))
-    buckets = max(2, int(bucket_count))
-    lc = _melt(close, "close")
-    lv = _melt(volume, "volume")
-    # Keep every bar aligned (NaN close / NaN volume stay in place) so the
-    # shared numpy kernel sees exactly the arrays the pandas reference sees.
-    long = _with_date(lc.join(lv, on=["ts", "instrument"], how="inner")).sort(
-        ["date", "instrument", "ts"]
+    out = MicroBvcVpin()._calculate_series(
+        to_pandas_panel(close), to_pandas_panel(volume),
+        scale_window=scale_window, bucket_count=bucket_count,
     )
-    daily = long.group_by(["date", "instrument"]).agg(
-        pl.col("close").alias("close_l"),
-        pl.col("volume").alias("volume_l"),
-    )
-    wide_c = daily.pivot(index="date", on="instrument", values="close_l", aggregate_function="first")
-    wide_v = daily.pivot(index="date", on="instrument", values="volume_l", aggregate_function="first")
-    out = {}
-    for inst in wide_c.columns:
-        if inst == "date":
-            continue
-        closes = wide_c.select(pl.col(inst)).to_series().to_list()
-        volumes = wide_v.select(pl.col(inst)).to_series().to_list()
-        out[inst] = _vpin_series(closes, volumes, sw, buckets)
-    dates = wide_c["date"].to_list()
-    return pl.DataFrame({**{"date": dates}, **out}).fill_null(float("nan"))
+    return pl.from_pandas(out.rename_axis("date").reset_index())
 
 
-_mk(
+_micro_bvc_vpin_cls = _mk(
     "micro_bvc_vpin",
-    "BV-C 等量桶 VPIN (sum|OF_b|/total_volume), 边界分钟按量切分（Polars）。",
+    "BV-C 等量桶 VPIN（Polars panel conversion delegates to pandas_numpy reference）。",
     ["close", "volume", "scale_window", "bucket_count"],
     lambda close, volume, scale_window=40, bucket_count=20: _bvc_vpin_polars(
         close, volume, scale_window, bucket_count
     ),
 )
+_micro_bvc_vpin_cls.metadata.tags.append("delegate:pandas_numpy")
 
 
 # Ensure the polars slots stay registered even when the module is re-imported

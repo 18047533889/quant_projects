@@ -34,7 +34,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 
@@ -44,6 +44,14 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         category="envelope",
         description=description,
         param_names=params,
+        panel_params=tuple(p for p in params if p in {"x", "upper", "lower", "mid"}),
+        scalar_params=tuple(p for p in params if p in {"window", "quantile"}),
+        param_specs={
+            "window": ParamSpec(dtype=int, min=2, default=20, param_role=ParamRole.HORIZON),
+            **({"quantile": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.8,
+                                     param_role=ParamRole.STATE_THRESHOLD)}
+               if "quantile" in params else {}),
+        },
         return_type="series",
         tags=[
             "envelope", "daily", "pit_safe", "causal", "typed_v2",
@@ -151,6 +159,57 @@ def _boundary_dwell_series(
             if total > 0:
                 out[t, c] = near / total
     return out
+
+
+def _polars_envelope(kind, panels, window=20, quantile=0.8):
+    """Native expression implementation of the authored three-panel formulas."""
+    import polars as pl
+    from factor_engine.cleaned_operators.common.strict_params import strict_int, strict_float
+
+    w = strict_int(window, "window", minimum=2)
+    q = strict_float(quantile, "quantile")
+    if not 0.0 < q < 1.0:
+        raise ValueError("quantile must be in (0, 1)")
+    first, second, third = panels
+    if not all(isinstance(p, pl.DataFrame) for p in panels):
+        raise TypeError("envelope inputs must be Polars wide DataFrame panels")
+    if any(p.shape != first.shape or p.columns != first.columns for p in panels[1:]):
+        raise ValueError("envelope panel axes must match")
+    output = []
+    for column in first.columns:
+        if column in {"date", "stock_code"}:
+            output.append(first[column])
+            continue
+        # A bounded three-column workspace per instrument, never a whole dataset copy.
+        frame = pl.DataFrame({"a": first[column], "b": second[column], "c": third[column]})
+        a, b, c = (pl.col(k).cast(pl.Float64) for k in ("a", "b", "c"))
+        finite = a.is_finite() & b.is_finite() & c.is_finite()
+        if kind == "compression":
+            width = (a-b)/c.abs()
+            value = pl.when(finite & (a>b) & (c!=0) & width.is_finite()).then(width).otherwise(None)
+        else:
+            position = 2*(a-c)/(b-c)-1
+            value = pl.when(finite & (b>c) & position.is_finite()).then(position).otherwise(None)
+        frame = frame.with_columns(value.alias("v"))
+        v = pl.col("v")
+        count = v.is_not_null().cast(pl.Float64).rolling_sum(w, min_samples=1)
+        if kind == "compression":
+            result = 1-v.rolling_rank(w, method="max", min_samples=1)/count
+        elif kind == "dwell":
+            near = pl.when(v.is_not_null()).then(v.abs()>=q).otherwise(None).cast(pl.Float64)
+            result = near.rolling_sum(w, min_samples=1)/count
+        elif kind == "pressure":
+            ordinal = pl.int_range(0, pl.len()).cast(pl.Float64)
+            start = (ordinal-w+1).clip(lower_bound=0)
+            numerator = (v*(ordinal+1)).rolling_sum(w, min_samples=1)-start*v.rolling_sum(w,min_samples=1)
+            weights = pl.when(v.is_not_null()).then(ordinal+1).otherwise(None)
+            denominator = weights.rolling_sum(w,min_samples=1)-start*count
+            result = numerator/denominator
+        else:
+            raise ValueError(f"unknown envelope formula: {kind}")
+        result = pl.when(v.is_not_null() & result.is_finite()).then(result).otherwise(None)
+        output.append(frame.select(result.alias(column)).to_series())
+    return pl.DataFrame(output)
 
 
 # ---------------------------------------------------------------------------

@@ -9,25 +9,23 @@ from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
 @pytest.fixture(autouse=True)
-def _no_load_all(monkeypatch, writable_global_registry):
-    """These tests register a minimal operator; avoid the full bootstrap.
-
-    ``infer_polars_long_tier`` (and other capability helpers) call
-    ``cleaned_operators.load_all`` at call time via ``from cleaned_operators
-    import load_all``, so patching ``cleaned_operators.load_all`` short-circuits
-    the slow/failing full bootstrap.  ``writable_global_registry`` 保证在全套件
-    中（前序测试已把全局 registry 冻结时）这些 scratch 注册仍可写。
-    """
+def _no_load_all(monkeypatch):
+    """Use isolated contract storage; never thaw the production singleton."""
     import factor_engine.cleaned_operators as co
+    import factor_engine.cleaned_operators.registry as registry_module
+
+    class IsolatedRegistry(OperatorRegistry):
+        _operators = {}
+        _aliases = {}
+        _catalog = {}
+        _first_registered = {}
+        _canonical_manifests = {}
+        _frozen = None
 
     monkeypatch.setattr(co, "load_all", lambda *a, **k: None)
+    monkeypatch.setattr(registry_module, "OperatorRegistry", IsolatedRegistry)
+    monkeypatch.setitem(globals(), "OperatorRegistry", IsolatedRegistry)
     yield
-    # cleanup: remove test operators
-    for canon in ("r40_spec_grain", "r40_spec_scalar", "r40_spec_panel", "r40_spec_scalar_only"):
-        try:
-            OperatorRegistry.unregister(canon)
-        except Exception:
-            pass
 
 
 def _register(canonical, *, param_names, return_type="series", input_grain=None, output_grain=None,
@@ -59,10 +57,13 @@ def _register(canonical, *, param_names, return_type="series", input_grain=None,
 
     _Op._calculate_series = _make_fn()
 
-    register_operator(
-        name=canonical, category="test", business_category="test",
-        canonical=canonical, source="r40_spec", status="research",
-    )(_Op)
+    # This suite tests spec projection, not registration. Seed only its
+    # private registry; production freeze and registration audits stay intact.
+    OperatorRegistry._operators[canonical] = {"pandas_numpy": _Op()}
+    OperatorRegistry._catalog[canonical] = {
+        "canonical": canonical, "status": "research", "source": "r40_spec",
+        "param_names": list(param_names), "return_type": return_type,
+    }
     return canonical
 
 

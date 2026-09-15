@@ -7,6 +7,7 @@ probabilities.  All are experimental high-cost operators.
 from __future__ import annotations
 
 import math
+import inspect
 from typing import Any
 
 import numpy as np
@@ -23,6 +24,44 @@ _CANONICALS: list[str] = []
 
 
 def _register(name: str, description: str, params: list[str], unit: str, fn, cost: int = 8, param_specs=None):
+    target_names = {
+        "ts_change_point_probability", "ts_cusum_vol_break_score", "ts_dfa_hurst",
+        "ts_lz_complexity", "ts_multiscale_entropy_slope",
+        "ts_pseudocount_sample_entropy", "ts_regime_duration",
+        "ts_turning_point_ratio", "ts_two_state_regime_probability",
+    }
+    specs = dict(param_specs or {})
+    if name in target_names:
+        signature = inspect.signature(fn)
+        roles = {
+            "window": (int, 2, ParamRole.HORIZON),
+            "m": (int, 1, ParamRole.MODEL_ORDER),
+            "r": (float, 0.0, ParamRole.ESTIMATOR_RESOLUTION),
+            "bins": (int, 2, ParamRole.ESTIMATOR_RESOLUTION),
+            "max_scale": (int, 2, ParamRole.ESTIMATOR_RESOLUTION),
+            "min_scale": (int, 2, ParamRole.ESTIMATOR_RESOLUTION),
+            "min_periods": (int, 1, ParamRole.SUPPORT_POLICY),
+            "transition_prob": (float, 0.0, ParamRole.POLICY),
+        }
+        for param in params:
+            if param not in roles:
+                continue
+            dtype, minimum, role = roles[param]
+            default = signature.parameters[param].default
+            old = specs.get(param)
+            specs[param] = ParamSpec(
+                dtype=dtype,
+                min=minimum,
+                max=1.0 if param == "transition_prob" else None,
+                default=default,
+                searchable=old.searchable if old is not None else role not in {ParamRole.POLICY, ParamRole.SUPPORT_POLICY},
+                param_role=role,
+            )
+    declared_metadata = metadata(
+        name, description, params, unit=unit, cost=cost, param_specs=specs
+    )
+    declared_metadata.panel_params = tuple(param for param in params if param not in specs)
+    declared_metadata.scalar_params = tuple(specs)
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -34,8 +73,7 @@ def _register(name: str, description: str, params: list[str], unit: str, fn, cos
         semantic_version="2.0" if name == "ts_pseudocount_sample_entropy" else "",
     )
     class _ComplexityOp(SeriesOperator):
-        metadata = metadata(name, description, params, unit=unit, cost=cost,
-                            param_specs=param_specs)
+        metadata = declared_metadata
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)

@@ -12,7 +12,9 @@ from collections import deque
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator,
+)
 
 
 def _positive(value: int, name: str, *, minimum: int = 1) -> int:
@@ -101,6 +103,23 @@ def _bounded_line(frame, left_window, right_window, history_window, points, *, h
 
 
 def _register(name, params, fn, description):
+    panel_params = tuple(param for param in params if param in {"close", "high", "low"})
+    scalar_params = tuple(param for param in params if param not in panel_params)
+    param_specs = {
+        "left_window": ParamSpec(
+            dtype=int,
+            min=1,
+            history_formula="left_window + right_window + history_window",
+        ),
+        "right_window": ParamSpec(dtype=int, min=1),
+        "history_window": ParamSpec(
+            dtype=int, min=1, param_role=ParamRole.HORIZON
+        ),
+    }
+    if "points" in scalar_params:
+        param_specs["points"] = ParamSpec(
+            dtype=int, min=2, param_role=ParamRole.ESTIMATOR_RESOLUTION
+        )
     metadata = OperatorMetadata(
         name=name,
         category="price_structure",
@@ -108,6 +127,11 @@ def _register(name, params, fn, description):
         param_names=list(params),
         return_type="series",
         tags=["pit_safe","causal","bounded_history","production_repair"],
+        param_specs=param_specs,
+        panel_params=panel_params,
+        panel_arity=len(panel_params),
+        scalar_params=scalar_params,
+        total_positional_arity=len(params),
     )
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)

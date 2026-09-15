@@ -59,7 +59,9 @@ from factor_engine.cleaned_operators.base import (
     register_operator,
 )
 from factor_engine.cleaned_operators.microstructure.intraday_agg import _as_panel
+from factor_engine.cleaned_operators.closure.strict_scalar import strict_int
 from factor_engine.runtime.session_panel import build_session_panel, default_ashare_calendar
+from factor_engine.runtime.session_calendar import SessionCalendar
 
 _EPS = 1e-12
 _SESSION_TZ = "Asia/Shanghai"
@@ -144,9 +146,14 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         tags=[
             "intraday", "daily_agg", "minute", "pit_safe", "causal", "typed_v2",
             "deterministic", "session_close",
+            "preserve_panel_time_coordinate", "minute_to_daily",
             f"signature:{','.join(params)}->series", "domain:price_volume",
             f"unit:{unit}", f"cost:{cost}",
         ],
+        output_unit="dimensionless",
+        panel_params=("x", "event"),
+        panel_arity=2,
+        scalar_params=tuple(p for p in params if p not in {"x", "event"}),
     )
 
 
@@ -166,12 +173,12 @@ def _recovery_day(
     explicit NaN slot, and the existing missing-price censor already fails
     closed across it.
     """
-    H = max(1, int(horizon))
+    H = strict_int(horizon, "horizon", lower=1)
     if not (0.0 < float(residual_fraction) <= 1.0):
         raise ValueError("session_event_recovery_score requires 0 < residual_fraction <= 1")
     c = float(residual_fraction)
-    rf = max(0, int(refractory))
-    me = max(1, int(min_events))
+    rf = strict_int(refractory, "refractory", lower=0)
+    me = strict_int(min_events, "min_events", lower=1)
     n = x.shape[0]
     # R11 #75: event must be EventBool (0/1).  Any finite non-binary value is an
     # invalid event panel -> the whole day fails closed.
@@ -263,15 +270,16 @@ class SessionEventRecoveryScore(SeriesOperator):
         cost=4,
     )
     metadata.param_specs = {
-        "horizon": ParamSpec(dtype=int, min=1),
+        "horizon": ParamSpec(dtype=int, min=1, default=10, history_semantics="session_slots", param_role=ParamRole.HORIZON),
         # P0-89: the strict lower bound lives in relational_specs below so that
         # 0 is compile-INVALID exactly like the runtime, not just runtime-invalid.
-        "residual_fraction": ParamSpec(dtype=float, min=0.0, max=1.0),
-        "refractory": ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.POLICY),
+        "residual_fraction": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.25, param_role=ParamRole.STATE_THRESHOLD),
+        "refractory": ParamSpec(dtype=int, min=0, default=1, searchable=False, param_role=ParamRole.POLICY),
         # R26-048: default + ParamSpec floor = the reviewed min-effective-sample
         # (>=3 effective events before a daily median is meaningful).
-        "min_events": ParamSpec(dtype=int, min=3, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),  # P0-88 / R26-048
-        "session_tz": ParamSpec(dtype=str, searchable=False, param_role=ParamRole.POLICY),  # R11 #77 / P0-87
+        "min_events": ParamSpec(dtype=int, min=3, default=3, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),  # P0-88 / R26-048
+        "session_tz": ParamSpec(dtype=str, default=None, searchable=False, param_role=ParamRole.SESSION_POLICY),  # R11 #77 / P0-87
+        "calendar": ParamSpec(dtype=SessionCalendar, default=None, searchable=False, param_role=ParamRole.SESSION_POLICY),
     }
     metadata.relational_specs = [
         RelationalParamSpec(
@@ -296,8 +304,9 @@ class SessionEventRecoveryScore(SeriesOperator):
         # events) — a single shock must NOT produce a daily score by default.
         if not (0.0 < float(residual_fraction) <= 1.0):
             raise ValueError("session_event_recovery_score requires 0 < residual_fraction <= 1")
-        rf = max(0, int(refractory))
-        me = max(1, int(min_events))
+        strict_int(horizon, "horizon", lower=1)
+        rf = strict_int(refractory, "refractory", lower=0)
+        me = strict_int(min_events, "min_events", lower=3)
         x = _session_local_frame(_as_panel(x), session_tz, calendar)
         event = _session_local_frame(_as_panel(event), session_tz, calendar)
         cal = calendar if calendar is not None else default_ashare_calendar(bar_freq="1min")

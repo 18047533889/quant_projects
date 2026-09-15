@@ -21,7 +21,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import ParamSpec
+from factor_engine.cleaned_operators.base import ParamSpec,ParamRole,RelationalParamSpec
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata as PolarsMetadata
 from factor_engine.cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
 from factor_engine.cleaned_operators.registry import OperatorRegistry
@@ -76,12 +76,9 @@ def _ts_weighted_standardized_moment(
     order: int = 3,
 ) -> pd.DataFrame:
     x, weight = _align(x, weight)
-    w = int(window)
-    if w < 2:
-        raise ValueError("ts_weighted_standardized_moment requires window >= 2")
-    p = int(order)
-    if p not in (3, 4):
-        raise ValueError("order must be 3 (weighted skew) or 4 (weighted kurtosis)")
+    from factor_engine.cleaned_operators.common.strict_params import strict_int,strict_enum
+    p = strict_enum(order,"order",(3,4))
+    w = strict_int(window,"window",minimum=p)
     min_samples = 4 if p == 4 else 3
     xv = x.to_numpy(dtype=float)
     wv = weight.to_numpy(dtype=float)
@@ -157,10 +154,9 @@ def _ts_cov_if(
     # R11 #144: condition must be a ConditionBool ({0, 1} / NaN missing), never
     # an arbitrary non-zero numeric.
     _assert_condition_bool(condition, name="condition")
-    w = int(window)
-    if w < 2:
-        raise ValueError("ts_cov_if requires window >= 2")
-    mp = max(2, int(min_periods))
+    from factor_engine.cleaned_operators.common.strict_params import strict_int
+    w = strict_int(window,"window",minimum=2)
+    mp = strict_int(min_periods,"min_periods",minimum=2,maximum=w)
     xv = x.to_numpy(dtype=float)
     yv = y.to_numpy(dtype=float)
     cv = condition.to_numpy()
@@ -182,12 +178,17 @@ def _ts_cov_if(
             ya = ys[mask].astype(float)
             if xa.size < mp:
                 continue
-            mx = float(xa.mean())
-            my = float(ya.mean())
-            if xa.size < 2:
+            # Extended intermediate precision prevents finite float64 means,
+            # products or sums overflowing before a representable covariance.
+            # Unrepresentable final covariance fails closed, not Inf/fake zero.
+            a=xa.astype(np.longdouble);b=ya.astype(np.longdouble)
+            cov=np.sum((a-a.mean())*(b-b.mean()))/(xa.size-1)
+            if not np.isfinite(cov) or abs(cov)>np.finfo(float).max:
                 continue
-            cov = float(np.sum((xa - mx) * (ya - my)) / (xa.size - 1.0))
-            out[r, col] = cov
+            result=float(cov)
+            if cov!=0 and result==0:
+                continue
+            out[r,col]=result
     return _frame_like(x, out)
 
 
@@ -203,14 +204,8 @@ def _assert_condition_bool(condition: pd.DataFrame, name: str = "condition") -> 
     "truthy" is a hidden semantic the operator contract forbids.  Fail the
     call (raise) instead of guessing.
     """
-    cv = condition.to_numpy()
-    finite = np.isfinite(cv)
-    bad = finite & (cv != 0.0) & (cv != 1.0)
-    if np.any(bad):
-        raise ValueError(
-            f"{name} must be a ConditionBool (values in {{0, 1}} with NaN as "
-            f"missing); found {int(bad.sum())} finite value(s) outside {{0, 1}}"
-        )
+    from factor_engine.cleaned_operators.common.strict_params import strict_condition_bool
+    strict_condition_bool(condition,name)
 
 
 def _cs_multi_ridge_resid(
@@ -337,9 +332,17 @@ _UNITS: dict[str, str] = {
 # the contract error uniformly at dispatch time).
 _PARAM_SPECS: dict[str, dict[str, ParamSpec]] = {
     "ts_weighted_standardized_moment": {
-        "order": ParamSpec(dtype=int, choices=(3, 4)),
+        "window": ParamSpec(dtype=int,min=3,default=20,param_role=ParamRole.HORIZON,
+                            history_semantics="max_rows"),
+        "order": ParamSpec(dtype=int,choices=(3,4),default=3,param_role=ParamRole.ESTIMATOR_RESOLUTION,
+                           searchable=False),
     },
-    "ts_cov_if": {},
+    "ts_cov_if": {
+        "window": ParamSpec(dtype=int,min=2,default=20,param_role=ParamRole.HORIZON,
+                            history_semantics="max_rows"),
+        "min_periods": ParamSpec(dtype=int,min=2,default=2,param_role=ParamRole.SUPPORT_POLICY,
+                                 searchable=False),
+    },
     "cs_multi_ridge_resid": {
         "add_intercept": ParamSpec(dtype=bool, choices=(True, False)),
     },
@@ -394,10 +397,21 @@ def _register() -> None:
                 processed_args, processed_kwargs = validate_operator_call(self, args, kwargs)
                 return _fn(*processed_args, **processed_kwargs)
 
+        if canonical in {"ts_cov_if","ts_weighted_standardized_moment"}:
+            _PandasOp._contract_callable=staticmethod(fn)
+            _PandasOp.metadata.panel_params=("x","y","condition") if canonical=="ts_cov_if" else ("x","weight")
+            _PandasOp.metadata.scalar_params=("window","min_periods") if canonical=="ts_cov_if" else ("window","order")
+            _PandasOp.metadata.relational_specs=[
+                RelationalParamSpec("min_periods <= window","min_periods must not exceed window")
+                if canonical=="ts_cov_if" else RelationalParamSpec("order <= window","window must support the selected moment order")]
         OperatorRegistry.register(
             _PandasOp(), canonical=canonical, backend="pandas_numpy",
             source="weighted_moment_ext", backend_explicit=True,
         )
+        if canonical in {"ts_cov_if","ts_weighted_standardized_moment"}:
+            from factor_engine.cleaned_operators.common.weighted_moment_delegate import register
+            register(canonical)
+            continue
 
         class _PolarsOp(PolarsSeriesOperator):
             metadata = PolarsMetadata(name=canonical, category="weighted_moment_ext", param_names=[])

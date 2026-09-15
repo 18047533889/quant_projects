@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "factor_engine/tests/runtime/test_r6_cleaning_scalars.py", "-q", "--tb=short", "--show-capture=no"], "returncode": 1, "sampled_peak_family_rss_bytes": 789233664, "sampling_seconds": 0.1, "seconds": 50.84067380684428, "test_guard_reason": null, "hard_memory_cap": false}

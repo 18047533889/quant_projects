@@ -82,17 +82,16 @@ are the genuinely missing "intra ex-self" P0 family.
 
 Family contract (all four):
 * Purely cross-sectional per row t: output row t depends ONLY on input
-  row t (pinned by a mutation test — a mutation at (t, col) leaves every
-  other row t' and — per the shared cross-section semantics — affects
-  only column `col` at row t; columns are independent cross-sections).
+  row t.  A mutation affects no other row, but may affect every member of
+  the same group on that row because each member's peer set can include it.
 * Fail-closed peers: NaN / ±Inf peer values are EXCLUDED from the LOO
   statistics, but a NaN/±Inf SELF value propagates to NaN output.
 * min_peers: require at least min_peers (>= 3 by contract) FINITE
   in-group peers EXCLUDING self, else NaN — a group too small to
   standardize against is undefined, never zero.
 * Degenerate denominators (LOO std == 0, LOO MAD == 0) -> NaN, never 0.
-* LOO mean computed stably as (n*mean - x)/(n-1) via running group sums
-  (never a re-scan per member).
+* LOO mean is computed directly on the peer set with max-absolute scaling;
+  no overflowing group total or catastrophic ``total - self`` subtraction.
 * LOO std computed as an EXACT TWO-PASS over the peer set (review P1):
   peer mean first, then ss = sum((p - mean)^2) over the n-1 peers,
   var = ss/(n-1), ddof=0 (population std of the peer set, matching
@@ -104,12 +103,10 @@ Family contract (all four):
   (no clamp needed) and an overflowed ss (|peer| ~ 1e200+) fails closed
   to NaN instead of emitting z = x/inf = 0.0.
 
-Known numeric limitations (documented, deliberate):
-* The absolute dispersion floor _EPS=1e-12 on var (and on LOO MAD) is
-  scale-dependent: a group with peer std < ~1e-6 (or MAD < 1e-12)
-  yields NaN even when well-posed — panels should be pre-scaled to O(1)
-  (returns / standardized factors), which is the intended DirectUse
-  input domain.
+Numeric contract:
+* Z-score and MAD calculations use max-absolute normalized coordinates.
+  Degeneracy is tested at zero in normalized space, so valid results are
+  invariant to finite nonzero rescaling and callers need not pre-scale.
 * LOO rank percentile: average rank of x among the n-1 finite peers
   (strictly-lower count + 0.5*ties, self excluded), divided by (n-1).
   Ties with self's own value among peers count as half — the standard
@@ -135,20 +132,11 @@ from factor_engine.cleaned_operators.base import (
 )
 from factor_engine.cleaned_operators.alignment import align_panel_inputs  # noqa: F401  (used via _aligned)
 
-_EPS = 1e-12
-
-
 def _pi(v: Any, name: str = "min_peers") -> int:
     """Runtime guard for min_peers: strict integer >= 3 (fail loudly)."""
-    if isinstance(v, bool):
+    if isinstance(v, (bool, np.bool_)) or not isinstance(v, (int, np.integer)):
         raise ValueError(f"{name} must be an integer >= 3")
-    try:
-        iv = int(v)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be an integer >= 3") from exc
-    if iv != v:
-        # reject 3.5-style silent truncation (ParamSpec dtype=int mirrors this)
-        raise ValueError(f"{name} must be an integer >= 3")
+    iv = int(v)
     if iv < 3:
         raise ValueError(f"{name} must be >= 3")
     return iv
@@ -162,25 +150,46 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
     return pd.DataFrame(values, index=template.index, columns=template.columns, dtype=float)
 
 
-def _group_sums_row(x_row: np.ndarray, g_row: np.ndarray, finite: np.ndarray):
-    """Per-label (sum, sumsq, count) over FINITE members only.
-
-    Returns {label: (S, S2, n)} for a single cross-sectional row.
-    """
-    sums: dict[Any, tuple[float, float, int]] = {}
-    for j in np.flatnonzero(finite):
-        label = g_row[j]
-        v = float(x_row[j])
-        if label in sums:
-            S, S2, n = sums[label]
-            sums[label] = (S + v, S2 + v * v, n + 1)
-        else:
-            sums[label] = (v, v * v, 1)
-    return sums
+def _valid_group_label(label: Any) -> bool:
+    if label is None or label is pd.NA or label is pd.NaT:
+        return False
+    if isinstance(label, str):
+        return label != ""
+    if isinstance(label, bool):
+        return True
+    try:
+        return bool(np.isfinite(float(label)))
+    except (TypeError, ValueError):
+        return True
 
 
-def _finite_indices(g_row: np.ndarray, label: Any, finite: np.ndarray) -> np.ndarray:
-    return np.flatnonzero((g_row == label) & finite)
+def _groups_row(g_row: np.ndarray, finite: np.ndarray) -> list[np.ndarray]:
+    """Finite member indices for each concrete label, built once per row."""
+    groups: list[np.ndarray] = []
+    series = pd.Series(g_row, copy=False)
+    for label in pd.unique(g_row):
+        if not _valid_group_label(label):
+            continue
+        members = series.eq(label).fillna(False).to_numpy(dtype=bool) & finite
+        idx = np.flatnonzero(members)
+        if idx.size:
+            groups.append(idx)
+    return groups
+
+
+def _origin_scaled(values: np.ndarray) -> tuple[np.ndarray, float] | None:
+    """Origin-relative coordinates preserving small spreads without overflow."""
+    with np.errstate(over="ignore", invalid="ignore"):
+        delta = values - values[0]
+    if np.all(np.isfinite(delta)):
+        scale = float(np.max(np.abs(delta)))
+        return (np.zeros_like(values), 0.0) if scale == 0.0 else (delta / scale, scale)
+    scale = float(np.max(np.abs(values)))
+    if not np.isfinite(scale) or scale == 0.0:
+        return None
+    normalized = values / scale
+    delta = normalized - normalized[0]
+    return (delta, scale) if np.all(np.isfinite(delta)) else None
 
 
 _MIN_PEERS_SPEC = ParamSpec(
@@ -201,6 +210,8 @@ def _meta(name: str, description: str, params: list[str], *, unit: str) -> Opera
             f"unit:{unit}", "cost:1",
         ],
         param_specs={"min_peers": _MIN_PEERS_SPEC},
+        panel_params=("x", "group"),
+        scalar_params=("min_peers",),
     )
 
 
@@ -213,7 +224,8 @@ def _register(name: str, description: str, params: list[str], fn, *, unit: str) 
     cls = type(
         f"ExSelfCsV1_{name}",
         (SeriesOperator,),
-        {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
+        {"metadata": metadata, "_calculate_series": _calculate_series,
+         "_contract_callable": staticmethod(fn), "__module__": __name__},
     )
     register_operator(
         name=name,
@@ -239,8 +251,8 @@ def _register(name: str, description: str, params: list[str], fn, *, unit: str) 
 def ex_self_mean_gap(x: pd.DataFrame, group: pd.DataFrame, min_peers: int = 3) -> pd.DataFrame:
     """x minus the leave-one-out group mean (peer-mean gap).
 
-    gap_i = x_i - (S_g - x_i) / (n_g - 1), where S_g / n_g are the finite
-    in-group sum / count at row t.  Self NaN/±Inf -> NaN; fewer than
+    The peer mean is evaluated in scaled peer coordinates without forming a
+    group total. Self NaN/±Inf -> NaN; fewer than
     min_peers finite in-group peers EXCLUDING self -> NaN.  Output carries
     x's unit (documented; the dimensionless standardized forms are the
     zscore/rank/mad_z canonicals below)."""
@@ -252,35 +264,29 @@ def ex_self_mean_gap(x: pd.DataFrame, group: pd.DataFrame, min_peers: int = 3) -
     out = np.full((rows, cols), np.nan, dtype=float)
     finite = np.isfinite(xv)
     for row in range(rows):
-        sums = _group_sums_row(xv[row], gv[row], finite[row])
-        g_row = gv[row]
-        for j in range(cols):
-            if not finite[row, j]:
-                continue  # self NaN/±Inf -> NaN (fail-closed)
-            label = g_row[j]
-            if label not in sums:
+        for members in _groups_row(gv[row], finite[row]):
+            if members.size - 1 < minp:
                 continue
-            S, _S2, n = sums[label]
-            m = n - 1  # finite peers excluding self
-            if m < minp:
-                continue
-            loo_mean = (S - float(xv[row, j])) / float(m)
-            out[row, j] = float(xv[row, j]) - loo_mean
+            for j in members:
+                peers = members[members != j]
+                combined = np.r_[xv[row, peers], xv[row, j]]
+                normalized = _origin_scaled(combined)
+                if normalized is None:
+                    continue
+                vals, scale = normalized
+                with np.errstate(over="ignore", invalid="ignore"):
+                    value = scale * (float(vals[-1]) - float(np.mean(vals[:-1])))
+                if np.isfinite(value):
+                    out[row, j] = value
     return _frame_like(x, out)
 
 
 def ex_self_zscore(x: pd.DataFrame, group: pd.DataFrame, min_peers: int = 3) -> pd.DataFrame:
     """(x - LOO mean) / LOO std — leave-one-out cross-sectional z-score.
 
-    LOO mean = (S - x)/(n-1).  LOO std (ddof=0 over the n-1 peers) via an
-    EXACT TWO-PASS over the peer set (review P1): peer mean first, then
-    ss = sum((p - mean)^2), var = ss/(n-1).  The running-sum identity
-    ss = S2 - S^2/m is algebraically equal but catastrophically
-    cancellative on high-level / low-dispersion groups (error ~eps*S2 can
-    exceed the true ss — emitting a finite-but-wrong z, or NaN by
-    rounding sign) and is NOT used.  Two-pass ss is non-negative by
-    construction; an overflowed ss (~|peer|^2 > float max) fails closed
-    to NaN rather than emitting z = x/inf = 0.0.
+    LOO mean/std (ddof=0 over the n-1 peers) are evaluated after a shared
+    max-absolute normalization of self and peers. This avoids both
+    cancellation and overflow while preserving the dimensionless result.
     Self NaN/±Inf -> NaN; peers < min_peers -> NaN; LOO std == 0
     (degenerate dispersion) -> NaN, never 0."""
     minp = _pi(min_peers)
@@ -291,31 +297,26 @@ def ex_self_zscore(x: pd.DataFrame, group: pd.DataFrame, min_peers: int = 3) -> 
     out = np.full((rows, cols), np.nan, dtype=float)
     finite = np.isfinite(xv)
     for row in range(rows):
-        g_row = gv[row]
-        for j in range(cols):
-            if not finite[row, j]:
+        for members in _groups_row(gv[row], finite[row]):
+            if members.size - 1 < minp:
                 continue
-            label = g_row[j]
-            members = _finite_indices(g_row, label, finite[row])
-            others = members[members != j]
-            if others.size < minp:
-                continue
-            v = float(xv[row, j])
-            peers = xv[row, others]
-            # pass 1: peer mean; pass 2: centered sum of squares —
-            # non-negative by construction (no cancellation, no clamp).
-            # |peer| ~ 1e200+ overflows ss to inf -> fail closed below
-            # rather than emitting z = x/inf = 0.0 (review P2).
-            loo_mean = float(peers.mean())
-            # overflow-to-inf is the DETECTED fail-closed case — compute
-            # under errstate so the deliberate probe is not a warning.
-            with np.errstate(over="ignore"):
-                var = float(np.sum((peers - loo_mean) ** 2)) / float(others.size)
-            if not np.isfinite(var):
-                continue  # overflowed dispersion — fail closed, never 0.0
-            if var <= _EPS:
-                continue  # degenerate dispersion -> NaN, never 0
-            out[row, j] = (v - loo_mean) / float(np.sqrt(var))
+            for j in members:
+                others = members[members != j]
+                combined = np.r_[xv[row, others], xv[row, j]]
+                normalized = _origin_scaled(combined)
+                if normalized is None:
+                    continue
+                vals, scale = normalized
+                if scale == 0.0:
+                    continue
+                peers = vals[:-1]
+                mean = float(np.mean(peers))
+                std = float(np.sqrt(np.mean((peers - mean) ** 2)))
+                if not np.isfinite(std) or std == 0.0:
+                    continue
+                value = (float(vals[-1]) - mean) / std
+                if np.isfinite(value):
+                    out[row, j] = value
     return _frame_like(x, out)
 
 
@@ -338,20 +339,16 @@ def ex_self_rank_pct(x: pd.DataFrame, group: pd.DataFrame, min_peers: int = 3) -
     out = np.full((rows, cols), np.nan, dtype=float)
     finite = np.isfinite(xv)
     for row in range(rows):
-        g_row = gv[row]
-        for j in range(cols):
-            if not finite[row, j]:
-                continue
-            label = g_row[j]
-            peers = _finite_indices(g_row, label, finite[row])
-            m = peers.size - 1  # excluding self
+        for members in _groups_row(gv[row], finite[row]):
+            m = members.size - 1
             if m < minp:
                 continue
-            v = float(xv[row, j])
-            peer_vals = xv[row, peers[peers != j]]
-            below = float(np.count_nonzero(peer_vals < v))
-            ties = float(np.count_nonzero(peer_vals == v))
-            out[row, j] = (below + 0.5 * ties) / float(m)
+            for j in members:
+                v = float(xv[row, j])
+                peer_vals = xv[row, members[members != j]]
+                below = float(np.count_nonzero(peer_vals < v))
+                ties = float(np.count_nonzero(peer_vals == v))
+                out[row, j] = (below + 0.5 * ties) / float(m)
     return _frame_like(x, out)
 
 
@@ -372,22 +369,26 @@ def ex_self_mad_z(x: pd.DataFrame, group: pd.DataFrame, min_peers: int = 3) -> p
     out = np.full((rows, cols), np.nan, dtype=float)
     finite = np.isfinite(xv)
     for row in range(rows):
-        g_row = gv[row]
-        for j in range(cols):
-            if not finite[row, j]:
+        for members in _groups_row(gv[row], finite[row]):
+            if members.size - 1 < minp:
                 continue
-            label = g_row[j]
-            peers = _finite_indices(g_row, label, finite[row])
-            others = peers[peers != j]
-            if others.size < minp:
-                continue
-            v = float(xv[row, j])
-            vals = xv[row, others]
-            med = float(np.median(vals))
-            mad = float(np.median(np.abs(vals - med)))
-            if mad <= _EPS:
-                continue  # degenerate robust scale -> NaN, never 0
-            out[row, j] = (v - med) / mad
+            for j in members:
+                others = members[members != j]
+                combined = np.r_[xv[row, others], xv[row, j]]
+                normalized = _origin_scaled(combined)
+                if normalized is None:
+                    continue
+                vals, scale = normalized
+                if scale == 0.0:
+                    continue
+                peers = vals[:-1]
+                med = float(np.median(peers))
+                mad = float(np.median(np.abs(peers - med)))
+                if not np.isfinite(mad) or mad == 0.0:
+                    continue
+                value = (float(vals[-1]) - med) / mad
+                if np.isfinite(value):
+                    out[row, j] = value
     return _frame_like(x, out)
 
 
@@ -407,7 +408,7 @@ _SPECS = [
         "ex_self_zscore",
         ["x", "group", "min_peers"],
         ex_self_zscore,
-        "(x - LOO mean) / LOO std (ddof=0 over the n-1 peers, running-sum stable); dimensionless; zero LOO std -> NaN.",
+        "(x - LOO mean) / LOO std (ddof=0 over peers, scale-normalized); dimensionless; zero LOO std -> NaN.",
         "ratio",
     ),
     (

@@ -62,6 +62,15 @@ _FP_PARAM_SPECS: dict[str, ParamSpec] = {
     "scale_horizon": ParamSpec(dtype=int, min=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
 }
 
+_FP_STATS_PARAM_SPECS: dict[str, ParamSpec] = {
+    "window": ParamSpec(dtype=int, min=2, default=120, history_semantics="max_rows", param_role=ParamRole.HORIZON, searchable=True),
+    "barrier": ParamSpec(dtype=float, min=np.nextafter(0.0, 1.0), default=1.0, param_role=ParamRole.STATE_THRESHOLD, searchable=True),
+    "horizon": ParamSpec(dtype=int, min=1, default=10, param_role=ParamRole.HORIZON, searchable=True),
+    "min_anchors": ParamSpec(dtype=int, min=1, default=3, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+    "scale_horizon": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.SUPPORT_POLICY, searchable=False),
+    "side": ParamSpec(dtype=str, choices=("upper", "lower"), default="upper", param_role=ParamRole.POLICY, searchable=False),
+}
+
 # Feasibility: an anchor ``s`` needs ``s + horizon <= t``, so a fully-observed
 # window ``[t-window, t-1]`` holds at most ``window - horizon + 1`` anchors; a
 # larger ``min_anchors`` is guaranteed-NaN and rejected at the call boundary.
@@ -123,6 +132,18 @@ def _metadata(
         },
         compatible_units={"scale": ("same_unit_as:x",)},
         same_unit_input_groups=(("x", "scale"),),
+        output_unit=("dimensionless" if name in {
+            "ts_first_passage_hit_probability", "ts_first_passage_conditional_time"
+        } else None),
+        panel_params=(tuple(p for p in ("x", "scale") if p in params)
+                      if name in {"ts_first_passage_hit_probability", "ts_first_passage_conditional_time"}
+                      else ()),
+        panel_arity=(sum(p in params for p in ("x", "scale"))
+                     if name in {"ts_first_passage_hit_probability", "ts_first_passage_conditional_time"}
+                     else 0),
+        scalar_params=(tuple(p for p in params if p not in {"x", "scale"})
+                       if name in {"ts_first_passage_hit_probability", "ts_first_passage_conditional_time"}
+                       else ()),
         relational_specs=list(relational_specs) if relational_specs else [],
         param_specs={k: v for k, v in (param_specs or {}).items() if k in params},
     )
@@ -363,7 +384,7 @@ class TsFirstPassageHitProbability(SeriesOperator):
         unit="probability",
         cost=6,
         relational_specs=_FP_RELATIONAL,
-        param_specs=_FP_PARAM_SPECS,
+        param_specs=_FP_STATS_PARAM_SPECS,
     )
 
     def _calculate_series(
@@ -414,7 +435,7 @@ class TsFirstPassageConditionalTime(SeriesOperator):
         unit="ratio",
         cost=6,
         relational_specs=_FP_RELATIONAL,
-        param_specs=_FP_PARAM_SPECS,
+        param_specs=_FP_STATS_PARAM_SPECS,
     )
 
     def _calculate_series(

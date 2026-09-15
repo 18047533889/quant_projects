@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator, strict_int_param
 from factor_engine.cleaned_operators.stateful._common import assert_condition_bool
 
 
@@ -28,6 +28,21 @@ def _metadata(name: str, description: str, params: list[str], *, domain: str, un
             f"unit:{unit}", "cost:1",
         ],
     )
+
+
+def _declare(metadata: OperatorMetadata, panel: str, specs: dict[str, ParamSpec]) -> OperatorMetadata:
+    metadata.panel_params = (panel,)
+    metadata.panel_arity = 1
+    metadata.scalar_params = tuple(p for p in metadata.param_names if p != panel)
+    metadata.param_specs = specs
+    return metadata
+
+
+def _positive_int(value: Any, name: str, minimum: int = 1) -> int:
+    result = strict_int_param(value, name)
+    if result < minimum:
+        raise ValueError(f"{name} must be >= {minimum}")
+    return result
 
 
 def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
@@ -78,17 +93,20 @@ class TsTransitionCount(SeriesOperator):
     前后状态连续，跨越缺失的切换不计入。
     """
 
-    metadata = _metadata(
+    metadata = _declare(_metadata(
         "ts_transition_count",
         "窗口内状态真值变化次数。",
         ["condition", "window", "missing_policy"],
         domain="trading_state",
         unit="count",
-    )
+    ), "condition", {
+        "window": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON),
+        "missing_policy": ParamSpec(dtype=str, choices=("break", "carry"), default="break", searchable=False, param_role=ParamRole.POLICY),
+    })
 
     def _calculate_series(self, condition: pd.DataFrame, window: int = 20, missing_policy: str = "break", **_: Any) -> pd.DataFrame:
         assert_condition_bool(condition, name="condition")
-        w = int(window)
+        w = _positive_int(window, "window")
         cv = condition.to_numpy()
         valid = np.isfinite(cv)
         truth = valid & (cv != 0)
@@ -141,13 +159,17 @@ class TsTimeSinceChange(SeriesOperator):
     才输出；距离恰好等于 ``max_lookback`` 时输出 NaN。
     """
 
-    metadata = _metadata(
+    metadata = _declare(_metadata(
         "ts_time_since_change",
         "距当前状态上一次变化经过的行数(since_transition 或 state_age)。",
         ["condition", "max_lookback", "missing_policy", "initial_semantics"],
         domain="trading_state",
         unit="count",
-    )
+    ), "condition", {
+        "max_lookback": ParamSpec(dtype=int, min=1, default=None, param_role=ParamRole.HORIZON),
+        "missing_policy": ParamSpec(dtype=str, choices=("break", "carry"), default="break", searchable=False, param_role=ParamRole.POLICY),
+        "initial_semantics": ParamSpec(dtype=str, choices=("since_transition", "state_age"), default="since_transition", searchable=False, param_role=ParamRole.POLICY),
+    })
 
     def _calculate_series(
         self,
@@ -158,7 +180,7 @@ class TsTimeSinceChange(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         assert_condition_bool(condition, name="condition")
-        limit = None if max_lookback is None else int(max_lookback)
+        limit = None if max_lookback is None else _positive_int(max_lookback, "max_lookback")
         cv = condition.to_numpy()
         valid = np.isfinite(cv)
         truth = valid & (cv != 0)
@@ -224,18 +246,21 @@ class TsEventSpacingMean(SeriesOperator):
     跨过 unknown 区段精确相连。
     """
 
-    metadata = _metadata(
+    metadata = _declare(_metadata(
         "ts_event_spacing_mean",
         "窗口内相邻事件间隔的平均值(跨越 unknown 的间隔被 censored)。",
         ["condition", "window", "min_events"],
         domain="trading_state",
         unit="count",
-    )
+    ), "condition", {
+        "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        "min_events": ParamSpec(dtype=int, min=2, default=2, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+    })
 
     def _calculate_series(self, condition: pd.DataFrame, window: int = 60, min_events: int = 2, **_: Any) -> pd.DataFrame:
         assert_condition_bool(condition, name="condition")
-        w = int(window)
-        min_e = max(2, int(min_events))
+        w = _positive_int(window, "window")
+        min_e = _positive_int(min_events, "min_events", 2)
         cv = condition.to_numpy()
         valid = np.isfinite(cv)
         truth = valid & (cv != 0)
@@ -271,18 +296,21 @@ class TsEventSpacingCv(SeriesOperator):
     输出 NaN，而不是跨过 unknown 区段把两个事件精确相连。
     """
 
-    metadata = _metadata(
+    metadata = _declare(_metadata(
         "ts_event_spacing_cv",
         "窗口内相邻事件间隔的变异系数(跨越 unknown 的间隔被 censored)。",
         ["condition", "window", "min_events"],
         domain="trading_state",
         unit="ratio",
-    )
+    ), "condition", {
+        "window": ParamSpec(dtype=int, min=1, default=60, param_role=ParamRole.HORIZON),
+        "min_events": ParamSpec(dtype=int, min=3, default=3, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+    })
 
     def _calculate_series(self, condition: pd.DataFrame, window: int = 60, min_events: int = 3, **_: Any) -> pd.DataFrame:
         assert_condition_bool(condition, name="condition")
-        w = int(window)
-        min_e = max(3, int(min_events))
+        w = _positive_int(window, "window")
+        min_e = _positive_int(min_events, "min_events", 3)
         cv = condition.to_numpy()
         valid = np.isfinite(cv)
         truth = valid & (cv != 0)
@@ -323,13 +351,17 @@ class EventDecayAsOf(SeriesOperator):
     首次有效观测前输出 NaN；缺失按 missing_policy。
     """
 
-    metadata = _metadata(
+    metadata = _declare(_metadata(
         "event_decay_asof",
         "sum_{s<=t} event_s * 0.5^((t-s)/half_life)。首次有效观测前输出 NaN；缺失按 missing_policy；event_kind=bool 时每次事件贡献 1。",
         ["event", "half_life", "missing_policy", "event_kind"],
         domain="event",
         unit="level",
-    )
+    ), "event", {
+        "half_life": ParamSpec(dtype=float, min=1.0, default=20.0, param_role=ParamRole.HORIZON),
+        "missing_policy": ParamSpec(dtype=str, choices=("carry", "break"), default="carry", searchable=False, param_role=ParamRole.POLICY),
+        "event_kind": ParamSpec(dtype=str, choices=("marked", "bool"), default="marked", searchable=False, param_role=ParamRole.POLICY),
+    })
 
     def _calculate_series(
         self,
@@ -340,8 +372,8 @@ class EventDecayAsOf(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         hl = float(half_life)
-        if hl < 1.0:
-            raise ValueError("half_life must be >= 1")
+        if not np.isfinite(hl) or hl < 1.0:
+            raise ValueError("half_life must be finite and >= 1")
         if missing_policy not in {"carry", "break"}:
             raise ValueError("missing_policy must be 'carry' or 'break'")
         kind = str(event_kind).lower()

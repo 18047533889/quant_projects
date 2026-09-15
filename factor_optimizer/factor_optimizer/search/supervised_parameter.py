@@ -11,6 +11,18 @@ U_CENTER_GRID = (0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65)
 TAIL_CUTOFF_GRID = (0.85, 0.90, 0.95)
 
 
+def _candidate_grid(values):
+    if isinstance(values, (str, bytes, bytearray, Mapping)):
+        raise TypeError("candidate_grid must be a numeric iterable, not text, bytes, or a mapping")
+    values = tuple(values)
+    if any(isinstance(v, bool) for v in values):
+        raise TypeError("candidate_grid must not contain bool")
+    grid = tuple(float(v) for v in values)
+    if not grid or len(grid) != len(set(grid)) or not all(math.isfinite(v) for v in grid):
+        raise ValueError("candidate_grid must be finite, unique, and non-empty")
+    return grid
+
+
 @dataclass(frozen=True)
 class FrozenSupervisedParameter:
     parent_factor_id: str
@@ -26,9 +38,9 @@ class FrozenSupervisedParameter:
     def __post_init__(self):
         if self.repair_family not in {"U_SHAPE_REPAIR", "TAIL_SATURATION", "TAIL_HINGE"}:
             raise ValueError("unsupported supervised repair family")
-        grid = tuple(float(v) for v in self.candidate_grid)
-        if not grid or len(grid) != len(set(grid)) or not all(math.isfinite(v) for v in grid):
-            raise ValueError("candidate_grid must be finite, unique, and non-empty")
+        if isinstance(self.value, bool):
+            raise TypeError("selected value must not be a bool")
+        grid = _candidate_grid(self.candidate_grid)
         if self.value not in grid:
             raise ValueError("selected value must belong to the predeclared grid")
         for value in (self.parent_factor_id, self.parameter_name, self.train_split_ref,
@@ -62,15 +74,19 @@ def fit_supervised_parameter(*, parent_factor_id: str, repair_family: str,
     """Choose from a finite grid using TRAIN evidence only."""
     if split_role != "TRAIN":
         raise ValueError("supervised repair parameters may only be fitted on TRAIN")
-    grid = tuple(float(v) for v in candidate_grid)
-    if set(train_scores) != set(grid):
+    grid = _candidate_grid(candidate_grid)
+    # Validate and select from the same captured values, never reread a provider.
+    scores = {key: train_scores[key] for key in train_scores}
+    if any(isinstance(v, bool) for v in scores):
+        raise TypeError("training candidate keys must not be bool")
+    if set(scores) != set(grid):
         raise ValueError("training evidence must cover the complete predeclared grid")
     if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
-               for v in train_scores.values()):
+               for v in scores.values()):
         raise ValueError("all training objective values must be finite")
     # Stable tie-break: closest to the simplest baseline, then lower value.
     baseline = 0.5 if repair_family == "U_SHAPE_REPAIR" else max(grid)
-    selected = min(grid, key=lambda value: (-float(train_scores[value]), abs(value - baseline), value))
+    selected = min(grid, key=lambda value: (-float(scores[value]), abs(value - baseline), value))
     return FrozenSupervisedParameter(
         parent_factor_id, repair_family, parameter_name, selected, grid,
         train_split_ref, training_evidence_ref, objective_id,

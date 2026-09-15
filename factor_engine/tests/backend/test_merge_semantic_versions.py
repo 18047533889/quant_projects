@@ -61,4 +61,6 @@ from factor_engine.backend.operator_semantic_version import semantic_version
 def test_merge_numeric_changes_have_distinct_semantic_versions(
     canonical: str, version: int
 ) -> None:
-    assert semantic_version(canonical) == version
+    # These are the minimum versions established by the merge audit. Later
+    # numerical repairs must advance identity, never make this audit obsolete.
+    assert semantic_version(canonical) >= version

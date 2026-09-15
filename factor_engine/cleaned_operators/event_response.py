@@ -46,10 +46,11 @@ _EPS = 1e-12
 # rejected by a RelationalParamSpec before running.
 def _event_history_specs() -> dict[str, ParamSpec]:
     return {
-        "history_window": ParamSpec(dtype=int, min=2),
-        "horizon": ParamSpec(dtype=int, min=1),
-        "min_events": ParamSpec(dtype=int, min=1),
-        "refractory": ParamSpec(dtype=int, min=0),
+        "history_window": ParamSpec(dtype=int, min=2, default=120, history_semantics="max_rows", param_role=ParamRole.HORIZON),
+        "horizon": ParamSpec(dtype=int, min=1, default=5, param_role=ParamRole.HORIZON),
+        "min_events": ParamSpec(dtype=int, min=1, default=5, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+        "require_full_horizon": ParamSpec(dtype=bool, default=True, searchable=False, param_role=ParamRole.POLICY),
+        "refractory": ParamSpec(dtype=int, min=0, default=0, searchable=False, param_role=ParamRole.POLICY),
     }
 
 
@@ -86,12 +87,12 @@ def _strict_refractory(v: Any) -> int:
 # canonical enter param_specs (registry invariant: keys ⊆ param_names).
 def _curve_specs(*, with_refractory: bool = False) -> dict[str, ParamSpec]:
     specs: dict[str, ParamSpec] = {
-        "history_window": ParamSpec(dtype=int, min=2),
-        "horizon": ParamSpec(dtype=int, min=1),
-        "min_events": ParamSpec(dtype=int, min=1),
+        "history_window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "horizon": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "min_events": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
     }
     if with_refractory:
-        specs["refractory"] = ParamSpec(dtype=int, min=0)
+        specs["refractory"] = ParamSpec(dtype=int, min=0, searchable=False, param_role=ParamRole.POLICY)
     return specs
 
 
@@ -100,9 +101,9 @@ def _diag_specs() -> dict[str, ParamSpec]:
     (no ``min_events``); ``refractory`` default is ``None`` (episode width =
     horizon)."""
     return {
-        "history_window": ParamSpec(dtype=int, min=2),
-        "horizon": ParamSpec(dtype=int, min=1),
-        "refractory": ParamSpec(dtype=int, min=0, default=None),
+        "history_window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+        "horizon": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        "refractory": ParamSpec(dtype=int, min=0, default=None, searchable=False, param_role=ParamRole.POLICY),
     }
 
 
@@ -131,6 +132,9 @@ def _metadata(
             f"unit:{unit}", f"cost:{cost}",
         ],
         output_unit=output_unit,
+        panel_params=tuple(p for p in ("response", "event") if p in params),
+        panel_arity=sum(p in params for p in ("response", "event")),
+        scalar_params=tuple(p for p in params if p not in {"response", "event"}),
         param_specs=dict(param_specs) if param_specs else {},
         relational_specs=list(relational_specs) if relational_specs else [],
     )
@@ -248,9 +252,12 @@ def _horizon_response(
     out = np.full(n, np.nan)
     observed = np.isfinite(event)
     times = np.flatnonzero(np.isfinite(event) & (event != 0.0))
-    episode_firsts = (
-        _collapse_events(times, refr, observed=observed) if refr > 0 else times
-    )
+    if refr > 0:
+        episode_firsts, _ = _episode_firsts_and_unknown(
+            times, refr, observed=observed
+        )
+    else:
+        episode_firsts = times
     for t in range(n):
         lo = max(0, t - hw)
         last_event = t - H                 # need s + H <= t
@@ -325,7 +332,7 @@ class EventHistoricalResponseMean(SeriesOperator):
         cost=4,
         param_specs=dict(
             _event_history_specs(),
-            mode=ParamSpec(dtype=str, choices=("sum", "mean"), searchable=True),
+            mode=ParamSpec(dtype=str, choices=("sum", "mean"), default="mean", searchable=False, param_role=ParamRole.POLICY),
         ),
         relational_specs=_event_history_relational(),
         extra_tags=("matured_historical_outcome",),
@@ -506,9 +513,9 @@ class EventHawkesBranchingRatio(SeriesOperator):
         unit="ratio",
         cost=6,
         param_specs={
-            "window": ParamSpec(dtype=int, min=2),
-            "max_lag": ParamSpec(dtype=int, min=1),
-            "min_events": ParamSpec(dtype=int, min=2),
+            "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+            "max_lag": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            "min_events": ParamSpec(dtype=int, min=2, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
         relational_specs=[
             RelationalParamSpec(

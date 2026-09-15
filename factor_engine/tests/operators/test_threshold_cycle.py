@@ -36,7 +36,7 @@ def test_ts_threshold_cycle_period_basic() -> None:
 
     op = _op("ts_threshold_cycle_period")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, lower=-0.5, upper=0.5)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -50,7 +50,7 @@ def test_ts_threshold_cycle_period_handles_nans() -> None:
 
     op = _op("ts_threshold_cycle_period")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, lower=-0.5, upper=0.5)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -64,8 +64,8 @@ def test_ts_threshold_cycle_period_deterministic() -> None:
 
     op = _op("ts_threshold_cycle_period")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, lower=-0.5, upper=0.5)
+        result2 = op.calculate(x, lower=-0.5, upper=0.5)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic
@@ -83,7 +83,7 @@ def test_ts_threshold_cycle_asymmetry_basic() -> None:
 
     op = _op("ts_threshold_cycle_asymmetry")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, lower=-0.5, upper=0.5)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
     except Exception as e:
@@ -97,7 +97,7 @@ def test_ts_threshold_cycle_asymmetry_handles_nans() -> None:
 
     op = _op("ts_threshold_cycle_asymmetry")
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, lower=-0.5, upper=0.5)
         assert isinstance(result, pd.DataFrame)
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
@@ -111,8 +111,8 @@ def test_ts_threshold_cycle_asymmetry_deterministic() -> None:
 
     op = _op("ts_threshold_cycle_asymmetry")
     try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
+        result1 = op.calculate(x, lower=-0.5, upper=0.5)
+        result2 = op.calculate(x, lower=-0.5, upper=0.5)
         pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
     except Exception:
         pass  # Some operators may not be deterministic

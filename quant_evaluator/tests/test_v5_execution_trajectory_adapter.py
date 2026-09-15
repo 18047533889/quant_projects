@@ -3,8 +3,9 @@ from dataclasses import replace
 import pytest
 
 from quant_evaluator.adapters.execution_trajectory import trajectory_to_probe_artifact, trajectories_to_probe_artifact
+from quant_evaluator.contracts.artifact_types import ExecutablePortfolioArtifact, ProbePortfolioArtifact
 from vectorbt_qs.contracts.costs import CostScope
-from vectorbt_qs.contracts.trajectories import TrajectoryRefs, build_research_trajectory
+from vectorbt_qs.contracts.trajectories import PortfolioTrajectory, TrajectoryRefs, build_research_trajectory
 
 
 def test_strict_profile_cost_and_research_ls_borrow_gate():
@@ -110,3 +111,98 @@ def test_collection_requires_an_exact_nonempty_unique_mapping():
         trajectories_to_probe_artifact({"f": paths["f"]}, factor_ids=("f", "g"), **common)
     with pytest.raises(ValueError, match="exactly match"):
         trajectories_to_probe_artifact(paths, factor_ids=("f",), **common)
+
+
+def test_v13_executable_scope_retains_a_distinct_certified_artifact_identity():
+    refs = TrajectoryRefs(("f",), "source:f", "portfolio:f", "cost:actual",
+                          None, "execution-ledger:1", "borrow-snapshot:1")
+    trajectory = PortfolioTrajectory(
+        scenario_id="actual", scope=CostScope.NET_EXECUTABLE,
+        profile="LONG_SHORT_RESEARCH", dates=("2024-01-02",),
+        gross_return=(.01,), net_return=(.009,), nav=(1.009,),
+        benchmark_return=None, active_return=None, relative_wealth=None,
+        contributions={"fees": (.001,), "long": (.02,), "short": (-.01,)},
+        refs=refs, statuses=(), executable_certified=True, cost_component_names=("fees",),
+    )
+    artifact = trajectory_to_probe_artifact(
+        trajectory, expected_portfolio_profile="LONG_SHORT_RESEARCH",
+        expected_cost_profile="net-executable",
+    )
+    assert isinstance(artifact, ExecutablePortfolioArtifact)
+    assert not type(artifact) is ProbePortfolioArtifact
+    assert artifact.provenance["execution_certified"] is True
+    assert artifact.provenance["execution_ref"] == "execution-ledger:1"
+
+
+def test_v13_assumed_cost_trajectory_remains_probe_only():
+    trajectory = build_research_trajectory(
+        scenario_id="assumed", profile="LONG_SHORT_RESEARCH", dates=("2024-01-02",),
+        gross_return=(.01,), benchmark_return=None, cost_contributions={"fees": (.001,)},
+        refs=TrajectoryRefs(("f",), "source:f", "portfolio:f", "cost:assumed", None),
+        long_contribution=(.02,), short_contribution=(-.01,),
+    )
+    artifact = trajectory_to_probe_artifact(
+        trajectory, expected_portfolio_profile="LONG_SHORT_RESEARCH",
+        expected_cost_profile="net-base",
+    )
+    assert type(artifact) is ProbePortfolioArtifact
+    assert artifact.provenance["execution_certified"] is False
+
+
+def test_portfolio_artifact_axes_are_mandatory_and_cannot_alias_columns():
+    import numpy as np
+
+    values = np.zeros((2, 2))
+    with pytest.raises(ValueError, match="time_index"):
+        ProbePortfolioArtifact(values, factor_ids=("f", "g"))
+    with pytest.raises(ValueError, match="factor_ids"):
+        ProbePortfolioArtifact(values, time_index=("d1", "d2"), factor_ids=("f",))
+    with pytest.raises(ValueError, match="factor_ids"):
+        ProbePortfolioArtifact(values, time_index=("d1", "d2"), factor_ids=("f", "f"))
+
+
+def test_executable_serialization_identity_cannot_be_downgraded_to_probe():
+    import numpy as np
+
+    provenance = {"execution_certified": True, "cost_scope": "NET_EXECUTABLE",
+                  "execution_ref": "ledger:1"}
+    executable = ExecutablePortfolioArtifact(
+        np.array([[.01]]), time_index=("d1",), factor_ids=("f",), provenance=provenance)
+    probe = ProbePortfolioArtifact(
+        np.array([[.01]]), time_index=("d1",), factor_ids=("f",),
+        metric_id=executable.metric_id, provenance=provenance)
+    assert executable.to_dict()["artifact_type"] == "ExecutablePortfolioArtifact"
+    assert probe.to_dict()["artifact_type"] == "ProbePortfolioArtifact"
+    assert hash(executable) != hash(probe)
+    with pytest.raises(ValueError, match="cannot be loaded"):
+        ProbePortfolioArtifact.from_dict(executable.to_dict())
+    assert ExecutablePortfolioArtifact.from_dict(executable.to_dict()) == executable
+
+
+def test_executable_batch_retains_each_factor_execution_ledger_ref():
+    def make(fid, ledger):
+        return PortfolioTrajectory(
+            scenario_id=f"actual-{fid}", scope=CostScope.NET_EXECUTABLE,
+            profile="LONG_SHORT_RESEARCH", dates=("2024-01-02",),
+            gross_return=(.01,), net_return=(.009,), nav=(1.009,),
+            benchmark_return=None, active_return=None, relative_wealth=None,
+            contributions={"fees": (.001,), "long": (.02,), "short": (-.01,)},
+            refs=TrajectoryRefs((fid,), f"source:{fid}", f"portfolio:{fid}",
+                                f"cost:{fid}", None, ledger, f"borrow:{fid}"),
+            statuses=(), executable_certified=True, cost_component_names=("fees",),
+        )
+
+    artifact = trajectories_to_probe_artifact(
+        {"f": make("f", "ledger:f"), "g": make("g", "ledger:g")},
+        expected_portfolio_profile="LONG_SHORT_RESEARCH",
+        expected_cost_profile="net-executable", factor_ids=("f", "g"))
+    assert artifact.provenance["per_factor_execution_refs"] == {
+        "f": "ledger:f", "g": "ledger:g"}
+    assert artifact.provenance["execution_ref"] == {"f": "ledger:f", "g": "ledger:g"}
+
+    invalid = dict(artifact.provenance)
+    invalid["execution_ref"] = "ledger:f"
+    with pytest.raises(ValueError, match="factor-keyed ledger mapping"):
+        ExecutablePortfolioArtifact(
+            artifact.values, time_index=artifact.time_index,
+            factor_ids=artifact.factor_ids, provenance=invalid)

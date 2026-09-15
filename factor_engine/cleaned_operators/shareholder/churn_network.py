@@ -28,10 +28,24 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator,
+)
 
 _EPS = 1e-12
 _CANONICALS: list[str] = []
+
+_SCALAR_SPECS_BY_CANONICAL = {
+    "holder_pledge_change": {
+        "lag": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
+    },
+    "holder_concentration_slope": {
+        "window": ParamSpec(dtype=int, min=3, default=8, param_role=ParamRole.HORIZON),
+    },
+    "holder_concentration_acceleration": {
+        "window": ParamSpec(dtype=int, min=3, default=8, param_role=ParamRole.HORIZON),
+    },
+}
 
 
 def _meta(
@@ -42,6 +56,8 @@ def _meta(
     unit: str = "ratio",
     input_units: dict[str, str] | None = None,
 ) -> OperatorMetadata:
+    scalar_specs = dict(_SCALAR_SPECS_BY_CANONICAL.get(name, {}))
+    panel_params = tuple(param for param in params if param not in scalar_specs)
     metadata = OperatorMetadata(
         name=name,
         category="shareholder",
@@ -53,6 +69,10 @@ def _meta(
             f"signature:{','.join(params)}->series", "domain:shareholder",
             f"unit:{unit}", "cost:1",
         ],
+        panel_params=panel_params,
+        panel_arity=len(panel_params),
+        scalar_params=tuple(scalar_specs),
+        param_specs=scalar_specs,
     )
     # Round-3 item 30: declare the input semantics for ratio/level operators.
     if input_units:
@@ -250,8 +270,30 @@ def _mk(
 ):
     metadata = _meta(name, description, params, unit=unit, input_units=input_units)
 
+    scalar_specs = dict(_SCALAR_SPECS_BY_CANONICAL.get(name, {}))
+
     def _calculate_series(self, *args, **kwargs):
-        return fn(*args, **kwargs)
+        """Bind generated operators by their declared names before calling kernels.
+
+        ID-matched kernels intentionally use ``*args`` so 40 object/numeric
+        panels retain their original dtype.  This adapter gives those kernels
+        the same all-positional/all-keyword/mixed call surface as handwritten
+        operators without coercing ID panels to numeric arrays.
+        """
+        bound = {param: value for param, value in zip(params, args)}
+        for param, value in kwargs.items():
+            if param in bound:
+                raise TypeError(f"multiple values for argument {param!r}")
+            if param not in params:
+                raise TypeError(f"unexpected keyword argument {param!r}")
+            bound[param] = value
+        for param, spec in scalar_specs.items():
+            if param not in bound:
+                bound[param] = spec.default
+        missing = [param for param in params if param not in bound]
+        if missing:
+            raise TypeError(f"missing required argument(s): {', '.join(missing)}")
+        return fn(*(bound[param] for param in params))
 
     cls = type(
         f"Shareholder_{name}",

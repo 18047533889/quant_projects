@@ -387,6 +387,23 @@ class TreatmentRecipe:
                 raise InvalidContractError(
                     f"unknown recipe implementation {step.implementation_ref!r}"
                 )
+            if metadata.semantic_id is not None and (
+                step.semantic_transform_id != metadata.semantic_id
+            ):
+                raise InvalidContractError(
+                    f"recipe step {step.step_id!r} semantic identity disagrees "
+                    "with the registered implementation"
+                )
+            if metadata.stage is not None and step.stage != metadata.stage:
+                raise InvalidContractError(
+                    f"recipe step {step.step_id!r} stage disagrees with the "
+                    "registered implementation"
+                )
+            if bool(step.requires_fit) != bool(metadata.requires_fit):
+                raise InvalidContractError(
+                    f"recipe step {step.step_id!r} fit requirement disagrees "
+                    "with the registered implementation"
+                )
             metadata.bind_parameters(dict(step.parameters))
             if step.requires_fit:
                 if not step.state_ref or step.state_ref not in available_states:

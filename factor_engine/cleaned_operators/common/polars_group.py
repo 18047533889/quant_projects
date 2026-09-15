@@ -13,6 +13,7 @@ from collections.abc import Callable
 import numpy as np
 import polars as pl
 
+from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 
 _SKIP = frozenset({"date", "stock_code"})
@@ -43,6 +44,28 @@ def _make(base: pl.DataFrame, cols: list[str], values: np.ndarray) -> pl.DataFra
     return pl.DataFrame({c: values[:, i] for i, c in enumerate(cols)})
 
 
+def _stable_mean(values: np.ndarray) -> float:
+    scale = float(np.max(np.abs(values)))
+    return 0.0 if scale == 0.0 else float(scale * np.mean(values / scale))
+
+
+def _stable_weighted_mean(values: np.ndarray, weights: np.ndarray) -> float | None:
+    if values.size == 0 or weights.size == 0:
+        return None
+    wscale = float(np.max(weights))
+    if wscale <= 0.0:
+        return None
+    xscale = float(np.max(np.abs(values)))
+    if xscale == 0.0:
+        return 0.0
+    wn = weights / wscale
+    denom = float(np.sum(wn))
+    if not np.isfinite(denom) or denom <= 0.0:
+        return None
+    value = float(xscale * (np.sum(wn * (values / xscale)) / denom))
+    return value if np.isfinite(value) else None
+
+
 def _row_arrays(*frames: pl.DataFrame, cols: list[str]) -> np.ndarray:
     return np.stack([f[c].to_numpy() for f in frames for c in cols], axis=1) if len(frames) == 1 else None
 
@@ -55,17 +78,20 @@ def group_ex_self_mean(x, group):
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for t in range(rows):
         finite = np.isfinite(xv[t])
-        labels = np.unique(gv[t])
+        # Stable unique membership does not sort incomparable null/string
+        # labels, and missing labels must never form an artificial group.
+        labels = dict.fromkeys(label for label in gv[t] if _valid_membership_label(label))
         for label in labels:
             idx = (gv[t] == label) & finite
             count = int(np.sum(idx))
             if count <= 1:
                 continue
-            total = float(np.sum(xv[t][idx]))
             for j in np.flatnonzero(gv[t] == label):
                 if not finite[j]:
                     continue
-                out[t, j] = (total - xv[t][j]) / (count - 1.0)
+                peers = idx.copy()
+                peers[j] = False
+                out[t, j] = _stable_mean(xv[t][peers])
     return _make(x, cols, out)
 
 
@@ -78,24 +104,22 @@ def group_ex_self_weighted_mean(x, weight, group):
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for t in range(rows):
         g_row = gv[t]
-        for label in np.unique(g_row):
+        labels = dict.fromkeys(label for label in g_row if _valid_membership_label(label))
+        for label in labels:
             idx = g_row == label
             # R5 P1-37(a) parity with the pandas twin: numerator and denominator
             # MUST use the same mask `finite(x) & finite(w) & w >= 0`.  The old
             # polars mask counted missing-x peers in the denominator but silently
             # dropped them from the numerator.
             mask = idx & np.isfinite(wv[t]) & np.isfinite(xv[t]) & (wv[t] >= 0)
-            total_w = float(np.sum(wv[t][mask]))
-            if not np.isfinite(total_w) or total_w <= 0.0:
-                continue
-            weighted = float(np.sum(wv[t][mask] * xv[t][mask]))
             for j in np.flatnonzero(idx):
                 if not mask[j]:
                     continue
-                denom = total_w - wv[t][j]
-                if denom <= 0.0:
-                    continue
-                out[t, j] = (weighted - wv[t][j] * xv[t][j]) / denom
+                peers = mask.copy()
+                peers[j] = False
+                value = _stable_weighted_mean(xv[t][peers], wv[t][peers])
+                if value is not None:
+                    out[t, j] = value
     return _make(x, cols, out)
 
 
@@ -191,6 +215,8 @@ def cs_trimmed_ols_resid(y, x, trim_ratio=0.1, add_intercept=True):
     3 stocks must not drive the regression.
     """
     trim = _pf(trim_ratio, "trim_ratio")
+    if not isinstance(add_intercept, (bool, np.bool_)):
+        raise ValueError("add_intercept must be bool")
     if not (0.0 <= trim < 0.5):
         raise ValueError("cs_trimmed_ols_resid requires 0 <= trim_ratio < 0.5")
     cols = _cols(y, x)
@@ -241,6 +267,15 @@ cs_robust_resid = cs_trimmed_ols_resid
 
 
 def _register(name: str, params: tuple[str, ...], function: Callable, description: str) -> None:
+    param_specs = {}
+    if name == "cs_trimmed_ols_resid":
+        param_specs = {
+            "trim_ratio": ParamSpec(dtype=float, min=0.0, max=0.499999999999,
+                                    default=0.1, searchable=True,
+                                    param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "add_intercept": ParamSpec(dtype=bool, default=True, searchable=False,
+                                       param_role=ParamRole.POLICY),
+        }
     metadata = OperatorMetadata(
         name=name,
         category="group_neutralization",
@@ -248,6 +283,9 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
         param_names=list(params),
         return_type="series",
         tags=["pit_safe", "causal", "polars", "native"],
+        param_specs=param_specs,
+        panel_params=tuple(p for p in params if p in {"x", "y", "weight", "group", "subgroup"}),
+        scalar_params=tuple(p for p in params if p not in {"x", "y", "weight", "group", "subgroup"}),
     )
 
     def _calculate_series(self, *args, **kwargs):

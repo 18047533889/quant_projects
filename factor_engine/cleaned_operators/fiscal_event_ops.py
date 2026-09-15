@@ -9,15 +9,19 @@ no daily rolling fallback is used.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator
+from factor_engine.cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
 from factor_engine.cleaned_operators.fiscal_strict import period_ordinal
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.cleaned_operators import operator_surface as _surface
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 
 # New strict fiscal primitives start on the reviewed extended surface until
 # their independent backend evidence is issued.
@@ -39,6 +43,90 @@ except ImportError:  # pragma: no cover
 
 _EPS = 1e-12
 _POLICIES = {"latest_available", "first_available"}
+
+_REVISION_SPEC = ParamSpec(
+    dtype=str,
+    choices=("latest_available", "first_available"),
+    searchable=False,
+    default="latest_available",
+    param_role=ParamRole.POLICY,
+)
+
+
+def _int_spec(default: int, *, minimum: int = 1) -> ParamSpec:
+    return ParamSpec(dtype=int, min=minimum, default=default, param_role=ParamRole.HORIZON)
+
+
+def _event_param_specs(name: str) -> dict[str, ParamSpec]:
+    """Authoritative scalar contracts matching the fiscal-event kernels."""
+    name = {
+        "fiscal_direction_consistency": "fiscal_sign_consistency",
+        "fiscal_pair_direction_agreement": "fiscal_sign_agreement",
+    }.get(name, name)
+    common = {
+        "require_consecutive": ParamSpec(dtype=bool, searchable=False, default=True, param_role=ParamRole.POLICY),
+        "revision_policy": _REVISION_SPEC,
+    }
+    specific = {
+        "fiscal_perpetual_inventory": {
+            "depreciation": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.15, param_role=ParamRole.ECONOMIC),
+            "periods_per_year": _int_spec(4), "warmup_periods": _int_spec(8, minimum=0),
+        },
+        "fiscal_standardized_surprise": {
+            "seasonal_lag": _int_spec(4), "lookback_periods": _int_spec(8),
+            "min_history": ParamSpec(dtype=int, min=1, default=4, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        },
+        "fiscal_sign_consistency": {"periods": _int_spec(8), "min_periods": _int_spec(3)},
+        "fiscal_change_direction_agreement": {"periods": _int_spec(8), "min_periods": _int_spec(3)},
+        "fiscal_sign_agreement": {"periods": _int_spec(8), "min_periods": _int_spec(3)},
+        "fiscal_autocorr": {"periods": _int_spec(12), "lag": _int_spec(1), "min_pairs": _int_spec(3)},
+        "fiscal_reversal_ratio": {"periods": _int_spec(8), "min_pairs": _int_spec(3)},
+        "fiscal_regression_resid_std": {
+            "periods": _int_spec(12), "min_obs": ParamSpec(dtype=int, min=1, default=None, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, default=True, param_role=ParamRole.POLICY),
+            "ddof": ParamSpec(dtype=int, min=0, default=1, searchable=False, param_role=ParamRole.NUMERICAL),
+        },
+        "fiscal_ar_resid_std": {
+            "periods": _int_spec(12), "ar_lag": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.MODEL_ORDER), "min_train": ParamSpec(dtype=int, min=1, default=6, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "ddof": ParamSpec(dtype=int, min=0, default=1, searchable=False, param_role=ParamRole.NUMERICAL),
+        },
+        "fin_seasonal_zscore": {"years": _int_spec(5), "min_history": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.ESTIMATOR_RESOLUTION)},
+        "fin_seasonal_percentile": {"years": _int_spec(5), "min_history": ParamSpec(dtype=int, min=1, default=2, param_role=ParamRole.ESTIMATOR_RESOLUTION)},
+        "fiscal_accrual_quality": {"periods": _int_spec(12)},
+        "relation_jaccard": {"periods": _int_spec(1)},
+        "fiscal_asymmetric_elasticity": {
+            "periods": _int_spec(12),
+            "mode": ParamSpec(dtype=str, choices=("down_minus_up",), searchable=False, default="down_minus_up", param_role=ParamRole.POLICY),
+            "add_intercept": ParamSpec(dtype=bool, searchable=False, default=True, param_role=ParamRole.POLICY),
+            "min_obs_per_regime": ParamSpec(dtype=int, min=1, default=3, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        },
+    }
+    result = dict(common)
+    result.update(specific.get(name, {}))
+    return result
+
+
+_EVENT_PANEL_PARAMS = {
+    "fiscal_perpetual_inventory": ("flow", "period_id"),
+    "fiscal_standardized_surprise": ("x", "period_id"),
+    "fiscal_sign_consistency": ("signal", "period_id"),
+    "fiscal_direction_consistency": ("signal", "period_id"),
+    "fiscal_change_direction_agreement": ("x", "y", "period_id"),
+    "fiscal_sign_agreement": ("signal_x", "signal_y", "period_id"),
+    "fiscal_pair_direction_agreement": ("signal_x", "signal_y", "period_id"),
+    "fiscal_autocorr": ("x", "period_id"),
+    "fiscal_reversal_ratio": ("x", "period_id"),
+    "fiscal_regression_resid_std": ("y", "period_id", "x1", "x2"),
+    "fiscal_ar_resid_std": ("x", "period_id"),
+    "fin_seasonal_zscore": ("x", "period_end", "fiscal_quarter"),
+    "fin_seasonal_percentile": ("x", "period_end", "fiscal_quarter"),
+    "fiscal_true_streak": ("condition", "period_id"),
+    "date_diff_days": ("left", "right"),
+    "cash_flow_lifecycle_stage": ("operating", "investing", "financing"),
+    "fiscal_accrual_quality": ("accrual", "cashflow", "period_id"),
+    "relation_jaccard": ("entity_id", "snapshot_id"),
+    "fiscal_asymmetric_elasticity": ("cost", "activity", "period_id"),
+}
 
 
 def _policy(value: Any) -> str:
@@ -668,28 +756,58 @@ def pd_fiscal_asymmetric_elasticity(cost, activity, period_id, periods=12, mode=
 
 
 class _RowSum(SeriesOperator):
-    metadata = OperatorMetadata(name="row_sum_skipna", category="elementwise", description="finite row sum with explicit minimum valid count", param_names=["...", "min_count"], return_type="series", tags=["production", "pit_safe"])
+    metadata = OperatorMetadata(
+        name="row_sum_skipna", category="elementwise",
+        description="finite row sum with explicit minimum valid count",
+        param_names=["...", "min_count"], mixed_params=("...", "min_count"),
+        variadic_mixed_param="inputs", scalar_params=("min_count",),
+        param_specs={"min_count": ParamSpec(
+            dtype=int, min=1, default=1, searchable=False,
+            param_role=ParamRole.SUPPORT_POLICY,
+        )},
+        return_type="series", tags=["production", "pit_safe", "variadic", "dynamic_inputs"],
+    )
     def _calculate_series(self, *args, min_count=1, **kwargs):
         return pd_row_sum_skipna(*args, min_count=min_count)
 
 
-class _PolarsRowSum:
-    # R5-02: direct ``calculate`` that routes through validate_operator_call.
-    _HANDLES_CALL_CONTRACT = True
-    metadata = OperatorMetadata(name="row_sum_skipna", category="elementwise", description="finite row sum with explicit minimum valid count", param_names=["...", "min_count"], return_type="series", tags=["production", "pit_safe", "polars_native", "variadic"])
-    def calculate(self, *args, min_count=1, **kwargs):
-        # R5-02: direct-``calculate`` op must still pass the central logical-call
-        # validator (row sums are variadic, hence the variadic tag).
-        from factor_engine.cleaned_operators.base import validate_operator_call
-
-        processed_args, processed_kwargs = validate_operator_call(self, args, kwargs)
-        return pl_row_sum_skipna(*processed_args, min_count=processed_kwargs.get("min_count", min_count))
+class _PolarsRowSum(PolarsSeriesOperator):
+    metadata = OperatorMetadata(
+        name="row_sum_skipna", category="elementwise",
+        description="finite row sum with explicit minimum valid count",
+        param_names=["...", "min_count"], mixed_params=("...", "min_count"),
+        variadic_mixed_param="inputs", scalar_params=("min_count",),
+        param_specs={"min_count": ParamSpec(
+            dtype=int, min=1, default=1, searchable=False,
+            param_role=ParamRole.SUPPORT_POLICY,
+        )},
+        return_type="series",
+        tags=["production", "pit_safe", "polars_native", "variadic", "dynamic_inputs"],
+    )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="row_sum_skipna", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        kernel_identity="fiscal_event_ops.pl_row_sum_skipna",
+    )
+    def _calculate_series(self, *args, min_count=1, **kwargs):
+        return pl_row_sum_skipna(*args, min_count=min_count)
 
 
 class _FunctionOperator(SeriesOperator):
     def __init__(self, name, params, fn, description):
         self._fn = fn
-        self.metadata = OperatorMetadata(name=name, category="fundamental_period", description=description, param_names=params, return_type="series", tags=["fundamental_period", "pit_safe", "strict_fiscal_event"])
+        panel_params = _EVENT_PANEL_PARAMS[name]
+        specs = _event_param_specs(name)
+        self.metadata = OperatorMetadata(
+            name=name, category="fundamental_period", description=description,
+            param_names=params, panel_params=panel_params,
+            param_specs={p: specs[p] for p in params if p in specs},
+            return_type="series",
+            tags=["fundamental_period", "pit_safe", "strict_fiscal_event"],
+        )
     def _calculate_series(self, *args, **kwargs):
         return self._fn(*args, **kwargs)
 
@@ -727,6 +845,19 @@ def register() -> None:
     }
     for name, (params, fn, description) in specs.items():
         _register(name, params, fn, description)
+
+    # Other bootstrap layers also provide a native Polars implementation of
+    # this three-panel operator, using ``*_cf`` parameter spellings.  Panel
+    # roles are positional, so declare those backend-local names explicitly;
+    # otherwise import order can leave the native backend looking like three
+    # scalar arguments at the final cross-backend signature audit.
+    for backend_op in OperatorRegistry._operators.get(
+        "cash_flow_lifecycle_stage", {}
+    ).values():
+        metadata = getattr(backend_op, "metadata", None)
+        names = tuple(getattr(metadata, "param_names", ()) or ())
+        if metadata is not None and len(names) == 3:
+            metadata.panel_params = names
     _register("fiscal_direction_consistency", specs["fiscal_sign_consistency"][0], pd_fiscal_sign_consistency, "deprecated alias for fiscal_sign_consistency", aliases=("fiscal_direction_consistency",))
     _register("fiscal_pair_direction_agreement", specs["fiscal_sign_agreement"][0], pd_fiscal_sign_agreement, "deprecated compatibility alias; use fiscal_sign_agreement", aliases=("fiscal_pair_direction_agreement",))
 

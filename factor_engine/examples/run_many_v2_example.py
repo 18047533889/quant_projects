@@ -19,6 +19,38 @@ Usage from an existing factor-definition program::
         receipt = materialize_all(all_factors)
 
 No backend, concurrency, batch-size or memory tuning is required from callers.
+The default execution purpose is research_compute: uncertified but otherwise
+valid implementations can be evaluated without changing strict input/PIT gates.
+Research artifacts remain UNVERIFIED and are not production publications.
+An explicitly approved production_compute profile retains certification gates.
+Define research formulas on the complete authoring surface, for example::
+
+    from factor_engine.api.factor import Factor
+    from factor_engine.api.dsl_parser import parse_recommended_expr
+    factors = [Factor(name="robust_residual",
+                      expr=parse_recommended_expr("cs_huber_resid(close, open)"))]
+    # Inside the main guard: receipt = materialize_all(factors)
+
+The same managed entry is available as ``POST /factor-engine/default/compute``
+through the existing authenticated asynchronous job queue, with a JSON body::
+
+    {"factors": [{"name": "robust_residual", "formula": "cs_huber_resid(close, open)"}]}
+
+The server must have its approved profile configured. This endpoint accepts no
+backend, mode, source, worker or memory overrides. Its job summary retains the
+durable receipt, including partial failures. Legacy compute endpoints are kept.
+Invalid request structure is rejected before submission. Malformed formulas and
+unknown operator calls become per-factor REJECTED manifest rows; valid peers
+continue through the same bounded pipeline. Real HTTP/DataAccess acceptance is
+still required; synthetic contract tests do not authorize real input or output.
+
+The CLI accepts the same factors-only JSON object using the approved profile::
+
+    python -m factor_engine.run_pipeline default-compute factors.json
+
+It prints the durable receipt and exits nonzero for a partial/failed batch.
+No backend, resource, data-source or output override is accepted by this command.
+
 The default policy uses auto regional backend selection and 80% of measured
 effective remaining memory as the shared admission pool. This is not a hard
 bound on all native allocator or process-family RSS allocations.

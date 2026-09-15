@@ -19,8 +19,16 @@ def _register(name,params,fn,desc,*,param_specs=None,relational_specs=None,input
     # ChaikinOscillator / ForceIndex smooth via ``ewm(adjust=False)`` (infinite
     # recursion) and therefore require full-history replay — review P0-05.
     _tags=("stateful","full_replay") if name in {"ChaikinOscillator","ForceIndex"} else ()
-    meta=OperatorMetadata(name=name,category="price_volume_extension",description=desc,param_names=list(params),return_type="series",tags=["pit_safe","causal","bounded_history","production_extension",*_tags,*extra_tags])
-    if param_specs: meta.param_specs=dict(param_specs)
+    specs=dict(param_specs or {})
+    for param in params:
+        if param == "window" or param.endswith("_window"):
+            specs.setdefault(
+                param,
+                ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            )
+    panel_params=tuple(param for param in params if param not in specs)
+    meta=OperatorMetadata(name=name,category="price_volume_extension",description=desc,param_names=list(params),return_type="series",tags=["pit_safe","causal","bounded_history","production_extension",*_tags,*extra_tags],panel_params=panel_params,panel_arity=len(panel_params),scalar_params=tuple(param for param in params if param in specs),total_positional_arity=len(params))
+    if specs: meta.param_specs=specs
     if relational_specs: meta.relational_specs=list(relational_specs)
     if input_units: meta.input_units=dict(input_units)
     if output_unit: meta.output_unit=output_unit
@@ -214,6 +222,14 @@ _AUTOCORR_PARAM_SPECS = {
     "lag": ParamSpec(dtype=int, min=1, history_semantics="exact_rows"),
 }
 _EXTRA: dict[str, dict] = {
+    "ChaikinOscillator": {
+        "param_specs": {
+            "fast_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            "slow_window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+            "adl_window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+        },
+        "relational_specs": [RelationalParamSpec("fast_window < slow_window")],
+    },
     "volume_autocorr": {"param_specs": dict(_AUTOCORR_PARAM_SPECS), "relational_specs": list(_AUTOCORR_REL)},
     "turnover_autocorr": {"param_specs": dict(_AUTOCORR_PARAM_SPECS), "relational_specs": list(_AUTOCORR_REL)},
     "volume_volatility": {"input_units": {"volume": "non_negative_volume"}},
@@ -234,14 +250,20 @@ _EXTRA: dict[str, dict] = {
     # R11 round-3 cross-cutting: ``epsilon`` is a numerical near-zero tolerance
     # (never an economic search dimension).
     "zero_return_ratio": {
-        "param_specs": {"epsilon": ParamSpec(dtype=float, min=0.0, searchable=False, param_role=ParamRole.NUMERICAL)},
+        "param_specs": {
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            "epsilon": ParamSpec(dtype=float, min=0.0, searchable=False, param_role=ParamRole.NUMERICAL),
+        },
     },
     # P1-86 / R5-34: EaseOfMovement's ``volume_scale`` is a pure unit-conversion
     # constant — it multiplies the whole output uniformly and leaves cross-sectional
     # ordering invariant, so it is not an alpha-search dimension.
     "EaseOfMovement": {
         "extra_tags": ("unit_conversion_only",),
-        "param_specs": {"volume_scale": ParamSpec(dtype=float, searchable=False)},
+        "param_specs": {
+            "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+            "volume_scale": ParamSpec(dtype=float, min=0.0, searchable=False),
+        },
     },
 }
 

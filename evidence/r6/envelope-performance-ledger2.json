@@ -1,0 +1,59 @@
+{
+  "scope": "Synthetic microbenchmark, not 100k-factor throughput or production certification",
+  "rows": 512,
+  "instruments": 8,
+  "window": 20,
+  "repetitions": 3,
+  "python": "3.12.3",
+  "pandas": "2.3.3",
+  "polars": "1.42.1",
+  "polars_threads": 32,
+  "kernel_source_sha256": "29782326dcb8d66b9f02bef281ca3494f43671b21e8d18a981867981c5b5323a",
+  "results": [
+    {
+      "canonical": "ts_envelope_compression",
+      "semantic_version": 2,
+      "median_seconds": {
+        "pandas_numpy": 0.027648536022752523,
+        "polars": 0.006851464044302702
+      },
+      "pandas_to_polars_input_seconds": 0.0010968470014631748,
+      "kernel_speedup": 4.035420144362213,
+      "end_to_end_speedup_including_input_conversion": 3.4785422794294267,
+      "finite_output_cells": 4096,
+      "max_abs_difference": 0.0,
+      "internal_pandas_numpy_conversions": 0,
+      "conversion_evidence": "test_r6_envelope_contracts forbids pandas/numpy conversion during final native calls"
+    },
+    {
+      "canonical": "ts_envelope_pressure",
+      "semantic_version": 2,
+      "median_seconds": {
+        "pandas_numpy": 0.2557976800017059,
+        "polars": 0.011411576066166162
+      },
+      "pandas_to_polars_input_seconds": 0.0006517099682241678,
+      "kernel_speedup": 22.415631155464382,
+      "end_to_end_speedup_including_input_conversion": 21.20464351690503,
+      "finite_output_cells": 4096,
+      "max_abs_difference": 4.163336342344337e-15,
+      "internal_pandas_numpy_conversions": 0,
+      "conversion_evidence": "test_r6_envelope_contracts forbids pandas/numpy conversion during final native calls"
+    },
+    {
+      "canonical": "ts_envelope_boundary_dwell",
+      "semantic_version": 2,
+      "median_seconds": {
+        "pandas_numpy": 0.2286474178545177,
+        "polars": 0.003968430915847421
+      },
+      "pandas_to_polars_input_seconds": 0.000835824990645051,
+      "kernel_speedup": 57.61658013030881,
+      "end_to_end_speedup_including_input_conversion": 47.5926808031861,
+      "finite_output_cells": 4096,
+      "max_abs_difference": 0.0,
+      "internal_pandas_numpy_conversions": 0,
+      "conversion_evidence": "test_r6_envelope_contracts forbids pandas/numpy conversion during final native calls"
+    }
+  ]
+}

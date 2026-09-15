@@ -44,13 +44,27 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.common.strict_params import strict_int
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
 
 
 def _metadata(name: str, description: str, params: list[str], *, unit: str, cost: int) -> OperatorMetadata:
+    acf = name.startswith("ts_autocorrelation_time")
+    specs = ({
+        "window": ParamSpec(dtype=int, min=2, default=120, param_role=ParamRole.HORIZON, history_semantics="max_rows"),
+        "max_lag": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+    } if acf else {
+        "fd": ParamSpec(dtype=float, min=float(np.nextafter(-1., 0.)), max=float(np.nextafter(1., 0.)), default=.4, param_role=ParamRole.ECONOMIC),
+        "cutoff": ParamSpec(dtype=int, min=1, default=20, param_role=ParamRole.HORIZON,
+                          history_formula="cutoff" if name == "ts_fractional_difference" else "0"),
+    })
+    if "max_discarded_weight_mass" in params:
+        specs["max_discarded_weight_mass"] = ParamSpec(dtype=float, min=0., max=1., default=.5, param_role=ParamRole.SUPPORT_POLICY)
     return OperatorMetadata(
         name=name,
+        panel_params=("x",), scalar_params=tuple(params[1:]), param_specs=specs,
+        relational_specs=[RelationalParamSpec(expression="max_lag < window", message="max_lag must be < window")] if acf else [],
         category="memory",
         description=description,
         param_names=params,
@@ -65,10 +79,7 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
 
 
 def _check_window(window: int) -> int:
-    w = int(window)
-    if w < 2:
-        raise ValueError("window must be >= 2")
-    return w
+    return strict_int(window, "window", minimum=2)
 
 
 def _trailing_contiguous_finite(chunk: np.ndarray) -> np.ndarray:
@@ -211,41 +222,34 @@ def _fd_weights(fd: float, cutoff: int) -> np.ndarray:
 
 
 def _fd_discarded_weight_mass(fd: float, cutoff: int, _tail_terms: int = 50000) -> float:
-    """Fraction of the theoretical |weight| mass discarded by a finite cutoff.
+    """Exact discarded absolute weight fraction; _tail_terms is legacy-only.
 
-    Audit #62: the fractional-difference cutoff must FOLLOW ``d``.  For ``d < 0``
-    (fractional integration) the weights are all positive and decay like
-    ``k^{-(1+d)}`` — a DIVERGENT p-series (``1+d in (0,1)``) — so any finite
-    cutoff discards essentially all of the theoretical mass (return 1.0).  For
-    ``d > 0`` the absolute mass converges; the recursion is summed out to
-    ``_tail_terms`` and an analytic power-law remainder ``|w_k| ~ |w_N| (k/N)^
-    {-(d+1)}`` (``sum ~ |w_N| * N / d``) is added.  ``d == 0`` leaves only
-    ``w_0 = 1``, so nothing is discarded.
+    For 0 < d < 1 all nonzero-lag weights are negative, total absolute
+    infinite mass is 2, and the omitted absolute tail is
+    product_{k=1..cutoff}(1-d/k). Evaluate its logarithm with bounded
+    4096-term scratch arrays; no arbitrary numerical-tail horizon.
+    Negative orders have divergent absolute mass; order zero is identity.
     """
-    c = int(cutoff)
+    c = strict_int(cutoff, "cutoff", minimum=1)
+    if not np.isfinite(fd) or not -1.0 < fd < 1.0:
+        raise ValueError("fd must satisfy -1 < fd < 1")
     if fd < 0.0:
         return 1.0
     if fd == 0.0:
         return 0.0
-    w = _fd_weights(fd, c)
-    kept = float(np.sum(np.abs(w)))
-    total = kept
-    N = int(_tail_terms)
-    w_prev = float(w[-1])
-    for k in range(c + 1, N + 1):
-        wk = -w_prev * (fd - k + 1) / k
-        total += abs(wk)
-        w_prev = wk
-    total += abs(w_prev) * float(N) / fd
-    if total <= 1e-15:
-        return 0.0
-    return float(max(0.0, min(1.0, 1.0 - kept / total)))
+    log_tail = 0.0
+    for start in range(1, c + 1, 4096):
+        k = np.arange(start, min(c + 1, start + 4096), dtype=float)
+        log_tail += float(np.log1p(-fd / k).sum())
+    return float(0.5 * np.exp(log_tail))
 
 
 def _fractional_difference_series(x2d: np.ndarray, fd: float, cutoff: int) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     c = int(cutoff)
+    if rows <= c or cols == 0:
+        return out  # No full-support output; do not allocate cutoff-sized weights.
     w = _fd_weights(fd, c)
     for col in range(cols):
         colv = x2d[:, col]
@@ -263,7 +267,13 @@ def _fractional_difference_series(x2d: np.ndarray, fd: float, cutoff: int) -> np
                 out[r, col] = np.nan
                 continue
             rev = seg[::-1]  # x_t, x_{t-1}, ..., x_{t-c}
-            out[r, col] = float(np.dot(rev, w))
+            magnitude = float(np.max(np.abs(rev)))
+            if magnitude == 0.0:
+                out[r, col] = 0.0
+                continue
+            with np.errstate(over="ignore", invalid="ignore"):
+                value = float(np.dot(rev / magnitude, w)) * magnitude
+            out[r, col] = value if np.isfinite(value) else np.nan
     return out
 
 
@@ -395,6 +405,8 @@ class TsFractionalDifference(SeriesOperator):
         # Audit #62: the cutoff must follow d.  A fixed cutoff that discards more
         # than the declared tolerance of the theoretical |weight| mass is a
         # DIFFERENT transform under the same factor name — fail closed (NaN).
+        if len(x) <= c or x.shape[1] == 0:
+            return frame_like(x, np.full(x.shape, np.nan, dtype=float))
         discarded = _fd_discarded_weight_mass(fdv, c)
         if discarded > tol:
             return frame_like(x, np.full(x.shape, np.nan, dtype=float))
@@ -413,7 +425,7 @@ class TsFractionalDifferenceDiscardedWeightMass(SeriesOperator):
 
     Audit #62 诊断输出：``discarded = 1 - kept_mass / total_mass``。d<0（分数
     积分）权重 k^{-(1+d)} 缓慢衰减、总质量发散 -> discarded=1；d>0 收敛，按
-    解析尾部近似。配合 ``ts_fractional_difference`` 的
+    精确二项尾部质量恒等式。配合 ``ts_fractional_difference`` 的
     ``max_discarded_weight_mass`` 门控使用。P1。
     """
 
@@ -453,8 +465,13 @@ def _register_surface() -> None:
     import factor_engine.cleaned_operators.operator_surface as _surface
 
     _surface.extend_extended_only(set(_NEW_CANONICALS))
+    try:
+        import polars  # noqa: F401
+    except ImportError:
+        return
+    from factor_engine.cleaned_operators.common.memory_delegate import register
     for _canon in _NEW_CANONICALS:
-        register_polars_bridge(_canon)
+        register(_canon)
 
 
 def _register_precise_alias() -> None:

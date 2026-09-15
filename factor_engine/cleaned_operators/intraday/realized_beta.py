@@ -268,6 +268,8 @@ def _op(name: str, description: str, unit: str):
             name, description, ["close", "free_market_cap"], unit=unit,
             domain="intraday_beta", extra_tags=["allow_panel_broadcast"],
         )
+        cls.metadata.panel_params = ("close", "free_market_cap")
+        cls.metadata.panel_arity = 2
         return register_operator(
             name=name,
             category="intraday_microstructure",

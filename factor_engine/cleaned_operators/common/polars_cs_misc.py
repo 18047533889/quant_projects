@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import numpy as np
+from factor_engine.cleaned_operators.common.elementwise_scalar_contracts import scalar_contract, polars_winsorize
 import polars as pl
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
@@ -119,21 +120,10 @@ def unitize(x):
     return _make(x, cols, out)
 
 
-def winsorize_mean(x, trim_pct=0.1):
-    trim = max(0.0, min(float(trim_pct), 0.49))
-    cols = _cols(x)
-    rows = x.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    arr = np.stack([x[c].to_numpy() for c in cols], axis=1)
-    for t in range(rows):
-        valid = arr[t][np.isfinite(arr[t])]
-        if valid.size == 0:
-            continue
-        lower = float(np.quantile(valid, trim))
-        upper = float(np.quantile(valid, 1.0 - trim))
-        clipped = np.clip(arr[t], lower, upper)
-        out[t] = np.full(len(cols), float(np.mean(clipped[np.isfinite(arr[t])])))
-    return _make(x, cols, out)
+def winsorize_mean(x: pl.DataFrame, trim_pct: float = 0.1):
+    from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar
+    trim = strict_finite_scalar(trim_pct, "trim_pct", minimum=0, maximum=0.49)
+    return polars_winsorize(x, trim, 1 - trim, mean=True)
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +210,7 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
         name=name,
         category="math",
         description=description,
+        **(scalar_contract("winsorize_mean") if name == "winsorize_mean" else {}),
         param_names=list(params),
         return_type="series",
         tags=["pit_safe", "causal", "polars", "native"],
@@ -231,7 +222,8 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
     cls = type(
         f"PolarsCsMisc_{name}",
         (SeriesOperator,),
-        {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
+        {"metadata": metadata, "_calculate_series": _calculate_series,
+         "_contract_callable": staticmethod(function), "__module__": __name__},
     )
     register_operator(
         name=name,

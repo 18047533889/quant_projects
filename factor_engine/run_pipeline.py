@@ -212,6 +212,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run factor_engine pipeline from a config file or config directory.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    durable_parser = subparsers.add_parser(
+        "default-compute", help="Compute formula JSON with the approved default durable profile")
+    durable_parser.add_argument("formulas_path", type=Path,
+        help='JSON object containing factors: [{"name": "...", "formula": "..."}]')
+    durable_parser.add_argument("--log-level", default="WARNING")
+    durable_parser.set_defaults(log_file=None)
+
     config_parser = subparsers.add_parser("config", help="Run pipeline for a single YAML config")
     config_parser.add_argument("config_path", type=Path, help="YAML config path")
     _add_common_options(config_parser)
@@ -554,10 +561,55 @@ def _run_deps(args: argparse.Namespace) -> dict:
     return {"ok": True, **payload}
 
 
+def _run_default_compute(formulas_path: Path) -> dict:
+    """Thin CLI adapter; scope, purpose, resources and writer belong to the facade.
+
+    The bounded JSON file contains definitions, never a source/output override.
+    Invalid request structure fails before computation. Formula parse failures
+    enter the same durable per-item terminal flow as other rejected definitions.
+    This is not a production publication operation.
+    """
+    from factor_engine.runtime.default_engine import (
+        get_engine, iter_parsed_factor_definitions,
+    )
+
+    limit = 64 * 1024 * 1024
+    with formulas_path.open("rb") as stream:
+        raw = stream.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError("formula manifest exceeds the 64 MiB CLI input bound")
+    payload = json.loads(raw)
+    if type(payload) is not dict or set(payload) != {"factors"}:
+        raise ValueError("default-compute accepts only a factors object")
+    entries = payload["factors"]
+    if type(entries) is not list or not entries:
+        raise ValueError("factors must be a nonempty list")
+    with get_engine() as engine:
+        if len(entries) > engine.policy.max_manifest_factors:
+            raise ValueError("factor count exceeds approved policy")
+        names = set()
+        for item in entries:
+            if type(item) is not dict or set(item) != {"name", "formula"}:
+                raise ValueError("each factor requires only name and formula")
+            name, formula = item["name"], item["formula"]
+            if (not isinstance(name, str) or not name.strip() or name in names
+                    or not isinstance(formula, str) or not formula.strip()):
+                raise ValueError("invalid or duplicate factor definition")
+            names.add(name)
+        return engine.run_many(iter_parsed_factor_definitions(entries))
+
+
 def main() -> None:
     """CLI 主入口：解析参数、配置日志并按子命令分发执行。"""
     args = parse_args()
     configure_logging(args.log_level, log_file=args.log_file)
+
+    if args.command == "default-compute":
+        receipt = _run_default_compute(args.formulas_path)
+        print(json.dumps(receipt, ensure_ascii=False))
+        if receipt.get("status") != "SUCCEEDED":
+            raise SystemExit(1)
+        return
 
     if args.command == "reconcile":
         payload = _run_reconcile(args)

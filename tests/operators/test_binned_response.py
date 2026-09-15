@@ -43,7 +43,7 @@ def test_ts_binned_response_monotonicity_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -68,7 +68,7 @@ def test_ts_binned_response_monotonicity_handles_nans() -> None:
     op = _op("ts_binned_response_monotonicity")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -89,7 +89,7 @@ def test_ts_binned_response_monotonicity_handles_inf() -> None:
     op = _op("ts_binned_response_monotonicity")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -104,7 +104,7 @@ def test_ts_binned_response_monotonicity_empty_input() -> None:
     op = _op("ts_binned_response_monotonicity")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -122,7 +122,7 @@ def test_ts_binned_response_monotonicity_single_column() -> None:
     op = _op("ts_binned_response_monotonicity")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -148,7 +148,7 @@ def test_ts_binned_response_curvature_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -173,7 +173,7 @@ def test_ts_binned_response_curvature_handles_nans() -> None:
     op = _op("ts_binned_response_curvature")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -194,7 +194,7 @@ def test_ts_binned_response_curvature_handles_inf() -> None:
     op = _op("ts_binned_response_curvature")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -209,7 +209,7 @@ def test_ts_binned_response_curvature_empty_input() -> None:
     op = _op("ts_binned_response_curvature")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -227,7 +227,7 @@ def test_ts_binned_response_curvature_single_column() -> None:
     op = _op("ts_binned_response_curvature")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -253,7 +253,7 @@ def test_ts_response_slope_asymmetry_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -278,7 +278,7 @@ def test_ts_response_slope_asymmetry_handles_nans() -> None:
     op = _op("ts_response_slope_asymmetry")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -299,7 +299,7 @@ def test_ts_response_slope_asymmetry_handles_inf() -> None:
     op = _op("ts_response_slope_asymmetry")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -314,7 +314,7 @@ def test_ts_response_slope_asymmetry_empty_input() -> None:
     op = _op("ts_response_slope_asymmetry")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -332,7 +332,7 @@ def test_ts_response_slope_asymmetry_single_column() -> None:
     op = _op("ts_response_slope_asymmetry")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1

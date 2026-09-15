@@ -60,6 +60,18 @@ class OperatorMetadata:
     # realised operators.
     available_at: str | None = None
     same_session_usable: bool | None = None
+    # The same named topology is accepted by both metadata constructors.
+    # Without these fields native backend modules can fail during import,
+    # before their implementations ever reach the registry.
+    panel_params: tuple[str, ...] = ()
+    scalar_params: tuple[str, ...] = ()
+    mixed_params: tuple[str, ...] = ()
+    nullable_mixed_params: tuple[str, ...] = ()
+    variadic_mixed_param: str | None = None
+    panel_arity: int | None = None
+    input_arity: int | None = None
+    total_positional_arity: int | None = None
+    relational_specs: List[Any] = field(default_factory=list)
 
 
 class Operator(ABC):
@@ -126,7 +138,11 @@ class Operator(ABC):
             *processed_args,
             allow_broadcast=allow_broadcast,
         )
-        processed_args = tuple(strip_panel_metadata(a) for a in processed_args)
+        # Identity-aware kernels explicitly opt in and exclude reserved metadata
+        # from their value columns. Removing absolute time would corrupt seeded
+        # estimators and make sliced panels disagree with the full computation.
+        if "preserve_panel_time_coordinate" not in tags:
+            processed_args = tuple(strip_panel_metadata(a) for a in processed_args)
         return processed_args, processed_kwargs
 
     def __repr__(self):

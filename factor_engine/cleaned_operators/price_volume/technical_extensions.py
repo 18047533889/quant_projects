@@ -19,7 +19,7 @@ from typing import Callable, Iterable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 
 _EPS = 1e-12
 
@@ -78,8 +78,6 @@ def _register(
     # ``pivot + right`` needs ``left + right`` prior bars).
     param_specs = {}
     if "left_window" in names and "right_window" in names:
-        from factor_engine.cleaned_operators.base import ParamSpec
-
         # R26-081: the confirmed-pivot state machine is bounded by an explicit
         # ``pivot_lookback_bars`` (past it the carried pivot/age/deque expires to
         # NaN), so the true history requirement is ``left + right + lookback`` —
@@ -90,10 +88,28 @@ def _register(
                 dtype=int, min=1, searchable=False
             )
             formula += " + pivot_lookback_bars"
+        if "history_window" in names:
+            param_specs["history_window"] = ParamSpec(
+                dtype=int, min=1, param_role=ParamRole.HORIZON
+            )
+            formula += " + history_window"
+        if "points" in names:
+            param_specs["points"] = ParamSpec(
+                dtype=int, min=2, param_role=ParamRole.ESTIMATOR_RESOLUTION
+            )
         param_specs["left_window"] = ParamSpec(
             dtype=int, min=1, history_formula=formula
         )
         param_specs["right_window"] = ParamSpec(dtype=int, min=1)
+    if "window" in names:
+        param_specs["window"] = ParamSpec(
+            dtype=int, min=1, param_role=ParamRole.HORIZON
+        )
+    if "std_dev" in names:
+        param_specs["std_dev"] = ParamSpec(
+            dtype=float, min=0.0, param_role=ParamRole.STATE_THRESHOLD
+        )
+    panel_params = tuple(param for param in names if param not in param_specs)
     metadata = OperatorMetadata(
         name=name,
         category=category,
@@ -102,6 +118,10 @@ def _register(
         return_type="series",
         tags=[*tags, "pit_safe", "causal", "production_extension"],
         param_specs=param_specs or None,
+        panel_params=panel_params,
+        panel_arity=len(panel_params),
+        scalar_params=tuple(param for param in names if param in param_specs),
+        total_positional_arity=len(names),
     )
 
     def _calculate_series(self, *args, **kwargs):
@@ -387,18 +407,22 @@ def _support_break(close, low, left_window, right_window, points, pivot_lookback
 
 _register("ts_confirmed_pivot_high", ["high", "left_window", "right_window"], lambda high, left_window, right_window: _confirmed_pivot_frame(high, left_window, right_window, high=True), category="price_structure", description="Confirmed pivot high emitted at the confirmation timestamp.")
 _register("ts_confirmed_pivot_low", ["low", "left_window", "right_window"], lambda low, left_window, right_window: _confirmed_pivot_frame(low, left_window, right_window, high=False), category="price_structure", description="Confirmed pivot low emitted at the confirmation timestamp.")
-_register("ts_last_pivot_high", ["high", "left_window", "right_window", "pivot_lookback_bars"], lambda high, left_window, right_window, pivot_lookback_bars=250: _last_pivot(high, left_window, right_window, high=True, pivot_lookback_bars=pivot_lookback_bars), category="price_structure", description="Most recent confirmed pivot-high price (bounded by pivot_lookback_bars).")
-_register("ts_last_pivot_low", ["low", "left_window", "right_window", "pivot_lookback_bars"], lambda low, left_window, right_window, pivot_lookback_bars=250: _last_pivot(low, left_window, right_window, high=False, pivot_lookback_bars=pivot_lookback_bars), category="price_structure", description="Most recent confirmed pivot-low price (bounded by pivot_lookback_bars).")
-_register("ts_pivot_high_age", ["high", "left_window", "right_window", "pivot_lookback_bars"], lambda high, left_window, right_window, pivot_lookback_bars=250: _pivot_age(high, left_window, right_window, high=True, pivot_lookback_bars=pivot_lookback_bars), category="price_structure", description="Bars since the latest confirmed pivot high (expires past pivot_lookback_bars).")
-_register("ts_pivot_low_age", ["low", "left_window", "right_window", "pivot_lookback_bars"], lambda low, left_window, right_window, pivot_lookback_bars=250: _pivot_age(low, left_window, right_window, high=False, pivot_lookback_bars=pivot_lookback_bars), category="price_structure", description="Bars since the latest confirmed pivot low (expires past pivot_lookback_bars).")
-_register("ts_resistance_level", ["high", "left_window", "right_window", "points", "pivot_lookback_bars"], _resistance_level, category="price_structure", description="Projected resistance line from recent confirmed pivot highs (bounded by pivot_lookback_bars).")
-_register("ts_support_level", ["low", "left_window", "right_window", "points", "pivot_lookback_bars"], _support_level, category="price_structure", description="Projected support line from recent confirmed pivot lows (bounded by pivot_lookback_bars).")
-_register("ts_resistance_slope", ["high", "left_window", "right_window", "points", "pivot_lookback_bars"], _resistance_slope, category="price_structure", description="Slope of resistance line fitted to confirmed pivot highs (bounded by pivot_lookback_bars).")
-_register("ts_support_slope", ["low", "left_window", "right_window", "points", "pivot_lookback_bars"], _support_slope, category="price_structure", description="Slope of support line fitted to confirmed pivot lows (bounded by pivot_lookback_bars).")
-_register("ts_distance_to_resistance", ["close", "high", "left_window", "right_window", "points", "pivot_lookback_bars"], _distance_to_resistance, category="price_structure", description="Signed close-to-resistance distance (bounded by pivot_lookback_bars).")
-_register("ts_distance_to_support", ["close", "low", "left_window", "right_window", "points", "pivot_lookback_bars"], _distance_to_support, category="price_structure", description="Signed close-to-support distance (bounded by pivot_lookback_bars).")
-_register("ts_resistance_break", ["close", "high", "left_window", "right_window", "points", "pivot_lookback_bars"], _resistance_break, category="price_structure", description="Positive magnitude of a confirmed-resistance breakout (bounded by pivot_lookback_bars).")
-_register("ts_support_break", ["close", "low", "left_window", "right_window", "points"], _support_break, category="price_structure", description="Positive magnitude of a confirmed-support breakdown.")
+# Seed the canonical contract in the same order used by the bounded pandas and
+# Polars production replacements. history_window is the authoritative name for
+# the former pivot_lookback_bars concept; adapters preserve its numerical meaning.
+_register("ts_last_pivot_high", ["high", "left_window", "right_window", "history_window"], lambda high, left_window, right_window, history_window=250: _last_pivot(high, left_window, right_window, high=True, pivot_lookback_bars=history_window), category="price_structure", description="Most recent confirmed pivot-high price inside bounded history.")
+_register("ts_last_pivot_low", ["low", "left_window", "right_window", "history_window"], lambda low, left_window, right_window, history_window=250: _last_pivot(low, left_window, right_window, high=False, pivot_lookback_bars=history_window), category="price_structure", description="Most recent confirmed pivot-low price inside bounded history.")
+_register("ts_pivot_high_age", ["high", "left_window", "right_window", "history_window"], lambda high, left_window, right_window, history_window=250: _pivot_age(high, left_window, right_window, high=True, pivot_lookback_bars=history_window), category="price_structure", description="Bars since the latest confirmed pivot high inside bounded history.")
+_register("ts_pivot_low_age", ["low", "left_window", "right_window", "history_window"], lambda low, left_window, right_window, history_window=250: _pivot_age(low, left_window, right_window, high=False, pivot_lookback_bars=history_window), category="price_structure", description="Bars since the latest confirmed pivot low inside bounded history.")
+_register("ts_resistance_level", ["high", "left_window", "right_window", "history_window", "points"], lambda high, left_window, right_window, history_window, points: _resistance_level(high, left_window, right_window, points, pivot_lookback_bars=history_window), category="price_structure", description="Projected resistance line from recent confirmed pivot highs.")
+_register("ts_support_level", ["low", "left_window", "right_window", "history_window", "points"], lambda low, left_window, right_window, history_window, points: _support_level(low, left_window, right_window, points, pivot_lookback_bars=history_window), category="price_structure", description="Projected support line from recent confirmed pivot lows.")
+_register("ts_resistance_slope", ["high", "left_window", "right_window", "history_window", "points"], lambda high, left_window, right_window, history_window, points: _resistance_slope(high, left_window, right_window, points, pivot_lookback_bars=history_window), category="price_structure", description="Slope of resistance line fitted to confirmed pivot highs.")
+_register("ts_support_slope", ["low", "left_window", "right_window", "history_window", "points"], lambda low, left_window, right_window, history_window, points: _support_slope(low, left_window, right_window, points, pivot_lookback_bars=history_window), category="price_structure", description="Slope of support line fitted to confirmed pivot lows.")
+_register("ts_distance_to_resistance", ["close", "high", "left_window", "right_window", "history_window", "points"], lambda close, high, left_window, right_window, history_window, points: _distance_to_resistance(close, high, left_window, right_window, points, pivot_lookback_bars=history_window), category="price_structure", description="Signed close-to-resistance distance.")
+_register("ts_distance_to_support", ["close", "low", "left_window", "right_window", "history_window", "points"], lambda close, low, left_window, right_window, history_window, points: _distance_to_support(close, low, left_window, right_window, points, pivot_lookback_bars=history_window), category="price_structure", description="Signed close-to-support distance.")
+_register("ts_resistance_break", ["close", "high", "left_window", "right_window", "history_window", "points"], lambda close, high, left_window, right_window, history_window, points: _resistance_break(close, high, left_window, right_window, points, pivot_lookback_bars=history_window), category="price_structure", description="Positive magnitude of a confirmed-resistance breakout.")
+_register("ts_support_break", ["close", "low", "left_window", "right_window", "history_window", "points"], lambda close, low, left_window, right_window, history_window, points: _support_break(close, low, left_window, right_window, points, pivot_lookback_bars=history_window), category="price_structure", description="Positive magnitude of a confirmed-support breakdown.")
+
 
 
 # ---------------------------------------------------------------------------

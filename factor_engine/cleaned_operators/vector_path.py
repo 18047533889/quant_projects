@@ -33,7 +33,7 @@ from typing import Any, Callable
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import OperatorMetadata, ParamSpec, ParamRole, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import (
     check_window,
     frame_like,
@@ -49,6 +49,9 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str, cost
         category="vector_path",
         description=description,
         param_names=params,
+        panel_params=("f1", "f2"), scalar_params=("window",),
+        param_specs={"window": ParamSpec(dtype=int, min=2, default=60,
+                     param_role=ParamRole.HORIZON, history_semantics="max_rows")},
         return_type="series",
         tags=[
             "vector_path", "daily", "pit_safe", "causal", "typed_v2",
@@ -66,10 +69,18 @@ def _standardize(f1: np.ndarray, f2: np.ndarray) -> tuple[np.ndarray, np.ndarray
     """Rolling-window z-standardization of each field (mean/std over the window)."""
     if f1.size < 2:
         return None
-    s1, s2 = float(np.std(f1)), float(np.std(f2))
-    if s1 <= _EPS or s2 <= _EPS:
-        return None
-    return (f1 - f1.mean()) / s1, (f2 - f2.mean()) / s2
+    standardized = []
+    for values in (f1, f2):
+        magnitude = float(np.max(np.abs(values)))
+        if not np.isfinite(magnitude) or magnitude == 0.0:
+            return None
+        unit = values / magnitude
+        centered = unit - np.mean(unit)
+        spread = float(np.std(centered))
+        if not np.isfinite(spread) or spread == 0.0:
+            return None
+        standardized.append(centered / spread)
+    return standardized[0], standardized[1]
 
 
 def _path_efficiency(f1: np.ndarray, f2: np.ndarray) -> float:
@@ -145,14 +156,17 @@ def _segments_properly_intersect(p1: np.ndarray, p2: np.ndarray, p3: np.ndarray,
     o2 = _orient(p1, p2, p4)
     o3 = _orient(p3, p4, p1)
     o4 = _orient(p3, p4, p2)
-    return (o1 * o2 < 0.0) and (o3 * o4 < 0.0)
+    # Compare signs directly: multiplying tiny/huge determinants can under/overflow.
+    return ((o1 < 0 < o2) or (o2 < 0 < o1)) and ((o3 < 0 < o4) or (o4 < 0 < o3))
 
 
 def _self_intersection_rate(f1: np.ndarray, f2: np.ndarray) -> float:
     n = f1.size
     if n < 3:
         return np.nan
-    pts = np.column_stack([f1, f2])
+    # Positive per-axis scaling preserves proper intersections and avoids overflow.
+    m1, m2 = float(np.max(np.abs(f1))), float(np.max(np.abs(f2)))
+    pts = np.column_stack([f1 / m1 if m1 else f1, f2 / m2 if m2 else f2])
     # R11 #96: a zero-length segment (consecutive duplicate point) has no defined
     # direction — its intersection classification is UNKNOWN, not a clean 0.
     # Exclude degenerate segments from BOTH the numerator and the denominator;
@@ -160,7 +174,7 @@ def _self_intersection_rate(f1: np.ndarray, f2: np.ndarray) -> float:
     # intersection structure at all -> NaN (unknown != zero ownership).
     segs = []
     for i in range(n - 1):
-        if not np.allclose(pts[i], pts[i + 1]):
+        if not np.array_equal(pts[i], pts[i + 1]):
             segs.append((pts[i], pts[i + 1]))
     m = len(segs)
     if m < 2:
@@ -169,7 +183,7 @@ def _self_intersection_rate(f1: np.ndarray, f2: np.ndarray) -> float:
     # Adjacent segments share an endpoint and can never properly intersect;
     # counting them biases the rate downward, worst for short windows.
     total = m * (m - 1) // 2 - (m - 1)
-    closed = bool(np.allclose(segs[0][0], segs[-1][1]))
+    closed = bool(np.array_equal(segs[0][0], segs[-1][1]))
     if closed:
         total -= 1  # first & last segments share an endpoint on a closed path
     if total < 1:
@@ -335,8 +349,12 @@ def _register_surface() -> None:
     import factor_engine.cleaned_operators.operator_surface as _surface
 
     _surface.extend_extended_only(set(_NEW_CANONICALS))
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.common.vector_path_native import make
     for _canon in _NEW_CANONICALS:
-        register_polars_bridge(_canon)
+        OperatorRegistry.register(make(_canon)(), canonical=_canon, backend="polars",
+                                  source="vector_path_numpy", status="implemented",
+                                  backend_explicit=True)
 
 
 _register_surface()

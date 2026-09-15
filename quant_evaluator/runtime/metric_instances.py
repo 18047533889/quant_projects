@@ -128,6 +128,8 @@ def evaluate_instances(request, *, evaluator=None, backend=None, gpu_policy=None
                    grouped_metrics=None, series_refs=None, label_id="MULTI_SCENARIO",
                    config_hash=config, instance_results=children, instance_specs=instances,
                    metadata={**dict(request.metadata), "planned_cost": planned_cost,
+                             **({"factor_value_ref": request.factor_value_ref.to_dict()}
+                                if request.factor_value_ref is not None else {}),
                              "requested_to_resolved_instances": requested_to_resolved,
                              "shared_evaluation_groups": len(groups),
                              "instance_statuses": {key: "COMPUTED" for key in children}})

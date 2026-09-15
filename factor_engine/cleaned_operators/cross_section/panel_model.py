@@ -23,6 +23,8 @@ would double-shift it.
 from __future__ import annotations
 
 from contextvars import ContextVar
+from dataclasses import replace
+import inspect
 from typing import Any
 from uuid import uuid4
 
@@ -31,6 +33,7 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
+    ParamRole,
     ParamSpec,
     SeriesOperator,
     register_operator,
@@ -109,20 +112,20 @@ def _design_cond(design: np.ndarray) -> float:
 # to ``int(3.9) == 3`` inside the kernel.  A declared spec makes the strict
 # call gate reject the fractional value at the boundary instead.
 _INT_PARAM_SPECS: dict[str, ParamSpec] = {
-    "window": ParamSpec(dtype=int, min=2),
-    "n_components": ParamSpec(dtype=int, min=1),
-    "component": ParamSpec(dtype=int, min=0),
-    "label_horizon": ParamSpec(dtype=int, min=1),
-    "n_regimes": ParamSpec(dtype=int, min=2),
-    "n_experts": ParamSpec(dtype=int, min=2),
+    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON),
+    "n_components": ParamSpec(dtype=int, min=1, param_role=ParamRole.MODEL_ORDER),
+    "component": ParamSpec(dtype=int, min=0, param_role=ParamRole.MODEL_ORDER),
+    "label_horizon": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
+    "n_regimes": ParamSpec(dtype=int, min=2, param_role=ParamRole.MODEL_ORDER),
+    "n_experts": ParamSpec(dtype=int, min=2, param_role=ParamRole.MODEL_ORDER),
 }
 _FLOAT_PARAM_SPECS: dict[str, ParamSpec] = {
-    "alpha": ParamSpec(dtype=float, min=1e-8),
-    "l1_ratio": ParamSpec(dtype=float, min=0.0, max=1.0),
+    "alpha": ParamSpec(dtype=float, min=1e-8, param_role=ParamRole.REGULARIZATION),
+    "l1_ratio": ParamSpec(dtype=float, min=0.0, max=1.0, param_role=ParamRole.REGULARIZATION),
 }
 
 
-def _meta(name: str, description: str, params: list[str], *, unit: str = "level", pit_safe: bool = True) -> OperatorMetadata:
+def _meta(name: str, description: str, params: list[str], fn, *, unit: str = "level", pit_safe: bool = True) -> OperatorMetadata:
     tags = [
         "panel_model", "daily", "causal", "typed_v2",
         f"signature:{','.join(params)}->series", "domain:panel_model",
@@ -136,23 +139,42 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "level"
         # point-in-time safe for default mining.
         tags.append("supervised_model")
         tags.append("not_pit_certified")
+    signature = inspect.signature(fn)
     param_specs = {
-        name: _INT_PARAM_SPECS[name]
-        for name in params
-        if name in _INT_PARAM_SPECS
+        param: replace(
+            _INT_PARAM_SPECS[param],
+            default=signature.parameters[param].default,
+        )
+        for param in params
+        if param in _INT_PARAM_SPECS
     }
     param_specs.update(
         {
-            name: _FLOAT_PARAM_SPECS[name]
-            for name in params
-            if name in _FLOAT_PARAM_SPECS
+            param: replace(
+                _FLOAT_PARAM_SPECS[param],
+                default=signature.parameters[param].default,
+            )
+            for param in params
+            if param in _FLOAT_PARAM_SPECS
         }
     )
+    scalar_params = tuple(param_specs)
+    # Optional feature panels have real ``None`` defaults.  The dynamic
+    # wrapper uses ``*args/**kwargs``, so expose those defaults explicitly to
+    # the central binder while retaining their panel-input topology.
+    for param in params:
+        default = signature.parameters[param].default
+        if param not in scalar_params and default is not inspect.Parameter.empty:
+            param_specs[param] = ParamSpec(
+                default=default, searchable=False, param_role=ParamRole.POLICY
+            )
     return OperatorMetadata(
         name=name,
         category="panel_model",
         description=description,
         param_names=params,
+        panel_params=tuple(param for param in params if param not in scalar_params),
+        scalar_params=scalar_params,
         return_type="series",
         tags=tags,
         param_specs=param_specs,
@@ -164,7 +186,7 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
 
 
 def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "level", pit_safe: bool = True):
-    metadata = _meta(name, description, params, unit=unit, pit_safe=pit_safe)
+    metadata = _meta(name, description, params, fn, unit=unit, pit_safe=pit_safe)
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)

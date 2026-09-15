@@ -63,7 +63,7 @@ _CANONICALS: list[str] = []
 # (expanding warmup: a trailing segment shorter than ``window`` still fits as
 # soon as the family's minimum sample is present).
 _VOL_PARAM_SPECS: dict[str, ParamSpec] = {
-    "window": ParamSpec(dtype=int, min=2, param_role=ParamRole.HORIZON, searchable=True),
+    "window": ParamSpec(dtype=int, min=2, default=120, param_role=ParamRole.HORIZON, searchable=True),
 }
 _GARCH_MIN_WINDOW = 13   # fit_seg = window - 1 must be >= _GARCH_MIN_FIT_OBS
 _GARCH_MIN_FIT_OBS = 12  # _fit_garch/_fit_gjr both refuse below this
@@ -86,13 +86,13 @@ _HAR_FORECAST_MIN_WINDOW = _derive_har_min_window(error=False)
 _HAR_ERROR_MIN_WINDOW = _derive_har_min_window(error=True)
 _HAR_MIN_WINDOW = 30  # legacy diagnostic constant; not the public call floor
 _GARCH_PARAM_SPECS: dict[str, ParamSpec] = {
-    "window": ParamSpec(dtype=int, min=_GARCH_MIN_WINDOW, param_role=ParamRole.HORIZON, searchable=True),
+    "window": ParamSpec(dtype=int, min=_GARCH_MIN_WINDOW, default=120, param_role=ParamRole.HORIZON, searchable=True),
 }
 _HAR_FORECAST_PARAM_SPECS: dict[str, ParamSpec] = {
-    "window": ParamSpec(dtype=int, min=_HAR_FORECAST_MIN_WINDOW, param_role=ParamRole.HORIZON, searchable=True),
+    "window": ParamSpec(dtype=int, min=_HAR_FORECAST_MIN_WINDOW, default=120, param_role=ParamRole.HORIZON, searchable=True),
 }
 _HAR_ERROR_PARAM_SPECS: dict[str, ParamSpec] = {
-    "window": ParamSpec(dtype=int, min=_HAR_ERROR_MIN_WINDOW, param_role=ParamRole.HORIZON, searchable=True),
+    "window": ParamSpec(dtype=int, min=_HAR_ERROR_MIN_WINDOW, default=120, param_role=ParamRole.HORIZON, searchable=True),
 }
 # P1: window semantics contract — a max lookback, not a strict full window.
 _WINDOW_SEMANTICS = "max_lookback"
@@ -182,6 +182,15 @@ def _register(name: str, description: str, params: list[str], unit: str, fn,
               output_unit: str | None = None,
               reject_price_level: bool = False,
               param_specs: "dict[str, ParamSpec] | None" = None):
+    declared_metadata = metadata(
+        name, description, params, unit=unit, cost=8,
+        input_units=input_units, output_unit=output_unit,
+        param_specs=param_specs if param_specs is not None else _VOL_PARAM_SPECS,
+    )
+    declared_metadata.panel_params = tuple(
+        param for param in params if param not in declared_metadata.param_specs
+    )
+    declared_metadata.scalar_params = tuple(declared_metadata.param_specs)
     @register_operator(
         name=name,
         category="time_series_regression",
@@ -192,9 +201,7 @@ def _register(name: str, description: str, params: list[str], unit: str, fn,
         status="experimental",
     )
     class _VolOp(SeriesOperator):
-        metadata = metadata(name, description, params, unit=unit, cost=8,
-                            input_units=input_units, output_unit=output_unit,
-                            param_specs=param_specs if param_specs is not None else _VOL_PARAM_SPECS)
+        metadata = declared_metadata
         # P1: window semantics contract — max lookback (not strict full window).
         metadata.window_semantics = _WINDOW_SEMANTICS
 
@@ -589,15 +596,13 @@ def _har_rv(rv: np.ndarray, window: int, stat: str) -> float:
     longer keep estimating on 25/120 = 1/5 of the history.
     """
     w = int(window)
-    minimum = _HAR_FORECAST_MIN_WINDOW if stat in ("forecast", "var_forecast") else _HAR_ERROR_MIN_WINDOW
-    if w < minimum:
-        raise ValueError(
-            "INFEASIBLE_PARAMETER_DOMAIN: "
-            f"HAR {stat} window={w} is below the derived minimum {minimum}"
-        )
     seg = rv[-w:]
     n = len(seg)
-    if n < minimum:
+    # Public calls apply the stricter derived family floor through ParamSpec.
+    # The numerical helper remains governed by actual feature capacity and the
+    # two mutable support policies below; this preserves diagnostic callers
+    # that deliberately probe alternative versioned support policies.
+    if n < _HAR_FEATURE_SPAN + 2:
         return np.nan
     daily = seg
     weekly = pd.Series(seg).rolling(5).mean().to_numpy()

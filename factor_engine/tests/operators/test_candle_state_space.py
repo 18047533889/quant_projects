@@ -26,6 +26,11 @@ def _op(name: str, backend: str = "pandas_numpy"):
     return op
 
 
+def _vector_call(op, x: pd.DataFrame) -> pd.DataFrame:
+    """The vector-state operators consume four explicit feature panels."""
+    return op.calculate(x, x, x, x)
+
+
 
 # ---------------------------------------------------------------------------
 # 1. ts_vector_state_mahalanobis
@@ -45,7 +50,7 @@ def test_ts_vector_state_mahalanobis_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _vector_call(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -70,7 +75,7 @@ def test_ts_vector_state_mahalanobis_handles_nans() -> None:
     op = _op("ts_vector_state_mahalanobis")
 
     try:
-        result = op.calculate(x)
+        result = _vector_call(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -91,7 +96,7 @@ def test_ts_vector_state_mahalanobis_handles_inf() -> None:
     op = _op("ts_vector_state_mahalanobis")
 
     try:
-        result = op.calculate(x)
+        result = _vector_call(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -106,7 +111,7 @@ def test_ts_vector_state_mahalanobis_empty_input() -> None:
     op = _op("ts_vector_state_mahalanobis")
 
     try:
-        result = op.calculate(x)
+        result = _vector_call(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -124,7 +129,7 @@ def test_ts_vector_state_mahalanobis_single_column() -> None:
     op = _op("ts_vector_state_mahalanobis")
 
     try:
-        result = op.calculate(x)
+        result = _vector_call(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -150,7 +155,7 @@ def test_ts_vector_state_local_density_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _vector_call(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -175,7 +180,7 @@ def test_ts_vector_state_local_density_handles_nans() -> None:
     op = _op("ts_vector_state_local_density")
 
     try:
-        result = op.calculate(x)
+        result = _vector_call(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -196,7 +201,7 @@ def test_ts_vector_state_local_density_handles_inf() -> None:
     op = _op("ts_vector_state_local_density")
 
     try:
-        result = op.calculate(x)
+        result = _vector_call(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -211,7 +216,7 @@ def test_ts_vector_state_local_density_empty_input() -> None:
     op = _op("ts_vector_state_local_density")
 
     try:
-        result = op.calculate(x)
+        result = _vector_call(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -229,7 +234,7 @@ def test_ts_vector_state_local_density_single_column() -> None:
     op = _op("ts_vector_state_local_density")
 
     try:
-        result = op.calculate(x)
+        result = _vector_call(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
