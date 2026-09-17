@@ -333,6 +333,30 @@ def _release_lease(lease: Any) -> None:
         lease.release()
 
 
+class _CSEMemoryLeaseBundle:
+    """One logical CSE owner backed by multiple admitted memory leases."""
+
+    def __init__(self, *leases: Any) -> None:
+        self._leases = tuple(item for item in leases if item is not None)
+        self._released = False
+        self._lock = threading.Lock()
+
+    def release(self) -> None:
+        with self._lock:
+            if self._released:
+                return
+            self._released = True
+        first_error = None
+        for item in self._leases:
+            try:
+                item.release()
+            except BaseException as exc:
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
+
+
 def _run_in_job_context(job_lease: Any, fn: Callable[..., Any], *args: Any) -> Any:
     """Run executor work with the explicitly captured job bound for DA children."""
     with job_lease.bind_context():
@@ -596,13 +620,34 @@ class AdaptiveBatchScheduler:
             return False
         from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
 
+        # A materialized panel can exceed its planning estimate. Admit that
+        # measured overflow before replacing the running reservation so there
+        # is never an unaccounted residency gap or a budget bypass.
+        inner_lease = getattr(lease, "_broker_lease", lease)
+        task = getattr(inner_lease, "task", None)
+        admitted = max(0, int(getattr(task, "admissible_peak_bytes", 0) or 0))
+        if admitted <= 0:
+            return False
+        transferred_bytes = min(nbytes, admitted)
+        overflow_lease = None
+        if nbytes > transferred_bytes:
+            overflow_lease = self._acquire_wave(
+                MemoryLeaseKind.CSE_CACHE,
+                nbytes - transferred_bytes,
+                lease_id=f"{self._lease_scope}:cse-overflow:{sid}",
+            )
+            if overflow_lease is None:
+                return False
         memory_lease = transfer(
             MemoryLeaseKind.CSE_CACHE,
-            nbytes,
+            transferred_bytes,
             lease_id=f"{self._lease_scope}:cse:{sid}",
         )
         if memory_lease is None:
+            _release_lease(overflow_lease)
             return False
+        if overflow_lease is not None:
+            memory_lease = _CSEMemoryLeaseBundle(memory_lease, overflow_lease)
         return bool(store.attach_memory_lease(sid, memory_lease, target=target))
 
     def _submit(self, backend: str, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Future:

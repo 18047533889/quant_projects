@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+
 try:
     import polars as pl
 except ImportError:
@@ -297,6 +299,17 @@ class ClipPolars(SeriesOperator):
 @register_operator(name="where", category="signal", business_category="technical_signal", canonical="where", source="factor_dsl_polars")
 class WherePolars(SeriesOperator):
     """Polars 条件选择（if-else）算子。"""
+
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="where", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=False, materializes_full_panel=True, requires_sorted=False,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="cleaned_operators.common.polars_ops:WherePolars:v1",
+        emitter_identity="polars.when.then.otherwise:three_valued:v1",
+        parameter_domain_hash="where.condition:dataframe,x:dataframe,y:dataframe",
+        semantic_contract_hash="where:finite_nonzero_true_unknown_null:v1",
+    )
 
     metadata = OperatorMetadata(
         name="where", category="signal", description="条件选择",

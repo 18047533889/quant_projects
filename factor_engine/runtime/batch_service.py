@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any, Sequence
 
 from factor_engine.api.factor import Factor
@@ -296,12 +297,18 @@ def _materialize_shared_subplan(
                 except Exception:
                     recompute_ms = 0.0
 
+            logical_refcounts = getattr(ctx, "_cse_refcounts", None) or {}
             res = store.put(
                 sid,
                 value,
                 recompute_cost_ms=recompute_ms,
                 next_use_distance=next_use_dist,
                 future_consumers=future_cons,
+                # Close the materialization→admission eviction gap atomically.
+                # Scheduler admission happens on the next control tick; a
+                # governor decision in between must not evict a result that
+                # still has logical consumers.
+                pin=int(logical_refcounts.get(str(sid), 0) or 0) > 0,
             )
             if res.status in ("MEMORY", "SPILLED"):
                 _release_consumed_sids(ctx, sub)
@@ -395,6 +402,28 @@ def _release_consumed_sids(ctx: Any, root: Any) -> None:
                 ctx.shared_result_cache.pop(sid, None)
 
 
+def _release_all_cse_sids(ctx: Any, shared_nodes: Any) -> None:
+    """Converge initial materialization holds after success or aborted runs."""
+
+    store = getattr(ctx, "shared_buffers", None)
+    if store is None:
+        return
+    nodes = shared_nodes or {}
+    keys = nodes.keys() if isinstance(nodes, dict) else (sid for sid, _ in nodes)
+    for sid in keys:
+        store.release(str(sid))
+
+
+@contextmanager
+def _cse_release_scope(ctx: Any, shared_nodes: Any):
+    """Release materialization holds when a legacy batch scope exits."""
+
+    try:
+        yield
+    finally:
+        _release_all_cse_sids(ctx, shared_nodes)
+
+
 
 def _cse_shared_reachability(
     roots_plans: list[Any], shared_nodes: dict[str, Any],
@@ -464,8 +493,12 @@ def _setup_cse_refcounts(
     shared = shared_nodes or {}
     if not isinstance(shared, dict):
         shared = dict(shared)
-    reachable, _dangling, _cycles = _cse_shared_reachability(roots_plans, shared)
-    shared_plans = [shared[sid] for sid in reachable]
+    # Every shared definition is currently lowered to an executable physical
+    # task, including definitions that integrity audit reports as root-orphaned.
+    # Count those real consumers too: excluding them lets an orphan task consume
+    # and release an inner SID without a matching hold, so the SID can disappear
+    # while a later admitted root is still using it.
+    shared_plans = list(shared.values())
     counts = cse_consumer_counts(roots_plans + shared_plans)
     if counts:
         try:
@@ -516,8 +549,10 @@ def validate_cse_refcount_integrity(dag: Any, ctx: Any) -> dict[str, Any]:
             issues.append(f"shared sid={sid!r} is orphaned (not root-reachable)")
     for edge in sorted(cycles):
         issues.append(f"shared dependency cycle detected at {edge}")
-    reachable_plans = [shared_nodes[sid] for sid in reachable]
-    counts = cse_consumer_counts(roots_plans + reachable_plans)
+    # Match the executable DAG lifecycle: the physical lowerer currently emits
+    # every shared definition, while orphan reachability remains a separate
+    # integrity issue above.
+    counts = cse_consumer_counts(roots_plans + list(shared_nodes.values()))
     refcounts = getattr(ctx, "_cse_refcounts", None) or {}
     for sid, expected in counts.items():
         actual = refcounts.get(sid, 0)
@@ -760,6 +795,7 @@ def _execute_root_with_path(
                 if physical_root_id is not None
                 else str(getattr(plan, "node_id", ""))
             ),
+            admission_mode=str(run_mode or "production").lower(),
         )
     path = snapshot_backend_path(getattr(local_ctx, "runtime_stats", None))
     physical_meta = dict(
@@ -1036,6 +1072,86 @@ def _record_region_candidate_ledger(ctx: Any, optimization: Any, policy: Any | N
     ctx.runtime_stats = runtime
 
 
+def _batch_route_from_physical_optimization(
+    optimization: Any,
+    *,
+    root_names: tuple[str, ...],
+    scan_cost_map: dict[str, Any] | None,
+    shared_roots: int,
+    factor_count: int,
+):
+    """Build the compatibility route ledger from the authoritative plan."""
+    from factor_engine.backend.plan_cost_router import BatchPhysicalRoute
+    from factor_engine.runtime.physical_execution_index import (
+        build_physical_execution_index,
+    )
+
+    plan = optimization.physical_plan
+    index = build_physical_execution_index(plan)
+    per_root = []
+    scan_bytes = 0
+    conversion_bytes = 0
+    fallback_scan_cost = next(iter((scan_cost_map or {}).values()), None)
+    for name in root_names:
+        region = index.regions[index.node_regions[name]]
+        choice = optimization.per_node_choices[name]
+        per_root.append((name, region.backend.value, choice.total_cost_ms))
+        cost = (scan_cost_map or {}).get(name) or fallback_scan_cost
+        scan_bytes += int(getattr(cost, "selected_bytes", 0) or 0)
+        conversion_bytes += int(getattr(cost, "projection_bytes", 0) or 0)
+    root_count = len(root_names)
+    scheduler_overhead = max(1, root_count * 2 + shared_roots) * 0.15
+    dq = root_count * 0.5
+    write = max(1, root_count) * 0.8
+    generation_commit = 2.0 + max(0.0, factor_count / 1000.0) * 5.0
+    return BatchPhysicalRoute(
+        total_time_to_durable_commit_ms=(
+            plan.total_ttdc_ms
+            + scheduler_overhead + dq + write + generation_commit
+        ),
+        per_root=tuple(per_root),
+        shared_benefit_ms=optimization.total_shared_benefit_ms,
+        native_fraction=plan.native_fraction,
+        scan_bytes=scan_bytes,
+        conversion_bytes=conversion_bytes,
+        scheduler_overhead_ms=scheduler_overhead,
+        dq_ms=dq,
+        write_ms=write,
+        generation_commit_ms=generation_commit,
+    )
+
+
+def _compatibility_batch_route(
+    physical_optimization: Any,
+    root_plans: dict[str, Any],
+    ctx: Any,
+    *,
+    scan_cost_map: dict[str, Any] | None,
+    shared_roots: int,
+    factor_count: int,
+    legacy_planner: Any,
+):
+    """Reuse the authoritative route, falling back only if projection fails."""
+    if physical_optimization is not None:
+        try:
+            return _batch_route_from_physical_optimization(
+                physical_optimization,
+                root_names=tuple(root_plans),
+                scan_cost_map=scan_cost_map,
+                shared_roots=shared_roots,
+                factor_count=factor_count,
+            )
+        except Exception:
+            pass
+    return legacy_planner(
+        root_plans,
+        ctx,
+        scan_cost_map=scan_cost_map,
+        shared_roots=shared_roots,
+        factor_count=factor_count,
+    )
+
+
 def _batch_source_bars_per_day(engine: Any) -> int:
     """批跑数据源的日内 bar 数（intraday trim 精度用）。"""
     from factor_engine.cleaned_operators.operator_policy import bars_per_day, infer_source_bar_freq
@@ -1213,6 +1329,26 @@ def _bind_physical_task_budgets(scheduler_plan, optimization):
     from dataclasses import replace
     from factor_engine.planner.physical_factor_dag import TASK_CSE_SHARED, TASK_ROOT
     from factor_engine.runtime.task_resource_contract import TaskResourceContract
+    reachable_shared = getattr(optimization, "logical_shared_nodes", None)
+    if isinstance(reachable_shared, dict):
+        stale_cse = {
+            task_id
+            for task_id, task in scheduler_plan.physical_dag.tasks.items()
+            if task.task_type == TASK_CSE_SHARED
+            and str(task_id).split(":", 1)[-1] not in reachable_shared
+        }
+        if stale_cse:
+            for task_id in stale_cse:
+                del scheduler_plan.physical_dag.tasks[task_id]
+            for task_id, task in list(scheduler_plan.physical_dag.tasks.items()):
+                inputs = tuple(item for item in task.inputs if item not in stale_cse)
+                consumers = tuple(
+                    item for item in task.consumers if item not in stale_cse
+                )
+                if inputs != task.inputs or consumers != task.consumers:
+                    scheduler_plan.physical_dag.tasks[task_id] = replace(
+                        task, inputs=inputs, consumers=consumers
+                    )
     physical = optimization.physical_plan
     from factor_engine.planner.backend_region import PhysicalRegionPlan
     from types import SimpleNamespace
@@ -1516,6 +1652,47 @@ def _execute_run_many_scheduler(
             ctx.runtime_stats = runtime
         except ImportError:
             raise
+    elif engine_to_use.backend.__class__.__name__ == "HybridBackend":
+        # Research auto uses the logical DAG directly. Production source
+        # authority is intentionally not fabricated here: bare columns remain
+        # non-production-certified and are admitted only by execution_ready.
+        from factor_engine.planner.batch_global_optimizer import optimize_batch_global
+        from factor_engine.runtime.engine import (
+            _admit_ready_single_region_batch,
+            _physical_plan_telemetry,
+        )
+
+        root_plans = {fp.factor_name: fp.root for fp in dag.roots}
+        bound_shared_nodes = dict(dag.shared_nodes or {})
+        planner_policy = _v2_planner_policy(engine_to_use)
+        physical_optimization = optimize_batch_global(
+            root_plans,
+            bound_shared_nodes,
+            {},
+            ctx,
+            max_optimization_ms=float(
+                getattr(planner_policy, "optimization_budget_ms_per_group", 250.0)
+            ),
+            column_scan_costs=batch_request.column_scan_costs,
+            max_candidate_plans=int(
+                getattr(planner_policy, "candidate_limit_per_group", 128)
+            ),
+            forced_backend=str(getattr(planner_policy, "backend", "auto")),
+        )
+        physical_optimization = _admit_ready_single_region_batch(
+            physical_optimization,
+            tuple(root_plans),
+            admission_mode="research",
+        )
+        _record_region_candidate_ledger(ctx, physical_optimization, planner_policy)
+        _bind_physical_task_budgets(plan, physical_optimization)
+        physical_by_factor = {name: physical_optimization for name in root_plans}
+        execution_backend = engine_to_use.backend
+        physical_plan_meta = _physical_plan_telemetry(physical_optimization)
+        physical_plan_meta.pop("actual_backend", None)
+        runtime = dict(ctx.runtime_stats or {})
+        runtime["physical_plan"] = physical_plan_meta
+        ctx.runtime_stats = runtime
     else:
         physical_optimization = None
         physical_by_factor = {}
@@ -1531,12 +1708,14 @@ def _execute_run_many_scheduler(
             root_plans = {
                 fp.factor_name: fp.root for fp in dag.roots
             }
-            batch_route = plan_batch_route(
+            batch_route = _compatibility_batch_route(
+                physical_optimization,
                 root_plans,
                 ctx,
                 scan_cost_map=batch_request.scan_cost_map,
                 shared_roots=len(dag.shared_nodes or {}),
                 factor_count=len(factors),
+                legacy_planner=plan_batch_route,
             )
             record_batch_route(ctx, batch_route)
             batch_route_meta = batch_route.to_dict()
@@ -1583,7 +1762,11 @@ def _execute_run_many_scheduler(
 
             bound_node = physical_optimization.logical_shared_nodes[str(sid)]
             value = _execute_ready_physical_shared_task(
-                physical_optimization, str(sid), execution_backend, ctx
+                physical_optimization,
+                str(sid),
+                execution_backend,
+                ctx,
+                admission_mode=str(run_mode or "production").lower(),
             )
             eagerly_materialized = _materialize_shared_subplan(
                 execution_backend,
@@ -1660,6 +1843,10 @@ def _execute_run_many_scheduler(
             scheduler.executor.shutdown(wait=True)
         finally:
             peak = run_peak_sampler.stop()
+            # Success releases each sid at its last logical consumer.  Abort,
+            # cancellation, sink failure, or a fatal sibling can leave roots
+            # unconsumed; converge those initial materialization pins here.
+            _release_all_cse_sids(ctx, getattr(dag, "shared_nodes", None))
         ctx.runtime_stats = record_resource_telemetry(
             ctx.runtime_stats, finalize=True, run_peak=peak
         )
@@ -1769,6 +1956,7 @@ def execute_run_many(
     result_policy: str = "return",
     sink: Any = None,
     warmup_clusters: bool = False,
+    _compiled: tuple[Any, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """``FactorEngine.run_many`` 实现体：默认多因子 DAG 自适应求值。
 
@@ -1823,11 +2011,8 @@ def execute_run_many(
 
     # 编译一次（CSE DAG + analyses），聚类与主执行共享同一份编译结果；同时消除
     # 老代码在 warmup_clusters 分支里的重复 ``_dag_from_factors`` 二次编译。
-    dag, analyses = engine._dag_from_factors(
-        factors,
-        enable_cse=enable_cse,
-        perf=perf,
-        pit_enforce=pit_enforce,
+    dag, analyses = _compiled or engine._dag_from_factors(
+        factors, enable_cse=enable_cse, perf=perf, pit_enforce=pit_enforce,
         pit_forbid_forward_fill=pit_forbid_forward_fill,
     )
     perf = perf or PerfConfig.from_env()
@@ -1854,8 +2039,32 @@ def execute_run_many(
     if warmup_clusters and auto_warmup and len(factors) > 1:
         waves = _cluster_factors_by_cost(engine, factors, analyses, plan=warmup_plan)
         if len(waves) > 1:
+            from factor_engine.planner.dag import DAGPlan
+
             merged: dict[str, Any] = {"results": {}, "analyses": analyses}
             for wave in waves:
+                wave_names = {factor.name for factor in wave}
+                wave_roots = [
+                    root for root in dag.roots if root.factor_name in wave_names
+                ]
+                reachable, dangling, cycles = _cse_shared_reachability(
+                    [root.root for root in wave_roots], dag.shared_nodes or {},
+                )
+                if dangling or cycles:
+                    raise RuntimeError(
+                        "warmup wave cannot reuse the compiled DAG: "
+                        f"dangling={sorted(dangling)!r}, cycles={sorted(cycles)!r}"
+                    )
+                wave_compiled = (
+                    DAGPlan(
+                        roots=wave_roots,
+                        shared_nodes={
+                            sid: node for sid, node in (dag.shared_nodes or {}).items()
+                            if str(sid) in reachable
+                        },
+                    ),
+                    {name: analyses[name] for name in wave_names},
+                )
                 partial = execute_run_many(
                     engine,
                     wave,
@@ -1871,6 +2080,7 @@ def execute_run_many(
                     pit_forbid_forward_fill=pit_forbid_forward_fill,
                     result_policy=result_policy,
                     sink=sink,
+                    _compiled=wave_compiled,
                 )
                 merged["results"].update(partial.get("results") or {})
                 for key in ("input_dq", "batch_graph", "backend_paths", "plan_costs"):
@@ -1963,7 +2173,7 @@ def execute_run_many(
             )
         return result, path
 
-    with routing_execution_scope(perf):
+    with routing_execution_scope(perf), _cse_release_scope(ctx, dag.shared_nodes):
         if ctx.shared_result_cache is not None:
             _setup_cse_refcounts(ctx, dag.roots, shared_nodes=dag.shared_nodes)
             materialize_shared_nodes_parallel(dag, engine_to_use.backend, ctx)
@@ -2150,7 +2360,7 @@ def execute_run_many_iter(
     root_by_name = {fp.factor_name: fp for fp in dag.roots}
     source_bars_per_day = _batch_source_bars_per_day(engine_to_use)
 
-    with routing_execution_scope(perf):
+    with routing_execution_scope(perf), _cse_release_scope(ctx, dag.shared_nodes):
         if ctx.shared_result_cache is not None:
             _setup_cse_refcounts(ctx, dag.roots, shared_nodes=dag.shared_nodes)
             materialize_shared_nodes_parallel(dag, engine_to_use.backend, ctx)
@@ -2213,6 +2423,7 @@ def execute_run_many_parallel(
     sink: Any = None,
     isolate_physical_errors: bool = False,
     _execution_owner: dict[str, str] | None = None,
+    _compiled: tuple[Any, dict[str, Any]] | None = None,
     _collect_fit_failure_snapshot: bool = False,
 ) -> dict[str, Any]:
     """``FactorEngine.run_many_parallel`` 实现体：根节点层内并行。
@@ -2255,11 +2466,8 @@ def execute_run_many_parallel(
     # 流式 sink（不再依赖 joblib，也避免整层 raw list burst memory）。
 
     # PIT 在编译期审计；auto_warmup 走共享 union 窗口 —— 两者都不再退化为逐因子 run()。
-    dag, analyses = engine._dag_from_factors(
-        factors,
-        enable_cse=enable_cse,
-        perf=perf,
-        pit_enforce=pit_enforce,
+    dag, analyses = _compiled or engine._dag_from_factors(
+        factors, enable_cse=enable_cse, perf=perf, pit_enforce=pit_enforce,
         pit_forbid_forward_fill=pit_forbid_forward_fill,
     )
     perf = perf or PerfConfig.from_env()
@@ -2430,7 +2638,7 @@ def execute_run_many_parallel(
     )
     _enter_scope()
     try:
-        with routing_execution_scope(perf):
+        with routing_execution_scope(perf), _cse_release_scope(ctx, dag.shared_nodes):
             if ctx.shared_result_cache is not None:
                 _setup_cse_refcounts(ctx, dag.roots, shared_nodes=dag.shared_nodes)
                 materialize_shared_nodes_parallel(dag, engine_to_use.backend, ctx)

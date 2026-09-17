@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "factor_engine/tests/operators/test_round14_hvg_structural_support_2026_08.py", "-k", "hvg", "--tb=short"], "returncode": 0, "sampled_peak_family_rss_bytes": 799432704, "sampling_seconds": 0.1, "seconds": 60.89981749490835, "test_guard_reason": null, "hard_memory_cap": false}

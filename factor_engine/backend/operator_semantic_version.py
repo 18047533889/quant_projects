@@ -14,6 +14,8 @@ class OperatorSemanticVersion:
 
 # 已知语义变更历史（新因子应使用最新 version）
 OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
+    # R16: Polars CCI now propagates null/nonfinite active windows like pandas.
+    "CCI": 2,
     # R6: final finite/mixed/graph panel contracts; no certification promotion.
     "hump_decay": 2,
     "trade_when": 2,
@@ -353,6 +355,7 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_autocorrelation_time_initial_positive_sequence": 2,
     # v2: input kind is explicit/typed; unknown or wrong domains fail closed.
     "ts_return_spectral_entropy": 2,
+    "ts_activity_spectral_entropy": 2,
     "ts_spectral_entropy": 2,
     "ts_detrended_level_spectral_entropy": 2,
     # v2: max-scaled probability weights; expected shortfall also requires

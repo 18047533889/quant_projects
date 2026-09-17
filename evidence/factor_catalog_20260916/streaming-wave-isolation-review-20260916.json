@@ -1,0 +1,25 @@
+{
+  "review": "streaming_wave_isolation",
+  "date": "2026-09-16",
+  "implementation_changed": false,
+  "current_behavior": {
+    "primary_error": "preserves and rethrows the first compute error; it does not continue",
+    "wave_failure": "aborts remaining factors and closes the input iterator",
+    "per_factor_terminals": false,
+    "cse_scope": "per_wave",
+    "global_cse": false
+  },
+  "reusable_components": [
+    "runtime/persistent_run_state.py terminal state model",
+    "runtime/bounded_pipeline.py receipt aggregation",
+    "batch_service physical_preflight_errors for the narrow production DataAccess case"
+  ],
+  "minimum_design": [
+    "return structured per-root errors from scheduler/batch service",
+    "continue independent roots; block only roots depending on a failed shared CSE",
+    "abort on sink, cancellation, broker authority, or scope-wide source failures",
+    "converge every requested ordinal to SUCCEEDED, FAILED, BLOCKED, or CANCELLED",
+    "retain cse_scope=per_wave until a scope/snapshot/window-bound stream ExecutionSession exists"
+  ],
+  "unsafe_shortcut": "Do not bisect or rerun an aborted wave outside the runner because already submitted sink results may be duplicated."
+}

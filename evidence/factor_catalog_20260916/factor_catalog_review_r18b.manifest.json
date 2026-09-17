@@ -1,0 +1,77 @@
+{
+  "batch_execution_status_counts": {
+    "BATCH_ABORTED": 37,
+    "EXECUTED": 36
+  },
+  "execution_groups": [
+    {
+      "counts": {
+        "EXECUTED": 34
+      },
+      "execution": "evidence/factor_catalog_20260916/factor_catalog_review_r18a.technical34_auto_r1.output.jsonl.gz",
+      "execution_sha256": "cdbc4a730f20fbfa7be81edb22d9c6a3f3b590e69a1ace4ef4949be643bfb9e9",
+      "input": "evidence/factor_catalog_20260916/factor_catalog_review_r18a.technical34.input.jsonl.gz",
+      "input_sha256": "5aa10749dbe1b7aff4ed8ab20369c57d64da8953b3edb5daab138364d835fdf9",
+      "records": 34,
+      "summary": "evidence/factor_catalog_20260916/factor_catalog_review_r18a.technical34_auto_r1.output.summary.json",
+      "summary_sha256": "eb437c2e9774de4f6a2f779a0179e150699061f058338730ec858608ad3db07e",
+      "symbol_count": 8,
+      "window": [
+        "2025-01-01",
+        "2026-04-30"
+      ]
+    },
+    {
+      "counts": {
+        "EXECUTED": 2
+      },
+      "execution": "evidence/factor_catalog_20260916/native-crash-daily2-r2.output.jsonl.gz",
+      "execution_sha256": "be7e996de12cef79d70ab4f59fdfdcbfb23980681b17ad43e910718be2e952d6",
+      "input": "evidence/factor_catalog_20260916/native-crash-daily2.input.jsonl.gz",
+      "input_sha256": "e6724c18a2c0dff0c6ca8ee40f4beb8a383d3b408fb8444b98fa341eb9e79ca8",
+      "records": 2,
+      "summary": "evidence/factor_catalog_20260916/native-crash-daily2-r2.output.summary.json",
+      "summary_sha256": "adf558fd7f643ef26b044f2890516de500345caff0d0988464b85fb53e5b5e8e",
+      "symbol_count": 8,
+      "window": [
+        "2025-01-01",
+        "2026-04-30"
+      ]
+    },
+    {
+      "counts": {
+        "BATCH_ABORTED": 37
+      },
+      "execution": "evidence/factor_catalog_20260916/factor_catalog_review_r17c.limit_valid37_auto_r1.output.jsonl.gz",
+      "execution_sha256": "0817f0de5642e3d8f3dbb129c086e279f39c73ad376b7669544343c369d24a30",
+      "input": "evidence/factor_catalog_20260916/factor_catalog_review_r17c.limit_valid37.input.jsonl.gz",
+      "input_sha256": "326a4cdb26645baa3426aa21b66055def9924aa92cf08343411de06dab533813",
+      "records": 37,
+      "summary": "evidence/factor_catalog_20260916/factor_catalog_review_r17c.limit_valid37_auto_r1.output.summary.json",
+      "summary_sha256": "01b26ea459a2b0d164f37d80e6ff08f855e3e8e6885d1fec115a27c805df3400",
+      "symbol_count": 8,
+      "window": [
+        "2025-01-01",
+        "2026-04-30"
+      ]
+    }
+  ],
+  "execution_records": 73,
+  "input_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r18a.csv.gz",
+  "input_checkpoint_sha256": "27970c460405be981a38c846a87829d13f72d2883cae051a67792968574d24c6",
+  "output_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r18b.csv.gz",
+  "output_checkpoint_sha256": "6215231104037d3ef635912827a413a3d274152f4c4be4aa4b46aaafd376758a",
+  "output_execution_status_counts": {
+    "BATCH_ABORTED": 40,
+    "COMPILE_FAILED": 119,
+    "EXECUTED": 8134,
+    "EXECUTED_ALL_NONFINITE": 186,
+    "EXECUTION_FAILED": 26,
+    "NATIVE_CRASH": 18,
+    "NOT_RUN": 105595,
+    "PREPARE_FAILED": 14
+  },
+  "scope": "multi_group_pinned_mixed_terminal_research_execution_evidence; no NOT_RUN target remains",
+  "source_rows": 114132,
+  "unique_factor_ids": 113893
+}

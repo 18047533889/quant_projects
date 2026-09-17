@@ -107,7 +107,7 @@ def test_dynamics_pack_deterministic_shape_prefix():
         "group_corr_mode_localization": (x, y, z, g),
         "cs_knn_peer_mean_ex_self": (y, x, z, z + 1.0),
         "cs_knn_neighbor_retention": (x, z, z + 1.0),
-        "report_filing_delay_surprise": (z,),
+        "report_filing_delay_surprise": (z, ev),
         "ts_hill_tail_index": (x,),
     }
     kwargs = {
@@ -435,7 +435,7 @@ def test_dynamics_polars_parity():
         "ts_joint_energy_shift": (x, y, z),
         "ts_energy_break_score": (x, y, z),
         "ts_hill_tail_index": (x,),
-        "report_filing_delay_surprise": (z,),
+        "report_filing_delay_surprise": (z, ev),
     }
     kwargs = {
         "ts_markov_persistence": {"window": 40, "bins": 3, "lag": 1, "min_count": 3},

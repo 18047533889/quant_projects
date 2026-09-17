@@ -172,6 +172,7 @@ def estimate_scan_cost(
     columns: Sequence[str] | None = None,
     time_range: tuple[Any, Any] | None = None,
     instrument_filter: Sequence[str] | None = None,
+    physical_scope: Sequence[str] | None = None,
     prefer_polars: bool = False,
     **params: Any,
 ) -> ScanCost:
@@ -193,14 +194,36 @@ def estimate_scan_cost(
     basis = "stats"
 
     manifest = None
-    try:
-        from data_access.read.manifest import load_manifest_for_dataset
+    if physical_scope is not None:
+        # prepare_read already froze the exact executor scope.  Cost discovery
+        # must use the same objects rather than independently resolving the
+        # dataset manifest again (which may describe the full dataset).
+        from data_access.read.stats import expand_parquet_paths, estimate_parquet_rows
 
-        manifest = load_manifest_for_dataset(store, dataset, **params)
-    except Exception:
-        manifest = None
+        scoped_files = expand_parquet_paths([str(path) for path in physical_scope])
+        requested = [str(path) for path in physical_scope]
+        if requested and not scoped_files:
+            # Exact remote objects must first be resolved through the configured
+            # mirror/COS layer.  Never fall back to whole-dataset stats because
+            # that would silently break the frozen-scope invariant.
+            basis = "unknown"
+        else:
+            basis = "physical_scope"
+            file_count = selected_files = len(scoped_files)
+            selected_bytes = sum(path.stat().st_size for path in scoped_files)
+            total_bytes = selected_bytes
+            estimated_rows = estimate_parquet_rows(scoped_files)
+    else:
+        try:
+            from data_access.read.manifest import load_manifest_for_dataset
 
-    if manifest is not None and manifest.files:
+            manifest = load_manifest_for_dataset(store, dataset, **params)
+        except Exception:
+            manifest = None
+
+    if physical_scope is not None:
+        stats_failed = basis == "unknown"
+    elif manifest is not None and manifest.files:
         basis = "manifest"
         by_path = {f.path: f for f in manifest.files}
         pruned_paths = manifest.prune(

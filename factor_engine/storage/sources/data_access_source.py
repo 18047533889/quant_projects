@@ -50,7 +50,7 @@ class _SourceThreadState(threading.local):
         self.lazy_overrides: "weakref.WeakKeyDictionary[Any, dict[str, bool]]" = (
             weakref.WeakKeyDictionary()
         )
-        self.logical_wrappers: "weakref.WeakKeyDictionary[Any, Any]" = (
+        self.logical_wrappers: "weakref.WeakKeyDictionary[Any, weakref.ReferenceType[Any]]" = (
             weakref.WeakKeyDictionary()
         )
 
@@ -67,11 +67,26 @@ def register_logical_wrapper(inner: Any, wrapper: Any) -> None:
     if wrapper is None:
         _source_tls.logical_wrappers.pop(inner, None)
     else:
-        _source_tls.logical_wrappers[inner] = wrapper
+        # A WeakKeyDictionary is not sufficient when its value strongly owns
+        # the key. LQTPLogicalDataSource.inner points back to ``inner``, so a
+        # strong value here would keep both objects (and their read-wave
+        # buffers/leases) alive forever. The execution context owns the wrapper;
+        # this registry is only a non-owning, thread-local lookup.
+        _source_tls.logical_wrappers[inner] = weakref.ref(wrapper)
 
 
 def _logical_wrapper_for(inner: Any) -> Any | None:
-    return _source_tls.logical_wrappers.get(inner)
+    ref = _source_tls.logical_wrappers.get(inner)
+    if ref is None:
+        return None
+    wrapper = ref()
+    if wrapper is None:
+        # Identity-safe cleanup: remove only the same dead registration, never
+        # a newer wrapper generation installed for this inner source.
+        if _source_tls.logical_wrappers.get(inner) is ref:
+            _source_tls.logical_wrappers.pop(inner, None)
+        return None
+    return wrapper
 
 
 class DataAccessColumnPreflightError(ValueError):

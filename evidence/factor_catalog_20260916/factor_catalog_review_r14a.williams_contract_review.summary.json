@@ -1,0 +1,13 @@
+{
+  "checkpoint": "factor_catalog_review_r14a.csv.gz",
+  "checkpoint_sha256": "16261f5e3f7917c336e0e692578a57c7493eec2d0980559c7e0959b023f540cd",
+  "frozen_decisions": "evidence/factor_catalog_20260916/factor_catalog_review_r14a.decisions.jsonl.gz",
+  "record_count": 67,
+  "counts": {
+    "EXACT_SHAPE_RECIPE": 35,
+    "EXPLICIT_CONTRACT_REPAIR": 32
+  },
+  "all_replay_formula_equal": true,
+  "review_file": "evidence/factor_catalog_20260916/factor_catalog_review_r14a.williams_contract_review.jsonl.gz",
+  "review_file_sha256": "41010a1c8e6bf56f105940e363b992f3588c82ae3a93ef99c42e1633bd932e30"
+}

@@ -39,7 +39,7 @@ _WINDOW_CANONICALS = frozenset({
 PARAMETER_ALIASES: dict[str, dict[str, str]] = {
     **{name: {"d": "window"} for name in _WINDOW_CANONICALS},
     "ts_delay": {"d": "n", "window": "n", "lag": "n", "periods": "n"},
-    "ts_delta": {"d": "n", "window": "n", "lag": "n", "periods": "n"},
+    "ts_delta": {"d": "n"},
     "ts_log_return": {"periods": "d", "window": "d", "lag": "d"},
     "ts_pct": {"periods": "d", "window": "d", "lag": "d", "n": "d"},
     "lerp": {"f": "fraction"},
@@ -52,7 +52,7 @@ PARAMETER_ALIASES: dict[str, dict[str, str]] = {
 # re-derives this set from the loaded registry and FAILS on drift (an entry that
 # gains metadata backing must be removed here, or the assertion breaks).
 #
-# ``ts_beta``, ``ts_median``, and ``ts_zscore`` gained metadata
+# The canonicals excluded below gained metadata
 # ``param_aliases={"d": "window"}``, so they are no longer compat-only; their
 # PARAMETER_ALIASES entries stay as planning-before-load_all fallbacks, but the
 # compat marker excludes them.  ``ts_rank`` remains compat-only (its polars native
@@ -60,7 +60,10 @@ PARAMETER_ALIASES: dict[str, dict[str, str]] = {
 # test_rolling_parameter_contracts).
 _COMPAT_ONLY_ALIAS_CANONICALS: frozenset[str] = (
     frozenset(PARAMETER_ALIASES.keys())
-    - frozenset({"ts_beta", "ts_median", "ts_zscore"})
+    - frozenset({
+        "ts_beta", "ts_delay", "ts_delta", "ts_max", "ts_median", "ts_min",
+        "ts_std", "ts_sum", "ts_zscore",
+    })
 )
 
 

@@ -122,7 +122,9 @@ class SourceBindingResult:
     source_ref_columns_bound: int = 0  # 其中产生 typed binding 的数量
 
 
-def discover_column_source_bindings(plans: Iterable[Any]) -> SourceBindingResult:
+def discover_column_source_bindings(
+    plans: Iterable[Any], *, market: str = "", anchor_dataset: str = ""
+) -> SourceBindingResult:
     """扫描计划中的 ``column`` 节点，为每个 SourceRef 列构建 typed binding。
 
     - 非 SourceRef 列：不产生 binding（走 anchor group）。
@@ -134,38 +136,120 @@ def discover_column_source_bindings(plans: Iterable[Any]) -> SourceBindingResult
         from factor_engine.api.source_ref import decode_source_ref, looks_like_source_ref
     except Exception:  # pragma: no cover - import 环境缺 api 时降级为无 binding
         return SourceBindingResult(bindings={})
+    requested_market = str(market or "").strip().lower()
+    registered_market = ""
+    try:
+        from factor_engine.storage.sources.logical_tables import (
+            ASHARE_LOGICAL_TABLES,
+            US_LOGICAL_TABLES,
+        )
+
+        registered = {
+            "ashare": {
+                contract.dataset for contract in ASHARE_LOGICAL_TABLES.values()
+                if contract.dataset
+            },
+            "us": {
+                contract.dataset for contract in US_LOGICAL_TABLES.values()
+                if contract.dataset
+            },
+        }
+        matching = {
+            name for name, datasets in registered.items()
+            if anchor_dataset in datasets
+        }
+        if requested_market:
+            if requested_market in matching:
+                registered_market = requested_market
+        elif len(matching) == 1:
+            registered_market = next(iter(matching))
+    except Exception:
+        registered_market = ""
 
     bindings: dict[str, ColumnSourceBinding] = {}
     seen: set[str] = set()
     bound: set[str] = set()
 
-    def walk(node: Any) -> None:
-        op = str(getattr(node, "op", "") or "")
-        if op == "column":
-            name = str((getattr(node, "attrs", None) or {}).get("name") or "")
+    visited: set[int] = set()
+    active: set[int] = set()
+
+    def walk(root: Any) -> None:
+        stack = [(root, False)]
+        while stack:
+            node, exiting = stack.pop()
+            node_key = id(node)
+            if exiting:
+                active.remove(node_key)
+                visited.add(node_key)
+                continue
+            if node_key in active:
+                raise ValueError("cyclic plan dependency while discovering source bindings")
+            if node_key in visited:
+                continue
+            active.add(node_key)
+            op = str(getattr(node, "op", "") or "")
+            if op == "column":
+                name = str((getattr(node, "attrs", None) or {}).get("name") or "")
+            else:
+                name = ""
             if name and looks_like_source_ref(name):
                 seen.add(name)
                 if name in bindings:
                     bound.add(name)
-                    return
+                    active.remove(node_key)
+                    visited.add(node_key)
+                    continue
                 try:
                     ref = decode_source_ref(name)
                 except Exception:  # noqa: BLE001
                     ref = None
-                if ref is not None and getattr(ref, "dataset", None):
-                    dataset = str(ref.dataset)
+                ref_market = str(getattr(ref, "market", "") or "").lower()
+                if ref is not None and registered_market and ref_market not in {
+                    "", registered_market
+                }:
+                    ref = None
+                dataset = str(getattr(ref, "dataset", "") or "")
+                binding_market = ref_market
+                if ref is not None and not dataset and registered_market:
+                    try:
+                        from factor_engine.storage.sources.logical_tables import (
+                            logical_table_contract,
+                        )
+
+                        contract = logical_table_contract(ref.table, registered_market)
+                        dataset = str(contract.dataset or "")
+                        binding_market = registered_market
+                        if not dataset:
+                            from factor_engine.fields.market_registry import (
+                                MultiMarketFieldRegistry,
+                            )
+
+                            table_spec = MultiMarketFieldRegistry().registry_for(
+                                registered_market
+                            ).resolve_table(ref.table)
+                            dataset = str(
+                                getattr(table_spec, "physical_dataset", "")
+                                or getattr(table_spec, "dataset", "")
+                                or ""
+                            )
+                    except (KeyError, TypeError, ValueError):
+                        dataset = ""
+                if ref is not None and dataset:
                     field = str(ref.field or "")
-                    market = str(ref.market or "")
+                    resolved_market = binding_market
                     bindings[name] = ColumnSourceBinding(
                         encoded_column=name,
                         dataset=dataset,
                         field=field,
-                        market=market,
-                        source_scope=_scope_from_ref(ref, dataset=dataset, market=market),
+                        market=resolved_market,
+                        source_scope=_scope_from_ref(ref, dataset=dataset, market=resolved_market),
                     )
                     bound.add(name)
-        for child in getattr(node, "inputs", ()) or ():
-            walk(child)
+            stack.append((node, True))
+            stack.extend(
+                (child, False)
+                for child in reversed(tuple(getattr(node, "inputs", ()) or ()))
+            )
 
     for plan in plans:
         walk(plan)

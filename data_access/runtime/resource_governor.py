@@ -363,6 +363,14 @@ class GlobalResourceGovernor:
                         f"active queries {per} 达到 per-principal 上限 "
                         f"{self._per_principal_active}。"
                     )
+            if self._max_scan is not None:
+                inflight = sum(r.estimated_scan_bytes for r in self._active.values())
+                if inflight + reservation.estimated_scan_bytes > self._max_scan:
+                    raise ResourceAdmissionError(
+                        f"resource admission: 全局 inflight scan bytes "
+                        f"{inflight + reservation.estimated_scan_bytes} > 上限 "
+                        f"{self._max_scan}（R25 §27）。"
+                    )
             # R32-P0-008：区分 HOST_ABSENT / HOST_CONFIGURED / HOST_BROKEN。
             host_lease_request = self._host_lease_request
             host_integration_configured = host_lease_request is not None
@@ -402,6 +410,14 @@ class GlobalResourceGovernor:
                 r.principal_id == reservation.principal_id for r in self._active.values()
             ) >= self._per_principal_active:
                 admission_error = "resource admission: per-principal active queries 达到上限"
+            elif self._max_scan is not None and (
+                sum(r.estimated_scan_bytes for r in self._active.values())
+                + reservation.estimated_scan_bytes
+                > self._max_scan
+            ):
+                admission_error = (
+                    "resource admission: 全局 inflight scan bytes 超过上限"
+                )
             # R32-P0-007：host lease 成功时作为权威，本地只做 bookkeeping。
             if admission_error is not None:
                 pass  # Roll back the host lease outside the lock below.
@@ -422,14 +438,6 @@ class GlobalResourceGovernor:
                         raise ResourceAdmissionError(
                             f"resource admission: 全局保留内存 {used + reservation.estimated_memory}"
                             f" > 上限 {self._max_memory}（T-RES-001）。"
-                        )
-                if self._max_scan is not None:
-                    inflight = sum(r.estimated_scan_bytes for r in self._active.values())
-                    if inflight + reservation.estimated_scan_bytes > self._max_scan:
-                        raise ResourceAdmissionError(
-                            f"resource admission: 全局 inflight scan bytes "
-                            f"{inflight + reservation.estimated_scan_bytes} > 上限 "
-                            f"{self._max_scan}（R25 §27）。"
                         )
                 self._remote_requests_total += max(0, reservation.remote_requests)
                 self._active[reservation.query_id] = reservation
@@ -465,7 +473,7 @@ class GlobalResourceGovernor:
             )
 
     def set_max_total_scan_bytes_inflight(self, scan_bytes: int) -> None:
-        """协调器注入 scan inflight 上限（§56：scan bytes inflight 成为 host lease 一部分）。
+        """协调器注入独立 scan inflight 上限（§56：不计入 host memory lease）。
 
         R38 P0-026：与 ``admit()`` 同锁。
         """

@@ -1,0 +1,77 @@
+{
+  "batch_execution_status_counts": {
+    "BATCH_ABORTED": 40,
+    "EXECUTED": 45
+  },
+  "execution_groups": [
+    {
+      "counts": {
+        "EXECUTED": 5
+      },
+      "execution": "evidence/factor_catalog_20260916/factor_catalog_review_r16b.cci_remaining5_auto_r2.output.jsonl.gz",
+      "execution_sha256": "b04e4fce6a59dc9b7d56569522bcd1564948b326213c0d920bf86115ddd41a4a",
+      "input": "evidence/factor_catalog_20260916/factor_catalog_review_r16b.cci_remaining5.input.jsonl.gz",
+      "input_sha256": "d039b64c3ef507b8ee9f883a4816c0d3a78c08c68a562acb7e652bf8c6d9c0c8",
+      "records": 5,
+      "summary": "evidence/factor_catalog_20260916/factor_catalog_review_r16b.cci_remaining5_auto_r2.output.summary.json",
+      "summary_sha256": "84874a5182b4f68232f8e0a2736547f1e346f60265ea5f2d5580686b48a275cc",
+      "symbol_count": 8,
+      "window": [
+        "2025-01-01",
+        "2026-04-30"
+      ]
+    },
+    {
+      "counts": {
+        "EXECUTED": 40
+      },
+      "execution": "evidence/factor_catalog_20260916/factor_catalog_review_r17b.outer_auto40_r1.output.jsonl.gz",
+      "execution_sha256": "2ef95ac344adc05b99d8f7e2eeb6e04ff25e3d04074d3d214f2d562b8bfb94d2",
+      "input": "evidence/factor_catalog_20260916/factor_catalog_review_r17b.outer_single_source_auto40.input.jsonl.gz",
+      "input_sha256": "c8b05816d6b764087d4982a11d178b533bde90d3bd58d4dbd6d8e80f2d079aa9",
+      "records": 40,
+      "summary": "evidence/factor_catalog_20260916/factor_catalog_review_r17b.outer_auto40_r1.output.summary.json",
+      "summary_sha256": "dba6223e7e378bbd7fdee539d9476330379ef0f62f2e7d661d1e6838f57ab71e",
+      "symbol_count": 8,
+      "window": [
+        "2025-01-01",
+        "2026-04-30"
+      ]
+    },
+    {
+      "counts": {
+        "BATCH_ABORTED": 40
+      },
+      "execution": "evidence/factor_catalog_20260916/factor_catalog_review_r17b.limit_auto40_r1.output.jsonl.gz",
+      "execution_sha256": "4d2a7ab93505fcd2552001305a34d5741aabd612426f947f9921540da415a99c",
+      "input": "evidence/factor_catalog_20260916/factor_catalog_review_r17b.limit_mixed_source_auto40.input.jsonl.gz",
+      "input_sha256": "d8645d65a622441a5972c72ffdb9e90d9db82b7fb35fb9d5e4395cea07712377",
+      "records": 40,
+      "summary": "evidence/factor_catalog_20260916/factor_catalog_review_r17b.limit_auto40_r1.output.summary.json",
+      "summary_sha256": "8bb9ba0054bbc92795acc38f9d5a676af05b74d141c07fac729385cee859fa2d",
+      "symbol_count": 8,
+      "window": [
+        "2025-01-01",
+        "2026-04-30"
+      ]
+    }
+  ],
+  "execution_records": 85,
+  "input_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r17b.csv.gz",
+  "input_checkpoint_sha256": "90a9643fc075e423bbc589fb090bfada8b70eddb23ddc07e2ba250c4028c0ae9",
+  "output_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r17c.csv.gz",
+  "output_checkpoint_sha256": "4eaf4ddc697de0f180df6f13cbe63590fe37ae56966bf3521b427808fb83568d",
+  "output_execution_status_counts": {
+    "BATCH_ABORTED": 40,
+    "COMPILE_FAILED": 119,
+    "EXECUTED": 8098,
+    "EXECUTED_ALL_NONFINITE": 186,
+    "EXECUTION_FAILED": 26,
+    "NATIVE_CRASH": 20,
+    "NOT_RUN": 105629,
+    "PREPARE_FAILED": 14
+  },
+  "scope": "multi_group_pinned_mixed_terminal_research_execution_evidence; no NOT_RUN target remains",
+  "source_rows": 114132,
+  "unique_factor_ids": 113893
+}

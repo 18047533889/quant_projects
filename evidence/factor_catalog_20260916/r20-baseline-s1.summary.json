@@ -1,0 +1,43 @@
+{
+  "source_sha256": "190a34ada8b380103e65f59b9cdf503f022c930838a0856e28824ab0b1e6d330",
+  "output_sha256": "f38631f401162d011cfb1bf6369eb4778f7495eae2aa3c6113ce05410bfddade",
+  "shard": 1,
+  "shards": 8,
+  "source_factor_count": 113893,
+  "proposal_count": 0,
+  "counts": {
+    "COMPILED": 12730,
+    "COMPILE_FAILED": 1507
+  },
+  "seconds": 771.8773461570963,
+  "scope": "real_engine_strict_field_bind_no_read_compile_not_execution",
+  "code_hashes_before": {
+    "factor_engine/api/dsl_parser.py": "e3603a9d009b75b0979c3b5737f041cab36d0779d0dc9eeba023f577dc81e9c0",
+    "factor_engine/ir/analyzer.py": "36c5924acab793fe5fae985282e0cb1f7a0010976ccb31992df074814b0a82c6",
+    "factor_engine/ir/types.py": "abc746211c4a76943a5122421987968df7e28a26d603ce44f159e9820fb50b2c",
+    "factor_engine/cleaned_operators/base.py": "e59bfc9435ff7a48bde71b5f46b09307079b9f86b1eb702ba1284aa2d1be6af4",
+    "factor_engine/cleaned_operators/operator_surface.py": "304256d7d730cbb12428e476fb036f022a77ee3e6cc81844f6ccd6ccf3e5ffa7",
+    "factor_engine/cleaned_operators/gemini_v2_common.py": "7b9340a23c95a22f5a69b857d5649a917e3aef83a83c1e37073527e7eb2b4c44",
+    "factor_engine/planner/canonicalize_params.py": "a0ffdd34f738f7d55b2f8e47c08a128dfc363740c0fc71e277e75d7e632363ac",
+    "factor_engine/planner/lowerings/next_stage.py": "f6a152ef95e5e92a324e5af76a105970896bfc6b1c6c2b9fe8fd190d9eb6ad6b",
+    "factor_engine/planner/lowerings/ashare.py": "773c2876f7b6634b05630be0d14ad3678540e481409ed0408820b0ac6accd873",
+    "evidence/factor_catalog_20260915/smoke_catalog.py": "a95220b5097ef713cd1bf78370c2bf0a4ebff7e2447027b56d658aa5c0b138bc",
+    "evidence/factor_catalog_20260915/compile_catalog.py": "33616401fa4fd002fe5113daba8fcbd46a865dbbd623f53a9e1f4512a0a9e8ed",
+    "evidence/factor_catalog_20260916/compile_r20_full.py": "ae84753d509f5120ab0f71f536b8d0701e5ad373056d38dbe259063107f4e8cf"
+  },
+  "code_hashes_after": {
+    "factor_engine/api/dsl_parser.py": "e3603a9d009b75b0979c3b5737f041cab36d0779d0dc9eeba023f577dc81e9c0",
+    "factor_engine/ir/analyzer.py": "36c5924acab793fe5fae985282e0cb1f7a0010976ccb31992df074814b0a82c6",
+    "factor_engine/ir/types.py": "abc746211c4a76943a5122421987968df7e28a26d603ce44f159e9820fb50b2c",
+    "factor_engine/cleaned_operators/base.py": "e59bfc9435ff7a48bde71b5f46b09307079b9f86b1eb702ba1284aa2d1be6af4",
+    "factor_engine/cleaned_operators/operator_surface.py": "304256d7d730cbb12428e476fb036f022a77ee3e6cc81844f6ccd6ccf3e5ffa7",
+    "factor_engine/cleaned_operators/gemini_v2_common.py": "7b9340a23c95a22f5a69b857d5649a917e3aef83a83c1e37073527e7eb2b4c44",
+    "factor_engine/planner/canonicalize_params.py": "a0ffdd34f738f7d55b2f8e47c08a128dfc363740c0fc71e277e75d7e632363ac",
+    "factor_engine/planner/lowerings/next_stage.py": "f6a152ef95e5e92a324e5af76a105970896bfc6b1c6c2b9fe8fd190d9eb6ad6b",
+    "factor_engine/planner/lowerings/ashare.py": "773c2876f7b6634b05630be0d14ad3678540e481409ed0408820b0ac6accd873",
+    "evidence/factor_catalog_20260915/smoke_catalog.py": "a95220b5097ef713cd1bf78370c2bf0a4ebff7e2447027b56d658aa5c0b138bc",
+    "evidence/factor_catalog_20260915/compile_catalog.py": "33616401fa4fd002fe5113daba8fcbd46a865dbbd623f53a9e1f4512a0a9e8ed",
+    "evidence/factor_catalog_20260916/compile_r20_full.py": "ae84753d509f5120ab0f71f536b8d0701e5ad373056d38dbe259063107f4e8cf"
+  },
+  "proposal_hashes": {}
+}

@@ -115,6 +115,31 @@ def test_nonresident_spilled_or_zero_byte_cse_needs_no_transfer():
     reservation.release()
 
 
+def test_builtin_float_cse_transfers_actual_scalar_bytes_and_releases_with_entry():
+    import sys
+
+    broker = _broker()
+    reservation = broker.try_reserve(_contract(512), task_id="scalar")
+    assert reservation is not None
+    ctx = _Ctx()
+    ctx.shared_buffers = GovernedBufferStore({}, budget_bytes=4096)
+    value = float("nan")
+    ctx.shared_buffers.put("scalar", value)
+    target = ctx.shared_buffers.capture_lease_target("scalar")
+    assert target is not None
+    assert target.bytes == sys.getsizeof(value)
+    assert target.ownership_kind == "exact_builtin_immutable"
+
+    assert _scheduler()._transfer_cse_memory_ownership(
+        ctx, "cse:scalar", reservation
+    ) is True
+    assert broker._running_peak_sum_bytes() == 0
+    assert broker._lease_sum_bytes() == sys.getsizeof(value)
+
+    ctx.shared_buffers.release("scalar")
+    assert broker._lease_sum_bytes() == 0
+
+
 def test_real_scheduler_cse_hands_cpu_to_dependent_root(monkeypatch):
     monkeypatch.setenv("FACTOR_ENGINE_HYBRID_FORCE", "thread")
     broker = _broker(memory=4096, cpu=1)

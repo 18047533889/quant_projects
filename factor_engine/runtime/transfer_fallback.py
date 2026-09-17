@@ -287,6 +287,8 @@ class TransferFallback:
                 started=started,
                 elapsed=elapsed,
                 fallback=not direct,
+                result=result,
+                identity=transform_value == "same_backend_native",
             )
             return result
         except Exception as exc:
@@ -321,12 +323,13 @@ class TransferFallback:
         started: float,
         elapsed: float,
         fallback: bool,
+        result: Any,
+        identity: bool,
     ) -> None:
         if self._telemetry is None:
             return
         try:
-            import pyarrow as pa  # noqa: F401
-
+            payload_bytes, row_count, column_count = _materialized_payload_metadata(result)
             telemetry = TransferEdgeTelemetry(
                 edge_id=edge_id,
                 producer_region=producer_region,
@@ -338,7 +341,7 @@ class TransferFallback:
                     target_repr, "value", str(target_repr)
                 ),
                 predicted_bytes=estimated_bytes,
-                actual_bytes=estimated_bytes,
+                actual_bytes=0 if identity else payload_bytes,
                 predicted_ms=0.0,
                 actual_ms=elapsed * 1000.0,
                 requires_sort=requires_sort,
@@ -347,16 +350,44 @@ class TransferFallback:
                 actual_repartition_ms=0.0,
                 requires_reshape=requires_reshape,
                 actual_reshape_ms=0.0,
-                row_count=0,
-                column_count=0,
+                row_count=row_count,
+                column_count=column_count,
                 schema_version="fallback" if fallback else "direct",
                 transfer_started_at=started,
                 transfer_finished_at=started + elapsed,
+                payload_bytes=payload_bytes,
+                actual_bytes_basis=("identity_zero_copy" if identity else
+                                    "materialized_payload" if payload_bytes is not None else "unmeasured"),
             )
             self._telemetry.record_transfer(telemetry)
         except Exception:
             pass
 
+
+
+def _materialized_payload_metadata(value: Any) -> tuple[int | None, int | None, int | None]:
+    """Inspect only materialized known buffers, never collect lazy/opaque values."""
+    import numpy as np
+    import pandas as pd
+    import pyarrow as pa
+
+    if isinstance(value, pd.Series):
+        return int(value.memory_usage(index=True, deep=True)), len(value), 1
+    if isinstance(value, pd.DataFrame):
+        return int(value.memory_usage(index=True, deep=True).sum()), len(value), len(value.columns)
+    if isinstance(value, (pa.Table, pa.RecordBatch)):
+        return int(value.nbytes), value.num_rows, value.num_columns
+    if isinstance(value, np.ndarray):
+        rows = value.shape[0] if value.ndim else None
+        columns = 1 if value.ndim == 1 else value.shape[1] if value.ndim == 2 else None
+        return int(value.nbytes), rows, columns
+    try:
+        import polars as pl
+    except ImportError:
+        pl = None
+    if pl is not None and isinstance(value, (pl.DataFrame, pl.Series)):
+        return int(value.estimated_size()), len(value), value.width if isinstance(value, pl.DataFrame) else 1
+    return None, None, None
 
 __all__ = [
     "TransferFallback",

@@ -1,0 +1,52 @@
+{
+  "original_source": "/Users/shw/Library/Mobile Documents/com~apple~CloudDocs/quantsociety/新因子统一整合.csv",
+  "original_source_sha256": "3ed7406a30634eedddf102a56a3217d2f7bf2379c5615b5c45b05b3f8fdc55eb",
+  "review_checkpoint_sha256": "ccf6a0effe8a09471491b94d3845767309bb4ebc380bf5cd3c016b680144c7c3",
+  "output": "/Users/shw/Documents/新因子统一整合_DSL更新版_R18c_20260916.csv",
+  "output_sha256": "1b553c81bba0b7db54011cf6f3502b0bb70d8a39eaef825f53c905eec5163a2c",
+  "output_size_bytes": 836286093,
+  "rows": 114132,
+  "original_columns_preserved": [
+    "因子ID",
+    "因子名称",
+    "公式或构造",
+    "方向假设",
+    "经济解释",
+    "作用机制",
+    "领域",
+    "因子族",
+    "子类",
+    "算子或要求",
+    "所需字段或输入",
+    "输入表",
+    "PIT或决策时点",
+    "状态",
+    "优先级",
+    "校验或准入状态",
+    "备注",
+    "研究或来源引用",
+    "来源批次",
+    "来源文件",
+    "原始完整内容JSON"
+  ],
+  "original_rows_reconstructed_exactly": 114132,
+  "updated_columns_changed_rows": {
+    "公式或构造": 21535,
+    "所需字段或输入": 111793,
+    "输入表": 109592
+  },
+  "compile_counts_nonempty_ids": {
+    "COMPILED": 109681,
+    "COMPILE_FAILED": 4212
+  },
+  "execution_counts": {
+    "EXECUTED": 8151,
+    "EXECUTED_ALL_NONFINITE": 188,
+    "NOT_RUN": 105595,
+    "EXECUTION_FAILED": 26,
+    "COMPILE_FAILED": 140,
+    "PREPARE_FAILED": 14,
+    "NATIVE_CRASH": 18
+  },
+  "scope": "original-layout CSV; all source metadata retained; only DSL/input fields updated; historical and current-code evidence scopes remain explicit"
+}

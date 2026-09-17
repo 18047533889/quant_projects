@@ -14,7 +14,6 @@ COMPOSITE_EDGE_CASES: tuple[CompositeReferenceCase, ...] = (
     CompositeReferenceCase("WilliamsR", ("high", "low", "close"), window=3),
     CompositeReferenceCase("StochasticK", ("high", "low", "close"), window=3),
     CompositeReferenceCase("StochasticD", ("high", "low", "close"), window=3),
-    CompositeReferenceCase("OBV", ("close", "volume")),
     CompositeReferenceCase("operating_margin", ("operating_income", "revenue")),
     CompositeReferenceCase("current_ratio", ("current_assets", "current_liabilities")),
     CompositeReferenceCase("quick_ratio", ("current_assets", "inventory", "current_liabilities")),

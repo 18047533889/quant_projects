@@ -34,7 +34,7 @@ import numpy as np
 import pandas as pd
 
 from factor_engine.cleaned_operators.base import (
-    OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator,
+    OperatorMetadata, ParamRole, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator,
 )
 from factor_engine.cleaned_operators.rolling_pack import (
     frame_like,
@@ -79,6 +79,12 @@ def _metadata(
         panel_params=panels,
         scalar_params=tuple(specs),
         param_specs=specs,
+        # Kernel tail probabilities use (0, 0.5], while ParamSpec.min is inclusive.
+        # Declare the open lower boundary so planning cannot admit q=0.
+        relational_specs=[
+            RelationalParamSpec(f"{param} > 0", f"{param} must be strictly positive")
+            for param in ("quantile", "target_q", "source_q") if param in specs
+        ],
         tags=[
             "quantile_dynamics", "daily", "pit_safe", "causal", "typed_v2",
             "deterministic", *extra_tags,

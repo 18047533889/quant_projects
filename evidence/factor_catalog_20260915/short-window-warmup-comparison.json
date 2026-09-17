@@ -1,0 +1,71 @@
+{
+  "long_window": [
+    "2025-01-01",
+    "2026-04-30"
+  ],
+  "short_output_window": [
+    "2026-04-27",
+    "2026-04-30"
+  ],
+  "symbols": [
+    "000001.SZ",
+    "000002.SZ",
+    "000063.SZ",
+    "000333.SZ",
+    "000651.SZ",
+    "000858.SZ",
+    "600000.SH",
+    "600519.SH"
+  ],
+  "results": [
+    {
+      "name": "mean_252",
+      "formula": "ts_mean(close, 252)",
+      "analysis_lookback": 251,
+      "long_seconds": 3.339457,
+      "short_seconds": 2.256099,
+      "short_run_window": "{'requested_start': '2026-04-27', 'requested_end': '2026-04-30', 'actual_load_start': '2025-04-03', 'actual_load_end': '2026-04-30', 'warmup_bars': 257, 'trim_output': True, 'full_history_required': False, 'full_history_start': None, 'full_history_satisfied': True}",
+      "index_equal": true,
+      "columns_equal": true,
+      "finite_mask_equal": true,
+      "finite_count_long_slice": 32,
+      "finite_count_short": 32,
+      "max_abs_error": 1.8189894035458565e-12,
+      "max_rel_error": 1.8815807523124396e-16,
+      "allclose_rtol_1e-10_atol_1e-12": true
+    },
+    {
+      "name": "spectral_120",
+      "formula": "ts_return_spectral_entropy(ret, window=120)",
+      "analysis_lookback": 119,
+      "long_seconds": 2.54632,
+      "short_seconds": 2.309648,
+      "short_run_window": "{'requested_start': '2026-04-27', 'requested_end': '2026-04-30', 'actual_load_start': '2025-10-21', 'actual_load_end': '2026-04-30', 'warmup_bars': 125, 'trim_output': True, 'full_history_required': False, 'full_history_start': None, 'full_history_satisfied': True}",
+      "index_equal": true,
+      "columns_equal": true,
+      "finite_mask_equal": true,
+      "finite_count_long_slice": 32,
+      "finite_count_short": 32,
+      "max_abs_error": 0.0,
+      "max_rel_error": 0.0,
+      "allclose_rtol_1e-10_atol_1e-12": true
+    },
+    {
+      "name": "nested_tema",
+      "formula": "ts_mean(TEMA(close, 30), 20)",
+      "analysis_lookback": 106,
+      "long_seconds": 4.587498,
+      "short_seconds": 4.478181,
+      "short_run_window": "{'requested_start': '2026-04-27', 'requested_end': '2026-04-30', 'actual_load_start': '2025-11-07', 'actual_load_end': '2026-04-30', 'warmup_bars': 112, 'trim_output': True, 'full_history_required': False, 'full_history_start': None, 'full_history_satisfied': True}",
+      "index_equal": true,
+      "columns_equal": true,
+      "finite_mask_equal": true,
+      "finite_count_long_slice": 32,
+      "finite_count_short": 32,
+      "max_abs_error": 2.7085158469435555,
+      "max_rel_error": 0.0010230182766220596,
+      "allclose_rtol_1e-10_atol_1e-12": false
+    }
+  ],
+  "safe_for_these_representatives": false
+}

@@ -798,7 +798,7 @@ class TsMarkovTransitionSurprisal(SeriesOperator):
         self, x: pd.DataFrame, window: int = 60, bins: int = 3, lag: int = 1, min_count: int = 3,
         min_state_support: int = 3, min_history: int = 10, **_: Any
     ) -> pd.DataFrame:
-        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history, outputs={"edges", "P", "counts", "N_obs", "n_states_obs"})
+        res = _run_kernel(x, window, bins, lag, min_count, min_state_support, min_history, outputs={"edges", "state", "P", "counts", "N_obs", "n_states_obs"})
         xv = x.to_numpy(dtype=float)
         cols = x.shape[1]
         lg = strict_int(lag, "lag", lower=1)

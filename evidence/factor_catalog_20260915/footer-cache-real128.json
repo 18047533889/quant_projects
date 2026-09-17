@@ -1,0 +1,1 @@
+{"scope": "footer_metadata_only_not_factor_execution", "files": 128, "rows": 529051, "cold_seconds": 0.014627149095758796, "warm_seconds": 0.0006063620094209909, "cache": {"hits": 128, "misses": 128, "maxsize": 8192, "currsize": 128}}

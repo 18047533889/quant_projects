@@ -1,0 +1,35 @@
+{
+  "code_hash_counts": {
+    "d5997059327cca57fbc9f15db2bc3262971e1eb4e5fe06e27652735d0165ec01": 45
+  },
+  "code_hash_interpretation": "per-record audit-time lowering/test snapshot; not a hash or certification of the current repository",
+  "compile_evidence": "evidence/factor_catalog_20260916/factor_catalog_r12a.net_borrowing_recompile.jsonl.gz",
+  "evidence_records": 45,
+  "evidence_sha256": "5f8836d44eb7a1e3e762104d79499c12473fc691ef8bebbf8166989615293bdc",
+  "evidence_status_counts": {
+    "COMPILED": 45
+  },
+  "factor_counts": {
+    "fin_net_borrowing_cashflow": 45
+  },
+  "input_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r12d.csv.gz",
+  "input_checkpoint_sha256": "8ef85f2b9698f1149b347bdf0f3eba4d7ebbe148440a980e2cffaf71281e26ac",
+  "merged_records": 45,
+  "output_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r12e.csv.gz",
+  "output_checkpoint_sha256": "d9668cd615ea28c9008159a6cd84bc99c9e1d29e38e04d459b3c4f0d2abb75d5",
+  "output_compile_status_counts": {
+    "COMPILED": 106487,
+    "COMPILE_FAILED": 4300,
+    "NOT_RUN": 3345
+  },
+  "scope": "compile_only_formula_matched_not_execution_or_code_certification",
+  "source_rows": 114132,
+  "unchanged_field_families": [
+    "identity",
+    "original_formula",
+    "current_formula",
+    "static",
+    "execution"
+  ],
+  "unique_factor_ids": 113893
+}

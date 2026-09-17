@@ -160,26 +160,6 @@ def test_composite_reference_matches_lowered_pandas(ref_source, case):
     )
 
 
-def test_obv_first_row_zero_reference_and_lowered(ref_source):
-    from tests.backend_parity.composite_reference_helpers import CompositeReferenceCase
-    from factor_engine.cleaned_operators.registry import OperatorRegistry
-
-    if "OBV" not in OperatorRegistry._operators:
-        pytest.skip("OBV is a recipe, not a primitive composite")
-
-    case = CompositeReferenceCase("OBV", ("close", "volume"))
-    panels = build_reference_panels(ref_source, ref_source.data["close"].index)
-    ref = panel_to_series(reference_pandas_calculate(case, panels), ref_source.data["close"].index)
-    lowered = execute_lowered_pandas(
-        lowered_plan_for(case),
-        ExecutionContext(data_source=ref_source),
-    )
-    for inst in ("A", "B"):
-        ts0 = pd.Timestamp("2024-01-02")
-        assert ref.loc[(ts0, inst)] == 0.0
-        assert lowered.loc[(ts0, inst)] == 0.0
-
-
 def test_safe_div_null_ratio_zero_denominator(ref_source):
     from factor_engine.cleaned_operators.registry import OperatorRegistry
     if "operating_margin" not in OperatorRegistry._operators:

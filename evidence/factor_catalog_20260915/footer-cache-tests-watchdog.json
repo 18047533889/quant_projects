@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "data_access/tests/unit/test_footer_row_count_cache.py", "data_access/tests/unit/test_stats_read_auto.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 388947968, "sampling_seconds": 0.1, "seconds": 3.618052284931764, "test_guard_reason": null, "hard_memory_cap": false}

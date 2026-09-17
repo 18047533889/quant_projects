@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "tests/operators/test_catalog_regression_bool_migration.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 488923136, "sampling_seconds": 0.1, "seconds": 53.43884307611734, "test_guard_reason": null, "hard_memory_cap": false}

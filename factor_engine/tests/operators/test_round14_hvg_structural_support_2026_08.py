@@ -19,6 +19,8 @@ Covers four audit items from the P1/P2 "support" section:
 """
 from __future__ import annotations
 
+import time
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -81,6 +83,68 @@ def test_hvg_coverage_params_in_signature(_loaded):
     op = OperatorRegistry.get("ts_hvg_degree_entropy", "pandas_numpy")
     assert "min_nodes" in op.metadata.param_names
     assert "min_coverage_fraction" in op.metadata.param_names
+
+
+def _degree_entropy_reference(values: np.ndarray) -> float:
+    n = len(values)
+    degrees = np.zeros(n, dtype=int)
+    for left in range(n):
+        for right in range(left + 1, n):
+            ceiling = min(values[left], values[right])
+            if np.all(values[left + 1:right] < ceiling):
+                degrees[left] += 1
+                degrees[right] += 1
+    _, counts = np.unique(degrees, return_counts=True)
+    probabilities = counts / counts.sum()
+    return float(-np.sum(probabilities * np.log(probabilities)))
+
+
+def test_hvg_degree_entropy_matches_independent_graph_oracle(_loaded):
+    rng = np.random.default_rng(1401)
+    values = rng.normal(size=24)
+    op = OperatorRegistry.get("ts_hvg_degree_entropy", "pandas_numpy")
+    actual = op.calculate(
+        _frame(values), window=12, min_periods=12, min_nodes=4,
+        min_coverage_fraction=1.0,
+    ).iloc[:, 0]
+    for end in range(11, len(values)):
+        expected = _degree_entropy_reference(values[end - 11:end + 1])
+        assert actual.iloc[end] == pytest.approx(expected, abs=1e-12)
+
+
+def test_hvg_degree_entropy_8_by_320_completes_within_budget(_loaded):
+    rng = np.random.default_rng(2968)
+    frame = pd.DataFrame(rng.normal(size=(320, 8)))
+    op = OperatorRegistry.get("ts_hvg_degree_entropy", "pandas_numpy")
+    started = time.perf_counter()
+    output = op.calculate(frame, window=60, min_periods=8)
+    elapsed = time.perf_counter() - started
+    assert np.isfinite(output.to_numpy()).sum() == 2488
+    assert elapsed < 5.0, f"8x320 HVG degree entropy took {elapsed:.3f}s"
+
+
+def test_hvg_degree_entropy_declares_bounded_rolling_history(_loaded):
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.ir.analyzer import Analyzer
+    from factor_engine.runtime.execution_contract import history_requirement
+
+    op = OperatorRegistry.get("ts_hvg_degree_entropy", "pandas_numpy")
+    assert op.metadata.window_semantics == "rolling"
+    assert op.metadata.param_specs["window"].history_semantics == "max_rows"
+    requirement = history_requirement(
+        "ts_hvg_degree_entropy",
+        {"window": 60, "min_periods": 8, "min_nodes": 10,
+         "min_coverage_fraction": 0.5},
+        production=True,
+    )
+    assert requirement.kind == "finite"
+    assert requirement.rows == 59
+    factor = parse_factor(
+        "ts_hvg_degree_entropy(ret,60,8)", name="hvg", surface="extended"
+    )
+    analysis = Analyzer(production=True, market="ashare").lower(factor.expr)
+    assert analysis.requires_full_history is False
+    assert analysis.lookback == 59
 
 
 # ---------------------------------------------------------------------------

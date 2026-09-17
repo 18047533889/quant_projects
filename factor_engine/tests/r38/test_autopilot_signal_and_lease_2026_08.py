@@ -87,7 +87,9 @@ def test_stale_decision_returns_conservative_not_stale():
         decision = broker.resource_decision()
         # 必须回到 conservative（target_concurrency=1），而不是 stale 的 64。
         assert decision.target_concurrency == 1
-        assert decision.pressure_state == "NORMAL"
+        assert decision.pressure_state == "PRESSURE_3"
+        assert decision.memory_constrained is True
+        assert "stale_decision_conservative_fallback" in decision.reasons
     finally:
         _svc.get_resource_autopilot = old
 
@@ -169,10 +171,22 @@ def test_da_governor_host_backed_admission():
     assert res.host_lease is not None  # host-backed（JobLease child）
     gov.release("q1")
     assert res.host_lease.released
-    # 无活跃 job → 回退本地 governor admission（仍受本地上限约束）。
+    assert gov.active_count() == 0
+    # 无活跃 job 的 durable worker 仍直接向 parent broker 申请 host lease。
     c.set_active_job_lease(None)
     res2 = ResourceReservation(query_id="q2", principal_id="p",
                                estimated_memory=100)
     gov.admit(res2)
-    assert res2.host_lease is None
+    assert res2.host_lease is not None
     gov.release("q2")
+    assert res2.host_lease.released
+    assert gov.active_count() == 0
+
+    # 只有显式移除 host bridge 才是 process-local governor fallback。
+    gov.set_host_lease_request(None)
+    res3 = ResourceReservation(query_id="q3", principal_id="p",
+                               estimated_memory=100)
+    gov.admit(res3)
+    assert res3.host_lease is None
+    gov.release("q3")
+    assert gov.active_count() == 0

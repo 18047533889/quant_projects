@@ -29,7 +29,7 @@ def test_real_catalog_production_return_and_adjusted_level_paths():
         _call("ts_detrended_level_spectral_entropy", field("close"), window=20)
     )
     assert level.ir.inputs[0].attrs["field_id"] == "StockDailyBarAdj.close"
-    assert level.ir.inputs[0].semantic_attrs["price_basis"] == "ADJUSTED"
+    assert level.ir.inputs[0].semantic_attrs["price_basis"] == "BACKWARD_ADJUSTED"
     assert level.ir.inputs[0].semantic_attrs["semantic_kind"] == "PriceContinuous"
     assert level.ir.attrs["input_kind"] == "PriceContinuous"
 
@@ -59,7 +59,7 @@ def test_explicit_return_kind_is_not_overwritten_by_inherited_adjusted_basis(mon
     original = analyzer._resolve_field_ir(ret_ref)
     assert original is not None
     explicit_return = replace(
-        original, semantic_kind="ReturnDecimal", price_basis="ADJUSTED"
+        original, semantic_kind="ReturnDecimal", price_basis="BACKWARD_ADJUSTED"
     )
     monkeypatch.setattr(analyzer, "_resolve_field_ir", lambda node: explicit_return)
     lowered = analyzer.lower(
@@ -155,3 +155,15 @@ def test_polars_bridge_propagates_input_kind_and_matches_pandas():
     np.testing.assert_allclose(actual["A"].to_numpy(), expected["A"].to_numpy(), equal_nan=True)
     with pytest.raises(ValueError, match="not an allowed choice|requires input_kind"):
         polars_op.calculate(pldf, window=20, input_kind="PriceContinuous")
+def test_activity_entropy_requires_cataloged_nonnegative_activity():
+    analyzer = Analyzer(production=True, market="ashare")
+    activity = analyzer.lower(
+        _call("ts_activity_spectral_entropy", field("turnover_ratio"), window=20)
+    )
+    assert activity.ir.inputs[0].semantic_attrs["semantic_kind"] == "NonNegativeActivity"
+    assert activity.ir.attrs["input_kind"] == "NonNegativeActivity"
+    for wrong in (field("ret"), field("close")):
+        with pytest.raises(TypedInputContractError):
+            analyzer.lower(
+                _call("ts_activity_spectral_entropy", wrong, window=20)
+            )

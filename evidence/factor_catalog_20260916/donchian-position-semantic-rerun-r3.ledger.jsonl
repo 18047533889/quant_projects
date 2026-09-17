@@ -1,0 +1,14 @@
+{"offset": 0, "limit": 20, "exit": 0, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-000.jsonl.gz"}
+{"offset": 20, "limit": 20, "exit": 0, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-020.jsonl.gz"}
+{"offset": 40, "limit": 20, "exit": 0, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-040.jsonl.gz"}
+{"offset": 60, "limit": 20, "exit": 0, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-060.jsonl.gz"}
+{"offset": 80, "limit": 20, "exit": 0, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-080.jsonl.gz"}
+{"offset": 100, "limit": 20, "exit": 124, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-100.jsonl.gz"}
+{"offset": 120, "limit": 20, "exit": -11, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-120.jsonl.gz"}
+{"offset": 140, "limit": 20, "exit": 0, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-140.jsonl.gz"}
+{"offset": 160, "limit": 20, "exit": 0, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-160.jsonl.gz"}
+{"offset": 180, "limit": 20, "exit": 0, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-180.jsonl.gz"}
+{"offset": 200, "limit": 20, "exit": 0, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-200.jsonl.gz"}
+{"offset": 220, "limit": 20, "exit": 0, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-220.jsonl.gz"}
+{"offset": 240, "limit": 20, "exit": 0, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-240.jsonl.gz"}
+{"offset": 260, "limit": 20, "exit": 0, "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r3-260.jsonl.gz"}

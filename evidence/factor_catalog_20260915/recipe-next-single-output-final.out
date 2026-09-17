@@ -1,0 +1,17 @@
+..............................................................           [100%]
+=============================== warnings summary ===============================
+tests/operators/test_catalog_recipe_migration.py::test_rewrites_only_bare_call_target_and_preserves_source_exactly
+tests/operators/test_catalog_recipe_migration.py::test_rewrites_only_bare_call_target_and_preserves_source_exactly
+  /home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
+
+tests/operators/test_catalog_recipe_migration.py::test_migrated_primitive_recipe_matches_legacy_numeric_output[MOM(close, 5)-MOM-legacy_args0]
+tests/operators/test_catalog_recipe_migration.py::test_migrated_primitive_recipe_matches_legacy_numeric_output[ROC(close, 5)-ROC-legacy_args1]
+tests/operators/test_catalog_recipe_migration.py::test_migrated_primitive_recipe_matches_legacy_numeric_output[BollingerUpper(close, 6, 2.5)-BollingerUpper-legacy_args2]
+tests/operators/test_catalog_recipe_migration.py::test_migrated_primitive_recipe_matches_legacy_numeric_output[BollingerLower(close, 6, 2.5)-BollingerLower-legacy_args3]
+tests/operators/test_catalog_recipe_migration.py::test_migrated_primitive_recipe_matches_legacy_numeric_output[BollingerBands(close, 6, 2.5)-BollingerBands-legacy_args4]
+  /home/sunhaiwei/quant_projects/tests/operators/test_catalog_recipe_migration.py:275: FutureWarning: The previous implementation of stack is deprecated and will be removed in a future version of pandas. See the What's New notes for pandas 2.1.0 for details. Specify future_stack=True to adopt the new implementation and silence this warning.
+    expected = legacy.stack(dropna=False)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+62 passed, 7 warnings in 47.63s

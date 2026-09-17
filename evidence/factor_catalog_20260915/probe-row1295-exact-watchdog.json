@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/factor_catalog_20260915/smoke_catalog.py", "--offset", "1293", "--limit", "1", "--batch-size", "1", "--output", "probe-row1295-exact.jsonl.gz"], "returncode": 0, "sampled_peak_family_rss_bytes": 752144384, "sampling_seconds": 0.1, "seconds": 54.547181284986436, "test_guard_reason": null, "hard_memory_cap": false}

@@ -208,14 +208,3 @@ def lower_stochastic_d(node: PlanNode) -> PlanNode:
     w = H.window_int(node, default=14, input_index=3)
     k = _stochastic_k(high, low, close, w)
     return H.ts_mean(k, 3)
-
-
-@register_lowering("OBV", min_inputs=2)
-def lower_obv(node: PlanNode) -> PlanNode:
-    """``cum_sum(sign(ts_delta(price,1)) * volume)``"""
-    if len(node.inputs) < 2:
-        return node
-    price, volume = node.inputs[0], node.inputs[1]
-    direction = H.fillna_const(H.unary("sign", H.ts_delta(price, 1)), 0.0)
-    signed_vol = H.binop("multiply", direction, volume)
-    return H.cum_sum(signed_vol)

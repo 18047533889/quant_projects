@@ -45,6 +45,8 @@ from data_access.registry.schema_validation import (
         ("timestamptz", "TIMESTAMP WITH TIME ZONE", True),
         ("timestamptz", "TIMESTAMPTZ", True),
         ("timestamptz", "TIMESTAMP", False),
+        ("uint64", "UBIGINT", True),
+        ("uint64", "BIGINT", False),
         ("timestamptz", "TIMESTAMP_NS", False),
         # 别名：int
         ("int", "BIGINT", True),

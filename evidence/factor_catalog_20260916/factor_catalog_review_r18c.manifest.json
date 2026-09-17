@@ -1,0 +1,53 @@
+{
+  "builder_sha256": "616ec3d1eeebee4c371b5fb0924f8907dbde97ff892efac40db5e5f625a81913",
+  "compile_evidence": "evidence/factor_catalog_20260916/r18-mixed40-preflight.compile.jsonl.gz",
+  "compile_evidence_sha256": "63ace83a3cdf4c8cc81692cc5a245b9395d4a5d716d63d4260d419b6fc675a6e",
+  "compile_input": "evidence/factor_catalog_20260916/r18-mixed40-preflight.input.jsonl.gz",
+  "compile_input_sha256": "d8645d65a622441a5972c72ffdb9e90d9db82b7fb35fb9d5e4395cea07712377",
+  "compile_summary": "evidence/factor_catalog_20260916/r18-mixed40-preflight.compile.summary.json",
+  "compile_summary_sha256": "ed394d2320d25ce4981ab86fa379d62d5f50e480dbb5dabb112dca327fd02337",
+  "execution_output": "evidence/factor_catalog_20260916/r18-mixed22-auto-r1.output.jsonl.gz",
+  "execution_output_sha256": "4a6d164ee3a3c0f3c0eb29f1659f7c639f913535d92fade9a778e9a2210141c0",
+  "execution_reconcile_helper": "evidence/factor_catalog_20260916/reconcile_r17_execution.py",
+  "execution_reconcile_helper_sha256": "940637cbd3a1fc150d182fa2eba2cdfc525c3a86a24a5ba53966edeb53dabea2",
+  "execution_summary": "evidence/factor_catalog_20260916/r18-mixed22-auto-r1.output.summary.json",
+  "execution_summary_sha256": "a39faaf3fd8219c6820fe999bc7a8911cb347c5012ec106086a9e0c7fad57a46",
+  "gaussian_compile_counts": {
+    "COMPILE_FAILED": 3
+  },
+  "gaussian_compile_evidence": "evidence/factor_catalog_20260916/factor_catalog_review_r18c.gaussian.compile.jsonl.gz",
+  "gaussian_compile_evidence_sha256": "433fa5522cce1ec4da968837224f05379122a819daf661c88577b259006dbaf1",
+  "gaussian_corrected_rows": 3,
+  "gaussian_correction_tool": "factor_engine/tools/catalog_r18_gaussian_corrections.py",
+  "gaussian_correction_tool_sha256": "4764f942bcca4e4ee8a9b7045e275d72e444c4d53e582beb0e423bbb73d84a7b",
+  "input_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r18b.csv.gz",
+  "input_checkpoint_sha256": "6215231104037d3ef635912827a413a3d274152f4c4be4aa4b46aaafd376758a",
+  "mixed_compile_counts": {
+    "COMPILED": 22,
+    "COMPILE_FAILED": 18
+  },
+  "mixed_execution_counts": {
+    "EXECUTED": 20,
+    "EXECUTED_ALL_NONFINITE": 2
+  },
+  "output_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r18c.csv.gz",
+  "output_checkpoint_sha256": "ccf6a0effe8a09471491b94d3845767309bb4ebc380bf5cd3c016b680144c7c3",
+  "output_execution_status_counts": {
+    "COMPILE_FAILED": 140,
+    "EXECUTED": 8151,
+    "EXECUTED_ALL_NONFINITE": 188,
+    "EXECUTION_FAILED": 26,
+    "NATIVE_CRASH": 18,
+    "NOT_RUN": 105595,
+    "PREPARE_FAILED": 14
+  },
+  "output_nonempty_compile_status_counts": {
+    "COMPILED": 109681,
+    "COMPILE_FAILED": 4212
+  },
+  "scope": "single consolidated R18c: three pinned Gaussian withdrawals, 40-row compile preflight, and closed 22-row execution reconciliation",
+  "source_rows": 114132,
+  "unique_factor_ids": 113893,
+  "valid_execution_input": "evidence/factor_catalog_20260916/r18-mixed40-preflight.valid.input.jsonl.gz",
+  "valid_execution_input_sha256": "c6d69c62baf66c4b53ac3d687991da9a18f0590db9b1f683a917ccee71061952"
+}

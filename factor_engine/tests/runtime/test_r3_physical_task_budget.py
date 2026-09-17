@@ -60,6 +60,36 @@ def test_shared_task_receives_selected_physical_workspace_budget():
     assert ledger["cse:shared"]["workspace_bytes"] == 80000
 
 
+def test_unreferenced_shared_task_is_pruned_before_admission():
+    root = PhysicalFactorTask(
+        "factor", "abs", TASK_ROOT, consumers=("cse:unused",),
+        factor_name="factor",
+        resource_contract=TaskResourceContract(peak_memory_bytes=8),
+    )
+    unused = PhysicalFactorTask(
+        "cse:unused", "abs", TASK_CSE_SHARED, inputs=("factor",),
+        resource_contract=TaskResourceContract(peak_memory_bytes=8),
+    )
+    scheduler = NS(
+        physical_dag=NS(tasks={"factor": root, "cse:unused": unused}), meta={}
+    )
+    physical = NS(
+        regions=(
+            NS(region_id="root", node_ids=("factor",), estimated_memory_bytes=128),
+        ),
+        edges=(),
+    )
+
+    ledger = _bind_physical_task_budgets(
+        scheduler,
+        NS(physical_plan=physical, logical_shared_nodes={}),
+    )
+
+    assert set(scheduler.physical_dag.tasks) == {"factor"}
+    assert scheduler.physical_dag.tasks["factor"].consumers == ()
+    assert set(ledger) == {"factor"}
+
+
 def test_same_region_roots_reuse_one_ancestry_computation():
     tasks = {
         name: PhysicalFactorTask(

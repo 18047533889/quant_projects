@@ -1,0 +1,10 @@
+{
+  "factor_count": 100000,
+  "status": "TIMEOUT",
+  "timeout_seconds": 180,
+  "max_rss_mib": 2048,
+  "stdout_bytes": 0,
+  "last_observed_elapsed_seconds": 136,
+  "last_observed_process_rss_kib": 394892,
+  "conclusion": "No completed 100k result within the bounded run; 100k support is not claimed."
+}

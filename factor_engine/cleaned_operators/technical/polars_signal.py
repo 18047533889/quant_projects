@@ -441,10 +441,14 @@ class CCIPolars(SeriesOperator):
         cols = _align_cols(high, low, close)
 
         def _mad(arr: np.ndarray) -> float:
-            if len(arr) == 0:
+            # The canonical CCI propagates any missing/nonfinite observation
+            # through the entire active window. Polars nulls must not be
+            # silently dropped by nanmean (or treated as a shorter window).
+            values = np.asarray(arr, dtype=np.float64)
+            if values.size == 0 or not np.isfinite(values).all():
                 return np.nan
-            m = np.nanmean(arr)
-            return float(np.nanmean(np.abs(arr - m)))
+            center = values.mean()
+            return float(np.mean(np.abs(values - center)))
 
         exprs = []
         for c in cols:

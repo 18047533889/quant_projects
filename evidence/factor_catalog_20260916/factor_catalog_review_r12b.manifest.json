@@ -1,0 +1,28 @@
+{
+  "counts": {
+    "rows": 114132,
+    "execution:EXECUTED": 7700,
+    "execution:EXECUTED_ALL_NONFINITE": 185,
+    "execution:NOT_RUN": 106066,
+    "execution:EXECUTION_FAILED": 26,
+    "execution:COMPILE_FAILED": 121,
+    "execution:PREPARE_FAILED": 14,
+    "changed": 34,
+    "changed_static:PARSED_FIELDS_BOUND": 33,
+    "changed_compile:COMPILED": 26,
+    "execution:NATIVE_CRASH": 20,
+    "migration_rejected": 435,
+    "changed_compile:COMPILE_FAILED": 8,
+    "changed_static:FIELDS_UNRESOLVED": 1
+  },
+  "unique_factor_ids": 113893,
+  "source_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r12a.csv.gz",
+  "source_sha256": "a5da8d8a7d6f5ce1ff3d23e78fe65ca36cd914e5e8bc6a127607159aee5bdaa1",
+  "output_sha256": {
+    "checkpoint": "b48d4054bda868d5d92a49387e2b61f9d26100d67bf10892500e5804c0f25fbe",
+    "decisions": "c17b37462868db0ef325311c602b16e5188b3c66de61b2e595f3e9f2e74012a9",
+    "input": "b9352801e0b1225e14bbd2a756b69f0e351f320c2f2d5e7686d97d3d86220dbb"
+  },
+  "scope": "reviewed_changes_compile_not_execution",
+  "authorization": "user requested explanation-backed DSL completion; explicit decisions retained"
+}

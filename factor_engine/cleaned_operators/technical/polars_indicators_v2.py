@@ -51,13 +51,37 @@ def _ema(expr: pl.Expr, span: int) -> pl.Expr:
     return (
         expr.fill_nan(None)
         .ewm_mean(
-            span=span,
-            adjust=False,
-            min_samples=span,
-            ignore_nulls=False,
+            span=span, adjust=False, min_samples=span, ignore_nulls=False
         )
         .fill_null(strategy="forward")
     )
+
+
+def _ema_numpy(values, span: int) -> np.ndarray:
+    """Deterministic pandas ``ewm(adjust=False, ignore_na=False)`` parity."""
+    span = _pi(span, "span")
+    alpha = 2.0 / (span + 1.0)
+    old_wt_factor = 1.0 - alpha
+    data = np.asarray(values, dtype=float)
+    out = np.full(data.shape, np.nan, dtype=float)
+    weighted = np.nan
+    old_wt = 1.0
+    observations = 0
+    for index, value in enumerate(data):
+        observed = np.isfinite(value)
+        if observed:
+            observations += 1
+        if np.isfinite(weighted):
+            old_wt *= old_wt_factor
+            if observed:
+                if weighted != value:
+                    weighted = (old_wt * weighted + alpha * value) / (old_wt + alpha)
+                old_wt = 1.0
+        elif observed:
+            weighted = value
+        if observations >= span:
+            out[index] = weighted
+    return out
 
 
 def _wilder(expr: pl.Expr, window: int) -> pl.Expr:
@@ -81,7 +105,15 @@ def _tr_expr() -> pl.Expr:
         (pl.col("high") - previous).abs(),
         (pl.col("low") - previous).abs(),
     ).fill_nan(None)
-    return pl.when(previous.is_null() | previous.is_nan()).then(None).otherwise(raw)
+    invalid = (
+        previous.is_null()
+        | previous.is_nan()
+        | pl.col("high").is_null()
+        | pl.col("high").is_nan()
+        | pl.col("low").is_null()
+        | pl.col("low").is_nan()
+    )
+    return pl.when(invalid).then(None).otherwise(raw)
 
 
 def _ohlc(high: pl.Series, low: pl.Series, close: pl.Series) -> pl.DataFrame:
@@ -261,19 +293,31 @@ def TSI(close, long_window, short_window):
     short_window = _pi(short_window, "short_window", 2)
     values = {}
     for column in _cols(close):
-        momentum = pl.col(column).diff()
-        numerator = _ema(_ema(momentum, long_window), short_window)
-        denominator = _ema(_ema(momentum.abs(), long_window), short_window)
-        values[column] = _one(
-            close,
-            column,
-            pl.when(denominator != 0).then(100.0 * numerator / denominator).otherwise(None),
+        raw = close[column].to_numpy().astype(float, copy=False)
+        momentum = np.empty(raw.shape, dtype=float)
+        momentum[0] = np.nan
+        momentum[1:] = raw[1:] - raw[:-1]
+        numerator = _ema_numpy(_ema_numpy(momentum, long_window), short_window)
+        denominator = _ema_numpy(
+            _ema_numpy(np.abs(momentum), long_window), short_window
         )
+        result = np.full(raw.shape, np.nan, dtype=float)
+        valid = np.isfinite(numerator) & np.isfinite(denominator) & (denominator != 0)
+        result[valid] = 100.0 * numerator[valid] / denominator[valid]
+        values[column] = pl.Series(column, result)
     return _result(close, values)
 
 
 def TSI_signal(close, long_window, short_window, signal_window):
-    return _signal(TSI(close, long_window, short_window), signal_window)
+    signal_window = _pi(signal_window, "signal_window")
+    oscillator = TSI(close, long_window, short_window)
+    return _result(
+        oscillator,
+        {
+            column: pl.Series(column, _ema_numpy(oscillator[column], signal_window))
+            for column in _cols(oscillator)
+        },
+    )
 
 
 def UltimateOscillator(
@@ -425,6 +469,8 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
 
 
 def _register(name: str, params: tuple[str, ...], function: Callable, description: str) -> None:
+    panel_params = ("close",) if name in {"TSI", "TSI_signal"} else ()
+    scalar_params = tuple(params[1:]) if panel_params else ()
     metadata = OperatorMetadata(
         name=name,
         category="technical_signal",
@@ -432,6 +478,8 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
         param_names=list(params),
         return_type="series",
         tags=["pit_safe", "causal", "polars", "native"],
+        panel_params=panel_params,
+        scalar_params=scalar_params,
     )
 
     def _calculate_series(self, *args, **kwargs):

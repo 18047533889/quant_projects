@@ -1,0 +1,29 @@
+{
+  "recipe_set": "r16_technical",
+  "counts": {
+    "rows": 114132,
+    "execution:EXECUTED": 8023,
+    "execution:EXECUTED_ALL_NONFINITE": 186,
+    "execution:NOT_RUN": 105744,
+    "execution:EXECUTION_FAILED": 26,
+    "execution:COMPILE_FAILED": 119,
+    "execution:PREPARE_FAILED": 14,
+    "execution:NATIVE_CRASH": 20,
+    "migration_rejected": 435,
+    "changed": 76,
+    "changed_static:PARSED_FIELDS_BOUND": 60,
+    "changed_compile:COMPILED": 58,
+    "changed_static:PARSE_FAILED": 16,
+    "changed_compile:COMPILE_FAILED": 18
+  },
+  "unique_factor_ids": 113893,
+  "source_checkpoint": "factor_catalog_review_r15b.csv.gz",
+  "source_sha256": "819bb637a0d9bcab3331c596ab1371e0dd8dcff703a1e3a1e877583570f57c74",
+  "output_sha256": {
+    "checkpoint": "269859a6edba076034c9149acadd7a6340192188746cef64e8f12a27115d35ca",
+    "decisions": "3d60fd2d00691a3419970d0cadbfcb54b058448dfe65e80e6839a9b2f307683b",
+    "input": "436c95eaca6b9f296eec21483ed702ebd1d1f7aa7b791a07f520634fcdb612f7"
+  },
+  "scope": "reviewed_changes_compile_not_execution",
+  "authorization": "user requested explanation-backed DSL completion; explicit decisions retained"
+}

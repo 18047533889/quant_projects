@@ -1,0 +1,305 @@
+{
+  "aggregation": {
+    "aggregate_evidence": "evidence/factor_catalog_20260916/r13_unsupported_current_formula_matched_compile.jsonl.gz",
+    "aggregate_evidence_sha256": "d89d92b302127570b1e1ad7057fe501dca2685f38639b5027971338e501bfac9",
+    "approved_chunks": [
+      {
+        "evidence": "evidence/factor_catalog_20260916/r13_unsupported_final000.jsonl.gz",
+        "evidence_sha256": "b10bb9042210f315cb99408c19b9b16bb835c29206290e6a60078d3325d23685",
+        "manifest": "evidence/factor_catalog_20260916/r13_unsupported_final000.manifest.json",
+        "manifest_sha256": "b17b8a768cc3bfa2a0b676733d6fa0f73e5a051c08dafb4c0629e0e9ab80c75f",
+        "records": 200
+      },
+      {
+        "evidence": "evidence/factor_catalog_20260916/r13_unsupported_final001.jsonl.gz",
+        "evidence_sha256": "ebf746cf0c901adf729324f96b00d848ae1f8ffabdad0721e08e422fdf40e84b",
+        "manifest": "evidence/factor_catalog_20260916/r13_unsupported_final001.manifest.json",
+        "manifest_sha256": "6e0ae125f70a22c2e327824ddee9a837d2c1daf064e3c75108845008b0d8eb5f",
+        "records": 200
+      },
+      {
+        "evidence": "evidence/factor_catalog_20260916/r13_unsupported_final002.jsonl.gz",
+        "evidence_sha256": "0f7034a8562b414b0c72c48f33afbd50c2876f55ab2bf3d2c24c5e042b61fa52",
+        "manifest": "evidence/factor_catalog_20260916/r13_unsupported_final002.manifest.json",
+        "manifest_sha256": "336b1db458f6b5c2ac310f4896cae127ce850d903b1e98b1890a30e1fd7deaab",
+        "records": 200
+      },
+      {
+        "evidence": "evidence/factor_catalog_20260916/r13_unsupported_final003.jsonl.gz",
+        "evidence_sha256": "78b4c390a0d562042473b3d942b214236f6645c861e6af06f5a3f7760b28983e",
+        "manifest": "evidence/factor_catalog_20260916/r13_unsupported_final003.manifest.json",
+        "manifest_sha256": "07411a2ffece9b26e332caa9db8b018f603e8a0114c0cbaf27128644740b3a9c",
+        "records": 200
+      },
+      {
+        "evidence": "evidence/factor_catalog_20260916/r13_unsupported_final004.jsonl.gz",
+        "evidence_sha256": "64a25327f3530d41e125916a7095f55af5413e6f94830e8e990c7fc1192b9ed3",
+        "manifest": "evidence/factor_catalog_20260916/r13_unsupported_final004.manifest.json",
+        "manifest_sha256": "14e07d5713793d4ca562f5b7651b3d825ced6df0ab78467d9ee6f02fb02d4c8b",
+        "records": 200
+      },
+      {
+        "evidence": "evidence/factor_catalog_20260916/r13_unsupported_final005.jsonl.gz",
+        "evidence_sha256": "c141e8876fdc88278646c9a736d742fa7859ee189367a9d88a4ebf46fabad3f5",
+        "manifest": "evidence/factor_catalog_20260916/r13_unsupported_final005.manifest.json",
+        "manifest_sha256": "33009e17cf3fec1caa0f62f7ec1d070b06126507a7d283f725a55fef43a44b53",
+        "records": 3
+      }
+    ],
+    "excluded_identities": [
+      [
+        97376,
+        "R65X_00558"
+      ],
+      [
+        97384,
+        "R65X_00566"
+      ],
+      [
+        97392,
+        "R65X_00574"
+      ],
+      [
+        97400,
+        "R65X_00582"
+      ],
+      [
+        97408,
+        "R65X_00590"
+      ],
+      [
+        97416,
+        "R65X_00598"
+      ],
+      [
+        98133,
+        "R65X_01315"
+      ],
+      [
+        98134,
+        "R65X_01316"
+      ],
+      [
+        98135,
+        "R65X_01317"
+      ],
+      [
+        98136,
+        "R65X_01318"
+      ],
+      [
+        98137,
+        "R65X_01319"
+      ],
+      [
+        98138,
+        "R65X_01320"
+      ],
+      [
+        98221,
+        "R65X_01403"
+      ],
+      [
+        99600,
+        "R65X_02782"
+      ],
+      [
+        99610,
+        "R65X_02792"
+      ],
+      [
+        99620,
+        "R65X_02802"
+      ],
+      [
+        99630,
+        "R65X_02812"
+      ],
+      [
+        99640,
+        "R65X_02822"
+      ],
+      [
+        99650,
+        "R65X_02832"
+      ],
+      [
+        99660,
+        "R65X_02842"
+      ],
+      [
+        99670,
+        "R65X_02852"
+      ],
+      [
+        99680,
+        "R65X_02862"
+      ],
+      [
+        99690,
+        "R65X_02872"
+      ],
+      [
+        99700,
+        "R65X_02882"
+      ],
+      [
+        99710,
+        "R65X_02892"
+      ],
+      [
+        99720,
+        "R65X_02902"
+      ],
+      [
+        99730,
+        "R65X_02912"
+      ],
+      [
+        99740,
+        "R65X_02922"
+      ],
+      [
+        99750,
+        "R65X_02932"
+      ],
+      [
+        99760,
+        "R65X_02942"
+      ],
+      [
+        99770,
+        "R65X_02952"
+      ],
+      [
+        99780,
+        "R65X_02962"
+      ]
+    ],
+    "excluded_reason_counts": {
+      "current_formula_changed_since_compile_source": 32
+    },
+    "excluded_records": 32,
+    "included_records": 971,
+    "source_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r12e.csv.gz",
+    "source_checkpoint_sha256": "d9668cd615ea28c9008159a6cd84bc99c9e1d29e38e04d459b3c4f0d2abb75d5",
+    "target_records": 1003
+  },
+  "code_hash_counts": {
+    "b89e18832435370709234f2f42e772eab3c6a7774c2ffab48e40005928faee0e": 971
+  },
+  "code_hash_interpretation": "per-record audit-time declared source-member snapshot, see approved chunk manifests; not whole current repository certification",
+  "compile_evidence": "evidence/factor_catalog_20260916/r13_unsupported_current_formula_matched_compile.jsonl.gz",
+  "evidence_records": 971,
+  "evidence_sha256": "d89d92b302127570b1e1ad7057fe501dca2685f38639b5027971338e501bfac9",
+  "evidence_status_counts": {
+    "COMPILED": 93,
+    "COMPILE_FAILED": 878
+  },
+  "factor_counts": {
+    "ACF": 4,
+    "ADXR": 1,
+    "AROON": 1,
+    "AROON_down": 1,
+    "AROON_up": 1,
+    "ATR": 1,
+    "BollingerLower": 1,
+    "BollingerUpper": 1,
+    "CCI": 1,
+    "DPO": 1,
+    "MOM": 1,
+    "ROC": 1,
+    "RSI": 1,
+    "StochasticD": 1,
+    "StochasticK": 1,
+    "TRIX": 1,
+    "WilliamsR": 1,
+    "bartlett_test": 4,
+    "causal_linear_extrapolate": 5,
+    "chi_square_test": 4,
+    "close_gap": 1,
+    "convolve": 5,
+    "corr_test": 4,
+    "cs_isotonic_residual": 1,
+    "cs_mad_zscore": 1,
+    "cumulative_returns": 1,
+    "decimate": 5,
+    "dft": 5,
+    "downside_beta": 1,
+    "durbin_watson_test": 4,
+    "fft": 5,
+    "filter_bandpass": 5,
+    "filter_highpass": 5,
+    "filter_lowpass": 5,
+    "filter_notch": 5,
+    "granger_causality": 4,
+    "holder_concentration_change": 1,
+    "holder_count_change_rate": 1,
+    "identity": 3,
+    "idft": 5,
+    "ifft": 5,
+    "jarque_bera_test": 4,
+    "kendall_corr_test": 4,
+    "kpss_test": 4,
+    "ks_test": 4,
+    "levene_test": 4,
+    "lilliefors_test": 4,
+    "micro_amihud_hf": 1,
+    "micro_spread": 1,
+    "micro_trade_imbalance": 1,
+    "micro_vpin": 1,
+    "multiply": 636,
+    "open_gap": 1,
+    "pacf": 4,
+    "phase": 5,
+    "quarter": 5,
+    "rank": 13,
+    "safe_div_null": 1,
+    "sharpe_ratio": 1,
+    "signed_sqrt": 1,
+    "spearman_corr_test": 4,
+    "stationarity_test": 4,
+    "subtract": 85,
+    "tanh": 2,
+    "ts_extrema_confirmation_rate": 6,
+    "ts_extrema_divergence_strength": 6,
+    "ts_fractional_difference": 1,
+    "ts_persistence_entropy": 12,
+    "ts_quantile_regression_beta": 8,
+    "ts_state_density": 1,
+    "ts_trend_break_score": 1,
+    "ts_zscore": 2,
+    "ttest_one_sample": 4,
+    "ttest_paired": 4,
+    "ttest_two_samples": 4,
+    "ttm": 5,
+    "volatility": 1,
+    "vp_weighted_price": 1,
+    "vpmacd": 1,
+    "vpmacd_signal": 1,
+    "wavelet": 5,
+    "wavelet_denoise": 5,
+    "where": 3,
+    "yoy": 5
+  },
+  "input_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r13a.csv.gz",
+  "input_checkpoint_sha256": "cc95e87ed8e874ed72828f45b3ec30172701a9967cb0ddcf0371382cc1384539",
+  "merged_records": 971,
+  "output_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r13b.csv.gz",
+  "output_checkpoint_sha256": "80dd39f1364d82edd236471c80ac5feb7f81cc2eaf00287262e95dce06f0e9d3",
+  "output_compile_status_counts": {
+    "COMPILED": 106977,
+    "COMPILE_FAILED": 3810,
+    "NOT_RUN": 3345
+  },
+  "scope": "compile_only_formula_matched_not_execution_or_code_certification",
+  "source_rows": 114132,
+  "unchanged_field_families": [
+    "identity",
+    "original_formula",
+    "current_formula",
+    "static",
+    "execution"
+  ],
+  "unique_factor_ids": 113893
+}

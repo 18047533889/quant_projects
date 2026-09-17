@@ -102,32 +102,14 @@ def test_collect_plan_ops_after_lowering():
     assert "ROC" not in ops
 
 
-def test_obv_lowers_with_coalesce_on_sign():
+def test_obv_stays_canonical_for_exact_registered_backend():
     plan = PlanNode(
         op="OBV",
         inputs=[_col("close"), _col("volume")],
         attrs={},
     )
     out = lower_composite_operators(plan)
-    assert out.op == "cum_sum"
-    inner = out.inputs[0]
-    assert inner.op == "multiply"
-    assert inner.inputs[0].op == "fillna_const"
-
-
-def test_obv_lowers_to_cum_sum_chain():
-    plan = PlanNode(
-        op="OBV",
-        inputs=[_col("close"), _col("volume")],
-        attrs={},
-    )
-    out = lower_composite_operators(plan)
-    assert out.op == "cum_sum"
-    inner = out.inputs[0]
-    assert inner.op == "multiply"
-    assert inner.inputs[0].op == "fillna_const"
-    assert inner.inputs[0].inputs[0].op == "sign"
-    assert inner.inputs[0].inputs[0].inputs[0].op == "ts_delta"
+    assert out.op == "OBV"
 
 
 def test_stochastic_k_lowers_to_min_max_div():
@@ -198,7 +180,6 @@ def test_list_composite_lowerings_batch_one_size():
     for name in (
         "MOM",
         "ROC",
-        "OBV",
         "StochasticK",
         "StochasticD",
         "BollingerBands",

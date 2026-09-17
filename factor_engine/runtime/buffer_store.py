@@ -115,10 +115,49 @@ class BufferLeaseTarget:
     _entry: _Entry = field(repr=False, compare=False)
     _store_token: Any = field(repr=False, compare=False)
     _owners: tuple[Any, ...] = field(repr=False, compare=False)
+    _logical_scalar_owner: bool = field(default=False, repr=False, compare=False)
+    _process_lifetime_native_owner: bool = field(default=False, repr=False, compare=False)
 
     @property
     def physical_ownership_supported(self) -> bool:
-        return bool(self._owners)
+        return bool(self._owners) or self._logical_scalar_owner or self._process_lifetime_native_owner
+
+    @property
+    def ownership_kind(self) -> str:
+        if self._owners:
+            return "weakref_physical"
+        if self._logical_scalar_owner:
+            return "exact_builtin_immutable"
+        if self._process_lifetime_native_owner:
+            return "process_lifetime_native"
+        return "unsupported"
+
+
+def _logical_scalar_owner_supported(value: Any) -> bool:
+    """Whether the entry itself is the complete owner of an immutable scalar."""
+    return value is None or type(value) in {bool, int, float, complex, str, bytes}
+
+
+def _requires_process_lifetime_native_owner(value: Any) -> bool:
+    """Whether native shared storage lacks a Python last-owner notification.
+
+    Polars and Arrow use native reference-counted buffers.  Their Python wrappers
+    do not expose a callback for the final native owner, and derived frames may
+    outlive the cached wrapper.  Keeping the broker lease for process lifetime is
+    conservative but exact with respect to the only lifetime we can prove; it
+    never makes unaccounted resident bytes reclaimable.
+    """
+    root = type(value).__module__.split(".", 1)[0]
+    if root in {"polars", "pyarrow"}:
+        return True
+    if root == "pandas":
+        manager = getattr(value, "_mgr", None)
+        for block in tuple(getattr(manager, "blocks", ())):
+            block_value = getattr(block, "values", None)
+            module = type(block_value).__module__.split(".", 1)[0]
+            if module == "pyarrow" or hasattr(block_value, "_pa_array"):
+                return True
+    return False
 
 
 def _physical_memory_owners(value: Any) -> tuple[Any, ...]:
@@ -142,9 +181,21 @@ def _physical_memory_owners(value: Any) -> tuple[Any, ...]:
                 return ()
             for block in blocks:
                 block_value = getattr(block, "values", None)
-                if not isinstance(block_value, np.ndarray):
+                if isinstance(block_value, np.ndarray):
+                    arrays.append(block_value)
+                    continue
+                # NumPy-backed pandas ExtensionArrays (nullable integers,
+                # booleans, and Python StringArray) expose their complete
+                # physical ownership through these arrays.
+                extension_arrays = []
+                for attr in ("_data", "_mask", "_ndarray"):
+                    candidate = getattr(block_value, attr, None)
+                    if isinstance(candidate, np.ndarray):
+                        extension_arrays.append(candidate)
+                if not extension_arrays:
                     return ()
-                arrays.append(block_value)
+                wrappers.append(block_value)
+                arrays.extend(extension_arrays)
             axes = []
             for name in ("index", "columns"):
                 axis = getattr(value, name, None)
@@ -286,6 +337,7 @@ class GovernedBufferStore:
         self._backing: dict[str, Any] = backing if backing is not None else {}
         self._entries: dict[str, _Entry] = {}
         self._entry_leases: dict[str, tuple[weakref.finalize, ...]] = {}
+        self._entry_scalar_leases: dict[str, Any] = {}
         self._lease_target_token = object()
         self._budget = (
             None if budget_bytes is None else max(0, int(budget_bytes))
@@ -369,6 +421,8 @@ class GovernedBufferStore:
             return BufferLeaseTarget(
                 key=key, bytes=max(0, int(entry.bytes)), _entry=entry,
                 _store_token=self._lease_target_token, _owners=owners,
+                _logical_scalar_owner=_logical_scalar_owner_supported(entry.value),
+                _process_lifetime_native_owner=_requires_process_lifetime_native_owner(entry.value),
             )
 
     def attach_memory_lease(
@@ -382,6 +436,8 @@ class GovernedBufferStore:
                 target = BufferLeaseTarget(
                     key=key, bytes=max(0, int(entry.bytes)), _entry=entry,
                     _store_token=self._lease_target_token, _owners=owners,
+                    _logical_scalar_owner=_logical_scalar_owner_supported(entry.value),
+                    _process_lifetime_native_owner=_requires_process_lifetime_native_owner(entry.value),
                 )
             valid = (
                 isinstance(target, BufferLeaseTarget)
@@ -389,13 +445,35 @@ class GovernedBufferStore:
                 and target._store_token is self._lease_target_token
             )
             owners = target._owners if valid else ()
-            if valid and not owners:
+            logical_scalar = bool(valid and target._logical_scalar_owner)
+            process_lifetime_native = bool(valid and target._process_lifetime_native_owner)
+            if valid and not owners and not logical_scalar and not process_lifetime_native:
                 # A caller bypassed the pre-transfer support check. There is
                 # no safe finalizer, so retain admission for process lifetime.
                 _retain_lease_conservatively(lease)
                 return False
             if not valid:
                 accepted = False
+            elif process_lifetime_native:
+                # Native Arc/shared-buffer lifetimes cannot be observed from
+                # Python without risking early release after a derived frame
+                # outlives the cached wrapper.  Retain the transferred lease
+                # for process lifetime: safe accounting, never a budget bypass.
+                _retain_lease_conservatively(lease)
+                accepted = True
+            elif logical_scalar:
+                # Exact built-in immutable scalars have no separate native
+                # allocation or weakref-able view. Their ownership is exactly
+                # the captured store entry generation, so release its lease on
+                # logical detach/replacement.
+                if entry is target._entry:
+                    previous = self._entry_scalar_leases.pop(key, None)
+                    if previous is not None:
+                        previous.release()
+                    self._entry_scalar_leases[key] = lease
+                    accepted = True
+                else:
+                    accepted = False
             else:
                 state = {
                     "remaining": len(owners), "lease": lease,
@@ -436,6 +514,9 @@ class GovernedBufferStore:
     def _detach_entry_lease_locked(self, key: str) -> None:
         """Drop logical tracking; global weakref finalizers retain the lease."""
         self._entry_leases.pop(key, None)
+        scalar_lease = self._entry_scalar_leases.pop(key, None)
+        if scalar_lease is not None:
+            scalar_lease.release()
 
     def put(
         self,
@@ -447,6 +528,7 @@ class GovernedBufferStore:
         spool: bool = False,
         next_use_distance: int = 0,
         future_consumers: int = 1,
+        pin: bool = False,
     ) -> BufferPutResult:
         """写入（R38 P0-029 + R42-016）：返回 BufferPutResult。
 
@@ -502,7 +584,16 @@ class GovernedBufferStore:
                 recompute_cost_ms=recompute_cost_ms,
                 next_use_distance=next_use_distance,
                 future_consumers=future_consumers,
+                state=(BufferEntryState.PINNED if pin else BufferEntryState.RECLAIMABLE),
+                refcount=(1 if pin else 0),
             )
+            if pin:
+                self._pinned.add(key)
+            else:
+                # An overwrite replaces the entry's complete lifecycle state.
+                # Do not retain a stale membership left by an older pinned
+                # generation of the same key.
+                self._pinned.discard(key)
             self._writes += 1
             return BufferPutResult(STATUS_MEMORY, key, reason="ok")
 
@@ -770,7 +861,11 @@ class GovernedBufferStore:
     def clear(self) -> None:
         """Drop every entry and release every attached memory lease once."""
         with self._lock:
-            keys = set(self._entries) | set(self._entry_leases)
+            keys = (
+                set(self._entries)
+                | set(self._entry_leases)
+                | set(self._entry_scalar_leases)
+            )
         for key in keys:
             self.release(key)
 

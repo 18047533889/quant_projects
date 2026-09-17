@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "--import-mode=importlib", "tests/operators/test_catalog_recipe_migration.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 482041856, "sampling_seconds": 0.1, "seconds": 54.94576288596727, "test_guard_reason": null, "hard_memory_cap": false}

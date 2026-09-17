@@ -163,6 +163,8 @@ def polars_long_to_multiindex_series(
         timestamp_col=timestamp_col,
         asset_col=instrument_col,
         value_col=value_col,
+        sort=True,
+        preserve_sparse=True,
     )
     if template_index is not None:
         return out.reindex(template_index)

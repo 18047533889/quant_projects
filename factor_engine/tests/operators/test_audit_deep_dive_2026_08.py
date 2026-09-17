@@ -190,10 +190,20 @@ def test_typed_input_contracts():
 
 
 def test_typed_input_contracts_legal_forms():
-    # Legal forms pass the typed gate (level/raw/continuous used correctly).
-    assert _analyze("ts_max_drawdown(close, 20)") in {"ok", "error"}
-    assert _analyze("ts_spectral_entropy(continuous_close, 20)") in {"ok", "error"}
-    assert _analyze("ashare_limit_up_touch(close, high_limit)") in {"ok", "error"}
+    from factor_engine.api.dsl_parser import parse_expr
+    from factor_engine.ir.analyzer import Analyzer
+
+    # Legal forms must lower successfully, not merely avoid the typed-input
+    # exception.  Spectral inputs use the dedicated return/level canonicals.
+    legal = (
+        "ts_max_drawdown(field('close', table='StockDailyBar'), 20)",
+        "ts_spectral_entropy(field('ret', table='StockDailyBarAdj'), 20)",
+        "ts_detrended_level_spectral_entropy(field('close', table='StockDailyBarAdj'), 20)",
+        "ashare_limit_up_touch(field('close', table='StockDailyBar'), "
+        "field('high_limit', table='StockDailyBar'), 0.005)",
+    )
+    for formula in legal:
+        Analyzer().lower(parse_expr(formula, surface="compat_research"))
 
 
 # ---------------------------------------------------------------------------
@@ -283,12 +293,14 @@ def test_supertrend_and_psar_missing_state_interrupt():
     # Missing bar -> NaN output; the recursion interrupts and re-seeds once the
     # Wilder ATR band is again finite (a band over a gap is uncomputable).
     assert np.isnan(st.iloc[3, 0])
-    assert np.isnan(st.iloc[4, 0])  # ATR still warming through the gap
-    assert np.isfinite(st.iloc[5, 0])
+    assert np.isnan(st.iloc[4, 0])  # previous close is missing, so TR is unknown
+    assert np.isnan(st.iloc[5, 0])  # first band-valid bar re-seeds as UNKNOWN
+    assert np.isfinite(st.iloc[6, 0])  # next valid bar re-asserts direction
 
     ps = PSAR(high, low, 0.02, 0.2)
     assert np.isnan(ps.iloc[3, 0])
-    assert np.isfinite(ps.iloc[4, 0])  # PSAR re-seeds from the bar's own range
+    assert np.isnan(ps.iloc[4, 0])  # first jointly valid bar re-seeds UNKNOWN
+    assert ps.iloc[5, 0] == pytest.approx(3.0)  # next rising bar establishes direction
 
 
 def test_supertrend_pandas_polars_parity_with_gap():

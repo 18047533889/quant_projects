@@ -45,6 +45,7 @@ def _sign_direction(c, o):
 # identical outputs and pollutes the search space (review P0-10).  ``pattern``
 # itself is always active.
 _CANDLE_PARAM_DEPS: dict[str, frozenset[str]] = {
+    "hammer": frozenset(),
     "long_line": frozenset({"body_window"}),
     "short_line": frozenset({"body_window"}),
     "high_wave": frozenset({"body_window", "shadow_window"}),
@@ -176,12 +177,24 @@ def _engine(o, h, l, c, pattern, body_window, shadow_window, penetration):
     def emit(mask, direction, valid):
         base = sign.where(valid, np.nan)
         if np.isscalar(direction):
-            return base.mask(mask, float(direction))
+            return base.mask(mask & valid, float(direction))
         if isinstance(direction, pd.DataFrame):
             values = direction.reindex(index=sign.index, columns=sign.columns)
         else:
             values = pd.DataFrame(direction, index=sign.index, columns=sign.columns)
-        return base.where(~mask, values.astype(float))
+        return base.where(~(mask & valid), values.astype(float))
+
+    if p == "hammer":
+        # Keep the established native-backend definition: a small real body,
+        # lower shadow at least twice the body, and a tightly bounded upper
+        # shadow.  This fixed-threshold pattern has no active rolling knobs.
+        safe_body = body.clip(lower=1e-12)
+        mask = (
+            (body <= 0.35 * rng)
+            & (lower >= 2.0 * body)
+            & (upper <= 0.35 * safe_body)
+        )
+        return emit(mask, 1.0, cur)
 
     if p == "long_line":
         return emit(long_body, _sign_direction(c, o), cur & has_b)

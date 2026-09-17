@@ -1399,6 +1399,11 @@ def _choices_contains(choices: Sequence[Any], value: Any, name: str) -> bool:
     return False
 
 
+def _positional_param_names(names):
+    """Parameters after the variadic marker can only be supplied by keyword."""
+    return names[:names.index("...")] if "..." in names else names
+
+
 def _bound_parameters(
     metadata: OperatorMetadata,
     args: tuple[Any, ...],
@@ -1416,7 +1421,7 @@ def _bound_parameters(
     """
     names = list(getattr(metadata, "param_names", None) or [])
     bound: dict[str, Any] = {
-        name: args[index] for index, name in enumerate(names[: len(args)])
+        name: args[index] for index, name in enumerate(_positional_param_names(names)[: len(args)])
     }
     bound.update(kwargs)
     explicit_aliases = getattr(metadata, "param_aliases", None) or {}
@@ -1527,23 +1532,37 @@ def _enforce_active_when(
     return frozenset(active), frozenset(inactive)
 
 
-def _normalise_call(
+def _validate_declared_call_arity(
     metadata: OperatorMetadata,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     *,
     defaults: dict[str, Any] | None = None,
-):
-    # ``getattr`` keeps this compatible with the parallel polars metadata class
-    # (base_polars.OperatorMetadata has no param_specs / param_types on every
-    # instance); both classes share the param_names contract.
+) -> None:
+    """Validate one call shape against the authored metadata contract.
+
+    This is the shared planning/runtime arity authority.  It intentionally
+    inspects only argument counts and names, never runtime panel values.
+    """
     names = list(getattr(metadata, "param_names", None) or [])
-    types = getattr(metadata, "param_types", None) or {}
     specs = getattr(metadata, "param_specs", None) or {}
-    mixed = set(getattr(metadata, "mixed_params", None) or ())
-    aliases = set(getattr(metadata, "param_aliases", None) or {})
     tags = {str(t).lower() for t in (getattr(metadata, "tags", None) or [])}
     variadic = "variadic" in tags or "dynamic_inputs" in tags
+    aliases = set(getattr(metadata, "param_aliases", None) or {})
+    if not variadic:
+        for key in kwargs:
+            if key in names or key in aliases:
+                continue
+            if key in _LEGACY_KERNEL_ALIASES:
+                targets = _LEGACY_KERNEL_ALIASES[key]
+                if any(target in names or target in aliases for target in targets):
+                    continue
+            raise OperatorParameterError(
+                f"{metadata.name}: undeclared keyword parameter {key!r}; parameters "
+                f"are {names}.  A hidden keyword that changes results without being "
+                "visible in the catalog is rejected (R5-06 / round-7 P0); declare it "
+                "in param_names / param_aliases or tag the operator variadic."
+            )
     # R5-06: reject extra positional arguments past the declared contract unless
     # the operator is explicitly variadic.  A fifth panel silently accepted by a
     # four-parameter kernel is a contract violation, not a feature.
@@ -1618,6 +1637,44 @@ def _normalise_call(
                     f"declares {len(names)} parameters {names}; extra positional "
                     "arguments are rejected unless the operator declares variadic"
                 )
+
+
+def validate_operator_call_arity(
+    operator: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> None:
+    """Validate call shape using metadata plus authored kernel defaults."""
+
+    metadata = getattr(operator, "metadata", None)
+    if metadata is None:
+        raise ValueError(f"{operator!r} has no metadata; cannot validate call arity")
+    _validate_declared_call_arity(
+        metadata,
+        args,
+        kwargs,
+        defaults=_kernel_param_defaults(operator),
+    )
+
+
+def _normalise_call(
+    metadata: OperatorMetadata,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+    *,
+    defaults: dict[str, Any] | None = None,
+):
+    # ``getattr`` keeps this compatible with the parallel polars metadata class
+    # (base_polars.OperatorMetadata has no param_specs / param_types on every
+    # instance); both classes share the param_names contract.
+    names = list(getattr(metadata, "param_names", None) or [])
+    types = getattr(metadata, "param_types", None) or {}
+    specs = getattr(metadata, "param_specs", None) or {}
+    mixed = set(getattr(metadata, "mixed_params", None) or ())
+    aliases = set(getattr(metadata, "param_aliases", None) or {})
+    tags = {str(t).lower() for t in (getattr(metadata, "tags", None) or [])}
+    variadic = "variadic" in tags or "dynamic_inputs" in tags
+    _validate_declared_call_arity(metadata, args, kwargs, defaults=defaults)
     # R19-002: per-value validation routes through the SAME unified
     # scalar-parameter authority the planning-time validator uses
     # (``normalize_and_validate_scalar_param``), so runtime and planning share
@@ -1629,9 +1686,10 @@ def _normalise_call(
 
     _canonical = str(getattr(metadata, "name", "") or "")
     processed_args = []
+    positional_names = _positional_param_names(names)
     for index, value in enumerate(args):
-        name = names[index] if index < len(names) else ""
-        if (name in mixed or (index >= len(names) and getattr(metadata, "variadic_mixed_param", None))) and _is_panel(value):
+        name = positional_names[index] if index < len(positional_names) else ""
+        if (name in mixed or (index >= len(positional_names) and getattr(metadata, "variadic_mixed_param", None))) and _is_panel(value):
             processed_args.append(value)
         else:
             processed_args.append(normalize_and_validate_scalar_param(
@@ -2119,8 +2177,9 @@ def _split_bound(
         scalar_params[target] = value
     panels: list[Any] = []
     panel_param_names: list[str] = []
+    positional_names = _positional_param_names(names)
     for index, value in enumerate(args):
-        name = names[index] if index < len(names) else ""
+        name = positional_names[index] if index < len(positional_names) else ""
         if _is_panel(value):
             panels.append(value)
             panel_param_names.append(name)
@@ -2225,7 +2284,7 @@ def validate_operator_call(
 
 def _validate_common_integer_relations(metadata: OperatorMetadata, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
     names = list(metadata.param_names or [])
-    bound = {name: args[index] for index, name in enumerate(names[: len(args)])}
+    bound = {name: args[index] for index, name in enumerate(_positional_param_names(names)[: len(args)])}
     bound.update(kwargs)
     window = bound.get("window")
     minimum = bound.get("min_periods")
@@ -2254,7 +2313,7 @@ def _validate_relational_specs(
         return
     names = list(metadata.param_names or [])
     bound: dict[str, Any] = {
-        name: args[index] for index, name in enumerate(names[: len(args)])
+        name: args[index] for index, name in enumerate(_positional_param_names(names)[: len(args)])
     }
     bound.update(kwargs)
     # R6-24: a relation like ``min_line < window - (dim-1)*delay`` must be

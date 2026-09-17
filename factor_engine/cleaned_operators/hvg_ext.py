@@ -58,7 +58,7 @@ _EPS = 1e-12
 # window that is mostly missing yields a statistic that is not a comparable HVG
 # reading of the window — gate on a minimum effective graph size and coverage.
 _HVG_PARAM_SPECS = {
-    "window": ParamSpec(dtype=int, min=4, searchable=True),
+    "window": ParamSpec(dtype=int, min=4, searchable=True, history_semantics="max_rows"),
     "min_periods": ParamSpec(dtype=int, min=4, searchable=True, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     "min_nodes": ParamSpec(dtype=int, min=4, searchable=True, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     "min_coverage_fraction": ParamSpec(dtype=float, min=0.0, max=1.0, searchable=True, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -67,7 +67,7 @@ _HVG_PARAM_SPECS = {
 # window=252 that is ~2.6M triples per row per stock.  Cap the window for the
 # motif operator so search cannot generate an exploding-cost parameter.
 _HVG_MOTIF_PARAM_SPECS = {
-    "window": ParamSpec(dtype=int, min=4, max=80, searchable=True),
+    "window": ParamSpec(dtype=int, min=4, max=80, searchable=True, history_semantics="max_rows"),
     "min_periods": ParamSpec(dtype=int, min=4, searchable=True, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     "min_nodes": ParamSpec(dtype=int, min=4, searchable=True, param_role=ParamRole.ESTIMATOR_RESOLUTION),
     "min_coverage_fraction": ParamSpec(dtype=float, min=0.0, max=1.0, searchable=True, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -175,6 +175,12 @@ def _kl(p: np.ndarray, q: np.ndarray) -> float:
     return float(out)
 
 
+def _degree_entropy_from_degrees(k_deg: np.ndarray) -> float:
+    _, counts = np.unique(k_deg, return_counts=True)
+    probabilities = counts / counts.sum()
+    return -float(np.sum(probabilities * np.log(probabilities)))
+
+
 def _hvg_stats(v: np.ndarray) -> dict[str, float]:
     """All HVG statistics for one window.  ``v`` must be finite and contiguous."""
     n = v.shape[0]
@@ -184,9 +190,7 @@ def _hvg_stats(v: np.ndarray) -> dict[str, float]:
     k_deg = k_in + k_out
 
     # ---- degree entropy (raw counts, no smoothing) ----
-    _, counts = np.unique(k_deg, return_counts=True)
-    p = counts / counts.sum()
-    degree_entropy = -float(np.sum(p * np.log(p)))
+    degree_entropy = _degree_entropy_from_degrees(k_deg)
 
     # ---- forward-backward asymmetry (symmetric KL, Laplace-smoothed) ----
     alpha = 0.5
@@ -312,8 +316,12 @@ def _hvg_series(
             # emitting a number from a degenerate graph.
             if chunk.shape[0] == 0 or v.size / chunk.shape[0] < mcf:
                 continue
-            stats = _hvg_stats(v)
-            val = stats.get(key, np.nan)
+            if key == "degree_entropy":
+                k_in, k_out = _hvg_directed_degrees(v)
+                val = _degree_entropy_from_degrees(k_in + k_out)
+            else:
+                stats = _hvg_stats(v)
+                val = stats.get(key, np.nan)
             if np.isfinite(val):
                 out[r, c] = float(val)
     return out
@@ -479,6 +487,7 @@ def _register() -> None:
             source="hvg_ext",
             tags_extra=spec["tags_extra"],
             output_unit=spec["unit"],
+            window_semantics="rolling",
             param_specs=spec.get("param_specs"),
         )
     union_extended(*_SPECS.keys())

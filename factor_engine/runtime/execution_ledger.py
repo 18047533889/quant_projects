@@ -73,8 +73,19 @@ _TRANSFER_DIMENSIONS = (
 
 
 def _transfer_key(event: Mapping[str, Any]) -> tuple[str, ...] | None:
-    values = tuple(_text(event.get(key)) for key in _TRANSFER_DIMENSIONS)
-    return None if any(value is _MISSING for value in values) else values
+    values = []
+    for key in _TRANSFER_DIMENSIONS:
+        value = _text(event.get(key))
+        if value is _MISSING:
+            # Runtime TransferEdgeTelemetry reports representations, but older
+            # events omit backend labels. Preserve those observations without
+            # guessing a backend from its physical representation.
+            if key in ("source_backend", "target_backend") and event.get(key) is None:
+                value = "unreported"
+            else:
+                return None
+        values.append(value)
+    return tuple(values)
 
 
 def summarize_execution_ledger(
@@ -162,13 +173,17 @@ def summarize_execution_ledger(
                     **dict(zip(_TRANSFER_DIMENSIONS, key)), "event_count": 0,
                 })
                 item["event_count"] += 1
-                for field in ("actual_bytes", "actual_rows"):
-                    value = event.get(field)
+                for field in ("actual_bytes", "actual_rows", "payload_bytes"):
+                    value = event.get(field, event.get("row_count") if field == "actual_rows" else None)
                     if type(value) is int and value >= 0:
                         item[field] = item.get(field, 0) + value
-                value = event.get("actual_transfer_ms")
+                value = event.get("actual_transfer_ms", event.get("actual_ms"))
                 if type(value) in (int, float) and math.isfinite(float(value)) and value >= 0:
                     item["actual_transfer_ms"] = item.get("actual_transfer_ms", 0.0) + float(value)
+                basis = event.get("actual_bytes_basis")
+                if type(basis) is str and basis in {"identity_zero_copy", "materialized_payload", "unmeasured", "unspecified"}:
+                    counts = item.setdefault("actual_bytes_basis_counts", {})
+                    counts[basis] = counts.get(basis, 0) + 1
                 for field in ("sort_applied", "repartition_applied", "reshape_applied"):
                     value = event.get(field)
                     if type(value) is bool:

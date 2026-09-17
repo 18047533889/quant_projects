@@ -451,16 +451,25 @@ class TSI(SeriesOperator):
         description="True Strength Index - double smoothed momentum",
         param_names=["close", "long_window", "short_window"],
         param_types={"close": pl.DataFrame, "long_window": int, "short_window": int},
+        panel_params=("close",),
+        scalar_params=("long_window", "short_window"),
     )
 
     def _calculate_series(self, close: pl.DataFrame, long_window: int = 25, short_window: int = 13, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.technical.polars_indicators_v2 import _ema_numpy
+
         values = {}
         for column in _panel_columns(close):
-            momentum = pl.col(column).diff()
-            numerator = _ema_expr(_ema_expr(momentum, long_window), short_window)
-            denominator = _ema_expr(_ema_expr(momentum.abs(), long_window), short_window)
-            expression = pl.when(denominator != 0).then(100.0 * numerator / denominator).otherwise(None)
-            values[column] = close.select(expression.alias(column)).to_series()
+            raw = close[column].to_numpy().astype(float, copy=False)
+            momentum = np.empty(raw.shape, dtype=float)
+            momentum[0] = np.nan
+            momentum[1:] = raw[1:] - raw[:-1]
+            numerator = _ema_numpy(_ema_numpy(momentum, long_window), short_window)
+            denominator = _ema_numpy(_ema_numpy(np.abs(momentum), long_window), short_window)
+            result = np.full(raw.shape, np.nan, dtype=float)
+            valid = np.isfinite(numerator) & np.isfinite(denominator) & (denominator != 0)
+            result[valid] = 100.0 * numerator[valid] / denominator[valid]
+            values[column] = pl.Series(column, result)
         return _panel_result(close, values)
 
 
@@ -480,15 +489,19 @@ class TSI_signal(SeriesOperator):
         description="TSI signal line - EMA smoothing of TSI",
         param_names=["close", "long_window", "short_window", "signal_window"],
         param_types={"close": pl.DataFrame, "long_window": int, "short_window": int, "signal_window": int},
+        panel_params=("close",),
+        scalar_params=("long_window", "short_window", "signal_window"),
     )
 
     def _calculate_series(
         self, close: pl.DataFrame, long_window: int = 25, short_window: int = 13,
         signal_window: int = 7, **kwargs
     ) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.technical.polars_indicators_v2 import _ema_numpy
+
         tsi = TSI()._calculate_series(close, long_window, short_window)
         values = {
-            column: tsi.select(_ema_expr(pl.col(column), signal_window).alias(column)).to_series()
+            column: pl.Series(column, _ema_numpy(tsi[column], signal_window))
             for column in _panel_columns(tsi)
         }
         return _panel_result(close, values)
@@ -508,12 +521,12 @@ class VortexMinus(SeriesOperator):
         name="VortexMinus",
         category="technical_indicator",
         description="Vortex Indicator Minus component",
-        param_names=["high", "low", "close", "period"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "period": int},
+        param_names=["high", "low", "close", "window"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "window": int},
     )
 
     def _calculate_series(
-        self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame, period: int = 14, **kwargs
+        self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame, window: int = 14, **kwargs
     ) -> pl.DataFrame:
         cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
         if not cols:
@@ -521,9 +534,9 @@ class VortexMinus(SeriesOperator):
 
         result_data = {}
         for col in cols:
-            h = high[col]
-            l = low[col]
-            c = close[col]
+            h = high[col].fill_nan(None)
+            l = low[col].fill_nan(None)
+            c = close[col].fill_nan(None)
 
             # Vortex Movement Minus: |Low[i] - High[i-1]|
             vm_minus = (l - h.shift(1)).abs()
@@ -532,11 +545,12 @@ class VortexMinus(SeriesOperator):
             hl = h - l
             hc = (h - c.shift(1)).abs()
             lc = (l - c.shift(1)).abs()
-            tr = pl.max_horizontal(hl, hc, lc)
+            valid_tr = h.is_not_null() & l.is_not_null() & c.shift(1).is_not_null()
+            tr = pl.when(valid_tr).then(pl.max_horizontal(hl, hc, lc)).otherwise(None)
 
             # Sum over period
-            vm_minus_sum = vm_minus.rolling_sum(period)
-            tr_sum = tr.rolling_sum(period)
+            vm_minus_sum = vm_minus.rolling_sum(window)
+            tr_sum = tr.rolling_sum(window)
 
             # VI- = Sum(VM-) / Sum(TR)
             vi_minus = pl.when(tr_sum != 0).then(vm_minus_sum / tr_sum).otherwise(None)
@@ -563,12 +577,12 @@ class VortexPlus(SeriesOperator):
         name="VortexPlus",
         category="technical_indicator",
         description="Vortex Indicator Plus component",
-        param_names=["high", "low", "close", "period"],
-        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "period": int},
+        param_names=["high", "low", "close", "window"],
+        param_types={"high": pl.DataFrame, "low": pl.DataFrame, "close": pl.DataFrame, "window": int},
     )
 
     def _calculate_series(
-        self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame, period: int = 14, **kwargs
+        self, high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame, window: int = 14, **kwargs
     ) -> pl.DataFrame:
         cols = [c for c in high.columns if c not in PANEL_SKIP_COLUMNS]
         if not cols:
@@ -576,9 +590,9 @@ class VortexPlus(SeriesOperator):
 
         result_data = {}
         for col in cols:
-            h = high[col]
-            l = low[col]
-            c = close[col]
+            h = high[col].fill_nan(None)
+            l = low[col].fill_nan(None)
+            c = close[col].fill_nan(None)
 
             # Vortex Movement Plus: |High[i] - Low[i-1]|
             vm_plus = (h - l.shift(1)).abs()
@@ -587,11 +601,12 @@ class VortexPlus(SeriesOperator):
             hl = h - l
             hc = (h - c.shift(1)).abs()
             lc = (l - c.shift(1)).abs()
-            tr = pl.max_horizontal(hl, hc, lc)
+            valid_tr = h.is_not_null() & l.is_not_null() & c.shift(1).is_not_null()
+            tr = pl.when(valid_tr).then(pl.max_horizontal(hl, hc, lc)).otherwise(None)
 
             # Sum over period
-            vm_plus_sum = vm_plus.rolling_sum(period)
-            tr_sum = tr.rolling_sum(period)
+            vm_plus_sum = vm_plus.rolling_sum(window)
+            tr_sum = tr.rolling_sum(window)
 
             # VI+ = Sum(VM+) / Sum(TR)
             vi_plus = pl.when(tr_sum != 0).then(vm_plus_sum / tr_sum).otherwise(None)

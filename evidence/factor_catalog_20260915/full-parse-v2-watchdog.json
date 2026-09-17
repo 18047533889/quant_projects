@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/factor_catalog_20260915/audit_catalog.py", "--output", "full-parse-v2.jsonl.gz"], "returncode": 0, "sampled_peak_family_rss_bytes": 747487232, "sampling_seconds": 0.1, "seconds": 295.33449196605943, "test_guard_reason": null, "hard_memory_cap": false}

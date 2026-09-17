@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/factor_catalog_20260915/compare_short_window_warmup.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 752009216, "sampling_seconds": 0.1, "seconds": 77.14568766206503, "test_guard_reason": null, "hard_memory_cap": false}

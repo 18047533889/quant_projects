@@ -31,7 +31,8 @@ ASHARE_LOGICAL_TABLES: dict[str, LogicalTableContract] = {
     "StockDailyBar": LogicalTableContract(None, "anchor"),
     # ADJ_FIELD_MIGRATION（2026-08-28）：A 股行情权威口径 = 后复权表。
     # StockDailyBarAdj / StockMinuteBarAdj 映射到 adj 数据集（field()/col() 指向
-    # Adj* 字段时走 adj 读路径）；未复权 StockDailyBar 仅保留 Factor/Volume 用途。
+    # Adj* 字段时走 adj 读路径）。StockDailyBar 仍用于 Factor/Volume 以及
+    # 涨跌停等明确要求 RAW 价格口径的事件；物理数据集由权威字段目录解析。
     "StockDailyBarAdj": LogicalTableContract("ashare_stock_daily_adj", "exact"),
     "StockMinuteBar": LogicalTableContract("ashare_stock_minute", "minute_session"),
     "StockMinuteBarAdj": LogicalTableContract("ashare_stock_minute_adj", "minute_session"),

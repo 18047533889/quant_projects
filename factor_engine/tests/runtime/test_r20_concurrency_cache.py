@@ -587,6 +587,67 @@ def test_lineage_wrapper_thread_isolation():
         assert results[tid] is True, f"thread {tid} 应看到自己的 logical wrapper"
 
 
+def test_lineage_wrapper_registry_does_not_own_wrapper_or_inner():
+    import gc
+    import weakref
+
+    from factor_engine.storage.sources.data_access_source import (
+        _logical_wrapper_for,
+        register_logical_wrapper,
+    )
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import (
+        LQTPLogicalDataSource,
+    )
+
+    class Source:
+        pass
+
+    inner = Source()
+    wrapper = LQTPLogicalDataSource(inner)
+    inner_ref = weakref.ref(inner)
+    wrapper_ref = weakref.ref(wrapper)
+    register_logical_wrapper(inner, wrapper)
+    assert _logical_wrapper_for(inner) is wrapper
+
+    del wrapper
+    gc.collect()
+    assert wrapper_ref() is None
+    assert _logical_wrapper_for(inner) is None
+
+    del inner
+    gc.collect()
+    assert inner_ref() is None
+
+
+def test_lineage_wrapper_dead_generation_does_not_remove_replacement():
+    import gc
+    import weakref
+
+    from factor_engine.storage.sources.data_access_source import (
+        _logical_wrapper_for,
+        register_logical_wrapper,
+    )
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import (
+        LQTPLogicalDataSource,
+    )
+
+    class Source:
+        pass
+
+    inner = Source()
+    previous = LQTPLogicalDataSource(inner)
+    previous_ref = weakref.ref(previous)
+    register_logical_wrapper(inner, previous)
+
+    replacement = LQTPLogicalDataSource(inner)
+    register_logical_wrapper(inner, replacement)
+    del previous
+    gc.collect()
+
+    assert previous_ref() is None
+    assert _logical_wrapper_for(inner) is replacement
+
+
 # ---------------------------------------------------------------------------
 # R20-132..137：ExecutionResourceScope 显式 strict，不从 env 猜
 # ---------------------------------------------------------------------------

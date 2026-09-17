@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "tests/backend/test_polars_prefetched_wave.py", "--tb=short"], "returncode": 1, "sampled_peak_family_rss_bytes": 476884992, "sampling_seconds": 0.1, "seconds": 54.44277388090268, "test_guard_reason": null, "hard_memory_cap": false}

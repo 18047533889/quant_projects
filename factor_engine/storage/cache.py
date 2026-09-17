@@ -194,6 +194,12 @@ class CacheManager:
         返回:
             无
         """
+        if budget_bytes is not None:
+            if isinstance(budget_bytes, bool) or not isinstance(budget_bytes, int):
+                raise TypeError("budget_bytes must be a non-negative integer or None")
+            if budget_bytes < 0:
+                raise ValueError("budget_bytes must be non-negative")
+
         self.data_scope = data_scope
         self.layer_name = layer_name
         # R6-151: insertion-ordered dict so eviction is true LRU — a ``get()``
@@ -223,7 +229,7 @@ class CacheManager:
 
     @property
     def budget_bytes(self) -> int:
-        if self._budget_bytes is not None and self._budget_bytes > 0:
+        if self._budget_bytes is not None:
             return self._budget_bytes
         try:
             from factor_engine.runtime.resource_governor import global_memory_governor
@@ -287,7 +293,8 @@ class CacheManager:
         gov = _governor()
         scoped = self._scoped_key(key)
         size = estimate_object_bytes(value)
-        if size > self.budget_bytes:
+        budget = self.budget_bytes
+        if budget <= 0 or size > budget:
             return
         # R20-119..124：dict mutation / byte counter / governor accounting 必须
         # 同一个原子 critical section。锁顺序恒为 governor → shared（与
@@ -344,9 +351,10 @@ class CacheManager:
         gov = _governor()
         with gov.lock:
             with self._shared.lock:
+                released = self._bytes
                 self._cache.clear()
                 self._bytes = 0
-            gov.release_all(self.layer_name)
+            gov.release_accounting(self.layer_name, released)
 
     def with_scope(self, data_scope: str, *, clear_memory: bool = False) -> CacheManager:
         """返回同类型实例并切换作用域（用于增量窗口隔离）。

@@ -18,6 +18,7 @@ except ImportError:
 
 from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.common.strict_params import strict_int
 
 _SKIP = frozenset({"date", "stock_code"})
 
@@ -38,6 +39,15 @@ def _mean_abs_dev_1d(arr) -> float:
     a = np.asarray(arr, dtype=np.float64)
     a = a[np.isfinite(a)]
     if a.size == 0:
+        return np.nan
+    mu = float(a.mean())
+    return float(np.mean(np.abs(a - mu)))
+
+
+def _strict_mean_abs_dev_1d(arr) -> float:
+    """单窗口平均绝对离差；任一 NaN/Inf 严格污染当前窗口。"""
+    a = np.asarray(arr, dtype=np.float64)
+    if a.size == 0 or not np.isfinite(a).all():
         return np.nan
     mu = float(a.mean())
     return float(np.mean(np.abs(a - mu)))
@@ -511,6 +521,31 @@ class MeanAbsDeviationPolars(SeriesOperator):
         ])
 
 
+class StrictMeanAbsDeviationPolars(SeriesOperator):
+    """Polars 严格非有限值传播的滚动平均绝对离差。"""
+    metadata = OperatorMetadata(
+        name="ts_mean_abs_deviation_strict", category="statistics",
+        description="平均绝对离差；NaN/Inf 严格污染当前窗口",
+        param_names=["x", "window"], return_type="series",
+        tags=["statistics", "polars", "strict"],
+        param_specs={
+            "window": ParamSpec(
+                dtype=int, min=1, default=20,
+                history_semantics="max_rows", param_role=ParamRole.HORIZON,
+            ),
+        },
+    )
+
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
+        w = strict_int(kwargs.get("d", window), "window", minimum=1)
+        cols = _numeric_cols(x)
+        return x.with_columns([
+            pl.col(c).rolling_map(
+                _strict_mean_abs_dev_1d, window_size=w, min_samples=1
+            ).alias(c) for c in cols
+        ])
+
+
 class MedianAbsDeviationPolars(SeriesOperator):
     """Polars 滚动中位数绝对离差（标准 MAD）：``median(|x_i - median(window)|)``。
 
@@ -551,6 +586,10 @@ OperatorRegistry.register_alias("ts_median_absolute_deviation", "ts_median_abs_d
 try:
     from factor_engine.cleaned_operators.operator_surface import extend_extended_only
 
-    extend_extended_only(["ts_mean_abs_deviation", "ts_median_abs_deviation"])
+    extend_extended_only([
+        "ts_mean_abs_deviation",
+        "ts_mean_abs_deviation_strict",
+        "ts_median_abs_deviation",
+    ])
 except ImportError:  # pragma: no cover - surface always present in-tree
     pass

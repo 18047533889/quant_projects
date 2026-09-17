@@ -1,0 +1,23 @@
+{
+  "cci_remaining5_note": "r1 attempted and BATCH_ABORTED because transfer estimate was unavailable; rows remain NOT_RUN unless separately reconciled",
+  "compile_evidence": "evidence/factor_catalog_20260916/factor_catalog_review_r17a.compile.jsonl.gz",
+  "compile_evidence_sha256": "b36b732e71f0a57f832f2dcb772e5c88e797f582bf4a02f796288e07e6244743",
+  "compile_status_counts": {
+    "COMPILED": 109668,
+    "COMPILE_FAILED": 4225,
+    "NOT_RUN": 239
+  },
+  "input_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r16b.csv.gz",
+  "input_checkpoint_sha256": "146dfa35122c62aa77a33a5c118d2a1131d964d4cb1df19443ffcf9142b2c93b",
+  "migration_counts": {
+    "limit_rows": 81,
+    "outer_changes": 100,
+    "outer_rows": 97,
+    "transport_rows": 30
+  },
+  "output_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r17a.csv.gz",
+  "output_checkpoint_sha256": "481613622f95a6664d682e4aa6842c2964bc178844cdd0ccb8b4b211c124a6dd",
+  "rows": 114132,
+  "scope": "R17 reviewed transport correction, A-share limit recipes, and exact technical outer recipes; changed formulas recompiled; execution evidence invalidated",
+  "unique_identities": 114132
+}

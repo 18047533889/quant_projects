@@ -14,7 +14,8 @@ from __future__ import annotations
 import ast
 import math
 from dataclasses import dataclass
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Callable, Iterable, Mapping
 from factor_engine.api.columns import field
 from factor_engine.api.factor import Factor
 from factor_engine.api.operator_registry import build_dsl_allowlist
@@ -52,12 +53,136 @@ class ComplexityBudget:
     max_keyword_length: int = 128
 
 
+def _native_source_col(*items: Any) -> Any:
+    """Strict parameterized source reference for native research formulas.
+
+    This is intentionally narrower than arbitrary function execution: every
+    table/field and identity keys are string literals (rank is an integer), and the table/field must exist in the frozen
+    A-share catalog, and every table-required identity parameter must be
+    present.  Benchmark index bars additionally require ``index`` because the
+    physical table contains many index instruments.
+    """
+    if len(items) < 2 or len(items) % 2:
+        raise ValueError(
+            "source_col requires table, field, then zero or more declared key/value literal pairs"
+        )
+    if not all(isinstance(item, str) for item in items[:2]):
+        raise TypeError("source_col table and field must be string literals")
+    table, field_name = items[:2]
+    pairs = items[2:]
+    params: dict[str, Any] = {}
+    for index in range(0, len(pairs), 2):
+        key, value = pairs[index], pairs[index + 1]
+        if not isinstance(key,str) or not key or key in params:
+            raise ValueError(f"source_col duplicate, non-string or empty parameter {key!r}")
+        if key in {"ShareholderRank", "rank"}:
+            if isinstance(value,bool) or not isinstance(value,int) or not 1 <= value <= 10:
+                raise ValueError("source_col shareholder rank must be integer 1..10")
+        elif not isinstance(value,str):
+            raise TypeError("source_col identity values must be string literals")
+        params[key] = value
+    from factor_engine.fields import FIELD_REGISTRY
+    table_spec = FIELD_REGISTRY.resolve_table(table)
+    if table_spec is None:
+        raise ValueError(f"source_col unknown table {table!r}")
+    FIELD_REGISTRY.require(field_name, table=table_spec.name)
+    required = set(table_spec.required_parameters)
+    if table_spec.name == "IndexDailyBar":
+        required.add("index")
+    missing = sorted(required - set(params))
+    if missing:
+        raise ValueError(
+            f"source_col {table!r} requires exact parameters {missing}"
+        )
+    allowed = set(required)
+    if table_spec.name in {"StockTopTenShareholder","StockTopTenFloatShareholder"}:
+        allowed.update({"ShareholderRank","rank"})
+        selected=[params[k] for k in ("ShareholderRank","rank") if k in params]
+        if not selected or len(set(selected)) != 1:
+            raise ValueError("source_col shareholder table requires one exact ShareholderRank=1..10")
+    unexpected = sorted(set(params) - allowed)
+    if unexpected:
+        raise ValueError(
+            f"source_col {table!r} received undeclared parameters {unexpected}"
+        )
+    from factor_engine.api.source_ref import source_col
+    return source_col(table, field_name, dialect="lqtp", **params)
+
+
+def _native_holder_top10_daily_id_churn(table: str) -> Any:
+    """Bounded macro: 20 ranked observations and their previous-session values.
+
+    This measures disclosure changes on the daily decision grid, not a
+    forward-filled last-report churn estimate. Expansion is always exactly
+    ten ranks, independent of user-supplied data or expression size.
+    """
+    if table not in {"StockTopTenShareholder","StockTopTenFloatShareholder"}:
+        raise ValueError("holder_top10_daily_id_churn requires an official top-ten table")
+    allowed=build_dsl_allowlist(surface="compat_research",dialect="native")
+    current=[_native_source_col(table,field_name,"ShareholderRank",rank)
+             for field_name in ("ShareRatio","ShareholderId") for rank in range(1,11)]
+    previous=[allowed["delay"](value,1) for value in current]
+    return allowed["holder_id_matched_churn"](*current,*previous)
+
+
+def _native_holder_top10_id_stat(table: str, statistic: str) -> Any:
+    if table not in {"StockTopTenShareholder","StockTopTenFloatShareholder"}:
+        raise ValueError("holder top-ten ID statistic requires an official top-ten table")
+    allowed=build_dsl_allowlist(surface="compat_research",dialect="native")
+    current=[_native_source_col(table,field_name,"ShareholderRank",rank)
+             for field_name in ("ShareRatio","ShareholderId") for rank in range(1,11)]
+    if statistic=="disclosure_count":
+        return allowed["holder_disclosure_count"](*current)
+    if statistic=="two_day_rank_migration":
+        previous=[allowed["delay"](value,2) for value in current]
+        return allowed["holder_share_weighted_rank_migration"](*current,*previous)
+    raise ValueError("unknown top-ten ID statistic")
+
+
+def _native_holder_top10_stat(table: str, statistic: str) -> Any:
+    """Fixed ten-rank macros; expand into governed primitives, not fake backends."""
+    if table not in {"StockTopTenShareholder","StockTopTenFloatShareholder"}:
+        raise ValueError("holder top-ten statistic requires an official top-ten table")
+    allowed=build_dsl_allowlist(surface="compat_research",dialect="native")
+    def op(name,*args):return allowed[name](*args)
+    def ranked(name):return [_native_source_col(table,name,"ShareholderRank",rank) for rank in range(1,11)]
+    def total(values):
+        value=values[0]
+        for item in values[1:]:value=op("add",value,item)
+        return value
+    amounts=ranked("ShareNumber")
+    if statistic=="pledge_ratio":
+        return op("safe_div_null",total(ranked("SharePledge")),total(amounts))
+    if statistic=="weighted_std":
+        weights=ranked("ShareRatio")
+        denom=total(weights)
+        mean=op("safe_div_null",total([op("multiply",x,w) for x,w in zip(amounts,weights)]),denom)
+        variance=op("safe_div_null",total([op("multiply",w,op("square",op("subtract",x,mean))) for x,w in zip(amounts,weights)]),denom)
+        return op("sqrt",variance)
+    raise ValueError("unknown top-ten statistic")
+
+
 class _ExprBuilder:
     def __init__(self,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None,
-                 budget:ComplexityBudget|None=None)->None:
+                 budget:ComplexityBudget|None=None,
+                 allowed:Mapping[str,Callable[...,Any]]|None=None)->None:
         if surface=="lqtp" and dialect=="native":dialect="lqtp"
         self._surface=str(surface or "daily");self._dialect=str(dialect or "native").lower();self._dialect_version=dialect_version
-        self._allowed=build_dsl_allowlist(surface=self._surface,dialect=self._dialect,dialect_version=self._dialect_version)
+        if allowed is not None:
+            self._allowed = allowed
+        else:
+            built = dict(build_dsl_allowlist(
+                surface=self._surface,dialect=self._dialect,
+                dialect_version=self._dialect_version
+            ))
+            if self._dialect == "native" and self._surface in {"compat_research", "all"}:
+                built["source_col"] = _native_source_col
+                built["holder_top10_daily_id_churn"] = _native_holder_top10_daily_id_churn
+                built["holder_top10_weighted_std"] = lambda table: _native_holder_top10_stat(table, "weighted_std")
+                built["holder_top10_pledge_ratio"] = lambda table: _native_holder_top10_stat(table, "pledge_ratio")
+                built["holder_top10_disclosure_count"] = lambda table: _native_holder_top10_id_stat(table, "disclosure_count")
+                built["holder_top10_two_day_rank_migration"] = lambda table: _native_holder_top10_id_stat(table, "two_day_rank_migration")
+            self._allowed = built
         self._budget=budget or ComplexityBudget()
         self._nodes=0
         self._depth=0
@@ -193,11 +318,8 @@ class _ExprBuilder:
                 f"call arity {len(node.args)} exceeds ComplexityBudget."
                 f"max_variadic_inputs={self._budget.max_variadic_inputs}"
             )
-        if len(node.args)+len(node.keywords)>self._budget.max_call_arity:
-            raise DSLParseError(
-                f"call arity {len(node.args)+len(node.keywords)} exceeds "
-                f"ComplexityBudget.max_call_arity={self._budget.max_call_arity}"
-            )
+        aliases:dict[str,str]={}
+        param_names:tuple[str,...]=()
         if isinstance(node.func,ast.Name):
             name=node.func.id
             if len(name)>self._budget.max_keyword_length:
@@ -208,13 +330,37 @@ class _ExprBuilder:
             if name not in self._allowed:
                 raise DSLUnknownOperatorError(f"Unsupported function: {name}")
             func=self._allowed[name]
-        else:func=self._visit(node.func)
-        args=[self._visit(arg) for arg in node.args];kwargs={}
+            total_arity=len(node.args)+len(node.keywords)
+            if (node.keywords or total_arity>self._budget.max_call_arity
+                    or any(isinstance(arg,(ast.Tuple,ast.List)) for arg in node.args)):
+                aliases,param_names=_call_parameter_binding(name)
+            if "..." in param_names:
+                if len(node.keywords)>self._budget.max_call_arity:
+                    raise DSLParseError(
+                        f"keyword arity {len(node.keywords)} exceeds ComplexityBudget."
+                        f"max_call_arity={self._budget.max_call_arity}"
+                    )
+            elif total_arity>self._budget.max_call_arity:
+                raise DSLParseError(
+                    f"call arity {total_arity} exceeds ComplexityBudget."
+                    f"max_call_arity={self._budget.max_call_arity}"
+                )
+        else:
+            if len(node.args)+len(node.keywords)>self._budget.max_call_arity:
+                raise DSLParseError(
+                    f"call arity {len(node.args)+len(node.keywords)} exceeds "
+                    f"ComplexityBudget.max_call_arity={self._budget.max_call_arity}"
+                )
+            func=self._visit(node.func)
+        positional_names=param_names[:param_names.index("...")] if "..." in param_names else param_names
+        args=[]
+        for index,arg in enumerate(node.args):
+            pname=positional_names[index] if index<len(positional_names) else ""
+            args.append(self._visit_call_argument(arg,name,pname))
+        kwargs={}
         seen_keywords:set[str]=set()
-        aliases,param_names=_call_parameter_binding(name) if isinstance(node.func,ast.Name) and node.keywords else ({},())
         # Parameters after a variadic input marker are keyword-only. Multiple
         # series inputs do not positionally consume e.g. row_sum's min_count.
-        positional_names=param_names[:param_names.index("...")] if "..." in param_names else param_names
         bound_canonical=set(positional_names[:len(node.args)])
         for kw in node.keywords:
             if kw.arg is None:raise DSLParseError("Keyword-only **kwargs are not supported.")
@@ -223,7 +369,7 @@ class _ExprBuilder:
                 raise DSLParseError(f"Duplicate parameter {canonical_kw!r} is not allowed.")
             seen_keywords.add(kw.arg)
             bound_canonical.add(canonical_kw)
-            kwargs[kw.arg]=self._visit(kw.value)
+            kwargs[kw.arg]=self._visit_call_argument(kw.value,name,canonical_kw)
         if not callable(func):raise DSLParseError("Call target is not callable.")
         if isinstance(node.func,ast.Name):
             # Round-11 #16: controlled numeric-string conversion against the
@@ -233,6 +379,46 @@ class _ExprBuilder:
             args,kwargs=_coerce_call_literals(name,args,kwargs)
         try:return func(*args,**kwargs)
         except (ValueError,TypeError) as exc:raise DSLParseError(str(exc)) from exc
+    def _visit_call_argument(self,node:ast.AST,operator_name:str,param_name:str)->Any:
+        if not isinstance(node,(ast.Tuple,ast.List)):
+            return self._visit(node)
+        expected=tuple if isinstance(node,ast.Tuple) else list
+        spec=_declared_sequence_spec(operator_name,param_name,expected)
+        if spec is None:
+            raise DSLParseError(
+                f"{operator_name}.{param_name or '?'} does not declare a "
+                f"{expected.__name__} scalar parameter"
+            )
+        if len(node.elts)>self._budget.max_variadic_inputs:
+            raise DSLParseError(
+                f"sequence length {len(node.elts)} exceeds ComplexityBudget."
+                f"max_variadic_inputs={self._budget.max_variadic_inputs}"
+            )
+        max_items=getattr(spec,"max_items",None)
+        min_items=getattr(spec,"min_items",None)
+        if max_items is not None and len(node.elts)>int(max_items):
+            raise DSLParseError(f"{operator_name}.{param_name} exceeds max_items={max_items}")
+        if min_items is not None and len(node.elts)<int(min_items):
+            raise DSLParseError(f"{operator_name}.{param_name} requires min_items={min_items}")
+        self._enter(node)
+        try:
+            values=[]
+            for element in node.elts:
+                if isinstance(element,(ast.Tuple,ast.List,ast.Set,ast.Dict,
+                                       ast.ListComp,ast.SetComp,ast.DictComp,
+                                       ast.GeneratorExp,ast.Name,ast.Call,ast.Attribute)):
+                    raise DSLParseError(
+                        "sequence parameters accept flat scalar literals only"
+                    )
+                value=self._visit(element)
+                if isinstance(value,Expr) or not isinstance(value,(type(None),bool,int,float,str)):
+                    raise DSLParseError(
+                        "sequence parameters accept flat scalar literals only"
+                    )
+                values.append(value)
+            return tuple(values) if expected is tuple else values
+        finally:
+            self._exit()
     def _visit_compare(self,node:ast.Compare)->Expr:
         if len(node.ops)!=1 or len(node.comparators)!=1:raise DSLParseError("Chained comparisons are not supported; use one comparison only.")
         left,right,op=self._visit(node.left),self._visit(node.comparators[0]),node.ops[0]
@@ -373,7 +559,85 @@ def _call_parameter_binding(name:str)->tuple[dict[str,str],tuple[str,...]]:
     return dict(_effective_alias_map(canonical)),tuple(getattr(meta,"param_names",None) or ())
 
 
+def _declared_sequence_spec(name:str,param_name:str,container:type):
+    """Return the exact declared list/tuple ParamSpec, never infer one."""
+    if not param_name:
+        return None
+    try:
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+        canonical=OperatorRegistry.resolve_canonical(name)
+        operator=OperatorRegistry.get(canonical,mode="any")
+    except (KeyError,RuntimeError,ValueError):
+        return None
+    metadata=getattr(operator,"metadata",None)
+    if metadata is None or param_name not in set(
+        getattr(metadata,"scalar_params",None) or ()
+    ):
+        return None
+    root=(getattr(metadata,"param_specs",None) or {}).get(param_name)
+    candidates=(root,*(getattr(root,"alternatives",None) or ()))
+    for candidate in candidates:
+        if getattr(candidate,"dtype",None) is container:
+            return candidate
+    return None
+
+
 def _is_field_identifier(name:str)->bool:return bool(name) and not name[0].isdigit() and all(c.isalnum() or c=="_" for c in name)
+
+
+class DSLParser:
+    """Reusable parser session with an explicit, immutable allowlist snapshot.
+
+    Construct a session for bulk parsing when every formula must use the same
+    authoring surface.  A registry lifecycle/version change invalidates the
+    session and raises on its next parse; create a new session to refresh it.
+    Ordinary :func:`parse_expr` calls remain fresh and never use a
+    process-global cache.
+    """
+
+    def __init__(self, *, surface: str = "daily", dialect: str = "native",
+                 dialect_version: str | None = None,
+                 budget: ComplexityBudget | None = None) -> None:
+        seed = _ExprBuilder(surface=surface, dialect=dialect,
+                            dialect_version=dialect_version, budget=budget)
+        self._surface = seed._surface
+        self._dialect = seed._dialect
+        self._dialect_version = seed._dialect_version
+        self._budget = seed._budget
+        # Copy before wrapping: callers cannot mutate the mapping returned by
+        # build_dsl_allowlist and silently widen this session's surface.
+        self._allowed = MappingProxyType(dict(seed._allowed))
+        self._registry_token = _current_registry_token()
+        if self._registry_token[1] not in {"finalized", "frozen"}:
+            raise DSLParseError(
+                "DSLParser sessions require a finalized or frozen operator registry"
+            )
+
+    def parse(self, text: str) -> Expr:
+        if _current_registry_token() != self._registry_token:
+            raise DSLParseError(
+                "operator registry changed after this DSLParser session was "
+                "created; create a new session"
+            )
+        # A fresh builder resets node/depth counters for every formula and also
+        # makes one session safe to reuse after a rejected over-budget formula.
+        return _ExprBuilder(
+            surface=self._surface, dialect=self._dialect,
+            dialect_version=self._dialect_version, budget=self._budget,
+            allowed=self._allowed,
+        ).build(text)
+
+    def parse_many(self, texts: Iterable[str]) -> list[Expr]:
+        """Parse an iterable in order, failing at the first invalid formula."""
+        return [self.parse(text) for text in texts]
+
+
+def _current_registry_token() -> tuple[int, str]:
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    return OperatorRegistry.version(), OperatorRegistry.lifecycle()
+
+
 def parse_expr(text:str,*,surface:str="daily",dialect:str="native",dialect_version:str|None=None,budget:ComplexityBudget|None=None)->Expr:return _ExprBuilder(surface=surface,dialect=dialect,dialect_version=dialect_version,budget=budget).build(text)
 
 

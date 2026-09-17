@@ -1,0 +1,290 @@
+F.                                                                       [100%]
+=================================== FAILURES ===================================
+_____________ test_obv_dsl_execution_matches_legacy_numeric_kernel _____________
+
+self = <factor_engine.backend.pandas_backend.PandasBackend object at 0x7f278aa1ec60>
+node = PlanNode(op='cum_sum', inputs=(PlanNode(op='multiply', inputs=(PlanNode(op='fillna_const', inputs=(PlanNode(op='sign',...ision_sequence_column=None),), universe_ids=(), semantic_kinds=('DailySeries', 'NonNegativeActivity'))}), node_id=None)
+ctx = ExecutionContext(data_source=<factor_engine.storage.sources.lqtp_logical_source_v2.LQTPLogicalDataSource object at 0x7...d=None, run_id=None, task_id=None, factor_id=None, fit_failure_sink=None, execution_purpose=None, execution_scope=None)
+
+    def _eval(self, node: PlanNode, ctx: ExecutionContext) -> Any:
+        """递归求值单个计划节点（含缓存、CSE 与 SQL 物化快捷路径）。
+    
+        参数
+        ----
+        node : PlanNode
+            当前待求值的逻辑计划节点。
+        ctx : ExecutionContext
+            执行期上下文。
+    
+        返回
+        ----
+        Any
+            节点求值结果，类型取决于算子（Series、标量、DataFrame 等）。
+    
+        异常
+        ----
+        RuntimeError
+            ``plan_ref`` 节点但 ``shared_result_cache`` 未配置。
+        KeyError
+            CSE 或 SQL 物化缓存中缺少对应 ``sid``。
+        NotImplementedError
+            算子名未在 ``KernelRegistry`` 中注册。
+        """
+        if node.op == "plan_ref":
+            sid = node.attrs["sid"]
+            # R38 P0-031（§12）：L0 读取优先走 GovernedBufferStore（唯一 owner）——
+            # backing 缺失时尝试 spill reload；没有 store 才退回 raw dict。
+            store = getattr(ctx, "shared_buffers", None)
+            if store is not None:
+                val = store.get_ref(sid)
+                if val is not None:
+                    return val
+                # 尝试 spill reload（SPILLED 的 sid）。
+                try:
+                    from factor_engine.runtime.spill_store import SpillRef
+    
+                    ref = getattr(store, "_spill_ref", None)
+                    _ = ref
+                except Exception:
+                    pass
+            sc = getattr(ctx, "shared_result_cache", None)
+            if sc is None:
+                raise RuntimeError(
+                    "plan_ref requires ExecutionContext.shared_result_cache; "
+                    "use FactorEngine.run_many() after compile_many CSE."
+                )
+            if sid not in sc:
+                raise KeyError(f"missing shared subplan result for sid prefix={sid[:64]!r}...")
+            return sc[sid]
+    
+        if node.op == "materialized_series":
+            sid = str(node.attrs["sid"])
+            mat = getattr(ctx, "materialized_series", None) or {}
+            if sid not in mat:
+                raise KeyError(f"missing SQL materialized_series for sid={sid[:64]!r}...")
+            return mat[sid]
+    
+        cache = getattr(ctx, "cache", None)
+        cache_key: str | None = None
+        if cache is not None:
+            cache_key = plan_cache_key(node)
+            hit = cache.get(cache_key)
+            if hit is not None:
+                return hit
+    
+        try:
+>           kernel = self._registry.get(node.op)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/backend/pandas_backend.py:168: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <factor_engine.backend.kernels.KernelRegistry object at 0x7f26893d0c50>
+op = 'cum_sum'
+
+    def get(self, op: str) -> object:
+        """按 IR/Plan 的 ``op`` 字段取 kernel。
+    
+        参数
+        ----
+        op : str
+            逻辑计划节点算子名。
+    
+        返回
+        ----
+        object
+            已注册的 kernel 可调用对象。
+    
+        异常
+        ----
+        KeyError
+            算子名未注册时由 ``dict`` 抛出，上层 ``_eval`` 会转为 ``NotImplementedError``。
+        """
+>       return self._kernels[op]
+               ^^^^^^^^^^^^^^^^^
+E       KeyError: 'cum_sum'
+
+factor_engine/backend/kernels.py:50: KeyError
+
+The above exception was the direct cause of the following exception:
+
+    def test_obv_dsl_execution_matches_legacy_numeric_kernel() -> None:
+        from factor_engine.api.dsl_parser import DSLParser
+        from factor_engine.api.factor import Factor
+        from factor_engine.backend.pandas_backend import PandasBackend
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.cleaned_operators.technical.signal import OBV as LegacyOBV
+        from factor_engine.runtime.engine import FactorEngine
+        from tests.helpers import InMemorySeriesSource
+    
+        load_all()
+        dates = pd.date_range("2024-01-02", periods=12, freq="B")
+        price = pd.DataFrame(
+            {"A": [10, 11, 11, 9, np.nan, 10, 12, 12, 11, 13, 12, 14],
+             "B": [20, 19, 21, 21, 22, 20, 20, 23, 22, np.nan, 24, 25]},
+            index=dates,
+            dtype=float,
+        )
+        volume = pd.DataFrame(
+            {"A": np.arange(100.0, 112.0), "B": np.arange(200.0, 212.0)},
+            index=dates,
+        )
+        data = {}
+        for name, frame in {"close": price, "volume": volume}.items():
+            series = frame.stack(dropna=False)
+            series.index.names = ["timestamp", "instrument"]
+            data[name] = series
+    
+        expr = DSLParser(surface="compat_research", dialect="native").parse(
+            "OBV(close, volume)"
+        )
+        actual = FactorEngine(
+            backend=PandasBackend(),
+            data_source=InMemorySeriesSource(data=data),
+            run_mode="research",
+>       ).run(Factor(name="obv", expr=expr))["result"].sort_index()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/operators/test_obv_canonical_execution.py:41: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/runtime/engine.py:3635: in run
+    result = engine_to_use.backend.execute(plan, ctx)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/backend/pandas_backend.py:80: in execute
+    return finalize_panel_result(self._eval(plan, ctx), ctx)
+                                 ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <factor_engine.backend.pandas_backend.PandasBackend object at 0x7f278aa1ec60>
+node = PlanNode(op='cum_sum', inputs=(PlanNode(op='multiply', inputs=(PlanNode(op='fillna_const', inputs=(PlanNode(op='sign',...ision_sequence_column=None),), universe_ids=(), semantic_kinds=('DailySeries', 'NonNegativeActivity'))}), node_id=None)
+ctx = ExecutionContext(data_source=<factor_engine.storage.sources.lqtp_logical_source_v2.LQTPLogicalDataSource object at 0x7...d=None, run_id=None, task_id=None, factor_id=None, fit_failure_sink=None, execution_purpose=None, execution_scope=None)
+
+    def _eval(self, node: PlanNode, ctx: ExecutionContext) -> Any:
+        """递归求值单个计划节点（含缓存、CSE 与 SQL 物化快捷路径）。
+    
+        参数
+        ----
+        node : PlanNode
+            当前待求值的逻辑计划节点。
+        ctx : ExecutionContext
+            执行期上下文。
+    
+        返回
+        ----
+        Any
+            节点求值结果，类型取决于算子（Series、标量、DataFrame 等）。
+    
+        异常
+        ----
+        RuntimeError
+            ``plan_ref`` 节点但 ``shared_result_cache`` 未配置。
+        KeyError
+            CSE 或 SQL 物化缓存中缺少对应 ``sid``。
+        NotImplementedError
+            算子名未在 ``KernelRegistry`` 中注册。
+        """
+        if node.op == "plan_ref":
+            sid = node.attrs["sid"]
+            # R38 P0-031（§12）：L0 读取优先走 GovernedBufferStore（唯一 owner）——
+            # backing 缺失时尝试 spill reload；没有 store 才退回 raw dict。
+            store = getattr(ctx, "shared_buffers", None)
+            if store is not None:
+                val = store.get_ref(sid)
+                if val is not None:
+                    return val
+                # 尝试 spill reload（SPILLED 的 sid）。
+                try:
+                    from factor_engine.runtime.spill_store import SpillRef
+    
+                    ref = getattr(store, "_spill_ref", None)
+                    _ = ref
+                except Exception:
+                    pass
+            sc = getattr(ctx, "shared_result_cache", None)
+            if sc is None:
+                raise RuntimeError(
+                    "plan_ref requires ExecutionContext.shared_result_cache; "
+                    "use FactorEngine.run_many() after compile_many CSE."
+                )
+            if sid not in sc:
+                raise KeyError(f"missing shared subplan result for sid prefix={sid[:64]!r}...")
+            return sc[sid]
+    
+        if node.op == "materialized_series":
+            sid = str(node.attrs["sid"])
+            mat = getattr(ctx, "materialized_series", None) or {}
+            if sid not in mat:
+                raise KeyError(f"missing SQL materialized_series for sid={sid[:64]!r}...")
+            return mat[sid]
+    
+        cache = getattr(ctx, "cache", None)
+        cache_key: str | None = None
+        if cache is not None:
+            cache_key = plan_cache_key(node)
+            hit = cache.get(cache_key)
+            if hit is not None:
+                return hit
+    
+        try:
+            kernel = self._registry.get(node.op)
+        except KeyError as exc:
+            from factor_engine.cleaned_operators.registry import OperatorRegistry
+            try:
+                resolved = "where" if node.op == "if_else" else OperatorRegistry.resolve_canonical(node.op)
+                kernel = self._registry.get(resolved)
+            except (KeyError, ValueError):
+>               raise NotImplementedError(f"Unsupported op: {node.op}") from exc
+E               NotImplementedError: Unsupported op: cum_sum
+
+factor_engine/backend/pandas_backend.py:175: NotImplementedError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: duplicate registration of canonical 'ts_sma_cn' backend 'polars' (old source='lqtp_numpy', new source='lqtp_numpy'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'lqtp_historical_cvar' backend 'polars' (old source='lqtp_numpy', new source='lqtp_numpy'). Continuing despite duplicate for compatibility.
+WARNING: logical-contract divergence for backend of canonical 'ts_product': field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=None, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'skipna': ParamSpec(dtype=<class 'bool'>, min=None, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=True, equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=5, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'ts_product': field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=None, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'skipna': ParamSpec(dtype=<class 'bool'>, min=None, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=True, equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=5, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'group_percentile': field 'param_specs' declares {'p': ParamSpec(dtype=<class 'float'>, min=0, max=1, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=0.5, equivalence=None, param_role=<ParamRole.ECONOMIC: 'economic'>, items=None, min_items=None, max_items=None, alternatives=None), 'side': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('top', 'bottom'), searchable=True, active_when=None, history_semantics=None, history_formula=None, default='top', equivalence=None, param_role=<ParamRole.POLICY: 'policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'missing_group_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('raise', 'null', 'global'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='raise', equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'fallback_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('nan', 'error', 'global', 'keep_original'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='global', equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'group_percentile': field 'param_specs' declares {'p': ParamSpec(dtype=<class 'float'>, min=0, max=1, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=0.5, equivalence=None, param_role=<ParamRole.ECONOMIC: 'economic'>, items=None, min_items=None, max_items=None, alternatives=None), 'side': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('top', 'bottom'), searchable=True, active_when=None, history_semantics=None, history_formula=None, default='top', equivalence=None, param_role=<ParamRole.POLICY: 'policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'missing_group_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('raise', 'null', 'global'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='raise', equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'fallback_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('nan', 'error', 'global', 'keep_original'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='global', equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'ts_product': field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=None, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'skipna': ParamSpec(dtype=<class 'bool'>, min=None, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=True, equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=5, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'ts_product': field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=None, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'skipna': ParamSpec(dtype=<class 'bool'>, min=None, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=True, equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=5, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'ts_product': field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=None, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'skipna': ParamSpec(dtype=<class 'bool'>, min=None, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=True, equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=5, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'group_percentile': field 'param_specs' declares {'p': ParamSpec(dtype=<class 'float'>, min=0, max=1, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=0.5, equivalence=None, param_role=<ParamRole.ECONOMIC: 'economic'>, items=None, min_items=None, max_items=None, alternatives=None), 'side': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('top', 'bottom'), searchable=True, active_when=None, history_semantics=None, history_formula=None, default='top', equivalence=None, param_role=<ParamRole.POLICY: 'policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'missing_group_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('raise', 'null', 'global'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='raise', equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'fallback_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('nan', 'error', 'global', 'keep_original'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='global', equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'group_percentile': field 'param_specs' declares {'p': ParamSpec(dtype=<class 'float'>, min=0, max=1, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=0.5, equivalence=None, param_role=<ParamRole.ECONOMIC: 'economic'>, items=None, min_items=None, max_items=None, alternatives=None), 'side': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('top', 'bottom'), searchable=True, active_when=None, history_semantics=None, history_formula=None, default='top', equivalence=None, param_role=<ParamRole.POLICY: 'policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'missing_group_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('raise', 'null', 'global'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='raise', equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'fallback_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('nan', 'error', 'global', 'keep_original'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='global', equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'group_percentile': field 'param_specs' declares {'p': ParamSpec(dtype=<class 'float'>, min=0, max=1, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=0.5, equivalence=None, param_role=<ParamRole.ECONOMIC: 'economic'>, items=None, min_items=None, max_items=None, alternatives=None), 'side': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('top', 'bottom'), searchable=True, active_when=None, history_semantics=None, history_formula=None, default='top', equivalence=None, param_role=<ParamRole.POLICY: 'policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'missing_group_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('raise', 'null', 'global'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='raise', equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'fallback_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('nan', 'error', 'global', 'keep_original'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='global', equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: duplicate registration of canonical 'ts_joint_energy_shift' backend 'polars' (old source='polars_dynamics', new source='distribution_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_energy_break_score' backend 'polars' (old source='polars_dynamics', new source='distribution_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_structural_level_density' backend 'polars' (old source='structural_reference_polars', new source='structural_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_nearest_structural_level_distance' backend 'polars' (old source='structural_reference_polars', new source='structural_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_structural_level_strength' backend 'polars' (old source='structural_reference_polars', new source='structural_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_crossing_speed' backend 'polars' (old source='pandas_bridge', new source='crossing_numpy'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_crossing_acceleration' backend 'polars' (old source='pandas_bridge', new source='crossing_numpy'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'intraday_medrv' backend 'polars' (old source='pandas_bridge', new source='jump_robust_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'intraday_minrv' backend 'polars' (old source='pandas_bridge', new source='jump_robust_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'intraday_jump_test_stat' backend 'polars' (old source='pandas_bridge', new source='jump_robust_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_chatterjee_xi' backend 'polars' (old source='dependence_reference_polars', new source='dependence_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_hsic' backend 'polars' (old source='dependence_reference_polars', new source='dependence_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_conditional_mutual_information' backend 'polars' (old source='dependence_reference_polars', new source='dependence_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_distance_correlation_partial_proxy' backend 'polars' (old source='dependence_reference_polars', new source='dependence_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_l_skewness' backend 'polars' (old source='pandas_bridge', new source='moments_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_l_kurtosis' backend 'polars' (old source='pandas_bridge', new source='moments_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: duplicate registration of canonical 'ts_hartigan_dip' backend 'polars' (old source='pandas_bridge', new source='moments_reference_polars'). Continuing despite duplicate for compatibility.
+WARNING: logical-contract divergence for backend of canonical 'ts_confirmed_pivot_high': field 'param_specs' declares {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula='left_window + right_window', default=MISSING, equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'ts_confirmed_pivot_low': field 'param_specs' declares {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'left_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula='left_window + right_window', default=MISSING, equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None), 'right_window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=MISSING, equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'ts_product': field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=None, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'skipna': ParamSpec(dtype=<class 'bool'>, min=None, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=True, equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=5, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'ts_product': field 'param_specs' declares {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=20, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None), 'min_periods': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=None, equivalence=None, param_role=<ParamRole.SUPPORT_POLICY: 'support_policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'skipna': ParamSpec(dtype=<class 'bool'>, min=None, max=None, choices=None, searchable=False, active_when=None, history_semantics=None, history_formula=None, default=True, equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'window': ParamSpec(dtype=<class 'int'>, min=1, max=None, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=5, equivalence=None, param_role=<ParamRole.HORIZON: 'horizon'>, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'group_percentile': field 'param_specs' declares {'p': ParamSpec(dtype=<class 'float'>, min=0, max=1, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=0.5, equivalence=None, param_role=<ParamRole.ECONOMIC: 'economic'>, items=None, min_items=None, max_items=None, alternatives=None), 'side': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('top', 'bottom'), searchable=True, active_when=None, history_semantics=None, history_formula=None, default='top', equivalence=None, param_role=<ParamRole.POLICY: 'policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'missing_group_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('raise', 'null', 'global'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='raise', equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'fallback_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('nan', 'error', 'global', 'keep_original'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='global', equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+WARNING: logical-contract divergence for backend of canonical 'group_percentile': field 'param_specs' declares {'p': ParamSpec(dtype=<class 'float'>, min=0, max=1, choices=None, searchable=True, active_when=None, history_semantics=None, history_formula=None, default=0.5, equivalence=None, param_role=<ParamRole.ECONOMIC: 'economic'>, items=None, min_items=None, max_items=None, alternatives=None), 'side': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('top', 'bottom'), searchable=True, active_when=None, history_semantics=None, history_formula=None, default='top', equivalence=None, param_role=<ParamRole.POLICY: 'policy'>, items=None, min_items=None, max_items=None, alternatives=None), 'missing_group_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('raise', 'null', 'global'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='raise', equivalence=None, param_role=<ParamRole.MISSING_POLICY: 'missing_policy'>, items=None, min_items=None, max_items=None, alternatives=None)} but the canonical contract holds {'fallback_policy': ParamSpec(dtype=<class 'str'>, min=None, max=None, choices=('nan', 'error', 'global', 'keep_original'), searchable=False, active_when=None, history_semantics=None, history_formula=None, default='global', equivalence=None, param_role=None, items=None, min_items=None, max_items=None, alternatives=None)} (P0-23 — continuing despite divergence for compatibility)
+=============================== warnings summary ===============================
+tests/operators/test_obv_canonical_execution.py::test_obv_dsl_execution_matches_legacy_numeric_kernel
+tests/operators/test_obv_canonical_execution.py::test_obv_dsl_execution_matches_legacy_numeric_kernel
+  /home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
+
+tests/operators/test_obv_canonical_execution.py::test_obv_dsl_execution_matches_legacy_numeric_kernel
+tests/operators/test_obv_canonical_execution.py::test_obv_dsl_execution_matches_legacy_numeric_kernel
+  /home/sunhaiwei/quant_projects/tests/operators/test_obv_canonical_execution.py:30: FutureWarning: The previous implementation of stack is deprecated and will be removed in a future version of pandas. See the What's New notes for pandas 2.1.0 for details. Specify future_stack=True to adopt the new implementation and silence this warning.
+    series = frame.stack(dropna=False)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/operators/test_obv_canonical_execution.py::test_obv_dsl_execution_matches_legacy_numeric_kernel
+1 failed, 1 passed, 4 warnings in 55.12s

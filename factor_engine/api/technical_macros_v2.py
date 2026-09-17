@@ -34,7 +34,11 @@ def augment_technical_macros(base:Mapping[str,Callable[...,Any]])->dict[str,Call
     out["donchian_upper"]=lambda high,window:ts_delay(ts_max(high,window),1)
     out["donchian_lower"]=lambda low,window:ts_delay(ts_min(low,window),1)
     out["donchian_mid"]=lambda high,low,window:mul(add(out["donchian_upper"](high,window),out["donchian_lower"](low,window)),0.5)
-    out["donchian_position"]=lambda high,low,close,window:div(sub(close,out["donchian_lower"](low,window)),sub(out["donchian_upper"](high,window),out["donchian_lower"](low,window)))
+    # Match the registered legacy prior-window canonical exactly.  The newer
+    # inclusive channel operator is separately named donchian_channel_position
+    # and uses (high, low, close, window); this same-named compatibility macro
+    # must not silently reinterpret old catalog (close, high, low, window) calls.
+    out["donchian_position"]=lambda close,high,low,window:div(sub(close,out["donchian_lower"](low,window)),sub(out["donchian_upper"](high,window),out["donchian_lower"](low,window)))
 
     out["bollinger_pct_b"]=lambda close,window,std_dev:div(sub(close,sub(ts_mean(close,window),mul(ts_std(close,window),std_dev))),mul(ts_std(close,window),mul(std_dev,2.0)))
     out["bollinger_width"]=lambda close,window,std_dev:div(mul(ts_std(close,window),mul(std_dev,2.0)),ts_mean(close,window))
@@ -55,8 +59,9 @@ def augment_technical_macros(base:Mapping[str,Callable[...,Any]])->dict[str,Call
     out["KeltnerLower"]=lambda high,low,close,ema_window,atr_window,multiplier:sub(ts_ema(close,ema_window),mul(f("ATR_WILDER")(high,low,close,atr_window),multiplier))
     out["KeltnerPosition"]=lambda high,low,close,ema_window,atr_window,multiplier:div(sub(close,out["KeltnerLower"](high,low,close,ema_window,atr_window,multiplier)),sub(out["KeltnerUpper"](high,low,close,ema_window,atr_window,multiplier),out["KeltnerLower"](high,low,close,ema_window,atr_window,multiplier)))
 
-    out["DEMA"]=lambda x,window:sub(mul(ts_ema(x,window),2.0),ts_ema(ts_ema(x,window),window))
-    out["TEMA"]=lambda x,window:add(sub(mul(ts_ema(x,window),3.0),mul(ts_ema(ts_ema(x,window),window),3.0)),ts_ema(ts_ema(ts_ema(x,window),window),window))
+    # Preserve the public recursive nodes from ``base``.  Expanding them into
+    # ts_ema arithmetic here erases their required-full-history identity before
+    # Analyzer can apply the DEMA/TEMA execution contract.
 
     out["ichimoku_tenkan"]=lambda high,low,tenkan_window:mul(add(ts_max(high,tenkan_window),ts_min(low,tenkan_window)),0.5)
     out["ichimoku_kijun"]=lambda high,low,kijun_window:mul(add(ts_max(high,kijun_window),ts_min(low,kijun_window)),0.5)

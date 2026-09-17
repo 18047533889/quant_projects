@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "evidence/factor_catalog_20260915/test_smoke_catalog.py", "evidence/factor_catalog_20260915/test_sweep_catalog.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 792838144, "sampling_seconds": 0.1, "seconds": 54.251681711990386, "test_guard_reason": null, "hard_memory_cap": false}

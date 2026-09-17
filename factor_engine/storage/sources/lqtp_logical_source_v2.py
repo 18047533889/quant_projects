@@ -15,6 +15,29 @@ from .lqtp_logical_source import _TABLE_DATASETS
 from .logical_tables import logical_table_contract
 
 
+def _collapse_financial_batches(batches: Iterable[Any], columns: list[str]) -> pd.DataFrame:
+    """Incrementally discard identical daily-snapshot financial duplicates.
+
+    The LQTP financial mirrors repeat the same report vintage in many daily
+    parquet files.  Keeping every repeated Arrow row until ``to_pandas()`` can
+    exceed the worker budget even for an eight-security request.  Deduplicate
+    complete rows batch-by-batch; conflicting values for one PIT key remain as
+    separate rows and are still rejected by ``_financial_from_raw``.
+    """
+    unique = pd.DataFrame(columns=columns)
+    for batch in batches:
+        frame = batch.to_pandas()
+        if frame.empty:
+            continue
+        frame = frame.drop_duplicates()
+        unique = (
+            frame.reset_index(drop=True)
+            if unique.empty
+            else pd.concat([unique, frame], ignore_index=True).drop_duplicates()
+        )
+    return unique.reset_index(drop=True)
+
+
 def _minute_fallback_allowed(exc: BaseException) -> bool:
     """Phase 5 R11：分钟 pushdown 失败是否允许回退 pandas 路径。
 
@@ -51,13 +74,16 @@ class LQTPLogicalDataSource(_Base):
                 "provide its authorized snapshot/content identity, not a substitute daily field")
         return snapshots, digests
 
-    def _child(self, dataset, *, instrument_filter=None):
+    def _child(self, dataset, *, instrument_filter=None, semantic_filters=None):
         # Bind before any child read, including paths outside physical batch
         # preflight. Never replace a missing approval with the current snapshot.
         snapshots, digests = self._approved_dependency(dataset)
         if instrument_filter is None:
             instrument_filter = getattr(self.inner, "instrument_filter", None)
-        child = super()._child(dataset, instrument_filter=instrument_filter)
+        child_kwargs = {"instrument_filter": instrument_filter}
+        if semantic_filters:
+            child_kwargs["semantic_filters"] = semantic_filters
+        child = super()._child(dataset, **child_kwargs)
         try:
             child._approved_source_snapshot_tokens = snapshots
             child._approved_source_content_digests = digests
@@ -87,7 +113,11 @@ class LQTPLogicalDataSource(_Base):
         row: dict[str, Any] = {"key": str(key), "kind": str(kind), **metadata}
         if snapshot_id:
             row["snapshot_id"] = str(snapshot_id)
-        self._dependency_store()[str(key)] = row
+        # A dataset can be read for several indices, industry levels and fields
+        # in one DAG. Never let a later read erase an earlier dependency.
+        identity = hashlib.sha256(json.dumps(row, sort_keys=True, ensure_ascii=False,
+                                             separators=(",", ":")).encode("utf-8")).hexdigest()
+        self._dependency_store()[str(key) + ":" + identity] = row
 
     def collect_source_dependencies(self) -> list[dict[str, Any]]:
         """Return deterministic secondary-source dependencies used this execution."""
@@ -151,6 +181,21 @@ class LQTPLogicalDataSource(_Base):
             raise SemanticContractError(msg)
         raise MissingDataDependencyError(msg)
 
+    @staticmethod
+    def _holder_rank_filter(table: str, params: dict) -> dict:
+        if table not in {"StockTopTenShareholder", "StockTopTenFloatShareholder"}:
+            return {}
+        values=[params[k] for k in ("ShareholderRank", "rank") if k in params]
+        if not values:
+            raise MissingDataDependencyError(
+                f"{table} is one_to_many: select explicit ShareholderRank=1..10; "
+                "aggregate hints alone do not implement a physical reduction")
+        if any(isinstance(v,bool) or not isinstance(v,int) or not 1<=v<=10 for v in values):
+            raise MissingDataDependencyError("ShareholderRank must be an integer from 1 to 10")
+        if len(set(values))!=1:
+            raise MissingDataDependencyError("conflicting ShareholderRank/rank selectors")
+        return {"ShareholderRank":values[0]}
+
     def load_column(self, name: str):
         if not self._is_source_ref_name(name):
             return self.inner.load_column(name)
@@ -199,7 +244,8 @@ class LQTPLogicalDataSource(_Base):
                 financial_by_table.setdefault(table, []).append((name, spec))
             elif table in {
                 "DailyBar", "StockDailyBar", "Intermediate",
-                "TurnoverBaseDaily", "StockMinuteBar", "MinuteBar", "DerivedField",
+                "TurnoverBaseDaily", "StockMinuteBar", "MinuteBar",
+                "StockMinuteBarAdj", "MinuteBarAdj", "DerivedField",
             }:
                 singles.append((name, spec))
             else:
@@ -260,7 +306,13 @@ class LQTPLogicalDataSource(_Base):
             filt = None
             if contract.required_parameter == "IndexSymbol" and table != "IndexConstituent":
                 filt = [str(params["IndexSymbol"])]
-            child = self._child(dataset, instrument_filter=filt)
+            rank_filter = self._holder_rank_filter(table, params)
+            child_kwargs = {"instrument_filter": filt}
+            if rank_filter:
+                child_kwargs["semantic_filters"] = rank_filter
+            if table == "IndexConstituent" or required_param == "IndustrySource":
+                child_kwargs["semantic_filters"] = {required_param: str(params[required_param])}
+            child = self._child(dataset, **child_kwargs)
             fields = list(dict.fromkeys(spec.field for _, spec in group))
             if table == "IndexConstituent":
                 fields.append("IndexSymbol")
@@ -295,6 +347,7 @@ class LQTPLogicalDataSource(_Base):
                     join_policy=policy,
                     **({"IndexSymbol": str(params["IndexSymbol"])} if "IndexSymbol" in params else {}),
                     **({"IndustrySource": str(params["IndustrySource"])} if "IndustrySource" in params else {}),
+                    **rank_filter,
                 )
                 if policy == "exact_date":
                     out[name] = self._broadcast_exact_by_date(self._anchor_index(), series)
@@ -384,7 +437,7 @@ class LQTPLogicalDataSource(_Base):
         snapshots, digests = self._approved_dependency(dataset)
         store = _get_store()
         ds = store.get_dataset(dataset)
-        required = [ds.instrument_column, "ReportPeriodEndDate", "PubDate", *fields]
+        required = list(dict.fromkeys([ds.instrument_column, "ReportPeriodEndDate", "PubDate", *fields]))
         end = getattr(self.inner, "end_date", None)
         kwargs: dict[str, Any] = {"columns": list(dict.fromkeys(required)), "mode": "event"}
         if end is not None:
@@ -410,8 +463,25 @@ class LQTPLogicalDataSource(_Base):
                 raise
             result = store.execute_prepared_read(prepared)
         else:
-            result = store.read_result(dataset, **kwargs)
-        snapshot = getattr(getattr(result, "snapshot", None), "snapshot_id", None)
+            # Financial mirrors are daily snapshots: a full-history materialized
+            # read retains the same report vintage thousands of times before the
+            # later PIT deduplication. Stream the governed projection and collapse
+            # identical rows incrementally so instrument filtering remains bounded.
+            handle = store.read(
+                dataset,
+                **kwargs,
+                result="stream",
+                batch_size=50_000,
+                run_mode=getattr(self.inner, "run_mode", None),
+            )
+            snapshot = getattr(getattr(handle, "snapshot", None), "snapshot_id", None)
+            try:
+                raw = _collapse_financial_batches(handle.stream(batch_size=50_000), required)
+            finally:
+                handle.close()
+            result = None
+        if result is not None:
+            snapshot = getattr(getattr(result, "snapshot", None), "snapshot_id", None)
         for field in fields:
             self._record_dependency(
                 dataset,
@@ -421,7 +491,7 @@ class LQTPLogicalDataSource(_Base):
                 availability_column="PubDate",
                 join_policy="asof_backward",
             )
-        return result.table.to_pandas()
+        return result.table.to_pandas() if result is not None else raw
 
     def _financial_from_raw(
         self,
@@ -434,14 +504,15 @@ class LQTPLogicalDataSource(_Base):
     ) -> pd.Series:
         """从共享 raw frame 构建单个字段的 PIT 事件 + 对齐到锚点。"""
         instrument = next(c for c in ("Symbol", "ticker", "Ticker") if c in raw.columns)
-        events = raw.rename(
-            columns={
-                instrument: "instrument",
-                "ReportPeriodEndDate": "period_end",
-                "PubDate": "available_at",
-                field: "value",
+        # Build explicitly because field may itself be a PIT identity column.
+        events = pd.DataFrame(
+            {
+                "instrument": raw[instrument],
+                "period_end": raw["ReportPeriodEndDate"],
+                "available_at": raw["PubDate"],
+                "value": raw[field],
             }
-        )[["instrument", "period_end", "available_at", "value"]]
+        )
         events = events.dropna(subset=["available_at", "period_end"]).copy()
         events["period_end"] = pd.to_datetime(events["period_end"]).dt.normalize()
         events["available_at"] = pd.to_datetime(events["available_at"])
@@ -599,8 +670,24 @@ class LQTPLogicalDataSource(_Base):
                 anchor, self._load_intermediate(spec), policy, context=f"intermediate:{field}"
             )
 
-        if table in {"DailyBar", "StockDailyBar"}:
+        if table == "DailyBar":
             return self.inner.load_column(field)
+
+        if table == "StockDailyBar":
+            # An explicit StockDailyBar SourceRef names the authoritative raw
+            # daily dataset. It must not inherit the adjusted anchor source:
+            # fields such as LowLimit/HighLimit exist only on the raw table.
+            dataset = "ashare_stock_daily"
+            child = self._child(dataset)
+            series = child.load_column(field)
+            self._record_dependency(
+                dataset,
+                kind="daily_exact",
+                snapshot_id=getattr(child, "data_snapshot_id", None),
+                field=field,
+                join_policy="exact",
+            )
+            return self._align_exact_by_instrument(anchor, series)
 
         if table == "TurnoverBaseDaily":
             series = self._load_turnover_base(field)
@@ -615,10 +702,48 @@ class LQTPLogicalDataSource(_Base):
         if table in {"StockIncome", "StockCashFlow", "StockBalance", "StockIndicator"}:
             return self._financial(_TABLE_DATASETS[table], field, transform, tparams)
 
-        if table in {"StockMinuteBar", "MinuteBar"}:
+        if table in {
+            "StockMinuteBar", "MinuteBar", "StockMinuteBarAdj", "MinuteBarAdj"
+        }:
             if transform is None:
+                dataset = _TABLE_DATASETS.get(table)
+                if dataset is None:
+                    raise MissingDataDependencyError(
+                        f"no FactorEngine minute dataset mapping for {table!r}"
+                    )
+                child = self._child(dataset)
+                series = child.load_column(field)
+                minute_index = series.index
+                if not isinstance(minute_index, pd.MultiIndex):
+                    raise MissingDataDependencyError(
+                        f"minute source {table!r}.{field} requires a MultiIndex"
+                    )
+                utc = pd.DatetimeIndex(minute_index.get_level_values(0))
+                if utc.tz is None:
+                    utc = utc.tz_localize("UTC")
+                local = utc.tz_convert("Asia/Shanghai").tz_localize(None)
+                series = series.copy()
+                series.index = pd.MultiIndex.from_arrays(
+                    [local, minute_index.get_level_values(1)],
+                    names=minute_index.names,
+                )
+                self._record_dependency(
+                    dataset,
+                    kind="minute_session",
+                    snapshot_id=getattr(child, "data_snapshot_id", None),
+                    field=field,
+                    join_policy="exact_session",
+                )
+                # A shape-changing intraday operator consumes the complete
+                # session axis in exchange-local wall clock.  The parquet
+                # contract stores QuoteTime in UTC; conversion is explicit
+                # here and never inferred from observed bars.  Never align it
+                # to the daily anchor: that would erase session rows.
+                return series
+            if table in {"StockMinuteBarAdj", "MinuteBarAdj"}:
                 raise MissingDataDependencyError(
-                    "minute fields require minute_at/range/resample/bar transform"
+                    "adjusted minute transforms require an explicit adjusted "
+                    "dataset implementation; refusing to substitute raw minute data"
                 )
             return self._minute_daily(field, transform, tparams)
 
@@ -656,7 +781,13 @@ class LQTPLogicalDataSource(_Base):
         filt = None
         if contract.required_parameter == "IndexSymbol" and table != "IndexConstituent":
             filt = [str(params["IndexSymbol"])]
-        child = self._child(dataset, instrument_filter=filt)
+        rank_filter = self._holder_rank_filter(table, params)
+        child_kwargs = {"instrument_filter": filt}
+        if rank_filter:
+            child_kwargs["semantic_filters"] = rank_filter
+        if table == "IndexConstituent" or required_param == "IndustrySource":
+            child_kwargs["semantic_filters"] = {required_param: str(params[required_param])}
+        child = self._child(dataset, **child_kwargs)
         if table == "IndexConstituent":
             loaded = child.load_columns([field, "IndexSymbol"])
             series = loaded[field].where(
@@ -708,6 +839,7 @@ class LQTPLogicalDataSource(_Base):
                 snapshot_id=snapshot,
                 field=field,
                 join_policy="asof_backward",
+                **rank_filter,
             )
             return self._align_by_instrument(anchor, series)
         if contract.join_policy == "asof_backward":

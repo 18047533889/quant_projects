@@ -1,0 +1,366 @@
+{
+  "source_sha256": "190a34ada8b380103e65f59b9cdf503f022c930838a0856e28824ab0b1e6d330",
+  "proposal_count": 12260,
+  "output_sha256": "dcbae17f331f67255c07c425361993053f0dc15ae6d8632726d36a5c38d37aa4",
+  "layer_hashes": {
+    "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz": "3e178337ed59211c1a66dd196ccd61f3ba559ce1f5cff14cce0530e9137e09b5",
+    "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl": "616c52e52a3c6307409a682888c2cbd7b1701343cd365e55dcf3bf611eda53f7",
+    "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl": "860a3f1ee41fbf4ec90d62844fc1dff58a0206a6a24454527f7484a73f1aa526"
+  },
+  "supersessions": [
+    {
+      "source_row": 97266,
+      "id": "R65X_00448",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 97267,
+      "id": "R65X_00449",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 97268,
+      "id": "R65X_00450",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 97269,
+      "id": "R65X_00451",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 97270,
+      "id": "R65X_00452",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 97271,
+      "id": "R65X_00453",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 97272,
+      "id": "R65X_00454",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101276,
+      "id": "R66_01319",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101278,
+      "id": "R66_01321",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101280,
+      "id": "R66_01323",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101282,
+      "id": "R66_01325",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101284,
+      "id": "R66_01327",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101286,
+      "id": "R66_01329",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101288,
+      "id": "R66_01331",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101290,
+      "id": "R66_01333",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101292,
+      "id": "R66_01335",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101294,
+      "id": "R66_01337",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 102646,
+      "id": "R67_00373",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 102651,
+      "id": "R67_00378",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 102656,
+      "id": "R67_00383",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 102661,
+      "id": "R67_00388",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_fin_lag_corrected_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 97920,
+      "id": "R65X_01102",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 97921,
+      "id": "R65X_01103",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 97922,
+      "id": "R65X_01104",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 97923,
+      "id": "R65X_01105",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 97924,
+      "id": "R65X_01106",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 97925,
+      "id": "R65X_01107",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 97956,
+      "id": "R65X_01138",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101246,
+      "id": "R66_01289",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101247,
+      "id": "R66_01290",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101248,
+      "id": "R66_01291",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101249,
+      "id": "R66_01292",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101250,
+      "id": "R66_01293",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101251,
+      "id": "R66_01294",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101264,
+      "id": "R66_01307",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101265,
+      "id": "R66_01308",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101266,
+      "id": "R66_01309",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101267,
+      "id": "R66_01310",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101268,
+      "id": "R66_01311",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101269,
+      "id": "R66_01312",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": true
+    },
+    {
+      "source_row": 101277,
+      "id": "R66_01320",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": false
+    },
+    {
+      "source_row": 101279,
+      "id": "R66_01322",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": false
+    },
+    {
+      "source_row": 101281,
+      "id": "R66_01324",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": false
+    },
+    {
+      "source_row": 101283,
+      "id": "R66_01326",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": false
+    },
+    {
+      "source_row": 101285,
+      "id": "R66_01328",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": false
+    },
+    {
+      "source_row": 101287,
+      "id": "R66_01330",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": false
+    },
+    {
+      "source_row": 101289,
+      "id": "R66_01332",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": false
+    },
+    {
+      "source_row": 101291,
+      "id": "R66_01334",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": false
+    },
+    {
+      "source_row": 101293,
+      "id": "R66_01336",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": false
+    },
+    {
+      "source_row": 101295,
+      "id": "R66_01338",
+      "old_layer": "evidence/factor_catalog_20260916/r20-merged-final.jsonl.gz",
+      "new_layer": "evidence/factor_catalog_20260916/r20_relation_semantic_delta_proposals.jsonl",
+      "formula_changed": false
+    }
+  ],
+  "claimed_statuses": {
+    "COMPILED": 12260
+  },
+  "scope": "Reviewed proposals only; final full current-code compile required."
+}
