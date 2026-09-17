@@ -89,6 +89,39 @@ def test_native_polars_indicator_matches_pandas(panels, name, inputs, kwargs):
     _assert_parity(name, tuple(panels[index] for index in inputs), kwargs)
 
 
+def test_tsi_matches_independent_serial_ewm_oracle(panels):
+    close = panels[2].copy()
+    close.iloc[18, 0] = np.nan
+    long_window = 8
+    short_window = 4
+    signal_window = 3
+    momentum = close.diff()
+    first_num = momentum.ewm(
+        span=long_window, adjust=False, min_periods=long_window
+    ).mean()
+    first_den = momentum.abs().ewm(
+        span=long_window, adjust=False, min_periods=long_window
+    ).mean()
+    expected_tsi = 100.0 * first_num.ewm(
+        span=short_window, adjust=False, min_periods=short_window
+    ).mean() / first_den.ewm(
+        span=short_window, adjust=False, min_periods=short_window
+    ).mean().replace(0, np.nan)
+    expected_signal = expected_tsi.ewm(
+        span=signal_window, adjust=False, min_periods=signal_window
+    ).mean()
+    polars_tsi = OperatorRegistry.get("TSI", backend="polars").calculate(
+        _polars(close), long_window=long_window, short_window=short_window
+    )
+    polars_signal = OperatorRegistry.get("TSI_signal", backend="polars").calculate(
+        _polars(close), long_window=long_window, short_window=short_window,
+        signal_window=signal_window,
+    )
+    for column in close.columns:
+        np.testing.assert_allclose(polars_tsi[column], expected_tsi[column], equal_nan=True)
+        np.testing.assert_allclose(polars_signal[column], expected_signal[column], equal_nan=True)
+
+
 def test_polars_indicator_edge_values_are_shape_preserving():
     index = pd.date_range("2025-01-01", periods=12, freq="D")
     close = pd.DataFrame({"A": [1.0, 1.0, np.nan, 2.0, 0.0, 2.0, 3.0, 3.0, 4.0, 4.0, 5.0, 6.0]}, index=index)
@@ -143,3 +176,42 @@ def test_polars_indicator_nan_warmup_matches_pandas():
         ("MFI", (high, low, close, volume), {"window": 5}),
     ):
         _assert_parity(name, args, kwargs)
+
+
+@pytest.mark.parametrize(
+    ("name", "positive"), (("VortexPlus", True), ("VortexMinus", False))
+)
+def test_vortex_internal_nan_matches_independent_pandas_formula(name, positive):
+    index = pd.date_range("2025-02-01", periods=12, freq="D")
+    close = pd.DataFrame(
+        {"A": [10.0, 11.0, np.nan, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0, 19.0, 20.0]},
+        index=index,
+    )
+    high = close + 1.0
+    low = close - 1.0
+    previous_close = close.shift(1)
+    true_range = pd.DataFrame(
+        np.maximum.reduce(
+            [
+                (high - low).to_numpy(float),
+                (high - previous_close).abs().to_numpy(float),
+                (low - previous_close).abs().to_numpy(float),
+            ]
+        ),
+        index=index,
+        columns=close.columns,
+    )
+    movement = (
+        (high - low.shift(1)).abs()
+        if positive
+        else (low - high.shift(1)).abs()
+    )
+    expected = movement.rolling(3, min_periods=3).sum() / true_range.rolling(
+        3, min_periods=3
+    ).sum().replace(0, np.nan)
+    actual = OperatorRegistry.get(name, backend="polars").calculate(
+        _polars(high), _polars(low), _polars(close), window=3
+    )
+    np.testing.assert_allclose(
+        actual["A"].to_numpy(), expected["A"].to_numpy(), equal_nan=True
+    )

@@ -1,0 +1,3 @@
+{"event":"start","ledger_kind":"post_run_verified_single_batch","scope":"real_data_research_smoke_not_production","config":{"backend":"auto","batch_size":84,"batch_only":true,"performance_options":"public_defaults"}}
+{"event":"batch_complete","output":"r13-auto-new84.jsonl.gz","summary":"r13-auto-new84.summary.json","processed":84,"source_offset":0,"next_offset":84,"counts":{"EXECUTED":84}}
+{"event":"sweep_closed","processed":84,"requested":84,"requested_count_completed":true,"scope":"verified closed standalone smoke output; no singleton retries"}

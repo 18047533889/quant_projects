@@ -163,6 +163,11 @@ SEMANTIC_TYPE: dict[str, SemanticType] = {
 _PRICE_BASIS_TO_SEMANTIC: dict[str, SemanticType] = {
     "RAW": SemanticType.PRICE_RAW,
     "CONTINUOUS": SemanticType.PRICE_CONTINUOUS,
+    # Concrete adjustment direction remains in price_basis / identity; all
+    # three denote continuous prices for typed operator input eligibility.
+    "ADJUSTED": SemanticType.PRICE_CONTINUOUS,
+    "FORWARD_ADJUSTED": SemanticType.PRICE_CONTINUOUS,
+    "BACKWARD_ADJUSTED": SemanticType.PRICE_CONTINUOUS,
     "RAW_OFFICIAL_LIMIT": SemanticType.OFFICIAL_LIMIT_PRICE,
     "RETURN": SemanticType.RETURN_DECIMAL,
 }
@@ -1972,6 +1977,12 @@ class ArgumentTypeContract:
 
 
 OPERATOR_INPUT_TYPE_CONTRACTS: dict[str, tuple[ArgumentTypeContract, ...]] = {
+    "ts_transition_count": (
+        ArgumentTypeContract("condition", frozenset({"EventBool", "MaskBool"})),
+    ),
+    "ts_activity_spectral_entropy": (
+        ArgumentTypeContract("x", frozenset({"NonNegativeActivity"})),
+    ),
     "ts_return_spectral_entropy": (
         ArgumentTypeContract("x", frozenset({"ReturnDecimal"})),
     ),

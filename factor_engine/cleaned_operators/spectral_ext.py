@@ -50,7 +50,9 @@ _MIN_WINDOW = 16
 # Audit #82: spectral entropy is a normalized Shannon entropy (dimensionless
 # ratio); the dominant cycle period is measured in bars, not a raw level.
 _OUTPUT_UNITS: dict[str, str] = {
+    "ts_signal_spectral_entropy": "ratio",
     "ts_return_spectral_entropy": "ratio",
+    "ts_activity_spectral_entropy": "ratio",
     "ts_spectral_entropy": "ratio",  # legacy spelling of the return direction
     "ts_detrended_level_spectral_entropy": "ratio",
     "ts_dominant_cycle_period": "bars",
@@ -159,11 +161,28 @@ def _dominant_cycle_period_series(
     return out
 
 
+def _ts_signal_spectral_entropy(x: pd.DataFrame, window: int = 60, **_: Any) -> pd.DataFrame:
+    """Normalized spectrum entropy of an explicitly chosen scalar research signal.
+
+    No conversion to returns or change of financial units is implied. This
+    separate canonical never relaxes the return/activity/price typed gates.
+    """
+    return _frame_like(x, _spectral_entropy_series(x.to_numpy(dtype=float), _check_window(int(window))))
+
+
 def _ts_return_spectral_entropy(x: pd.DataFrame, window: int = 60, *,
                                 input_kind: str | None = None, **_: Any) -> pd.DataFrame:
     w = _check_window(int(window))
     _require_input_kind("ts_return_spectral_entropy", input_kind)
     return _frame_like(x, _spectral_entropy_series(x.to_numpy(dtype=float), w))
+
+def _ts_activity_spectral_entropy(x: pd.DataFrame, window: int = 60, *,
+                                  input_kind: str | None = None, **_: Any) -> pd.DataFrame:
+    """Normalized periodogram entropy of non-negative trading activity."""
+    w = _check_window(int(window))
+    _require_input_kind("ts_activity_spectral_entropy", input_kind)
+    return _frame_like(x, _spectral_entropy_series(x.to_numpy(dtype=float), w))
+
 
 
 def _ts_detrended_level_spectral_entropy(
@@ -202,6 +221,7 @@ def _ts_dominant_cycle_period(
 # is the separate detrended price-level direction.  Documented mapping:
 # ``ts_spectral_entropy`` == ``ts_return_spectral_entropy`` (return spectrum).
 _DAILY_CANONICALS: tuple[str, ...] = (
+    "ts_activity_spectral_entropy",
     "ts_return_spectral_entropy",
     "ts_spectral_entropy",  # legacy spelling of the return-direction canonical
     "ts_detrended_level_spectral_entropy",
@@ -209,6 +229,8 @@ _DAILY_CANONICALS: tuple[str, ...] = (
 )
 
 _KERNELS: dict[str, Callable[..., pd.DataFrame]] = {
+    "ts_signal_spectral_entropy": _ts_signal_spectral_entropy,
+    "ts_activity_spectral_entropy": _ts_activity_spectral_entropy,
     "ts_return_spectral_entropy": _ts_return_spectral_entropy,
     "ts_spectral_entropy": _ts_return_spectral_entropy,
     "ts_detrended_level_spectral_entropy": _ts_detrended_level_spectral_entropy,
@@ -216,6 +238,8 @@ _KERNELS: dict[str, Callable[..., pd.DataFrame]] = {
 }
 
 _PARAMS: dict[str, list[str]] = {
+    "ts_signal_spectral_entropy": ["x", "window"],
+    "ts_activity_spectral_entropy": ["x", "window", "input_kind"],
     "ts_return_spectral_entropy": ["x", "window", "input_kind"],
     "ts_spectral_entropy": ["x", "window", "input_kind"],
     "ts_detrended_level_spectral_entropy": ["x", "window", "input_kind"],
@@ -223,6 +247,8 @@ _PARAMS: dict[str, list[str]] = {
 }
 
 _CATEGORIES: dict[str, str] = {
+    "ts_signal_spectral_entropy": "spectral",
+    "ts_activity_spectral_entropy": "spectral",
     "ts_return_spectral_entropy": "spectral",
     "ts_spectral_entropy": "spectral",
     "ts_detrended_level_spectral_entropy": "spectral",
@@ -233,6 +259,8 @@ _CATEGORIES: dict[str, str] = {
 # trailing window to be FULLY finite (a missing value never zero-pads the FFT),
 # so the window semantics are ``trailing_contiguous``.
 _WINDOW_SEMANTICS: dict[str, str] = {
+    "ts_signal_spectral_entropy": "trailing_contiguous",
+    "ts_activity_spectral_entropy": "trailing_contiguous",
     "ts_return_spectral_entropy": "trailing_contiguous",
     "ts_spectral_entropy": "trailing_contiguous",
     "ts_detrended_level_spectral_entropy": "trailing_contiguous",
@@ -248,10 +276,17 @@ _WINDOW_SEMANTICS: dict[str, str] = {
 # opposite type.  A raw un-adjusted close is excluded from the level canonical
 # too — a split gap injects spurious low-frequency energy from the level path.
 _INPUT_UNITS: dict[str, dict[str, str]] = {
+    "ts_signal_spectral_entropy": {"x": "scalar_research_signal"},
+    "ts_activity_spectral_entropy": {"x": "nonnegative_activity"},
     "ts_return_spectral_entropy": {"x": "return_decimal"},
     "ts_spectral_entropy": {"x": "return_decimal"},
     "ts_detrended_level_spectral_entropy": {"x": "continuous_price"},
     "ts_dominant_cycle_period": {"x": "return_or_continuous_price"},
+}
+
+_INPUT_KIND_CHOICES = {
+    "ts_activity_spectral_entropy": ("NonNegativeActivity",),
+    "ts_detrended_level_spectral_entropy": ("PriceContinuous",),
 }
 
 _SKIP = frozenset({"date", "stock_code"})
@@ -295,7 +330,7 @@ def _register() -> None:
                 scalar_params=tuple(params[1:]),
                 total_positional_arity=len(params),
                 return_type="series",
-                tags=["daily", "panel", "pit_safe", "causal", "deterministic",
+                tags=["research" if canonical == "ts_signal_spectral_entropy" else "daily", "panel", "pit_safe", "causal", "deterministic",
                       f"signature:{','.join(params)}->series",
                       "domain:spectral", f"unit:{output_unit}", "cost:5"],
                 window_semantics=_WINDOW_SEMANTICS[canonical],
@@ -306,8 +341,7 @@ def _register() -> None:
                     param_role=ParamRole.STATE_THRESHOLD,
                 )} if canonical == "ts_dominant_cycle_period" else {}), **({"input_kind": PandasParamSpec(
                     dtype=str, searchable=False,
-                    choices=("PriceContinuous",) if canonical == "ts_detrended_level_spectral_entropy"
-                    else ("ReturnDecimal",),
+                    choices=_INPUT_KIND_CHOICES.get(canonical, ("ReturnDecimal",)),
                 )} if "input_kind" in params else {})},
             )
 
@@ -342,8 +376,7 @@ def _register() -> None:
                     param_role=ParamRole.STATE_THRESHOLD,
                 )} if canonical == "ts_dominant_cycle_period" else {}), **({"input_kind": PandasParamSpec(
                     dtype=str, searchable=False,
-                    choices=("PriceContinuous",) if canonical == "ts_detrended_level_spectral_entropy"
-                    else ("ReturnDecimal",),
+                    choices=_INPUT_KIND_CHOICES.get(canonical, ("ReturnDecimal",)),
                 )} if "input_kind" in params else {})},
                 window_semantics=_WINDOW_SEMANTICS[canonical],
                 input_units=_INPUT_UNITS[canonical],

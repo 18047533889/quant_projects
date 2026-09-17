@@ -177,6 +177,64 @@ def test_validate_plan_params_enforces_active_when():
     validate_plan_params(_candle(pattern="3_stars_south", body_window=999))
 
 
+def _lit(value: object) -> PlanNode:
+    return PlanNode(op="literal", attrs={"value": value})
+
+
+def test_validate_plan_params_rejects_panel_in_hawkes_window_slot():
+    plan = PlanNode(
+        op="event_hawkes_branching_ratio_proxy",
+        inputs=[_col("event"), _col("ret")],
+    )
+    with pytest.raises(Exception, match=r"window.*planning-time.*not provably scalar"):
+        validate_plan_params(plan)
+
+
+def test_validate_plan_params_accepts_literal_hawkes_controls():
+    plan = PlanNode(
+        op="event_hawkes_branching_ratio_proxy",
+        inputs=[_col("event"), _lit(120), _lit(10), _lit(5)],
+    )
+    validate_plan_params(plan)
+
+
+def test_validate_plan_params_keeps_structured_scalar_literals():
+    plan = PlanNode(
+        op="ts_multiscale_trend_consensus",
+        inputs=[_col(), _lit(60), _lit([5, 10, 20, 40])],
+    )
+    validate_plan_params(plan)
+
+
+def test_validate_plan_params_accepts_proven_scalar_expression():
+    scalar_window = PlanNode(op="add", inputs=[_lit(60), _lit(60)])
+    plan = PlanNode(
+        op="event_hawkes_branching_ratio_proxy",
+        inputs=[_col("event"), scalar_window, _lit(10), _lit(5)],
+    )
+    validate_plan_params(plan)
+
+
+def test_validate_plan_params_rejects_unresolved_plan_ref_in_scalar_slot():
+    plan = PlanNode(
+        op="event_hawkes_branching_ratio_proxy",
+        inputs=[_col("event"), PlanNode(op="plan_ref", attrs={"sid": "window"})],
+    )
+    with pytest.raises(Exception, match=r"window.*not provably scalar"):
+        validate_plan_params(plan)
+
+
+def test_validate_plan_params_scalar_proof_rejects_cycle_without_recursion():
+    cyclic = PlanNode(op="add", inputs=[_lit(1), _lit(2)])
+    object.__setattr__(cyclic, "inputs", (cyclic, _lit(1)))
+    plan = PlanNode(
+        op="event_hawkes_branching_ratio_proxy",
+        inputs=[_col("event"), cyclic],
+    )
+    with pytest.raises(Exception, match=r"window.*not provably scalar"):
+        validate_plan_params(plan)
+
+
 # ---------------------------------------------------------------------------
 # NEW-P0-21: CSE plan_ref carries the shared subtree's semantic contract
 # ---------------------------------------------------------------------------

@@ -9,7 +9,9 @@ import sys
 from threading import Lock
 from time import monotonic
 from typing import Any
+from uuid import uuid4
 
+from factor_engine.backend.operator_errors import OperatorParameterError
 from factor_engine.api.factor import Factor
 from factor_engine.planner.dag import DuplicateFactorNameError
 
@@ -28,6 +30,95 @@ class _PermanentSinkFailure(RuntimeError):
 
 class _SinkDeliveryRefused(RuntimeError):
     """Internal wake-up after the writer has already failed."""
+
+
+def _source_has_snapshot_proof(source: Any) -> bool:
+    """Require an explicit immutable/versioned source identity for reuse.
+
+    Dataset names and filesystem roots identify a source configuration, not the
+    bytes observed by this run. They cannot authorize cross-wave reuse alone.
+    """
+    missing = object()
+    token = getattr(source, "snapshot_token", missing)
+    if token is not missing:
+        # Sources exposing an authoritative token may have a stable data ID
+        # while their manifest changes. A missing token cannot fall back to
+        # that weaker identity.
+        return type(token) is str and bool(token.strip())
+    for name in (
+        "data_snapshot_id", "snapshot_id", "generation_id",
+        "content_hash",
+    ):
+        value = getattr(source, name, None)
+        # A flag or an empty/mutable container is not a version identity.
+        # Accept explicit text tokens and integer generations (including zero),
+        # without interpreting arbitrary object truthiness as snapshot proof.
+        if (type(value) is str and value.strip()) or type(value) is int:
+            return True
+    return False
+
+
+def _bounded_stream_cache(engine: Any, run_kwargs: dict[str, Any]):
+    """Return a per-call scoped L2 cache, broker lease and execution clone.
+
+    Unknown/ephemeral source identity or unavailable broker budget deliberately
+    keeps the established per-wave behavior.  The transient cache is never
+    attached to the caller-owned engine.
+    """
+    if getattr(engine, "cache", None) is not None:
+        return engine, None, None, "existing_engine_cache"
+    lease = None
+    try:
+        from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
+        from factor_engine.runtime.engine import FactorEngine
+        from factor_engine.storage.cache import CacheManager
+        from factor_engine.storage.data_scope import compute_data_scope
+
+        if not isinstance(engine, FactorEngine):
+            return engine, None, None, "unsupported_engine"
+        refresh = getattr(engine.data_source, "refresh_snapshot", None)
+        if callable(refresh):
+            refresh()
+        if not _source_has_snapshot_proof(engine.data_source):
+            return engine, None, None, "no_snapshot_identity"
+        source_scope = compute_data_scope(engine.data_source)
+        if source_scope.startswith("ephemeral:"):
+            return engine, None, None, "ephemeral_source"
+        broker = run_kwargs.get("broker") or getattr(engine, "resource_broker", None)
+        if broker is None:
+            return engine, None, None, "no_resource_broker"
+        budget = int(getattr(broker, "current_cse_budget")())
+        perf = run_kwargs.get("perf")
+        if perf is not None:
+            plan = perf.build_resource_plan()
+            configured = getattr(plan, "cse_budget_bytes", None) if plan is not None else None
+            if configured is not None:
+                budget = min(budget, int(configured))
+        if budget <= 0:
+            return engine, None, None, "no_cse_budget"
+        lease = broker.acquire_memory(
+            MemoryLeaseKind.CSE_CACHE, budget,
+            lease_id=f"run-many-stream-cross-wave:{uuid4().hex}",
+        )
+        if lease is None:
+            return engine, None, None, "cse_lease_refused"
+        cache = CacheManager(data_scope=source_scope, budget_bytes=budget)
+        clone = FactorEngine(
+            engine.backend, engine.data_source, cache=cache,
+            run_mode=engine.run_mode,
+            production_fallback_policy=engine.production_fallback_policy,
+            execution_scope=engine.execution_scope,
+        )
+        for name in ("default_execution_policy", "resource_broker", "execution_purpose"):
+            if hasattr(engine, name):
+                setattr(clone, name, getattr(engine, name))
+        return clone, cache, lease, "transient_bounded_l2"
+    except Exception:
+        if lease is not None:
+            lease.release()
+        # Cache reuse is an optimization.  Production correctness remains the
+        # existing per-wave path when identity/budget setup is unavailable.
+        return engine, None, None, "cache_setup_unavailable"
 
 
 def _transfer_result(value: Any) -> _QueuedResult:
@@ -53,12 +144,13 @@ def execute_run_many_stream(
     sink: Any,
     wave_size: int | None = None,
     sink_queue_bytes: int | None = None,
+    _wave_runner: str = "parallel",
     **run_kwargs: Any,
 ) -> dict[str, Any]:
     """Compute bounded waves while transferring results to a bounded writer queue.
 
     All execution, resource admission, production checks and sink failure behavior
-    delegate to run_many_parallel. Names are kept globally to reject duplicates;
+    delegate to the selected public batch runner. Names are kept globally to reject duplicates;
     factor definitions, DAGs, paths and outputs are not retained across waves.
     """
     from factor_engine.runtime.batch_service import _validate_result_policy
@@ -67,6 +159,8 @@ def execute_run_many_stream(
     )
 
     _validate_result_policy("sink", sink)
+    if _wave_runner not in {"parallel", "run_many"}:
+        raise ValueError("_wave_runner must be 'parallel' or 'run_many'")
     width_limit = _get_adaptive_dag_width_limit()
     if wave_size is None:
         wave_size = min(_get_adaptive_chunk_size(), width_limit)
@@ -105,6 +199,7 @@ def execute_run_many_stream(
     pending = iter(factors)
     names: set[str] = set()
     requested = completed = waves = 0
+    failed_factors: dict[str, dict[str, str]] = {}
     expected: set[str] = set()
     state_lock = Lock()
     started = monotonic()
@@ -128,7 +223,12 @@ def execute_run_many_stream(
         batch_size=1,
         writer_threads=1,
     )
-    delivery.start()
+
+    execution_engine, cross_wave_cache, cross_wave_lease, cross_wave_cache_mode = (
+        _bounded_stream_cache(engine, run_kwargs)
+    )
+    initial_source_scope = None
+    cache_reuse_unmeasured = cross_wave_cache is not None or cross_wave_cache_mode == "existing_engine_cache"
 
     def write(name, result):
         nonlocal completed, sink_submit_seconds
@@ -156,6 +256,12 @@ def execute_run_many_stream(
 
     primary_error: BaseException | None = None
     try:
+        if cross_wave_cache is not None:
+            # _bounded_stream_cache refreshed before admitting the cache.
+            # Bind to the exact scope used at cache construction, not a later
+            # unverified token read.
+            initial_source_scope = cross_wave_cache.data_scope
+        delivery.start()
         while True:
             wave = list(islice(pending, wave_size))
             if not wave:
@@ -167,16 +273,135 @@ def execute_run_many_stream(
                     )
                 names.add(factor.name)
             requested += len(wave)
-            expected = {factor.name for factor in wave}
+            # Preflight the whole wave before starting it. The common success path
+            # keeps batch CSE and avoids O(roots) compile calls. Only when the
+            # analyzer reports an explicit unsupported expression do we compile
+            # roots independently to identify safe per-root failures.
+            compile_many = getattr(execution_engine, "_dag_from_factors", None)
+            executable = wave
+            compiled = None
+            if callable(compile_many):
+                compile_kwargs = {
+                    key: run_kwargs[key]
+                    for key in (
+                        "enable_cse", "perf", "pit_enforce", "pit_forbid_forward_fill",
+                    )
+                    if key in run_kwargs
+                }
+                def isolatable(exc: BaseException) -> bool:
+                    return (
+                        type(exc) is OperatorParameterError
+                        or isinstance(exc, NotImplementedError)
+                        and str(exc).startswith("Unsupported expr:")
+                    )
+                try:
+                    compiled = compile_many(wave, **compile_kwargs)
+                except (NotImplementedError, OperatorParameterError) as wave_exc:
+                    if not isolatable(wave_exc):
+                        raise
+                    executable = []
+                    for root in wave:
+                        try:
+                            compile_many([root], **compile_kwargs)
+                        except (NotImplementedError, OperatorParameterError) as exc:
+                            if not isolatable(exc):
+                                raise
+                            failed_factors[root.name] = {
+                                "phase": "compile_preflight",
+                                "error_type": type(exc).__name__,
+                                "message": str(exc),
+                            }
+                        else:
+                            executable.append(root)
+                    if executable:
+                        compiled = compile_many(executable, **compile_kwargs)
+            if not executable:
+                waves += 1
+                del wave, factor
+                continue
+            if cross_wave_cache is not None:
+                from factor_engine.storage.data_scope import compute_data_scope
+                from factor_engine.planner.source_dependencies import (
+                    build_source_dependency_manifest,
+                )
+
+                dag = compiled[0] if compiled is not None else None
+                dependency_plans = [
+                    root.root for root in (getattr(dag, "roots", ()) or ())
+                ]
+                dependency_plans.extend(
+                    (getattr(dag, "shared_nodes", {}) or {}).values()
+                )
+                secondary_dependencies = {
+                    dependency
+                    for plan in dependency_plans
+                    for dependency in build_source_dependency_manifest(plan)
+                }
+                if secondary_dependencies:
+                    # The anchor snapshot does not prove the snapshot of a
+                    # secondary SourceRef. Until a complete multi-source
+                    # snapshot binding exists, fail closed to per-wave reuse.
+                    cross_wave_cache.clear_memory()
+                    cross_wave_cache = None
+                    execution_engine.cache = None
+                    if cross_wave_lease is not None:
+                        cross_wave_lease.release()
+                        cross_wave_lease = None
+                    cross_wave_cache_mode = "secondary_source_dependencies"
+
+                if cross_wave_cache is not None:
+                    refresh = getattr(execution_engine.data_source, "refresh_snapshot", None)
+                    if callable(refresh):
+                        refresh()
+                    observed_scope = compute_data_scope(execution_engine.data_source)
+                    if observed_scope != initial_source_scope:
+                        raise RuntimeError(
+                            "streaming source identity changed between waves; refusing "
+                            "mixed-snapshot cross-wave reuse"
+                        )
+                    factor_scopes = tuple(sorted({
+                        getattr(root, "execution_scope").scope_key()
+                        for root in (getattr(dag, "roots", ()) or ())
+                    }))
+                    if len(factor_scopes) != 1:
+                        cross_wave_cache.clear_memory()
+                        cross_wave_cache = None
+                        execution_engine.cache = None
+                        if cross_wave_lease is not None:
+                            cross_wave_lease.release()
+                            cross_wave_lease = None
+                        cross_wave_cache_mode = "mixed_execution_scopes"
+                        factor_scopes = ()
+                if cross_wave_cache is not None:
+                    backend = execution_engine.backend
+                    cache_scope = repr((
+                        observed_scope,
+                        type(backend).__module__, type(backend).__qualname__,
+                        factor_scopes,
+                    ))
+                    execution_engine.cache = cross_wave_cache.with_scope(cache_scope)
+                    # Opt in only this transient stream cache to plan-ref key
+                    # normalization. Persistent/caller-owned caches retain
+                    # their established global key semantics.
+                    execution_engine.cache.plan_key_shared_nodes = dict(
+                        getattr(dag, "shared_nodes", {}) or {}
+                    )
+            runner_kwargs = dict(run_kwargs)
+            if compiled is not None:
+                runner_kwargs["_compiled"] = compiled
+            expected = {factor.name for factor in executable}
             before = completed
             compute_started = monotonic()
-            output = engine.run_many_parallel(
-                wave, result_policy="sink", sink=write, **run_kwargs,
+            runner = (
+                execution_engine.run_many
+                if _wave_runner == "run_many"
+                else execution_engine.run_many_parallel
             )
+            output = runner(executable, result_policy="sink", sink=write, **runner_kwargs)
             wave_execution_seconds += monotonic() - compute_started
             if output.get("results"):
                 raise RuntimeError("streaming wave unexpectedly retained factor results")
-            if expected or completed - before != len(wave):
+            if expected or completed - before != len(executable):
                 raise RuntimeError("streaming wave did not deliver every factor to the bounded sink")
             waves += 1
             del output, wave, factor
@@ -184,6 +409,18 @@ def execute_run_many_stream(
         primary_error = exc
         raise
     finally:
+        cleanup_error: BaseException | None = None
+        try:
+            if cross_wave_cache is not None:
+                cross_wave_cache.clear_memory()
+        except BaseException as exc:
+            cleanup_error = exc
+        try:
+            if cross_wave_lease is not None:
+                cross_wave_lease.release()
+        except BaseException as exc:
+            if cleanup_error is None:
+                cleanup_error = exc
         input_close_error: BaseException | None = None
         close_input = getattr(pending, "close", None)
         if callable(close_input):
@@ -212,6 +449,8 @@ def execute_run_many_stream(
             raise
         if input_close_error is not None and primary_error is None:
             raise input_close_error
+        if cleanup_error is not None and primary_error is None:
+            raise cleanup_error
         sink_finish_wait_seconds = monotonic() - finish_started
 
     sink_summary = delivery.summary()
@@ -223,9 +462,12 @@ def execute_run_many_stream(
         "executor": "streaming_waves",
         "requested_factors": requested,
         "completed_factors": completed,
+        "failed_factors": failed_factors,
+        "failed_factor_count": len(failed_factors),
         "completed_waves": waves,
         "wave_size": wave_size,
         "cse_scope": "per_wave",
+        "cross_wave_cache_mode": cross_wave_cache_mode,
         "seconds": wall_seconds,
         "cost_ledger": {
             "wall_seconds": wall_seconds,
@@ -235,6 +477,10 @@ def execute_run_many_stream(
             "sink_finish_wait_seconds": sink_finish_wait_seconds,
             "cse_scope": "per_wave",
             "global_cse": False,
+            "cross_wave_cache_enabled": cross_wave_cache is not None,
+            # Cache eligibility is not a measured cross-wave hit. The native
+            # cache currently has no wave-provenance hit counter.
+            "cross_wave_value_reuse": None if cache_reuse_unmeasured else False,
             "name_metadata_entries": len(names),
             "name_utf8_payload_bytes": sum(len(name.encode("utf-8")) for name in names),
             "name_set_container_bytes": None,

@@ -124,8 +124,11 @@ def lower_limit_up_state(node: PlanNode) -> PlanNode:
         return node
     threshold, sem = _tolerance_threshold(node, node.inputs[1], up=True)
     out = H.binop("ge", node.inputs[0], threshold)
-    merged = dict(out.semantic_attrs)
-    merged.update(sem)
+    if node.op == "limit_up_close":
+        merged = dict(node.semantic_attrs)
+    else:
+        merged = dict(out.semantic_attrs)
+        merged.update(sem)
     return PlanNode(
         op=out.op,
         inputs=out.inputs,
@@ -152,8 +155,11 @@ def lower_limit_down_state(node: PlanNode) -> PlanNode:
         return node
     threshold, sem = _tolerance_threshold(node, node.inputs[1], up=False)
     out = H.binop("le", node.inputs[0], threshold)
-    merged = dict(out.semantic_attrs)
-    merged.update(sem)
+    if node.op == "limit_down_close":
+        merged = dict(node.semantic_attrs)
+    else:
+        merged = dict(out.semantic_attrs)
+        merged.update(sem)
     return PlanNode(
         op=out.op,
         inputs=out.inputs,

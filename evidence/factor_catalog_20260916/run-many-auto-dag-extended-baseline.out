@@ -1,0 +1,15 @@
+........................................................................ [ 66%]
+.....................................                                    [100%]
+=============================== warnings summary ===============================
+factor_engine/tests/runtime/test_run_many_production.py::test_run_many_input_dq_uses_batch_path_and_cse
+factor_engine/tests/runtime/test_run_many_production.py::test_run_many_input_dq_uses_batch_path_and_cse
+factor_engine/tests/runtime/test_run_many_stream.py::test_public_stream_executes_real_factor_values_and_preserves_production_gate
+factor_engine/tests/runtime/test_run_many_stream.py::test_public_stream_executes_real_factor_values_and_preserves_production_gate
+factor_engine/tests/runtime/test_run_many_stream.py::test_public_stream_executes_real_factor_values_and_preserves_production_gate
+factor_engine/tests/unit/test_run_many_streaming.py::test_run_many_sink_does_not_accumulate_results
+factor_engine/tests/unit/test_run_many_streaming.py::test_cse_shared_results_released_after_last_consumer
+  /home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+109 passed, 7 warnings in 50.54s

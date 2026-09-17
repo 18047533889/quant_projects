@@ -1,0 +1,25 @@
+{
+  "execution_evidence": "evidence/factor_catalog_20260916/factor_catalog_review_r16a.cci_daily_smoke_auto40_r1.output.jsonl.gz",
+  "execution_evidence_sha256": "b9a03a400bfb52c2cf972fa7e82ff39617bd55c171806a534cd80a265506fc52",
+  "execution_records": 40,
+  "execution_summary": "evidence/factor_catalog_20260916/factor_catalog_review_r16a.cci_daily_smoke_auto40_r1.output.summary.json",
+  "execution_summary_sha256": "f925a702b1faffe2e84f58acd27b0dc2e0ecc902405ee9ea05ad8d6253c600bd",
+  "input_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r16a.csv.gz",
+  "input_checkpoint_sha256": "269859a6edba076034c9149acadd7a6340192188746cef64e8f12a27115d35ca",
+  "input_execution_request": "evidence/factor_catalog_20260916/factor_catalog_review_r16a.cci_daily_smoke.input.jsonl.gz",
+  "input_execution_request_sha256": "54fe41e1a3f38f68f87c394edb78c142ffe6a0a76404c0756690ee0c658473ff",
+  "output_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r16b.csv.gz",
+  "output_checkpoint_sha256": "146dfa35122c62aa77a33a5c118d2a1131d964d4cb1df19443ffcf9142b2c93b",
+  "output_execution_status_counts": {
+    "COMPILE_FAILED": 119,
+    "EXECUTED": 8063,
+    "EXECUTED_ALL_NONFINITE": 186,
+    "EXECUTION_FAILED": 26,
+    "NATIVE_CRASH": 20,
+    "NOT_RUN": 105704,
+    "PREPARE_FAILED": 14
+  },
+  "scope": "formula_input_identity_and_hash_matched_research_execution_evidence_only",
+  "source_rows": 114132,
+  "unique_factor_ids": 113893
+}

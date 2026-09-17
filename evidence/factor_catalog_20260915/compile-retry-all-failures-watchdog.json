@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/factor_catalog_20260915/compile_catalog.py", "--input", "compile-retry-input.jsonl.gz", "--output", "compile-retry-all-failures.jsonl.gz"], "returncode": 0, "sampled_peak_family_rss_bytes": 752070656, "sampling_seconds": 0.1, "seconds": 164.0611956869252, "test_guard_reason": null, "hard_memory_cap": false}

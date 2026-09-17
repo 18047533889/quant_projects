@@ -38,12 +38,12 @@ class _Engine:
         return _Engine(source, run_mode=self.run_mode)
 
 
-def _stateful_analysis():
+def _stateful_analysis(formula="KAMA(close,10,2,30)"):
     from factor_engine.api.dsl_parser import parse_factor
     from factor_engine.ir.analyzer import Analyzer
 
     factor = parse_factor(
-        "KAMA(close,10,2,30)", name="kama", surface="extended"
+        formula, name="stateful", surface="extended"
     )
     return Analyzer().lower(factor.expr)
 
@@ -84,6 +84,41 @@ def test_production_full_history_requires_explicit_origin():
             _Engine(_Source()),
             _Factor(),
             _stateful_analysis(),
+            auto_warmup=True,
+            trim_warmup=True,
+            market="us",
+        )
+
+
+def test_nested_tema_research_warns_when_full_history_origin_is_unknown(caplog):
+    from factor_engine.runtime.warmup_service import prepare_run_warmup
+
+    analysis = _stateful_analysis("ts_mean(TEMA(close,30),20)")
+    warmup = prepare_run_warmup(
+        _Engine(_Source(), run_mode="research"),
+        _Factor(),
+        analysis,
+        auto_warmup=True,
+        trim_warmup=True,
+        market="us",
+    )
+
+    assert analysis.requires_full_history is True
+    assert warmup.full_history_required is True
+    assert warmup.full_history_satisfied is False
+    assert warmup.full_history_start is None
+    assert "does not declare full_history_start" in caplog.text
+
+
+def test_nested_tema_production_fails_closed_without_full_history_origin():
+    from factor_engine.runtime.production_policy import ProductionPolicyViolation
+    from factor_engine.runtime.warmup_service import prepare_run_warmup
+
+    with pytest.raises(ProductionPolicyViolation, match="full_history_start"):
+        prepare_run_warmup(
+            _Engine(_Source(), run_mode="production"),
+            _Factor(),
+            _stateful_analysis("ts_mean(TEMA(close,30),20)"),
             auto_warmup=True,
             trim_warmup=True,
             market="us",

@@ -169,3 +169,54 @@ def test_per_direction_input_units_contract():
     from factor_engine.cleaned_operators.registry import _contract_hash
 
     assert _contract_hash(ret_op) != _contract_hash(lvl_op)
+def test_activity_entropy_matches_existing_statistic_and_metadata():
+    activity = _frame(np.abs(np.sin(np.arange(120.0) / 7.0)) + 0.01)
+    activity_op = _op("ts_activity_spectral_entropy")
+    return_op = _op("ts_return_spectral_entropy")
+    actual = activity_op.calculate(
+        activity, window=_WINDOW, input_kind="NonNegativeActivity")
+    expected = return_op.calculate(
+        activity, window=_WINDOW, input_kind="ReturnDecimal")
+    np.testing.assert_allclose(actual, expected, equal_nan=True)
+    assert activity_op.metadata.input_units == {"x": "nonnegative_activity"}
+    assert activity_op.metadata.output_unit == "ratio"
+    assert activity_op.metadata.param_specs["input_kind"].choices == (
+        "NonNegativeActivity",)
+
+
+@pytest.mark.parametrize("wrong_kind", ["ReturnDecimal", "PriceContinuous"])
+def test_activity_entropy_rejects_non_activity_semantic_kinds(wrong_kind):
+    activity = _frame(np.linspace(0.0, 1.0, 80))
+    with pytest.raises(ValueError, match="input_kind"):
+        _op("ts_activity_spectral_entropy").calculate(
+            activity, window=20, input_kind=wrong_kind)
+
+
+def test_activity_entropy_nonfinite_window_fails_closed():
+    values = np.abs(np.sin(np.arange(80.0) / 5.0)) + 0.01
+    values[70] = np.nan
+    out = _op("ts_activity_spectral_entropy").calculate(
+        _frame(values), window=20, input_kind="NonNegativeActivity")
+    assert np.isnan(out["A"].iloc[-1])
+    assert np.isfinite(out["A"].iloc[69])
+
+
+def test_activity_entropy_polars_matches_pandas():
+    import polars as pl
+    activity = np.abs(np.cos(np.arange(80.0) / 6.0))
+    pdf = _frame(activity)
+    pldf = pl.DataFrame({
+        "date": pd.date_range("2024-01-01", periods=80),
+        "A": activity,
+    })
+    pandas_op = OperatorRegistry.get(
+        "ts_activity_spectral_entropy", "pandas_numpy", mode="any")
+    polars_op = OperatorRegistry.get(
+        "ts_activity_spectral_entropy", "polars", mode="any")
+    assert pandas_op is not None and polars_op is not None
+    expected = pandas_op.calculate(
+        pdf, window=20, input_kind="NonNegativeActivity")
+    actual = polars_op.calculate(
+        pldf, window=20, input_kind="NonNegativeActivity")
+    np.testing.assert_allclose(
+        actual["A"].to_numpy(), expected["A"].to_numpy(), equal_nan=True)

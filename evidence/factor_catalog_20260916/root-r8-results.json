@@ -1,0 +1,23 @@
+{
+  "scope": "incremental_research_smoke_not_complete_catalog_certification",
+  "worktree": "/home/sunhaiwei/quant_projects",
+  "new_daily_sweeps": {
+    "r15": {"source_offset": 12503, "next_offset": 13776, "processed": 500, "EXECUTED": 459, "COMPILE_FAILED": 25, "EXECUTED_ALL_NONFINITE": 16, "returncode": 0, "sampled_peak_family_rss_bytes": 825614336},
+    "r16": {"source_offset": 13776, "next_offset": 16546, "processed": 1000, "EXECUTED": 883, "COMPILE_FAILED": 64, "EXECUTION_FAILED": 5, "EXECUTED_ALL_NONFINITE": 48, "returncode": 0, "sampled_peak_family_rss_bytes": 825516032, "seconds": 537.0945961799007}
+  },
+  "independent_regressions": {
+    "terminal_state": {"log": "root-terminal-state-r8.log", "passed": 30, "returncode": 0},
+    "run_many_stream": {"log": "root-runmany-stream-r8.log", "python": ".venv/bin/python", "passed": 29, "returncode": 0, "sampled_peak_family_rss_bytes": 471633920}
+  },
+  "synthetic_scale_evidence": {
+    "10000": {"path": "evidence/r6/autochunk_scale_20260916/10k.result.json", "status": "PASS", "completed_sink_outputs": 10000, "waves": 12, "source_load_calls": 12, "execution_seconds": 145.7425516929943, "sampled_peak_family_rss_bytes": 641368064},
+    "100000": {"path": "evidence/r6/autochunk_scale_20260916/100k.runner.log", "status": "TIMEOUT_NOT_CERTIFIED", "returncode": -15, "test_guard_reason": "TEST_WALL_TIME_LIMIT", "watchdog_seconds": 600.1586547507904, "sampled_peak_family_rss_bytes": 640897024, "last_reported_completed_outputs": 37000}
+  },
+  "limits": [
+    "Sampled RSS watchdog is not a hard memory cap or OOM proof.",
+    "Synthetic scale results do not certify real all-factor execution.",
+    "CSE is per-wave; global cross-wave CSE is not implemented.",
+    "Most catalog factors remain unexecuted.",
+    "No code commit, push, deployment or production publication."
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "changed_unique_rows": 34,
+  "compile_evidence": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/factor_catalog_review_r18a.compile.jsonl.gz",
+  "compile_evidence_sha256": "bb28b5e8306c8c9c84d152aef0eddfa5173bcb6f6236d940834d22847c25451f",
+  "compile_status_counts_all_rows_including_239_blank_ids": {
+    "COMPILED": 109702,
+    "COMPILE_FAILED": 4191,
+    "NOT_RUN": 239
+  },
+  "execution_status_counts_all_rows_including_239_blank_ids": {
+    "BATCH_ABORTED": 40,
+    "COMPILE_FAILED": 119,
+    "EXECUTED": 8098,
+    "EXECUTED_ALL_NONFINITE": 186,
+    "EXECUTION_FAILED": 26,
+    "NATIVE_CRASH": 20,
+    "NOT_RUN": 105629,
+    "PREPARE_FAILED": 14
+  },
+  "input_checkpoint": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/factor_catalog_review_r17c.csv.gz",
+  "input_checkpoint_sha256": "4eaf4ddc697de0f180df6f13cbe63590fe37ae56966bf3521b427808fb83568d",
+  "migration_counts": {
+    "technical_changes": 34,
+    "technical_rows": 34
+  },
+  "output_checkpoint": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/factor_catalog_review_r18a.csv.gz",
+  "output_checkpoint_sha256": "27970c460405be981a38c846a87829d13f72d2883cae051a67792968574d24c6",
+  "recipe_sha256": "c90477373860ddb976a88592b89b9e7aec4b0367e75eacb0b9ba82f87a134aed",
+  "scope": "R18 exact technical recipes; changed formulas recompiled and prior execution evidence invalidated",
+  "source_rows": 114132,
+  "unique_nonempty_factor_ids": 113893
+}

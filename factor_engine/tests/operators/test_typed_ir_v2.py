@@ -14,13 +14,13 @@ def test_canonical_expression_is_stable_and_field_aware() -> None:
     first = parse_expr("ts_mean(field('close'), 3)")
     second = parse_expr("ts_mean(close, 3)")
     assert canonical_expression(first) == canonical_expression(second)
-    assert "StockDailyBar.close" in canonical_expression(first)
+    assert "StockDailyBarAdj.close" in canonical_expression(first)
 
 
 def test_dsl_known_field_is_catalog_bound() -> None:
     expr = parse_expr("close")
     assert isinstance(expr, FieldRef)
-    assert expr.field_id == "StockDailyBar.close"
+    assert expr.field_id == "StockDailyBarAdj.close"
 
 
 def test_dsl_unknown_column_remains_legacy_column() -> None:

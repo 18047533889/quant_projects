@@ -1,0 +1,13 @@
+{
+  "completed_sink_outputs": 10000,
+  "completed_waves": 12,
+  "cse_scope": "per_wave",
+  "digest": "301638789677501444ff7cd92d20877dce60c39f64d927226651edd75b2895a1",
+  "elapsed_seconds": 145.7425516929943,
+  "executor": "streaming_waves",
+  "global_cse": false,
+  "requested": 10000,
+  "source_load_calls": 12,
+  "status": "PASS",
+  "wave_size": 877
+}

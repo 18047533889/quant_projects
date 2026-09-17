@@ -145,7 +145,9 @@ def _assert_backend_plan_authority(backend: Any, plan: Any | None = None) -> Non
         )
 
 
-def _assert_public_batch_authority(engine: Any) -> None:
+def _assert_public_batch_authority(
+    engine: Any, *, research_physical_consumer: bool = False
+) -> None:
     """v2 defers to the batch planner's physical admission, never Hybrid routing.
 
     Other callers retain the legacy guard. A policy is not a certificate:
@@ -155,6 +157,12 @@ def _assert_public_batch_authority(engine: Any) -> None:
 
     policy = getattr(engine, "default_execution_policy", None)
     if engine.run_mode == "production" and isinstance(policy, DefaultExecutionPolicy):
+        return
+    if (
+        research_physical_consumer
+        and engine.run_mode == "research"
+        and engine.backend.__class__.__name__ == "HybridBackend"
+    ):
         return
     _assert_backend_plan_authority(engine.backend)
 
@@ -546,6 +554,31 @@ def _value_matches_physical_representation(value: Any, representation: Any) -> b
     return False
 
 
+def _value_matches_bounded_scalar_contract(value: Any) -> bool:
+    """Runtime half of the optimizer's bounded scalar proof."""
+    return (
+        value is None
+        or type(value) in (bool, float, complex)
+        or type(value) is int and value.bit_length() <= 63
+    )
+
+
+def _execute_fixed_backend(
+    selected: Any, plan: PlanNode, ctx: Any, *, backend_label: str
+) -> Any:
+    """Execute with a planner-fixed operator backend on the original context."""
+    had_selected = hasattr(ctx, "selected_backend")
+    previous = getattr(ctx, "selected_backend", None)
+    setattr(ctx, "selected_backend", backend_label)
+    try:
+        return selected.execute(plan, ctx)
+    finally:
+        if had_selected:
+            setattr(ctx, "selected_backend", previous)
+        else:
+            delattr(ctx, "selected_backend")
+
+
 def _execute_ready_single_region_plan(
     optimization: Any,
     logical_root: PlanNode,
@@ -554,6 +587,7 @@ def _execute_ready_single_region_plan(
     *,
     logical_root_id: str,
     _allow_shared_root: bool = False,
+    admission_mode: str | None = None,
 ) -> Any:
     """Execute a planner-selected physical DAG without runtime backend routing.
 
@@ -570,7 +604,12 @@ def _execute_ready_single_region_plan(
         optimization, () if _allow_shared_root else (logical_root_id,),
         # This legacy physical entry has always required production admission.
         # Only an explicit immutable managed purpose selects research admission.
-        admission_mode=operator_admission_mode(ctx) if getattr(ctx, "execution_purpose", None) is not None else "production",
+        admission_mode=(
+            admission_mode
+            or (operator_admission_mode(ctx)
+                if getattr(ctx, "execution_purpose", None) is not None
+                else "production")
+        ),
         shared_sid=logical_root_id if _allow_shared_root else None)
     physical_plan = optimization.physical_plan
     cache = getattr(optimization, "execution_index_cache", None)
@@ -585,32 +624,55 @@ def _execute_ready_single_region_plan(
     # debug-only identifier (the long-standing single-region contract).
     root_region_id = node_regions[logical_root_id]
     def contains_plan_ref(node: PlanNode) -> bool:
-        return node.op == "plan_ref" or any(contains_plan_ref(child) for child in node.inputs)
+        pending = [node]
+        seen: set[int] = set()
+        while pending:
+            current = pending.pop()
+            if id(current) in seen:
+                continue
+            seen.add(id(current))
+            if current.op == "plan_ref":
+                return True
+            pending.extend(current.inputs)
+        return False
 
     if len(regions) == 1 and not physical_plan.edges and not contains_plan_ref(logical_root):
         selected = _physical_backend_for_region(backend, regions[root_region_id].backend)
         runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+        actual_label = str(
+            getattr(selected, "runtime_backend_label", "")
+            or regions[root_region_id].backend.value
+        )
         runtime["physical_plan"] = _physical_plan_telemetry(
             optimization,
-            actual_backend=str(
-                getattr(selected, "runtime_backend_label", "")
-                or regions[root_region_id].backend.value
-            ),
+            actual_backend=actual_label,
             root_region_id=root_region_id,
         )
         ctx.runtime_stats = runtime
-        return selected.execute(logical_root, ctx)
+        return _execute_fixed_backend(
+            selected, logical_root, ctx, backend_label=actual_label
+        )
 
     nodes: dict[str, PlanNode] = {}
     parents: dict[str, set[str]] = {}
+    execution_node_ids: set[str] = set()
+    execution_parents: dict[str, set[str]] = {}
     plan_ref_sids: dict[str, str] = {}
+    logical_shared_nodes = getattr(optimization, "logical_shared_nodes", None) or {}
+    collected_modes: set[tuple[str, bool]] = set()
 
-    def collect(node: PlanNode, *, is_root: bool = False) -> str:
-        node_id = (
+    def resolve_node_id(node: PlanNode, *, is_root: bool = False) -> str:
+        return (
             logical_root_id
             if is_root
             else str(discovered_node_ids.get(id(node)) or node.node_id or "")
         )
+
+    active_modes: set[tuple[str, bool]] = set()
+    pending_collect = [(logical_root, True, True, None, False)]
+    while pending_collect:
+        node, is_root, for_execution, parent_id, exiting = pending_collect.pop()
+        node_id = resolve_node_id(node, is_root=is_root)
         if not node_id or node_id not in node_regions:
             raise PhysicalPlanRequiredError(
                 "physical region node IDs do not identify the logical plan"
@@ -618,6 +680,26 @@ def _execute_ready_single_region_plan(
         if node_id in nodes and nodes[node_id] is not node:
             raise PhysicalPlanRequiredError(f"duplicate logical node ID {node_id!r}")
         nodes[node_id] = node
+        if parent_id is not None:
+            parents.setdefault(node_id, set()).add(parent_id)
+            if for_execution:
+                execution_parents.setdefault(node_id, set()).add(parent_id)
+        if for_execution:
+            execution_node_ids.add(node_id)
+        mode = (node_id, for_execution)
+        if exiting:
+            active_modes.remove(mode)
+            collected_modes.add(mode)
+            continue
+        if mode in collected_modes:
+            continue
+        if mode in active_modes:
+            raise PhysicalPlanRequiredError(
+                f"cyclic physical logical plan at node {node_id!r}"
+            )
+        active_modes.add(mode)
+        pending_collect.append((node, is_root, for_execution, parent_id, True))
+        dependencies = list(node.inputs)
         if node.op == "plan_ref":
             sid = str((node.attrs or {}).get("sid") or "")
             if not sid or sid not in node_regions:
@@ -625,15 +707,21 @@ def _execute_ready_single_region_plan(
                     f"physical plan_ref has unknown shared sid {sid!r}"
                 )
             plan_ref_sids[node_id] = sid
-        for child in node.inputs:
-            child_id = collect(child)
-            parents.setdefault(child_id, set()).add(node_id)
-        return node_id
+            definition = logical_shared_nodes.get(sid)
+            if definition is not None:
+                definition_id = resolve_node_id(definition)
+                if definition_id != sid:
+                    raise PhysicalPlanRequiredError(
+                        f"physical shared sid {sid!r} maps to node {definition_id!r}"
+                    )
+                pending_collect.append(
+                    (definition, False, False, None, False)
+                )
+        for child in reversed(dependencies):
+            pending_collect.append(
+                (child, False, for_execution, node_id, False)
+            )
 
-    collect(logical_root, is_root=True)
-
-    reachable_region_ids = {node_regions[node_id] for node_id in nodes}
-    reachable_region_ids.update(node_regions[sid] for sid in plan_ref_sids.values())
     required_pairs = {
         (node_regions[child_id], node_regions[parent_id])
         for child_id, parent_ids in parents.items()
@@ -650,26 +738,16 @@ def _execute_ready_single_region_plan(
         for pair in required_pairs
         if pair in execution_index.edges_by_pair
     }
-    local_planned_pairs: set[tuple[str, str]] = set()
-    for consumer in reachable_region_ids:
-        incoming = execution_index.incoming_regions.get(consumer, ())
-        if len(incoming) <= len(reachable_region_ids):
-            local_planned_pairs.update(
-                (producer, consumer)
-                for producer in incoming
-                if producer in reachable_region_ids
-            )
-        else:
-            local_planned_pairs.update(
-                (producer, consumer)
-                for producer in reachable_region_ids
-                if producer in incoming
-            )
-    if required_pairs != local_planned_pairs:
-        missing = sorted(required_pairs.difference(edge_by_pair))
-        extra = sorted(local_planned_pairs.difference(required_pairs))
+    missing = sorted(required_pairs.difference(edge_by_pair))
+    if missing:
+        # This executes one root from a batch-global plan.  Another root may
+        # contribute an edge between two regions that this root also reaches;
+        # without logical endpoint metadata that edge cannot be attributed to
+        # this root and is not an execution error.  Required root-local
+        # boundaries remain fail-closed, while the execution index validates
+        # global edge endpoints and uniqueness for the whole physical plan.
         raise PhysicalPlanRequiredError(
-            f"TransferEdge boundaries do not match logical plan: missing={missing!r}, extra={extra!r}"
+            f"TransferEdge boundaries do not match logical plan: missing={missing!r}"
         )
 
     outputs: dict[str, Any] = {}
@@ -684,9 +762,25 @@ def _execute_ready_single_region_plan(
     transfer_telemetry = RegionTelemetryCollector()
     transferred_edges: dict[str, Any] = {}
     resolved_shared: dict[str, Any] = {}
+    from factor_engine.runtime.multibackend.batch_global_optimizer import (
+        plan_proves_bounded_scalar,
+    )
+
+    scalar_proof_memo: dict[int, bool] = {}
+    scalar_shared_sids = {
+        sid
+        for sid, shared_plan in logical_shared_nodes.items()
+        if plan_proves_bounded_scalar(
+            shared_plan, logical_shared_nodes, _memo=scalar_proof_memo
+        )
+    }
     transfer_executor = TransferFallback(
         metrics=transfer_metrics, telemetry=transfer_telemetry
     )
+    reachable_region_ids = {
+        node_regions[node_id] for node_id in execution_node_ids
+    }
+    reachable_region_ids.update(node_regions[sid] for sid in plan_ref_sids.values())
     local_topological_order = sorted(
         reachable_region_ids, key=execution_index.topological_positions.__getitem__
     )
@@ -696,7 +790,7 @@ def _execute_ready_single_region_plan(
         if node_regions[sid] != node_regions[node_id]
         and not any(
             node_regions[logical_node_id] == node_regions[sid]
-            for logical_node_id in nodes
+            for logical_node_id in execution_node_ids
         )
     }
     for region_id in local_topological_order:
@@ -705,10 +799,13 @@ def _execute_ready_single_region_plan(
         region = regions[region_id]
         candidates = [
             node_id
-            for node_id in nodes
+            for node_id in execution_node_ids
             if node_regions[node_id] == region_id
             if node_id == logical_root_id
-            or any(node_regions[parent] != region_id for parent in parents.get(node_id, ()))
+            or any(
+                node_regions[parent] != region_id
+                for parent in execution_parents.get(node_id, ())
+            )
         ]
         if len(candidates) != 1:
             raise PhysicalPlanRequiredError(
@@ -735,6 +832,17 @@ def _execute_ready_single_region_plan(
                 shared_region_id = node_regions[sid]
                 value = resolved_shared[sid]
                 if shared_region_id == region_id:
+                    if sid in scalar_shared_sids:
+                        if not _value_matches_bounded_scalar_contract(value):
+                            raise PhysicalPlanRequiredError(
+                                f"governed scalar shared value for plan_ref {sid!r} "
+                                "does not match its bounded scalar plan contract"
+                            )
+                        # A proven same-region scalar has no panel residency.
+                        # Rebuild it as a literal; the fixed backend performs
+                        # its normal scalar broadcast without inventing a
+                        # transfer or panel representation.
+                        return PlanNode(op="literal", attrs={"value": value})
                     if not _value_matches_physical_representation(
                         value, regions[region_id].representation
                     ):
@@ -808,8 +916,15 @@ def _execute_ready_single_region_plan(
         actual_labels[region_id] = str(
             getattr(selected, "runtime_backend_label", "") or region.backend.value
         )
-        # Calling HybridBackend.execute here would re-run routing.
-        outputs[region_id] = selected.execute(lower(output_id), ctx)
+        # Calling HybridBackend.execute here would re-run routing. Bind the
+        # already-admitted concrete backend so cleaned operators cannot route
+        # again through the Hybrid "auto" label.
+        outputs[region_id] = _execute_fixed_backend(
+            selected,
+            lower(output_id),
+            ctx,
+            backend_label=actual_labels[region_id],
+        )
 
     actual_backend = actual_labels[root_region_id]
     runtime = dict(getattr(ctx, "runtime_stats", None) or {})
@@ -836,6 +951,8 @@ def _execute_ready_physical_shared_task(
     sid: str,
     backend: Any,
     ctx: ExecutionContext,
+    *,
+    admission_mode: str | None = None,
 ) -> Any:
     """Execute one optimizer-declared bound shared task on its fixed backend."""
     shared_nodes = getattr(optimization, "logical_shared_nodes", None) or {}
@@ -851,6 +968,7 @@ def _execute_ready_physical_shared_task(
         ctx,
         logical_root_id=str(sid),
         _allow_shared_root=True,
+        admission_mode=admission_mode,
     )
 
 
@@ -4059,6 +4177,7 @@ class FactorEngine:
         result_policy: str = "return",
         sink: Any | None = None,
         warmup_clusters: bool = False,
+        _compiled: tuple[Any, dict[str, AnalysisResult]] | None = None,
     ) -> dict[str, Any]:
         """多因子求值：默认全批 DAG、CSE 与资源受控自适应调度。
 
@@ -4088,8 +4207,29 @@ class FactorEngine:
             ``input_dq``、``backend_paths``、``plan_costs`` 等的字典。
         """
         from factor_engine.runtime.batch_service import execute_run_many
+        from factor_engine.planner.physical_lowerer import _get_adaptive_dag_width_limit
 
-        _assert_public_batch_authority(self)
+        _assert_public_batch_authority(self, research_physical_consumer=True)
+        if result_policy == "sink" and len(factors) > _get_adaptive_dag_width_limit():
+            from factor_engine.runtime.streaming_batch_service import execute_run_many_stream
+
+            return execute_run_many_stream(
+                self,
+                factors,
+                sink=sink,
+                _wave_runner="run_many",
+                perf=perf,
+                enable_cse=enable_cse,
+                auto_warmup=auto_warmup,
+                trim_warmup=trim_warmup,
+                market=market,
+                input_dq_check=input_dq_check,
+                input_dq_strict=input_dq_strict,
+                input_dq_thresholds=input_dq_thresholds,
+                pit_enforce=pit_enforce,
+                pit_forbid_forward_fill=pit_forbid_forward_fill,
+                warmup_clusters=warmup_clusters,
+            )
         return execute_run_many(
             self,
             factors,
@@ -4106,6 +4246,7 @@ class FactorEngine:
             result_policy=result_policy,
             sink=sink,
             warmup_clusters=warmup_clusters,
+            _compiled=_compiled,
         )
 
     def run_many_iter(
@@ -4170,6 +4311,7 @@ class FactorEngine:
         sink: Any | None = None,
         _execution_owner: dict[str, str] | None = None,
         _collect_fit_failure_snapshot: bool = False,
+        _compiled: tuple[Any, dict[str, AnalysisResult]] | None = None,
     ) -> dict[str, Any]:
         """多因子求值：共享子树串行、因子根并行。
 
@@ -4210,6 +4352,7 @@ class FactorEngine:
             sink=sink,
             _execution_owner=_execution_owner,
             _collect_fit_failure_snapshot=_collect_fit_failure_snapshot,
+            _compiled=_compiled,
         )
 
     def run_many_stream(

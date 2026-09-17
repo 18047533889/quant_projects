@@ -69,8 +69,15 @@ def test_elementwise_operator_is_sql_capable(name: str) -> None:
 
 def test_stateful_operators_not_sql_lowered() -> None:
     """Stateful / aggregation kernels are intentionally not SQL-lowered."""
-    for name in ("ts_kalman_level", "ts_garch_vol_forecast", "ts_permutation_entropy",
-                 "intra_realized_skewness", "panel_rolling_pca_loading"):
+    expected_ops = {
+        "ts_kalman_level": "ts_kalman_level",
+        "ts_garch_vol_forecast": "ts_garch_next_vol_forecast",
+        "ts_permutation_entropy": "ts_permutation_entropy",
+        "intra_realized_skewness": "intra_realized_skewness",
+        "panel_rolling_pca_loading": "panel_rolling_pca_loading",
+    }
+    for name, expected_op in expected_ops.items():
         plan = PlanNode(op=name, inputs=[_col("x")], attrs={})
         optimized = Optimizer().optimize(plan)
-        assert optimized.op == name, f"{name} should not lower"
+        assert optimized.op == expected_op, f"{name}: expected {expected_op}, got {optimized.op}"
+        assert not is_sql_capable(optimized), f"{name} should not be SQL-capable"

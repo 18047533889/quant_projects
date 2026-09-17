@@ -9,6 +9,7 @@ from factor_engine.api.factor import Factor
 from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 from factor_engine.backend.factory import build_backend
 from factor_engine.planner.sql_io import plan_is_fully_sql, should_skip_column_prefetch
+from factor_engine.planner.sql_lowerer import lower_to_physical_plan
 from factor_engine.runtime.engine import FactorEngine
 from tests.helpers import InMemorySeriesSource
 
@@ -28,17 +29,19 @@ def _compile_plan(expr):
 
 def test_rank_ts_mean_is_fully_sql():
     plan = _compile_plan(rank(ts_mean(col("close"), 3)))
-    assert plan_is_fully_sql(plan)
+    assert lower_to_physical_plan(plan, mode="research").fully_sql
+    assert not plan_is_fully_sql(plan)  # uncertified SQL is production-fail-closed
 
 
 def test_ts_sharpe_is_fully_sql():
     plan = _compile_plan(ts_sharpe(col("ret"), 20))
-    assert plan_is_fully_sql(plan)
+    assert lower_to_physical_plan(plan, mode="research").fully_sql
+    assert not plan_is_fully_sql(plan)  # uncertified SQL is production-fail-closed
 
 
 def test_should_skip_prefetch_without_dq():
     plan = _compile_plan(rank(ts_mean(col("close"), 3)))
-    assert should_skip_column_prefetch([plan], input_dq_check=False)
+    assert not should_skip_column_prefetch([plan], input_dq_check=False)
 
 
 def test_should_not_skip_prefetch_when_dq_enabled():

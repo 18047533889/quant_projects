@@ -1,0 +1,206 @@
+{
+  "evidence": "evidence/factor_catalog_20260916/r19-combined-r5.jsonl.gz",
+  "total_failed": 1011,
+  "counts": {
+    "参数名、数量、范围或类型错误": 181,
+    "表达式语法、文字占位或参数数量限制": 287,
+    "字段未绑定：缺少字段、来源表或指数身份；不等于已证实无数据": 295,
+    "NotImplementedError": 6,
+    "输入语义或单位不匹配": 24,
+    "未注册算子或旧名称": 218
+  },
+  "examples": {
+    "参数名、数量、范围或类型错误": [
+      {
+        "source_row": 10300,
+        "id": "cold19_9da419284861f20f",
+        "current_formula": "multiply(rank(state_episode_excursion_balance(subtract(exp(ts_sum(log(add(ret, 1.0)), 5)), 1.0), ts_hysteresis_state(ts_zscore(turnover_ratio, 60), upper=1.25, lower=0.35), turnover_ratio)), rank(neg(amihud_illiquidity(ret, close, volume, 20))))",
+        "error": "OperatorParameterError: state_episode_excursion_balance: received 3 positional arguments but declares 2 parameters ['x', 'state']; extra positional arguments are rejected unless the operator declares variadic"
+      },
+      {
+        "source_row": 26613,
+        "id": "cold_r26_0e3b20a3c086566f1f",
+        "current_formula": "rank(where(or_(gt(cs_pct_rank(ts_sharpe(ret, 60)), 0.7), lt(cs_pct_rank(price_impact(ret, amount, 20)), 0.3)), signed_sqrt(cs_shrinkage_mahalanobis(safe_div_null(net_profit, market_cap), pb_ratio, log_positive_or_nan(market_cap), shrinkage=0.2)), multiply(cs_shrinkage_mahalanobis(safe_div_null(net_profit, market_cap), pb_ratio, log_positive_or_nan(market_cap), shrinkage=0.2), 0.25)))",
+        "error": "OperatorParameterError: cs_shrinkage_mahalanobis: missing required parameters ['f4']"
+      },
+      {
+        "source_row": 26744,
+        "id": "cold_r26_0b4ce4c3459ae68226",
+        "current_formula": "rank(add(multiply(cs_rank_gaussian(rank(rank(state_episode_excursion_balance(subtract(exp(ts_sum(log(add(ret, 1.0)), 5)), 1.0), ts_hysteresis_state(ts_zscore(ts_std(ret, 20), 60), upper=1.25, lower=0.35), turnover_ratio))), 'blom'), cs_pct_rank(turnover_zscore(turnover_ratio, 20))), neg(multiply(abs(rank(rank(state_episode_excursion_balance(subtract(exp(ts_sum(log(add(ret, 1.0)), 5)), 1.0), ts_hysteresis_state(ts_zscore(ts_std(ret, 20), 60), upper=1.25, lower=0.35), turnover_ratio)))), cs_pct_rank(ts_spectral_entropy(ret, window=60))))))",
+        "error": "OperatorParameterError: state_episode_excursion_balance: received 3 positional arguments but declares 2 parameters ['x', 'state']; extra positional arguments are rejected unless the operator declares variadic"
+      },
+      {
+        "source_row": 53433,
+        "id": "cold_54c1c5b0e9a65d23",
+        "current_formula": "rank(safe_div(add(cs_pct_rank(cs_rank_copula_entropy(subtract(exp(ts_sum(log(add(ret, 1.0)), 20)), 1.0), turnover_ratio, grid=10)), cs_pct_rank(subtract(exp(ts_sum(log(add(ret, 1.0)), 20)), 1.0))), add(abs(price_impact(ret, amount, 20)), 1.0)))",
+        "error": "OperatorParameterError: cs_rank_copula_entropy.grid: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): cs_rank_copula_entropy.grid [planning]: grid=10 is not an allowed choice [4, 8, 16]"
+      },
+      {
+        "source_row": 53434,
+        "id": "cold_798fef8a851fa59c",
+        "current_formula": "rank(safe_div(add(cs_pct_rank(cs_rank_copula_entropy(subtract(exp(ts_sum(log(add(ret, 1.0)), 20)), 1.0), turnover_ratio, grid=10)), cs_pct_rank(roe)), add(abs(price_impact(ret, amount, 20)), 1.0)))",
+        "error": "OperatorParameterError: cs_rank_copula_entropy.grid: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): cs_rank_copula_entropy.grid [planning]: grid=10 is not an allowed choice [4, 8, 16]"
+      }
+    ],
+    "表达式语法、文字占位或参数数量限制": [
+      {
+        "source_row": 25202,
+        "id": "cold_r26_9cbeea2adf23463d26",
+        "current_formula": "rank(where(or_(and_(gt(cs_pct_rank(ts_sharpe(ret, 60)), 0.65), lt(cs_pct_rank(ts_kurt(ret, 60)), 0.70)), and_(gt(cs_pct_rank(efficiency_ratio(close, 20)), 0.65), lt(cs_pct_rank(price_impact(ret, amount, 20)), 0.65))), where(gt(rank(subtract(ts_topk_mean(ret, 20, 2), ts_bottomk_mean(ret, 20, 2))), 0.8), neg(rank(subtract(rank(safe_div(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), add(abs(ts_mean(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), 40)), 1e-08))), rank(subtract(rank(ts_turnover_holding_age(close, turnover_ratio, window=20)), rank(multiply(safe_div_null(1.0, pb_ratio), ts_sum(log(add(ret, 1.0)), 20)))))))), rank(subtract(rank(safe_div(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), add(abs(ts_mean(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), 40)), 1e-08))), rank(subtract(rank(ts_turnover_holding_age(close, turnover_ratio, window=20)), rank(multiply(safe_div_null(1.0, pb_ratio), ts_sum(log(add(ret, 1.0)), 20)))))))), multiply(where(gt(rank(subtract(ts_topk_mean(ret, 20, 2), ts_bottomk_mean(ret, 20, 2))), 0.8), neg(rank(subtract(rank(safe_div(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), add(abs(ts_mean(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), 40)), 1e-08))), rank(subtract(rank(ts_turnover_holding_age(close, turnover_ratio, window=20)), rank(multiply(safe_div_null(1.0, pb_ratio), ts_sum(log(add(ret, 1.0)), 20)))))))), rank(subtract(rank(safe_div(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), add(abs(ts_mean(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), 40)), 1e-08))), rank(subtract(rank(ts_turnover_holding_age(close, turnover_ratio, window=20)), rank(multiply(safe_div_null(1.0, pb_ratio), ts_sum(log(add(ret, 1.0)), 20)))))))), 0.25)))",
+        "error": "DSLParseError: expression exceeds ComplexityBudget.max_ast_nodes=256"
+      },
+      {
+        "source_row": 25214,
+        "id": "cold_r26_7247e08b6d1a0a5963",
+        "current_formula": "rank(where(or_(and_(gt(cs_pct_rank(ts_sharpe(ret, 60)), 0.65), lt(cs_pct_rank(ts_kurt(ret, 60)), 0.70)), and_(gt(cs_pct_rank(efficiency_ratio(close, 20)), 0.65), lt(cs_pct_rank(price_impact(ret, amount, 20)), 0.65))), where(and_(gt(abs(zscore(safe_div_null(subtract(ts_sum(maximum(ts_delta(close, 1), 0.0), 20), ts_sum(maximum(neg(ts_delta(close, 1)), 0.0), 20)), add(ts_sum(abs(ts_delta(close, 1)), 20), 1e-08)))), 1.0), gt(abs(zscore(safe_div_null(subtract(ts_sum(maximum(ts_delta(volume, 1), 0.0), 20), ts_sum(maximum(neg(ts_delta(volume, 1)), 0.0), 20)), add(ts_sum(abs(ts_delta(volume, 1)), 20), 1e-08)))), 1.0)), multiply(zscore(safe_div_null(subtract(ts_sum(maximum(ts_delta(close, 1), 0.0), 20), ts_sum(maximum(neg(ts_delta(close, 1)), 0.0), 20)), add(ts_sum(abs(ts_delta(close, 1)), 20), 1e-08))), zscore(safe_div_null(subtract(ts_sum(maximum(ts_delta(volume, 1), 0.0), 20), ts_sum(maximum(neg(ts_delta(volume, 1)), 0.0), 20)), add(ts_sum(abs(ts_delta(volume, 1)), 20), 1e-08)))), 0.0), multiply(where(and_(gt(abs(zscore(safe_div_null(subtract(ts_sum(maximum(ts_delta(close, 1), 0.0), 20), ts_sum(maximum(neg(ts_delta(close, 1)), 0.0), 20)), add(ts_sum(abs(ts_delta(close, 1)), 20), 1e-08)))), 1.0), gt(abs(zscore(safe_div_null(subtract(ts_sum(maximum(ts_delta(volume, 1), 0.0), 20), ts_sum(maximum(neg(ts_delta(volume, 1)), 0.0), 20)), add(ts_sum(abs(ts_delta(volume, 1)), 20), 1e-08)))), 1.0)), multiply(zscore(safe_div_null(subtract(ts_sum(maximum(ts_delta(close, 1), 0.0), 20), ts_sum(maximum(neg(ts_delta(close, 1)), 0.0), 20)), add(ts_sum(abs(ts_delta(close, 1)), 20), 1e-08))), zscore(safe_div_null(subtract(ts_sum(maximum(ts_delta(volume, 1), 0.0), 20), ts_sum(maximum(neg(ts_delta(volume, 1)), 0.0), 20)), add(ts_sum(abs(ts_delta(volume, 1)), 20), 1e-08)))), 0.0), 0.25)))",
+        "error": "DSLParseError: expression exceeds ComplexityBudget.max_ast_nodes=256"
+      },
+      {
+        "source_row": 95961,
+        "id": "R65AG_00388",
+        "current_formula": "multiply/safe_div_null [ts_turnover_profit_share × momentum]",
+        "error": "DSLParseError: Invalid expression syntax: multiply/safe_div_null [ts_turnover_profit_share × momentum]"
+      },
+      {
+        "source_row": 95962,
+        "id": "R65AG_00389",
+        "current_formula": "multiply/safe_div_null [ts_turnover_profit_share × short-term reversal]",
+        "error": "DSLParseError: Invalid expression syntax: multiply/safe_div_null [ts_turnover_profit_share × short-term reversal]"
+      },
+      {
+        "source_row": 95963,
+        "id": "R65AG_00390",
+        "current_formula": "multiply/safe_div_null [ts_turnover_near_cost_mass × breakout]",
+        "error": "DSLParseError: Invalid expression syntax: multiply/safe_div_null [ts_turnover_near_cost_mass × breakout]"
+      }
+    ],
+    "字段未绑定：缺少字段、来源表或指数身份；不等于已证实无数据": [
+      {
+        "source_row": 46706,
+        "id": "R34_60ee2e18371b1991",
+        "current_formula": "multiply(rank(event_level_survival_share(ashare_limit_down_touch(field(\"low\", table=\"StockDailyBar\"), field(\"low_limit\", table=\"StockDailyBar\"), 0.005), low_limit, close, 60, 'down', 0.005)), rank(neg(SHORT)))",
+        "error": "ValueError: FIELD_BINDING_FAILED: [{\"input\": \"SHORT\", \"reason\": \"FIELD_RESOLUTION_FAILED\", \"detail\": \"KeyError: \\\"unknown field 'SHORT'\\\"\"}]"
+      },
+      {
+        "source_row": 46708,
+        "id": "R34_9b63399033d389b0",
+        "current_formula": "where(gt(ts_zscore(event_level_survival_share(ashare_limit_down_touch(field(\"low\", table=\"StockDailyBar\"), field(\"low_limit\", table=\"StockDailyBar\"), 0.005), low_limit, close, 60, 'down', 0.005), 60), 0.0), rank(neg(SHORT)), neg(rank(ts_std(ret, 20))))",
+        "error": "ValueError: FIELD_BINDING_FAILED: [{\"input\": \"SHORT\", \"reason\": \"FIELD_RESOLUTION_FAILED\", \"detail\": \"KeyError: \\\"unknown field 'SHORT'\\\"\"}]"
+      },
+      {
+        "source_row": 46710,
+        "id": "R34_238344c3538b3f75",
+        "current_formula": "ts_corr(event_level_survival_share(ashare_limit_down_touch(field(\"low\", table=\"StockDailyBar\"), field(\"low_limit\", table=\"StockDailyBar\"), 0.005), low_limit, close, 60, 'down', 0.005), neg(SHORT), 60)",
+        "error": "ValueError: FIELD_BINDING_FAILED: [{\"input\": \"SHORT\", \"reason\": \"FIELD_RESOLUTION_FAILED\", \"detail\": \"KeyError: \\\"unknown field 'SHORT'\\\"\"}]"
+      },
+      {
+        "source_row": 54777,
+        "id": "cold_c214b76051943f5e",
+        "current_formula": "ts_quantile_transport_slope(ts_corr(cs_actual_lof_score(ts_sum(ret, 20), ts_std(ret, 20), log_positive_or_nan(market_cap), k=20), neg(SHORT), 60), recent_window=20, old_window=40)",
+        "error": "ValueError: FIELD_BINDING_FAILED: [{\"input\": \"SHORT\", \"reason\": \"FIELD_RESOLUTION_FAILED\", \"detail\": \"KeyError: \\\"unknown field 'SHORT'\\\"\"}]"
+      },
+      {
+        "source_row": 60909,
+        "id": "cold_7e7b9f808485eac2",
+        "current_formula": "ts_quantile_transport_slope(ts_corr(ts_endpoint_deviation(ret, window=20), neg(SHORT), 60), recent_window=20, old_window=40)",
+        "error": "ValueError: FIELD_BINDING_FAILED: [{\"input\": \"SHORT\", \"reason\": \"FIELD_RESOLUTION_FAILED\", \"detail\": \"KeyError: \\\"unknown field 'SHORT'\\\"\"}]"
+      }
+    ],
+    "NotImplementedError": [
+      {
+        "source_row": 95804,
+        "id": "R65AG_00231",
+        "current_formula": "ts_expectile(x=field('ret', table='StockDailyBarAdj'), tau=low)",
+        "error": "NotImplementedError: cleaned op 'ts_expectile' kwargs must be literals, got 'tau'"
+      },
+      {
+        "source_row": 95805,
+        "id": "R65AG_00232",
+        "current_formula": "ts_expectile(x=field('ret', table='StockDailyBarAdj'), tau=high)",
+        "error": "NotImplementedError: cleaned op 'ts_expectile' kwargs must be literals, got 'tau'"
+      },
+      {
+        "source_row": 95807,
+        "id": "R65AG_00234",
+        "current_formula": "ts_expectile(x=overnight_return(open, pre_close), tau=low)",
+        "error": "NotImplementedError: cleaned op 'ts_expectile' kwargs must be literals, got 'tau'"
+      },
+      {
+        "source_row": 95808,
+        "id": "R65AG_00235",
+        "current_formula": "ts_expectile(x=overnight_return(open, pre_close), tau=high)",
+        "error": "NotImplementedError: cleaned op 'ts_expectile' kwargs must be literals, got 'tau'"
+      },
+      {
+        "source_row": 95810,
+        "id": "R65AG_00237",
+        "current_formula": "ts_expectile(x=open_close_return(open, close), tau=low)",
+        "error": "NotImplementedError: cleaned op 'ts_expectile' kwargs must be literals, got 'tau'"
+      }
+    ],
+    "输入语义或单位不匹配": [
+      {
+        "source_row": 96423,
+        "id": "R65AG_00850",
+        "current_formula": "ts_spectral_entropy(x=turnover)",
+        "error": "TypedInputContractError: ts_spectral_entropy requires typed input in ['ReturnDecimal']; got 'NonNegativeActivity'"
+      },
+      {
+        "source_row": 96424,
+        "id": "R65AG_00851",
+        "current_formula": "ts_spectral_entropy(x=relative_volume(field('volume', table='StockDailyBarAdj'), 20))",
+        "error": "TypedInputContractError: ts_spectral_entropy requires typed input in ['ReturnDecimal']; got 'NonNegativeActivity'"
+      },
+      {
+        "source_row": 96425,
+        "id": "R65AG_00852",
+        "current_formula": "ts_spectral_entropy(x=amihud_illiquidity(field('ret', table='StockDailyBarAdj'), field('close', table='StockDailyBarAdj'), field('volume', table='StockDailyBarAdj'), 20))",
+        "error": "TypedInputContractError: ts_spectral_entropy requires typed input in ['ReturnDecimal']; got 'MIXED'"
+      },
+      {
+        "source_row": 96426,
+        "id": "R65AG_00853",
+        "current_formula": "ts_spectral_entropy(x=atr_pct(high, low, close, window=20))",
+        "error": "TypedInputContractError: ts_spectral_entropy requires typed input in ['ReturnDecimal']; got 'PriceContinuous'"
+      },
+      {
+        "source_row": 97717,
+        "id": "R65X_00899",
+        "current_formula": "multiply(event_historical_response_mean(field('ret', table='StockDailyBarAdj'), index_entry_exit_event(IndexSymbol)), TurnoverRatio)",
+        "error": "TypedInputContractError: operator 'event_historical_response_mean' parameter 'event' declares input_types=['EventBool', 'MaskBool'], got 'DailySeries' on 'input[1]' (typed-IR #269)"
+      }
+    ],
+    "未注册算子或旧名称": [
+      {
+        "source_row": 97938,
+        "id": "R65X_01120",
+        "current_formula": "multiply(holder_concentration_change(ShareholderId,ShareRatio),safe_div_null(AccountReceivable,TotalAssets))",
+        "error": "DSLUnknownOperatorError: Unsupported function: holder_concentration_change"
+      },
+      {
+        "source_row": 97939,
+        "id": "R65X_01121",
+        "current_formula": "multiply(holder_concentration_change(ShareholderId,ShareRatio),safe_div_null(Inventories,TotalAssets))",
+        "error": "DSLUnknownOperatorError: Unsupported function: holder_concentration_change"
+      },
+      {
+        "source_row": 97940,
+        "id": "R65X_01122",
+        "current_formula": "multiply(holder_concentration_change(ShareholderId,ShareRatio),safe_div_null(GoodWill,TotalAssets))",
+        "error": "DSLUnknownOperatorError: Unsupported function: holder_concentration_change"
+      },
+      {
+        "source_row": 97941,
+        "id": "R65X_01123",
+        "current_formula": "multiply(holder_concentration_change(ShareholderId,ShareRatio),safe_div_null(OtherNonCurrentFinancialAssets,TotalAssets))",
+        "error": "DSLUnknownOperatorError: Unsupported function: holder_concentration_change"
+      },
+      {
+        "source_row": 97942,
+        "id": "R65X_01124",
+        "current_formula": "multiply(holder_concentration_change(ShareholderId,ShareRatio),safe_div_null(ShorttermLoan,TotalAssets))",
+        "error": "DSLUnknownOperatorError: Unsupported function: holder_concentration_change"
+      }
+    ]
+  }
+}

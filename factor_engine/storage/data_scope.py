@@ -164,6 +164,15 @@ def compute_data_scope(
     """
     payload: dict[str, Any] = {"source_type":f"{type(data_source).__module__}.{type(data_source).__qualname__}"}
     has_stable_identity=False
+    # ``snapshot_token`` is the public, authoritative read epoch for sources
+    # whose cheap manifest marker can advance while ``data_snapshot_id`` stays
+    # unchanged. Only a concrete non-empty token is evidence; None, an
+    # unverifiable SnapshotState-like object, or another opaque value must not
+    # turn an otherwise ephemeral source into a reusable cache namespace.
+    snapshot_token = getattr(data_source, "snapshot_token", None)
+    if isinstance(snapshot_token, str) and snapshot_token.strip():
+        payload["snapshot_token"] = snapshot_token
+        has_stable_identity = True
     for attr in (
         "dataset",
         "start_date",

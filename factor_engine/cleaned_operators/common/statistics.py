@@ -33,6 +33,7 @@ from factor_engine.cleaned_operators._causal import (
     expanding_two_sample,
     expanding_univariate,
 )
+from factor_engine.cleaned_operators.common.strict_params import strict_int
 
 import numpy as np
 import pandas as pd
@@ -81,6 +82,15 @@ def _mean_abs_dev_1d(arr) -> float:
     a = np.asarray(arr, dtype=float)
     a = a[np.isfinite(a)]
     if a.size == 0:
+        return np.nan
+    mu = float(a.mean())
+    return float(np.mean(np.abs(a - mu)))
+
+
+def _strict_mean_abs_dev_1d(arr) -> float:
+    """单窗口平均绝对离差；任一 NaN/Inf 严格污染当前窗口。"""
+    a = np.asarray(arr, dtype=float)
+    if a.size == 0 or not np.isfinite(a).all():
         return np.nan
     mu = float(a.mean())
     return float(np.mean(np.abs(a - mu)))
@@ -413,6 +423,38 @@ class MeanAbsoluteDeviation(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
         w = int(window)
         return x.rolling(window=w, min_periods=1).apply(_mean_abs_dev_1d, raw=True)
+
+
+# canonical=ts_mean_abs_deviation_strict backend=pandas_numpy
+@register_operator(
+    name="ts_mean_abs_deviation_strict",
+    canonical="ts_mean_abs_deviation_strict",
+    backend="pandas_numpy",
+)
+class StrictMeanAbsoluteDeviation(SeriesOperator):
+    """严格非有限值传播的滚动平均绝对离差。"""
+
+    metadata = OperatorMetadata(
+        name="ts_mean_abs_deviation_strict",
+        category="statistics",
+        description="平均绝对离差；NaN/Inf 严格污染当前窗口",
+        examples=["ts_mean_abs_deviation_strict(returns, 20)"],
+        param_names=["x", "window"],
+        return_type="series",
+        tags=["statistics", "mad", "deviation", "mean", "strict"],
+        param_specs={
+            "window": ParamSpec(
+                dtype=int, min=1, default=20,
+                history_semantics="max_rows", param_role=ParamRole.HORIZON,
+            ),
+        },
+    )
+
+    def _calculate_series(self, x: pd.DataFrame, window: int = 20, **kwargs) -> pd.DataFrame:
+        w = strict_int(window, "window", minimum=1)
+        return x.rolling(window=w, min_periods=1).apply(
+            _strict_mean_abs_dev_1d, raw=True
+        )
 
 
 # canonical=ts_median_abs_deviation backend=pandas_numpy selected=ts_median_abs_deviation source=statistics/basic_stats.py
@@ -2110,6 +2152,10 @@ OperatorRegistry.register_alias("ts_median_absolute_deviation", "ts_median_abs_d
 try:
     from factor_engine.cleaned_operators.operator_surface import extend_extended_only
 
-    extend_extended_only(["ts_mean_abs_deviation", "ts_median_abs_deviation"])
+    extend_extended_only([
+        "ts_mean_abs_deviation",
+        "ts_mean_abs_deviation_strict",
+        "ts_median_abs_deviation",
+    ])
 except ImportError:  # pragma: no cover - surface always present in-tree
     pass

@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "data_access/tests/unit/test_cos_financial_runtime_schema.py", "data_access/tests/unit/test_financial_update_time_timestamptz.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 357625856, "sampling_seconds": 0.1, "seconds": 3.5117778938729316, "test_guard_reason": null, "hard_memory_cap": false}

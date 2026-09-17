@@ -1,0 +1,37 @@
+{
+  "scope": "partial implementation and research smoke; not production acceptance",
+  "workspace": "server-c:/home/sunhaiwei/quant_projects",
+  "source_records": 114132,
+  "factor_ids": 113893,
+  "latest_checkpoint": "factor_catalog_review_checkpoint_r3.csv.gz",
+  "checkpoint_validation": "review-checkpoint-r3-validation.json",
+  "latest_static": "full-parse-official-limit.jsonl.gz",
+  "compile_evidence": "compile-full-latest.jsonl.gz",
+  "daily_sweep_resume_offset": 2665,
+  "offset_semantics": "zero-based JSONL index; original CSV source_row = offset + 2",
+  "latest_daily_sweep": "resume-daily2456-next100.ledger.jsonl",
+  "latest_daily_sweep_in_checkpoint": false,
+  "verified_tests": {
+    "root_core": "root-final-targeted-regressions.log: 21 passed",
+    "optional_cs": "robust-cs-optional-polars-parity.out: 55 passed",
+    "huber_contract": "huber-prior-finite-history.out: 45 passed",
+    "recipe_migrations": "official-limit-migration-tests-r3.log: 28 passed",
+    "exporter": "export-provenance-asserted-tests.log: 10 passed"
+  },
+  "remaining": [
+    "113893 factors have NOT all been executed; checkpoint execution status is historical formula-matched evidence, not current-code certification",
+    "Minute rows24/25 pass admission and joins but latest observed executions remain ALL_NONFINITE; r6_intraday_next is investigating first value-loss stage",
+    "Raw official-limit SourceRef binds ashare_stock_daily but runtime queried adjusted columns; row2205 remains failed; same agent owns LQTP routing",
+    "TSI/TSI_signal import-order metadata and parity remain under r6_alpha investigation; do not claim clean",
+    "Two SIGSEGV processes were observed; subsequent serial, batch and forced-abort reproduction runs succeeded but root cause is unconfirmed",
+    "Missing financial/undefined recipe definitions remain unresolved; do not invent them",
+    "DEMA/TEMA now require authoritative full-history origin; none is declared by current daily adjusted source, so research warns and production fails closed"
+  ],
+  "constraints": [
+    "No branch/worktree/repo copy",
+    "No commit/push/deploy/production factor publication",
+    "Preserve concurrent changes",
+    "Subagents GPT-5.6-sol only",
+    "Owned tiny patches cleaned; keep unique evidence"
+  ]
+}

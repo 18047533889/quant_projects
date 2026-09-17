@@ -83,7 +83,7 @@ class TransferEdgeTelemetry:
     target_representation: str
     # 预测 vs 实际
     predicted_bytes: int
-    actual_bytes: int
+    actual_bytes: int | None
     predicted_ms: float
     actual_ms: float
     # 转换细节
@@ -94,12 +94,15 @@ class TransferEdgeTelemetry:
     requires_reshape: bool
     actual_reshape_ms: float
     # 数据质量
-    row_count: int
-    column_count: int
+    row_count: int | None
+    column_count: int | None
     schema_version: str
     # 时间戳
     transfer_started_at: float
     transfer_finished_at: float
+    # Payload footprint is distinct from bytes copied by an identity edge.
+    payload_bytes: int | None = None
+    actual_bytes_basis: str = "unspecified"
 
 
 @dataclass

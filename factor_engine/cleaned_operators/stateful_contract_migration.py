@@ -13,7 +13,11 @@ single authority), never the legacy set.
 """
 from __future__ import annotations
 
-from factor_engine.runtime.execution_contract import declare_stateful
+from factor_engine.runtime.execution_contract import (
+    ExecutionContractResolutionError,
+    declare_stateful,
+    execution_contract_overrides,
+)
 
 # Checkpoint-capable recursive kernels (segmented execution supported) — these
 # are already backed by runtime.stateful_incremental checkpoint restore.
@@ -71,15 +75,39 @@ _R20_DERIVATIVE_RECURSIVE: tuple[str, ...] = (
 _APPLIED = False
 
 
-def apply_stateful_contract_migration() -> None:
-    """Declare explicit execution contracts for legacy recursive kernels."""
-    global _APPLIED
-    if _APPLIED:
+def _declare_expected(name: str, *, chunking: str) -> None:
+    """Restore one declaration if a runtime-contract lifecycle reset removed it."""
+    expected = {
+        "state_model": "recursive",
+        "chunking": chunking,
+        "checkpoint_schema": None,
+        "minimum_history": 0,
+        "history_kind": "full_history",
+        "history_count": None,
+    }
+    current = execution_contract_overrides().get(name)
+    if current is None:
+        declare_stateful(name, state_model="recursive", chunking=chunking)
         return
+    if current != expected:
+        raise ExecutionContractResolutionError(
+            f"stateful migration contract drift for {name!r}: "
+            f"expected {expected!r}, got {current!r}"
+        )
+
+
+def apply_stateful_contract_migration() -> None:
+    """Declare explicit execution contracts for legacy recursive kernels.
+
+    ``_APPLIED`` is observability only.  Import/bootstrap paths may rebuild the
+    runtime declaration table while this module stays imported, so an early
+    return based only on that boolean can silently lose every declaration.
+    """
+    global _APPLIED
     for name in _CHECKPOINT_RECURSIVE:
-        declare_stateful(name, state_model="recursive", chunking="checkpoint")
+        _declare_expected(name, chunking="checkpoint")
     for name in _FULL_HISTORY_RECURSIVE:
-        declare_stateful(name, state_model="recursive", chunking="required_full_history")
+        _declare_expected(name, chunking="required_full_history")
     for name in _R20_DERIVATIVE_RECURSIVE:
-        declare_stateful(name, state_model="recursive", chunking="required_full_history")
+        _declare_expected(name, chunking="required_full_history")
     _APPLIED = True

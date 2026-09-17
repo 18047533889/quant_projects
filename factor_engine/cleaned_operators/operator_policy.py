@@ -1532,6 +1532,9 @@ _FISCAL_EVENT_PACK_POLICIES = {
     "cash_flow_lifecycle_stage": {"scope": "fundamental_period", "pit_safe": True},
     "fiscal_perpetual_inventory": {"scope": "fundamental_period", "pit_safe": True},
     "fiscal_standardized_surprise": {"scope": "fundamental_period", "pit_safe": True},
+    "ashare_fiscal_quarter_from_period_end": {
+        "scope": "fundamental_period", "pit_safe": True,
+    },
     "fiscal_sign_consistency": {"scope": "fundamental_period", "pit_safe": True},
     "fiscal_change_direction_agreement": {"scope": "fundamental_period", "pit_safe": True},
     "fiscal_sign_agreement": {"scope": "fundamental_period", "pit_safe": True},

@@ -21,7 +21,7 @@ import json
 import math
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
 from factor_engine.backend.contracts import ExecutionKind
@@ -63,6 +63,169 @@ def _numba_pi_id(op: str, kernel_impl_id: str) -> str:
         ).encode("utf-8")
     ).hexdigest()
     return f"{_NUMBA_PI_ID_PREFIX}{digest}"
+
+
+def _canonical_cost_op(node: PlanNode) -> str | None:
+    """Return this graph node's cost operator without re-walking its subtree."""
+    op = str(getattr(node, "op", "") or "")
+    if not op or op in {"column", "literal", "plan_ref", "materialized_series"}:
+        return None
+    try:
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+        return str(OperatorRegistry._aliases.get(op, op))
+    except Exception:
+        return op
+
+
+def _declared_scalar_parameter_positions(node: PlanNode) -> frozenset[int]:
+    """Return positional controls proven by every registered implementation."""
+    canonical = _canonical_cost_op(node)
+    if canonical is None:
+        return frozenset()
+    try:
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+        operators, _aliases, _catalog = OperatorRegistry._read_state()
+        implementations = tuple(operators.get(canonical, {}).values())
+    except Exception:
+        return frozenset()
+    declarations: list[frozenset[int]] = []
+    for implementation in implementations:
+        metadata = getattr(implementation, "metadata", None)
+        names = tuple(getattr(metadata, "param_names", None) or ())
+        scalars = frozenset(getattr(metadata, "scalar_params", None) or ())
+        if not names or not scalars:
+            return frozenset()
+        declarations.append(frozenset(
+            index for index, name in enumerate(names) if name in scalars
+        ))
+    if not declarations or any(item != declarations[0] for item in declarations[1:]):
+        return frozenset()
+    return declarations[0]
+
+
+def _bounded_control_payload_bytes(value: Any, *, max_objects: int = 4096) -> int:
+    """Measure a validated list/tuple control payload; fail closed otherwise."""
+    stack = [(value, False)]
+    seen: set[int] = set()
+    active: set[int] = set()
+    references = 0
+    total = 0
+    while stack:
+        item, exiting = stack.pop()
+        item_id = id(item)
+        if exiting:
+            active.remove(item_id)
+            seen.add(item_id)
+            continue
+        if item_id in active:
+            return 0
+        if item_id in seen:
+            continue
+        if type(item) in (list, tuple):
+            references += len(item)
+            if references > max_objects:
+                return 0
+            total += int(sys.getsizeof(item))
+            active.add(item_id)
+            stack.append((item, True))
+            stack.extend((child, False) for child in reversed(item))
+        elif (
+            item is None
+            or type(item) in (bool, float, complex, str, bytes)
+            or type(item) is int and item.bit_length() <= 63
+        ):
+            total += int(sys.getsizeof(item))
+            seen.add(item_id)
+        else:
+            return 0
+    return max(1, total)
+
+
+# Only operators with fixed-size scalar outputs and exact input arity may seed
+# shape evidence without a panel/source input. Arbitrary operators over literal
+# children are not assumed scalar: they may expand vectors or change axis.
+_BOUNDED_SCALAR_ARITIES: dict[str, frozenset[int]] = {
+    "safe_div_null": frozenset({2}),
+    "divide": frozenset({2}),
+    "eq": frozenset({2}),
+    "ne": frozenset({2}),
+    "lt": frozenset({2}),
+    "le": frozenset({2}),
+    "gt": frozenset({2}),
+    "ge": frozenset({2}),
+    "and": frozenset({2}),
+    "or": frozenset({2}),
+    "not": frozenset({1}),
+    "is_null": frozenset({1}),
+    "is_finite": frozenset({1}),
+    "where": frozenset({3}),
+}
+
+
+def plan_proves_bounded_scalar(
+    plan: PlanNode,
+    shared_nodes: dict[str, PlanNode] | None = None,
+    *,
+    _memo: dict[int, bool] | None = None,
+) -> bool:
+    """Prove that a logical plan yields one bounded numeric/boolean scalar."""
+    definitions = shared_nodes or {}
+    memo = _memo if _memo is not None else {}
+    active: set[int] = set()
+    stack: list[tuple[PlanNode, bool]] = [(plan, False)]
+    while stack:
+        node, expanded = stack.pop()
+        node_key = id(node)
+        if node_key in memo:
+            continue
+        op = str(getattr(node, "op", "") or "")
+        attrs = dict(getattr(node, "attrs", None) or {})
+        inputs = tuple(getattr(node, "inputs", ()) or ())
+        if op == "plan_ref":
+            sid = str(attrs.get("sid") or "")
+            definition = definitions.get(sid)
+            dependencies = (definition,) if definition is not None else ()
+        else:
+            definition = None
+            dependencies = inputs
+        if not expanded:
+            if node_key in active:
+                return False
+            active.add(node_key)
+            stack.append((node, True))
+            for child in reversed(dependencies):
+                if id(child) not in memo:
+                    stack.append((child, False))
+            continue
+        active.remove(node_key)
+        if any(
+            attrs.get(key) is not None
+            for key in (
+                "execution_axis", "output_axis", "output_frequency",
+                "row_multiplier", "output_rows", "source_scope",
+                "dataset", "table",
+            )
+        ):
+            result = False
+        elif op == "literal":
+            value = attrs.get("value")
+            result = (
+                value is None
+                or type(value) in (bool, float, complex)
+                or type(value) is int and value.bit_length() <= 63
+            )
+        elif op == "plan_ref":
+            result = definition is not None and memo.get(id(definition), False)
+        else:
+            canonical = _canonical_cost_op(node) or op
+            result = (
+                len(inputs) in _BOUNDED_SCALAR_ARITIES.get(canonical, frozenset())
+                and all(memo.get(id(child), False) for child in inputs)
+            )
+        memo[node_key] = result
+    return memo.get(id(plan), False)
 
 
 @dataclass(frozen=True)
@@ -273,6 +436,8 @@ class PhysicalBatchGlobalOptimizer:
         shared_nodes: dict[str, PlanNode],
         node_graph: dict[str, list[str]],  # node_id -> [child_ids]
         ctx: Any,
+        *,
+        column_scan_costs: dict[str, Any] | None = None,
     ) -> BatchOptimizationResult:
         """MB-P1-009: Optimize backend assignment for entire batch.
 
@@ -286,7 +451,6 @@ class PhysicalBatchGlobalOptimizer:
             BatchOptimizationResult with physical plan and choices
         """
         optimization_started = time.monotonic()
-        from factor_engine.backend.plan_cost_router import plan_occurrences
         from factor_engine.backend.operator_cost import estimate_backend_cost
 
         # Discover the complete graph from PlanNode.inputs.  Caller-supplied
@@ -322,8 +486,14 @@ class PhysicalBatchGlobalOptimizer:
 
         for factor_id, root in roots.items():
             discover(root, factor_id)
-        for shared_id, shared_node in shared_nodes.items():
-            discover(shared_node, shared_id)
+        # The compiler may retain definitions that no selected root references.
+        # They are validation inventory, not executable physical work. Including
+        # them creates terminal regions with no path to a declared batch root.
+        shared_nodes = {
+            shared_id: shared_node
+            for shared_id, shared_node in shared_nodes.items()
+            if shared_id in all_nodes
+        }
         node_graph = discovered_graph
 
         # Count consumers for shared benefit calculation
@@ -354,12 +524,11 @@ class PhysicalBatchGlobalOptimizer:
         estimate_rows = rows or 0
         node_costs: dict[str, float] = {}
         for node_id, node in all_nodes.items():
-            occurrences = plan_occurrences(node)
-            if occurrences:
-                occ = occurrences[0]
+            canonical = _canonical_cost_op(node)
+            if canonical is not None:
                 # Estimate for pandas as baseline
                 cost = estimate_backend_cost(
-                    occ.canonical,
+                    canonical,
                     "pandas_numpy",
                     row_count_estimate=estimate_rows,
                 )
@@ -387,6 +556,7 @@ class PhysicalBatchGlobalOptimizer:
             global_rows=rows,
             global_bytes=estimated_bytes,
             global_memory=estimated_memory,
+            column_scan_costs=column_scan_costs,
         )
 
         # Solve one assignment problem over the complete discovered DAG.  A
@@ -395,8 +565,11 @@ class PhysicalBatchGlobalOptimizer:
         self._choices, optimization_basis, candidate_plan_count, selected_incumbent = self._optimize_graph(
             all_nodes, node_graph, estimate_rows, ctx, node_estimates
         )
-        per_node_choices = dict(self._choices)
+        self._co_locate_residency_neutral_nodes(
+            self._choices, all_nodes, node_graph, estimate_rows=estimate_rows, ctx=ctx
+        )
 
+        per_node_choices = dict(self._choices)
         # MB-P1-010, §44: Recompute shared benefit based on selected physical implementation.
         # The initial estimate used Pandas baseline costs; after physical assignment,
         # we recalculate avoided compute based on each shared node's selected backend cost.
@@ -694,7 +867,14 @@ class PhysicalBatchGlobalOptimizer:
                     kernel_signature=kernel_signature,
                 ))
         # Add DuckDB/ClickHouse/Q/Numba candidates
-        if supports_sql(op, mode=mode):
+        sql_data_plane_ready = False
+        try:
+            from factor_engine.backend.sql_pushdown.executor import extract_pushdown_context
+
+            sql_data_plane_ready = extract_pushdown_context(ctx) is not None
+        except Exception:
+            sql_data_plane_ready = False
+        if supports_sql(op, mode=mode) and sql_data_plane_ready:
             capability = capability_for(op, "duckdb_sql")
             candidates.append(NodeBackendChoice(
                 node_id=node_id,
@@ -1165,15 +1345,35 @@ class PhysicalBatchGlobalOptimizer:
         global_rows: int | None,
         global_bytes: int | None,
         global_memory: int | None,
+        column_scan_costs: dict[str, Any] | None = None,
     ) -> dict[str, tuple[int, int, int]]:
         """Collect node-specific row/byte/memory evidence without fabricating it."""
         estimates: dict[str, tuple[int, int, int]] = {}
-        source_ids = [
-            node_id
-            for node_id, node in all_nodes.items()
-            if getattr(node, "op", "") == "column"
-        ]
-        sole_source = source_ids[0] if len(source_ids) == 1 else None
+        root_id_set = set(roots)
+        consumer_edges: dict[str, list[tuple[str, int]]] = {
+            node_id: [] for node_id in all_nodes
+        }
+        parameter_positions: dict[str, frozenset[int]] = {}
+        for consumer_id, child_ids in node_graph.items():
+            positions = parameter_positions.setdefault(
+                consumer_id,
+                _declared_scalar_parameter_positions(all_nodes[consumer_id]),
+            )
+            for input_index, child_id in enumerate(child_ids):
+                if child_id in consumer_edges:
+                    consumer_edges[child_id].append((consumer_id, input_index))
+        declared_control_literals: dict[str, int] = {}
+        for node_id, node in all_nodes.items():
+            if getattr(node, "op", "") != "literal":
+                continue
+            value = dict(getattr(node, "attrs", None) or {}).get("value")
+            edges = consumer_edges[node_id]
+            if type(value) not in (list, tuple) or not edges:
+                continue
+            if all(index in parameter_positions[consumer] for consumer, index in edges):
+                payload_bytes = _bounded_control_payload_bytes(value)
+                if payload_bytes > 0:
+                    declared_control_literals[node_id] = payload_bytes
         for node_id, node in all_nodes.items():
             attrs = dict(getattr(node, "attrs", None) or {})
             def positive(*keys: str) -> int:
@@ -1188,16 +1388,247 @@ class PhysicalBatchGlobalOptimizer:
             rows = positive("estimated_rows", "row_count_estimate")
             byte_count = positive("estimated_bytes", "byte_count_estimate")
             memory = positive("estimated_memory_bytes", "memory_bytes_estimate")
-            if node_id in roots:
+            if getattr(node, "op", "") == "literal":
+                # A scalar literal is evidenced, not an unknown-size panel. It
+                # can become its own residency region when the same constant
+                # feeds consumers on different backends. Size the actual
+                # scalar payload; containers and arbitrary objects remain
+                # unknown rather than being mislabeled as one eight-byte value.
+                value = attrs.get("value")
+                scalar_literal = value is None or isinstance(
+                    value, (bool, int, float, complex, str, bytes)
+                )
+                if scalar_literal:
+                    scalar_bytes = max(1, int(sys.getsizeof(value)))
+                    rows = rows or 1
+                    byte_count = byte_count or scalar_bytes
+                    memory = memory or scalar_bytes
+                elif node_id in declared_control_literals:
+                    control_bytes = declared_control_literals[node_id]
+                    rows = rows or 1
+                    byte_count = byte_count or control_bytes
+                    memory = memory or control_bytes
+            if node_id in root_id_set:
                 rows = rows or int(global_rows or 0)
                 byte_count = byte_count or int(global_bytes or 0)
                 memory = memory or int(global_memory or 0)
-            if node_id == sole_source:
+            if getattr(node, "op", "") == "column":
+                name = str(attrs.get("name") or "")
+                scan_cost = (column_scan_costs or {}).get(name)
+                if scan_cost is not None:
+                    try:
+                        scan_rows = int(getattr(scan_cost, "estimated_rows", 0) or 0)
+                        scan_bytes = int(
+                            getattr(scan_cost, "projection_bytes", 0)
+                            or getattr(scan_cost, "selected_bytes", 0)
+                            or 0
+                        )
+                    except (TypeError, ValueError):
+                        scan_rows = scan_bytes = 0
+                    if scan_rows > 0 and scan_bytes > 0:
+                        rows = rows or scan_rows
+                        byte_count = byte_count or scan_bytes
+                        memory = memory or scan_bytes
+            # Ordinary columns belong to the anchor DataSource whose metadata
+            # produced the global estimate. Encoded SourceRefs name independent
+            # table/scope authorities and must carry their own estimates.
+            is_anchor_column = False
+            if getattr(node, "op", "") == "column":
+                from factor_engine.api.source_ref import looks_like_source_ref
+
+                name = str(attrs.get("name") or "")
+                is_anchor_column = (
+                    bool(name)
+                    and not looks_like_source_ref(name)
+                    and not any(
+                        attrs.get(key) is not None
+                        for key in (
+                            "source_scope", "dataset", "table", "source_ref",
+                            "execution_axis", "output_axis", "output_frequency",
+                            "row_multiplier", "output_rows",
+                        )
+                    )
+                )
+            if is_anchor_column:
                 rows = rows or int(global_rows or 0)
                 byte_count = byte_count or int(global_bytes or 0)
                 memory = memory or int(global_memory or 0)
             estimates[node_id] = (rows, byte_count, memory)
+        # Factor operators are index-preserving unless the logical node carries
+        # an explicit axis/granularity contract. Propagate only fully evidenced
+        # child shapes upward; never propagate from an unevidenced SourceRef.
+        # This covers CSE/shared intermediate regions without inventing a source
+        # estimate or borrowing the anchor estimate across tables.
+        consumers: dict[str, list[str]] = {node_id: [] for node_id in all_nodes}
+        remaining_children: dict[str, int] = {}
+        for node_id in all_nodes:
+            child_ids = tuple(node_graph.get(node_id, ()))
+            remaining_children[node_id] = len(child_ids)
+            for child_id in child_ids:
+                consumers[child_id].append(node_id)
+        ready = [
+            node_id for node_id, count in remaining_children.items() if count == 0
+        ]
+        from heapq import heapify, heappop, heappush
+
+        heapify(ready)
+        visited = 0
+        bounded_scalar: dict[str, bool] = {}
+        shape_neutral_literal: dict[str, bool] = {}
+        while ready:
+            node_id = heappop(ready)
+            visited += 1
+            node = all_nodes[node_id]
+            op = str(getattr(node, "op", "") or "")
+            attrs = dict(getattr(node, "attrs", None) or {})
+            if op == "literal":
+                value = attrs.get("value")
+                bounded_scalar[node_id] = (
+                    value is None
+                    or type(value) in (bool, float, complex)
+                    or type(value) is int and value.bit_length() <= 63
+                )
+                shape_neutral_literal[node_id] = (
+                    bounded_scalar[node_id]
+                    or type(value) in (str, bytes)
+                    or node_id in declared_control_literals
+                )
+            rows, byte_count, memory = estimates[node_id]
+            if not (rows > 0 and byte_count > 0 and memory > 0):
+                blocks_inference = (
+                    op
+                    in {"column", "literal", "resample", "aggregate"}
+                    or any(
+                        attrs.get(key) is not None
+                        for key in (
+                            "execution_axis", "output_axis", "output_frequency",
+                            "row_multiplier", "output_rows", "source_scope",
+                            "dataset", "table",
+                        )
+                    )
+                )
+                if not blocks_inference:
+                    all_child_ids = tuple(node_graph.get(node_id, ()))
+                    child_ids = tuple(
+                        child for child in node_graph.get(node_id, ())
+                        if not (
+                            getattr(all_nodes[child], "op", "") == "literal"
+                            and shape_neutral_literal.get(child, False)
+                        )
+                    )
+                    has_unknown_literal = any(
+                        getattr(all_nodes[child], "op", "") == "literal"
+                        and not shape_neutral_literal.get(child, False)
+                        for child in all_child_ids
+                    )
+                    child_estimates = [estimates[child] for child in child_ids]
+                    if op == "plan_ref":
+                        # Discovery adds the referenced SID as the plan_ref's
+                        # sole dependency. A ref is a shape alias, not an
+                        # operator that may widen/narrow its referenced value.
+                        if len(all_child_ids) != 1:
+                            raise ValueError(
+                                f"plan_ref {node_id!r} must have exactly one SID dependency"
+                            )
+                        referenced = estimates[all_child_ids[0]]
+                        if min(referenced) > 0:
+                            estimates[node_id] = referenced
+                            bounded_scalar[node_id] = bounded_scalar.get(
+                                all_child_ids[0], False
+                            )
+                    elif not has_unknown_literal and child_estimates and all(
+                        min(item) > 0 for item in child_estimates
+                    ):
+                        # Mixed scalar/panel elementwise expressions (including
+                        # where) inherit the largest fully-evidenced input
+                        # shape. Any unknown non-literal child blocks inference,
+                        # so an unknown/cross-source branch cannot be masked by
+                        # a known panel sibling.
+                        estimates[node_id] = tuple(
+                            max(item[i] for item in child_estimates) for i in range(3)
+                        )
+                    elif (
+                        len(all_child_ids) in _BOUNDED_SCALAR_ARITIES.get(
+                            _canonical_cost_op(node) or op, frozenset()
+                        )
+                        and all(
+                            bounded_scalar.get(child, False)
+                            and min(estimates[child]) > 0
+                            for child in all_child_ids
+                        )
+                    ):
+                        # Fixed-output numeric/boolean scalar operator with
+                        # exact arity. The 32-byte floor bounds CPython scalar
+                        # payloads admitted above without borrowing panel rows.
+                        literal_shapes = [estimates[child] for child in all_child_ids]
+                        estimates[node_id] = (
+                            1,
+                            max(32, *(item[1] for item in literal_shapes)),
+                            max(32, *(item[2] for item in literal_shapes)),
+                        )
+                        bounded_scalar[node_id] = True
+            for consumer_id in consumers[node_id]:
+                remaining_children[consumer_id] -= 1
+                if remaining_children[consumer_id] == 0:
+                    heappush(ready, consumer_id)
+        if visited != len(all_nodes):
+            raise ValueError("cyclic node dependency while propagating estimates")
         return estimates
+
+    def _co_locate_residency_neutral_nodes(
+        self,
+        choices: dict[str, NodeBackendChoice],
+        all_nodes: dict[str, PlanNode],
+        node_graph: dict[str, list[str]],
+        *,
+        estimate_rows: int,
+        ctx: Any,
+    ) -> None:
+        """Embed neutral sources and scalars when all consumers agree."""
+        neutral_ids = {
+            node_id
+            for node_id, node in all_nodes.items()
+            if getattr(node, "op", "") in {"column", "literal"}
+        }
+        consumers_by_node: dict[str, list[str]] = {
+            node_id: [] for node_id in all_nodes
+        }
+        for consumer_id, child_ids in node_graph.items():
+            for child_id in child_ids:
+                if child_id in consumers_by_node and consumer_id in choices:
+                    consumers_by_node[child_id].append(consumer_id)
+        for node_id in neutral_ids:
+            node = all_nodes[node_id]
+            op = getattr(node, "op", "")
+            if op == "column" and self._has_source_residency(node):
+                continue
+            consumer_ids = consumers_by_node[node_id]
+            consumer_residencies = {
+                (choices[item].backend, choices[item].representation)
+                for item in consumer_ids
+            }
+            if len(consumer_residencies) != 1:
+                continue
+            residency = next(iter(consumer_residencies))
+            if op == "literal":
+                choices[node_id] = replace(
+                    choices[node_id],
+                    backend=residency[0],
+                    representation=residency[1],
+                )
+                continue
+            matching = next(
+                (
+                    choice
+                    for choice in self._eligible_choices(
+                        node_id, node, estimate_rows, ctx
+                    )
+                    if (choice.backend, choice.representation) == residency
+                ),
+                None,
+            )
+            if matching is not None:
+                choices[node_id] = matching
 
     @staticmethod
     def _has_source_residency(node: PlanNode) -> bool:
@@ -1351,24 +1782,20 @@ class PhysicalBatchGlobalOptimizer:
                 != choices[consumer_id].representation
             )
         }
+        node_regions = {
+            node_id: region.region_id
+            for region in plan.regions
+            for node_id in region.node_ids
+        }
+        planned_region_boundaries = {
+            (edge.producer_region, edge.consumer_region) for edge in plan.edges
+        }
         actual_boundaries = {
             (producer_id, consumer_id)
             for producer_id, consumer_id in expected_boundaries
-            if any(
-                edge.producer_region
-                == next(
-                    region.region_id
-                    for region in plan.regions
-                    if producer_id in region.node_ids
-                )
-                and edge.consumer_region
-                == next(
-                    region.region_id
-                    for region in plan.regions
-                    if consumer_id in region.node_ids
-                )
-                for edge in plan.edges
-            )
+            if (
+                node_regions.get(producer_id), node_regions.get(consumer_id)
+            ) in planned_region_boundaries
         }
         if actual_boundaries != expected_boundaries:
             return False, "backend switch lacks transfer edge"
@@ -1421,13 +1848,10 @@ class PhysicalBatchGlobalOptimizer:
             choice = per_node_choices.get(node_id)
             if choice is not None:
                 # Recompute cost with the selected backend
-                from factor_engine.backend.plan_cost_router import plan_occurrences
-
-                occurrences = plan_occurrences(node)
-                if occurrences:
-                    occ = occurrences[0]
+                canonical = _canonical_cost_op(node)
+                if canonical is not None:
                     compute_cost = estimate_backend_cost(
-                        occ.canonical,
+                        canonical,
                         choice.backend.value,
                         row_count_estimate=rows,
                     )
@@ -1494,9 +1918,47 @@ class PhysicalBatchGlobalOptimizer:
         """Build PhysicalRegionPlan from optimization results."""
         import hashlib
         import json
+        root_id_set = set(root_ids)
 
-        # Build maximal connected residency regions, not one global bucket per
-        # backend. Re-entering a backend later in a chain must form a new region.
+        # Assign a monotone residency-boundary level before fusing nodes.
+        # Undirected same-backend connectivity alone can contract A -> B -> A
+        # plus a direct A -> A edge into a cyclic region graph.
+        from heapq import heapify, heappop, heappush
+
+        children = {
+            node_id: set(node_graph.get(node_id, ()))
+            for node_id in per_node_choices
+        }
+        consumers: dict[str, set[str]] = {node_id: set() for node_id in children}
+        for parent_id, child_ids in children.items():
+            for child_id in child_ids:
+                if child_id not in consumers:
+                    raise ValueError("physical node dependency has no backend assignment")
+                consumers[child_id].add(parent_id)
+        pending = {node_id: len(child_ids) for node_id, child_ids in children.items()}
+        ready_nodes = [node_id for node_id, count in pending.items() if count == 0]
+        heapify(ready_nodes)
+        levels: dict[str, int] = {}
+        while ready_nodes:
+            node_id = heappop(ready_nodes)
+            choice = per_node_choices[node_id]
+            residency = (choice.backend, choice.representation)
+            levels[node_id] = max((
+                levels[child_id] + int(residency != (
+                    per_node_choices[child_id].backend,
+                    per_node_choices[child_id].representation,
+                ))
+                for child_id in children[node_id]
+            ), default=0)
+            for parent_id in consumers[node_id]:
+                pending[parent_id] -= 1
+                if pending[parent_id] == 0:
+                    heappush(ready_nodes, parent_id)
+        if len(levels) != len(children):
+            raise ValueError("cyclic physical node dependency")
+
+        # Same-level connected residency regions are safe to contract: every
+        # edge between distinct components strictly increases the level.
         adjacency: dict[str, set[str]] = {node_id: set() for node_id in per_node_choices}
         for parent_id, child_ids in node_graph.items():
             parent = per_node_choices.get(parent_id)
@@ -1506,17 +1968,26 @@ class PhysicalBatchGlobalOptimizer:
                 child = per_node_choices.get(child_id)
                 if child is None:
                     continue
-                if (parent.backend, parent.representation) == (
-                    child.backend,
-                    child.representation,
+                if levels[parent_id] == levels[child_id] and (
+                    parent.backend, parent.representation
+                ) == (child.backend, child.representation) and (
+                    len(consumers[child_id]) == 1 and child_id not in root_id_set
                 ):
+                    # A fused region has one materialized output in the current
+                    # runtime contract. Never absorb a fan-out child: it may be
+                    # needed independently by another region, which would give
+                    # the fused producer two distinct output values.
                     adjacency[parent_id].add(child_id)
                     adjacency[child_id].add(parent_id)
 
         region_components: list[tuple[PhysicalBackend, Representation, list[str]]] = []
         unassigned = set(per_node_choices)
-        while unassigned:
-            seed = min(unassigned)
+        # Sort once rather than repeatedly taking min(unassigned), which is
+        # quadratic when a fan-out workload deliberately creates one region
+        # per factor root.
+        for seed in sorted(per_node_choices):
+            if seed not in unassigned:
+                continue
             residency = (
                 per_node_choices[seed].backend,
                 per_node_choices[seed].representation,
@@ -1533,23 +2004,52 @@ class PhysicalBatchGlobalOptimizer:
                         stack.append(neighbor)
             region_components.append((*residency, component))
 
-        topological_nodes: list[str] = []
-        visited: set[str] = set()
-
-        def visit(node_id: str) -> None:
-            if node_id in visited:
-                return
-            visited.add(node_id)
-            for child_id in node_graph.get(node_id, ()):
-                visit(child_id)
-            topological_nodes.append(node_id)
-
-        for node_id in sorted(per_node_choices):
-            visit(node_id)
-        node_rank = {node_id: index for index, node_id in enumerate(topological_nodes)}
-        region_components.sort(
-            key=lambda component: min(node_rank[node_id] for node_id in component[2])
-        )
+        # Fan-out nodes deliberately remain separate even at the same level,
+        # so level alone is not a complete component ordering. Topologically
+        # order the contracted component DAG in O(V+E).
+        component_for_node = {
+            node_id: component_id
+            for component_id, component in enumerate(region_components)
+            for node_id in component[2]
+        }
+        component_consumers: dict[int, set[int]] = {
+            component_id: set() for component_id in range(len(region_components))
+        }
+        component_dependencies: dict[int, set[int]] = {
+            component_id: set() for component_id in range(len(region_components))
+        }
+        for consumer_id, child_ids in node_graph.items():
+            consumer_component = component_for_node[consumer_id]
+            for child_id in child_ids:
+                producer_component = component_for_node[child_id]
+                if producer_component == consumer_component:
+                    continue
+                component_dependencies[consumer_component].add(producer_component)
+                component_consumers[producer_component].add(consumer_component)
+        component_key = {
+            component_id: min(region_components[component_id][2])
+            for component_id in range(len(region_components))
+        }
+        ready_components = [
+            (component_key[component_id], component_id)
+            for component_id, deps in component_dependencies.items()
+            if not deps
+        ]
+        heapify(ready_components)
+        ordered_components = []
+        while ready_components:
+            _, component_id = heappop(ready_components)
+            ordered_components.append(region_components[component_id])
+            for consumer_component in component_consumers[component_id]:
+                component_dependencies[consumer_component].discard(component_id)
+                if not component_dependencies[consumer_component]:
+                    heappush(
+                        ready_components,
+                        (component_key[consumer_component], consumer_component),
+                    )
+        if len(ordered_components) != len(region_components):
+            raise ValueError("cyclic contracted region dependency")
+        region_components = ordered_components
 
         regions: list[BackendRegion] = []
         region_for_node: dict[str, str] = {}
@@ -1592,11 +2092,15 @@ class PhysicalBatchGlobalOptimizer:
             for child_id in child_ids:
                 producer = per_node_choices.get(child_id)
                 if producer is None or (
-                    producer.backend == consumer.backend
-                    and producer.representation == consumer.representation
+                    region_for_node[child_id] == region_for_node[consumer_id]
                 ):
                     continue
-                boundary = (child_id, consumer_id)
+                # Regions are single-output. Multiple logical consumers of the
+                # same producer output inside one consumer region share one
+                # unambiguous transfer edge.
+                boundary = (
+                    region_for_node[child_id], region_for_node[consumer_id]
+                )
                 if boundary in seen_boundaries:
                     continue
                 seen_boundaries.add(boundary)
@@ -1622,6 +2126,23 @@ class PhysicalBatchGlobalOptimizer:
                         ),
                     )
                 )
+
+        logical_boundaries = {
+            (region_for_node[child_id], region_for_node[consumer_id])
+            for consumer_id, child_ids in node_graph.items()
+            for child_id in child_ids
+            if region_for_node[child_id] != region_for_node[consumer_id]
+        }
+        planned_boundaries = {
+            (edge.producer_region, edge.consumer_region) for edge in edges
+        }
+        if logical_boundaries != planned_boundaries:
+            missing = sorted(logical_boundaries.difference(planned_boundaries))
+            extra = sorted(planned_boundaries.difference(logical_boundaries))
+            raise ValueError(
+                "global TransferEdge boundaries do not match logical DAG: "
+                f"missing={missing!r}, extra={extra!r}"
+            )
 
         # Create plan hash
         plan_dict = {
@@ -1760,6 +2281,7 @@ def optimize_batch_global(
     max_optimization_ms: float = 250.0,
     max_candidate_plans: int = 128,
     forced_backend: str | None = None,
+    column_scan_costs: dict[str, Any] | None = None,
 ) -> BatchOptimizationResult:
     """MB-P1-009: Entry point for batch-global optimization.
 
@@ -1770,7 +2292,9 @@ def optimize_batch_global(
         max_candidate_plans=max_candidate_plans,
         forced_backend=forced_backend,
     )
-    return optimizer.optimize_batch(roots, shared_nodes, node_graph, ctx)
+    return optimizer.optimize_batch(
+        roots, shared_nodes, node_graph, ctx, column_scan_costs=column_scan_costs
+    )
 
 
 def validate_root_physical_support(

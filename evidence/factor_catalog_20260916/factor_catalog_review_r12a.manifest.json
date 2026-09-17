@@ -1,0 +1,29 @@
+{
+  "counts": {
+    "rows": 114132,
+    "execution:EXECUTED": 7700,
+    "execution:EXECUTED_ALL_NONFINITE": 185,
+    "execution:NOT_RUN": 106045,
+    "execution:EXECUTION_FAILED": 26,
+    "execution:COMPILE_FAILED": 142,
+    "changed": 3740,
+    "changed_static:PARSED_FIELDS_BOUND": 1499,
+    "changed_compile:COMPILED": 3242,
+    "execution:PREPARE_FAILED": 14,
+    "execution:NATIVE_CRASH": 20,
+    "changed_compile:COMPILE_FAILED": 498,
+    "changed_static:FIELDS_UNRESOLVED": 2224,
+    "changed_static:PARSE_FAILED": 17,
+    "migration_rejected": 435
+  },
+  "unique_factor_ids": 113893,
+  "source_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_checkpoint_r8_1_donchian_daily18760.csv.gz",
+  "source_sha256": "b49c96f6d038ebf003fcf9ef52434ca54171b5e6f8def3d035cb596043947b53",
+  "output_sha256": {
+    "checkpoint": "a5da8d8a7d6f5ce1ff3d23e78fe65ca36cd914e5e8bc6a127607159aee5bdaa1",
+    "decisions": "2522c8bf5b600053f4f5327ab2d414ebb9d82b46834ecdb4b2bb8d23e780eda5",
+    "input": "aa1a772ce21acbf2492447b9bf5a623a86c106cf13b4562e681e70224223a704"
+  },
+  "scope": "reviewed_changes_compile_not_execution",
+  "authorization": "user requested explanation-backed DSL completion; explicit decisions retained"
+}

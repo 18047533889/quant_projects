@@ -26,7 +26,6 @@ def test_composite_technical_names_lower_to_primitive_dag():
         "NATR(high,low,close,14)": "NATR",
         "PPO(close,12,26)": "PPO",
         "KeltnerPosition(high,low,close,20,14,2.0)": "KeltnerPosition",
-        "DEMA(close,20)": "DEMA",
         "ichimoku_cloud_width(high,low,9,26,52)": "ichimoku_cloud_width",
         "ts_breakout_high(close,20)": "ts_breakout_high",
     }
@@ -38,6 +37,21 @@ def test_composite_technical_names_lower_to_primitive_dag():
         names = set(_ops(ir))
         assert composite not in names, (formula, names)
         assert len(names) > 1
+
+
+@pytest.mark.parametrize("canonical", ("DEMA", "TEMA"))
+def test_recursive_ma_names_survive_macro_augmentation(canonical):
+    from factor_engine.api.dsl_parser import parse_factor
+    from factor_engine.ir.analyzer import Analyzer
+
+    factor = parse_factor(
+        f"ts_mean({canonical}(close,20),5)",
+        name=f"recursive::{canonical}",
+        surface="extended",
+    )
+    analysis = Analyzer().lower(factor.expr)
+    assert canonical in set(_ops(analysis.ir))
+    assert analysis.requires_full_history is True
 
 
 def test_intraday_daily_dsl_builds_auditable_source_ref():

@@ -74,6 +74,7 @@ _TYPE_ALIASES: dict[str, tuple[str, ...]] = {
     "int": ("INTEGER", "BIGINT", "SMALLINT", "TINYINT", "HUGEINT", "UBIGINT", "UINTEGER"),
     "int32": ("INTEGER",),
     "int64": ("BIGINT",),
+    "uint64": ("UBIGINT",),
     # 浮点
     "float": ("DOUBLE", "REAL", "DECIMAL", "FLOAT"),
     "double": ("DOUBLE", "REAL", "DECIMAL", "FLOAT"),

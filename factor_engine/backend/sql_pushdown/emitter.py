@@ -12482,17 +12482,17 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         pair_y = f"CASE WHEN {pair} THEN _yv END"
         pair_x = f"CASE WHEN {pair} THEN _xv END"
         n = f"COUNT(CASE WHEN {pair} THEN 1 END) OVER ({over})"
-        # population moments via the AVG identity (pairwise rows share the
-        # same mask, so E[xy] - E[x]E[y] / (E[x^2] - E[x]^2) is ddof=0/0).
-        mean_ab = f"AVG({pair_y} * {pair_x}) OVER ({over})"
-        mean_a = f"AVG({pair_y}) OVER ({over})"
-        mean_b = f"AVG({pair_x}) OVER ({over})"
-        mean_b2 = f"AVG({pair_x} * {pair_x}) OVER ({over})"
-        cov = f"({mean_ab} - {mean_a} * {mean_b})"
-        var = f"({mean_b2} - {mean_b} * {mean_b})"
+        # Native centered aggregates avoid catastrophic cancellation in the
+        # raw-moment identity.  The degeneracy floor is relative to the actual
+        # regressor scale (8 ULPs), never a dimensionful absolute epsilon.
+        cov = f"COVAR_POP({pair_y}, {pair_x}) OVER ({over})"
+        var = f"VAR_POP({pair_x}) OVER ({over})"
+        x_scale = f"MAX(ABS({pair_x})) OVER ({over})"
+        resolution_floor = f"POWER({x_scale} * 1.7763568394002505e-15, 2)"
         return _Layer(
             f"SELECT ts, inst, "
-            f"CASE WHEN {n} < {mp} OR {var} IS NULL OR {var} <= 1e-12 THEN NULL "
+            f"CASE WHEN {n} < {mp} OR {var} IS NULL "
+            f"OR {var} <= {resolution_floor} THEN NULL "
             f"ELSE {cov} / {var} END AS _v "
             f"FROM ({masked}) t",
             has_inst_window=True,

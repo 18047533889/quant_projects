@@ -100,5 +100,10 @@ def test_row_sum_real_run_many_variadic_binding_with_scalar_literal():
     factor = Factor(name="sum", expr=expr)
     single = engine.run(factor)["result"]
     many = engine.run_many([factor])["results"]["sum"]
+    expected = pd.Series(
+        [4., 4., 3., 10., 8., 14.],
+        index=index,
+        name="sum",
+    )
     pd.testing.assert_series_equal(single, many, check_names=False)
-    np.testing.assert_allclose(single.to_numpy(), [4., 4., 3., 10., 8., 14.], equal_nan=True)
+    pd.testing.assert_series_equal(single, expected, check_names=False)

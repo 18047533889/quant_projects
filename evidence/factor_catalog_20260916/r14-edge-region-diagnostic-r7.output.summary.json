@@ -1,0 +1,39 @@
+{
+  "input": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/factor_catalog_review_r14a.williams_daily_smoke.input.jsonl.gz",
+  "output": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/r14-edge-region-diagnostic-r7.output.jsonl.gz",
+  "processed": 40,
+  "offset": 0,
+  "next_offset": 40,
+  "complete": true,
+  "stopped_reason": null,
+  "counts": {
+    "BATCH_ABORTED": 40
+  },
+  "seconds": 32.768793392926455,
+  "window": [
+    "2025-01-01",
+    "2026-04-30"
+  ],
+  "symbols": [
+    "000001.SZ",
+    "000002.SZ",
+    "000063.SZ",
+    "000333.SZ",
+    "000651.SZ",
+    "000858.SZ",
+    "600000.SH",
+    "600519.SH"
+  ],
+  "dataset": "ashare_stock_daily_adj",
+  "max_rss_mib": 1800,
+  "timeout_seconds": 20,
+  "deadline_kind": "external-watchdog",
+  "requested_backend": "auto",
+  "batch_size": 40,
+  "batch_only": true,
+  "performance_options": "public_defaults",
+  "requested_limit": 40,
+  "prepare_chunk": 100,
+  "daily_only": true,
+  "input_records_scanned": 40
+}

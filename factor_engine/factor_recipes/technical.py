@@ -69,8 +69,10 @@ _RECIPES = (
         "stochastic_d",
         "technical",
         "随机指标D值",
-        "ts_mean(100 * safe_div_null(close - ts_min(low, window), ts_max(high, window) - ts_min(low, window)), smooth_window)",
-        ("high", "low", "close", "window", "smooth_window"),
+        "ts_mean(where(eq(ts_max(high, window) - ts_min(low, window), 0.0), "
+        "safe_div_null(0.0, 0.0), 100 * divide(close - ts_min(low, window), "
+        "ts_max(high, window) - ts_min(low, window))), 3)",
+        ("high", "low", "close", "window"),
         replacement_for=("StochasticD",),
     ),
     FactorRecipe(
@@ -85,7 +87,8 @@ _RECIPES = (
         "adxr",
         "technical",
         "ADX平均方向指数评级",
-        "0.5 * (ADX(high, low, close, window) + ts_delay(ADX(high, low, close, window), window))",
+        "0.5 * (ADX(high, low, close, window) + "
+        "ts_delay(ADX(high, low, close, window), window))",
         ("high", "low", "close", "window"),
         replacement_for=("ADXR",),
     ),
@@ -93,7 +96,11 @@ _RECIPES = (
         "trix",
         "technical",
         "三重EMA的一期变化率",
-        "100 * ts_pct(ts_ema(ts_ema(ts_ema(close, window), window), window), 1)",
+        "where(eq(ts_delay(ts_ema(ts_ema(ts_ema(close, window), window), window), 1), 0.0), "
+        "safe_div_null(0.0, 0.0), multiply(100.0, divide(subtract("
+        "ts_ema(ts_ema(ts_ema(close, window), window), window), "
+        "ts_delay(ts_ema(ts_ema(ts_ema(close, window), window), window), 1)), "
+        "ts_delay(ts_ema(ts_ema(ts_ema(close, window), window), window), 1))))",
         ("close", "window"),
         replacement_for=("TRIX",),
     ),
@@ -149,8 +156,9 @@ _RECIPES = (
         "aroon_oscillator",
         "technical",
         "Aroon上下轨差",
-        "100 * (safe_div_null(ts_argmin(low, window), window) - safe_div_null(ts_argmax(high, window), window))",
-        ("high", "low", "window"),
+        "100 * (ts_argmin(close, window + 1, window + 1) - "
+        "ts_argmax(close, window + 1, window + 1)) / window",
+        ("close", "window"),
         replacement_for=("AROON",),
     ),
     FactorRecipe(
@@ -173,7 +181,9 @@ _RECIPES = (
         "cci",
         "technical",
         "商品通道指数",
-        "safe_div_null(typical_price - ts_mean(typical_price, window), constant * ts_mad(typical_price, window))",
+        "where(eq(ts_mean_abs_deviation_strict(typical_price, window), 0.0), "
+        "safe_div_null(0.0, 0.0), divide(typical_price - ts_mean(typical_price, window), "
+        "constant * ts_mean_abs_deviation_strict(typical_price, window)))",
         ("typical_price", "window", "constant"),
         replacement_for=("CCI",),
     ),

@@ -159,7 +159,19 @@ class PandasBackend(Backend):
         cache = getattr(ctx, "cache", None)
         cache_key: str | None = None
         if cache is not None:
-            cache_key = plan_cache_key(node)
+            cache_node = node
+            shared_nodes = getattr(cache, "plan_key_shared_nodes", None)
+            if hasattr(cache, "plan_key_shared_nodes"):
+                try:
+                    from factor_engine.planner.physical_lowerer import _expand_plan_refs
+
+                    cache_node = _expand_plan_refs(node, shared_nodes)
+                except (KeyError, TypeError, ValueError, RuntimeError, RecursionError):
+                    # A malformed/cyclic/dangling reference must never fall
+                    # back to a potentially colliding cross-wave key.
+                    cache_node = None
+            cache_key = plan_cache_key(cache_node) if cache_node is not None else None
+        if cache is not None and cache_key is not None:
             hit = cache.get(cache_key)
             if hit is not None:
                 return hit

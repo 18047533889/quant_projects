@@ -167,6 +167,70 @@ def test_polars_liquidity_beta_pairwise_finite_zero_variance_and_axes():
     assert out["B"][-1] is None or np.isnan(out["B"][-1])
 
 
+@pytest.mark.parametrize(
+    "name", ["ts_market_liquidity_beta", "ts_industry_liquidity_beta"]
+)
+@pytest.mark.parametrize("window", [None, 2, 19, 20, 60])
+def test_polars_liquidity_beta_matches_canonical_window_contract(name, window):
+    n = 100
+    delta = 1e-6 * (1.0 + 0.2 * np.sin(np.arange(n, dtype=float)))
+    liquidity = 100.0 + np.cumsum(delta)
+    observed = np.diff(liquidity, prepend=np.nan)
+    own_return = 2.5 * observed + 1e-5
+    index = pd.date_range("2024-01-01", periods=n, freq="D")
+    pandas_y = pd.DataFrame({"A": own_return}, index=index)
+    pandas_x = pd.DataFrame({"A": liquidity}, index=index)
+    polars_y = pl.DataFrame({"A": own_return})
+    polars_x = pl.DataFrame({"A": liquidity})
+    reference = OperatorRegistry.get(name)
+    native = OperatorRegistry.get(name, backend="polars")
+
+    if window is None:
+        expected = reference.calculate(pandas_y, pandas_x)
+        actual = native.calculate(polars_y, polars_x)
+    else:
+        expected = reference.calculate(pandas_y, pandas_x, window=window)
+        actual = native.calculate(polars_y, polars_x, window=window)
+
+    expected_values = expected["A"].to_numpy(dtype=float)
+    actual_values = actual["A"].to_numpy()
+    actual_values = np.array(
+        [np.nan if value is None else float(value) for value in actual_values],
+        dtype=float,
+    )
+    assert np.array_equal(np.isfinite(actual_values), np.isfinite(expected_values))
+    assert np.allclose(
+        actual_values, expected_values, rtol=1e-9, atol=1e-9, equal_nan=True
+    )
+
+    spec = native.metadata.param_specs["window"]
+    assert spec.default == 60
+    assert spec.min == 2
+    from factor_engine.backend.evidence_provenance import parameter_domain_hash_for
+
+    assert native._physical_spec.parameter_domain_hash.startswith(
+        parameter_domain_hash_for(name)
+    )
+
+
+@pytest.mark.parametrize(
+    "name", ["ts_market_liquidity_beta", "ts_industry_liquidity_beta"]
+)
+@pytest.mark.parametrize("bad_window", [True, 2.5])
+def test_liquidity_beta_rejects_non_integer_window_on_public_calculate(name, bad_window):
+    pandas_panel = pd.DataFrame({"A": np.arange(8, dtype=float)})
+    polars_panel = pl.DataFrame({"A": np.arange(8, dtype=float)})
+
+    with pytest.raises(OperatorParameterError):
+        OperatorRegistry.get(name).calculate(
+            pandas_panel, pandas_panel, window=bad_window
+        )
+    with pytest.raises(OperatorParameterError):
+        OperatorRegistry.get(name, backend="polars").calculate(
+            polars_panel, polars_panel, window=bad_window
+        )
+
+
 def test_physical_spec_accepts_contract_instances_across_module_reload():
     import importlib
     from types import SimpleNamespace

@@ -410,10 +410,10 @@ POLARS_LONG_MAP_GROUPS: frozenset[str] = frozenset(
     }
 )
 
-# R30 §2: bfill/causal_bfill were physically removed (``tombstones`` is the
-# single authority).  No tier classifies them any more; the emitter's raise
-# guards remain as migration errors for stale hand-built plans only.
-POLARS_LONG_BLOCKED_CAUSAL: frozenset[str] = frozenset()
+# Stale hand-built plans can still reach the emitter even though these names
+# are tombstoned from the public surface. Keep their explicit blocked tier in
+# sync with the emitter's causal guard; blocked names are never compatible.
+POLARS_LONG_BLOCKED_CAUSAL: frozenset[str] = frozenset({"bfill", "causal_bfill"})
 
 POLARS_LONG_PASSTHROUGH: frozenset[str] = frozenset()
 

@@ -1,0 +1,48 @@
+{
+  "source_sha256": "ccf6a0effe8a09471491b94d3845767309bb4ebc380bf5cd3c016b680144c7c3",
+  "compile_evidence_sha256": "e1cd68b536e06a66f34e404b644d925595f437dfb1eaeca45636a470cc386dad",
+  "output_sha256": "91eb653109906330e47c784cd59b77291cbe2875d6d9f31229b1cf979042d418",
+  "rows": 114132,
+  "changed_this_round": 3344,
+  "compile_counts_nonempty_ids": {
+    "COMPILED": 112882,
+    "COMPILE_FAILED": 1011
+  },
+  "execution_counts": {
+    "EXECUTED": 8151,
+    "EXECUTED_ALL_NONFINITE": 188,
+    "NOT_RUN": 105428,
+    "EXECUTION_FAILED": 26,
+    "COMPILE_FAILED": 321,
+    "NATIVE_CRASH": 18
+  },
+  "scope": "Only 4212 prior failures current-code recompiled; other compile and execution evidence remain historical",
+  "code_hashes": {
+    "factor_engine/tools/catalog_r19_financial_field_recipes.py": "3606ff10df584ebf87a0ebb2bd75626acb9686a85e4befe92228d87eb47ea6f3",
+    "factor_engine/tools/catalog_r19_signal_recipes.py": "8cb9d6f011481ad3d68cc728f24b9d35d64c9a0c65b89a0b609d3ba5256b8ac1",
+    "factor_engine/tools/catalog_r19_context_recipes.py": "5fe524952e3e58f31d5356f196b67483ce19d7068748138cbf312b06d7fe80c8",
+    "factor_engine/tools/catalog_r19_parameter_recipes.py": "f5761ac5e91e2d20ad17d49378ca71d658213e5cff589350ff2af3d282fab7fb",
+    "factor_engine/tools/catalog_r19_operator_recipes.py": "77f7ebf9badc5abd01e61f63f4a30042f90250d37925613edea05433946266c9",
+    "factor_engine/tools/catalog_r19_type_recipes.py": "d57cd1b295521c7ae298765e8f27efd5de3c24477be13c863e5a5670c1ad41f4",
+    "factor_engine/tools/catalog_r19_literal_recipes.py": "345c329a5a8aeaf3137f5196d08b293733f8bac3287bec10bbb3a5235547b109",
+    "factor_engine/tools/catalog_r19_fiscal_recipes.py": "a78dd8605b7227a67cedbb103249e3168dd8d65998e6e3c86b2a91b8359f7248",
+    "factor_engine/tools/catalog_r19_missingness_recipes.py": "089ba64c45ffaa87685c01ee5a9e9d9e8bbdf2081cae242bffb6ba4128ff71c9",
+    "factor_engine/tools/catalog_r19_remaining_params_recipes.py": "02a463956d30b82b8cc261099e665b600052739464a8c193f39789a4cdb3d800",
+    "factor_engine/api/dsl_parser.py": "e3603a9d009b75b0979c3b5737f041cab36d0779d0dc9eeba023f577dc81e9c0",
+    "factor_engine/backend/long_frame.py": "8545cce855bcf25effc28faf6257eb62a184978d8285d68745ac1bcb5af305d0",
+    "factor_engine/cleaned_operators/price_volume/candle_pattern_engine_v2.py": "cba42bbf34277cd70d86a95a2857b56509dd66e78c3b6435caee6fa76f1f04c1",
+    "factor_engine/cleaned_operators/common/polars_candle_patterns.py": "cc61003f07a8445a3fe0f8c6a73cd17e5f041664740dd352302c80959763239a",
+    "factor_engine/ir/analyzer.py": "36c5924acab793fe5fae985282e0cb1f7a0010976ccb31992df074814b0a82c6",
+    "factor_engine/ir/types.py": "abc746211c4a76943a5122421987968df7e28a26d603ce44f159e9820fb50b2c",
+    "factor_engine/cleaned_operators/gemini_v2_common.py": "7b9340a23c95a22f5a69b857d5649a917e3aef83a83c1e37073527e7eb2b4c44",
+    "factor_engine/cleaned_operators/base.py": "e59bfc9435ff7a48bde71b5f46b09307079b9f86b1eb702ba1284aa2d1be6af4",
+    "factor_engine/cleaned_operators/markov_dynamics.py": "c3b03a03bab1ba8915badafcde262fb567af5e75ad328940d8cea8fba4896446",
+    "factor_engine/cleaned_operators/sequence_complexity.py": "2463b3fd77770e89c2c65f51b763c77b6f329ac028bb64f065d7058fc4391a22",
+    "factor_engine/cleaned_operators/state_event.py": "359646199509ef8f6441e6f9150aac3c63805bc4cfb523953a6827d3f65aad9c",
+    "factor_engine/cleaned_operators/fiscal_event_ops.py": "5a3a5dc2ae19733c082f313de16295ba1a35a3ea9b30f7dc697765c1085427f4",
+    "factor_engine/planner/lowerings/next_stage.py": "f6a152ef95e5e92a324e5af76a105970896bfc6b1c6c2b9fe8fd190d9eb6ad6b",
+    "factor_engine/planner/lowerings/ashare.py": "773c2876f7b6634b05630be0d14ad3678540e481409ed0408820b0ac6accd873",
+    "factor_engine/planner/canonicalize_params.py": "a0ffdd34f738f7d55b2f8e47c08a128dfc363740c0fc71e277e75d7e632363ac",
+    "evidence/factor_catalog_20260916/recompile_r19.py": "d8bd8865d2e44e7caff815305650f27606a29c935fa9baca2104cba9ea86b420"
+  }
+}

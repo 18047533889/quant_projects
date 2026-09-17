@@ -98,7 +98,7 @@ def _read_cgroup_v2_max() -> int | None:
         except OSError:
             continue
         if not raw or raw == "max":
-            return None
+            continue
         try:
             value = int(raw)
             if value > 0:
@@ -119,8 +119,14 @@ def _cgroup_v2_memory_remaining_bytes() -> int | None:
             maximum = int(raw_max)
             current = int((directory / "memory.current").read_text(encoding="utf-8").strip())
             remaining.append(max(0, maximum - current))
-        except (OSError, ValueError):
+        except FileNotFoundError:
+            # Controller files may be absent at the hierarchy root.  A finite
+            # limit without readable usage must not be treated as unlimited.
+            if (directory / "memory.max").exists():
+                return 0
             continue
+        except (OSError, ValueError):
+            return 0
     return min(remaining) if remaining else None
 
 
@@ -391,15 +397,21 @@ def live_memory_headroom_bytes(
     """
     limit = hard_limit or effective_memory_limit_bytes()
     candidates: list[int] = []
-    cur = _cgroup_memory_current_bytes()
-    if cur is not None:
-        cgroup_headroom = max(0, limit - cur)
+    # Pair each ancestor's limit with its own usage, never a process cap
+    # with the memory.current of a shared cgroup.
+    cgroup_headroom = _cgroup_v2_memory_remaining_bytes()
+    if cgroup_headroom is not None:
         candidates.append(cgroup_headroom)
     reserve = max(int(min_host_reserve_gb * 1024**3),
                   int(limit * min_host_reserve_fraction))
     host_headroom = max(0, _host_mem_available_bytes() - reserve)
     candidates.append(host_headroom)
-    configured = max(0, limit - process_family_rss_bytes())
+    family_rss = process_family_rss_bytes()
+    # The sampler's historical error sentinel is zero. A running Python
+    # process cannot have zero resident bytes; do not call that free capacity.
+    if family_rss is None or family_rss <= 0:
+        return 0
+    configured = max(0, limit - family_rss)
     candidates.append(configured)
     return min(candidates) if candidates else 0
 
@@ -891,7 +903,11 @@ def estimate_object_bytes(value: Any) -> int:
     - dict/list：浅层累加（避免递归爆炸）
     """
     if value is None:
-        return 0
+        return sys.getsizeof(None)
+    if type(value) in {bool, int, float, complex, str, bytes}:
+        # Exact built-in immutable scalars own their complete payload in the
+        # Python object.  They do not expose ``nbytes`` but are still resident.
+        return max(1, int(sys.getsizeof(value)))
     try:
         import pandas as pd
 

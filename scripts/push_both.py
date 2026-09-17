@@ -140,49 +140,80 @@ def _origin_token() -> str:
     return token
 
 
-def _gh_api(method: str, path: str, token: str, body: dict | None = None) -> dict:
+def _gh_api(method: str, path: str, token: str, body: dict | None = None,
+            attempts: int = 4) -> dict:
     import json as _json
+    import time
     import urllib.error
     import urllib.request
     data = _json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(
-        f"https://api.github.com{path}", data=data, method=method,
-        headers={"Authorization": f"token {token}",
-                 "Accept": "application/vnd.github+json",
-                 "Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req) as resp:
-            return json.loads(resp.read() or b"{}")
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode(errors="replace")[:400]
-        raise SyncError(f"GitHub API {method} {path} -> HTTP {exc.code}: {sanitize(detail)}") from exc
+    last: Exception | None = None
+    for attempt in range(attempts):
+        req = urllib.request.Request(
+            f"https://api.github.com{path}", data=data, method=method,
+            headers={"Authorization": f"token {token}",
+                     "Accept": "application/vnd.github+json",
+                     "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return json.loads(resp.read() or b"{}")
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode(errors="replace")[:400]
+            # 5xx and 429 are retryable; 4xx are not
+            if exc.code < 500 and exc.code != 429:
+                raise SyncError(
+                    f"GitHub API {method} {path} -> HTTP {exc.code}: {sanitize(detail)}") from exc
+            last = SyncError(f"GitHub API {method} {path} -> HTTP {exc.code}: {sanitize(detail)}")
+        except (urllib.error.URLError, OSError) as exc:
+            # transient DNS/connection failures (seen on this host) -> retry
+            last = SyncError(f"GitHub API {method} {path} -> {sanitize(str(exc))}")
+        if attempt < attempts - 1:
+            time.sleep(2 ** attempt)
+    raise last if last else SyncError(f"GitHub API {method} {path} failed")
 
 
 def publish_root_via_pr(root_sha: str, token: str) -> dict:
-    """Root goes to main ONLY through a PR branch: push branch -> open PR -> squash-merge."""
+    """Root goes to main ONLY through a PR: push a sync branch -> open PR -> squash-merge.
+
+    The branch carries ONE commit whose parent is the current remote main and whose
+    tree equals local HEAD's tree.  (Pushing the local commit itself would conflict:
+    the first squash-merge already rewrote remote main's history.)  Local main is
+    never rewritten; local-vs-remote parity is enforced at the tree level.
+    """
     owner, name = ROOT_OWNER, "quant_projects"
-    branch = f"push/{root_sha[:10]}"
     api = f"repos/{owner}/{name}"
-    # 1. push the branch carrying the local commit
-    git(ROOT, "push", "origin", f"{root_sha}:refs/heads/{branch}")
-    # 2. open PR branch -> main
+    local_tree = git(ROOT, "rev-parse", f"{root_sha}^{{tree}}")
+    # current remote main = parent of the sync commit
+    git(ROOT, "fetch", "--quiet", "origin", "main")
+    parent = git(ROOT, "rev-parse", "FETCH_HEAD^{commit}")
+    parent_tree = git(ROOT, "rev-parse", "FETCH_HEAD^{tree}")
+    if parent_tree == local_tree:
+        return {"skipped": "remote main already carries the local tree", "remoteMain": parent}
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    env = object_env(ROOT)
+    commit = run(["git", "-C", str(ROOT), "-c", "user.name=Sun Haiwei", "-c",
+                  "user.email=sunhaiwei@users.noreply.github.com", "commit-tree", local_tree,
+                  "-p", parent,
+                  "-m", f"push quant_projects from local main {root_sha} at {stamp}"], env=env)
+    branch = f"push/{commit[:10]}"
+    git(ROOT, "push", "origin", f"{commit}:refs/heads/{branch}")
     pr = _gh_api("POST", f"{api}/pulls", token, {
-        "title": f"push {root_sha[:10]}",
+        "title": f"push quant_projects {commit[:10]}",
         "head": branch, "base": "main",
-        "body": f"Automated publication of commit {root_sha} by push_both.py"})
+        "body": f"Automated publication of local main {root_sha} "
+                f"(tree {local_tree}) by push_both.py"})
     number = pr.get("number")
     if not number:
         raise SyncError(f"PR creation returned no number: {sanitize(str(pr))[:200]}")
-    # 3. squash-merge into main
     merged = _gh_api("PUT", f"{api}/pulls/{number}/merge", token, {"merge_method": "squash"})
     if not merged.get("merged"):
         raise SyncError(f"PR #{number} not merged: {sanitize(str(merged))[:200]}")
-    # 4. delete the transient branch (PR itself left for the audit trail)
     try:
         _gh_api("DELETE", f"{api}/git/refs/heads/{branch}", token)
     except SyncError:
         pass
-    return {"pr": number, "branch": branch}
+    return {"pr": number, "branch": branch, "syncCommit": commit,
+            "remoteParent": parent, "tree": local_tree}
 
 
 def assert_root_state(expected_sha: str | None, *, allow_dirty: bool) -> tuple[str, bool]:

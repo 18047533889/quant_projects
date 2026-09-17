@@ -724,7 +724,7 @@ class TsAutocorrDecayHalfLife(SeriesOperator):
         cost=2,
         param_specs={
             "window": ParamSpec(dtype=int, min=2, default=60, history_semantics="max_rows", param_role=ParamRole.HORIZON),
-            "max_lag": ParamSpec(dtype=int, min=1, max=30, default=10, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+            "max_lag": ParamSpec(dtype=int, min=2, max=30, default=10, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
             "use_abs": ParamSpec(dtype=bool, default=False, searchable=False, param_role=ParamRole.POLICY),
             "min_periods": ParamSpec(dtype=int, min=2, default=2, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
         },
@@ -733,7 +733,7 @@ class TsAutocorrDecayHalfLife(SeriesOperator):
 
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, max_lag: int = 10, use_abs: bool = False, min_periods: int = 2, **_: Any) -> pd.DataFrame:
         w = check_window(window)
-        ml = strict_int(max_lag, "max_lag", lower=1, upper=30)
+        ml = strict_int(max_lag, "max_lag", lower=2, upper=30)
         mp = strict_int(min_periods, "min_periods", lower=2)
         abs_ = bool(use_abs)
 

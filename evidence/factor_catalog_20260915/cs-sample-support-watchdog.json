@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/factor_catalog_20260915/probe_cs_sample_support.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 983252992, "sampling_seconds": 0.1, "seconds": 68.9807053860277, "test_guard_reason": null, "hard_memory_cap": false}

@@ -262,14 +262,18 @@ class ResourceSnapshot:
     process_family_vms: int | None = None
     rlimit_as_remaining: int | None = None
     host_mem_available_known: bool = True
+    cgroup_memory_remaining: int | None = None
+    process_family_rss_known: bool = True
 
     @property
     def live_headroom(self) -> int:
         """live headroom = min(cgroup, host, configured)（R27-027）。"""
+        if not self.host_mem_available_known or not self.process_family_rss_known:
+            return 0
         candidates: list[int] = []
-        if self.cgroup_memory_current is not None and self.hard_memory_limit:
-            cgroup_headroom = max(0, self.hard_memory_limit - self.cgroup_memory_current)
-            candidates.append(cgroup_headroom)
+        # Shared-cgroup current remains telemetry, not process-cap usage.
+        if self.cgroup_memory_remaining is not None:
+            candidates.append(max(0, self.cgroup_memory_remaining))
         # host_headroom = MemAvailable - external_reserve（external reserve 由
         # broker 在 configured_headroom 侧统一扣除；此处只保证非负）。
         candidates.append(max(0, self.host_mem_available))
@@ -289,6 +293,7 @@ class ResourceSnapshot:
             "loadavg": self.loadavg,
             "hard_memory_limit": self.hard_memory_limit,
             "cgroup_memory_current": self.cgroup_memory_current,
+            "cgroup_memory_remaining": self.cgroup_memory_remaining,
             "host_mem_available": self.host_mem_available,
             "process_rss": self.process_rss,
             "worker_rss": self.worker_rss,
@@ -308,6 +313,7 @@ class ResourceSnapshot:
             "process_family_vms": self.process_family_vms,
             "rlimit_as_remaining": self.rlimit_as_remaining,
             "host_mem_available_known": self.host_mem_available_known,
+            "process_family_rss_known": self.process_family_rss_known,
         }
 
 
@@ -472,11 +478,24 @@ def _process_family_cpu_times() -> float:
         return 0.0
 
 
-def _process_family_rss(pss: bool = False) -> int:
+def _process_family_rss(pss: bool = False) -> tuple[int, bool]:
     """主进程 + 递归子进程的 RSS/PSS 之和（R27-036）。
 
     Linux ``/proc/*/smaps_rollup`` 可读时优先 PSS（共享内存更准）；RSS 兜底。
+    返回 ``(telemetry_bytes, family_sample_known)``；仅主进程的 ``ru_maxrss``
+    回退值可用于诊断，但不能冒充完整进程族采样。
     """
+
+    def _self_peak_fallback() -> tuple[int, bool]:
+        try:
+            import resource
+
+            return (
+                int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * 1024,
+                False,
+            )
+        except Exception:
+            return 0, False
     try:
         import psutil  # type: ignore[import-untyped]
 
@@ -498,31 +517,51 @@ def _process_family_rss(pss: bool = False) -> int:
         root = psutil.Process()
         total_rss = 0
         total_pss = 0
+        family_sample_known = True
+        root_sampled = False
+        vanished = tuple(
+            exc for exc in (
+                getattr(psutil, "NoSuchProcess", None),
+                getattr(psutil, "ZombieProcess", None),
+            )
+            if isinstance(exc, type)
+        )
+        access_denied = getattr(psutil, "AccessDenied", ())
+        denied = (access_denied,) if isinstance(access_denied, type) else ()
         visited: set[int] = set()
 
-        def _walk(proc: Any) -> None:
-            nonlocal total_rss, total_pss
+        def _walk(proc: Any, *, is_root: bool = False) -> None:
+            nonlocal total_rss, total_pss, family_sample_known, root_sampled
             if proc.pid in visited:
                 return
             visited.add(proc.pid)
-            r, p = _one(proc)
+            try:
+                r, p = _one(proc)
+            except vanished:
+                return
+            except denied:
+                family_sample_known = False
+                return
+            except Exception:
+                family_sample_known = False
+                return
             total_rss += r
             total_pss += p
+            root_sampled = root_sampled or is_root
             try:
                 for child in proc.children(recursive=True):
                     _walk(child)
+            except vanished:
+                return
             except Exception:
-                pass
+                family_sample_known = False
 
-        _walk(root)
-        return total_pss if pss and total_pss else total_rss
+        _walk(root, is_root=True)
+        if not root_sampled:
+            return _self_peak_fallback()
+        return (total_pss if pss and total_pss else total_rss), family_sample_known
     except Exception:
-        try:
-            import resource
-
-            return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss) * 1024
-        except Exception:
-            return 0
+        return _self_peak_fallback()
 
 
 class _CpuTokenAllocator:
@@ -857,8 +896,8 @@ class ResourceBroker:
             and now - self._last_sample_ms < self.sample_interval * 1000.0
         ):
             return self._cached
-        rss = _process_family_rss(pss=False)
-        pss = _process_family_rss(pss=True)
+        rss, rss_known = _process_family_rss(pss=False)
+        pss, _pss_known = _process_family_rss(pss=True)
         system_cpu = _cpu_util()
         # R31-P0-010：外部 CPU = max(0, system - 本进程族 share)。
         family_times = _process_family_cpu_times()
@@ -885,6 +924,7 @@ class ResourceBroker:
         sw_cur, sw_max = _swap()
         from factor_engine.runtime.resource_governor import (
             _cgroup_v2_memory_high_remaining_bytes,
+            _cgroup_v2_memory_remaining_bytes,
             process_family_vms_bytes,
         )
         import resource
@@ -902,10 +942,12 @@ class ResourceBroker:
             loadavg=_loadavg(),
             hard_memory_limit=self.hard_memory_limit,
             cgroup_memory_current=_cgroup_memory_current(),
+            cgroup_memory_remaining=_cgroup_v2_memory_remaining_bytes(),
             host_mem_available=mem_available,
             process_rss=rss,
             worker_rss=0,
             process_family_rss=rss,
+            process_family_rss_known=rss_known,
             process_family_pss=pss,
             spill_free_bytes=self._spill_free(),
             spill_total_bytes=self._spill_total(),
@@ -1040,20 +1082,29 @@ class ResourceBroker:
         min）。``EmergencyReserve`` 与 live 候选交给 ``compute_auto_memory_budget``。
         """
         snap = self._refresh()
-        from factor_engine.runtime.resource_governor import _cgroup_v2_memory_remaining_bytes
 
         budget = compute_auto_memory_budget(
             hard_memory_limit=self.hard_memory_limit,
-            cgroup_current=snap.cgroup_memory_current,
-            host_mem_available=(snap.host_mem_available if snap.host_mem_available_known else None),
-            process_family_rss=snap.process_family_rss,
-            cgroup_remaining=_cgroup_v2_memory_remaining_bytes(),
+            # No user-cap minus shared-group-usage fallback for unlimited
+            # groups. Only paired cgroup remaining samples are authoritative.
+            cgroup_current=None,
+            host_mem_available=(
+                snap.host_mem_available if snap.host_mem_available_known else None
+            ),
+            process_family_rss=(
+                snap.process_family_rss
+                if snap.process_family_rss_known
+                else None
+            ),
+            cgroup_remaining=snap.cgroup_memory_remaining,
             address_space_remaining=snap.rlimit_as_remaining,
             min_reserve_gb=self.min_host_reserve_gb,
             min_reserve_fraction=self.min_host_reserve_fraction,
             safety_factor=self._safety_factor,
             verified_pool_residency_by_domain=self._verified_pool_residency_by_domain,
-            host_measurement_known=snap.host_mem_available_known,
+            host_measurement_known=(
+                snap.host_mem_available_known and snap.process_family_rss_known
+            ),
         )
         target = budget.execution_budget
         if self._active_execution_budget is None or target <= self._active_execution_budget:

@@ -7,6 +7,7 @@ import json
 import os
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -159,13 +160,29 @@ def expand_parquet_paths(glob_paths: list[str]) -> list[Path]:
     return files
 
 
+def _footer_file_identity(path: str) -> tuple[int, int, int, int, int]:
+    stat = os.stat(path)
+    return (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+
+
+@lru_cache(maxsize=8192)
+def _parquet_footer_rows(path: str, identity: tuple[int, int, int, int, int]) -> int:
+    """Cache only an integer row count for an unchanged local file generation."""
+    rows = int(pq.read_metadata(path).num_rows)
+    if _footer_file_identity(path) != identity:
+        # Never cache a count under a generation that changed during inspection.
+        # The caller's existing unknown-cost policy handles this failed estimate.
+        raise RuntimeError(f"Parquet file changed during row-count estimation: {path}")
+    return rows
+
+
 def estimate_parquet_rows(paths: list[Path]) -> int:
     total = 0
     for path in paths:
         if path.name.startswith(".") or path.is_symlink():
             continue
-        meta = pq.read_metadata(str(path))
-        total += meta.num_rows
+        local_path = str(path.absolute())
+        total += _parquet_footer_rows(local_path, _footer_file_identity(local_path))
     return total
 
 

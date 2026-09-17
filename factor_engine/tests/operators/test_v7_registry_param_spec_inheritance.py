@@ -39,7 +39,9 @@ def test_backend_param_spec_inherits_omitted_canonical_role() -> None:
     }
     backend = _operator_with_role(None)
 
-    _backfill_logical_contract(backend, canonical)
+    _backfill_logical_contract(
+        backend, canonical, allow_legacy_divergence=True
+    )
 
     assert backend.metadata.param_specs["window"].param_role is ParamRole.HORIZON
     assert backend.metadata.param_specs["window"].dtype is int
@@ -57,7 +59,9 @@ def test_backend_param_spec_preserves_and_reports_explicit_role_conflict(
 
     backend = _operator_with_role(ParamRole.THRESHOLD)
 
-    _backfill_logical_contract(backend, canonical)
+    _backfill_logical_contract(
+        backend, canonical, allow_legacy_divergence=True
+    )
 
     assert backend.metadata.param_specs["window"].param_role is ParamRole.THRESHOLD
     assert "logical-contract divergence" in capsys.readouterr().err

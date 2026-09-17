@@ -230,12 +230,32 @@ def _switch_engine_to_window(
         return engine
     from factor_engine.storage.time_window import narrow_data_source_for_window
 
-    narrowed = narrow_data_source_for_window(
-        engine.data_source,
-        start_date=run_window.actual_load_start,
-        end_date=run_window.actual_load_end,
-        bar_freq=source_bar_freq if bars_per_day > 1 else None,
-    )
+    from factor_engine.storage.sources.data_access_source import DataAccessSource
+
+    if type(engine.data_source) is DataAccessSource:
+        # Warmup expands the requested interval. Narrowing intersects bounds
+        # and would silently discard every pre-start history row.
+        source = engine.data_source
+        contract_names = (
+            "dataset", "fields", "instrument_filter", "normalize_timestamp",
+            "timestamp_unit", "read_auto", "params", "semantic_filters",
+            "read_mode", "strict_unknown_fields", "run_mode", "production",
+            "enforce_mining_gate", "snapshot_now_only", "mining_coverage_threshold",
+            "pit_enforce", "snapshot_only", "snapshot_valid_at", "snapshot_created_at",
+        )
+        contracts = {name: getattr(source, name) for name in contract_names}
+        narrowed = DataAccessSource(
+            **contracts,
+            start_date=run_window.actual_load_start,
+            end_date=run_window.actual_load_end,
+        )
+    else:
+        narrowed = narrow_data_source_for_window(
+            engine.data_source,
+            start_date=run_window.actual_load_start,
+            end_date=run_window.actual_load_end,
+            bar_freq=source_bar_freq if bars_per_day > 1 else None,
+        )
     narrowed = _preserve_source_contracts(engine.data_source, narrowed)
     use_fresh_cache = not isinstance(engine.cache, PersistentPlanCache)
     return engine.with_data_source(narrowed, fresh_cache=use_fresh_cache)

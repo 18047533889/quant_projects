@@ -260,7 +260,7 @@ def test_panel_identity_hash_stable_across_processes() -> None:
 
     code = (
         "import pandas as pd, numpy as np\n"
-        "from cleaned_operators.common._polars_bridge import PanelIdentity\n"
+        "from factor_engine.cleaned_operators.common._polars_bridge import PanelIdentity\n"
         "mi = pd.MultiIndex.from_tuples([('2024-01-01','A'),('2024-01-01','B'),"
         "('2024-01-02','A')], names=['ts','inst'])\n"
         "print(hash(PanelIdentity.from_frame("
@@ -469,6 +469,14 @@ def test_normalize_operator_result_shape_changing() -> None:
         template_panel=in_panel, ctx=_Ctx(), operator=_M2D(),
     )
     assert isinstance(out, pd.Series) and len(out) == 4
+    out_native = _normalize_operator_result(
+        daily, backend="pandas_numpy", template=minute_idx,
+        template_panel=in_panel, ctx=_Ctx(native=True), operator=_M2D(),
+    )
+    assert isinstance(out_native, pd.Series) and len(out_native) == 4
+    assert out_native.index.get_level_values(0).equals(
+        daily.stack(future_stack=True).index.get_level_values(0)
+    )
 
     class _Plain:
         metadata = OperatorMetadata(name="plain", category="x", param_names=["x"])
@@ -487,3 +495,50 @@ def test_normalize_operator_result_shape_changing() -> None:
             daily_dup, backend="pandas_numpy", template=minute_idx,
             template_panel=in_panel, ctx=_Ctx(), operator=_M2D(),
         )
+
+
+def test_normalize_nested_daily_parent_does_not_restore_minute_root_axis() -> None:
+    from factor_engine.backend.cleaned_bridge import _normalize_operator_result
+    from factor_engine.cleaned_operators.base import OperatorMetadata
+
+    minute_root = pd.MultiIndex.from_product(
+        [pd.date_range("2025-01-02 09:31", periods=2, freq="min"), ["A", "B"]],
+        names=["timestamp", "instrument"],
+    )
+    daily_index = pd.MultiIndex.from_product(
+        [pd.to_datetime(["2025-01-02"]), ["A", "B"]],
+        names=["timestamp", "instrument"],
+    )
+    daily_template = pd.Series([1.0, 2.0], index=daily_index)
+    daily_panel = daily_template.unstack("instrument")
+
+    class _Perf:
+        panel_native = True
+
+    class _Ctx:
+        timestamp_col = "timestamp"
+        instrument_col = "instrument"
+        template_index = minute_root
+        perf = _Perf()
+
+    class _DailyParent:
+        metadata = OperatorMetadata(
+            name="daily_parent",
+            category="test",
+            param_names=["x", "y"],
+            input_grain="daily",
+            output_grain="daily",
+        )
+
+    out = _normalize_operator_result(
+        daily_panel * 2.0,
+        backend="pandas_numpy",
+        template=daily_template,
+        template_panel=daily_panel,
+        ctx=_Ctx(),
+        operator=_DailyParent(),
+    )
+
+    assert isinstance(out, pd.Series)
+    assert out.index.equals(daily_index)
+    assert out.tolist() == [2.0, 4.0]

@@ -1,0 +1,29 @@
+{
+  "closed_evidence": [
+    {
+      "path": "evidence/factor_catalog_20260916/r13-auto-new84.jsonl.gz",
+      "records": 84,
+      "sha256": "af1295441d9fe9aea5cb967ae09e8db2d569728c669f107c633d812f3fd982b0"
+    }
+  ],
+  "input_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r13b.csv.gz",
+  "input_checkpoint_sha256": "80dd39f1364d82edd236471c80ac5feb7f81cc2eaf00287262e95dce06f0e9d3",
+  "input_ledger": "evidence/factor_catalog_20260916/r13-auto-new84.ledger.jsonl",
+  "input_ledger_sha256": "8b702055e798c4e507540e497a3e3c7737a8949694455b56b78e34152ab340c4",
+  "ledger_closed_processed": 84,
+  "merged_records": 84,
+  "output_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r13c.csv.gz",
+  "output_checkpoint_sha256": "fb11fcd9f1a8d90763bd96714da73e70a3045edf665acc821477c5d154aed5b1",
+  "scope": "formula_matched_research_smoke_not_code_certification",
+  "source_rows": 114132,
+  "status_counts": {
+    "COMPILE_FAILED": 121,
+    "EXECUTED": 7911,
+    "EXECUTED_ALL_NONFINITE": 186,
+    "EXECUTION_FAILED": 26,
+    "NATIVE_CRASH": 20,
+    "NOT_RUN": 105854,
+    "PREPARE_FAILED": 14
+  },
+  "unique_factor_ids": 113893
+}

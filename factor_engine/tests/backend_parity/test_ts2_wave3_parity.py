@@ -537,6 +537,65 @@ def test_liquidity_beta_degenerate_variance_fails_closed():
     assert sql_out.isna().all(), "zero-variance window must fail closed to NaN (SQL)"
 
 
+def test_liquidity_beta_small_scale_nonzero_variance_is_not_degenerate():
+    """Regression existence is scale-free; small but resolved variance is valid."""
+    rows = _BETA_ROWS
+    dates = [pd.Timestamp("2024-01-02") + pd.Timedelta(days=i) for i in range(rows)]
+    delta = (np.arange(rows, dtype=float) + 1.0) * 1e-14
+    liquidity = 1e-9 + np.cumsum(delta)
+    y = 3.0 * delta + 2e-13
+    frame = pd.DataFrame({"ts": dates, "inst": ["A"] * rows, "y": y, "liq": liquidity})
+    plan = PlanNode(
+        op="ts_market_liquidity_beta",
+        inputs=[sql_column("y"), sql_column("liq"), sql_literal(float(_BETA_WINDOW))],
+        attrs={"window": _BETA_WINDOW},
+    )
+    ref_op = OperatorRegistry.get("ts_market_liquidity_beta", backend="pandas_numpy")
+    ref = ref_op.calculate(
+        frame.pivot(index="ts", columns="inst", values="y"),
+        frame.pivot(index="ts", columns="inst", values="liq"),
+        _BETA_WINDOW,
+    )
+    outputs = (
+        _panel_from_wide(ref),
+        _polars_emitter_out(plan, frame),
+        _sql_emitter_out(plan, frame),
+    )
+    for out in outputs:
+        finite = out[np.isfinite(out)]
+        assert not finite.empty
+        np.testing.assert_allclose(finite.to_numpy(), 3.0, rtol=1e-7, atol=1e-7)
+
+
+def test_liquidity_beta_nonfinite_rows_are_excluded_and_recover():
+    """NaN/Inf rows break their deltas but do not poison later valid windows."""
+    rows = _BETA_ROWS
+    dates = [pd.Timestamp("2024-01-02") + pd.Timedelta(days=i) for i in range(rows)]
+    delta = np.linspace(0.5, 2.5, rows)
+    liquidity = np.cumsum(delta)
+    y = 1.75 * delta - 0.2
+    liquidity[9] = np.nan
+    y[17] = np.inf
+    frame = pd.DataFrame({"ts": dates, "inst": ["A"] * rows, "y": y, "liq": liquidity})
+    plan = PlanNode(
+        op="ts_market_liquidity_beta",
+        inputs=[sql_column("y"), sql_column("liq"), sql_literal(float(_BETA_WINDOW))],
+        attrs={"window": _BETA_WINDOW},
+    )
+    ref_op = OperatorRegistry.get("ts_market_liquidity_beta", backend="pandas_numpy")
+    ref = _panel_from_wide(ref_op.calculate(
+        frame.pivot(index="ts", columns="inst", values="y"),
+        frame.pivot(index="ts", columns="inst", values="liq"),
+        _BETA_WINDOW,
+    ))
+    for actual in (_polars_emitter_out(plan, frame), _sql_emitter_out(plan, frame)):
+        joined = pd.concat([ref.rename("ref"), actual.rename("actual")], axis=1)
+        assert joined["actual"].isna().equals(joined["ref"].isna())
+        finite = joined.dropna()
+        assert not finite.empty
+        np.testing.assert_allclose(finite["actual"], finite["ref"], rtol=1e-7, atol=1e-10)
+
+
 def test_inf_row_never_poisons_polars_window():
     # C carries ±Inf rows: pandas rolling drops them from BOTH the aggregate
     # and the min_periods count — the polars native branch must agree.

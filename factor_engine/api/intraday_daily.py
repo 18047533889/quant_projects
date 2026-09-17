@@ -7,18 +7,36 @@ logical source boundary before the value enters a daily factor DAG.
 from __future__ import annotations
 
 from typing import Any, Callable
+from numbers import Number
 
 from factor_engine.api.source_ref import source_col, transform_source_col
 
 _TIMESTAMP_CONVENTIONS = frozenset({"bar_end", "bar_start"})
+_SOURCE_CONTROL_PARAMS = frozenset({
+    "bar_minutes", "cutoff_time", "min_coverage", "min_bars",
+    "timestamp_convention", "history_days", "minutes",
+})
+
+
+def _integer_control(value: Any, name: str) -> int:
+    """Normalize integral controls without silently truncating their meaning."""
+    if isinstance(value, bool) or not isinstance(value, (Number, str)):
+        raise ValueError(f"{name} must be a numeric integer scalar, not bool or array")
+    try:
+        result = int(value)
+        if not isinstance(value, str) and value != result:
+            raise ValueError("fractional value")
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{name} must be a finite integer") from exc
+    return result
 
 
 def _validated_params(params: dict[str, Any]) -> dict[str, Any]:
     output = dict(params)
-    bar_minutes = int(output.get("bar_minutes", 5))
-    min_bars = int(output.get("min_bars", 2))
+    bar_minutes = _integer_control(output.get("bar_minutes", 5), "bar_minutes")
+    min_bars = _integer_control(output.get("min_bars", 2), "min_bars")
     min_coverage = float(output.get("min_coverage", 0.8))
-    history_days = int(output.get("history_days", 0))
+    history_days = _integer_control(output.get("history_days", 0), "history_days")
     convention = str(output.get("timestamp_convention", "bar_end")).lower()
     if bar_minutes <= 0:
         raise ValueError("bar_minutes must be positive")
@@ -30,8 +48,10 @@ def _validated_params(params: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("history_days must be non-negative")
     if convention not in _TIMESTAMP_CONVENTIONS:
         raise ValueError("timestamp_convention must be bar_end or bar_start")
-    if "minutes" in output and int(output["minutes"]) <= 0:
-        raise ValueError("minutes must be positive")
+    if "minutes" in output:
+        output["minutes"] = _integer_control(output["minutes"], "minutes")
+        if output["minutes"] <= 0:
+            raise ValueError("minutes must be positive")
     if "q" in output and not 0 < float(output["q"]) < 1:
         raise ValueError("q must be in (0,1)")
     output.update(
@@ -215,3 +235,59 @@ for name, func in _all_intraday.items():
     # Create intra_* alias (e.g. intraday_realized_variance -> intra_realized_variance)
     alias = name.replace("intraday_", "intra_", 1)
     INTRADAY_DAILY_DSL_FUNCTIONS[alias] = func
+
+
+def augment_intraday_daily_allowlist(
+    allow: dict[str, Callable[..., Any]],
+) -> dict[str, Callable[..., Any]]:
+    """Add SourceRef factories without shadowing explicit-panel operators.
+
+    Several historical ``intra_*`` names have two intentional forms: a
+    zero-input SourceRef authoring helper and a cleaned operator accepting
+    minute panels.  Route explicit positional inputs (or named panel inputs)
+    to the existing cleaned callable; keep zero-input/config-only calls on the
+    SourceRef path.
+    """
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.expr.base import Expr
+
+    out = dict(allow)
+    for name, source_func in INTRADAY_DAILY_DSL_FUNCTIONS.items():
+        panel_func = out.get(name)
+        if panel_func is None:
+            out[name] = source_func
+            continue
+        try:
+            canonical = OperatorRegistry.resolve_canonical(name)
+            operator = OperatorRegistry.get(canonical, mode="any")
+            metadata = getattr(operator, "metadata", None)
+            panel_names = frozenset({
+                *(getattr(metadata, "panel_params", ()) or ()),
+                *(getattr(metadata, "mixed_params", ()) or ()),
+            })
+        except (KeyError, RuntimeError, ValueError):
+            panel_names = frozenset()
+
+        def dual_route(*args: Any, _panel=panel_func, _source=source_func,
+                       _panel_names=panel_names, **kwargs: Any):
+            explicit_panel = bool(
+                args or _panel_names.intersection(kwargs)
+                or any(isinstance(value, Expr) for value in kwargs.values())
+            )
+            if explicit_panel and _SOURCE_CONTROL_PARAMS.intersection(kwargs):
+                mixed = sorted(_SOURCE_CONTROL_PARAMS.intersection(kwargs))
+                raise ValueError(
+                    "cannot mix explicit panel inputs with SourceRef controls: "
+                    + ", ".join(mixed)
+                )
+            if explicit_panel:
+                return _panel(*args, **kwargs)
+            return _source(**kwargs)
+
+        dual_route.__name__ = name
+        dual_route.__doc__ = (
+            f"Route {name}() to SourceRef authoring and explicit panel inputs "
+            "to the cleaned intraday operator."
+        )
+        out[name] = dual_route
+    return out

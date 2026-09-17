@@ -1,0 +1,13 @@
+{
+  "log": "r19-real-smoke-final.log",
+  "counts": {
+    "EXECUTED": 40
+  },
+  "sampled_peak_family_rss_bytes": 1288945664,
+  "sampling_seconds": 0.1,
+  "total_seconds_including_startup": 138.63659064099193,
+  "batch_seconds": 87.12495229812339,
+  "test_guard_reason": null,
+  "hard_memory_cap": false,
+  "scope": "Eight stocks, 2025-01-01 through 2026-04-30, forty-factor public-default run_many(auto), result sink summaries only. Not a full-scale performance or GPU certification. Watchdog values captured from the actual completed command."
+}

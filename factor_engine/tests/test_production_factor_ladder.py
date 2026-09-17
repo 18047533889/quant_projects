@@ -110,7 +110,7 @@ def test_level100_batch_run_many_sink_and_errors(tmp_path: Path, monkeypatch: py
     import factor_engine.runtime.run_peak_sampler as _rps
 
     G = 1 << 30
-    monkeypatch.setattr(_rb, "_process_family_rss", lambda pss=False: G)
+    monkeypatch.setattr(_rb, "_process_family_rss", lambda pss=False: (G, True))
     monkeypatch.setattr(_rb, "_process_family_cpu_times", lambda: 0.0)
     monkeypatch.setattr(_rb, "_cpu_util", lambda interval=0.0: 0.0)
     monkeypatch.setattr(_rb, "_disk_io_counters", lambda: None)

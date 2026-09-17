@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "tests/runtime/test_cse_materialization_pin.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 337842176, "sampling_seconds": 0.1, "seconds": 2.809536124812439, "test_guard_reason": null, "hard_memory_cap": false}

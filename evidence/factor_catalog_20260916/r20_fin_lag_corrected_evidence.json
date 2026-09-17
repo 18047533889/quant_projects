@@ -1,0 +1,13 @@
+{
+  "scope": "complete effective R20 surface (113893 R19 rows plus merged overrides)",
+  "source_sha256": "190a34ada8b380103e65f59b9cdf503f022c930838a0856e28824ab0b1e6d330",
+  "merged_sha256": "3e178337ed59211c1a66dd196ccd61f3ba559ce1f5cff14cce0530e9137e09b5",
+  "proposal_count": 21,
+  "effective_factor_count": 113893,
+  "effective_fin_announcement_lag_factor_count": 21,
+  "remaining_contract_violations": [],
+  "compile_counts": {
+    "COMPILED": 21
+  },
+  "output_sha256": "616c52e52a3c6307409a682888c2cbd7b1701343cd365e55dcf3bf611eda53f7"
+}

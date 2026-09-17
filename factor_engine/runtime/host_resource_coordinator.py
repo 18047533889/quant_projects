@@ -264,7 +264,10 @@ class HostResourceCoordinator:
         :class:`_HostLeaseRef`（带 ``release()``，DA governor release 时一并释放）。
         """
         job = _ACTIVE_JOB_LEASE.get()
-        requested = max(0, int(memory_bytes)) + max(0, int(scan_bytes))
+        # Scan bytes are cumulative I/O, not simultaneously resident memory.
+        # GlobalResourceGovernor owns their independent inflight cap; this child
+        # lease reserves only query/decode memory that can coexist with output.
+        requested = max(0, int(memory_bytes))
         if requested <= 0:
             requested = 1
         lease_id = f"da-query-workspace:{getattr(job, 'lease_id', 'standalone')}:{uuid.uuid4().hex}"

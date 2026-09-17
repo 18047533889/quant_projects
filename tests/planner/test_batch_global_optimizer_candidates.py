@@ -109,7 +109,10 @@ def test_numba_candidate_added():
         assert choice.representation == Representation.NUMPY_PANEL
 
 
-def test_multiple_candidates_present():
+def test_multiple_candidates_present(monkeypatch):
+    monkeypatch.setattr(
+        "factor_engine.backend.sql_pushdown.executor.extract_pushdown_context", lambda ctx: object()
+    )
     """Verify that multiple backend candidates are present for a given operator."""
     root = PlanNode("abs", inputs=(PlanNode("column", node_id="source"),), node_id="root")
 

@@ -1997,6 +1997,7 @@ class DataAccessStore:
                 columns=columns,
                 time_range=time_range,
                 instrument_filter=instrument_filter,
+                physical_scope=paths,
             )
             if cost.projection_bytes:
                 return max(int(cost.projection_bytes), 1)
@@ -8976,8 +8977,8 @@ class DataAccessStore:
         含新文件但 snapshot 没记录——lineage 不真实。这里在 snapshot 构建的同时
         展开一次，之后读路径只消费这份 frozen list，不再二次 mutable glob。
 
-        - 本地 glob（含 ``*``/``?``/``[``）→ glob.glob(recursive=True) 排序展开
-        - 展开为空 → 保留原 pattern（调用方按空分支处理，行为与旧版一致）
+        - 本地 glob（含 ``*``/``?``/``[``）→ glob.glob(recursive=True) 排序展开；
+          单个日历分区不存在时省略该 pattern，避免把周末/休市日交给执行器
         - **remote wildcard（R58）**：``s3://…/*.parquet`` 不再原样直传 DuckDB
           （AlphaFlow review #1：主读链必须自己展开）——
           ``dataset pattern → COS LIST prefix → 过滤精确 key → 精确 s3:// 列表``。
@@ -9018,9 +9019,6 @@ class DataAccessStore:
                 continue
             expanded = sorted(glob_mod.glob(p, recursive=True))
             if not expanded:
-                if p not in seen:
-                    seen.add(p)
-                    frozen.append(p)
                 continue
             for fp in expanded:
                 if fp not in seen:

@@ -80,8 +80,8 @@ def test_update_time_role_is_ingestion_time_not_knowledge():
 def test_price_fields_adjustment_status_declared():
     """R17-010 + ADJ_FIELD_MIGRATION（2026-08-28）：Factor 方向 verified
     （backward multiplier）；复权表 StockDailyBarAdj 的 OHLCV/limit 声明
-    ADJUSTED price basis（权威口径）；未复权 StockDailyBar 仍声明 RAW。pre_close
-    在复权表声明 ADJUSTED / 未复权表声明 official-reference。"""
+    BACKWARD_ADJUSTED price basis（权威口径）；未复权 StockDailyBar 仍声明 RAW。pre_close
+    在复权表声明 BACKWARD_ADJUSTED / 未复权表声明 official-reference。"""
     for logical, expected_status, expected_basis in (
         ("open", "raw", "RAW"),
         ("high", "raw", "RAW"),
@@ -100,7 +100,7 @@ def test_price_fields_adjustment_status_declared():
             assert spec.price_basis is None or spec.price_basis == "RAW", logical
         else:
             assert spec.price_basis == expected_basis, logical
-    # 复权权威口径：StockDailyBarAdj 同 logical 名声明 ADJUSTED。
+    # 复权权威口径：StockDailyBarAdj 同 logical 名声明 BACKWARD_ADJUSTED。
     for logical, source in (
         ("open", "AdjOpen"),
         ("high", "AdjHigh"),
@@ -112,7 +112,7 @@ def test_price_fields_adjustment_status_declared():
         spec = FIELD_REGISTRY.get(logical, table="StockDailyBarAdj")
         assert spec is not None, logical
         assert spec.source_name == source, (logical, spec.source_name)
-        assert spec.price_basis == "ADJUSTED", logical
+        assert spec.price_basis == "BACKWARD_ADJUSTED", logical
         assert spec.metadata.get("adjustment_status") == "adjusted", logical
 
 
@@ -497,7 +497,7 @@ def test_rank_slot_shareholder_aliases_name_id_matched_replacements():
     }
     for canon, replacements in checks.items():
         entry = OperatorRegistry._catalog[canon]
-        assert entry.get("preferred_replacements") == replacements, canon
+        assert entry.get("preferred_replacements") == tuple(replacements), canon
         assert "semantic_note" in entry, canon
     for canon in ("holder_pledge_churn", "holder_concentration_change", "holder_count_change_rate"):
         entry = OperatorRegistry._catalog[canon]
@@ -558,10 +558,10 @@ def test_production_allowlist_is_evidence_gated_not_surface_gated():
 def test_legacy_in_sample_and_intraday_aliases_stamped_honest():
     entry = OperatorRegistry._catalog["ts_multi_regression_resid"]
     assert entry["in_sample"] is True and entry["diagnostic_only"] is True
-    assert entry["preferred_replacements"] == ["ts_multi_regression_forecast_error"]
+    assert entry["preferred_replacements"] == ("ts_multi_regression_forecast_error",)
     jump = OperatorRegistry._catalog["intra_positive_jump_variation"]
     assert jump["compatibility_only"] is True
-    assert jump["preferred_replacements"] == ["intra_positive_tail_variation"]
+    assert jump["preferred_replacements"] == ("intra_positive_tail_variation",)
     assert OperatorRegistry._catalog["intra_realized_beta"]["benchmark_only"] is True
 
 
@@ -580,7 +580,7 @@ def test_expectile_quantile_regression_in_sample_stamped_and_hidden():
         assert entry["diagnostic_only"] is True, canon
         assert entry["hidden_from_default_mining"] is True, canon
         if replacement is not None:
-            assert entry["preferred_replacements"] == replacement, canon
+            assert entry["preferred_replacements"] == tuple(replacement), canon
     # hidden_from_default_mining is load-bearing: excluded from the production
     # allowlist independently of the diagnostic_only flag.
     from factor_engine.backend.fastpath_allowlists import production_allowlist

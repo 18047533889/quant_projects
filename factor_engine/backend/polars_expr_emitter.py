@@ -6494,7 +6494,7 @@ def _compile_polars_impl(
         # peer_ops._liquidity_beta: regress own_return on liquidity.diff(1)
         # with w = window, mp = max(3, window // 5); pairwise-finite mask;
         # population cov / population var (ddof=0 identity, R35-P0-M12);
-        # n > 1 and var > 0 guards (peer_ops var <= _EPS → NaN).
+        # n > 1 and scale-relative resolvable-variance guards.
         if len(node.inputs) < 2:
             return None
         y_in = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -6512,15 +6512,20 @@ def _compile_polars_impl(
         pair = y_fin.is_not_null() & x_fin.is_not_null()
         ym = pl.when(pair).then(y_fin).otherwise(None)
         xm = pl.when(pair).then(x_fin).otherwise(None)
-        mean_ab = (ym * xm).rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
-        mean_a = ym.rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
-        mean_b = xm.rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
-        mean_b2 = (xm * xm).rolling_mean(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
         n = ym.is_not_null().cast(pl.Float64).rolling_sum(window_size=w, min_samples=mp).over(_INST, order_by=_TS)
-        pop_cov = mean_ab - mean_a * mean_b
-        pop_var = mean_b2 - mean_b * mean_b
+        pop_cov = pl.rolling_cov(
+            ym, xm, window_size=w, min_samples=mp, ddof=0
+        ).over(_INST, order_by=_TS)
+        pop_var = xm.rolling_var(
+            window_size=w, min_samples=mp, ddof=0
+        ).over(_INST, order_by=_TS)
+        x_scale = xm.abs().rolling_max(
+            window_size=w, min_samples=mp
+        ).over(_INST, order_by=_TS)
+        resolution_floor = (x_scale * (8.0 * np.finfo(np.float64).eps)) ** 2
         expr = pl.when(
-            n.is_null() | (n <= 1) | pop_var.is_null() | (pop_var <= 1e-12)
+            n.is_null() | (n <= 1) | pop_var.is_null()
+            | (pop_var <= resolution_floor)
         ).then(None).otherwise(pop_cov / pop_var)
         return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
@@ -6730,7 +6735,7 @@ def execute_polars_long_plan(
     compiled = compile_polars_long_lazy(
         plan, ctx, base_lf=base_lf, lazy_cache_key=lazy_cache_key
     )
-    lf = compiled.frame.sort([compiled.ts_col, compiled.inst_col]).select(
+    lf = compiled.frame.select(
         pl.col(compiled.ts_col).alias(ctx.timestamp_col),
         pl.col(compiled.inst_col).alias(ctx.instrument_col),
         pl.col(compiled.value_col).alias("value"),
@@ -6757,7 +6762,7 @@ def execute_polars_long_plan(
             instrument_col=ctx.instrument_col,
             value_col="value",
             template_index=optional_universe_index(ctx),
-        ).sort_index()
+        )
 
     import time as _t
 
@@ -6775,7 +6780,7 @@ def execute_polars_long_plan(
         instrument_col=ctx.instrument_col,
         value_col="value",
         template_index=optional_universe_index(ctx),
-    ).sort_index()
+    )
 
 
 def execute_polars_expr_plan(plan: PlanNode, ctx: Any) -> pd.Series:

@@ -1,0 +1,28 @@
+{
+  "recipe_set": "r14_technical",
+  "counts": {
+    "rows": 114132,
+    "execution:EXECUTED": 7927,
+    "execution:EXECUTED_ALL_NONFINITE": 186,
+    "execution:NOT_RUN": 105840,
+    "execution:EXECUTION_FAILED": 26,
+    "execution:COMPILE_FAILED": 119,
+    "execution:PREPARE_FAILED": 14,
+    "execution:NATIVE_CRASH": 20,
+    "changed": 67,
+    "changed_static:PARSED_FIELDS_BOUND": 58,
+    "changed_compile:COMPILED": 51,
+    "changed_compile:COMPILE_FAILED": 16,
+    "changed_static:PARSE_FAILED": 9
+  },
+  "unique_factor_ids": 113893,
+  "source_checkpoint": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/factor_catalog_review_r13f.csv.gz",
+  "source_sha256": "4529988819993fc51219fd0561cd99c723565a8e063418c2116b47b5dbebba19",
+  "output_sha256": {
+    "checkpoint": "16261f5e3f7917c336e0e692578a57c7493eec2d0980559c7e0959b023f540cd",
+    "decisions": "db0fec7de5e0be98c708f1f1d58ce114570600484c936df4ee926ec97b654406",
+    "input": "64ab98a9411e3c4ff01c2fd5c04d8eab5fd31679b1b4b53dd05c9e129d1cca74"
+  },
+  "scope": "reviewed_changes_compile_not_execution",
+  "authorization": "user requested explanation-backed DSL completion; explicit decisions retained"
+}

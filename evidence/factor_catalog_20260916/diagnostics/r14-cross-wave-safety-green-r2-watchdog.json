@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "factor_engine/tests/runtime/test_run_many_cross_wave_cache.py"], "returncode": 0, "signal_number": null, "signal_name": null, "source_hashes": {}, "sampled_peak_family_rss_bytes": 455458816, "sampling_seconds": 0.1, "seconds": 55.15440687700175, "test_guard_reason": null, "hard_memory_cap": false}
