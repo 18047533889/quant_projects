@@ -145,6 +145,8 @@ class BatchDataRequest:
     groups: list[SourceScanGroup] = field(default_factory=list)
     degraded_planning: list[ScanCostUnavailable] = field(default_factory=list)
     hard_gate_counters: dict[str, int] = field(default_factory=dict)
+    column_source_scope_keys: dict[str, str] = field(default_factory=dict)
+    column_scan_costs: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @property
     def scan_cost_map(self) -> dict[str, Any]:
@@ -190,16 +192,26 @@ class BatchSourceResolver:
         self.anchor_scope = _anchor_source_scope(anchor_source, market=self.market)
         self._cache: dict[str, Any] = {}
 
-    def resolve_source(self, scope: SourceScopeId) -> Any:
+    def resolve_source(
+        self,
+        scope: SourceScopeId,
+        *,
+        semantic_filters: dict[str, Any] | None = None,
+    ) -> Any:
         """返回 scope 对应的 DataSourceAdapter；不可得返回 ``None``。"""
         key = scope.key()
         if key in self._cache:
             return self._cache[key]
-        adapter = self._resolve(scope)
+        adapter = self._resolve(scope, semantic_filters=semantic_filters)
         self._cache[key] = adapter
         return adapter
 
-    def _resolve(self, scope: SourceScopeId) -> Any:
+    def _resolve(
+        self,
+        scope: SourceScopeId,
+        *,
+        semantic_filters: dict[str, Any] | None = None,
+    ) -> Any:
         if scope.dataset == self.anchor_scope.dataset:
             return self.anchor_source
         src = self.anchor_source
@@ -210,14 +222,27 @@ class BatchSourceResolver:
         if isinstance(registry, dict):
             for sub in registry.values():
                 if str(getattr(sub, "dataset", "") or "") == scope.dataset:
-                    return sub
+                    return self._scope_filtered_adapter(sub, semantic_filters)
             if scope.dataset in registry:
-                return registry[scope.dataset]
+                return self._scope_filtered_adapter(
+                    registry[scope.dataset], semantic_filters
+                )
         # 2) 子源工厂（LQTP logical source._child(dataset) 等）。
         child_factory = getattr(src, "_child", None)
         if callable(child_factory):
             try:
-                child = child_factory(scope.dataset)
+                if semantic_filters:
+                    child = child_factory(
+                        scope.dataset,
+                        semantic_filters=dict(semantic_filters),
+                    )
+                else:
+                    child = child_factory(scope.dataset)
+            except TypeError:
+                # Older generic child factories may not expose the keyword.
+                # They are only usable when no explicit SourceRef identity is
+                # required; silently dropping rank/index/industry is forbidden.
+                child = None if semantic_filters else child_factory(scope.dataset)
             except Exception:  # noqa: BLE001
                 child = None
             if child is not None:
@@ -231,12 +256,135 @@ class BatchSourceResolver:
             fn = getattr(src, method_name, None)
             if callable(fn):
                 try:
-                    found = fn(scope.dataset)
+                    if semantic_filters:
+                        found = fn(
+                            scope.dataset,
+                            semantic_filters=dict(semantic_filters),
+                        )
+                    else:
+                        found = fn(scope.dataset)
+                except TypeError:
+                    found = None if semantic_filters else fn(scope.dataset)
                 except Exception:  # noqa: BLE001
                     found = None
                 if found is not None:
-                    return found
+                    return self._scope_filtered_adapter(found, semantic_filters)
+        # A strict DataAccess anchor can create a same-window adapter only for
+        # a dataset registered to the already resolved market. Arbitrary
+        # dataset strings and cross-market scopes remain unresolved.
+        try:
+            from factor_engine.storage.sources.data_access_source import DataAccessSource
+            from factor_engine.storage.sources.logical_tables import (
+                ASHARE_LOGICAL_TABLES,
+                US_LOGICAL_TABLES,
+            )
+
+            registered = {
+                "ashare": {
+                    contract.dataset for contract in ASHARE_LOGICAL_TABLES.values()
+                    if contract.dataset
+                },
+                "us": {
+                    contract.dataset for contract in US_LOGICAL_TABLES.values()
+                    if contract.dataset
+                },
+            }
+            from factor_engine.fields.market_registry import MultiMarketFieldRegistry
+
+            field_registries = MultiMarketFieldRegistry()
+            for market_name in tuple(registered):
+                registered[market_name].update(
+                    str(spec.dataset)
+                    for spec in field_registries.table_specs(market_name)
+                    if getattr(spec, "dataset", None)
+                )
+            if (
+                isinstance(src, DataAccessSource)
+                and self.market in registered
+                and scope.market == self.market
+                and scope.dataset in registered[self.market]
+            ):
+                return DataAccessSource(
+                    dataset=scope.dataset,
+                    start_date=src.start_date,
+                    end_date=src.end_date,
+                    instrument_filter=list(src.instrument_filter or ()),
+                    read_auto=getattr(src, "read_auto", None),
+                    params=dict(getattr(src, "params", None) or {}),
+                    semantic_filters={
+                        **dict(getattr(src, "semantic_filters", None) or {}),
+                        **dict(semantic_filters or {}),
+                    },
+                    read_mode=str(getattr(src, "read_mode", "panel") or "panel"),
+                    strict_unknown_fields=src.strict_unknown_fields,
+                    run_mode=src.run_mode,
+                    production=src.production,
+                )
+        except Exception:
+            return None
         return None
+
+    @staticmethod
+    def _scope_filtered_adapter(
+        adapter: Any,
+        semantic_filters: dict[str, Any] | None,
+    ) -> Any:
+        """Return an identity-specific adapter without mutating shared sources.
+
+        A pre-registered ``DataAccessSource`` is often unfiltered.  Reusing it
+        for ``ShareholderRank=1`` and ``ShareholderRank=2`` would collapse two
+        distinct SourceRef scopes into the same physical estimate/read identity.
+        Clone only this public adapter type; opaque adapters fail closed unless
+        they already carry the exact requested semantic filters.
+        """
+        requested = dict(semantic_filters or {})
+        if not requested:
+            return adapter
+        existing = dict(getattr(adapter, "semantic_filters", None) or {})
+        merged = {**existing, **requested}
+        if existing == merged:
+            return adapter
+        try:
+            from factor_engine.storage.sources.data_access_source import DataAccessSource
+
+            if isinstance(adapter, DataAccessSource):
+                return DataAccessSource(
+                    dataset=adapter.dataset,
+                    fields=dict(getattr(adapter, "fields", None) or {}),
+                    start_date=adapter.start_date,
+                    end_date=adapter.end_date,
+                    instrument_filter=list(adapter.instrument_filter or ()),
+                    normalize_timestamp=adapter.normalize_timestamp,
+                    timestamp_unit=adapter.timestamp_unit,
+                    read_auto=getattr(adapter, "read_auto", None),
+                    params=dict(getattr(adapter, "params", None) or {}),
+                    semantic_filters=merged,
+                    read_mode=str(getattr(adapter, "read_mode", "panel") or "panel"),
+                    strict_unknown_fields=adapter.strict_unknown_fields,
+                    run_mode=adapter.run_mode,
+                    production=adapter.production,
+                    pit_enforce=bool(getattr(adapter, "pit_enforce", False)),
+                )
+        except Exception:  # noqa: BLE001
+            return None
+        return None
+
+
+def _binding_semantic_filters(binding: Any) -> dict[str, Any]:
+    """Recover the exact SourceRef row identity carried by an encoded column.
+
+    ``params_digest`` separates physical scopes but is intentionally not parsed
+    back into business values.  The encoded SourceRef remains the authoritative
+    reversible carrier.  Transform parameters are execution semantics and are
+    not row filters.
+    """
+    try:
+        from factor_engine.api.source_ref import decode_source_ref
+
+        ref = decode_source_ref(binding.encoded_column)
+        return dict(ref.params_dict())
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def _anchor_source_scope(source: Any, *, market: str = "") -> SourceScopeId:
@@ -252,13 +400,30 @@ def _anchor_source_scope(source: Any, *, market: str = "") -> SourceScopeId:
 
 
 def _walk_columns(plan: Any, out: set[str]) -> None:
-    op = str(getattr(plan, "op", "") or "")
-    if op == "column":
-        name = str((getattr(plan, "attrs", None) or {}).get("name") or "")
-        if name:
-            out.add(name)
-    for child in getattr(plan, "inputs", ()) or ():
-        _walk_columns(child, out)
+    visited: set[int] = set()
+    active: set[int] = set()
+    stack = [(plan, False)]
+    while stack:
+        node, exiting = stack.pop()
+        node_key = id(node)
+        if exiting:
+            active.remove(node_key)
+            visited.add(node_key)
+            continue
+        if node_key in active:
+            raise ValueError("cyclic plan dependency while collecting batch columns")
+        if node_key in visited:
+            continue
+        active.add(node_key)
+        if str(getattr(node, "op", "") or "") == "column":
+            name = str((getattr(node, "attrs", None) or {}).get("name") or "")
+            if name:
+                out.add(name)
+        stack.append((node, True))
+        stack.extend(
+            (child, False)
+            for child in reversed(tuple(getattr(node, "inputs", ()) or ()))
+        )
 
 
 def _looks_like_source_ref(name: str) -> bool:
@@ -371,10 +536,21 @@ def build_batch_data_request(
     anchor_scope = _anchor_source_scope(source, market=market)
 
     # 2) R39-P0-PERF-002：typed ColumnSourceBinding（从列直接解析）。
-    discovery = discover_column_source_bindings(plans)
+    discovery = discover_column_source_bindings(
+        plans,
+        market=market,
+        anchor_dataset=anchor_scope.dataset,
+    )
     bindings = discovery.bindings
+    binding_markets = {
+        binding.market for binding in bindings.values() if binding.market
+    }
+    if not market and len(binding_markets) == 1:
+        market = next(iter(binding_markets))
     group_by_scope: dict[SourceScopeId, set[str]] = {}
+    filters_by_scope: dict[SourceScopeId, dict[str, Any]] = {}
     anchor_cols: set[str] = set()
+    effective_scope_keys: dict[str, str] = {}
     unbound_sref = 0
     for name in ordered:
         binding = bindings.get(name)
@@ -387,10 +563,23 @@ def build_batch_data_request(
                 and (binding.market or market) == market
             ):
                 anchor_cols.add(name)
+                # The anchor owns the actual snapshot, time window and
+                # instrument filter. A legacy SourceRef's dialect-version
+                # digest is parser identity, not a distinct physical scan.
+                # Bind same-dataset/same-market columns to the exact anchor
+                # group so they receive that group's evidenced ScanCost.
+                effective_scope_keys[name] = anchor_scope.key()
             else:
                 group_by_scope.setdefault(binding.source_scope, set()).add(
                     binding.field
                 )
+                filters = _binding_semantic_filters(binding)
+                prior = filters_by_scope.setdefault(binding.source_scope, filters)
+                if prior != filters:
+                    raise ValueError(
+                        "SourceRef scope digest collision with different semantic filters"
+                    )
+                effective_scope_keys[name] = binding.source_scope.key()
         else:
             if _looks_like_source_ref(name):
                 unbound_sref += 1
@@ -419,7 +608,10 @@ def build_batch_data_request(
         getattr(source, "instrument_filter", None) or ()
     ) or None
     for gid, (scope, cols) in enumerate(group_specs):
-        adapter = resolver.resolve_source(scope)
+        adapter = resolver.resolve_source(
+            scope,
+            semantic_filters=filters_by_scope.get(scope),
+        )
         estimator = (
             getattr(adapter, "estimate_scan_cost", None)
             if adapter is not None
@@ -479,11 +671,23 @@ def build_batch_data_request(
                 cost_dataset=cost_dataset,
             )
         )
+    costs_by_scope = {
+        group.source_scope_key: group.scan_cost
+        for group in requests
+        if group.scan_cost is not None
+    }
+    column_scope_keys = dict(effective_scope_keys)
     return BatchDataRequest(
         fields=ordered,
         groups=requests,
         degraded_planning=degraded,
         hard_gate_counters={
             "SOURCE_REF_WITHOUT_TYPED_SOURCE_BINDING": unbound_sref,
+        },
+        column_source_scope_keys=column_scope_keys,
+        column_scan_costs={
+            name: costs_by_scope[scope_key]
+            for name, scope_key in column_scope_keys.items()
+            if scope_key in costs_by_scope
         },
     )

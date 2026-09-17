@@ -300,7 +300,7 @@ def _rolling_regression(y: pd.DataFrame, x: pd.DataFrame, window: int, min_perio
             start = max(0, row - w + 1)
             a, b = yv[start : row + 1, col], xv[start : row + 1, col]
             valid = np.isfinite(a) & np.isfinite(b)
-            if valid.sum() < mp or np.var(b[valid]) <= _EPS:
+            if valid.sum() < mp:
                 continue
             a, b = a[valid], b[valid]
             # R5 P1-96: np.cov defaults to ddof=1 while np.var defaults to ddof=0,
@@ -308,6 +308,15 @@ def _rolling_regression(y: pd.DataFrame, x: pd.DataFrame, window: int, min_perio
             # so numerator and denominator share a single ddof.
             xbar = float(np.mean(b))
             denom = float(np.sum((b - xbar) ** 2))
+            # A fixed variance epsilon is dimensionful and incorrectly rejects
+            # valid small-scale regressors.  Fail closed only when the centered
+            # energy is indistinguishable from zero at this window's own
+            # floating-point scale; the margin rejects one-bit noise too.
+            scale = float(np.max(np.abs(b)))
+            ulp = float(np.nextafter(scale, np.inf) - scale)
+            resolution_floor = float(b.size) * (8.0 * ulp) ** 2
+            if not np.isfinite(denom) or denom <= resolution_floor:
+                continue
             out[row, col] = float(np.sum((a - np.mean(a)) * (b - xbar)) / denom)
     return _frame_like(y, out)
 

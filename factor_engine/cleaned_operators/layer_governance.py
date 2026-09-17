@@ -41,7 +41,6 @@ RECIPE_CANONICALS = frozenset({
     "CCI",
     "DPO",
     "MOM",
-    "OBV",
     "ROC",
     "RSI",
     "StochasticD",
@@ -106,7 +105,27 @@ RESEARCH_CANONICALS = frozenset({
 })
 
 # Historical duplicate that can remain as a compatibility alias without a canonical.
-ALIAS_MIGRATIONS = {"log_returns": "ts_log_return"}
+ALIAS_MIGRATIONS = {
+    "log_returns": "ts_log_return",
+    "ACF": "ts_expanding_acf_statistic",
+    "pacf": "ts_expanding_pacf_statistic",
+    "bartlett_test": "ts_expanding_bartlett_pvalue",
+    "chi_square_test": "ts_expanding_chi_square_pvalue",
+    "corr_test": "ts_expanding_pearson_pvalue",
+    "durbin_watson_test": "ts_expanding_durbin_watson_statistic",
+    "granger_causality": "ts_expanding_granger_pvalue",
+    "jarque_bera_test": "ts_expanding_jarque_bera_pvalue",
+    "kendall_corr_test": "ts_expanding_kendall_pvalue",
+    "kpss_test": "ts_expanding_kpss_pvalue",
+    "ks_test": "ts_expanding_ks_pvalue",
+    "levene_test": "ts_expanding_levene_pvalue",
+    "lilliefors_test": "ts_expanding_lilliefors_pvalue",
+    "spearman_corr_test": "ts_expanding_spearman_pvalue",
+    "stationarity_test": "ts_expanding_adf_pvalue",
+    "ttest_one_sample": "ts_expanding_ttest_one_sample_pvalue",
+    "ttest_paired": "ts_expanding_ttest_paired_pvalue",
+    "ttest_two_samples": "ts_expanding_ttest_two_sample_pvalue",
+}
 
 _FINALIZED = False
 

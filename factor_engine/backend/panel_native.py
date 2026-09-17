@@ -42,13 +42,19 @@ def load_column_as_panel(data_source: Any, name: str, ctx: ExecutionContext) -> 
     unchanged and avoids an instrument-major -> time-major reorder.
     """
     prefer_series = bool(getattr(data_source, "prefer_series_panel_loading", False))
-    if prefer_series:
+    loader = getattr(data_source, "load_column_panel", None)
+    # A wide panel cannot represent whether a Cartesian cell was absent from
+    # the source or explicitly present with NaN. Capture the first column's
+    # authoritative sparse MultiIndex before widening, including its order.
+    if getattr(ctx, "template_index", None) is None:
         series = data_source.load_column(name)
         ensure_template_from_series(ctx, series)
-        from .cleaned_bridge import series_to_panel
-        panel = series_to_panel(series, ctx)
+        if prefer_series or not callable(loader):
+            from .cleaned_bridge import series_to_panel
+            panel = series_to_panel(series, ctx)
+        else:
+            panel = loader(name)
     else:
-        loader = getattr(data_source, "load_column_panel", None)
         if callable(loader):
             panel = loader(name)
         else:

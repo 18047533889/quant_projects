@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import pandas as pd
 import pyarrow as pa
+import pytest
 
+from data_access.core.exceptions import ValidationError
 from data_access.read.adapters import arrow_table_to_multiindex_columns, arrow_to_multiindex_series
 
 
@@ -173,3 +175,43 @@ def test_decimal_object_coerced_to_float64():
     assert series.dtype == "float64"
     assert series.iloc[0] == 1.0
     assert series.iloc[1] == 0.0
+def test_timestamptz_microseconds_normalizes_to_checked_nanoseconds():
+    table = pa.table(
+        {
+            "ts": pa.array(
+                [pd.Timestamp("2025-01-02T01:31:00Z").to_pydatetime()],
+                type=pa.timestamp("us", tz="UTC"),
+            ),
+            "symbol": ["000001.SZ"],
+            "value": [1.0],
+        }
+    )
+    out = arrow_to_multiindex_series(
+        table,
+        timestamp_column="ts",
+        instrument_column="symbol",
+        value_column="value",
+    )
+    timestamps = out.index.get_level_values("timestamp")
+    assert str(timestamps.dtype) == "datetime64[ns]"
+    assert timestamps[0] == pd.Timestamp("2025-01-02 01:31:00")
+
+
+def test_timestamptz_outside_nanosecond_domain_fails_closed():
+    table = pa.table(
+        {
+            "ts": pa.array(
+                [pd.Timestamp("2500-01-02T01:31:00Z").to_pydatetime()],
+                type=pa.timestamp("us", tz="UTC"),
+            ),
+            "symbol": ["000001.SZ"],
+            "value": [1.0],
+        }
+    )
+    with pytest.raises(ValidationError, match="datetime64\\[ns\\]"):
+        arrow_to_multiindex_series(
+            table,
+            timestamp_column="ts",
+            instrument_column="symbol",
+            value_column="value",
+        )

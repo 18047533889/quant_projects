@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "tests/operators/test_catalog_recipe_migration.py", "-k", "markov_min_periods"], "returncode": 0, "sampled_peak_family_rss_bytes": 479793152, "sampling_seconds": 0.1, "seconds": 52.552736008074135, "test_guard_reason": null, "hard_memory_cap": false}

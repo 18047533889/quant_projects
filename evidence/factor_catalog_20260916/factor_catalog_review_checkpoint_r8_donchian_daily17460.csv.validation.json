@@ -1,0 +1,24 @@
+{
+  "rows": 114132,
+  "factor_ids": 113893,
+  "donchian_rows": 280,
+  "donchian_status_counts": {
+    "EXECUTED": 244,
+    "EXECUTED_ALL_NONFINITE": 4,
+    "COMPILE_FAILED": 3,
+    "EXECUTION_FAILED": 9,
+    "NATIVE_CRASH": 20
+  },
+  "donchian_old_evidence_rows": 0,
+  "r17_status_counts": {
+    "EXECUTED": 424,
+    "COMPILE_FAILED": 34,
+    "EXECUTED_ALL_NONFINITE": 42
+  },
+  "intraday_semantic_redesign_counts": {
+    "FIELDS_UNRESOLVED": 28,
+    "PARSED_FIELDS_BOUND": 71
+  },
+  "output_sha256": "9a46fb1e48cb56e2cc5b70ed9e4419705512f8731966b08e02fc0d55c6b3b133",
+  "passed": true
+}

@@ -13,9 +13,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from factor_engine.planner.batch_data_request import (
     BatchSourceResolver,
     ScanCostUnavailable,
+    _walk_columns,
     build_batch_data_request,
 )
 from factor_engine.planner.logical_plan import PlanNode
@@ -29,12 +32,25 @@ from factor_engine.api.source_ref import (
     encode_source_ref,
     make_source_ref,
 )
+from factor_engine.storage.sources.data_access_source import DataAccessSource
 
 
 def _sref(table, field, *, dataset=None, market=None):
     """构造一个可解码的 SourceRef 列名。"""
     return encode_source_ref(
         make_source_ref(table, field, dataset=dataset, market=market)
+    )
+
+
+def _filtered_sref(table, field, *, dataset, market="ashare", **params):
+    return encode_source_ref(
+        make_source_ref(
+            table,
+            field,
+            dataset=dataset,
+            market=market,
+            params=params,
+        )
     )
 
 
@@ -233,6 +249,108 @@ def test_batch_source_resolver_direct():
     assert resolver.resolve_source(missing_scope) is None
 
 
+def test_data_access_anchor_builds_only_registered_same_market_secondary():
+    source = DataAccessSource(
+        dataset="ashare_stock_daily_adj",
+        start_date="2025-01-01",
+        end_date="2025-01-31",
+        instrument_filter=["000001"],
+        read_auto=False,
+        run_mode="interactive_research",
+        production=False,
+    )
+    resolver = BatchSourceResolver(source, market="ashare")
+    valuation = resolver.resolve_source(
+        SourceScopeId(dataset="ashare_stock_valuation_daily", market="ashare")
+    )
+    assert isinstance(valuation, DataAccessSource)
+    assert valuation is not source
+    assert valuation.dataset == "ashare_stock_valuation_daily"
+    assert valuation.start_date == source.start_date
+    assert valuation.end_date == source.end_date
+    assert valuation.instrument_filter == source.instrument_filter
+    assert valuation.run_mode == source.run_mode
+    assert valuation.production == source.production
+    assert resolver.resolve_source(
+        SourceScopeId(dataset="unknown_table", market="ashare")
+    ) is None
+    raw = resolver.resolve_source(
+        SourceScopeId(dataset="ashare_stock_daily", market="ashare")
+    )
+    assert isinstance(raw, DataAccessSource)
+    assert raw.dataset == "ashare_stock_daily"
+    assert raw is not source
+    assert resolver.resolve_source(
+        SourceScopeId(dataset="us_stock_daily", market="us")
+    ) is None
+
+
+@pytest.mark.parametrize(
+    ("table", "field", "dataset", "filter_name", "filter_value"),
+    [
+        ("StockTopTenShareholder", "ShareRatio", "ashare_stock_topten_shareholder", "ShareholderRank", 7),
+        ("IndexConstituent", "Weight", "ashare_index_constituent", "IndexSymbol", "000300.SH"),
+        ("StockIndustry", "IndustryCode", "ashare_stock_industry", "IndustrySource", "sw_l1"),
+    ],
+)
+def test_secondary_data_access_estimator_preserves_source_ref_identity(
+    monkeypatch, table, field, dataset, filter_name, filter_value
+):
+    """Rank/index/industry scopes must reach their own adapter and estimator."""
+    source = DataAccessSource(
+        dataset="ashare_stock_daily_adj",
+        start_date="2026-04-20",
+        end_date="2026-04-24",
+        instrument_filter=["000001.SZ"],
+        read_auto=False,
+        run_mode="interactive_research",
+        production=False,
+    )
+    calls = []
+
+    def fake_estimate(self, fields=None, time_range=None, instruments=None):
+        calls.append(
+            {
+                "dataset": self.dataset,
+                "semantic_filters": dict(self.semantic_filters),
+                "fields": tuple(fields or ()),
+            }
+        )
+        return SimpleNamespace(
+            selected_bytes=100,
+            projection_bytes=50,
+            estimated_rows=10,
+            file_count=1,
+            remote=False,
+            instrument_count=1,
+        )
+
+    monkeypatch.setattr(DataAccessSource, "estimate_scan_cost", fake_estimate)
+    encoded = _filtered_sref(
+        table,
+        field,
+        dataset=dataset,
+        **{filter_name: filter_value},
+    )
+    req = build_batch_data_request(
+        source,
+        analyses={},
+        dag=_dag(_plan(encoded)),
+        ctx=SimpleNamespace(market="ashare"),
+    )
+    group = next(g for g in req.groups if g.dataset == dataset)
+    assert group.scan_cost is not None
+    assert group.scan_cost_unavailable is None
+    assert group.source_adapter is not source
+    assert group.source_adapter.semantic_filters == {filter_name: filter_value}
+    assert calls[-1:] == [
+        {
+            "dataset": dataset,
+            "semantic_filters": {filter_name: filter_value},
+            "fields": (field,),
+        }
+    ]
+    assert req.column_scan_costs[encoded] is group.scan_cost
 def test_time_range_end_only_preserved():
     """PERF-004：(None, end) 保留，端界进入 prune 边界（不是全量）。"""
     src = _AnchorSource()
@@ -313,6 +431,58 @@ def test_discover_binding_result_counts():
     assert binding.source_scope.market == "ashare"
 
 
+def test_v1_raw_and_adjusted_tables_keep_distinct_authoritative_datasets():
+    raw = _sref("StockDailyBar", "High", market="ashare")
+    adjusted = _sref("StockDailyBarAdj", "High", market="ashare")
+
+    result = discover_column_source_bindings(
+        [_plan(raw, adjusted)],
+        market="ashare",
+        anchor_dataset="ashare_stock_daily_adj",
+    )
+
+    assert result.bindings[raw].dataset == "ashare_stock_daily"
+    assert result.bindings[raw].field == "High"
+    assert result.bindings[adjusted].dataset == "ashare_stock_daily_adj"
+    assert result.bindings[adjusted].field == "High"
+    assert result.bindings[raw].source_scope != result.bindings[adjusted].source_scope
+
+
+def test_source_walkers_are_iterative_and_diamond_safe():
+    raw = _sref("StockDailyBar", "High", market="ashare")
+    leaf = _column(raw)
+    deep = leaf
+    for _ in range(5000):
+        deep = PlanNode("identity", inputs=(deep,))
+
+    columns = set()
+    _walk_columns(deep, columns)
+    assert columns == {raw}
+    assert set(discover_column_source_bindings(
+        [deep], market="ashare", anchor_dataset="ashare_stock_daily_adj"
+    ).bindings) == {raw}
+
+    diamond = leaf
+    for _ in range(60):
+        diamond = PlanNode("add", inputs=(diamond, diamond))
+    columns = set()
+    _walk_columns(diamond, columns)
+    assert columns == {raw}
+    assert set(discover_column_source_bindings(
+        [diamond], market="ashare", anchor_dataset="ashare_stock_daily_adj"
+    ).bindings) == {raw}
+
+
+def test_source_walkers_reject_plan_cycles():
+    cyclic = PlanNode("identity", inputs=())
+    object.__setattr__(cyclic, "inputs", (cyclic,))
+
+    with pytest.raises(ValueError, match="cyclic plan dependency"):
+        _walk_columns(cyclic, set())
+    with pytest.raises(ValueError, match="cyclic plan dependency"):
+        discover_column_source_bindings([cyclic])
+
+
 def test_multi_field_coalesce_same_scope():
     """同 dataset+同 transform → 合并进同一 group，多个 field 一起估一次。"""
     ref_a = _sref("StockIncome", "NetProfit", dataset="fundamental_quarterly", market="ashare")
@@ -328,3 +498,92 @@ def test_multi_field_coalesce_same_scope():
     assert set(fund.fields) == {"NetProfit", "TotalRevenue"}
     assert len(src.fund.calls) == 1
     assert set(src.fund.calls[0]["fields"]) == {"NetProfit", "TotalRevenue"}
+
+
+class _RegisteredAshareSource(_AnchorSource):
+    dataset = "ashare_stock_daily_adj"
+
+    def __init__(self):
+        super().__init__()
+        self.valuation = _CostAdapter("ashare_stock_valuation_daily")
+        self.sources = {"valuation": self.valuation}
+
+
+def test_legacy_same_dataset_ref_uses_exact_anchor_scan_cost():
+    ret = _sref("StockDailyBarAdj", "Return")
+    vwap = _sref("StockDailyBarAdj", "AdjVwap")
+    source = _RegisteredAshareSource()
+
+    req = build_batch_data_request(
+        source,
+        analyses={},
+        dag=_dag(_plan(ret, vwap)),
+        ctx=SimpleNamespace(market=""),
+    )
+
+    assert len(req.groups) == 1
+    anchor = req.groups[0]
+    assert anchor.dataset == source.dataset
+    assert set(anchor.fields) == {ret, vwap}
+    assert req.column_source_scope_keys == {
+        ret: anchor.source_scope_key,
+        vwap: anchor.source_scope_key,
+    }
+    assert req.column_scan_costs[ret] is anchor.scan_cost
+    assert req.column_scan_costs[vwap] is anchor.scan_cost
+
+
+def test_legacy_v1_ref_resolves_through_registered_anchor_market_scope():
+    legacy = _sref("StockValuationDaily", "TurnoverRatio")
+    source = _RegisteredAshareSource()
+
+    req = build_batch_data_request(
+        source,
+        analyses={},
+        dag=_dag(_plan("close", legacy)),
+        ctx=SimpleNamespace(market=""),
+    )
+
+    assert req.hard_gate_counters["SOURCE_REF_WITHOUT_TYPED_SOURCE_BINDING"] == 0
+    assert req.column_source_scope_keys[legacy].startswith("dataset:ashare_stock_valuation_daily::market:ashare::")
+    groups = {group.dataset: group for group in req.groups}
+    assert set(groups) == {
+        "ashare_stock_daily_adj",
+        "ashare_stock_valuation_daily",
+    }
+    assert groups["ashare_stock_valuation_daily"].fields == ("TurnoverRatio",)
+    assert req.column_scan_costs[legacy] is groups[
+        "ashare_stock_valuation_daily"
+    ].scan_cost
+
+
+def test_legacy_v1_unknown_table_remains_unbound_and_fail_closed():
+    legacy = _sref("UnknownLegacyTable", "X")
+    req = build_batch_data_request(
+        _RegisteredAshareSource(),
+        analyses={},
+        dag=_dag(_plan("close", legacy)),
+        ctx=SimpleNamespace(market=""),
+    )
+
+    assert req.hard_gate_counters["SOURCE_REF_WITHOUT_TYPED_SOURCE_BINDING"] == 1
+    assert legacy not in req.column_source_scope_keys
+    assert legacy not in req.column_scan_costs
+
+
+def test_cross_market_ref_is_not_bound_to_anchor_market_cost():
+    cross_market = _sref(
+        "StockValuationDaily",
+        "market_cap",
+        dataset="us_stock_valuation_daily",
+        market="us",
+    )
+    req = build_batch_data_request(
+        _RegisteredAshareSource(),
+        analyses={},
+        dag=_dag(_plan("close", cross_market)),
+        ctx=SimpleNamespace(market="ashare"),
+    )
+
+    assert req.hard_gate_counters["SOURCE_REF_WITHOUT_TYPED_SOURCE_BINDING"] == 1
+    assert cross_market not in req.column_source_scope_keys

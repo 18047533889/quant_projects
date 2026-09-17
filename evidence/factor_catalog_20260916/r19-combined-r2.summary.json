@@ -1,0 +1,45 @@
+{
+  "source_sha256": "ccf6a0effe8a09471491b94d3845767309bb4ebc380bf5cd3c016b680144c7c3",
+  "output_sha256": "c9113539df7d5e6b3d00515f49548154974f770260f6a6f92bb6934c63f7cf61",
+  "counts": {
+    "COMPILED": 2402,
+    "COMPILE_FAILED": 1810
+  },
+  "changed": 2989,
+  "seconds": 129.3999724360183,
+  "modules": [
+    "factor_engine.tools.catalog_r19_signal_recipes",
+    "factor_engine.tools.catalog_r19_parameter_recipes",
+    "factor_engine.tools.catalog_r19_operator_recipes",
+    "factor_engine.tools.catalog_r19_type_recipes",
+    "factor_engine.tools.catalog_r19_literal_recipes",
+    "factor_engine.tools.catalog_r19_fiscal_recipes"
+  ],
+  "scope": "real_engine_no_read_compile_not_execution",
+  "code_hashes_before": {
+    "factor_engine/tools/catalog_r19_signal_recipes.py": "8cb9d6f011481ad3d68cc728f24b9d35d64c9a0c65b89a0b609d3ba5256b8ac1",
+    "factor_engine/tools/catalog_r19_parameter_recipes.py": "dcaab1729b11513473b7e19afc55f1be4782e60929381b597dc1a4749c35dc1e",
+    "factor_engine/tools/catalog_r19_operator_recipes.py": "4a600442c1e9644ccd45d2358cdf7e39b44188d1d964fb656790f4266ddabf37",
+    "factor_engine/tools/catalog_r19_type_recipes.py": "d57cd1b295521c7ae298765e8f27efd5de3c24477be13c863e5a5670c1ad41f4",
+    "factor_engine/tools/catalog_r19_literal_recipes.py": "04552778254e980b18260e66fb166ae8aa5c9d848fcf70efde226678dec68983",
+    "factor_engine/tools/catalog_r19_fiscal_recipes.py": "81ecd571aeb75b988915c824d579ef5164c53f518236e421660c481595b6eb69",
+    "factor_engine/api/dsl_parser.py": "e3603a9d009b75b0979c3b5737f041cab36d0779d0dc9eeba023f577dc81e9c0",
+    "factor_engine/ir/analyzer.py": "0f997b581d81ead1a15e619f2ca06a390c6e66e2c3d0dacc46d7efd9e5aec0ac",
+    "factor_engine/cleaned_operators/gemini_v2_common.py": "7b9340a23c95a22f5a69b857d5649a917e3aef83a83c1e37073527e7eb2b4c44",
+    "factor_engine/planner/canonicalize_params.py": "051fb759f38171e2d98c90dc77785ce55c84cf5e3b9c9ed91f3331bbbbe33016",
+    "evidence/factor_catalog_20260916/recompile_r19.py": "8eb4b77f2d6276e85a9921ba45cd5bf2cc616a4c92201286833b750a5c113e60"
+  },
+  "code_hashes_after": {
+    "factor_engine/tools/catalog_r19_signal_recipes.py": "8cb9d6f011481ad3d68cc728f24b9d35d64c9a0c65b89a0b609d3ba5256b8ac1",
+    "factor_engine/tools/catalog_r19_parameter_recipes.py": "dcaab1729b11513473b7e19afc55f1be4782e60929381b597dc1a4749c35dc1e",
+    "factor_engine/tools/catalog_r19_operator_recipes.py": "4a600442c1e9644ccd45d2358cdf7e39b44188d1d964fb656790f4266ddabf37",
+    "factor_engine/tools/catalog_r19_type_recipes.py": "d57cd1b295521c7ae298765e8f27efd5de3c24477be13c863e5a5670c1ad41f4",
+    "factor_engine/tools/catalog_r19_literal_recipes.py": "04552778254e980b18260e66fb166ae8aa5c9d848fcf70efde226678dec68983",
+    "factor_engine/tools/catalog_r19_fiscal_recipes.py": "81ecd571aeb75b988915c824d579ef5164c53f518236e421660c481595b6eb69",
+    "factor_engine/api/dsl_parser.py": "e3603a9d009b75b0979c3b5737f041cab36d0779d0dc9eeba023f577dc81e9c0",
+    "factor_engine/ir/analyzer.py": "0f997b581d81ead1a15e619f2ca06a390c6e66e2c3d0dacc46d7efd9e5aec0ac",
+    "factor_engine/cleaned_operators/gemini_v2_common.py": "7b9340a23c95a22f5a69b857d5649a917e3aef83a83c1e37073527e7eb2b4c44",
+    "factor_engine/planner/canonicalize_params.py": "051fb759f38171e2d98c90dc77785ce55c84cf5e3b9c9ed91f3331bbbbe33016",
+    "evidence/factor_catalog_20260916/recompile_r19.py": "8eb4b77f2d6276e85a9921ba45cd5bf2cc616a4c92201286833b750a5c113e60"
+  }
+}

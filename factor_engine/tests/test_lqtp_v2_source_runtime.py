@@ -171,6 +171,73 @@ def test_load_source_refs_batch_coalesces_financial_fields() -> None:
     np.testing.assert_allclose(out[b].to_numpy(), [40.0, 90.0])
 
 
+def test_financial_batch_collapse_keeps_conflicts_but_drops_snapshot_repeats() -> None:
+    import pyarrow as pa
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import (
+        _collapse_financial_batches,
+    )
+
+    columns = ["Symbol", "ReportPeriodEndDate", "PubDate", "TotalAssets"]
+    first = pa.RecordBatch.from_pylist([
+        {"Symbol": "A", "ReportPeriodEndDate": "2024-03-31", "PubDate": "2024-04-30", "TotalAssets": 100.0},
+        {"Symbol": "A", "ReportPeriodEndDate": "2024-03-31", "PubDate": "2024-04-30", "TotalAssets": 100.0},
+    ])
+    second = pa.RecordBatch.from_pylist([
+        {"Symbol": "A", "ReportPeriodEndDate": "2024-03-31", "PubDate": "2024-04-30", "TotalAssets": 100.0},
+        {"Symbol": "A", "ReportPeriodEndDate": "2024-03-31", "PubDate": "2024-04-30", "TotalAssets": 101.0},
+    ])
+    out = _collapse_financial_batches([first, second], columns)
+    assert out.to_dict("records") == [
+        {"Symbol": "A", "ReportPeriodEndDate": "2024-03-31", "PubDate": "2024-04-30", "TotalAssets": 100.0},
+        {"Symbol": "A", "ReportPeriodEndDate": "2024-03-31", "PubDate": "2024-04-30", "TotalAssets": 101.0},
+    ]
+
+
+def test_financial_raw_multi_streams_bounded_and_closes(monkeypatch) -> None:
+    import pyarrow as pa
+    from factor_engine.storage.sources import data_access_source
+    from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
+
+    calls = {}
+    class Handle:
+        snapshot = type("Snapshot", (), {"snapshot_id": "snap-1"})()
+        def stream(self, *, batch_size):
+            calls["stream_batch_size"] = batch_size
+            yield pa.RecordBatch.from_pylist([{
+                "Symbol": "A", "ReportPeriodEndDate": "2024-03-31",
+                "PubDate": "2024-04-30", "TotalAssets": 100.0,
+            }])
+        def close(self):
+            calls["closed"] = True
+    class Store:
+        def get_dataset(self, dataset):
+            return type("Dataset", (), {"instrument_column": "Symbol"})()
+        def read(self, dataset, **kwargs):
+            calls["read"] = (dataset, kwargs)
+            return Handle()
+    class Inner:
+        end_date = "2026-04-30"
+        instrument_filter = ["A"]
+        run_mode = "interactive_research"
+
+    monkeypatch.setattr(data_access_source, "_get_store", lambda: Store())
+    source = LQTPLogicalDataSource(Inner())
+    out = source._financial_raw_multi("ashare_stock_balance", ["TotalAssets"])
+    dataset, kwargs = calls["read"]
+    assert dataset == "ashare_stock_balance"
+    assert kwargs["columns"] == [
+        "Symbol", "ReportPeriodEndDate", "PubDate", "TotalAssets"]
+    assert kwargs["time_range"] == (None, "2026-04-30")
+    assert kwargs["instrument_filter"] == ["A"]
+    assert kwargs["result"] == "stream"
+    assert kwargs["batch_size"] == calls["stream_batch_size"] == 50_000
+    assert calls["closed"] is True
+    assert out["TotalAssets"].tolist() == [100.0]
+    dependency = source.collect_source_dependencies()[0]
+    assert dependency["snapshot_id"] == "snap-1"
+    assert dependency["availability_column"] == "PubDate"
+
+
 def test_minute_resample_does_not_silently_collapse_to_daily() -> None:
     from factor_engine.storage.sources.lqtp_logical_source_v2 import LQTPLogicalDataSource
     from factor_engine.storage.sources.data_access_source import MissingDataDependencyError

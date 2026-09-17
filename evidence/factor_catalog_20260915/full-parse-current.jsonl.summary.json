@@ -1,0 +1,2517 @@
+{
+  "counts": {
+    "PARSED_FIELDS_BOUND": 103542,
+    "PARSE_FAILED": 1551,
+    "FIELDS_UNRESOLVED": 8800,
+    "NON_FACTOR_RECORD": 239
+  },
+  "seconds": 264.8989322928246,
+  "fields": [
+    [
+      "ret",
+      51007
+    ],
+    [
+      "close",
+      33532
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlR1cm5vdmVyUmF0aW8iLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrVmFsdWF0aW9uRGFpbHkiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      19278
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkakNsb3NlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja01pbnV0ZUJhckFkaiIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      18834
+    ],
+    [
+      "high",
+      17612
+    ],
+    [
+      "low",
+      16587
+    ],
+    [
+      "volume",
+      16500
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsQXNzZXRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      12799
+    ],
+    [
+      "amount",
+      11539
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlZvbHVtZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tNaW51dGVCYXJBZGoiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      7482
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik1hcmtldENhcCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tWYWx1YXRpb25EYWlseSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      7425
+    ],
+    [
+      "open",
+      7237
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlBiUmF0aW8iLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrVmFsdWF0aW9uRGFpbHkiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      5440
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkakNsb3NlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0RhaWx5QmFyQWRqIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      4438
+    ],
+    [
+      "FiscalPeriodId",
+      4219
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik9wZXJhdGluZ1JldmVudWUiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      4125
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkakFtb3VudCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tNaW51dGVCYXJBZGoiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      3903
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNhc2hFcXVpdmFsZW50cyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      3598
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlNob3J0dGVybUxvYW4iLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      3583
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlZvbHVtZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tEYWlseUJhckFkaiIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      3192
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkakhpZ2giLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrRGFpbHlCYXJBZGoiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      3077
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkakxvdyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tEYWlseUJhckFkaiIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      3077
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik9jZlRvUmV2ZW51ZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmRpY2F0b3IiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      2868
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlJvZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmRpY2F0b3IiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      2834
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ikxvbmd0ZXJtTG9hbiIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      2707
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldE9wZXJhdGVDYXNoRmxvdyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      2703
+    ],
+    [
+      "pre_close",
+      2699
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsTGlhYmlsaXR5IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      2682
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluY1JldmVudWVZZWFyT25ZZWFyIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luZGljYXRvciIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      2571
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkZyZWVNYXJrZXRDYXAiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrVmFsdWF0aW9uRGFpbHkiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      2555
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldFByb2ZpdCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmNvbWUiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      2374
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5vbkN1cnJlbnRMaWFiaWxpdHlJbk9uZVllYXIiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      2306
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlJldHVybiIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tEYWlseUJhckFkaiIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      2279
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFjY291bnRSZWNlaXZhYmxlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      2204
+    ],
+    [
+      "high_limit",
+      2202
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlBlUmF0aW8iLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrVmFsdWF0aW9uRGFpbHkiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      2111
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkJvbmRzUGF5YWJsZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      2070
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsQ3VycmVudExpYWJpbGl0eSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      2044
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsQ3VycmVudEFzc2V0cyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      1965
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsUHJvZml0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      1901
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkak9wZW4iLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrTWludXRlQmFyQWRqIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      1872
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludmVudG9yaWVzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      1856
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ikdvb2RXaWxsIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      1810
+    ],
+    [
+      "OperatingRevenue_SP",
+      1661
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik9wZXJhdGluZ1Byb2ZpdCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmNvbWUiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      1657
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkZyZWVDYXAiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrVmFsdWF0aW9uRGFpbHkiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      1653
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkZpeGVkQXNzZXRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      1594
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlJkRXhwZW5zZXMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      1593
+    ],
+    [
+      "vwap",
+      1411
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkxlYXNlTGlhYmlsaXR5IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      1401
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludGFuZ2libGVBc3NldHMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      1375
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluY05ldFByb2ZpdFllYXJPblllYXIiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5kaWNhdG9yIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      1353
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ikdyb3NzUHJvZml0TWFyZ2luIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luZGljYXRvciIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      1340
+    ],
+    [
+      "low_limit",
+      1325
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsT3duZXJFcXVpdGllcyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      1260
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlBjZlJhdGlvIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja1ZhbHVhdGlvbkRhaWx5IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      1231
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFjY291bnRzUGF5YWJsZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      1178
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldFByb2ZpdE1hcmdpbiIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmRpY2F0b3IiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      1130
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNvbnN0cnVJblByb2Nlc3MiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      1128
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludmVzdG1lbnRJbmNvbWUiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      1125
+    ],
+    [
+      "NetOperateCashFlow_SP",
+      1052
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkZpeEludGFuT3RoZXJBc3NldEFjcXVpQ2FzaCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      1031
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRldmVsb3BtZW50RXhwZW5kaXR1cmUiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      1016
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNvbnRyYWN0TGlhYmlsaXR5IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      989
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkbWluaXN0cmF0aW9uRXhwZW5zZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmNvbWUiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      987
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkak9wZW4iLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrRGFpbHlCYXJBZGoiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      945
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlBzUmF0aW8iLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrVmFsdWF0aW9uRGFpbHkiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      941
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5vdGVzUGF5YWJsZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      929
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRpdmlkZW5kUmF0aW8iLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrVmFsdWF0aW9uRGFpbHkiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      923
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlJvYSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmRpY2F0b3IiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      918
+    ],
+    [
+      "is_suspend",
+      904
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5vbk9wZXJhdGluZ1JldmVudWUiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      902
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkanVzdGVkUHJvZml0VG9Qcm9maXQiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5kaWNhdG9yIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      893
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkJpbGxSZWNlaXZhYmxlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      842
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluY09wZXJhdGlvblByb2ZpdFllYXJPblllYXIiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5kaWNhdG9yIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      840
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNvbnRyYWN0QXNzZXRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      834
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlNhbGVFeHBlbnNlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      826
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlN1YnRvdGFsT3BlcmF0ZUNhc2hPdXRmbG93IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      809
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkZhaXJWYWx1ZVZhcmlhYmxlSW5jb21lIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      774
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlBjZlJhdGlvMiIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tWYWx1YXRpb25EYWlseSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      765
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkakhpZ2giLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrTWludXRlQmFyQWRqIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      716
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkakxvdyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tNaW51dGVCYXJBZGoiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      709
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik9wZXJhdGluZ0Nvc3QiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      703
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFzc2V0SW1wYWlybWVudExvc3MiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      697
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNyZWRpdEltcGFpcm1lbnRMb3NzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      688
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldEZpbmFuY2VDYXNoRmxvdyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      664
+    ],
+    [
+      "Top10PledgeRatio",
+      641
+    ],
+    [
+      "ReportPeriodEndDate",
+      638
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik9jZlRvT3BlcmF0aW5nUHJvZml0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luZGljYXRvciIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      635
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluY1RvdGFsUmV2ZW51ZVllYXJPblllYXIiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5kaWNhdG9yIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      620
+    ],
+    [
+      "MinuteOHLCVA",
+      619
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlN1YnRvdGFsT3BlcmF0ZUNhc2hJbmZsb3ciLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      618
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyUGF5YWJsZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      614
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkJvcnJvd2luZ1JlcGF5bWVudCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      606
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlBlUmF0aW9MeXIiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrVmFsdWF0aW9uRGFpbHkiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      605
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5vbk9wZXJhdGluZ0V4cGVuc2UiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      605
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlJldGFpbmVkUHJvZml0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      603
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5wUGFyZW50Q29tcGFueU93bmVycyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmNvbWUiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      586
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyUmVjZWl2YWJsZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      546
+    ],
+    [
+      "PubDate",
+      546
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRyYWRpbmdBc3NldHMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      541
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldEludmVzdENhc2hGbG93IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      538
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRheHNQYXlhYmxlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      532
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNhcGl0YWxpemF0aW9uIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja1ZhbHVhdGlvbkRhaWx5IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      511
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkZpbmFuY2lhbEV4cGVuc2UiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      508
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlN1YnRvdGFsRmluYW5jZUNhc2hPdXRmbG93IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      495
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlB1YmxpY1N0YXR1cyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tTdGF0dXMiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      491
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRlZmVycmVkVGF4QXNzZXRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      487
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNhc2hGcm9tQm9ycm93aW5nIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      486
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkakFtb3VudCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tEYWlseUJhckFkaiIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      484
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluZHVzdHJ5Q29kZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmR1c3RyeSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      480
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkdmFuY2VQZWNlaXB0cyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      475
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRlZmVycmVkVGF4TGlhYmlsaXR5IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      475
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlN1YnRvdGFsSW52ZXN0Q2FzaE91dGZsb3ciLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      470
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRlcml2YXRpdmVGaW5hbmNpYWxBc3NldCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      464
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludmVzdENhc2hQYWlkIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      463
+    ],
+    [
+      "FiscalAvgAssets",
+      453
+    ],
+    [
+      "IndexReturn",
+      448
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNhc2hFcXVpdmFsZW50c0F0QmVnaW5uaW5nIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      443
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRpdmlkZW5kSW50ZXJlc3RQYXltZW50IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      436
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkalByZUNsb3NlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0RhaWx5QmFyQWRqIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      420
+    ],
+    [
+      "period_id",
+      413
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkdmFuY2VQYXltZW50IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      411
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyTm9uQ3VycmVudEZpbmFuY2lhbEFzc2V0cyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      407
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlZhbHVlQ2hhbmdlUHJvZml0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luZGljYXRvciIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      406
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluY29tZVRheEV4cGVuc2UiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      405
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludmVzbWVudFByb2ZpdFRvUHJvZml0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luZGljYXRvciIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      402
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik9wZXJhdGluZ1Byb2ZpdFRvUHJvZml0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luZGljYXRvciIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      400
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkVxdWl0aWVzUGFyZW50Q29tcGFueU93bmVycyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      396
+    ],
+    [
+      "FixIntanOtherAssetAcquiCash_SP",
+      388
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsQ2FwaXRhbCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXBpdGFsRGFpbHkiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      386
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNhcGl0YWxSZXNlcnZlRnVuZCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      384
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkalZ3YXAiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrRGFpbHlCYXJBZGoiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      362
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlN1YnRvdGFsRmluYW5jZUNhc2hJbmZsb3ciLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      358
+    ],
+    [
+      "fiscal_quarter",
+      353
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik1pbm9yaXR5UHJvZml0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      345
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ikdvb2RzU2FsZUFuZFNlcnZpY2VSZW5kZXJDYXNoIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      344
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkJvbmRJbnZlc3QiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      344
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluY1JldmVudWVBbm51YWwiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5kaWNhdG9yIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      343
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRheFBheW1lbnRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      342
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsQ29tcG9zaXRlSW5jb21lIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      336
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludGVyZXN0RXhwZW5zZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmNvbWUiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      331
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlN0YWZmQmVoYWxmUGFpZCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      330
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlNhbGFyaWVzUGF5YWJsZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      329
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNhc2hBbmRFcXVpdmFsZW50c0F0RW5kIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      325
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNhc2hFcXVpdmFsZW50SW5jcmVhc2UiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      324
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyQm9uZEludmVzdCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      322
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyRXF1aXR5VG9vbHNJbnZlc3QiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      316
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludGVyZXN0UGF5YWJsZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      315
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ikdvb2RzU2FsZUFuZFNlcnZpY2VUb1JldmVudWUiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5kaWNhdG9yIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      314
+    ],
+    [
+      "NpParentCompanyOwners_SP",
+      307
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkV4cGVuc2VUb1RvdGFsUmV2ZW51ZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmRpY2F0b3IiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      304
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluZGV4U3ltYm9sIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJJbmRleENvbnN0aXR1ZW50IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      301
+    ],
+    [
+      "OperatingCost_SP",
+      301
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkJhc2ljRXBzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      300
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRpbHV0ZWRFcHMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      300
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkZpeEludGFuT3RoZXJBc3NldERpc3BvQ2FzaCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      299
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ikdvb2RzQW5kU2VydmljZXNDYXNoUGFpZCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      298
+    ],
+    [
+      "RdExpenses_SP",
+      298
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkZpbmFuY2luZ0V4cGVuc2VUb1RvdGFsUmV2ZW51ZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmRpY2F0b3IiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      295
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlN1YnRvdGFsSW52ZXN0Q2FzaEluZmxvdyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      288
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkakhpZ2hMaW1pdCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tEYWlseUJhckFkaiIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      286
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkakxvd0xpbWl0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0RhaWx5QmFyQWRqIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      286
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRyYWRpbmdMaWFiaWxpdHkiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      285
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsT3BlcmF0aW5nUmV2ZW51ZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmNvbWUiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      274
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkalZ3YXAiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrTWludXRlQmFyQWRqIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      261
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkdhRXhwZW5zZVRvVG90YWxSZXZlbnVlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luZGljYXRvciIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      260
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik9wZXJhdGlvblByb2ZpdFRvVG90YWxSZXZlbnVlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luZGljYXRvciIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      259
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyRWFybmluZ3MiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      255
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlJlY2VpdmFibGVGaW4iLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      251
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik9wZXJhdGluZ0V4cGVuc2VUb1RvdGFsUmV2ZW51ZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmRpY2F0b3IiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      243
+    ],
+    [
+      "ret_1d",
+      243
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNhc2hGcm9tQm9uZHNJc3N1ZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      240
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlVzdWZydWN0QXNzZXRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      233
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldFByb2ZpdFRvVG90YWxSZXZlbnVlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luZGljYXRvciIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      209
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludmVzdG1lbnRQcm9wZXJ0eSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      206
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNpcmN1bGF0aW5nQ2FwaXRhbCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXBpdGFsRGFpbHkiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      183
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik1pbm9yaXR5SW50ZXJlc3RzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      180
+    ],
+    [
+      "OperatingProfit_SP",
+      173
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkVzdGltYXRlTGlhYmlsaXR5IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      161
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ikxvbmd0ZXJtRXF1aXR5SW52ZXN0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      160
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRlcml2YXRpdmVGaW5hbmNpYWxMaWFiaWxpdHkiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      160
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsTm9uQ3VycmVudEFzc2V0cyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      159
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFzc2V0RGVhbEluY29tZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmNvbWUiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      159
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNpcmN1bGF0aW5nTWFya2V0Q2FwIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja1ZhbHVhdGlvbkRhaWx5IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      158
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyRmluYW5jZUFjdFBheW1lbnQiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      154
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyQ2FzaFRvSW52ZXN0QWN0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      151
+    ],
+    [
+      "FinancialExpense_SP",
+      147
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluY05ldFByb2ZpdFRvU2hhcmVob2xkZXJzWWVhck9uWWVhciIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmRpY2F0b3IiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      146
+    ],
+    [
+      "IndexWeight",
+      143
+    ],
+    [
+      "SaleExpense_SP",
+      140
+    ],
+    [
+      "AdministrationExpense_SP",
+      140
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNpcmN1bGF0aW5nQ2FwIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja1ZhbHVhdGlvbkRhaWx5IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      139
+    ],
+    [
+      "SHORT",
+      126
+    ],
+    [
+      "BorrowingRepayment_SP",
+      126
+    ],
+    [
+      "VOL",
+      113
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFDYXAiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrVmFsdWF0aW9uRGFpbHkiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      111
+    ],
+    [
+      "GoodsSaleAndServiceRenderCash_SP",
+      108
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlN1c3RPcGVyYXRlTmV0UHJvZml0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      106
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRyZWFzdXJ5U3RvY2siLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      104
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyQ3VycmVudEFzc2V0cyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      103
+    ],
+    [
+      "share_rank_1",
+      102
+    ],
+    [
+      "share_rank_10",
+      102
+    ],
+    [
+      "share_rank_2",
+      102
+    ],
+    [
+      "share_rank_3",
+      102
+    ],
+    [
+      "share_rank_4",
+      102
+    ],
+    [
+      "share_rank_5",
+      102
+    ],
+    [
+      "share_rank_6",
+      102
+    ],
+    [
+      "share_rank_7",
+      102
+    ],
+    [
+      "share_rank_8",
+      102
+    ],
+    [
+      "share_rank_9",
+      102
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlBlcGVydHVhbExpYWJpbGl0eU5vbmN1cnJlbnQiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      100
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlByZWZlcnJlZFNoYXJlc05vbmN1cnJlbnQiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      100
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludmVzdFdpdGhkcmF3YWxDYXNoIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      98
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlN1cnBsdXNSZXNlcnZlRnVuZCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      97
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyRXF1aXR5VG9vbHMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      97
+    ],
+    [
+      "IndexClose",
+      97
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlByZWZlcnJlZFNoYXJlc0VxdWl0eSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      94
+    ],
+    [
+      "Top1ShareRatio",
+      92
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlBhaWRpbkNhcGl0YWwiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      91
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkVzdGltYXRlTGlhYmlsaXR5Q3VycmVudCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      90
+    ],
+    [
+      "CashFromBorrowing_SP",
+      86
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRlZmVycmVkRWFybmluZyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      85
+    ],
+    [
+      "OtherEarnings_SP",
+      85
+    ],
+    [
+      "FiscalAvgEquity",
+      84
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkhvbGRTYWxlQXNzZXQiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      82
+    ],
+    [
+      "rel_volume",
+      82
+    ],
+    [
+      "CashFromBondsIssue_SP",
+      81
+    ],
+    [
+      "IncomeTaxExpense_SP",
+      80
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlBlcGVydHVhbExpYWJpbGl0eUVxdWl0eSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      79
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyQ3VycmVudExpYWJpbGl0eSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      79
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkhvbGRTYWxlTGlhYmlsaXR5IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      78
+    ],
+    [
+      "amihud",
+      78
+    ],
+    [
+      "SustOperateNetProfit_SP",
+      78
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlByZW1pdW1zRWFybmVkIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      77
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRpc2Nvbk9wZXJhdGVOZXRQcm9maXQiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      76
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluY05ldFByb2ZpdEFubnVhbCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmRpY2F0b3IiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      75
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyQ29tcHJlaGVuc2l2ZUluY29tZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      74
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRlZmVycmVkRWFybmluZ0N1cnJlbnQiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      73
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ikxvbmd0ZXJtUmVjZWl2YWJsZUFjY291bnQiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      73
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsT3BlcmF0aW5nQ29zdCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmNvbWUiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      70
+    ],
+    [
+      "Top2to10ShareRatio",
+      70
+    ],
+    [
+      "DividendInterestPayment_SP",
+      68
+    ],
+    [
+      "TotalProfit_SP",
+      68
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyTm9uQ3VycmVudEFzc2V0cyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      64
+    ],
+    [
+      "Top10HHI",
+      64
+    ],
+    [
+      "TaxPayments_SP",
+      60
+    ],
+    [
+      "FixIntanOtherAssetDispoCash_SP",
+      60
+    ],
+    [
+      "FloatTop10HHI",
+      59
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyTm9uQ3VycmVudExpYWJpbGl0eSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      58
+    ],
+    [
+      "oi_spread",
+      56
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ikxvbmd0ZXJtQWNjb3VudFBheWFibGUiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      54
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRpdmlkZW5kUGF5YWJsZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      54
+    ],
+    [
+      "NetProfit_SP",
+      53
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluY09wZXJhdGlvblByb2ZpdEFubnVhbCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmRpY2F0b3IiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      51
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkJpb2xvZ2ljYWxBc3NldHMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      50
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik9pbEdhc0Fzc2V0cyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      50
+    ],
+    [
+      "overnight_ret",
+      49
+    ],
+    [
+      "intraday_ret",
+      49
+    ],
+    [
+      "ReportVector",
+      49
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldENhc2hGcm9tU3ViQ29tcGFueSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      48
+    ],
+    [
+      "InvestmentIncome_SP",
+      44
+    ],
+    [
+      "FairValueVariableIncome_SP",
+      43
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluY1JldHVybiIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmRpY2F0b3IiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      42
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsTm9uQ3VycmVudExpYWJpbGl0eSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      42
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNhc2hGcm9tSW52ZXN0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      41
+    ],
+    [
+      "ShareNumber",
+      40
+    ],
+    [
+      "SharePledge",
+      40
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyT3BlcmF0ZUNhc2hQYWlkIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      38
+    ],
+    [
+      "edge_spread",
+      38
+    ],
+    [
+      "AssetDealIncome_SP",
+      38
+    ],
+    [
+      "VOLCONF",
+      37
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ikluc3VyYW5jZUNvbnRyYWN0UmVzZXJ2ZXMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      36
+    ],
+    [
+      "CapitalChangeDate",
+      36
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ikxvbmd0ZXJtU2FsYXJpZXNQYXlhYmxlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      35
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlN0b2NrRGl2aWRlbmQiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrRGl2aWRlbmQiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      35
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlN0b2NrVHJhbnNmZXIiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrRGl2aWRlbmQiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      35
+    ],
+    [
+      "StaffBehalfPaid_SP",
+      35
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludGVyZXN0Q29zdEZpbiIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmNvbWUiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      34
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkZvcmVpZ25DdXJyZW5jeVJlcG9ydENvbnZEaWZmIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      34
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkanVzdGVkUHJvZml0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luZGljYXRvciIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      32
+    ],
+    [
+      "TaxLevyRefund_SP",
+      32
+    ],
+    [
+      "InvestWithdrawalCash_SP",
+      32
+    ],
+    [
+      "InvestProceeds_SP",
+      32
+    ],
+    [
+      "NetCashFromSubCompany_SP",
+      32
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik9wZXJhdGluZ1RheFN1cmNoYXJnZXMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      31
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFNYXJrZXRDYXAiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrVmFsdWF0aW9uRGFpbHkiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      30
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkJvcnJvd2luZ0NhcGl0YWwiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      30
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyQ2FzaGluUmVsYXRlZE9wZXJhdGUiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      30
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkxvbmdEZWZlcnJlZEV4cGVuc2UiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      30
+    ],
+    [
+      "vwap_dist",
+      30
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRlcG9zaXRJbkludGVyYmFuayIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      29
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlNvbGRCdXliYWNrU2VjdVByb2NlZWRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      29
+    ],
+    [
+      "lower",
+      29
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNhc2hEaXZpZGVuZCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tEaXZpZGVuZCIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      29
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkJvcnJvd2luZ0Zyb21DZW50cmFsYmFuayIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      28
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkxvYW5BbmRBZHZhbmNlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      28
+    ],
+    [
+      "ShareRatio",
+      28
+    ],
+    [
+      "ShareholderId",
+      28
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldENhc2hEZWFsU3ViY29tcGFueSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      27
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRheExldnlSZWZ1bmQiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      27
+    ],
+    [
+      "ILL",
+      27
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNvbW1pc3Npb25JbmNvbWUiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      26
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkxvYW5BbmRBZHZhbmNlQ3VycmVudEFzc2V0cyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      25
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlByb3h5U2VjdVByb2NlZWRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      25
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlJlY2VpdmluZ3NGcm9tVmljYXJpb3VzbHlTb2xkU2VjdXJpdGllcyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      25
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkxvYW5BbmRBZHZhbmNlTm9uY3VycmVudEFzc2V0cyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      24
+    ],
+    [
+      "chip_profit_share",
+      24
+    ],
+    [
+      "chip_mode_distance",
+      24
+    ],
+    [
+      "OtherCompositeIncome_SP",
+      24
+    ],
+    [
+      "Top10FreezeRatio",
+      24
+    ],
+    [
+      "NetCashDealSubcompany_SP",
+      24
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRpdmlkZW5kUmVjZWl2YWJsZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      22
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludGVyZXN0UmVjZWl2YWJsZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      22
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNvbnN0cnVjdGlvbk1hdGVyaWFscyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      20
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkJvdWdodFNlbGxiYWNrQXNzZXRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      20
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldFBheUluc3VyYW5jZUNsYWltcyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmNvbWUiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      20
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludGVyZXN0SW5jb21lRmluIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      19
+    ],
+    [
+      "OtherFinanceActPayment_SP",
+      19
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNoYW5nZVR5cGUiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrU3RhdHVzIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      18
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkhvbGRGb3JTYWxlQXNzZXRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      17
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldE9wZW5IZWRnZUluY29tZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmNvbWUiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      17
+    ],
+    [
+      "NetFinanceCashFlow_SP",
+      16
+    ],
+    [
+      "NetInvestCashFlow_SP",
+      16
+    ],
+    [
+      "TotalCompositeIncome_SP",
+      16
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlNldHRsZW1lbnRQcm92aSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      15
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNpUGFyZW50Q29tcGFueU93bmVycyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmNvbWUiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      15
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNoYW5nZURhdGUiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrU3RhdHVzIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      15
+    ],
+    [
+      "trade_date",
+      15
+    ],
+    [
+      "OtherCashFromInvestAct_SP",
+      15
+    ],
+    [
+      "OtherCashToInvestAct_SP",
+      15
+    ],
+    [
+      "OtherFinanceActCash_SP",
+      15
+    ],
+    [
+      "CashFromMinoSInvestSub_SP",
+      15
+    ],
+    [
+      "ProceedsFromSubToMinoS_SP",
+      15
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluY05ldFByb2ZpdFRvU2hhcmVob2xkZXJzQW5udWFsIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luZGljYXRvciIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      14
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyQ29tcG9zaXRlSW5jb21lIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      14
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldExvYW5BbmRBZHZhbmNlSW5jcmVhc2UiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      14
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldERlcG9zaXRJbmNyZWFzZSIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      14
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkV4Y2hhbmdlSW5jb21lIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      14
+    ],
+    [
+      "PositiveFinancialAsset_Bond",
+      14
+    ],
+    [
+      "PositiveFinancialAsset_Derivative",
+      14
+    ],
+    [
+      "PositiveFinancialAsset_Equity",
+      14
+    ],
+    [
+      "PositiveFinancialAsset_OtherBond",
+      14
+    ],
+    [
+      "PositiveFinancialAsset_OtherNC",
+      14
+    ],
+    [
+      "PositiveFinancialAsset_Trading",
+      14
+    ],
+    [
+      "PositiveOpLiab_AP",
+      14
+    ],
+    [
+      "PositiveOpLiab_Advance",
+      14
+    ],
+    [
+      "PositiveOpLiab_Contract",
+      14
+    ],
+    [
+      "PositiveOpLiab_Notes",
+      14
+    ],
+    [
+      "PositiveOpLiab_Other",
+      14
+    ],
+    [
+      "PositiveOpLiab_Payroll",
+      14
+    ],
+    [
+      "PositiveOpLiab_Tax",
+      14
+    ],
+    [
+      "SubtotalInvestCashInflow_SP",
+      14
+    ],
+    [
+      "SubtotalOperateCashInflow_SP",
+      14
+    ],
+    [
+      "limit_up_touch",
+      13
+    ],
+    [
+      "limit_down_touch",
+      13
+    ],
+    [
+      "failed_limit",
+      13
+    ],
+    [
+      "gap_up",
+      13
+    ],
+    [
+      "gap_down",
+      13
+    ],
+    [
+      "index_entry",
+      13
+    ],
+    [
+      "index_exit",
+      13
+    ],
+    [
+      "suspension_resume",
+      13
+    ],
+    [
+      "st_transition",
+      13
+    ],
+    [
+      "capital_supply_shock",
+      13
+    ],
+    [
+      "PositiveFunding_1Y",
+      13
+    ],
+    [
+      "PositiveFunding_Bond",
+      13
+    ],
+    [
+      "PositiveFunding_LT",
+      13
+    ],
+    [
+      "PositiveFunding_Lease",
+      13
+    ],
+    [
+      "PositiveFunding_ST",
+      13
+    ],
+    [
+      "SubtotalFinanceCashInflow_SP",
+      13
+    ],
+    [
+      "SubtotalFinanceCashOutflow_SP",
+      13
+    ],
+    [
+      "SubtotalInvestCashOutflow_SP",
+      13
+    ],
+    [
+      "SubtotalOperateCashOutflow_SP",
+      13
+    ],
+    [
+      "GoodsAndServicesCashPaid_SP",
+      13
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyRmluYW5jZUFjdENhc2giLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      12
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldEJ1eWJhY2siLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      12
+    ],
+    [
+      "amount_change",
+      12
+    ],
+    [
+      "opposite_or_recovery_state",
+      12
+    ],
+    [
+      "turnover_decimal",
+      12
+    ],
+    [
+      "Top10PledgeConcentration",
+      12
+    ],
+    [
+      "MinorityProfit_SP",
+      12
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNhc2hGcm9tTWlub1NJbnZlc3RTdWIiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      11
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkZpeGVkQXNzZXRzTGlxdWlkYXRpb24iLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      11
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlJlaW5zdXJhbmNlQ29udHJhY3RSZXNlcnZlc1JlY2VpdmFibGUiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      11
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlJlaW5zdXJhbmNlUmVjZWl2YWJsZXMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      11
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNpTWlub3JpdHlPd25lcnMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      11
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlNwZWNpZmljUmVzZXJ2ZXMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      11
+    ],
+    [
+      "upper",
+      11
+    ],
+    [
+      "Top2to5ShareRatio",
+      11
+    ],
+    [
+      "Top10Ownership",
+      11
+    ],
+    [
+      "Top10Entropy",
+      11
+    ],
+    [
+      "Top10Churn",
+      11
+    ],
+    [
+      "FloatTop10Ownership",
+      11
+    ],
+    [
+      "FloatTop10Entropy",
+      11
+    ],
+    [
+      "FloatTop10Churn",
+      11
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlJlaW5zdXJhbmNlUGF5YWJsZXMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      10
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkV4Y2hhbmdlUmF0ZUNoYW5nZUVmZmVjdCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      10
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlJlaW5zdXJhbmNlQ29zdCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmNvbWUiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      10
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludGVyZXN0SW5jb21lIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      10
+    ],
+    [
+      "filing_event",
+      10
+    ],
+    [
+      "current_period_id",
+      10
+    ],
+    [
+      "previous_period_id",
+      10
+    ],
+    [
+      "prior_vintage_value",
+      10
+    ],
+    [
+      "revision_event",
+      10
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkhvbGRUb01hdHVyaXR5SW52ZXN0bWVudHMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      9
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludmVzdEluY29tZUFzc29jaWF0ZXMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      9
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkRpc3Bvc2FsTG9zc05vbkN1cnJlbnRMaWFiaWxpdHkiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      9
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyQ2FzaEZyb21JbnZlc3RBY3QiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      9
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlNwZWNpZmljQWNjb3VudFBheWFibGUiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQmFsYW5jZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      9
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldEJvcnJvd2luZ0Zyb21DZW50cmFsQmFuayIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      9
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNvbW1pc3Npb25FeHBlbnNlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      9
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldE9yaWdpbmFsSW5zdXJhbmNlQ2FzaCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      9
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik9yaWdpbmFsQ29tcGVuc2F0aW9uUGFpZCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      9
+    ],
+    [
+      "InvestCashPaid_SP",
+      9
+    ],
+    [
+      "IndexAmount",
+      9
+    ],
+    [
+      "IndexVolume",
+      9
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldERlYWxUcmFkaW5nQXNzZXRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      8
+    ],
+    [
+      "CashEquivalentIncrease_SP",
+      8
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkxlbmRDYXBpdGFsIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      7
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ikluc3VyYW5jZVJlY2VpdmFibGVzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      6
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkNvbW1pc3Npb25QYXlhYmxlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      6
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludGVyZXN0QW5kQ29tbWlzc2lvbkNhc2hpbiIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      6
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldENhc2hSZWNlaXZlZEZyb21SZWluc3VyYW5jZUJ1c2luZXNzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      6
+    ],
+    [
+      "positive_momentum_state",
+      6
+    ],
+    [
+      "negative_momentum_state",
+      6
+    ],
+    [
+      "high_turnover_state",
+      6
+    ],
+    [
+      "high_volume_state",
+      6
+    ],
+    [
+      "high_vol_state",
+      6
+    ],
+    [
+      "illiquidity_state",
+      6
+    ],
+    [
+      "drawdown_state",
+      6
+    ],
+    [
+      "above_vwap_state",
+      6
+    ],
+    [
+      "breakout_state",
+      6
+    ],
+    [
+      "limit_stress_state",
+      6
+    ],
+    [
+      "chip_profit_state",
+      6
+    ],
+    [
+      "chip_supply_wall_state",
+      6
+    ],
+    [
+      "contract_liability",
+      6
+    ],
+    [
+      "ExchangeIncome_SP",
+      6
+    ],
+    [
+      "ExchangeRateChangeEffect_SP",
+      6
+    ],
+    [
+      "NetOpenHedgeIncome_SP",
+      6
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkludmVzdFByb2NlZWRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      5
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldEJvcnJvd2luZ0Zyb21GaW5hbmNlQ28iLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      5
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldERlcG9zaXRJbkNiQW5kSWIiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      5
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldEluY3JlYXNlSW5QbGFjZW1lbnRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      5
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkltcGF3bmVkTG9hbk5ldEluY3JlYXNlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0Nhc2hGbG93IiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      5
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlJlZnVuZGVkUHJlbWl1bXMiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrSW5jb21lIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      5
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlBvbGljeURpdmlkZW5kUGF5b3V0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      5
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlBvbGljeURpdmlkZW5kQ2FzaFBhaWQiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      5
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IldpdGhkcmF3SW5zdXJhbmNlQ29udHJhY3RSZXNlcnZlIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      5
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5ldEluc3VyZXJEZXBvc2l0SW52ZXN0bWVudCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tDYXNoRmxvdyIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      5
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik9yZGluYXJ5Umlza1Jlc2VydmVGdW5kIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      5
+    ],
+    [
+      "return_volatility",
+      5
+    ],
+    [
+      "OtherCashinRelatedOperate_SP",
+      5
+    ],
+    [
+      "OtherOperateCashPaid_SP",
+      5
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik5vbkN1cnJlbnRBc3NldEluT25lWWVhciIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tCYWxhbmNlIiwidHJhbnNmb3JtIjpudWxsLCJ0cmFuc2Zvcm1fcGFyYW1zIjp7fX0",
+      4
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkhhbmRsaW5nQ2hhcmdlc0FuZENvbW1pc3Npb24iLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      4
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkVwcyIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmRpY2F0b3IiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      3
+    ],
+    [
+      "EFF",
+      3
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlByb2NlZWRzRnJvbVN1YlRvTWlub1MiLCJwYXJhbXMiOnt9LCJzY2hlbWFfdmVyc2lvbiI6IjEiLCJ0YWJsZSI6IlN0b2NrQ2FzaEZsb3ciLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      3
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkluY1RvdGFsUmV2ZW51ZUFubnVhbCIsInBhcmFtcyI6e30sInNjaGVtYV92ZXJzaW9uIjoiMSIsInRhYmxlIjoiU3RvY2tJbmRpY2F0b3IiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      2
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsU2hlZXRPd25lckVxdWl0aWVzIiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0JhbGFuY2UiLCJ0cmFuc2Zvcm0iOm51bGwsInRyYW5zZm9ybV9wYXJhbXMiOnt9fQ",
+      2
+    ],
+    [
+      "__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6Ik90aGVyQ29tcG9zaXRlSW5jb21lTWlub0F0IiwicGFyYW1zIjp7fSwic2NoZW1hX3ZlcnNpb24iOiIxIiwidGFibGUiOiJTdG9ja0luY29tZSIsInRyYW5zZm9ybSI6bnVsbCwidHJhbnNmb3JtX3BhcmFtcyI6e319",
+      2
+    ],
+    [
+      "EMA_fast",
+      2
+    ],
+    [
+      "EMA_slow",
+      2
+    ],
+    [
+      "symmetric",
+      1
+    ]
+  ],
+  "failures": [
+    {
+      "error": "SyntaxError: invalid syntax. Maybe you meant '==' or ':=' instead of '='? (<unknown>, line 1)",
+      "count": 276,
+      "example": {
+        "source_row": 95581,
+        "formula": "ts_markov_persistence [x=atr_pct]"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: intraday_volume_clock_path_roughness",
+      "count": 101,
+      "example": {
+        "source_row": 104754,
+        "formula": "multiply(intraday_volume_clock_path_roughness(MinuteVolume),Top10PledgeRatio)"
+      }
+    },
+    {
+      "error": "DSLParseError: _factory.<locals>.function() takes 0 positional arguments but 3 were given",
+      "count": 99,
+      "example": {
+        "source_row": 105134,
+        "formula": "multiply(intraday_limit_first_hit_time(MinuteClose,HighLimit,LowLimit),Top10PledgeRatio)"
+      }
+    },
+    {
+      "error": "SyntaxError: invalid syntax (<unknown>, line 1)",
+      "count": 97,
+      "example": {
+        "source_row": 96626,
+        "formula": "subtract [ret_1d - cs_knn_peer_mean_ex_self(target=ret_1d; features=momentum, turnover, volatility)]"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: StochasticK",
+      "count": 81,
+      "example": {
+        "source_row": 98169,
+        "formula": "multiply(StochasticK(Open,High,Low,Close,Volume),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLParseError: Unsupported syntax node: Subscript",
+      "count": 77,
+      "example": {
+        "source_row": 99519,
+        "formula": "industry_neutralize(Return,IndustryCode[sw_l1])"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: ts_persistence_entropy",
+      "count": 69,
+      "example": {
+        "source_row": 6786,
+        "formula": "rank(ts_persistence_entropy(ret, window=60, tau=1, dim=3))"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: AROON",
+      "count": 64,
+      "example": {
+        "source_row": 98019,
+        "formula": "multiply(AROON(Open,High,Low,Close,Volume),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: CCI",
+      "count": 63,
+      "example": {
+        "source_row": 98061,
+        "formula": "multiply(CCI(Open,High,Low,Close,Volume),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: WilliamsR",
+      "count": 58,
+      "example": {
+        "source_row": 97379,
+        "formula": "multiply(safe_div_null(ShorttermLoan,CashEquivalents),WilliamsR(Open,High,Low,Close,Volume))"
+      }
+    },
+    {
+      "error": "DSLParseError: call arity 20 exceeds ComplexityBudget.max_call_arity=12",
+      "count": 42,
+      "example": {
+        "source_row": 101186,
+        "formula": "relation_rank_entity_mobility(shareholder_id_1,shareholder_id_2,shareholder_id_3,shareholder_id_4,shareholder_id_5,shareholder_id_6,shareholder_id_7,shareholder_id_8,shareholder_id_9,shareholder_id_10,share_rank_1,share_rank_2,share_rank_3,share_rank_4,share_rank_5,share_rank_6,share_rank_7,share_rank_8,share_rank_9,share_rank_10)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: RSI",
+      "count": 32,
+      "example": {
+        "source_row": 97373,
+        "formula": "multiply(safe_div_null(ShorttermLoan,CashEquivalents),RSI(Open,High,Low,Close,Volume))"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: ATR",
+      "count": 32,
+      "example": {
+        "source_row": 97375,
+        "formula": "multiply(safe_div_null(ShorttermLoan,CashEquivalents),ATR(Open,High,Low,Close,Volume))"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: DPO",
+      "count": 31,
+      "example": {
+        "source_row": 98073,
+        "formula": "multiply(DPO(Open,High,Low,Close,Volume),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "SyntaxError: invalid syntax. Perhaps you forgot a comma? (<unknown>, line 1)",
+      "count": 29,
+      "example": {
+        "source_row": 96554,
+        "formula": "ts_interval_union_coverage [OHLC interval inputs]"
+      }
+    },
+    {
+      "error": "SyntaxError: invalid character '×' (U+00D7) (<unknown>, line 1)",
+      "count": 28,
+      "example": {
+        "source_row": 95961,
+        "formula": "multiply/safe_div_null [ts_turnover_profit_share × momentum]"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: ADXR",
+      "count": 24,
+      "example": {
+        "source_row": 98007,
+        "formula": "multiply(ADXR(Open,High,Low,Close,Volume),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: TRIX",
+      "count": 24,
+      "example": {
+        "source_row": 98181,
+        "formula": "multiply(TRIX(Open,High,Low,Close,Volume),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: max_drawdown",
+      "count": 21,
+      "example": {
+        "source_row": 97962,
+        "formula": "multiply(max_drawdown(Return),safe_div_null(SharePledge,ShareNumber))"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: open_gap",
+      "count": 11,
+      "example": {
+        "source_row": 98233,
+        "formula": "subtract(overnight_return(Open,Close,PreClose,Vwap),open_gap(Open,Close,PreClose,Vwap))"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: close_gap",
+      "count": 10,
+      "example": {
+        "source_row": 98235,
+        "formula": "subtract(overnight_return(Open,Close,PreClose,Vwap),close_gap(Open,Close,PreClose,Vwap))"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: ts_quantile_regression_beta",
+      "count": 8,
+      "example": {
+        "source_row": 100924,
+        "formula": "ts_quantile_regression_beta(Return,TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: holder_concentration_change",
+      "count": 7,
+      "example": {
+        "source_row": 97938,
+        "formula": "multiply(holder_concentration_change(ShareholderId,ShareRatio),safe_div_null(AccountReceivable,TotalAssets))"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: holder_count_change_rate",
+      "count": 7,
+      "example": {
+        "source_row": 97944,
+        "formula": "multiply(holder_count_change_rate(ShareholderId,ShareRatio),safe_div_null(AccountReceivable,TotalAssets))"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: AROON_up",
+      "count": 7,
+      "example": {
+        "source_row": 98025,
+        "formula": "multiply(AROON_up(Open,High,Low,Close,Volume),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: AROON_down",
+      "count": 7,
+      "example": {
+        "source_row": 98031,
+        "formula": "multiply(AROON_down(Open,High,Low,Close,Volume),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: BollingerUpper",
+      "count": 7,
+      "example": {
+        "source_row": 98049,
+        "formula": "multiply(BollingerUpper(Open,High,Low,Close,Volume),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: BollingerLower",
+      "count": 7,
+      "example": {
+        "source_row": 98055,
+        "formula": "multiply(BollingerLower(Open,High,Low,Close,Volume),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: MOM",
+      "count": 7,
+      "example": {
+        "source_row": 98127,
+        "formula": "multiply(MOM(Open,High,Low,Close,Volume),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: ROC",
+      "count": 7,
+      "example": {
+        "source_row": 98145,
+        "formula": "multiply(ROC(Open,High,Low,Close,Volume),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: StochasticD",
+      "count": 7,
+      "example": {
+        "source_row": 98175,
+        "formula": "multiply(StochasticD(Open,High,Low,Close,Volume),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: causal_linear_extrapolate",
+      "count": 5,
+      "example": {
+        "source_row": 101861,
+        "formula": "causal_linear_extrapolate(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: convolve",
+      "count": 5,
+      "example": {
+        "source_row": 101866,
+        "formula": "convolve(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: decimate",
+      "count": 5,
+      "example": {
+        "source_row": 101871,
+        "formula": "decimate(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: dft",
+      "count": 5,
+      "example": {
+        "source_row": 101876,
+        "formula": "dft(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: fft",
+      "count": 5,
+      "example": {
+        "source_row": 101881,
+        "formula": "fft(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: filter_bandpass",
+      "count": 5,
+      "example": {
+        "source_row": 101886,
+        "formula": "filter_bandpass(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: filter_highpass",
+      "count": 5,
+      "example": {
+        "source_row": 101891,
+        "formula": "filter_highpass(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: filter_lowpass",
+      "count": 5,
+      "example": {
+        "source_row": 101896,
+        "formula": "filter_lowpass(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: filter_notch",
+      "count": 5,
+      "example": {
+        "source_row": 101901,
+        "formula": "filter_notch(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: idft",
+      "count": 5,
+      "example": {
+        "source_row": 101906,
+        "formula": "idft(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: ifft",
+      "count": 5,
+      "example": {
+        "source_row": 101911,
+        "formula": "ifft(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: phase",
+      "count": 5,
+      "example": {
+        "source_row": 101916,
+        "formula": "phase(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: wavelet",
+      "count": 5,
+      "example": {
+        "source_row": 101921,
+        "formula": "wavelet(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: wavelet_denoise",
+      "count": 5,
+      "example": {
+        "source_row": 101926,
+        "formula": "wavelet_denoise(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: ttm",
+      "count": 5,
+      "example": {
+        "source_row": 102074,
+        "formula": "ttm(OperatingRevenue)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: yoy",
+      "count": 5,
+      "example": {
+        "source_row": 102079,
+        "formula": "yoy(OperatingRevenue)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: quarter",
+      "count": 5,
+      "example": {
+        "source_row": 102084,
+        "formula": "quarter(OperatingRevenue)"
+      }
+    },
+    {
+      "error": "SyntaxError: cannot assign to expression here. Maybe you meant '==' instead of '='? (<unknown>, line 1)",
+      "count": 4,
+      "example": {
+        "source_row": 96681,
+        "formula": "cs_knn_neighbor_retention [f1/f2/f3=momentum, turnover, volatility]"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: micro_spread",
+      "count": 4,
+      "example": {
+        "source_row": 98277,
+        "formula": "multiply(micro_spread(MinuteOHLCVA),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: micro_trade_imbalance",
+      "count": 4,
+      "example": {
+        "source_row": 98280,
+        "formula": "multiply(micro_trade_imbalance(MinuteOHLCVA),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: micro_vpin",
+      "count": 4,
+      "example": {
+        "source_row": 98283,
+        "formula": "multiply(micro_vpin(MinuteOHLCVA),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: micro_amihud_hf",
+      "count": 4,
+      "example": {
+        "source_row": 98286,
+        "formula": "multiply(micro_amihud_hf(MinuteOHLCVA),TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: bartlett_test",
+      "count": 4,
+      "example": {
+        "source_row": 101789,
+        "formula": "bartlett_test(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: chi_square_test",
+      "count": 4,
+      "example": {
+        "source_row": 101793,
+        "formula": "chi_square_test(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: corr_test",
+      "count": 4,
+      "example": {
+        "source_row": 101797,
+        "formula": "corr_test(Return,TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: durbin_watson_test",
+      "count": 4,
+      "example": {
+        "source_row": 101801,
+        "formula": "durbin_watson_test(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: granger_causality",
+      "count": 4,
+      "example": {
+        "source_row": 101805,
+        "formula": "granger_causality(Return,TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: jarque_bera_test",
+      "count": 4,
+      "example": {
+        "source_row": 101809,
+        "formula": "jarque_bera_test(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: kendall_corr_test",
+      "count": 4,
+      "example": {
+        "source_row": 101813,
+        "formula": "kendall_corr_test(Return,TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: kpss_test",
+      "count": 4,
+      "example": {
+        "source_row": 101817,
+        "formula": "kpss_test(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: ks_test",
+      "count": 4,
+      "example": {
+        "source_row": 101821,
+        "formula": "ks_test(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: levene_test",
+      "count": 4,
+      "example": {
+        "source_row": 101825,
+        "formula": "levene_test(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: lilliefors_test",
+      "count": 4,
+      "example": {
+        "source_row": 101829,
+        "formula": "lilliefors_test(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: spearman_corr_test",
+      "count": 4,
+      "example": {
+        "source_row": 101833,
+        "formula": "spearman_corr_test(Return,TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: stationarity_test",
+      "count": 4,
+      "example": {
+        "source_row": 101837,
+        "formula": "stationarity_test(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: ttest_one_sample",
+      "count": 4,
+      "example": {
+        "source_row": 101841,
+        "formula": "ttest_one_sample(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: ttest_paired",
+      "count": 4,
+      "example": {
+        "source_row": 101845,
+        "formula": "ttest_paired(Return,TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: ttest_two_samples",
+      "count": 4,
+      "example": {
+        "source_row": 101849,
+        "formula": "ttest_two_samples(Return,TurnoverRatio)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: ACF",
+      "count": 4,
+      "example": {
+        "source_row": 101853,
+        "formula": "ACF(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: pacf",
+      "count": 4,
+      "example": {
+        "source_row": 101857,
+        "formula": "pacf(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: vpmacd",
+      "count": 4,
+      "example": {
+        "source_row": 102101,
+        "formula": "vpmacd(Close,Volume)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: vpmacd_signal",
+      "count": 4,
+      "example": {
+        "source_row": 102105,
+        "formula": "vpmacd_signal(Close,Volume)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: vp_weighted_price",
+      "count": 4,
+      "example": {
+        "source_row": 102109,
+        "formula": "vp_weighted_price(Close,Volume)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: downside_beta",
+      "count": 4,
+      "example": {
+        "source_row": 102113,
+        "formula": "downside_beta(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: sharpe_ratio",
+      "count": 4,
+      "example": {
+        "source_row": 102117,
+        "formula": "sharpe_ratio(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: volatility",
+      "count": 4,
+      "example": {
+        "source_row": 102121,
+        "formula": "volatility(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: cumulative_returns",
+      "count": 4,
+      "example": {
+        "source_row": 102125,
+        "formula": "cumulative_returns(Return)"
+      }
+    },
+    {
+      "error": "DSLUnknownOperatorError: Unsupported function: identity",
+      "count": 3,
+      "example": {
+        "source_row": 99495,
+        "formula": "identity(CashDividend)"
+      }
+    },
+    {
+      "error": "DSLParseError: expression exceeds ComplexityBudget.max_ast_nodes=256",
+      "count": 2,
+      "example": {
+        "source_row": 25202,
+        "formula": "rank(where(or_(and_(gt(cs_pct_rank(ts_sharpe(ret, 60)), 0.65), lt(cs_pct_rank(ts_kurt(ret, 60)), 0.70)), and_(gt(cs_pct_rank(efficiency_ratio(close, 20)), 0.65), lt(cs_pct_rank(price_impact(ret, amount, 20)), 0.65))), where(gt(rank(subtract(ts_topk_mean(ret, 20, 2), ts_bottomk_mean(ret, 20, 2))), 0.8), neg(rank(subtract(rank(safe_div(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), add(abs(ts_mean(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), 40)), 1e-08))), rank(subtract(rank(ts_turnover_holding_age(close, turnover_ratio, window=20)), rank(multiply(safe_div_null(1.0, pb_ratio), ts_sum(log(add(ret, 1.0)), 20)))))))), rank(subtract(rank(safe_div(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), add(abs(ts_mean(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), 40)), 1e-08))), rank(subtract(rank(ts_turnover_holding_age(close, turnover_ratio, window=20)), rank(multiply(safe_div_null(1.0, pb_ratio), ts_sum(log(add(ret, 1.0)), 20)))))))), multiply(where(gt(rank(subtract(ts_topk_mean(ret, 20, 2), ts_bottomk_mean(ret, 20, 2))), 0.8), neg(rank(subtract(rank(safe_div(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), add(abs(ts_mean(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), 40)), 1e-08))), rank(subtract(rank(ts_turnover_holding_age(close, turnover_ratio, window=20)), rank(multiply(safe_div_null(1.0, pb_ratio), ts_sum(log(add(ret, 1.0)), 20)))))))), rank(subtract(rank(safe_div(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), add(abs(ts_mean(multiply(cdl_tweezer_bottom(open, high, low, close), candle_gap_atr(open, high, low, close, 14)), 40)), 1e-08))), rank(subtract(rank(ts_turnover_holding_age(close, turnover_ratio, window=20)), rank(multiply(safe_div_null(1.0, pb_ratio), ts_sum(log(add(ret, 1.0)), 20)))))))), 0.25)))"
+      }
+    },
+    {
+      "error": "SyntaxError: unterminated string literal (detected at line 1) (<unknown>, line 1)",
+      "count": 1,
+      "example": {
+        "source_row": 113882,
+        "formula": "Fit PIT autoregression of profitability, extract residuals, compute the paper's third-moment features, estimate expected residual skewness."
+      }
+    }
+  ]
+}

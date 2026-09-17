@@ -386,3 +386,255 @@ def test_public_stream_executes_real_factor_values_and_preserves_production_gate
             [Factor(name="p", expr=col("close"))], sink=sink, wave_size=1,
             perf=PerfConfig(result_budget_bytes=1024),
         )
+
+
+def test_public_run_many_automatically_streams_oversize_research_auto_sink(monkeypatch):
+    from dataclasses import replace
+
+    import numpy as np
+    import pandas as pd
+
+    from benchmarks.benchmark_run_many_streaming_20260906 import Source
+    from factor_engine.api import col, ts_mean
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.factory import build_backend
+    from factor_engine.planner import physical_lowerer
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.runtime.perf_config import PerfConfig
+    from factor_engine.runtime.resource_broker import ResourceBroker
+    from factor_engine.runtime import resource_governor
+
+    monkeypatch.setattr(physical_lowerer, "_get_adaptive_dag_width_limit", lambda: 2)
+    monkeypatch.setattr(physical_lowerer, "_get_adaptive_chunk_size", lambda: 2)
+    index = pd.MultiIndex.from_product(
+        [pd.date_range("2024-01-01", periods=4), ["A", "B"]],
+        names=["timestamp", "instrument"],
+    )
+    values = pd.Series(np.arange(len(index), dtype=float), index=index)
+
+    class CountingSource(Source):
+        def __init__(self, data):
+            super().__init__(data)
+            self.load_columns_calls = 0
+            self.instrument_filter = ("A", "B")
+            self.start_date = index.levels[0].min().tz_localize("UTC")
+            self.end_date = index.levels[0].max().tz_localize("UTC")
+            self.schema = {"close": "float64"}
+
+        def load_columns(self, names):
+            self.load_columns_calls += 1
+            return super().load_columns(names)
+
+    broker = ResourceBroker(
+        hard_memory_limit=2 * 1024**3,
+        cpu_slots=2,
+        min_host_reserve_gb=0,
+        min_host_reserve_fraction=0,
+    )
+    hard = broker.hard_memory_limit
+    monkeypatch.setattr(resource_governor, "_cgroup_v2_memory_remaining_bytes", lambda: hard)
+    snapshot = replace(
+        broker.snapshot(), hard_memory_limit=hard, cgroup_memory_current=0,
+        host_mem_available=hard, process_rss=0, worker_rss=0,
+        process_family_rss=0, process_family_pss=0,
+        host_mem_available_known=True,
+    )
+    broker._refresh = lambda force=False: snapshot
+    source = CountingSource(values)
+    engine = FactorEngine(build_backend("auto"), source, run_mode="research")
+    engine.resource_broker = broker
+    shared = ts_mean(col("close"), 2)
+    factors = [Factor(name=f"f{i}", expr=shared + i) for i in range(5)]
+    seen = []
+    outcome = engine.run_many(
+        factors, result_policy="sink",
+        sink=lambda name, value: seen.append(name),
+        perf=PerfConfig(max_workers=1, native_fusion=False, result_budget_bytes=1024**2),
+    )
+    assert seen == [f"f{i}" for i in range(5)]
+    assert outcome["executor"] == "streaming_waves"
+    assert outcome["completed_factors"] == 5
+    assert outcome["completed_waves"] == 3
+    assert outcome["cse_scope"] == "per_wave"
+    assert source.load_columns_calls == 3
+
+class PreflightEngine(FakeEngine):
+    def __init__(self, *, unknown_error=False):
+        super().__init__()
+        self.events = []
+        self.unknown_error = unknown_error
+
+    def _dag_from_factors(self, factors, **kwargs):
+        names = tuple(factor.name for factor in factors)
+        self.events.append(("preflight", names))
+        if any(name.startswith("bad") for name in names):
+            if self.unknown_error:
+                raise RuntimeError("compiler crashed")
+            raise NotImplementedError("Unsupported expr: BadExpr")
+        return object(), {name: object() for name in names}
+
+    def run_many_parallel(self, factors, *, result_policy, sink, **kwargs):
+        self.events.append(("execute", tuple(f.name for f in factors)))
+        return super().run_many_parallel(
+            factors, result_policy=result_policy, sink=sink, **kwargs,
+        )
+
+
+def test_stream_preflights_all_roots_then_isolates_unsupported_formula():
+    engine = PreflightEngine()
+    seen = []
+    factors = [SimpleNamespace(name=name) for name in ("good1", "bad", "good2")]
+    out = execute_run_many_stream(
+        engine, factors, wave_size=3, sink=lambda name, value: seen.append(name),
+        sink_queue_bytes=1024,
+    )
+    assert engine.events[:4] == [
+        ("preflight", ("good1", "bad", "good2")), ("preflight", ("good1",)),
+        ("preflight", ("bad",)), ("preflight", ("good2",)),
+    ]
+    assert seen == ["good1", "good2"]
+    assert out["completed_factors"] == 2
+    assert out["failed_factors"] == {
+        "bad": {"phase": "compile_preflight", "error_type": "NotImplementedError",
+                "message": "Unsupported expr: BadExpr"},
+    }
+    assert "_compiled" in engine.waves[0][1]
+
+def test_stream_reuses_successful_batch_preflight_without_second_compile():
+    engine = PreflightEngine()
+    seen = []
+    factors = [SimpleNamespace(name=name) for name in ("good1", "good2")]
+    out = execute_run_many_stream(
+        engine, factors, wave_size=2, sink=lambda name, value: seen.append(name),
+        sink_queue_bytes=1024,
+    )
+    assert engine.events == [
+        ("preflight", ("good1", "good2")), ("execute", ("good1", "good2")),
+    ]
+    assert seen == ["good1", "good2"] and out["completed_factors"] == 2
+
+
+def test_stream_all_bad_wave_skips_runner_then_next_wave_sinks_once():
+    engine = PreflightEngine()
+    seen = []
+    factors = [SimpleNamespace(name=name) for name in ("bad1", "bad2", "good")]
+    out = execute_run_many_stream(
+        engine, factors, wave_size=2, sink=lambda name, value: seen.append(name),
+        sink_queue_bytes=1024,
+    )
+    assert seen == ["good"]
+    assert [event for event in engine.events if event[0] == "execute"] == [
+        ("execute", ("good",)),
+    ]
+    assert out["completed_factors"] == 1
+    assert set(out["failed_factors"]) == {"bad1", "bad2"}
+
+
+def test_real_engine_good_bad_good_isolates_before_sink():
+    import pandas as pd
+
+    from benchmarks.benchmark_run_many_streaming_20260906 import Source
+    from factor_engine.api import col
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.runtime.perf_config import PerfConfig
+
+    index = pd.MultiIndex.from_product(
+        [pd.date_range("2024-01-01", periods=2), ["A"]],
+        names=["timestamp", "instrument"],
+    )
+    values = pd.Series([1.0, 2.0], index=index)
+    engine = FactorEngine(PandasBackend(), Source(values))
+    seen = []
+    out = engine.run_many_stream(
+        [Factor("good1", col("close") + 1), Factor("bad", None),
+         Factor("good2", col("close") + 2)],
+        sink=lambda name, value: seen.append(name), wave_size=3,
+        perf=PerfConfig(max_workers=1, result_budget_bytes=1024**2, native_fusion=False),
+    )
+    assert seen == ["good1", "good2"]
+    assert out["completed_factors"] == 2
+    assert out["failed_factors"]["bad"] == {
+        "phase": "compile_preflight",
+        "error_type": "NotImplementedError",
+        "message": "Unsupported expr: NoneType",
+
+    }
+
+def test_stream_does_not_isolate_unknown_preflight_failure():
+    engine = PreflightEngine(unknown_error=True)
+    seen = []
+
+@pytest.mark.parametrize("bad_window", [True, 0])
+def test_real_engine_isolates_operator_parameter_error(bad_window):
+    import pandas as pd
+
+    from benchmarks.benchmark_run_many_streaming_20260906 import Source
+    from factor_engine.api import col, ts_mean
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.runtime.perf_config import PerfConfig
+
+    index = pd.MultiIndex.from_product(
+        [pd.date_range("2024-01-01", periods=2), ["A"]],
+        names=["timestamp", "instrument"],
+    )
+    engine = FactorEngine(
+        PandasBackend(), Source(pd.Series([1.0, 2.0], index=index)),
+    )
+    seen = []
+    out = engine.run_many_stream(
+        [Factor("good1", col("close") + 1),
+         Factor("bad", ts_mean(col("close"), bad_window)),
+         Factor("good2", col("close") + 2)],
+        sink=lambda name, value: seen.append(name), wave_size=3,
+        perf=PerfConfig(max_workers=1, result_budget_bytes=1024**2, native_fusion=False),
+    )
+    assert seen == ["good1", "good2"]
+    assert out["failed_factors"]["bad"]["error_type"] == "OperatorParameterError"
+
+
+def test_real_engine_all_parameter_bad_wave_skips_then_good_runs_once():
+    import pandas as pd
+
+    from benchmarks.benchmark_run_many_streaming_20260906 import Source
+    from factor_engine.api import col, ts_mean
+    from factor_engine.api.factor import Factor
+    from factor_engine.backend.pandas_backend import PandasBackend
+    from factor_engine.runtime.engine import FactorEngine
+    from factor_engine.runtime.perf_config import PerfConfig
+
+    index = pd.MultiIndex.from_product(
+        [pd.date_range("2024-01-01", periods=2), ["A"]],
+        names=["timestamp", "instrument"],
+    )
+    engine = FactorEngine(
+        PandasBackend(), Source(pd.Series([1.0, 2.0], index=index)),
+    )
+    seen = []
+    out = engine.run_many_stream(
+        [Factor("bad_bool", ts_mean(col("close"), True)),
+         Factor("bad_zero", ts_mean(col("close"), 0)),
+         Factor("good", col("close") + 1)],
+        sink=lambda name, value: seen.append(name), wave_size=2,
+        perf=PerfConfig(max_workers=1, result_budget_bytes=1024**2, native_fusion=False),
+    )
+    assert seen == ["good"]
+
+def test_stream_does_not_isolate_plain_value_error():
+    class PlainValueErrorEngine(FakeEngine):
+        def _dag_from_factors(self, factors, **kwargs):
+            raise ValueError("ordinary compiler value error")
+
+    seen = []
+    with pytest.raises(ValueError, match="ordinary compiler value error") as caught:
+        execute_run_many_stream(
+            PlainValueErrorEngine(),
+            [SimpleNamespace(name="good"), SimpleNamespace(name="bad")],
+            wave_size=2,
+            sink=lambda name, value: seen.append(name),
+            sink_queue_bytes=1024,
+        )
+    assert type(caught.value) is ValueError

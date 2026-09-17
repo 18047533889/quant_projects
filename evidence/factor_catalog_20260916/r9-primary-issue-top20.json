@@ -1,0 +1,134 @@
+{
+  "source": "evidence/factor_catalog_20260916/full-parse-r9-intraday-redesign.jsonl.gz",
+  "population_nonempty_ids": 113893,
+  "problematic_ids": 10266,
+  "no_static_issue_ids": 103627,
+  "classification_note": "One primary static issue per non-empty ID. Missing fields take the first unresolved binding; unknown/syntactically undefined formulas are missing mathematical definitions; remaining deterministic exceptions are code bugs. Top20 excludes NO_STATIC_ISSUE.",
+  "top20": [
+    {
+      "rank": 1,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:FiscalPeriodId",
+      "count": 3492
+    },
+    {
+      "rank": 2,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:MinuteOHLCVA",
+      "count": 619
+    },
+    {
+      "rank": 3,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:FiscalAvgAssets",
+      "count": 362
+    },
+    {
+      "rank": 4,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:fiscal_quarter",
+      "count": 353
+    },
+    {
+      "rank": 5,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:NetOperateCashFlow_SP",
+      "count": 288
+    },
+    {
+      "rank": 6,
+      "category": "MISSING_MATH_DEFINITION",
+      "primary_issue": "SyntaxError:invalid syntax. Maybe you meant '==' or ':=' instead of '='? (<unknown>, line 1)",
+      "count": 276
+    },
+    {
+      "rank": 7,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:IndexReturn",
+      "count": 274
+    },
+    {
+      "rank": 8,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:PubDate",
+      "count": 214
+    },
+    {
+      "rank": 9,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:OperatingRevenue_SP",
+      "count": 208
+    },
+    {
+      "rank": 10,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:FixIntanOtherAssetAcquiCash_SP",
+      "count": 186
+    },
+    {
+      "rank": 11,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:Top10PledgeRatio",
+      "count": 182
+    },
+    {
+      "rank": 12,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:AdministrationExpense_SP",
+      "count": 141
+    },
+    {
+      "rank": 13,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:SHORT",
+      "count": 126
+    },
+    {
+      "rank": 14,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:BorrowingRepayment_SP",
+      "count": 126
+    },
+    {
+      "rank": 15,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:VOL",
+      "count": 113
+    },
+    {
+      "rank": 16,
+      "category": "MISSING_MATH_DEFINITION",
+      "primary_issue": "unsupported_operator:intraday_volume_clock_path_roughness",
+      "count": 101
+    },
+    {
+      "rank": 17,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:IndexWeight",
+      "count": 98
+    },
+    {
+      "rank": 18,
+      "category": "MISSING_MATH_DEFINITION",
+      "primary_issue": "SyntaxError:invalid syntax (<unknown>, line 1)",
+      "count": 97
+    },
+    {
+      "rank": 19,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:ret_1d",
+      "count": 96
+    },
+    {
+      "rank": 20,
+      "category": "MISSING_FIELD",
+      "primary_issue": "field:ReportPeriodEndDate",
+      "count": 92
+    }
+  ],
+  "category_counts": {
+    "MISSING_FIELD": 8814,
+    "MISSING_MATH_DEFINITION": 1452,
+    "NO_STATIC_ISSUE": 103627
+  }
+}

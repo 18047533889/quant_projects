@@ -321,8 +321,9 @@ def _operator_param_values(node: CleanedCall, op_impl: Any) -> dict[str, Any]:
     param_names = tuple(
         getattr(getattr(op_impl, "metadata", None), "param_names", ()) or ()
     )
+    positional_names = param_names[:param_names.index("...")] if "..." in param_names else param_names
     for index, argument in enumerate(node.args):
-        if index >= len(param_names):
+        if index >= len(positional_names):
             break
         literal = _literal_value(argument)
         if literal is not None or isinstance(argument, Literal):
@@ -541,6 +542,19 @@ _SPECTRAL_FAMILY = frozenset({
 # immediate input is an authoritative price level.  ``ts_pct`` is also a
 # generic change-rate operator, so generic numeric inputs must not be promoted.
 _RETURN_FROM_PRICE_CANONICALS = frozenset({"ts_pct", "ts_log_return", "log_returns"})
+_ASHARE_LIMIT_EVENT_CANONICALS = frozenset({
+    "ashare_limit_up_touch",
+    "ashare_limit_down_touch",
+    "ashare_limit_one_price",
+    "ashare_limit_failed",
+    "ashare_open_at_upper_limit",
+    "ashare_limit_open_failed",
+    "limit_up_close",
+    "limit_down_close",
+})
+_MASK_BOOL_CANONICALS = frozenset({
+    "lt", "le", "eq", "gt", "ge", "ne", "and_", "or_", "not_",
+})
 
 
 class TypedInputContractError(ValueError):
@@ -664,7 +678,12 @@ def _resolve_operator_price_basis(
         if basis is None:
             return None  # a price input without a resolvable basis -> fail closed
         bases.add(basis)
-    return bases.pop() if len(bases) == 1 else None
+    if len(bases) > 1:
+        raise TypedInputContractError(
+            f"{canonical}: price basis mismatch across typed price inputs: "
+            f"{sorted(bases)!r}"
+        )
+    return bases.pop() if bases else None
 
 
 def _flow_semantics_of_field(name: str, *, market: str | None = None) -> str | None:
@@ -719,7 +738,11 @@ def validate_typed_input_contracts(ir: IRNode, *, market: str | None = None) -> 
     def walk(node: IRNode) -> None:
         children = _direct_child_attrs(node)
         if node.op in _DRAWDOWN_FAMILY:
-            for name, sem in children:
+            # ``ts_max_drawdown_activity_cost(x, activity, ...)`` has a second
+            # panel input whose contract is activity, not a price level.  The
+            # drawdown level restriction applies only to x (input[0]).
+            drawdown_inputs = children[:1] if node.op == "ts_max_drawdown_activity_cost" else children
+            for name, sem in drawdown_inputs:
                 basis = sem.get("price_basis") or _price_basis_of_field(name, market=market)
                 if _is_return_field(name) or basis in {"RETURN"}:
                     errors.append(
@@ -767,7 +790,8 @@ def validate_semantic_kind_contracts(ir: IRNode) -> list[str]:
     def walk(node: IRNode) -> None:
         children = _direct_child_attrs(node)
         if node.op in _DRAWDOWN_FAMILY:
-            for name, sem in children:
+            drawdown_inputs = children[:1] if node.op == "ts_max_drawdown_activity_cost" else children
+            for name, sem in drawdown_inputs:
                 if sem.get("semantic_kind") == "ReturnDecimal" or _is_return_field(name):
                     errors.append(
                         f"{node.op} on return input {name}: drawdown requires a "
@@ -1399,7 +1423,20 @@ class Analyzer:
                     f"{node.op} is disabled: backward-looking fill is not point-in-time safe"
                 )
             canonical = OperatorRegistry.resolve_canonical_strict(node.op)
-            implementation = OperatorRegistry.get(canonical)
+            # Research/compat analyzers may lower explicitly research-surface
+            # operators.  Production analyzers retain the registry's strict
+            # daily/extended admission gate.
+            implementation = OperatorRegistry.get(
+                canonical, mode="production" if self._production else "any"
+            )
+            from factor_engine.backend.parameter_aliases import normalize_parameter_aliases
+            from factor_engine.cleaned_operators.base import validate_operator_call_arity
+
+            validate_operator_call_arity(
+                implementation,
+                node.args,
+                normalize_parameter_aliases(canonical, node.kwargs_dict()),
+            )
             _validate_distinct_inputs(node, canonical, implementation)
 
             # R40 #176: the declared AxisEffectContract is the single authority
@@ -1472,6 +1509,87 @@ class Analyzer:
                 pass
 
             visited_inputs = [visit(argument) for argument in node.args]
+            deepest_child = max((item[1] for item in visited_inputs), default=0)
+            attrs: dict[str, Any] = {}
+            keyword_inputs: dict[str, tuple[IRNode, int]] = {}
+            metadata = getattr(implementation, "metadata", None)
+            panel_keyword_names = set(getattr(metadata, "panel_params", ()) or ())
+            if not panel_keyword_names and node.kwargs_dict():
+                # Match the public operator contract: legacy kernels may declare
+                # panel roles through annotations/signatures instead of metadata.
+                # ParamSpecs and primitive annotations still exclude scalar slots.
+                from factor_engine.cleaned_operators.operator_spec import _infer_panel_params
+
+                panel_keyword_names.update(
+                    _infer_panel_params(implementation, metadata, {})
+                )
+            panel_keyword_names.update(getattr(metadata, "mixed_params", ()) or ())
+            panel_keyword_names.update(
+                getattr(metadata, "nullable_mixed_params", ()) or ()
+            )
+            parameter_names = tuple(getattr(metadata, "param_names", ()) or ())
+            parameter_aliases = getattr(metadata, "param_aliases", None) or {}
+            for key, value in node.kwargs_dict().items():
+                if isinstance(value, Expr):
+                    lowered, keyword_lookback = visit(value)
+                    target = parameter_aliases.get(key, key)
+                    if lowered.op == "literal":
+                        attrs[key] = lowered.attrs["value"]
+                    elif target in panel_keyword_names:
+                        if target not in parameter_names:
+                            raise NotImplementedError(
+                                f"cleaned op {node.op!r} panel parameter {target!r} "
+                                "is absent from param_names"
+                            )
+                        positional_index = parameter_names.index(target)
+                        if positional_index < len(node.args):
+                            raise TypeError(
+                                f"cleaned op {node.op!r} got multiple values for "
+                                f"panel parameter {target!r}"
+                            )
+                        if target in keyword_inputs:
+                            raise TypeError(
+                                f"cleaned op {node.op!r} got multiple keyword values "
+                                f"for panel parameter {target!r}"
+                            )
+                        keyword_inputs[target] = (lowered, keyword_lookback)
+                    else:
+                        raise NotImplementedError(
+                            f"cleaned op {node.op!r} kwargs must be literals, got {key!r}"
+                        )
+                    deepest_child = max(deepest_child, keyword_lookback)
+                else:
+                    attrs[key] = value
+
+            if keyword_inputs:
+                positional_names = set(parameter_names[: len(node.args)])
+                keyword_names = set(keyword_inputs)
+                ordered_keyword_inputs: list[tuple[IRNode, int]] = []
+                for name in parameter_names:
+                    if name not in keyword_inputs:
+                        continue
+                    index = parameter_names.index(name)
+                    missing_before = [
+                        prior
+                        for prior in parameter_names[:index]
+                        if prior in panel_keyword_names
+                        and prior not in positional_names
+                        and prior not in keyword_names
+                    ]
+                    if missing_before:
+                        raise NotImplementedError(
+                            f"cleaned op {node.op!r} panel kwargs cannot skip earlier "
+                            f"panel parameters {missing_before!r}"
+                        )
+                    ordered_keyword_inputs.append(keyword_inputs[name])
+                if len(ordered_keyword_inputs) != len(keyword_inputs):
+                    undeclared = sorted(set(keyword_inputs) - set(parameter_names))
+                    raise NotImplementedError(
+                        f"cleaned op {node.op!r} has panel kwargs absent from param_names: "
+                        f"{undeclared!r}"
+                    )
+                visited_inputs.extend(ordered_keyword_inputs)
+
             _validate_same_unit_inputs(
                 canonical,
                 implementation,
@@ -1479,19 +1597,6 @@ class Analyzer:
                 production=effective_production,
             )
             inputs = tuple(item[0] for item in visited_inputs)
-            deepest_child = max((item[1] for item in visited_inputs), default=0)
-            attrs: dict[str, Any] = {}
-            for key, value in node.kwargs_dict().items():
-                if isinstance(value, Expr):
-                    lowered, keyword_lookback = visit(value)
-                    if lowered.op != "literal":
-                        raise NotImplementedError(
-                            f"cleaned op {node.op!r} kwargs must be literals, got {key!r}"
-                        )
-                    attrs[key] = lowered.attrs["value"]
-                    deepest_child = max(deepest_child, keyword_lookback)
-                else:
-                    attrs[key] = value
 
             from factor_engine.backend.parameter_aliases import normalize_parameter_aliases
 
@@ -1524,7 +1629,8 @@ class Analyzer:
                     attrs["dtype"] = "datetime64[ns]"
 
             if canonical in {"ts_return_spectral_entropy", "ts_spectral_entropy",
-                             "ts_detrended_level_spectral_entropy"}:
+                             "ts_detrended_level_spectral_entropy",
+                             "ts_activity_spectral_entropy"}:
                 # Actual immediate expression type overrides any caller stamp.
                 # No full-panel numeric discriminator may inspect future rows.
                 immediate = visited_inputs[0][0] if visited_inputs else None
@@ -1577,11 +1683,17 @@ class Analyzer:
             # (kw = node.attrs).  Without this stamp the basis is re-derived at
             # runtime from panel column names — instrument codes in a
             # cross-sectional panel — which the fail-closed gate rejects.
-            if "price_basis" not in attrs:
-                _op_price_basis = _resolve_operator_price_basis(
-                    canonical, implementation, visited_inputs
-                )
-                if _op_price_basis:
+            _op_price_basis = _resolve_operator_price_basis(
+                canonical, implementation, visited_inputs
+            )
+            if _op_price_basis:
+                explicit_basis = attrs.get("price_basis")
+                if explicit_basis is not None and explicit_basis != _op_price_basis:
+                    raise TypedInputContractError(
+                        f"{canonical}: explicit price basis {explicit_basis!r} conflicts "
+                        f"with typed price inputs {_op_price_basis!r}"
+                    )
+                if "price_basis" not in attrs:
                     attrs["price_basis"] = _op_price_basis
 
             # Round-7 WS-C (#265-#268): propagate field-catalog metadata into
@@ -1711,6 +1823,32 @@ class Analyzer:
                     semantic["semantic_kind"] = "DailySeries"
                     semantic.pop("price_basis", None)
                     semantic["unit"] = "ratio"
+            # ``where(condition, when_true, when_false)`` is numerically typed
+            # by its value branches, not by its boolean selector.  Keep the
+            # selector in the full PIT/availability join above, but exclude it
+            # from the value-type slots so declaring comparisons as MaskBool
+            # does not turn a numeric where-expression into MIXED.
+            if canonical == "where" and len(inputs) >= 3:
+                branch_views: list[dict[str, Any]] = []
+                for child in inputs[1:3]:
+                    view = dict(child.semantic_attrs or {})
+                    for key in ("unit", "price_basis", "flow_semantics"):
+                        if view.get(key) is None:
+                            value = (child.attrs or {}).get(key)
+                            if value is not None:
+                                view[key] = value
+                    branch_views.append(view)
+                branch_semantic = lattice_join_semantic_attrs(branch_views)
+                value_type_keys = (
+                    "semantic_kind", "mixed_semantic_kind", "unit", "mixed_unit",
+                    "price_basis", "mixed_price_basis", "flow_semantics",
+                    "mixed_flow_semantics",
+                )
+                for key in value_type_keys:
+                    semantic.pop(key, None)
+                for key in value_type_keys:
+                    if key in branch_semantic:
+                        semantic[key] = branch_semantic[key]
             # P0-30 / WS-C: derive the typed-IR semantic kind from the joined
             # attrs — only when the lattice left the kind unresolved (a
             # single-kind join already pinned it; a mixed join stays unresolved).
@@ -1723,6 +1861,29 @@ class Analyzer:
                 )
                 if kind is not None:
                     semantic["semantic_kind"] = kind.value
+            # Comparisons and logical combinators are formal 0/1/NaN masks.
+            # Their output type replaces inherited numeric input kinds; this
+            # is a producer contract, not a relaxation of boolean consumers.
+            if canonical in _MASK_BOOL_CANONICALS:
+                semantic["semantic_kind"] = "MaskBool"
+                semantic["unit"] = "boolean"
+                for inherited_key in (
+                    "mixed_semantic_kind", "price_basis", "mixed_price_basis",
+                    "flow_semantics", "mixed_flow_semantics",
+                ):
+                    semantic.pop(inherited_key, None)
+            # These operators are formal 0/1/NaN market-event indicators.  Their
+            # output type must replace, not inherit, the joined price-input kinds
+            # (for example PriceRaw + OfficialLimitPrice -> MIXED).
+            if canonical in _ASHARE_LIMIT_EVENT_CANONICALS:
+                semantic["semantic_kind"] = "EventBool"
+                semantic["unit"] = "boolean"
+                for inherited_key in (
+                    "mixed_semantic_kind",
+                    "price_basis",
+                    "mixed_price_basis",
+                ):
+                    semantic.pop(inherited_key, None)
 
             return (
                 IRNode(op=canonical, inputs=inputs, attrs=attrs, semantic_attrs=semantic),

@@ -11,7 +11,8 @@ def test_analyzer_and_lowerer():
 
     assert analysis.has_ts_op is True
     assert analysis.has_cs_op is True
-    assert analysis.lookback == 10
+    # A 10-row trailing window needs the current row plus 9 prior rows.
+    assert analysis.lookback == 9
     assert analysis.referenced_columns == {"close"}
     assert plan.op == "rank"
     assert plan.inputs[0].op == "ts_mean"

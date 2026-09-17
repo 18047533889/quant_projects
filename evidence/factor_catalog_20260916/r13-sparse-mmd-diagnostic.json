@@ -1,0 +1,110 @@
+{
+  "source_row": 60447,
+  "window": [
+    "2025-10-01",
+    "2026-04-30"
+  ],
+  "symbols": [
+    "000001.SZ",
+    "600519.SH"
+  ],
+  "scope": "subexpression counts, no panels or formula changes",
+  "subexpressions": {
+    "probe_4": {
+      "formula": "ts_confirmed_pivot_low(low, 3, 3)",
+      "size": 274,
+      "finite": 22,
+      "unique_finite": 22
+    },
+    "probe_3": {
+      "formula": "price_impact(ret, amount, 20)",
+      "size": 274,
+      "finite": 236,
+      "unique_finite": 235
+    },
+    "probe_1": {
+      "formula": "ts_sharpe(ret, 60)",
+      "size": 274,
+      "finite": 236,
+      "unique_finite": 236
+    },
+    "probe_0": {
+      "formula": "ts_sum(ret, 20)",
+      "size": 274,
+      "finite": 274,
+      "unique_finite": 273
+    },
+    "probe_5": {
+      "formula": "rank(ts_confirmed_pivot_low(low, 3, 3))",
+      "size": 274,
+      "finite": 22,
+      "unique_finite": 3
+    },
+    "probe_7": {
+      "formula": "ts_decay_linear(price_impact(ret, amount, 20), 10)",
+      "size": 274,
+      "finite": 236,
+      "unique_finite": 236
+    },
+    "probe_6": {
+      "formula": "ts_decay_linear(ts_sharpe(ret, 60), 10)",
+      "size": 274,
+      "finite": 236,
+      "unique_finite": 236
+    },
+    "probe_2": {
+      "formula": "rank(ts_sum(ret, 20))",
+      "size": 274,
+      "finite": 274,
+      "unique_finite": 2
+    },
+    "probe_9": {
+      "formula": "cs_pct_rank(ts_decay_linear(price_impact(ret, amount, 20), 10))",
+      "size": 274,
+      "finite": 236,
+      "unique_finite": 2
+    },
+    "probe_10": {
+      "formula": "multiply(rank(ts_confirmed_pivot_low(low, 3, 3)), rank(ts_sum(ret, 20)))",
+      "size": 274,
+      "finite": 22,
+      "unique_finite": 3
+    },
+    "probe_8": {
+      "formula": "cs_pct_rank(ts_decay_linear(ts_sharpe(ret, 60), 10))",
+      "size": 274,
+      "finite": 236,
+      "unique_finite": 2
+    },
+    "probe_11": {
+      "formula": "tanh(multiply(rank(ts_confirmed_pivot_low(low, 3, 3)), rank(ts_sum(ret, 20))))",
+      "size": 274,
+      "finite": 22,
+      "unique_finite": 3
+    },
+    "probe_12": {
+      "formula": "subtract(cs_pct_rank(ts_decay_linear(ts_sharpe(ret, 60), 10)), cs_pct_rank(ts_decay_linear(price_impact(ret, amount, 20), 10)))",
+      "size": 274,
+      "finite": 236,
+      "unique_finite": 3
+    },
+    "probe_13": {
+      "formula": "multiply(tanh(multiply(rank(ts_confirmed_pivot_low(low, 3, 3)), rank(ts_sum(ret, 20)))), subtract(cs_pct_rank(ts_decay_linear(ts_sharpe(ret, 60), 10)), cs_pct_rank(ts_decay_linear(price_impact(ret, amount, 20), 10))))",
+      "size": 274,
+      "finite": 22,
+      "unique_finite": 3
+    },
+    "probe_14": {
+      "formula": "rank(multiply(tanh(multiply(rank(ts_confirmed_pivot_low(low, 3, 3)), rank(ts_sum(ret, 20)))), subtract(cs_pct_rank(ts_decay_linear(ts_sharpe(ret, 60), 10)), cs_pct_rank(ts_decay_linear(price_impact(ret, amount, 20), 10)))))",
+      "size": 274,
+      "finite": 22,
+      "unique_finite": 3
+    },
+    "probe_15": {
+      "formula": "ts_mmd_rbf_shift(rank(multiply(tanh(multiply(rank(ts_confirmed_pivot_low(low, 3, 3)), rank(ts_sum(ret, 20)))), subtract(cs_pct_rank(ts_decay_linear(ts_sharpe(ret, 60), 10)), cs_pct_rank(ts_decay_linear(price_impact(ret, amount, 20), 10))))), recent_window=20, old_window=40)",
+      "size": 274,
+      "finite": 0,
+      "unique_finite": 0
+    }
+  }
+}

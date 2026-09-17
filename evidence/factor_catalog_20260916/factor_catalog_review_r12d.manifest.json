@@ -1,0 +1,39 @@
+{
+  "closed_evidence": [
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/r12b-reviewed-daily-000000.jsonl.gz",
+      "records": 10,
+      "sha256": "19275f82506f66fda174aaf1f928d88c835265a92cb813b781bafa6e03851710"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/r12b-reviewed-daily-000010.jsonl.gz",
+      "records": 10,
+      "sha256": "b054f13f6b83bf8c5fa32c46df95a55d5ce693919b39df794fb9c588d21cd6eb"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/r12b-reviewed-daily-000020.jsonl.gz",
+      "records": 5,
+      "sha256": "fecab0fff36b65c64294c24f527e449ae78687d6d948de550e0bfef218d41490"
+    }
+  ],
+  "input_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r12c.csv.gz",
+  "input_checkpoint_sha256": "189e6a720d38cc93c53856eeef14799959711971ba1203bddfdbc8ab80419eb0",
+  "input_ledger": "evidence/factor_catalog_20260915/r12b-reviewed-daily.ledger.jsonl",
+  "input_ledger_sha256": "2d913d75028ab963c0978a1b4cd2e0404cb8f08659218d1b1aa6283b1cc6f8d1",
+  "ledger_closed_processed": 25,
+  "merged_records": 25,
+  "output_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r12d.csv.gz",
+  "output_checkpoint_sha256": "8ef85f2b9698f1149b347bdf0f3eba4d7ebbe148440a980e2cffaf71281e26ac",
+  "scope": "formula_matched_research_smoke_not_code_certification",
+  "source_rows": 114132,
+  "status_counts": {
+    "COMPILE_FAILED": 121,
+    "EXECUTED": 7827,
+    "EXECUTED_ALL_NONFINITE": 186,
+    "EXECUTION_FAILED": 26,
+    "NATIVE_CRASH": 20,
+    "NOT_RUN": 105938,
+    "PREPARE_FAILED": 14
+  },
+  "unique_factor_ids": 113893
+}

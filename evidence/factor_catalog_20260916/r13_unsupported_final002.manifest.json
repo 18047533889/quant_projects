@@ -1,0 +1,27 @@
+{
+  "bindings": "r13_unsupported_final002.bindings.jsonl.gz",
+  "bindings_sha256": "4419caee68f0e1ac7b5b585a77fb91438fd4c5e5f99c17d797fd53e25f8466ed",
+  "checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r12e.csv.gz",
+  "checkpoint_sha256": "d9668cd615ea28c9008159a6cd84bc99c9e1d29e38e04d459b3c4f0d2abb75d5",
+  "code_hash": "b89e18832435370709234f2f42e772eab3c6a7774c2ffab48e40005928faee0e",
+  "code_hash_members": {
+    "evidence/factor_catalog_20260915/compile_catalog.py": "33616401fa4fd002fe5113daba8fcbd46a865dbbd623f53a9e1f4512a0a9e8ed",
+    "evidence/factor_catalog_20260915/smoke_catalog.py": "447b81693f86b5a1fd72ecf7346fc78b4b473b8faab384be7e55068496ed0ffb",
+    "evidence/factor_catalog_20260916/recompile_r13_unsupported.py": "c265f1faae3cd091829cff77bbac7e30895f21a63ac8d6b5ed6c3c6140ea27c9",
+    "factor_engine/api/dsl_parser.py": "e3603a9d009b75b0979c3b5737f041cab36d0779d0dc9eeba023f577dc81e9c0",
+    "factor_engine/cleaned_operators/registry.py": "2428fcbb2520f6651552e853eec42cbd96f8c5a8baa1c8b7f11725c0812b8a58",
+    "factor_engine/ir/analyzer.py": "32ae7c6cda4a4ce8fd8558b451e763f54f2fa9fa6e9c9f61d78f0240e384eb36",
+    "factor_engine/runtime/engine.py": "6faf91d05c4c4b9c67fcd09155a6755fac39724a4d5e2e669f3433ac36ac50e6",
+    "factor_engine/tools/catalog_r13_expression_recipes.py": "db7065018c32fcacb7cfb62381160c52e34ea48424347e02e91b00746efb7077"
+  },
+  "evidence": "r13_unsupported_final002.jsonl.gz",
+  "evidence_sha256": "0f7034a8562b414b0c72c48f33afbd50c2876f55ab2bf3d2c24c5e042b61fa52",
+  "limit": 200,
+  "records": 200,
+  "scope": "current_code_no_read_compile_only_not_execution",
+  "selection": "compile_reason startswith Unsupported function and ast.parse(mode=eval) succeeds",
+  "start": 400,
+  "status_counts": {
+    "COMPILE_FAILED": 200
+  }
+}

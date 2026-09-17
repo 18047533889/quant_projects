@@ -759,7 +759,7 @@ class _RowSum(SeriesOperator):
     metadata = OperatorMetadata(
         name="row_sum_skipna", category="elementwise",
         description="finite row sum with explicit minimum valid count",
-        param_names=["...", "min_count"], mixed_params=("...", "min_count"),
+        param_names=["...", "min_count"], mixed_params=("...",),
         variadic_mixed_param="inputs", scalar_params=("min_count",),
         param_specs={"min_count": ParamSpec(
             dtype=int, min=1, default=1, searchable=False,
@@ -775,7 +775,7 @@ class _PolarsRowSum(PolarsSeriesOperator):
     metadata = OperatorMetadata(
         name="row_sum_skipna", category="elementwise",
         description="finite row sum with explicit minimum valid count",
-        param_names=["...", "min_count"], mixed_params=("...", "min_count"),
+        param_names=["...", "min_count"], mixed_params=("...",),
         variadic_mixed_param="inputs", scalar_params=("min_count",),
         param_specs={"min_count": ParamSpec(
             dtype=int, min=1, default=1, searchable=False,

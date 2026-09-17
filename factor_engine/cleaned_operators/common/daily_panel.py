@@ -310,9 +310,17 @@ def cs_bucket(
     **_: Any,
 ) -> pd.DataFrame:
     count = _positive_int(buckets, "buckets")
-    pct = x.rank(axis=1, method="average", pct=True, ascending=bool(ascending))
-    result = np.floor(pct * count) + 1.0
-    return result.clip(upper=float(count)).where(x.notna())
+    if not isinstance(ascending, (bool, np.bool_)):
+        raise TypeError("ascending must be bool")
+    finite = pd.DataFrame(np.isfinite(x.to_numpy(dtype=float)), index=x.index, columns=x.columns)
+    clean = x.where(finite)
+    rank = clean.rank(axis=1, method="average", ascending=bool(ascending), na_option="keep")
+    valid_count = finite.sum(axis=1).astype(float)
+    rank01 = rank.sub(1).div((valid_count - 1).replace(0, np.nan), axis=0)
+    single = valid_count.eq(1)
+    if single.any():
+        rank01.loc[single] = (finite.loc[single].astype(float) * 0.5).where(finite.loc[single])
+    return (np.floor(rank01 * count) + 1).clip(1, count).where(finite)
 
 
 def _ols_residual(

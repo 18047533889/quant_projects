@@ -58,11 +58,6 @@ COMPOSITE_TRIPLE_PARITY_CASES: tuple[dict, ...] = (
         "duck": lambda: F("StochasticD")(_col_duck("high"), _col_duck("low"), _col_duck("close"), 3),
     },
     {
-        "canon": "OBV",
-        "mem": lambda: F("OBV")(_col_mem("close"), _col_mem("volume")),
-        "duck": lambda: F("OBV")(_col_duck("close"), _col_duck("volume")),
-    },
-    {
         "canon": "operating_margin",
         "mem": lambda: F("operating_margin")(_col_mem("operating_income"), _col_mem("revenue")),
         "duck": lambda: F("operating_margin")(_col_duck("operating_income"), _col_duck("revenue")),

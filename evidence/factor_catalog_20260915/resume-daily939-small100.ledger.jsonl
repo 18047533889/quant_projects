@@ -1,0 +1,1 @@
+{"event": "start", "config": {"limit": 100, "offset": 939, "chunk": 10, "max_rss_mib": 2048, "rotate_rss_mib": 1500, "timeout_seconds": 30, "daily_only": true, "output_prefix": "resume-daily939-small100"}, "scope": "real_data_research_smoke_not_production"}

@@ -413,5 +413,5 @@ def _validate_hfq_source_contract(source):
         spec = MULTI_MARKET_FIELD_REGISTRY.resolve_field(
             "ashare", logical, table=dataset, strict=True)
         if (spec is None or spec.dataset != dataset or spec.source_name != physical or
-                spec.price_basis != "ADJUSTED"):
+                spec.price_basis != "BACKWARD_ADJUSTED"):
             raise DeploymentConfigurationError(detail=f"HFQ field contract mismatch: {logical}")

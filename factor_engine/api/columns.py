@@ -130,6 +130,16 @@ def field(
         # table="StockDailyBar" 或用 raw_* 概念）。
         resolved = resolve_market_field(name, ASHARE_CONTEXT, table="StockDailyBarAdj", strict=False)
         spec = resolved.spec if resolved is not None else None
+    if spec is None and table is None and name in {
+        "minute_open", "minute_high", "minute_low", "minute_close",
+        "minute_volume", "minute_amount", "minute_vwap",
+        "m_open", "m_high", "m_low", "m_close", "m_volume", "m_amount", "m_vwap",
+    }:
+        # The two minute catalogs deliberately share logical aliases. Resolve
+        # only the declared minute-price names to their adjusted authority;
+        # never guess a table for fiscal/date/category ambiguities.
+        resolved = resolve_market_field(name, ASHARE_CONTEXT, table="StockMinuteBarAdj", strict=False)
+        spec = resolved.spec if resolved is not None else None
     if spec is None:
         if strict:
             qualifier = f" in table {table!r}" if table else ""

@@ -1,0 +1,47 @@
+{
+  "schema_version": "factor_catalog.r16_contract_investigation.v1",
+  "keltner_position": {
+    "source_rows": [14226, 14227, 14228, 14229, 14231],
+    "observed_shape": "KeltnerPosition(high, low, close, close, 20, 2.0)",
+    "observed_failure": "EMA.span received a DataFrame because the fourth positional close binds to ema_window",
+    "formal_contract": "KeltnerPosition(high, low, close, ema_window, atr_window, multiplier)",
+    "evidence": [
+      "factor_engine/cleaned_operators/technical/indicators_v2.py:152-157,1421-1424,1556-1559",
+      "factor_engine/api/technical_macros_v2.py:56",
+      "tests/operators/test_v2_macro_and_intraday_dsl.py:28"
+    ],
+    "decision": "FAIL_CLOSED_NO_EXACT_MIGRATION",
+    "reason": "Removing the redundant close leaves only one window scalar. The catalog text does not determine whether 20 is ema_window, atr_window, or intended for both; supplying 14 or duplicating 20 would invent a missing mathematical parameter."
+  },
+  "event_historical_response_mean": {
+    "source_rows": [13892, 13893, 13895, 13896, 13897, 13898],
+    "observed_shape": "event_historical_response_mean(ret, gt(abs(ret), multiply(ts_std(ret, 20), 2.0)), history_window=120, horizon=5, mode='sum')",
+    "observed_failure": "typed-IR reports parameter event received ReturnDecimal on input[1]",
+    "formal_contract": "event_historical_response_mean(response, event, history_window, horizon, mode, ...)",
+    "evidence": [
+      "factor_engine/cleaned_operators/event_response.py:299-350",
+      "factor_engine/ir/types.py:2013-2022",
+      "factor_engine/tests/operators/test_event_response.py:65-78,107-110"
+    ],
+    "decision": "DO_NOT_SWAP_ARGUMENTS; INVESTIGATE_TYPED_IR_INPUT_ORDER",
+    "reason": "The existing formula already passes ReturnDecimal as response and the boolean predicate as event, exactly matching metadata, implementation and tests. Swapping would contradict the formal contract and change semantics."
+  },
+  "donchian_position": {
+    "source_rows": [14222],
+    "observed_shape": "donchian_position(close, high, low, 20)",
+    "observed_status": "EXECUTED, but execution alone is not semantic certification",
+    "registered_contract": "legacy prior-window donchian_position(close, high, low, window)",
+    "former_conflicting_macro_contract": "technical_macros_v2 exposed a same-named macro donchian_position(high, low, close, window) before the bounded fix",
+    "evidence": [
+      "factor_engine/cleaned_operators/technical/indicators_v2.py:525-530",
+      "factor_engine/cleaned_operators/technical/polars_tech_misc.py:203-210,531",
+      "factor_engine/tests/backend/test_sql_pushdown_indicators_duckdb.py:362",
+      "factor_engine/api/technical_macros_v2.py:37",
+      "tests/operators/test_donchian_macro_registered_contract.py"
+    ],
+    "decision": "KEEP_CURRENT_ROW_ORDER; MACRO_FIXED_TO_REGISTERED_CONTRACT",
+    "reason": "The catalog row matches the registered prior-window canonical and its backend parity tests. Reordering it would feed high as close and create a silent semantic error. The macro was corrected to (close, high, low, window), and a numeric test now compares it with the registered implementation while proving the former order differs."
+  },
+  "scope": "bounded investigation only; no full audit, no guessed recipe migration, no production publication",
+  "classification_caveat": "The earlier primary ledger's zero deterministic-code-bug bucket describes only its static classification rules and is not a claim that the codebase has no bugs."
+}

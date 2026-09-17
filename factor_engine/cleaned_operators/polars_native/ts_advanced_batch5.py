@@ -136,34 +136,28 @@ class TSFIRLowpassCausalPolarsNative(SeriesOperator):
         return feature.rolling_mean(window)
 
 
-@register_operator(name="ts_first_passage_bias", canonical="ts_first_passage_bias", backend="polars", status="research_only")
+@register_operator(name="ts_first_passage_bias", canonical="ts_first_passage_bias", backend="polars")
 class TSFirstPassageBiasPolarsNative(SeriesOperator):
-    """Asymmetry in first passage times (up vs down)"""
-
-    metadata = OperatorMetadata(
-        name="ts_first_passage_bias",
-        category="time_series",
-        description="Asymmetry in first passage times across threshold",
-        # R4-100 parity: the pandas reference (first_passage) declares the
-        # 7-param contract ``(x, scale, window, barrier, horizon, min_anchors,
-        # scale_horizon)``.  The research placeholder keeps the full arity so a
-        # positional call valid against the reference never mis-reads this
-        # backend.
-        param_names=["x", "scale", "window", "barrier", "horizon", "min_anchors", "scale_horizon"],
-        return_type="series",
-        tags=["time_series", "threshold", "pit_safe"],
+    """Exact first-passage reference; never a threshold-crossing surrogate."""
+    from factor_engine.cleaned_operators.first_passage import TsFirstPassageBias as _Reference
+    metadata = copy.deepcopy(_Reference.metadata)
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_first_passage_bias", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
-    metadata.param_specs = {
-        "barrier": ParamSpec(dtype=float, param_role=ParamRole.STATE_THRESHOLD),
-    }
 
-    def _calculate_series(self, x, scale=None, window=20, barrier=1.0, horizon=10,
-                          min_anchors=5, scale_horizon=1, **kwargs):
-        # R4-100 parity: canonical 7-param contract; ``threshold`` is legacy.
-        feature = x
-        # TODO: Implement proper first passage time calculation
-        # Placeholder: threshold crossing indicator
-        return (feature > barrier).cast(pl.Float64)
+    @property
+    def _contract_callable(self):
+        return self._Reference()._calculate_series
+
+    def _calculate_series(self, x, scale, window=120, barrier=1.0, horizon=10,
+                          min_anchors=3, scale_horizon=1, **kwargs):
+        return _call_pandas_delegate("ts_first_passage_bias", (x, scale), {
+            "window": window, "barrier": barrier, "horizon": horizon,
+            "min_anchors": min_anchors, "scale_horizon": scale_horizon, **kwargs,
+        })
 
 
 @register_operator(name="ts_first_passage_conditional_time", canonical="ts_first_passage_conditional_time", category="first_passage", business_category="first_passage", backend="polars", status="research_only")
@@ -832,7 +826,7 @@ class TSIndustryLiquidityBetaPolarsNative(SeriesOperator):
         tags=["time_series", "rolling", "regression", "liquidity", "pit_safe", "native"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
+        "window": ParamSpec(dtype=int, min=2, default=60, param_role=ParamRole.HORIZON),
     }
     _physical_spec = PhysicalImplementationSpec(
         canonical="ts_industry_liquidity_beta", backend="polars",
@@ -841,15 +835,20 @@ class TSIndustryLiquidityBetaPolarsNative(SeriesOperator):
         supports_nan=True, supports_inf=True,
         implementation_source_hash="polars_native.ts_advanced_batch5:industry_liquidity_beta:v2",
         kernel_identity="polars.diff+rolling_cov_ddof0/rolling_var_ddof0:centered-origin:v2",
-        parameter_domain_hash="window:int:min=20",
+        parameter_domain_hash="window:int:min=2:default=60",
         semantic_contract_hash="liquidity_beta:on_liquidity_change:pairwise_finite:v2",
     )
 
-    def _calculate_series(self, own_return, industry_liquidity, window, **kwargs):
+    def _calculate_series(self, own_return, industry_liquidity, window=60, **kwargs):
         from factor_engine.cleaned_operators.ts_model.polars_regression import (
-            _liquidity_delta, _pairwise_rolling,
+            _liquidity_delta, _pairwise_rolling, align_cols,
         )
         w = int(window)
+        if w < 3:
+            return own_return.with_columns([
+                pl.lit(None, dtype=pl.Float64).alias(c)
+                for c in align_cols(own_return, industry_liquidity)
+            ])
         return _pairwise_rolling(
             own_return, _liquidity_delta(industry_liquidity), w, max(3, w // 5)
         )
@@ -868,7 +867,7 @@ class TSMarketLiquidityBetaPolarsNative(SeriesOperator):
         tags=["time_series", "rolling", "regression", "liquidity", "pit_safe", "native"],
     )
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
+        "window": ParamSpec(dtype=int, min=2, default=60, param_role=ParamRole.HORIZON),
     }
     _physical_spec = PhysicalImplementationSpec(
         canonical="ts_market_liquidity_beta", backend="polars",
@@ -877,15 +876,20 @@ class TSMarketLiquidityBetaPolarsNative(SeriesOperator):
         supports_nan=True, supports_inf=True,
         implementation_source_hash="polars_native.ts_advanced_batch5:market_liquidity_beta:v2",
         kernel_identity="polars.diff+rolling_cov_ddof0/rolling_var_ddof0:centered-origin:v2",
-        parameter_domain_hash="window:int:min=20",
+        parameter_domain_hash="window:int:min=2:default=60",
         semantic_contract_hash="liquidity_beta:on_liquidity_change:pairwise_finite:v2",
     )
 
-    def _calculate_series(self, own_return, market_liquidity, window, **kwargs):
+    def _calculate_series(self, own_return, market_liquidity, window=60, **kwargs):
         from factor_engine.cleaned_operators.ts_model.polars_regression import (
-            _liquidity_delta, _pairwise_rolling,
+            _liquidity_delta, _pairwise_rolling, align_cols,
         )
         w = int(window)
+        if w < 3:
+            return own_return.with_columns([
+                pl.lit(None, dtype=pl.Float64).alias(c)
+                for c in align_cols(own_return, market_liquidity)
+            ])
         return _pairwise_rolling(
             own_return, _liquidity_delta(market_liquidity), w, max(3, w // 5)
         )
@@ -1113,20 +1117,22 @@ class TSKramersMoyalDriftPolarsNative(SeriesOperator):
         return self._delegate.calculate("ts_kramers_moyal_drift", *args, **kwargs)
 
 
-@register_operator(name="ts_kramers_moyal_local_stability", canonical="ts_kramers_moyal_local_stability", backend="polars", status="research_only")
+@register_operator(name="ts_kramers_moyal_local_stability", canonical="ts_kramers_moyal_local_stability", backend="polars")
 class TSKramersMoyalLocalStabilityPolarsNative(SeriesOperator):
-    """Local stability via negative drift gradient"""
+    """Exact canonical Markov calculation with explicit reference conversion."""
+    from factor_engine.cleaned_operators.common import markov_reference_delegate as _delegate
+    metadata = _delegate.metadata("ts_kramers_moyal_local_stability")
 
-    metadata = OperatorMetadata(
-        name="ts_kramers_moyal_local_stability",
-        category="time_series",
-        description="Local stability: -dD1/dx (negative drift gradient)",
-        param_names=["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
-    )
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference("ts_kramers_moyal_local_stability")._calculate_series
 
-    def _calculate_series(self, x, window=20, bins=10, lag=1, min_count=5, min_state_support=2, min_history=10, **kwargs):
-        feature = x
-        return feature.diff().rolling_mean(window).diff() * -1.0
+    def physical_spec(self):
+        return self._delegate.physical_spec("ts_kramers_moyal_local_stability")
+
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("ts_kramers_moyal_local_stability", *args, **kwargs)
+
 
 # ============================================================================
 # KS Shift and L-Moments
@@ -1535,37 +1541,19 @@ class TSMarkovCommittorPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_markov_entropy_production", canonical="ts_markov_entropy_production", backend="polars")
 class TSMarkovEntropyProductionPolarsNative(SeriesOperator):
-    """Markov entropy production rate (irreversibility measure)
+    """Exact canonical Markov calculation with explicit reference conversion."""
+    from factor_engine.cleaned_operators.common import markov_reference_delegate as _delegate
+    metadata = _delegate.metadata("ts_markov_entropy_production")
 
-    NOTE: This operator is marked research_only. True entropy production requires:
-    1. State space discretization
-    2. Transition matrix estimation
-    3. Computing entropy production from forward/reverse transitions
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference("ts_markov_entropy_production")._calculate_series
 
-    Current implementation is a placeholder: absolute directional bias.
-    """
+    def physical_spec(self):
+        return self._delegate.physical_spec("ts_markov_entropy_production")
 
-    metadata = OperatorMetadata(
-        name="ts_markov_entropy_production",
-        category="time_series",
-        description="[RESEARCH ONLY] Rate of entropy production in discretized state space (requires transition matrix)",
-        param_names=["x","window","bins","lag","min_periods","min_history"],
-        return_type="series",
-        tags=["time_series", "rolling", "markov", "entropy", "pit_safe", "research_only"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-        "bins": ParamSpec(dtype=int, min=3, max=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
-
-    def _calculate_series(self, x, window=60, bins=5, lag=1, min_periods=20, min_history=20, **kwargs):
-        # R4-100 parity: canonical (x, window, bins, lag, min_periods,
-        # min_history); ``feature/n_bins`` are legacy.
-        feature = x
-        # Placeholder: directional bias (NOT true entropy production)
-        up = (feature.diff() > 0).cast(pl.Int32).rolling_mean(window)
-        down = (feature.diff() < 0).cast(pl.Int32).rolling_mean(window)
-        return (up - down).abs()
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("ts_markov_entropy_production", *args, **kwargs)
 
 
 @register_operator(name="ts_markov_mean_first_passage_time", canonical="ts_markov_mean_first_passage_time", backend="polars")

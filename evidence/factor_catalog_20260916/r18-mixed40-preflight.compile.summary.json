@@ -1,0 +1,171 @@
+{
+  "scope": "compile_preflight_only_not_execution_certification",
+  "processed": 40,
+  "counts": {
+    "COMPILED": 22,
+    "COMPILE_FAILED": 18
+  },
+  "valid_count": 22,
+  "valid_ids": [
+    "R65X_00903",
+    "R65X_00904",
+    "R65X_00905",
+    "R65X_00906",
+    "R65X_00907",
+    "R65X_00912",
+    "R65X_00914",
+    "R65X_00915",
+    "R65X_00916",
+    "R65X_00917",
+    "R65X_00918",
+    "R65X_00923",
+    "R65X_00925",
+    "R65X_00926",
+    "R65X_00927",
+    "R65X_00928",
+    "R65X_00929",
+    "R65X_00934",
+    "R65X_03050",
+    "R65X_03051",
+    "R65X_03054",
+    "R65X_03055"
+  ],
+  "failed_count": 18,
+  "failures": [
+    {
+      "source_row": "97726",
+      "id": "R65X_00908",
+      "error_type": "OperatorParameterError",
+      "error": "event_frequency.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_frequency(ashare_limit_up_touch(field('high', table='StockDailyBar'), field('high_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "97727",
+      "id": "R65X_00909",
+      "error_type": "OperatorParameterError",
+      "error": "event_fano_factor.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_fano_factor(ashare_limit_up_touch(field('high', table='StockDailyBar'), field('high_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "97728",
+      "id": "R65X_00910",
+      "error_type": "OperatorParameterError",
+      "error": "event_interval_memory.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_interval_memory(ashare_limit_up_touch(field('high', table='StockDailyBar'), field('high_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "97729",
+      "id": "R65X_00911",
+      "error_type": "OperatorParameterError",
+      "error": "event_local_variation.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_local_variation(ashare_limit_up_touch(field('high', table='StockDailyBar'), field('high_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "97737",
+      "id": "R65X_00919",
+      "error_type": "OperatorParameterError",
+      "error": "event_frequency.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_frequency(ashare_limit_down_touch(field('low', table='StockDailyBar'), field('low_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "97738",
+      "id": "R65X_00920",
+      "error_type": "OperatorParameterError",
+      "error": "event_fano_factor.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_fano_factor(ashare_limit_down_touch(field('low', table='StockDailyBar'), field('low_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "97739",
+      "id": "R65X_00921",
+      "error_type": "OperatorParameterError",
+      "error": "event_interval_memory.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_interval_memory(ashare_limit_down_touch(field('low', table='StockDailyBar'), field('low_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "97740",
+      "id": "R65X_00922",
+      "error_type": "OperatorParameterError",
+      "error": "event_local_variation.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_local_variation(ashare_limit_down_touch(field('low', table='StockDailyBar'), field('low_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "97748",
+      "id": "R65X_00930",
+      "error_type": "OperatorParameterError",
+      "error": "event_frequency.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_frequency(ashare_limit_failed(field('high', table='StockDailyBar'), field('close', table='StockDailyBar'), field('high_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "97749",
+      "id": "R65X_00931",
+      "error_type": "OperatorParameterError",
+      "error": "event_fano_factor.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_fano_factor(ashare_limit_failed(field('high', table='StockDailyBar'), field('close', table='StockDailyBar'), field('high_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "97750",
+      "id": "R65X_00932",
+      "error_type": "OperatorParameterError",
+      "error": "event_interval_memory.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_interval_memory(ashare_limit_failed(field('high', table='StockDailyBar'), field('close', table='StockDailyBar'), field('high_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "97751",
+      "id": "R65X_00933",
+      "error_type": "OperatorParameterError",
+      "error": "event_local_variation.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_local_variation(ashare_limit_failed(field('high', table='StockDailyBar'), field('close', table='StockDailyBar'), field('high_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "99866",
+      "id": "R65X_03048",
+      "error_type": "OperatorParameterError",
+      "error": "event_fano_excess.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_fano_excess(ashare_limit_up_touch(field('high', table='StockDailyBar'), field('high_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "99867",
+      "id": "R65X_03049",
+      "error_type": "OperatorParameterError",
+      "error": "event_hawkes_branching_ratio_proxy.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_hawkes_branching_ratio_proxy(ashare_limit_up_touch(field('high', table='StockDailyBar'), field('high_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "99870",
+      "id": "R65X_03052",
+      "error_type": "OperatorParameterError",
+      "error": "event_fano_excess.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_fano_excess(ashare_limit_down_touch(field('low', table='StockDailyBar'), field('low_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "99871",
+      "id": "R65X_03053",
+      "error_type": "OperatorParameterError",
+      "error": "event_hawkes_branching_ratio_proxy.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_hawkes_branching_ratio_proxy(ashare_limit_down_touch(field('low', table='StockDailyBar'), field('low_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "99874",
+      "id": "R65X_03056",
+      "error_type": "OperatorParameterError",
+      "error": "event_fano_excess.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_fano_excess(ashare_limit_failed(field('high', table='StockDailyBar'), field('close', table='StockDailyBar'), field('high_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    },
+    {
+      "source_row": "99875",
+      "id": "R65X_03057",
+      "error_type": "OperatorParameterError",
+      "error": "event_hawkes_branching_ratio_proxy.window: planning-time scalar parameter at positional index 1 is not provably scalar",
+      "formula": "event_hawkes_branching_ratio_proxy(ashare_limit_failed(field('high', table='StockDailyBar'), field('close', table='StockDailyBar'), field('high_limit', table='StockDailyBar'), 0.005), field('ret', table='StockDailyBarAdj'))"
+    }
+  ],
+  "input_source": "evidence/factor_catalog_20260916/factor_catalog_review_r17b.limit_mixed_source_auto40.input.jsonl.gz",
+  "input_sha256": "d8645d65a622441a5972c72ffdb9e90d9db82b7fb35fb9d5e4395cea07712377",
+  "pinned_input": "evidence/factor_catalog_20260916/r18-mixed40-preflight.input.jsonl.gz",
+  "pinned_input_sha256": "d8645d65a622441a5972c72ffdb9e90d9db82b7fb35fb9d5e4395cea07712377",
+  "compile_output": "evidence/factor_catalog_20260916/r18-mixed40-preflight.compile.jsonl.gz",
+  "compile_output_sha256": "63ace83a3cdf4c8cc81692cc5a245b9395d4a5d716d63d4260d419b6fc675a6e",
+  "valid_input": "evidence/factor_catalog_20260916/r18-mixed40-preflight.valid.input.jsonl.gz",
+  "valid_input_sha256": "c6d69c62baf66c4b53ac3d687991da9a18f0590db9b1f683a917ccee71061952",
+  "valid_formulas_unchanged_from_pinned_input": true
+}

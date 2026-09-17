@@ -1,0 +1,96 @@
+..........................................F.....                         [100%]
+=================================== FAILURES ===================================
+_ test_migrated_primitive_recipe_matches_legacy_numeric_output[ADXR(high, low, close, 6)-ADXR-legacy_args5] _
+
+source = 'ADXR(high, low, close, 6)', legacy_name = 'ADXR', legacy_args = (6,)
+
+    @pytest.mark.parametrize(
+        ("source", "legacy_name", "legacy_args"),
+        [
+            ("MOM(close, 5)", "MOM", (5,)),
+            ("ROC(close, 5)", "ROC", (5,)),
+            ("BollingerUpper(close, 6, 2.5)", "BollingerUpper", (6, 2.5)),
+            ("BollingerLower(close, 6, 2.5)", "BollingerLower", (6, 2.5)),
+            ("BollingerBands(close, 6, 2.5)", "BollingerBands", (6, 2.5)),
+            ("ADXR(high, low, close, 6)", "ADXR", (6,)),
+        ],
+    )
+    def test_migrated_primitive_recipe_matches_legacy_numeric_output(
+        source: str, legacy_name: str, legacy_args: tuple[object, ...]
+    ) -> None:
+        from factor_engine.api.dsl_parser import DSLParser
+        from factor_engine.api.factor import Factor
+        from factor_engine.backend.pandas_backend import PandasBackend
+        from factor_engine.cleaned_operators import load_all
+        from factor_engine.cleaned_operators.technical import signal
+        from factor_engine.runtime.engine import FactorEngine
+        from tests.helpers import InMemorySeriesSource
+    
+        load_all()
+        dates = pd.date_range("2024-01-02", periods=30, freq="B")
+        panel = pd.DataFrame(
+            {"A": [10.0 + i + (i % 4) for i in range(30)]}, index=dates
+        )
+        series = panel.stack()
+        series.index.names = ["timestamp", "instrument"]
+        migrated = migrate_catalog_recipe_formula(source)
+        expr = DSLParser(surface="compat_research", dialect="native").parse(
+            migrated.formula
+        )
+        engine = FactorEngine(
+            backend=PandasBackend(),
+            data_source=InMemorySeriesSource(
+                data={
+                    "close": series,
+                    "high": (panel + 1.25).stack(),
+                    "low": (panel - 0.75).stack(),
+                }
+            ),
+            run_mode="research",
+        )
+        actual = engine.run(Factor(name="migrated", expr=expr))["result"].sort_index()
+        if legacy_name == "ADXR":
+            legacy = signal.ADXR().calculate(panel + 1.25, panel - 0.75, panel, *legacy_args)
+        else:
+            legacy = getattr(signal, legacy_name)().calculate(panel, *legacy_args)
+        expected = legacy.stack(dropna=False)
+        expected.index.names = ["timestamp", "instrument"]
+>       pd.testing.assert_series_equal(
+            actual, expected.sort_index(), check_names=False, rtol=1e-12, atol=1e-12
+        )
+
+tests/operators/test_catalog_recipe_migration.py:291: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+pandas/_libs/testing.pyx:55: in pandas._libs.testing.assert_almost_equal
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+>   ???
+E   AssertionError: Series are different
+E   
+E   Series values are different (76.66667 %)
+E   [index]: [(2024-01-02 00:00:00, A), (2024-01-03 00:00:00, A), (2024-01-04 00:00:00, A), (2024-01-05 00:00:00, A), (2024-01-08 00:00:00, A), (2024-01-09 00:00:00, A), (2024-01-10 00:00:00, A), (2024-01-11 00:00:00, A), (2024-01-12 00:00:00, A), (2024-01-15 00:00:00, A), (2024-01-16 00:00:00, A), (2024-01-17 00:00:00, A), (2024-01-18 00:00:00, A), (2024-01-19 00:00:00, A), (2024-01-22 00:00:00, A), (2024-01-23 00:00:00, A), (2024-01-24 00:00:00, A), (2024-01-25 00:00:00, A), (2024-01-26 00:00:00, A), (2024-01-29 00:00:00, A), (2024-01-30 00:00:00, A), (2024-01-31 00:00:00, A), (2024-02-01 00:00:00, A), (2024-02-02 00:00:00, A), (2024-02-05 00:00:00, A), (2024-02-06 00:00:00, A), (2024-02-07 00:00:00, A), (2024-02-08 00:00:00, A), (2024-02-09 00:00:00, A), (2024-02-12 00:00:00, A)]
+E   [left]:  [nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, 56.37967395315697, 54.622797774963146, 54.77513367444088, 53.360169970212624, 53.73447531089032, 52.384729777402995, 52.82169902238531, 51.65781866598677, 52.221599693208844, 51.108204005422905, 51.71752242581479, 50.703935706506726, 51.38337430005973]
+E   [right]: [nan, nan, nan, nan, nan, nan, nan, 89.56084027601813, 85.93557355341301, 84.02366606602227, 77.91123959976133, 74.96926630659115, 70.87560309791989, 69.12111203721011, 65.31515193918698, 63.8920520414019, 61.13489457924433, 60.43038166688525, 57.998387536403385, 57.588125142307746, 55.70432952676835, 55.68794160802009, 54.01261835834447, 54.17827283983654, 52.78829684719612, 53.16366484421664, 51.8932582979294, 52.37173433623687, 51.24911229852512, 51.837688126741725]
+E   At positional index 7, first diff: nan != 89.56084027601813
+
+pandas/_libs/testing.pyx:173: AssertionError
+=============================== warnings summary ===============================
+tests/operators/test_catalog_recipe_migration.py::test_rewrites_only_bare_call_target_and_preserves_source_exactly
+tests/operators/test_catalog_recipe_migration.py::test_rewrites_only_bare_call_target_and_preserves_source_exactly
+  /home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
+
+tests/operators/test_catalog_recipe_migration.py::test_migrated_primitive_recipe_matches_legacy_numeric_output[MOM(close, 5)-MOM-legacy_args0]
+tests/operators/test_catalog_recipe_migration.py::test_migrated_primitive_recipe_matches_legacy_numeric_output[ROC(close, 5)-ROC-legacy_args1]
+tests/operators/test_catalog_recipe_migration.py::test_migrated_primitive_recipe_matches_legacy_numeric_output[BollingerUpper(close, 6, 2.5)-BollingerUpper-legacy_args2]
+tests/operators/test_catalog_recipe_migration.py::test_migrated_primitive_recipe_matches_legacy_numeric_output[BollingerLower(close, 6, 2.5)-BollingerLower-legacy_args3]
+tests/operators/test_catalog_recipe_migration.py::test_migrated_primitive_recipe_matches_legacy_numeric_output[BollingerBands(close, 6, 2.5)-BollingerBands-legacy_args4]
+tests/operators/test_catalog_recipe_migration.py::test_migrated_primitive_recipe_matches_legacy_numeric_output[ADXR(high, low, close, 6)-ADXR-legacy_args5]
+  /home/sunhaiwei/quant_projects/tests/operators/test_catalog_recipe_migration.py:289: FutureWarning: The previous implementation of stack is deprecated and will be removed in a future version of pandas. See the What's New notes for pandas 2.1.0 for details. Specify future_stack=True to adopt the new implementation and silence this warning.
+    expected = legacy.stack(dropna=False)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/operators/test_catalog_recipe_migration.py::test_migrated_primitive_recipe_matches_legacy_numeric_output[ADXR(high, low, close, 6)-ADXR-legacy_args5]
+1 failed, 47 passed, 8 warnings in 55.31s

@@ -32,8 +32,16 @@ from factor_engine.runtime.engine import (
     _execute_ready_physical_shared_task,
     _physical_backend_for_region,
 )
-from factor_engine.runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
+from factor_engine.runtime.batch_service import (
+    _batch_route_from_physical_optimization,
+    _compatibility_batch_route,
+    _execute_root_with_path,
+    _materialize_shared_subplan,
+)
 from factor_engine.runtime.buffer_store import GovernedBufferStore
+from factor_engine.runtime.multibackend.batch_global_optimizer import (
+    PhysicalBatchGlobalOptimizer,
+)
 
 
 class PandasBackend:
@@ -637,6 +645,190 @@ def test_physical_plan_ref_reuses_real_governed_value_without_releasing_it() -> 
     assert store.get_ref("shared") is None
 
 
+def test_materialized_shared_definition_is_validated_but_not_reexecuted() -> None:
+    shared_value = pd.Series([1.0, 2.0])
+    store = GovernedBufferStore(backing={"shared": shared_value})
+    shared_definition = PlanNode(
+        op="column", attrs={"name": "close"}, node_id="shared"
+    )
+    ref = PlanNode(op="plan_ref", attrs={"sid": "shared"}, node_id="ref")
+    root = PlanNode(op="identity", inputs=(ref,), node_id="debug-factor")
+    producer = _region(region_id="r1", node_ids=("shared",))
+    consumer = _region(region_id="r2", node_ids=("factor", "ref"))
+    edge = TransferEdge(
+        edge_id="shared-to-factor",
+        producer_region="r1",
+        consumer_region="r2",
+        source_backend=PhysicalBackend.PANDAS_NUMPY,
+        target_backend=PhysicalBackend.PANDAS_NUMPY,
+        source_representation=Representation.PANDAS_LONG,
+        target_representation=Representation.PANDAS_LONG,
+        transform=TransferTransform.SAME_BACKEND_NATIVE,
+        estimated_rows=2,
+        estimated_bytes=16,
+        estimated_transfer_ms=0.0,
+    )
+    optimization = _optimization(
+        _plan(
+            producer,
+            consumer,
+            edges=(edge,),
+            roots=("r2",),
+            topological_order=("r1", "r2"),
+        )
+    )
+    optimization.logical_shared_nodes = {"shared": shared_definition}
+    optimization.discovered_node_ids = {
+        id(shared_definition): "shared",
+        id(ref): "ref",
+    }
+    backend = HybridBackend()
+    calls = []
+
+    def consume(plan: PlanNode, _ctx: object) -> object:
+        calls.append(plan.op)
+        assert plan.op != "column", "materialized shared definition was reexecuted"
+        return plan.inputs[0].attrs["value"]
+
+    backend._pandas.execute = consume
+    result = _execute_ready_single_region_plan(
+        optimization,
+        root,
+        backend,
+        SimpleNamespace(runtime_stats={}, shared_buffers=store),
+        logical_root_id="factor",
+    )
+
+    assert result is shared_value
+    assert calls == ["identity"]
+
+
+def test_deep_materialized_shared_definition_validation_is_iterative() -> None:
+    definition = PlanNode("literal", attrs={"value": True}, node_id="shared_0")
+    discovered = {id(definition): "shared_0"}
+    shared_node_ids = ["shared_0"]
+    for index in range(1, 3001):
+        node_id = "shared" if index == 3000 else f"shared_{index}"
+        definition = PlanNode("not", inputs=(definition,), node_id=node_id)
+        discovered[id(definition)] = node_id
+        shared_node_ids.append(node_id)
+    ref = PlanNode("plan_ref", attrs={"sid": "shared"}, node_id="ref")
+    root = PlanNode("identity", inputs=(ref,), node_id="debug-factor")
+    discovered[id(ref)] = "ref"
+    optimization = _optimization(
+        _plan(_region(node_ids=("factor", "ref", *shared_node_ids)))
+    )
+    optimization.logical_shared_nodes = {"shared": definition}
+    optimization.discovered_node_ids = discovered
+    backend = HybridBackend()
+    backend._pandas.execute = lambda plan, _ctx: plan.inputs[0].attrs["value"]
+
+    result = _execute_ready_single_region_plan(
+        optimization,
+        root,
+        backend,
+        SimpleNamespace(
+            runtime_stats={},
+            shared_buffers=GovernedBufferStore(backing={"shared": True}),
+        ),
+        logical_root_id="factor",
+    )
+
+    assert result is True
+
+
+def test_batch_route_ledger_reuses_authoritative_physical_optimization() -> None:
+    shared = PlanNode("literal", attrs={"value": 1}, node_id="shared")
+    roots = {
+        name: PlanNode("plan_ref", attrs={"sid": "shared"})
+        for name in ("left", "right")
+    }
+    optimization = PhysicalBatchGlobalOptimizer(
+        forced_backend="pandas_numpy"
+    ).optimize_batch(
+        roots,
+        {"shared": shared},
+        {},
+        SimpleNamespace(
+            run_mode="research",
+            runtime_stats={
+                "row_count_estimate": 1,
+                "estimated_bytes": 32,
+                "estimated_memory_bytes": 32,
+            },
+        ),
+    )
+    route = _batch_route_from_physical_optimization(
+        optimization,
+        root_names=("left", "right"),
+        scan_cost_map={
+            "scope": SimpleNamespace(selected_bytes=100, projection_bytes=200)
+        },
+        shared_roots=1,
+        factor_count=2,
+    )
+
+    ledger = route.to_dict()
+    assert [item[0] for item in route.per_root] == ["left", "right"]
+    assert {item[1] for item in route.per_root} == {"pandas_numpy"}
+    assert ledger["scan_bytes"] == 200
+    assert ledger["conversion_bytes"] == 400
+    assert ledger["total_time_to_durable_commit_ms"] > 0
+
+
+def test_compatibility_route_skips_legacy_planner_when_projection_succeeds() -> None:
+    expected = object()
+    legacy_calls = []
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "factor_engine.runtime.batch_service._batch_route_from_physical_optimization",
+            lambda *args, **kwargs: expected,
+        )
+        result = _compatibility_batch_route(
+            object(),
+            {"factor": object()},
+            object(),
+            scan_cost_map=None,
+            shared_roots=0,
+            factor_count=1,
+            legacy_planner=lambda *args, **kwargs: legacy_calls.append((args, kwargs)),
+        )
+
+    assert result is expected
+    assert legacy_calls == []
+
+
+def test_compatibility_route_falls_back_when_projection_fails() -> None:
+    expected = object()
+    legacy_calls = []
+
+    def invalid_projection(*args, **kwargs):
+        raise ValueError("invalid plan")
+
+    def legacy(*args, **kwargs):
+        legacy_calls.append((args, kwargs))
+        return expected
+
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "factor_engine.runtime.batch_service._batch_route_from_physical_optimization",
+            invalid_projection,
+        )
+        result = _compatibility_batch_route(
+            object(),
+            {"factor": object()},
+            object(),
+            scan_cost_map=None,
+            shared_roots=0,
+            factor_count=1,
+            legacy_planner=legacy,
+        )
+
+    assert result is expected
+    assert len(legacy_calls) == 1
+
+
 def test_physical_plan_ref_same_region_representation_mismatch_fails_closed() -> None:
     import polars as pl
 
@@ -719,7 +911,7 @@ def test_real_global_optimizer_executes_plan_ref_nodes_without_debug_ids() -> No
     from factor_engine.planner.batch_global_optimizer import BatchGlobalOptimizer
     from factor_engine.runtime.default_execution_policy import ExecutionPurpose
 
-    shared_definition = PlanNode("literal", attrs={"value": 0})
+    shared_definition = PlanNode("column", attrs={"name": "close"})
     optimized_root = PlanNode(
         "neg", inputs=(PlanNode("plan_ref", attrs={"sid": "shared"}),)
     )

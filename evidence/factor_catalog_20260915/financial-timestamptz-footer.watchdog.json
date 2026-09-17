@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "--import-mode=importlib", "data_access/tests/unit/test_financial_update_time_timestamptz.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 348299264, "sampling_seconds": 0.1, "seconds": 3.7191646930295974, "test_guard_reason": null, "hard_memory_cap": false}

@@ -1,0 +1,30 @@
+{
+  "dataset": "ashare_stock_minute_adj",
+  "time_range": [
+    "2025-01-02",
+    "2025-01-08"
+  ],
+  "symbols": [
+    "000001.SZ",
+    "000002.SZ",
+    "000063.SZ",
+    "000333.SZ",
+    "000651.SZ",
+    "000858.SZ",
+    "600000.SH",
+    "600519.SH"
+  ],
+  "paths": [
+    "/home/sunhaiwei/cos_data/StockMinuteBarAdj/2025-01-02.parquet",
+    "/home/sunhaiwei/cos_data/StockMinuteBarAdj/2025-01-03.parquet",
+    "/home/sunhaiwei/cos_data/StockMinuteBarAdj/2025-01-06.parquet",
+    "/home/sunhaiwei/cos_data/StockMinuteBarAdj/2025-01-07.parquet",
+    "/home/sunhaiwei/cos_data/StockMinuteBarAdj/2025-01-08.parquet"
+  ],
+  "cost_basis": "physical_scope",
+  "file_count": 5,
+  "selected_files": 5,
+  "estimated_rows": 6147120,
+  "selected_bytes": 171090093,
+  "projection_bytes": 245884800
+}

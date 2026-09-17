@@ -60,7 +60,8 @@ class LQTPLogicalDataSource(DataSource):
                 return idx
         raise MissingDataDependencyError("cannot resolve LQTP logical source without an anchor panel index")
 
-    def _child(self, dataset: str, *, instrument_filter: list[str] | None = None) -> DataAccessSource:
+    def _child(self, dataset: str, *, instrument_filter: list[str] | None = None,
+               semantic_filters: dict[str, Any] | None = None) -> DataAccessSource:
         start = getattr(self.inner, "start_date", None)
         end = getattr(self.inner, "end_date", None)
         # #收官轮 P0（Integration）：二级 SourceRef child 必须继承父级 execution
@@ -74,6 +75,9 @@ class LQTPLogicalDataSource(DataSource):
         # sw_l1），这里把父级的行级 filter 一并带给 child，否则 child 读
         # ashare_stock_industry 时 required_filters 缺失直接 ValidationError。
         filters = dict(getattr(self.inner, "semantic_filters", {}) or {})
+        # Explicit SourceRef identity wins over ambient parent defaults. Keep
+        # it in row filters (not dataset path params), before panel validation.
+        filters.update(semantic_filters or {})
         if dataset == "ashare_stock_industry" and "IndustrySource" not in filters:
             filters = {**filters, "IndustrySource": "sw_l1"}
         return DataAccessSource(

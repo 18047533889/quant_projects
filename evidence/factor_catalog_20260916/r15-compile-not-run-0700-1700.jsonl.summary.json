@@ -1,0 +1,16 @@
+{
+  "input": "evidence/factor_catalog_20260916/factor_catalog_review_r15a.csv.gz",
+  "input_sha256": "bf1cb03d27dc1c5017262ba092fe1cb25ec4b7a77bdaa1035477da0579af8bed",
+  "output": "evidence/factor_catalog_20260916/r15-compile-not-run-0700-1700.jsonl.gz",
+  "output_sha256": "49d922bf3c221a1feef71ba84b37792e3dc4e12e2f63fbd711c998fc726f1b20",
+  "start": 700,
+  "requested": 1000,
+  "processed": 1000,
+  "counts": {
+    "COMPILED": 974,
+    "COMPILE_FAILED": 26
+  },
+  "seconds": 81.81964584090747,
+  "complete": true,
+  "scope": "compile_only_no_data_read_not_execution_evidence"
+}

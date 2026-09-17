@@ -1,0 +1,81 @@
+{
+  "compile_evidence": [
+    {
+      "path": "evidence/factor_catalog_20260916/r15-compile-not-run-0000-0200.jsonl.gz",
+      "records": 200,
+      "sha256": "e5e48a96da48775c42d1aab8af2eff6baa999ba6cf93fb2bde199d49d2456fa6",
+      "summary": "evidence/factor_catalog_20260916/r15-compile-not-run-0000-0200.jsonl.summary.json",
+      "summary_sha256": "ec57d1bd849f1fa56c04e61d37ca2f8a71d3f76cf3fef241a9d4224ec02262ef"
+    },
+    {
+      "path": "evidence/factor_catalog_20260916/r15-compile-not-run-0200-0700.jsonl.gz",
+      "records": 500,
+      "sha256": "7c4d4a80ae588bf778bf21dc609dc82f66867f52d9851de4f73b7099348e01ac",
+      "summary": "evidence/factor_catalog_20260916/r15-compile-not-run-0200-0700.jsonl.summary.json",
+      "summary_sha256": "a0947c7a476e41c60b95cca3be023c3ab9f245ad3287cacb0d27908bfebf0d61"
+    },
+    {
+      "path": "evidence/factor_catalog_20260916/r15-compile-not-run-0700-1700.jsonl.gz",
+      "records": 1000,
+      "sha256": "49d922bf3c221a1feef71ba84b37792e3dc4e12e2f63fbd711c998fc726f1b20",
+      "summary": "evidence/factor_catalog_20260916/r15-compile-not-run-0700-1700.jsonl.summary.json",
+      "summary_sha256": "f1e3da6c80f6d48d9ff35faad4c92e3aecab8db62e902c511cbaf27f607de4f8"
+    },
+    {
+      "path": "evidence/factor_catalog_20260916/r15-compile-not-run-1700-2700.jsonl.gz",
+      "records": 1000,
+      "sha256": "a0a5bf689d0f042c322ce109ef8ef65c7980a773a9ff1970a222f86a6bc3234c",
+      "summary": "evidence/factor_catalog_20260916/r15-compile-not-run-1700-2700.jsonl.summary.json",
+      "summary_sha256": "716ee06f65645db4f7260a53d7841fe850b025f4c6ce990a2854633c6622ad88"
+    },
+    {
+      "path": "evidence/factor_catalog_20260916/r15-compile-not-run-2700-3106.jsonl.gz",
+      "records": 406,
+      "sha256": "5b56e0d58c87ae4ee01f7c39da8ccd7fca89b2f43bc24db2ee76b54899bd0d13",
+      "summary": "evidence/factor_catalog_20260916/r15-compile-not-run-2700-3106.jsonl.summary.json",
+      "summary_sha256": "ffdc78012175adddb2f38a2b60907a832d1afac198b4b5cf11d3cfa2777a481e"
+    }
+  ],
+  "compile_records": 3106,
+  "execution_evidence": [
+    {
+      "path": "evidence/factor_catalog_20260916/factor_catalog_review_r14a.williams_daily_smoke_auto40_r8.output.jsonl.gz",
+      "records": 40,
+      "sha256": "186e150b50278d52d9fe69447c8badb63bf9612ad928c6af3193f4f8a04203bb",
+      "summary": "evidence/factor_catalog_20260916/factor_catalog_review_r14a.williams_daily_smoke_auto40_r8.output.summary.json",
+      "summary_sha256": "de9357e38a0a224ceca537a656b5218513e7c3fac4414c958255c03093f95f98"
+    },
+    {
+      "path": "evidence/factor_catalog_20260916/factor_catalog_review_r15a.stochastic_daily_smoke_auto37_r2.output.jsonl.gz",
+      "records": 37,
+      "sha256": "88595baba0f8385766b08db202253c5ea23d33afed22698d3adfbe46b2c5ca3d",
+      "summary": "evidence/factor_catalog_20260916/factor_catalog_review_r15a.stochastic_daily_smoke_auto37_r2.output.summary.json",
+      "summary_sha256": "be7d8ae4615a2765d4b9cc54f06e6a6768276a81f6e8b131418f6c2cfd89a2da"
+    }
+  ],
+  "execution_records": 77,
+  "input_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r15a.csv.gz",
+  "input_checkpoint_sha256": "bf1cb03d27dc1c5017262ba092fe1cb25ec4b7a77bdaa1035477da0579af8bed",
+  "output_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r15b.csv.gz",
+  "output_checkpoint_sha256": "819bb637a0d9bcab3331c596ab1371e0dd8dcff703a1e3a1e877583570f57c74",
+  "output_compile_status_counts": {
+    "COMPILED": 109482,
+    "COMPILE_FAILED": 4411,
+    "NOT_RUN": 239
+  },
+  "output_execution_status_counts": {
+    "COMPILE_FAILED": 119,
+    "EXECUTED": 8023,
+    "EXECUTED_ALL_NONFINITE": 186,
+    "EXECUTION_FAILED": 26,
+    "NATIVE_CRASH": 20,
+    "NOT_RUN": 105744,
+    "PREPARE_FAILED": 14
+  },
+  "scope": "combined_formula_matched_compile_only_and_research_execution_evidence",
+  "source_rows": 114132,
+  "telemetry_caveats": [
+    "Williams auto40 r8 predates transfer telemetry correction: transfer actual_bytes may equal predicted_bytes and is not measured payload; numerical output evidence is retained."
+  ],
+  "unique_factor_ids": 113893
+}

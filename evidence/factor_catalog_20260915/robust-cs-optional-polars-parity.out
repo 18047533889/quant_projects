@@ -1,0 +1,9 @@
+.......................................................                  [100%]
+=============================== warnings summary ===============================
+factor_engine/tests/operators/test_robust_cs_optional_panels.py::test_optional_feature_wrapper_matches_kernel[1-cs_mahalanobis_distance]
+factor_engine/tests/operators/test_robust_cs_optional_panels.py::test_optional_feature_wrapper_matches_kernel[1-cs_mahalanobis_distance]
+  /home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+55 passed, 2 warnings in 46.44s

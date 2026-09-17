@@ -42,7 +42,7 @@ def _robust_specs(name: str) -> dict[str, ParamSpec]:
 
 
 def _meta(name: str, description: str, params: list[str], *, unit: str = "level") -> OperatorMetadata:
-    return OperatorMetadata(
+    metadata = OperatorMetadata(
         name=name,
         category="cross_sectional",
         description=description,
@@ -57,6 +57,17 @@ def _meta(name: str, description: str, params: list[str], *, unit: str = "level"
         scalar_params=tuple(_ROBUST_SCALARS[name]),
         param_specs=_robust_specs(name),
     )
+    if name == "cs_shrinkage_mahalanobis":
+        # Backward-compatible bounded fifth feature: the historical fifth
+        # positional slot was scalar shrinkage, so f5 is explicitly mixed and
+        # the kernel dispatch below distinguishes a panel from that scalar.
+        metadata.panel_params = ("f1", "f2", "f3", "f4")
+        metadata.mixed_params = ("f5",)
+        metadata.nullable_mixed_params = ("f5",)
+        metadata.param_specs["f5"] = ParamSpec(dtype=None, default=None, searchable=False)
+        metadata.total_positional_arity = 6
+        metadata.tags.extend(["bounded_features:min=4,max=5", "f5_or_legacy_shrinkage"])
+    return metadata
 
 
 def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
@@ -65,6 +76,16 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
 
 def _mk(name: str, description: str, params: list[str], fn, *, unit: str = "level"):
     metadata = _meta(name, description, params, unit=unit)
+    # The wrapper hides the kernel signature from base validation. Preserve
+    # optional feature defaults explicitly, without relaxing required inputs
+    # (notably the four required shrinkage features).
+    from inspect import signature
+
+    for key, parameter in signature(fn).parameters.items():
+        if key in metadata.panel_params and parameter.default is None:
+            metadata.param_specs.setdefault(
+                key, ParamSpec(dtype=None, default=None, searchable=False)
+            )
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -345,12 +366,32 @@ def _cs_shrinkage_mahalanobis(*features, shrinkage=0.1):
     return _frame_like(features[0], out)
 
 
+def _cs_shrinkage_mahalanobis_dispatch(
+    f1, f2, f3, f4, f5=None, shrinkage=None,
+):
+    """Bind an optional fifth panel without stealing legacy positional shrinkage."""
+    if isinstance(f5, pd.DataFrame):
+        features = (f1, f2, f3, f4, f5)
+        effective_shrinkage = 0.1 if shrinkage is None else shrinkage
+    else:
+        features = (f1, f2, f3, f4)
+        if f5 is not None and shrinkage is not None:
+            raise ValueError(
+                "shrinkage was provided both as legacy fifth positional and keyword"
+            )
+        effective_shrinkage = f5 if f5 is not None else (
+            0.1 if shrinkage is None else shrinkage
+        )
+    return _cs_shrinkage_mahalanobis(
+        *features, shrinkage=float(effective_shrinkage)
+    )
+
+
 _mk(
     "cs_shrinkage_mahalanobis",
     "收缩协方差的马氏距离（向对角收缩，缓解病态协方差）。",
-    ["f1", "f2", "f3", "f4", "shrinkage"],
-    lambda f1, f2=None, f3=None, f4=None, shrinkage=0.1: _cs_shrinkage_mahalanobis(
-        *[v for v in (f1, f2, f3, f4) if v is not None], shrinkage=float(shrinkage)),
+    ["f1", "f2", "f3", "f4", "f5", "shrinkage"],
+    _cs_shrinkage_mahalanobis_dispatch,
     unit="distance",
 )
 

@@ -169,26 +169,31 @@ def phase2_operator_signatures() -> dict[str, OperatorSignature]:
         "ashare_limit_distance", ArgSpec("close", _F), ArgSpec("upper_limit", _F)
     )
     signatures["ashare_limit_up_touch"] = _sig(
-        "ashare_limit_up_touch", ArgSpec("high", _F), ArgSpec("upper_limit", _F), ArgSpec("tick_tolerance", _FLT)
+        "ashare_limit_up_touch", ArgSpec("high", _F), ArgSpec("upper_limit", _F),
+        ArgSpec("tick_tolerance", _FLT), output=_B,
     )
     signatures["ashare_limit_down_touch"] = _sig(
-        "ashare_limit_down_touch", ArgSpec("low", _F), ArgSpec("lower_limit", _F), ArgSpec("tick_tolerance", _FLT)
+        "ashare_limit_down_touch", ArgSpec("low", _F), ArgSpec("lower_limit", _F),
+        ArgSpec("tick_tolerance", _FLT), output=_B,
     )
     signatures["ashare_limit_one_price"] = _sig(
         "ashare_limit_one_price",
         ArgSpec("open", _F), ArgSpec("high", _F), ArgSpec("low", _F), ArgSpec("close", _F),
         ArgSpec("upper_limit", _F), ArgSpec("lower_limit", _F),
-        ArgSpec("side", _ANY), ArgSpec("tick_tolerance", _FLT),
+        ArgSpec("side", _ANY), ArgSpec("tick_tolerance", _FLT), output=_B,
     )
     signatures["ashare_limit_failed"] = _sig(
         "ashare_limit_failed",
-        ArgSpec("high", _F), ArgSpec("close", _F), ArgSpec("upper_limit", _F), ArgSpec("tick_tolerance", _FLT),
+        ArgSpec("high", _F), ArgSpec("close", _F), ArgSpec("upper_limit", _F),
+        ArgSpec("tick_tolerance", _FLT), output=_B,
     )
     signatures["ashare_open_at_upper_limit"] = _sig(
-        "ashare_open_at_upper_limit", ArgSpec("open", _F), ArgSpec("upper_limit", _F), ArgSpec("tick_tolerance", _FLT)
+        "ashare_open_at_upper_limit", ArgSpec("open", _F), ArgSpec("upper_limit", _F),
+        ArgSpec("tick_tolerance", _FLT), output=_B,
     )
     signatures["ashare_limit_open_failed"] = _sig(
-        "ashare_limit_open_failed", ArgSpec("open", _F), ArgSpec("low", _F), ArgSpec("upper_limit", _F), ArgSpec("tick_tolerance", _FLT)
+        "ashare_limit_open_failed", ArgSpec("open", _F), ArgSpec("low", _F),
+        ArgSpec("upper_limit", _F), ArgSpec("tick_tolerance", _FLT), output=_B,
     )
 
     # ---- Filter Layer (2026-08-12) ----------------------------------------

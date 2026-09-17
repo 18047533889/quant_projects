@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -526,3 +527,88 @@ def test_search_configuration_rejects_unbounded_values():
         BatchGlobalOptimizer(exact_search_max_ambiguous_nodes=-1)
     with pytest.raises(ValueError, match="approximate_max_passes"):
         BatchGlobalOptimizer(approximate_max_passes=0)
+
+
+def test_unreferenced_shared_definition_is_not_physical_work() -> None:
+    root = PlanNode("literal", attrs={"value": 1})
+    unused = PlanNode("literal", attrs={"value": 2})
+
+    result = PhysicalBatchGlobalOptimizer(
+        forced_backend="pandas_numpy"
+    ).optimize_batch(
+        {"factor": root},
+        {"unused": unused},
+        {},
+        _ctx(100),
+    )
+
+    assert set(result.per_node_choices) == {"factor"}
+    assert result.logical_shared_nodes == {}
+    assert result.physical_plan.root_region_ids == (
+        result.physical_plan.regions[0].region_id,
+    )
+
+
+def test_readiness_indexes_region_membership_once_for_switch_edges():
+    class CountingNodeIds(tuple):
+        contains_calls = 0
+
+        def __contains__(self, item):
+            type(self).contains_calls += 1
+            return super().__contains__(item)
+
+    count = 100
+    nodes = {
+        f"node_{index}": PlanNode("literal", attrs={"value": index})
+        for index in range(count)
+    }
+    graph = {
+        f"node_{index}": [] if index == 0 else [f"node_{index - 1}"]
+        for index in range(count)
+    }
+    choices = {
+        node_id: _choice(
+            node_id,
+            PhysicalBackend.PANDAS_NUMPY
+            if index % 2 == 0
+            else PhysicalBackend.POLARS_LONG,
+            1.0,
+        )
+        for index, node_id in enumerate(nodes)
+    }
+    optimizer = PhysicalBatchGlobalOptimizer()
+    estimates = {node_id: (1, 8, 8) for node_id in nodes}
+    plan = optimizer._build_physical_plan(
+        choices,
+        {},
+        0.0,
+        float(count),
+        0.0,
+        SimpleNamespace(),
+        graph,
+        (f"node_{count - 1}",),
+        estimates,
+        nodes,
+    )
+    plan = replace(
+        plan,
+        regions=tuple(
+            replace(region, node_ids=CountingNodeIds(region.node_ids))
+            for region in plan.regions
+        ),
+    )
+
+    ready, reason = optimizer._readiness(
+        roots={f"node_{count - 1}": nodes[f"node_{count - 1}"]},
+        all_nodes=nodes,
+        choices=choices,
+        plan=plan,
+        rows=1,
+        estimated_bytes=8,
+        estimated_memory=8,
+        node_graph=graph,
+        run_mode="production",
+    )
+
+    assert ready, reason
+    assert CountingNodeIds.contains_calls == 0

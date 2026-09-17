@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "--noconftest", "-q", "factor_engine/tests/operators/test_catalog_recipe_edges.py", "tests/operators/test_catalog_recipe_migration.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 450138112, "sampling_seconds": 0.1, "seconds": 52.93276584893465, "test_guard_reason": null, "hard_memory_cap": false}

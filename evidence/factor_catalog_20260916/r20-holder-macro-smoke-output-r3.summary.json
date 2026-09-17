@@ -1,0 +1,39 @@
+{
+  "input": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/r20-holder-macro-smoke-input.jsonl.gz",
+  "output": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/r20-holder-macro-smoke-output-r3.jsonl.gz",
+  "processed": 3,
+  "offset": 0,
+  "next_offset": 3,
+  "complete": true,
+  "stopped_reason": null,
+  "counts": {
+    "BATCH_ABORTED": 3
+  },
+  "seconds": 11.65792973805219,
+  "window": [
+    "2026-04-20",
+    "2026-04-24"
+  ],
+  "symbols": [
+    "000001.SZ",
+    "000002.SZ",
+    "000063.SZ",
+    "000333.SZ",
+    "000651.SZ",
+    "000858.SZ",
+    "600000.SH",
+    "600519.SH"
+  ],
+  "dataset": "ashare_stock_daily_adj",
+  "max_rss_mib": 2048,
+  "timeout_seconds": 240,
+  "deadline_kind": "external-watchdog",
+  "requested_backend": "auto",
+  "batch_size": 3,
+  "batch_only": true,
+  "performance_options": "public_defaults",
+  "requested_limit": 3,
+  "prepare_chunk": 100,
+  "daily_only": false,
+  "input_records_scanned": 3
+}

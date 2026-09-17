@@ -103,6 +103,18 @@ def arrow_table_to_multiindex_columns(
 
     if getattr(ts_series.dt, "tz", None) is not None:
         ts_series = ts_series.dt.tz_convert(None)
+    # FactorEngine's index contract is nanosecond-resolution, timezone-naive
+    # UTC.  Arrow/DuckDB may preserve a parquet footer's microsecond unit, and
+    # mixing a cached ns index with a freshly read us index makes pandas joins
+    # fail.  Convert explicitly and fail closed outside pandas' ns domain;
+    # never wrap overflowing epoch integers or discard timezone semantics.
+    try:
+        ts_series = ts_series.dt.as_unit("ns")
+    except (OverflowError, ValueError, pd.errors.OutOfBoundsDatetime) as exc:
+        raise ValidationError(
+            f"{timestamp_column} 超出 FactorEngine datetime64[ns] 可表示范围；"
+            "拒绝溢出或截断时间戳"
+        ) from exc
     if normalize_timestamp:
         ts_series = ts_series.dt.normalize()
 

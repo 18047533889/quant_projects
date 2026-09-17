@@ -1568,9 +1568,9 @@ _PARAM_SPECS = {
         "long_window": _WIN_GE2,
         # R5-35: the weight triple is ONE ratio dimension (kernel normalizes to
         # ``w3=1``), so the individual weights must not be independently mined.
-        "short_weight": ParamSpec(dtype=float, searchable=False),
-        "medium_weight": ParamSpec(dtype=float, searchable=False),
-        "long_weight": ParamSpec(dtype=float, searchable=False),
+        "short_weight": ParamSpec(dtype=float, searchable=False, default=4.0),
+        "medium_weight": ParamSpec(dtype=float, searchable=False, default=2.0),
+        "long_weight": ParamSpec(dtype=float, searchable=False, default=1.0),
     },
     "DEMA": {"window": _WIN_GE1},
     "TEMA": {"window": _WIN_GE1},

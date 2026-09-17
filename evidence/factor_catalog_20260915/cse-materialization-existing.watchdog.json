@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "tests/runtime/test_physical_region_execution.py", "-k", "materialize_shared_subplan"], "returncode": 5, "sampled_peak_family_rss_bytes": 341676032, "sampling_seconds": 0.1, "seconds": 3.0106660570017993, "test_guard_reason": null, "hard_memory_cap": false}

@@ -1,0 +1,34 @@
+{
+  "input": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/input.jsonl.gz",
+  "output": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/smoke-daily100.jsonl.gz",
+  "processed": 100,
+  "offset": 0,
+  "next_offset": 100,
+  "complete": true,
+  "stopped_reason": null,
+  "counts": {
+    "EXECUTED": 93,
+    "EXECUTION_FAILED": 7
+  },
+  "seconds": 11.912771272007376,
+  "window": [
+    "2025-01-01",
+    "2026-04-30"
+  ],
+  "symbols": [
+    "000001.SZ",
+    "000002.SZ",
+    "000063.SZ",
+    "000333.SZ",
+    "000651.SZ",
+    "000858.SZ",
+    "600000.SH",
+    "600519.SH"
+  ],
+  "dataset": "ashare_stock_daily_adj",
+  "max_rss_mib": 2048,
+  "timeout_seconds": 30,
+  "batch_size": 100,
+  "daily_only": true,
+  "input_records_scanned": 10000
+}

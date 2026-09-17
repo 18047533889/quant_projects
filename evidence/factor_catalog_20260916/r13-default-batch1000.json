@@ -1,0 +1,18 @@
+{
+  "roots": 1000,
+  "input_values": 16,
+  "public_entry": "run_many",
+  "backend": "auto",
+  "performance_options": "none; public defaults",
+  "successful_oracles": 1000,
+  "source_load_columns_calls": 1,
+  "seconds": 17.510510195977986,
+  "executor": "adaptive_batch_scheduler",
+  "shared_nodes": 2,
+  "completed_waves": null,
+  "cse_scope": "single_call_dag",
+  "actual_backends": [
+    "pandas_numpy"
+  ],
+  "scope": "1000 distinct offsets of one rolling subtree; not 110k catalog certification"
+}

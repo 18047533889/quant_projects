@@ -255,7 +255,12 @@ class CSBucketNative(SeriesOperator):
             return long.with_columns(
                 pl.when(pl.col("_v").is_null())
                 .then(None)
-                .otherwise(((rank - 1) / count * bins).floor().clip(0, bins - 1) + 1)
+                .otherwise(
+                    pl.when(count == 1)
+                    .then(float((bins // 2) + 1))
+                    .otherwise((((rank - 1) / (count - 1)) * bins).floor() + 1)
+                    .clip(1, bins)
+                )
                 .alias("_v")
             )
 

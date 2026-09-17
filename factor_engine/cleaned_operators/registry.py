@@ -1166,7 +1166,12 @@ _LOGICAL_CONTRACT_FIELDS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _backfill_logical_contract(operator: Any, prev: dict[str, Any]) -> None:
+def _backfill_logical_contract(
+    operator: Any,
+    prev: dict[str, Any],
+    *,
+    allow_legacy_divergence: bool = False,
+) -> None:
     """Copy every undeclared logical-contract field from the canonical contract,
     and REJECT any backend-declared field that CONTRADICTS the canonical.
 
@@ -1181,7 +1186,9 @@ def _backfill_logical_contract(operator: Any, prev: dict[str, Any]) -> None:
     silently — the catalog dict still carries the contract for consumers that
     read it there.  Backend-only physical fields (``execution_kind`` /
     ``supports_lazy`` / ``cost``) are not in ``_LOGICAL_CONTRACT_FIELDS`` and are
-    never compared.
+    never compared.  ``allow_legacy_divergence`` is reserved for the registry's
+    explicit bootstrap compatibility path; direct contract validation remains
+    fail-closed by default.
     """
     meta = getattr(operator, "metadata", None)
     if meta is None:
@@ -1248,7 +1255,7 @@ def _backfill_logical_contract(operator: Any, prev: dict[str, Any]) -> None:
         # Non-empty backend-declared value: must MATCH the canonical, or the
         # backend carries a contradictory logical contract (P0-23 fail-closed).
         if not _logical_field_equal(field, canonical, cur):
-            if field == "relational_specs":
+            if field == "relational_specs" or not allow_legacy_divergence:
                 raise ValueError(
                     "logical-contract divergence for backend of canonical "
                     f"{getattr(meta, 'name', '?')!r}: field {field!r} declares "
@@ -2112,7 +2119,9 @@ class OperatorRegistry:
         # same canonical.  Backfill every logical-contract field the operator did
         # not declare itself (native implementations keep their declared values;
         # adapters inherit the canonical, pandas-owned contract).
-        _backfill_logical_contract(operator, prev)
+        _backfill_logical_contract(
+            operator, prev, allow_legacy_divergence=True
+        )
         # R4-95/98: surface the field-semantic metadata on the catalog dict so
         # catalog consumers see unit / window-semantics labels.  First
         # non-None wins: the pandas backend (registered first) typically carries
@@ -2253,7 +2262,11 @@ class OperatorRegistry:
         # check in ``_backfill_logical_contract`` above.
         if updated.get("relational_specs"):
             for registered_operator in existing_ops.values():
-                _backfill_logical_contract(registered_operator, updated)
+                _backfill_logical_contract(
+                    registered_operator,
+                    updated,
+                    allow_legacy_divergence=True,
+                )
         for alias in aliases or []:
             if alias != canonical:
                 cls.register_alias(alias, canonical)

@@ -1,0 +1,14 @@
+{
+  "offset": 100,
+  "limit": 20,
+  "exit": 0,
+  "elapsed_seconds": 112.502,
+  "output": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r4-offset100.jsonl.gz",
+  "log": "evidence/factor_catalog_20260916/donchian-position-semantic-rerun-r4-offset100.log",
+  "revision_note": "current-version rerun after known interface-transition window",
+  "source_sha256": {
+    "factor_engine/runtime/resource_broker.py": "89a8788fecf587fa8d1cb2de1924ca581354d59ce80d5a12978abe17c501b199",
+    "evidence/factor_catalog_20260915/smoke_catalog.py": "c7af58b64234d0f11655f597657ad8a8b4df00867f43316d8d66d47209d80155",
+    "factor_engine/api/technical_macros_v2.py": "2f8b3ac4fa2b87843b62794d484064d7c4e6f92ff28a9a8b3074106236544cef"
+  }
+}

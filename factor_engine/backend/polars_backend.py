@@ -191,9 +191,28 @@ class PolarsBackend(PandasBackend):
             # 回退逐节点。
             _polars_expr_auto = os.environ.get("FACTOR_ENGINE_POLARS_EXPR", "").strip().lower() not in {"0", "false", "off"}
             if _polars_expr_auto and ctx.data_source is not None:
-                from .polars_expr_backend import execute_polars_expr_plan, plan_is_polars_expr_capable
+                from .polars_expr_backend import (
+                    collect_columns, execute_polars_expr_plan, plan_is_polars_expr_capable,
+                )
 
-                if plan_is_polars_expr_capable(plan):
+                expr_capable = plan_is_polars_expr_capable(plan)
+                native_projection = getattr(ctx.data_source, "has_native_columns", None)
+                columns = collect_columns(plan) if expr_capable else set()
+                if columns and callable(native_projection) and not native_projection(columns):
+                    # A read wave may already own snapshot-bound pandas panels.
+                    # The adapter's scan method must not reopen those columns.
+                    # Use the existing panel evaluator instead of entering an
+                    # unavailable native scan; genuine native waves stay fast.
+                    expr_capable = False
+                    runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+                    runtime["polars_expr_fallback"] = True
+                    runtime["polars_expr_fallback_reason"] = (
+                        "admitted wave has no native projection; using materialized panels"
+                    )
+                    ctx.runtime_stats = runtime
+                    root_ctx.runtime_stats = runtime
+
+                if expr_capable:
                     try:
                         result = execute_polars_expr_plan(plan, ctx)
                         runtime = dict(getattr(ctx, "runtime_stats", None) or {})

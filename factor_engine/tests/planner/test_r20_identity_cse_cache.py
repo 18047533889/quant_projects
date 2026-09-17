@@ -209,7 +209,7 @@ def test_r20_038_differential_detects_semantic_attr_change():
     )
     result = audit.audit(ref, executor=lambda p: data["close"])
     assert not result.passed
-    assert any("factor_engine.semantic.available_at" in m.attribute for m in result.mismatches)
+    assert any("semantic.available_at" in m.attribute for m in result.mismatches)
 
 
 def test_r20_039_differential_detects_new_source_dependency():

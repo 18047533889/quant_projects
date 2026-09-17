@@ -415,7 +415,26 @@ def contract_for_plan(
     engine_threads = _engine_threads_for(backend)
     cpu_tokens = engine_threads
     io_tokens = 1 if backend in {"duckdb_sql", "clickhouse_sql", "sql"} else 0
-    out_bytes = max(1, (rows or 500_000) * 8)
+    logical_rows = rows or 500_000
+    out_bytes = max(1, logical_rows * 8)
+    if backend == "pandas_numpy":
+        # A resident panel is not a bare float buffer.  Budget values, index
+        # codes/labels, axes and pandas ownership objects.  This structural
+        # estimate scales for both long MultiIndex Series and wide frames and
+        # prevents tiny panels from being underestimated by fixed overhead.
+        n_instruments = max(1, int(instruments or 1))
+        n_dates = max(1, (logical_rows + n_instruments - 1) // n_instruments)
+        value_bytes = logical_rows * 8
+        multiindex_codes = logical_rows * 16
+        date_level = n_dates * 8
+        instrument_level = n_instruments * 256
+        pandas_owners = 512 + 128 * (2 + n_instruments)
+        out_bytes = max(
+            out_bytes,
+            value_bytes + multiindex_codes + date_level
+            + instrument_level + pandas_owners,
+        )
+        peak = max(peak, out_bytes)
     # 整棵 plan 的最严格 shard 语义（交集 barrier wins）——不再统一 False。
     shardable, shard_dim = plan_shard_semantics(plan)
     return TaskResourceContract(

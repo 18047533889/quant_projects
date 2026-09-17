@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/factor_catalog_20260915/audit_catalog.py", "--limit", "100", "--output", "parse-pilot.jsonl.gz"], "returncode": 0, "sampled_peak_family_rss_bytes": 747544576, "sampling_seconds": 0.1, "seconds": 55.4602972320281, "test_guard_reason": null, "hard_memory_cap": false}

@@ -59,6 +59,87 @@ def _operator_contract(canonical: str):
     )
 
 
+_SCALAR_CONTROL_ARITIES: dict[str, frozenset[int]] = {
+    "add": frozenset({2}),
+    "subtract": frozenset({2}),
+    "multiply": frozenset({2}),
+    "divide": frozenset({2}),
+    "safe_div_null": frozenset({2}),
+    "mod": frozenset({2}),
+    "power": frozenset({2}),
+    "negate": frozenset({1}),
+    "abs": frozenset({1}),
+    "eq": frozenset({2}),
+    "ne": frozenset({2}),
+    "lt": frozenset({2}),
+    "le": frozenset({2}),
+    "gt": frozenset({2}),
+    "ge": frozenset({2}),
+    "and": frozenset({2}),
+    "or": frozenset({2}),
+    "not": frozenset({1}),
+    "is_null": frozenset({1}),
+    "is_finite": frozenset({1}),
+    "where": frozenset({3}),
+}
+
+
+def _plan_proves_scalar_control(plan: PlanNode, aliases: Mapping[str, str]) -> bool:
+    """Prove a positional expression is a bounded scalar control value.
+
+    This is deliberately a small, fixed-output whitelist.  Panel/source,
+    time-series, aggregation and unresolved ``plan_ref`` nodes never gain
+    scalar status merely because they occupy a scalar parameter slot.  The
+    iterative identity walk is safe for shared DAGs, deep expressions and
+    malformed cycles.
+    """
+    memo: dict[int, bool] = {}
+    active: set[int] = set()
+    stack: list[tuple[PlanNode, bool]] = [(plan, False)]
+    while stack:
+        node, expanded = stack.pop()
+        node_id = id(node)
+        if node_id in memo:
+            continue
+        inputs = tuple(getattr(node, "inputs", ()) or ())
+        if not expanded:
+            if node_id in active:
+                return False
+            active.add(node_id)
+            stack.append((node, True))
+            for child in reversed(inputs):
+                if id(child) not in memo:
+                    stack.append((child, False))
+            continue
+
+        active.remove(node_id)
+        op = str(getattr(node, "op", "") or "")
+        attrs = dict(getattr(node, "attrs", None) or {})
+        if op == "literal":
+            # ParamSpec validation below remains the authority for the literal
+            # value, including structured list/tuple controls.
+            result = "value" in attrs
+        elif op in {"column", "materialized_series", "plan_ref"}:
+            result = False
+        elif any(
+            attrs.get(key) is not None
+            for key in (
+                "execution_axis", "output_axis", "output_frequency",
+                "row_multiplier", "output_rows", "source_scope",
+                "dataset", "table",
+            )
+        ):
+            result = False
+        else:
+            canonical = aliases.get(op, op)
+            result = (
+                len(inputs) in _SCALAR_CONTROL_ARITIES.get(canonical, frozenset())
+                and all(memo.get(id(child), False) for child in inputs)
+            )
+        memo[node_id] = result
+    return memo.get(id(plan), False)
+
+
 def validate_plan_params(plan: PlanNode, *, production: bool = True) -> PlanNode:
     """R6 P0-04 + R13 NEW-P0-20: validate every operator node's scalar ``attrs``
     against its declared contract BEFORE composite lowering runs.
@@ -98,6 +179,19 @@ def validate_plan_params(plan: PlanNode, *, production: bool = True) -> PlanNode
         param_names = list(getattr(meta, "param_names", None) or [])
         if not param_names:
             return
+        scalar_params = frozenset(getattr(meta, "scalar_params", None) or ())
+        # Names after the variadic marker are keyword-only controls; a second
+        # data input must never become e.g. row_sum_skipna's min_count.
+        positional_names = param_names[:param_names.index("...")] if "..." in param_names else param_names
+        for index, child in enumerate(node.inputs[:len(positional_names)]):
+            param_name = positional_names[index]
+            if param_name not in scalar_params or str(child.op or "") == "literal":
+                continue
+            if not _plan_proves_scalar_control(child, OperatorRegistry._aliases):
+                raise OperatorParameterError(
+                    f"{canonical}.{param_name}: planning-time scalar parameter "
+                    f"at positional index {index} is not provably scalar"
+                )
         attrs = normalize_parameter_aliases(canonical, dict(node.attrs))
         for ignored_name in getattr(meta, "deprecated_ignored_params", ()) or ():
             attrs.pop(ignored_name, None)
@@ -109,7 +203,7 @@ def validate_plan_params(plan: PlanNode, *, production: bool = True) -> PlanNode
         # skip these params entirely (and run relational specs on an empty
         # bound, raising a misleading "fast < slow" error for a valid call).
         for _idx, _child in enumerate(node.inputs):
-            if _idx >= len(param_names):
+            if _idx >= len(positional_names):
                 break
             # R19-003: ``"value" in child.attrs`` (NOT ``attrs.get("value") is not
             # None``) — an explicit ``None`` positional literal is a real bound

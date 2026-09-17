@@ -1,0 +1,58 @@
+{
+  "rows": 114132,
+  "unique_factor_ids": 113893,
+  "execution_counts": {
+    "EXECUTED": 1472,
+    "EXECUTED_ALL_NONFINITE": 13,
+    "NOT_RUN": 112635,
+    "EXECUTION_FAILED": 11,
+    "COMPILE_FAILED": 1
+  },
+  "spot_checks": {
+    "24": {
+      "execution_status": "EXECUTED",
+      "finite_count": "40",
+      "execution_evidence_file": "r6-crosspath-minute-row24-25-offset22.jsonl.gz"
+    },
+    "25": {
+      "execution_status": "EXECUTED",
+      "finite_count": "40",
+      "execution_evidence_file": "r6-crosspath-minute-row24-25-offset22.jsonl.gz"
+    },
+    "35": {
+      "execution_status": "EXECUTED",
+      "finite_count": "40",
+      "execution_evidence_file": "r6-nested-grain-fixed-row35-36-offset33.jsonl.gz"
+    },
+    "36": {
+      "execution_status": "EXECUTED",
+      "finite_count": "40",
+      "execution_evidence_file": "r6-nested-grain-fixed-row35-36-offset33.jsonl.gz"
+    },
+    "46": {
+      "execution_status": "EXECUTED",
+      "finite_count": "40",
+      "execution_evidence_file": "r6-nested-grain-fixed-row46-47-offset44.jsonl.gz"
+    },
+    "47": {
+      "execution_status": "EXECUTED",
+      "finite_count": "40",
+      "execution_evidence_file": "r6-nested-grain-fixed-row46-47-offset44.jsonl.gz"
+    },
+    "3004": {
+      "execution_status": "EXECUTED",
+      "finite_count": "1317",
+      "execution_evidence_file": "abdi-row3004-fixed.jsonl.gz"
+    },
+    "3087": {
+      "execution_status": "EXECUTED",
+      "finite_count": "2472",
+      "execution_evidence_file": "r6-sigsegv-diagnostic-row3087-offset3085.jsonl.gz"
+    }
+  },
+  "gzip_footer_verified": true,
+  "source_identity_and_formula_verified": true,
+  "sha256": "e991861c61c7c5d0cfe0ab096a4031316dd3b91e8fec0dd78fc9205e7ad0f16c",
+  "bytes": 8177150,
+  "scope": "historical_formula_matched_not_current_code_certification"
+}

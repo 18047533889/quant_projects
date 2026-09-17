@@ -136,17 +136,26 @@ ashare_stock_minute_adj:
   glob: "**/*.parquet"
   time_column: QuoteTime
   instrument_column: Symbol
+  # StockMinuteBarAdj uses the same one-file-per-trading-day layout as the raw
+  # minute table.  Declare it so time_range is applied before admission and the
+  # frozen physical scope contains only requested daily files.
+  partitioning:
+    time:
+      source: filename
+      field: QuoteTime
+      frequency: daily
+      pattern: "{date}.parquet"
   # 工程生成的后复权分钟表（realizations.md §5.6）：AdjX = 原始X × Factor(Symbol)
   # （Factor 取同日 StockDailyBar 的 Symbol 映射）；Volume 原始值不复权。
   schema:
     TradeDate: date
-    QuoteTime: timestamp
+    QuoteTime: timestamptz
     Symbol: string
     AdjOpen: double
     AdjHigh: double
     AdjLow: double
     AdjClose: double
-    Volume: int64
+    Volume: uint64
     AdjAmount: double
     AdjVwap: double
     UpdateTime: timestamptz
@@ -209,7 +218,7 @@ ashare_stock_indicator:
     Symbol: string
     PubDate: date
     ReportPeriodEndDate: date
-    UpdateTime: timestamp
+    UpdateTime: timestamptz
     Eps: double
     Roe: double
     Roa: double
@@ -248,7 +257,7 @@ ashare_stock_income:
     Symbol: string
     PubDate: date
     ReportPeriodEndDate: date
-    UpdateTime: timestamp
+    UpdateTime: timestamptz
     TotalOperatingRevenue: double
     OperatingRevenue: double
     OperatingCost: double
@@ -279,7 +288,7 @@ ashare_stock_cashflow:
     Symbol: string
     PubDate: date
     ReportPeriodEndDate: date
-    UpdateTime: timestamp
+    UpdateTime: timestamptz
     NetOperateCashFlow: double
     NetInvestCashFlow: double
     NetFinanceCashFlow: double

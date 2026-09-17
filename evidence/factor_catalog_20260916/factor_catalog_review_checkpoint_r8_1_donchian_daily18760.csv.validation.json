@@ -1,0 +1,29 @@
+{
+  "rows": 114132,
+  "factor_ids": 113893,
+  "donchian_rows": 280,
+  "donchian_status_counts": {
+    "EXECUTED": 244,
+    "EXECUTED_ALL_NONFINITE": 4,
+    "COMPILE_FAILED": 3,
+    "EXECUTION_FAILED": 9,
+    "NATIVE_CRASH": 20
+  },
+  "donchian_old_evidence_rows": 0,
+  "r17_status_counts": {
+    "EXECUTED": 424,
+    "COMPILE_FAILED": 34,
+    "EXECUTED_ALL_NONFINITE": 42
+  },
+  "r18_status_counts": {
+    "EXECUTED": 488,
+    "EXECUTED_ALL_NONFINITE": 9,
+    "COMPILE_FAILED": 3
+  },
+  "intraday_semantic_redesign_counts": {
+    "FIELDS_UNRESOLVED": 28,
+    "PARSED_FIELDS_BOUND": 71
+  },
+  "output_sha256": "b49c96f6d038ebf003fcf9ef52434ca54171b5e6f8def3d035cb596043947b53",
+  "passed": true
+}

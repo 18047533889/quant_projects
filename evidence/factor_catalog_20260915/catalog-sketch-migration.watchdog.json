@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "-m", "pytest", "-q", "tests/operators/test_catalog_sketch_migration.py"], "returncode": 0, "sampled_peak_family_rss_bytes": 792956928, "sampling_seconds": 0.1, "seconds": 53.93933751992881, "test_guard_reason": null, "hard_memory_cap": false}

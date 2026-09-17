@@ -30,6 +30,10 @@ Contract under test:
 """
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
+
 import pytest
 
 from factor_engine.cleaned_operators import load_all
@@ -126,3 +130,54 @@ def test_migration_is_idempotent():
             state_model="recursive",
             chunking="required_full_history",
         )
+
+
+@pytest.mark.parametrize(
+    "imports",
+    (
+        "from factor_engine.cleaned_operators import load_all",
+        (
+            "from factor_engine.api.dsl_parser import parse_factor\n"
+            "from factor_engine.ir.analyzer import Analyzer\n"
+            "from factor_engine.cleaned_operators import load_all"
+        ),
+    ),
+)
+def test_fresh_process_import_orders_keep_nested_tema_full_history(imports):
+    code = f"""
+{imports}
+load_all()
+from factor_engine.api.dsl_parser import parse_factor
+from factor_engine.ir.analyzer import Analyzer
+factor = parse_factor(
+    "ts_mean(TEMA(close,30),20)", name="nested_tema", surface="extended"
+)
+analysis = Analyzer().lower(factor.expr)
+assert analysis.requires_full_history is True, analysis
+assert analysis.history_requirement.kind == "full_history", analysis.history_requirement
+"""
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.getcwd()
+    completed = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=os.getcwd(),
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=600,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def test_migration_restores_declarations_after_runtime_table_reset(monkeypatch):
+    from factor_engine.runtime import execution_contract as contracts
+
+    saved = dict(contracts._DECLARED_STATEFUL)
+    monkeypatch.setattr(contracts, "_DECLARED_STATEFUL", {})
+    assert _scm._APPLIED is True
+
+    apply_stateful_contract_migration()
+
+    assert "TEMA" in contracts.declared_stateful_canonicals()
+    assert contracts.execution_contract("TEMA").requires_full_history is True
+    contracts._DECLARED_STATEFUL.update(saved)

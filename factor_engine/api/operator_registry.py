@@ -44,12 +44,12 @@ def build_dsl_allowlist(
         allow.update(build_cleaned_dsl_allowlist(set(), surface=selected))
 
     if raw_surface in {"extended", "compat", "compat_research", "all"}:
-        from factor_engine.api.intraday_daily import INTRADAY_DAILY_DSL_FUNCTIONS
+        from factor_engine.api.intraday_daily import augment_intraday_daily_allowlist
         from factor_engine.api.technical_macros_v2 import augment_technical_macros
         from factor_engine.storage.sources.intraday_clock_install import install_intraday_clock_runtime
 
         install_intraday_clock_runtime()
-        allow.update(INTRADAY_DAILY_DSL_FUNCTIONS)
+        allow = augment_intraday_daily_allowlist(allow)
         # Public composite names lower to primitive Expr DAGs before Analyzer/IR.
         # The registry implementations remain semantic references only.
         allow = augment_technical_macros(allow)

@@ -179,6 +179,20 @@ def register_dual(
     specs = dict(param_specs) if param_specs else None
     rel_specs = list(relational_specs) if relational_specs else None
     panels = tuple(panel_params or ())
+    if panel_params is None:
+        # Omitted roles are not an explicit zero-panel contract. Infer from the
+        # authored callable, exactly as the public operator manifest does.
+        from types import SimpleNamespace
+        from factor_engine.cleaned_operators.operator_spec import _infer_panel_params
+
+        panels = _infer_panel_params(
+            SimpleNamespace(_contract_callable=fn),
+            SimpleNamespace(
+                panel_params=(), param_names=tuple(params),
+                input_fields=(), param_specs=specs or {},
+            ),
+            {},
+        )
     scalars = tuple(p for p in params if p not in panels)
 
     class _PandasOp(PandasSeriesOperator):

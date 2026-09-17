@@ -366,6 +366,15 @@ def _resolve_canonical(op: str) -> str:
 def _call_cleaned_operator(canonical: str, operator: Any, call_args: list[Any], kw: dict[str, Any]) -> Any:
     from factor_engine.backend.parameter_aliases import reject_runtime_parameter_aliases
     reject_runtime_parameter_aliases(canonical, kw)
+    if canonical == "intraday_activity_duration_curvature" and "calendar" not in kw:
+        # This operator is explicitly A-share-only and its completeness gate
+        # requires the official exchange session grid.  Supply the declared
+        # calendar at the engine boundary; the operator's direct-call API
+        # remains fail-closed when callers omit calendar authority.
+        from factor_engine.runtime.session_panel import default_ashare_calendar
+
+        kw = dict(kw)
+        kw["calendar"] = default_ashare_calendar(bar_freq="1min")
     # R5 P0-01 (defense-in-depth): the dispatch layer runs the central logical
     # call validator for every cleaned operator, so an operator that overrides
     # ``calculate`` directly (bypassing ``SeriesOperator._prepare_call``) still
@@ -919,17 +928,26 @@ def _normalize_operator_result(
             raise OperatorShapeError("DataFrame result requires a panel template")
         if grain_changing:
             _validate_downsampled_result(result, template_panel)
-            if panel_native_enabled(ctx):
-                return result
             # A daily (or other downsampled) result must NOT be reindexed onto
             # the minute input template — that would blank every daily value
-            # (no matching minute keys).  Stack on the result's OWN axis.
+            # (no matching minute keys).  Stack on the result's OWN axis even
+            # in panel-native mode so the generic root finalizer cannot later
+            # reapply the minute template.
             return panel_to_series(result, ctx, template=None)
         if not result.index.equals(template_panel.index):
             raise OperatorShapeError("operator DataFrame index does not match input panel")
         if not result.columns.equals(template_panel.columns):
             raise OperatorShapeError("operator DataFrame columns do not match input panel")
         if panel_native_enabled(ctx):
+            root_template = _ctx_template(ctx)
+            if (
+                root_template is not None
+                and not _target_index(template).equals(_target_index(root_template))
+            ):
+                # A parent of a grain-changing child is itself shape-preserving
+                # on the child's reduced axis. Do not leave that daily panel for
+                # the root finalizer, whose first-loaded template may be minute.
+                return panel_to_series(result, ctx, template=template)
             return result
         return panel_to_series(result, ctx, template=template)
     target = _target_index(template)
@@ -1187,12 +1205,12 @@ def build_cleaned_dsl_allowlist(skip: set[str] | None = None, *, surface: str = 
     skip = skip or set()
     out: dict[str, Any] = {}
     for canon in OperatorRegistry.list_canonical():
-        if canon in skip or canon in out or OperatorRegistry.get(canon) is None:
+        if canon in skip or canon in out or OperatorRegistry.get(canon, mode="any") is None:
             continue
         if is_dsl_name_allowed(canon, canon, surface=surface):
             out[canon] = make_cleaned_call_factory(canon)
     for alias, canon in OperatorRegistry._aliases.items():
-        if alias in skip or alias in out or OperatorRegistry.get(canon) is None:
+        if alias in skip or alias in out or OperatorRegistry.get(canon, mode="any") is None:
             continue
         if is_dsl_name_allowed(alias, canon, surface=surface):
             out[alias] = make_cleaned_call_factory(canon)

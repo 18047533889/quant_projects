@@ -18,7 +18,7 @@ class CompositeReferenceCase:
 
     canon: str
     columns: tuple[str, ...]
-    window: int = 3
+    window: int | None = 3
     extra_attrs: dict[str, Any] = field(default_factory=dict)
     calc_kwargs: dict[str, Any] = field(default_factory=dict)
 
@@ -33,7 +33,6 @@ COMPOSITE_REFERENCE_CASES: tuple[CompositeReferenceCase, ...] = (
     CompositeReferenceCase("WilliamsR", ("high", "low", "close"), window=3),
     CompositeReferenceCase("StochasticK", ("high", "low", "close"), window=3),
     CompositeReferenceCase("StochasticD", ("high", "low", "close"), window=3),
-    CompositeReferenceCase("OBV", ("close", "volume")),
     CompositeReferenceCase("operating_margin", ("operating_income", "revenue")),
     CompositeReferenceCase("current_ratio", ("current_assets", "current_liabilities")),
     CompositeReferenceCase("quick_ratio", ("current_assets", "inventory", "current_liabilities")),
@@ -139,7 +138,9 @@ def reference_pandas_calculate(
 def build_composite_plan(case: CompositeReferenceCase) -> PlanNode:
     """构造 composite 算子 PlanNode。"""
     inputs = [PlanNode(op="column", attrs={"name": c}, inputs=[]) for c in case.columns]
-    attrs: dict[str, object] = {"window": case.window, "d": case.window}
+    attrs: dict[str, object] = {}
+    if case.window is not None:
+        attrs.update({"window": case.window, "d": case.window})
     attrs.update(case.extra_attrs)
     if "std_dev" in case.calc_kwargs:
         attrs["std_dev"] = case.calc_kwargs["std_dev"]

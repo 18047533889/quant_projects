@@ -1,0 +1,126 @@
+{
+  "schema_version": "factor_catalog.intraday_limit_semantic_conflict.v1",
+  "source_audit": "evidence/factor_catalog_20260916/full-parse-r8-open-limit.jsonl.gz",
+  "population": {
+    "rows": 99,
+    "status": "PARSE_FAILED",
+    "error": "_factory.<locals>.function() takes 0 positional arguments but 3 were given",
+    "source_row_groups": [
+      "105134-105157",
+      "105761-105790",
+      "109570,109580,109590,109600,109610,109620,109630,109640,109650,109660,109670,109680,109686,109696,109706,109716,109726,109736",
+      "110252-110269",
+      "110813,110821,110829,110837,110845,110853,110861,110869,110877"
+    ]
+  },
+  "formula_groups": [
+    {
+      "operator": "intraday_limit_first_hit_time",
+      "count": 24,
+      "original_subexpression_shape": "intraday_limit_first_hit_time(MinuteClose,HighLimit,LowLimit)",
+      "source_semantics": {
+        "api_shape": "zero-positional-panel SourceRef factory; function(**kwargs)",
+        "input": "StockMinuteBar.Close sourced internally and resampled to 5-minute bars",
+        "limit_source": "computed internally from previous close, instrument, trade date and PIT ST status",
+        "touch": "close-only comparison against computed upper/lower limit",
+        "unit": "dimensionless fraction: first observed/resampled hit index / max(1, observed bar count - 1)",
+        "defaults": "side=up, bar_minutes=5, cutoff_time=session_close, min_coverage=0.80, min_bars=2, timestamp_convention=bar_end"
+      },
+      "native_candidate_semantics": {
+        "operator": "intra_limit_first_hit_time",
+        "input": "explicit minute close/high/low/high_limit/low_limit panels",
+        "touch": "up-side uses minute high when supplied, otherwise close",
+        "unit": "dimensionless fraction: physical session-slot ordinal / total official session slots",
+        "direction": "side defaults to up"
+      },
+      "conflicts": [
+        "observed-index normalization is not physical-slot normalization",
+        "5-minute internal resampling is not the same input contract as explicit minute panels",
+        "close-only touch is not high/low touch",
+        "internally derived PIT limits are not supplied HighLimit/LowLimit panels",
+        "panel kwargs cannot skip native high/low positions; repeating close would manufacture arguments"
+      ]
+    },
+    {
+      "operator": "intraday_limit_duration",
+      "count": 30,
+      "original_subexpression_shape": "intraday_limit_duration(MinuteClose,HighLimit,LowLimit)",
+      "source_semantics": {
+        "api_shape": "zero-positional-panel SourceRef factory; function(**kwargs)",
+        "input": "StockMinuteBar.Close sourced internally and resampled to 5-minute bars",
+        "limit_source": "computed internally from previous close, instrument, trade date and PIT ST status",
+        "touch": "close-only comparison against computed upper/lower limit",
+        "unit": "dimensionless fraction: mean of at-limit booleans over observed/resampled bars",
+        "defaults": "side=up, bar_minutes=5, cutoff_time=session_close, min_coverage=0.80, min_bars=2, timestamp_convention=bar_end"
+      },
+      "native_candidate_semantics": {
+        "operator": "intra_limit_duration",
+        "input": "explicit minute close/high_limit/low_limit panels",
+        "unit": "dimensionless duration fraction over explicit panel observations",
+        "direction": "side defaults to up"
+      },
+      "conflicts": [
+        "5-minute internal resampling is not the same observation population as explicit minute panels",
+        "internally derived PIT limits are not supplied HighLimit/LowLimit panels",
+        "MinuteClose alias may be adjusted while official limits require raw-price identity"
+      ]
+    },
+    {
+      "operator": "intraday_limit_reopen_count",
+      "count": 45,
+      "original_subexpression_shape": "intraday_limit_reopen_count(MinuteClose,HighLimit,LowLimit)",
+      "source_semantics": {
+        "api_shape": "zero-positional-panel SourceRef factory; function(**kwargs)",
+        "input": "StockMinuteBar.Close sourced internally and resampled to 5-minute bars",
+        "limit_source": "computed internally from previous close, instrument, trade date and PIT ST status",
+        "touch": "close-only comparison against computed upper/lower limit",
+        "unit": "count of boolean transitions",
+        "direction": "transition=open counts false-to-true; transition=reseal counts true-to-false",
+        "defaults": "side=up, transition=open, bar_minutes=5, cutoff_time=session_close, min_coverage=0.80, min_bars=2, timestamp_convention=bar_end"
+      },
+      "native_candidate_semantics": {
+        "operator": "intra_limit_reopen_count",
+        "input": "explicit minute close/high_limit/low_limit panels",
+        "unit": "count of boolean transitions",
+        "direction": "transition=open counts true-to-false; transition=reseal counts false-to-true"
+      },
+      "conflicts": [
+        "open/reseal labels have opposite transition directions",
+        "5-minute internal resampling is not the same observation population as explicit minute panels",
+        "internally derived PIT limits are not supplied HighLimit/LowLimit panels",
+        "omitted side and transition do not resolve author intent across contradictory contracts"
+      ]
+    }
+  ],
+  "code_evidence": [
+    "factor_engine/api/intraday_daily.py:68,78,84,94,214",
+    "factor_engine/storage/sources/intraday_feature_extension.py:419-438",
+    "factor_engine/cleaned_operators/microstructure/intraday_agg.py:1392-1401,1414-1437,1478-1491"
+  ],
+  "decision": {
+    "status": "STRICT_EQUIVALENCE_FAIL_CLOSED; OPT_IN_SEMANTIC_REDESIGN_AUTHORIZED",
+    "reason": "No strict semantic equivalent exists. The separately gated redesign is authorized precisely because it changes values and meaning, and every change is recorded.",
+    "required_design_choices": [
+      "raw close-only versus high/low touch semantics",
+      "exact side",
+      "transition naming and direction",
+      "1-minute versus 5-minute aggregation",
+      "physical-slot versus observed-index normalization",
+      "official limit source and ST/PIT policy",
+      "raw versus adjusted MinuteClose identity"
+    ],
+    "authorized_redesign": {
+      "gate": "semantic-redesign-intraday-limit; disabled in the ordinary strict migration API",
+      "side": "up, written explicitly from the current native default",
+      "first_hit_touch": "HIGH_FOR_UP/LOW_FOR_DOWN using real raw StockMinuteBar high/low fields",
+      "duration_touch": "CLOSE_ONLY using raw StockMinuteBar close",
+      "reopen_touch": "CLOSE_ONLY using raw StockMinuteBar close",
+      "reopen_transition": "open means touch-to-non-touch under the native definition",
+      "clock": "registered StockMinuteBar plus canonical physical session grid; absent bars do not compress first-hit slot time and transitions do not cross a missing slot",
+      "limits": "raw official StockDailyBar high_limit/low_limit broadcast to the minute operator",
+      "granularity_note": "No synthetic 1-minute bars are claimed. Runtime cadence remains the registered source data; the canonical grid governs physical slots and gaps.",
+      "formula_evidence_policy": "The original catalog formula remains unchanged in source. Checkpoints store it alongside current_formula and SEMANTIC_REDESIGN migration_changes."
+    }
+  },
+  "execution_evidence_validity": "The redesigned current_formula differs from all earlier formulas, so earlier whole-factor execution evidence is invalid unless exact executed_formula matches. Many outer formulas retain other unresolved fields; those rows remain FIELDS_UNRESOLVED and NOT_RUN and must not be represented as executable merely because the native subexpression passes its own oracle."
+}

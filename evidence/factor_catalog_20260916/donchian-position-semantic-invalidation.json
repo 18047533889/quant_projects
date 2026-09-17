@@ -1,0 +1,9 @@
+{
+  "operator": "donchian_position",
+  "unique_catalog_rows": 280,
+  "call_occurrences": 345,
+  "exact_call_shape": "donchian_position(close, high, low, 20)",
+  "old_execution_evidence_status": "STALE_SEMANTIC_BUG",
+  "reason": "compat_research macro interpreted positional inputs as high/low/close while registered canonical is close/high/low",
+  "required_action": "rerun every listed catalog row after macro fix; do not certify formula-matched old results"
+}

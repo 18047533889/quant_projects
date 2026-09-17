@@ -1,0 +1,1619 @@
+{
+  "counts": {
+    "rows": 114132,
+    "static:PARSED_FIELDS_BOUND": 103627,
+    "execution:EXECUTED": 5671,
+    "compile:COMPILED": 106687,
+    "execution:EXECUTED_ALL_NONFINITE": 82,
+    "execution:NOT_RUN": 108242,
+    "compile:NOT_RUN": 3366,
+    "execution:EXECUTION_FAILED": 17,
+    "compile:COMPILE_FAILED": 4079,
+    "execution:COMPILE_FAILED": 106,
+    "static:PARSE_FAILED": 1452,
+    "execution:PREPARE_FAILED": 14,
+    "static:FIELDS_UNRESOLVED": 8814,
+    "static:NON_FACTOR_RECORD": 239,
+    "factor_ids": 113893
+  },
+  "source": "evidence/factor_catalog_20260915/input.jsonl.gz",
+  "audit": "evidence/factor_catalog_20260916/full-parse-r9-intraday-redesign.jsonl.gz",
+  "smoke_evidence": [
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/smoke-strict-daily10.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/warm-cse-root-final100-000022.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000000.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000004.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000008.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000012.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000016.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000020.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000024.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000028.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000032.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000036.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000040.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000044.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000048.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000052.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000056.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000060.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000064.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000068.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000072.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000076.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000080.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000084.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000088.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000092.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000096.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-daily-fixed1000-000259.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-daily-fixed1000-000403.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-daily-fixed1000-000574.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-daily-fixed1000-000738.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-cs64-54.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily906-probe.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily924-probe.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-000939.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-000957.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-000983.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-000998.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-001019.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-001034.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-001050.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-001073.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-001092.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-001114.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001127.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001146.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001171.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001193.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001209.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001226.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001245.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001262.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001277.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001298.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001316.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001331.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001349.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001364.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001377.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001393.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001411.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001432.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001461.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001475.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001491.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001505.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001522.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001544.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001566.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001592.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001618.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001641.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001656.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001682.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001709.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001735.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001758.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001785.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001812.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001844.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001865.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001889.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001912.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001934.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001952.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001967.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001992.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002012.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002031.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002054.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002067.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002090.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002114.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002143.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002186.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002196.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002197.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002198.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002203.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002204.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002205.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002206.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002208.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002215.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-batch-fixed-002186.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002216.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002246.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002276.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002297.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002318.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002341.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002369.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002385.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002410.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002441.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/optional-cs-real-row1845.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/optional-cs-real-row1890.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/optional-cs-real-row1939.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/probe-row1295-fixed.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/official-limit-row2205.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/minute-session-fixed-row24-000022.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/minute-session-fixed-row25-000023.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002456.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002477.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002497.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002511.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002530.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002550.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002569.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002585.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002598.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002613.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2665-preflight-002665.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/minute-grain-final-row24-000022.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/minute-grain-final-row25-000023.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/official-limit-raw-route-fixed-row2205-002203.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/r6-crosspath-minute-row24-25-offset22.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/r6-nested-grain-fixed-row35-36-offset33.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/r6-nested-grain-fixed-row46-47-offset44.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/r6-sigsegv-diagnostic-row3087-offset3085.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/abdi-row3004-fixed.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003019.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003114.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003186.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003280.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003337.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003387.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003447.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003484.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003529.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003605.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003651.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003702.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003742.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003773.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003798.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003846.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003905.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003943.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003977.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-004011.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004044.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004122.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004204.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004292.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004418.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004642.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004735.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004822.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004897.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004977.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005055.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005138.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005221.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005311.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005388.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005473.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005563.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005646.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005736.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005821.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/hvg-row2968-fixed.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/density-row2769-64symbols.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/conditional-row2738-64symbols.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/r6-official-price-exact-row2286.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/r6-official-price-exact-row2292.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/r6-official-price-exact-row2412.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/r6-official-price-exact-row31593.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/amihud-failed18-fixed.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-005906.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-006015.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-006104.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-006291.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-006775.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-006886.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-007676.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-007726.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-007776.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-007826.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-008104.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-008163.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-008257.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-008761.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-008869.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-008938.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-009010.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009374.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009410.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009446.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009471.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009529.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009563.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009619.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009654.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-009680.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-009807.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-009933.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010089.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010165.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010252.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010383.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010483.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010573.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010664.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-010755.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-010842.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-010922.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011018.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011107.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011218.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011335.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011428.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011490.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011555.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-011713.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-011828.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-011912.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012009.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012095.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012157.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012219.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012291.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012362.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012433.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/cs-support128-r6.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/glr-abdi-six-extended-window.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/fiscal-r67-row102274-wide-r17.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/fiscal-r67-row102298-wide-r17.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/open-limit-failed17-fixed-r18.jsonl.gz",
+    "evidence/factor_catalog_20260916/row6170-liquidity-beta-fixed.jsonl.gz",
+    "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012503.jsonl.gz",
+    "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012610.jsonl.gz",
+    "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012674.jsonl.gz",
+    "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012760.jsonl.gz",
+    "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012840.jsonl.gz",
+    "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012901.jsonl.gz",
+    "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012966.jsonl.gz",
+    "evidence/factor_catalog_20260915/resume-daily12503-external-r15-013024.jsonl.gz",
+    "evidence/factor_catalog_20260915/resume-daily12503-external-r15-013132.jsonl.gz",
+    "evidence/factor_catalog_20260915/resume-daily12503-external-r15-013193.jsonl.gz",
+    "evidence/factor_catalog_20260916/intraday-limit-redesign-real-smoke.jsonl.gz",
+    "evidence/factor_catalog_20260916/intraday-limit-redesign-real-smoke-r2.jsonl.gz"
+  ],
+  "compile_evidence": [
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/compile-full-latest.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/compile-recipe-r6.jsonl.gz",
+    "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/compile-recipe-r6-tail.jsonl.gz"
+  ],
+  "evidence_fingerprints": [
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/smoke-strict-daily10.jsonl.gz",
+      "records": 10,
+      "sha256": "fed04e72b813916760cdea5ef053865da5bc4fc06799583a145fe9d66815a34f"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/warm-cse-root-final100-000022.jsonl.gz",
+      "records": 100,
+      "sha256": "2c3bf0a1f4fd6d82e6229b5797b8980bf3423a2dc8ee180a36c4f75494d471bb"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000000.jsonl.gz",
+      "records": 4,
+      "sha256": "442a5eb28ebbb99cb356490a0fccc313901a85903787b5be2ac3461aeb5f71b2"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000004.jsonl.gz",
+      "records": 4,
+      "sha256": "d7dd0b1841da25968af1ca595b73b3f11a376a564a5a17df61f706ccecf5b0a6"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000008.jsonl.gz",
+      "records": 4,
+      "sha256": "e85f618d11ed20d3bc718d041de16bcd2af8b624e0b0ac0376e693b119a0e168"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000012.jsonl.gz",
+      "records": 4,
+      "sha256": "225cd8a97135990394d62bf56e963bb625696855d24bdf6df7303a6a915b8558"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000016.jsonl.gz",
+      "records": 4,
+      "sha256": "c584fa030547b58924c2f7e57fddc46759b12a4f90e64b63211652beafab53f4"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000020.jsonl.gz",
+      "records": 4,
+      "sha256": "ef0466241716894185d3632fb25e56c318fa705e3ed0ef90661a811a7396783d"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000024.jsonl.gz",
+      "records": 4,
+      "sha256": "51e1dd76669a1e8de5119251808a2f9ea72ef28ac2522a1af1b2a17e8aade7b2"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000028.jsonl.gz",
+      "records": 4,
+      "sha256": "c66732b9e0075c78a0c119de185cd4af9321a2a47b09b04f7302fc7b17a085e0"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000032.jsonl.gz",
+      "records": 4,
+      "sha256": "4ee58434072ac3ad8eafb24ed1f0edf71aaabbc91289c9d8228b214697c6601d"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000036.jsonl.gz",
+      "records": 4,
+      "sha256": "ada6e47dd36212592a86bf28156f564c1becd986bf4294b513281a87f49d34d3"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000040.jsonl.gz",
+      "records": 4,
+      "sha256": "54bb8b4570a27a33cfc4310adb6ba4eb5062c04f6d3e2f5d706b9e37b6e68663"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000044.jsonl.gz",
+      "records": 4,
+      "sha256": "0a68c8ce20f6d47c42d415d0f3baa28238c8b61790b6d4aa4e0d3f209444fcca"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000048.jsonl.gz",
+      "records": 4,
+      "sha256": "fbb0c3135f06475ba5798ebd7337b0a73d2bef81dcbda87660bc76e5bfe69220"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000052.jsonl.gz",
+      "records": 4,
+      "sha256": "ae89f7d57019eb333f795cf174ea1247c4e293825fcd9f38aafcdd87c7a29b3f"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000056.jsonl.gz",
+      "records": 4,
+      "sha256": "f034fce7338c8de031cc6925ed7b199a07da0615e1169c2fdecddfcc295d10ae"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000060.jsonl.gz",
+      "records": 4,
+      "sha256": "ea5bb179bc4a5b9124b1e013eeb6253d44ff8f038c9a534594a2d9b8320b254a"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000064.jsonl.gz",
+      "records": 4,
+      "sha256": "19404754a4dc7bbe5b1588a852c84a6498bbe45820607cdf958b17e8fffaad76"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000068.jsonl.gz",
+      "records": 4,
+      "sha256": "820d56d5ad1b066c74c5462fbdafef63b4ca85062c7123be2178b7578467d731"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000072.jsonl.gz",
+      "records": 4,
+      "sha256": "0241387940120db223bbc7698531279fb320b5942a06f0dfbeec6fe0d3c3f94c"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000076.jsonl.gz",
+      "records": 4,
+      "sha256": "e00f1eb12845b59da78873dd2c78ec499d458efd67543828b20643e729d7509b"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000080.jsonl.gz",
+      "records": 4,
+      "sha256": "ca77770b748c0c8ef18b6a2ac5cbedfd5465fb6c2bd798bcf0522b1a402de177"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000084.jsonl.gz",
+      "records": 4,
+      "sha256": "713d688110f470838a08d3dfbb51a9331b19b4ed53d6f0d660d1adf2ff01c2f7"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000088.jsonl.gz",
+      "records": 4,
+      "sha256": "80eda04467a78834cd55679246746ba620b4fc34cc0f25b4e33ef2a85558f515"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000092.jsonl.gz",
+      "records": 4,
+      "sha256": "dd3f7671b77150fd473e4ff524db71b6aba5aaf709273b613d17691e64b6c243"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-mixed-small100-000096.jsonl.gz",
+      "records": 4,
+      "sha256": "77aa5b4b65dcab30a304cdf91371df82424a7960972d620f4af00aa5fd96bdfd"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-daily-fixed1000-000259.jsonl.gz",
+      "records": 100,
+      "sha256": "20f4faabda6e6d2df95d66a7e2a05d3092a0bf39a515e3e40c90151d58dd4ca0"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-daily-fixed1000-000403.jsonl.gz",
+      "records": 100,
+      "sha256": "fce8449c73a73d63ee28d29023b58319aa0fa951316801905dc9fb5273ceca36"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-daily-fixed1000-000574.jsonl.gz",
+      "records": 100,
+      "sha256": "cb92f6ef0951b5709855bc3b1b11e2a9f757ed44ca01743e7655daccf04ec897"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-daily-fixed1000-000738.jsonl.gz",
+      "records": 100,
+      "sha256": "658b44ab117c69d0623f6be8d5abad8429b5ac977ac9a4267cec75b2db1f0796"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/strict-cs64-54.jsonl.gz",
+      "records": 54,
+      "sha256": "10bc56b4a464d6c994f76968bc0ac442f07a6e645a25138cb73f052fbe14b30b"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily906-probe.jsonl.gz",
+      "records": 10,
+      "sha256": "bacf640886514b20eb1e643f5fb6e60ee1fcf21769755333cd316134616cea79"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily924-probe.jsonl.gz",
+      "records": 10,
+      "sha256": "160b8d1030d4e03faa3f22eb06bab476526cd1fcb9641a855b3ed37574d52dd3"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-000939.jsonl.gz",
+      "records": 10,
+      "sha256": "38d9e79fccf2e80a2bed2f748ed335cc4f208245c9d21499466a59c1b2d59584"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-000957.jsonl.gz",
+      "records": 10,
+      "sha256": "ac6853bb5dce186c0be015ee57e86d31e0ff6b590fe96b61072c1f39c7eaaf66"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-000983.jsonl.gz",
+      "records": 10,
+      "sha256": "235e55650e553830caf1f1b954d2a6c5dcb5c06878e16decdb67feac47216179"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-000998.jsonl.gz",
+      "records": 10,
+      "sha256": "659b74a57908706b54d7df2d9e939b2d65051d38a843b118c52faf73bec2ee5d"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-001019.jsonl.gz",
+      "records": 10,
+      "sha256": "ee234239b8257015eda91f3dad6d8d0b8c452d969ea846457aa9e1055a47e9ad"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-001034.jsonl.gz",
+      "records": 10,
+      "sha256": "a8847f2b5c4b132c9023f0bd579f4680c6e2c78dc7cc838e3736ad6a2a44edc1"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-001050.jsonl.gz",
+      "records": 10,
+      "sha256": "8d0e00c1f8750d99c913b5a9d6adad87596052473ab0a4d99a81124667279a87"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-001073.jsonl.gz",
+      "records": 10,
+      "sha256": "72b324b48f5d1209aa2cbc7e75064ceda6b6a1d9a75c39090b129d5e605ca7e8"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-001092.jsonl.gz",
+      "records": 10,
+      "sha256": "4f1b1b85956c3a5d932860f8df0df905e9cf82e961031ab4c55979067da69636"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily939-small100-r2-001114.jsonl.gz",
+      "records": 10,
+      "sha256": "3d578a3bef64b2064b9da15756f55299d8695daca445f756a1957aab68cb69bc"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001127.jsonl.gz",
+      "records": 10,
+      "sha256": "ca5d96758addb7668c7af7fa7eb39c062431c8a09eb0725ea71088d0ecbe0acf"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001146.jsonl.gz",
+      "records": 10,
+      "sha256": "9855cf9b645dd82dd578551c005fea50613d974775301ca5f52abbad1e8ca321"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001171.jsonl.gz",
+      "records": 10,
+      "sha256": "98aac135708c9e0383609e580f8e7164b6f5c60695df019cb1e534fa75c2396b"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001193.jsonl.gz",
+      "records": 10,
+      "sha256": "93e94bb97a67f96b11c366b3ece03eb2abf3edddb9696047fc33d06c6aff3d58"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001209.jsonl.gz",
+      "records": 10,
+      "sha256": "92531d4ac6e77570ce3e20599423095ffef3e414c81a7f166857ef52e443f462"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001226.jsonl.gz",
+      "records": 10,
+      "sha256": "ee115e34cb11e5381423eaea30205e7291035e40b9e706f954860ca37de26db9"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001245.jsonl.gz",
+      "records": 10,
+      "sha256": "3fedf2d1b8d8a09caca111e9b8e3e734a4669baf0795c3e31a1270b3d5cdbcda"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001262.jsonl.gz",
+      "records": 10,
+      "sha256": "bf0d9fc3396af51750e5bbfa5ed8b93edaf442e2ffa309cbabeba71bbf16f450"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001277.jsonl.gz",
+      "records": 10,
+      "sha256": "cf5a3becf511b690fc9b3dbcaa4dcf2e1c671081b3211883e54bdbf226092f81"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001298.jsonl.gz",
+      "records": 10,
+      "sha256": "400d85784aa1c237370b3b9be1fa87fde5b8a09976e989592ecb6be0a45c5e97"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001316.jsonl.gz",
+      "records": 10,
+      "sha256": "a0b17930becd46cd61cdd607ca07fc39bff1c90516298d55bf24cbbc557093f6"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001331.jsonl.gz",
+      "records": 10,
+      "sha256": "ba5d98822742d8832fd52be7681d6dafb397d17fff2dc28b7b41ec32f71175ce"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001349.jsonl.gz",
+      "records": 10,
+      "sha256": "df56bf27f57c69b78771a734110252c34f9017e0c37da162879e36de1ff01e59"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001364.jsonl.gz",
+      "records": 10,
+      "sha256": "b063b8232a99c295d8fddd12d27eb48a078cb5c3314122399622622c158096f6"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001377.jsonl.gz",
+      "records": 10,
+      "sha256": "bb46d475bf49b29f10891d0a2eb82673aefb05f2c8b06da522738b33a5178165"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001393.jsonl.gz",
+      "records": 10,
+      "sha256": "e88b598cbd9b0a6e646f08be357328b698acca5055d8601d224abfc5733b8b6a"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001411.jsonl.gz",
+      "records": 10,
+      "sha256": "ff3cf1c647e5a74e77d117f3dca6e197840204ab37c3e34b71095e8d1e6173ce"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001432.jsonl.gz",
+      "records": 10,
+      "sha256": "d8b58e7d07abad1bf1628a8f25a6b2ef2a6ab9ff8122d36d57901d37b0c76a57"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001461.jsonl.gz",
+      "records": 10,
+      "sha256": "1ef756d2a2526e2d0a13f550e7c32ec162bba142d3925191e5e863b514c68a20"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001475.jsonl.gz",
+      "records": 10,
+      "sha256": "00b297fb16fb8aa09aa173a87eb26114299963e9cd49406d049b6cd6a6c119b7"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001491.jsonl.gz",
+      "records": 10,
+      "sha256": "fa429406a6f8f195c9e869c0e6124c8c0c615896177f167a8c25d3270776dd60"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001505.jsonl.gz",
+      "records": 10,
+      "sha256": "75ada14ef394077cd5eb9d47835605924efb0bdf863c560b52af73f7753fa042"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001522.jsonl.gz",
+      "records": 10,
+      "sha256": "02bc3d71d4a97616e4ba2b3507d31f27a8246dff0a80f6de6b294d135aa9ebde"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001544.jsonl.gz",
+      "records": 10,
+      "sha256": "5a11630a46fed3b76daa0d8e536b8e01a41ef4c97c56d3789edc5233b728e77c"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001566.jsonl.gz",
+      "records": 10,
+      "sha256": "f5919afe43a0b40caee230fa0c54a1ec42e7dce14a6cbd851b231683646a2d83"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001592.jsonl.gz",
+      "records": 10,
+      "sha256": "d0eaca3ae3d9e81fc6b15c7d4c211a8d5d1bb260566244166e2267687aaa9785"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001618.jsonl.gz",
+      "records": 10,
+      "sha256": "dc0baa79c3b67e6d96cb55f648c24de1c04780eecca7ce3b0f841aee6449624b"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001641.jsonl.gz",
+      "records": 10,
+      "sha256": "49cd30aece58130d8088430d2175ff9640bb81e47361703920f59cb2e2bf27e1"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001656.jsonl.gz",
+      "records": 10,
+      "sha256": "d07e6f4cc25a38f4ee8f29d18cafb6c74736b2333ba4f6e23d69a40bbb2a804f"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001682.jsonl.gz",
+      "records": 10,
+      "sha256": "38dce7dc134fef5165653ab4fd8f23eaf4fade7799ad9f531fe1358c6c3d938e"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001709.jsonl.gz",
+      "records": 10,
+      "sha256": "97b103f7dc3fa6bfd931b78fa72228e8416f3e7529faa975b26aa407c6794e14"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001735.jsonl.gz",
+      "records": 10,
+      "sha256": "318e11eae92b4fa6c1ee041153f06341fa26fe3e5427aa30d4d5362f6a0f8495"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001758.jsonl.gz",
+      "records": 10,
+      "sha256": "37cbb9ba0d1427155ea8bb181d899029ece50e095e8822e66bffa5e41adee5cd"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001785.jsonl.gz",
+      "records": 10,
+      "sha256": "b21f51f920cae611615095d639f9843ff5a0df6b204b4d87a7f63ca6edfb1f35"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001812.jsonl.gz",
+      "records": 10,
+      "sha256": "976b1b5e50c3151590f3599647dad8faf6473b234d8d7e1798715bf16968d6d2"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001844.jsonl.gz",
+      "records": 10,
+      "sha256": "1a856c8483560e6419c6769735f7367e669b00ffb4bb9aa28a930c9dbf009a39"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001865.jsonl.gz",
+      "records": 10,
+      "sha256": "e9b0548e9217f7a96cb38c5d21fb732620923b91f69df8a94bc546bfb1ac5fe5"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001889.jsonl.gz",
+      "records": 10,
+      "sha256": "14d1ad6ecdb7060378cd50dee9ae0d23df89cec0f2e13044a4a694b3418517b9"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001912.jsonl.gz",
+      "records": 10,
+      "sha256": "73d4fd1458e73f2cab7ce9df77fa3c1266d9e6b81c3dbba67d59a2eefa563a98"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001934.jsonl.gz",
+      "records": 10,
+      "sha256": "683fed411f1180d93ba388a1e73c110424782c82c07755ccc57b14b422a8fc7a"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001952.jsonl.gz",
+      "records": 10,
+      "sha256": "c752c02871b6fa47d6954ef563ff1c8d49e18f23799ca2646de8957cfcfba5b9"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001967.jsonl.gz",
+      "records": 10,
+      "sha256": "b36e4e670e04e655ec4db758ff57fcb63b02acfe593215a4f18815553eebad73"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-001992.jsonl.gz",
+      "records": 10,
+      "sha256": "12db794bb2f9e7ab7838bd46a66a84c1e9d04d1246a62a0393561adb6396fb54"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002012.jsonl.gz",
+      "records": 10,
+      "sha256": "9c6cbca553e8585b6ee24f4275011c0eb1dbaf3fabf6da81905cf381fb6e3e13"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002031.jsonl.gz",
+      "records": 10,
+      "sha256": "31dbc199f86b06a45dff6a07bc80c024584a9f3c7bb3776c9b6f910cbb1a9d24"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002054.jsonl.gz",
+      "records": 10,
+      "sha256": "2774cf5a469ab499b4a4cb80b00fb9c9107d990272c501795a3b2970f702142d"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002067.jsonl.gz",
+      "records": 10,
+      "sha256": "94929d0adb3e3412d69c31b946d0646ac4e933ac6f3b7806c859cef05429fb9c"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002090.jsonl.gz",
+      "records": 10,
+      "sha256": "70b817f29a562cfa750084f00d67443b8862155d48b78e47a07da5b53a4bcc02"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002114.jsonl.gz",
+      "records": 10,
+      "sha256": "1baee1000269cd18f87d2e9da9ad01f4ddc4118bd62fbeb62e23bbc0848d18a4"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily1127-next500-002143.jsonl.gz",
+      "records": 10,
+      "sha256": "83d95d990dc91ba543deae29251e79fd89e8deffe3f0a95b894c99dc7f4a8f3b"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002186.jsonl.gz",
+      "records": 1,
+      "sha256": "61f0b40852f30244db9d6e5a3f33ce5c05aa55b7263b554ed43017f28a6e161f"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002196.jsonl.gz",
+      "records": 1,
+      "sha256": "d6da353fc7d93080b74f1e82c81f9a246da7582519e170a820e7be4035d31315"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002197.jsonl.gz",
+      "records": 1,
+      "sha256": "00e27281f6c7ea69811630a6bc74a829e49f0542bd46d34b8136d52bb81aa8db"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002198.jsonl.gz",
+      "records": 1,
+      "sha256": "b95685de87b994e2c873c35d7fc1cff0aba22a649d9a780d2bbe559e9e3900ba"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002203.jsonl.gz",
+      "records": 1,
+      "sha256": "c24eeaadfc14f5444e8ce2c3c3d2819de41f95b9e8f5dec7d9716eeba82411f3"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002204.jsonl.gz",
+      "records": 1,
+      "sha256": "64d613a3e65821c73b300a62081aaf723c50fbe6b44cac6f0300dceca9790922"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002205.jsonl.gz",
+      "records": 1,
+      "sha256": "35c22e0255e5769c7423a3f3a8a2e1ab5ee1217ddff19f68f558101a4046c1c4"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002206.jsonl.gz",
+      "records": 1,
+      "sha256": "0e8257eef5e1bd41103bbf8ec49e2937b7a5ffbfd0956941648c12bb5f60f456"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002208.jsonl.gz",
+      "records": 1,
+      "sha256": "41929ba78496f97ba97d7f16c83f7e529b91e11a8085586a07ce2a11a685112d"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-single-002215.jsonl.gz",
+      "records": 1,
+      "sha256": "5796d894cdac91f20365656401701ac3d2ec2fb47f6b63fd8219d7aa7318577e"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/isolate-daily2186-batch-fixed-002186.jsonl.gz",
+      "records": 10,
+      "sha256": "e64560f13403938db6fe997fb82af2d2ff94f7a76016eb0a20c6d4f0c8bd05c1"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002216.jsonl.gz",
+      "records": 10,
+      "sha256": "27b4d9b1c80fafa692cffa95d1310f890643798746f906d545c41414b50dae9a"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002246.jsonl.gz",
+      "records": 10,
+      "sha256": "383ea227f222e48eacd5906c2d3ce3560d3f6481ac6e003614355583e26fb7ab"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002276.jsonl.gz",
+      "records": 10,
+      "sha256": "93cc73553f46067a972920d5d1b46ae7a4396a1ed96e4f79a67d4cb35671743c"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002297.jsonl.gz",
+      "records": 10,
+      "sha256": "f80ed0e08207e8fa61e68f1a1de0c91ac94038021ce0d747c0d8bfa663f3b069"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002318.jsonl.gz",
+      "records": 10,
+      "sha256": "8ca2bb20aff8fbe0cd7f5df42aa2cabb201111851ca16768b0e06aebb914d287"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002341.jsonl.gz",
+      "records": 10,
+      "sha256": "4c1fbb7e3dc0d2731aa05201ddb7426dbeed7960aa4a08f1e78cdf7211b4060c"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002369.jsonl.gz",
+      "records": 10,
+      "sha256": "699abac617268d29993b38566d24501c0083e03395e088ee650da417a8bc4960"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002385.jsonl.gz",
+      "records": 10,
+      "sha256": "cbdb55ccad00c00c5aa2260232bfb1419256cd9fa4cd4d33cbbc1f2a30bb566d"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002410.jsonl.gz",
+      "records": 10,
+      "sha256": "50aa7fb54e934423f605becbd1e95070e7ba8c9516c4c08373566e1c97f02cd6"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2216-next100-002441.jsonl.gz",
+      "records": 10,
+      "sha256": "99325b2489a2f7730e135f6bd9058f089c3d62e6e1554f8f6891373c4bad4f89"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/optional-cs-real-row1845.jsonl.gz",
+      "records": 1,
+      "sha256": "8d05f8507e345f122f2e7e4699a0379a95f0b386aa36bef6562384b11b74a118"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/optional-cs-real-row1890.jsonl.gz",
+      "records": 1,
+      "sha256": "a3ce506d690c1083425e4df1cdeaedd3cfff84b69aece13be1c7501790dfd59b"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/optional-cs-real-row1939.jsonl.gz",
+      "records": 1,
+      "sha256": "5effa1bff546f21cf05cef23d9eb7184d0847856bd8c3c7a800ec595d4261242"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/probe-row1295-fixed.jsonl.gz",
+      "records": 1,
+      "sha256": "f60afdee94beae1c189cf84a9f3c54325feb4f42adc6cef87f10d37931125ea2"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/official-limit-row2205.jsonl.gz",
+      "records": 1,
+      "sha256": "f511cf03c45c2bb2f0d28707771efeb53b26f619ab00f195afc5961b8725f0a4"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/minute-session-fixed-row24-000022.jsonl.gz",
+      "records": 1,
+      "sha256": "8fefe56b1f9995848bd0e687dbeb4cce010b08cc1781eb35361d9481b91c35dc"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/minute-session-fixed-row25-000023.jsonl.gz",
+      "records": 1,
+      "sha256": "c3cf1f2c29c70e6a551d594ef4566baabfc519149c8f30729e861427a5f10194"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002456.jsonl.gz",
+      "records": 10,
+      "sha256": "f12670982c601e4bc5a2fbce3eda899903e5f52e6a24c2101e36db57c28fc2df"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002477.jsonl.gz",
+      "records": 10,
+      "sha256": "33a2b76c094321c748083a2dbd302bfc556cb57683676fcdd340bc86b5146347"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002497.jsonl.gz",
+      "records": 10,
+      "sha256": "f10e815a681c94a68b89aa0ec663260ad903c2c2f3f5e403ca0d34017293bfd3"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002511.jsonl.gz",
+      "records": 10,
+      "sha256": "e424d8ed3f393d99665ce94d787649d873d3bd1b3c24eef766507e33209be23d"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002530.jsonl.gz",
+      "records": 10,
+      "sha256": "738d3920ab068b5b5655d24e7b94c8137139390a2995bd2245a448043b3b203f"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002550.jsonl.gz",
+      "records": 10,
+      "sha256": "56d8724bb3280555be4cf2c1c23ec85387ef5f8f09c0e76d798ca58b8854d145"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002569.jsonl.gz",
+      "records": 10,
+      "sha256": "99f0a7bc0511efe92aa40321ba10af7a6ef45515be26177f86a7d7dca0d2768a"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002585.jsonl.gz",
+      "records": 10,
+      "sha256": "55b76a7271e4baf2256b029942e4a9643b69d981238ea3b917506f5b73d10ef0"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002598.jsonl.gz",
+      "records": 10,
+      "sha256": "da2fc9d5716adb7f2f43d0dc82237b4b20e70280b7a08a6e5128852efe1d654a"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2456-next100-002613.jsonl.gz",
+      "records": 10,
+      "sha256": "9e6d35b6a55d5ea09afae12400d9c87c6fce82b279a1de58b7a60b46e8614274"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily2665-preflight-002665.jsonl.gz",
+      "records": 100,
+      "sha256": "d2826d74dc581c3d4d6c493a55728b032e58e97ff544cfb8f0b5cd3e0834f277"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/minute-grain-final-row24-000022.jsonl.gz",
+      "records": 1,
+      "sha256": "497a1b464cacdd4349b8d67528260ef0d061b8301a0103d43f5c77fb7811d8b3"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/minute-grain-final-row25-000023.jsonl.gz",
+      "records": 1,
+      "sha256": "3658fe982b87ef868ba3533206e3ff28987e67feb29074dc33fd51e1d1f7a5e8"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/official-limit-raw-route-fixed-row2205-002203.jsonl.gz",
+      "records": 1,
+      "sha256": "1881bce0f332a92c61eb5c9900714f66b393ee6ee3438f447aafb0085ccfeab5"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/r6-crosspath-minute-row24-25-offset22.jsonl.gz",
+      "records": 2,
+      "sha256": "c664efd3b02e2852959e73968f84fff3f5470cccfe540261be38554cac382e23"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/r6-nested-grain-fixed-row35-36-offset33.jsonl.gz",
+      "records": 2,
+      "sha256": "76c452d7d335d0a296187f88b3181522a9eb39847c4f4dac49f5a412bc2eddfe"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/r6-nested-grain-fixed-row46-47-offset44.jsonl.gz",
+      "records": 2,
+      "sha256": "01b338ca1faadd9bfbc8aa3eae3eeed5855a29a952175ad33b10c1c4101eacdc"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/r6-sigsegv-diagnostic-row3087-offset3085.jsonl.gz",
+      "records": 1,
+      "sha256": "c1c2c348ee2e4f38602d30963fe3b447ed0edb459a4f1a5d415ec5405c5602f8"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/abdi-row3004-fixed.jsonl.gz",
+      "records": 1,
+      "sha256": "c4b8b671b11de03bd8303506dfa3f83e18342f55be50d7ed43226fc28b6a70c0"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003019.jsonl.gz",
+      "records": 20,
+      "sha256": "21d36e114bfc65b4d846110494aaf1ef546883de94579c359a77197bd5a663b6"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003114.jsonl.gz",
+      "records": 20,
+      "sha256": "f273ea20a8db4ab71cd089613d559308573b8d7870a055103a38278a480b03c0"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003186.jsonl.gz",
+      "records": 20,
+      "sha256": "c773bdbd1df94265d4ee20aa5df8566b3e96154d77e437686d93cc0acd1195c4"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003280.jsonl.gz",
+      "records": 20,
+      "sha256": "67d567d6e9203ce63b691032ad6967ab564d50d0495ee53bf2fb280d17512509"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003337.jsonl.gz",
+      "records": 20,
+      "sha256": "4b719900d012ef5d505604c98094ca29dfaabad826527347d032f4008052da09"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003387.jsonl.gz",
+      "records": 20,
+      "sha256": "bfb5b35cb0245573f184458bb8559185cbd35e34bc02827056ddce163cb70837"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003447.jsonl.gz",
+      "records": 20,
+      "sha256": "29348ecdce3ea7935ffbd1df63bf8435e1b7214b00842abc16a056f3b34d7ed0"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003484.jsonl.gz",
+      "records": 20,
+      "sha256": "a9a70c6684949e2e6cad4209703e213da17cba39f0cdf25a741a6c270dfe3bf6"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003529.jsonl.gz",
+      "records": 20,
+      "sha256": "6364483c1376ff4f74ffaf5faee0bb957c086ed2bcd4ee40c55c274ed6bcb388"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3019-external-r5-003605.jsonl.gz",
+      "records": 20,
+      "sha256": "f2fd4e8d4090b2e9b4ea25a5a2c5c189097c34d463cd218f61c7fc1b889d9d5d"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003651.jsonl.gz",
+      "records": 20,
+      "sha256": "0d3b5032a5811d6bd11445030fa4feaf279f3014e87538e4adacb6b549039fd4"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003702.jsonl.gz",
+      "records": 20,
+      "sha256": "264cdd62375d82cd7d6c296a58696468e4e1b92888f63f6aec9d58cfb35c00a1"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003742.jsonl.gz",
+      "records": 20,
+      "sha256": "65d43dbf41549ce3986abff7e3311e508be8fcb9651d0e37d979d66c6077a972"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003773.jsonl.gz",
+      "records": 20,
+      "sha256": "6bf7341348856c253cb16012d8be27daafce4b67cd0bf05908405b9542b736dd"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003798.jsonl.gz",
+      "records": 20,
+      "sha256": "fd61be7b84a4ef9170bc1b2acd441d93646021793eb8e94d1e71f5e32a25f564"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003846.jsonl.gz",
+      "records": 20,
+      "sha256": "1c71d3018536b07eae033859f0ad61d4b20f34bb31637d383ba7df467ce47be5"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003905.jsonl.gz",
+      "records": 20,
+      "sha256": "a199983b18f021819f2b4f001c8b592753675d76120bf3850275359541da464e"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003943.jsonl.gz",
+      "records": 20,
+      "sha256": "7e5f50c24ca87e5f5523e2b33023bc8ef16152b463e9063d7f00b9a9ed4d7538"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-003977.jsonl.gz",
+      "records": 20,
+      "sha256": "b7f223ab896a4aed7714416b409ae9843ac2437d06b215ae4b758c325ba90acc"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily3651-external-r7-004011.jsonl.gz",
+      "records": 20,
+      "sha256": "fc81db4cdd57f332bca831b3a5c6145e8744340d42c8ba430a78eede15a7c107"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004044.jsonl.gz",
+      "records": 50,
+      "sha256": "5cb0ec8f712c9fe1921d7806f36dfa872b8e0a82a94ff2b5c3a7328fb29096c5"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004122.jsonl.gz",
+      "records": 50,
+      "sha256": "6eb19818a6553dd0a40d01bd7e2076e5e349e8e9af1a7f1f35853974681524dc"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004204.jsonl.gz",
+      "records": 50,
+      "sha256": "c7943e8cb7793403469b96e5a47a023836e7359d841fd29ca2707a61bfef2b51"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004292.jsonl.gz",
+      "records": 50,
+      "sha256": "4cc5b4b195890d55e40d9d88a457edcd63e03c3b43b3160d01a391debe5c3a81"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004418.jsonl.gz",
+      "records": 50,
+      "sha256": "31708e56993a872bf3c6adc46ae26c0a4ecabe2faa068d8a44b30efb33c53804"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004642.jsonl.gz",
+      "records": 50,
+      "sha256": "82aa98b4f9a55299661ccf5bae9df3dc239144b6c5161ce354d0090d771981d0"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004735.jsonl.gz",
+      "records": 50,
+      "sha256": "fa91cb5b163e3b007d0a3982855c70395505f345986e263cdf61d6ee6fb36f25"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004822.jsonl.gz",
+      "records": 50,
+      "sha256": "a479c2e03e187d7ca4a485ee24e0964bddc6ae60c6d6000259a207fb530d4826"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004897.jsonl.gz",
+      "records": 50,
+      "sha256": "658ff308e74fcba95edf74a7d34ffd291beb5bc3ed7729388b3e5841e4fbc069"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily4044-external-r8-004977.jsonl.gz",
+      "records": 50,
+      "sha256": "c9c358d5622d047cdbe3792726a81ef628beaf54e132243ff36c0f32b043d554"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005055.jsonl.gz",
+      "records": 50,
+      "sha256": "9e92e3ee44cfc0c7169308b0c6d16d6b0a315d2db295881dfa040ba0efc96ce2"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005138.jsonl.gz",
+      "records": 50,
+      "sha256": "7b5449546b0fe8884b39d69227b7890a62d9e953779e3ceaa43869186f3f65d7"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005221.jsonl.gz",
+      "records": 50,
+      "sha256": "fc5ba4a84263a497c7836933cbb7dc61131b7b657fe3b9e69a18a7e504c71ebe"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005311.jsonl.gz",
+      "records": 50,
+      "sha256": "464e71fe4a07cf27dad73126d7fe6de27fb83c6fcb0335de60a3e44ca84262b3"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005388.jsonl.gz",
+      "records": 50,
+      "sha256": "1c2d1e4bcc8f7c759726b1bb48004d42eb5b01ed608f253539767f06f24073a2"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005473.jsonl.gz",
+      "records": 50,
+      "sha256": "7800da40486f079c3e5b92e75ce2640dab3348bef2edd5d17362251b34fee34a"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005563.jsonl.gz",
+      "records": 50,
+      "sha256": "2f5d44732a5d38191de9978d3fac7b3c018c6a3eb54c0f74273dd8a5d03b50c6"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005646.jsonl.gz",
+      "records": 50,
+      "sha256": "969ace61e5715c5cc33c829fe4bc3542c3daff45998265b1bde3b14354a630fd"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005736.jsonl.gz",
+      "records": 50,
+      "sha256": "6bde3566e0b503d09e2ba26c316b07941eb8e6f0a3edb75c06d62f8c293f54f4"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5055-external-r9-005821.jsonl.gz",
+      "records": 50,
+      "sha256": "caef5258f696576da178b2874a4a578f809cab60789ae22e5a7140e12e41fd68"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/hvg-row2968-fixed.jsonl.gz",
+      "records": 1,
+      "sha256": "af2e9ee119a05354ca112dc0d77b45308094abf0e7fc067bb0e820ee80fa4c21"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/density-row2769-64symbols.jsonl.gz",
+      "records": 1,
+      "sha256": "efb98b908606ec4d0a830c8c15296b78339720fa90f37e1487b708f1017f552c"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/conditional-row2738-64symbols.jsonl.gz",
+      "records": 1,
+      "sha256": "f50cb89ac93b1c6e6b5288a1babfa7238f9a4c7a715d3389a5fb00afeea224cb"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/r6-official-price-exact-row2286.jsonl.gz",
+      "records": 1,
+      "sha256": "a5f7e97ca6b75287e63252d03b70e100984d5644e83e7283a9f8af8846f72625"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/r6-official-price-exact-row2292.jsonl.gz",
+      "records": 1,
+      "sha256": "b245047b4c66ab74a4bfc45a4364906564b95e4232dc2af6307333fd4f2e0952"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/r6-official-price-exact-row2412.jsonl.gz",
+      "records": 1,
+      "sha256": "06ea745f3ea16028cadd6802428e86505d1003c79ca2407efab2bbc467cd7e67"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/r6-official-price-exact-row31593.jsonl.gz",
+      "records": 1,
+      "sha256": "ed2ae228a2dd417e73350abf609b402f71e6b277978b4da16afc9e5f7dd38185"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/amihud-failed18-fixed.jsonl.gz",
+      "records": 18,
+      "sha256": "a180ac84667b4d62833be4cbdde35275fb0f2276abe040056b93d4e469c0ba4c"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-005906.jsonl.gz",
+      "records": 50,
+      "sha256": "62938e1811efcadc09619df9def727ee732fc8bfb89c774c8c3894acd492bb1b"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-006015.jsonl.gz",
+      "records": 50,
+      "sha256": "9200c565b003eb0eb112eab22ddbfd84ab4f7c2f3ee1314b59ed9a14f8310917"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-006104.jsonl.gz",
+      "records": 50,
+      "sha256": "e0b09be310a65f952d767a8f30c78c72d8ae28c7f368c1e78c5ff185c2dd4635"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-006291.jsonl.gz",
+      "records": 50,
+      "sha256": "1cb4fb7a5526fc8f455aaba13c82c60cbcc3e9189ed7624f6e7a1c5900fc1b35"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-006775.jsonl.gz",
+      "records": 50,
+      "sha256": "a1790e8f300f7618bff746b6b42882cef64182a10b342751a143024fbfcd55d0"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-006886.jsonl.gz",
+      "records": 50,
+      "sha256": "c4b4f87fe32a4bf347b84096cf0f58f3f3082c950f4de32421b156d0464b7812"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-007676.jsonl.gz",
+      "records": 50,
+      "sha256": "8d1ac88130389a0a63995e0c57857177b72d6a05250876cf0cca1146b8af0195"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-007726.jsonl.gz",
+      "records": 50,
+      "sha256": "b32c7e837dec294021b728229cd9366574c9fcfd22667eb531bd8554c82b6b1b"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-007776.jsonl.gz",
+      "records": 50,
+      "sha256": "904234f6eec51c57313ebeb35457389a65c89a2d30d2d3a732eedffefaf10234"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-007826.jsonl.gz",
+      "records": 50,
+      "sha256": "cfc1577fe7aeb8844cf388bf10d4630316d026aba6b9954c3bb47ce0aee62dcf"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-008104.jsonl.gz",
+      "records": 50,
+      "sha256": "0f755904298c8d3f0e71f36542cf833637cd668a7092218e0d659127bc3fed3c"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-008163.jsonl.gz",
+      "records": 50,
+      "sha256": "8cc15b15ca77a96cbf006ecbc64b5f16fad05c451149e4b6e7057669dedd215f"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-008257.jsonl.gz",
+      "records": 50,
+      "sha256": "81746a3d6ac7aceb67768105eeb3ce1345699a03c6c85d2e8eb6ad9e2c5db95d"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-008761.jsonl.gz",
+      "records": 50,
+      "sha256": "2ee898c36752113ad32583ce38768a496577f4c900d4bf5cd2bff44eabd3807b"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-008869.jsonl.gz",
+      "records": 50,
+      "sha256": "191d99c07f0b2c3ecdf47637ab0a956bad8c754ead190bd93995af51b95609a1"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-008938.jsonl.gz",
+      "records": 50,
+      "sha256": "f8c4159a98582916e317d42c167c6663d8c6b3f63c6abb54b866c9596e6a97d5"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily5906-external-r10-009010.jsonl.gz",
+      "records": 50,
+      "sha256": "c7962c222657b4b95a310ba66a7c43b042423b9d8a17a3c2d412ee74d25df959"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009374.jsonl.gz",
+      "records": 20,
+      "sha256": "65af8411b9a691cc9c80860a42e6edf08fc067fa3e71820ef6d260cf043de8b9"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009410.jsonl.gz",
+      "records": 20,
+      "sha256": "811d25af97b8b879e4717069d100f00c0fbd2b639d5ae9c0f0d00fcfc32d4ce5"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009446.jsonl.gz",
+      "records": 20,
+      "sha256": "e17de523a6ee7c285f60b07e70bde1bc8fac6a9decf7f25ab9fa561abc070ff8"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009471.jsonl.gz",
+      "records": 20,
+      "sha256": "ea62b8722416683ed35c9168601fd7d91ca69efd77afc2f3e8f6143718bff166"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009529.jsonl.gz",
+      "records": 20,
+      "sha256": "d16327baec26681006beb48f40557d73e2ed4a43905c135901dee8ee5f59e6d0"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009563.jsonl.gz",
+      "records": 20,
+      "sha256": "472585fea6c1e588c5759b890f245b75018045cbcb6eac5845a97816677ea116"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009619.jsonl.gz",
+      "records": 20,
+      "sha256": "c473101847c0b778980ca7c5904871aeb380de34739ac7caaf7d15b07dfebcf3"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9374-external-r11-009654.jsonl.gz",
+      "records": 10,
+      "sha256": "f83a009d8b611e9950284665a4169a9464eb6ec8ce298bf3dbc7a8bd4e6e9d54"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-009680.jsonl.gz",
+      "records": 50,
+      "sha256": "59a6b18c52972fbd93c45d9fa1a30e4bfa2dbfafb94bf3937d3c01d6a834ab32"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-009807.jsonl.gz",
+      "records": 50,
+      "sha256": "c3381be31c2f0e6f238943e1f577b3b9b8d9eb9b878da50320937450eae202b7"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-009933.jsonl.gz",
+      "records": 50,
+      "sha256": "f0fcb19f84130b5452ef7937931a5d74b0dae7171b40fbd9d48ff5b7b4abcfe3"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010089.jsonl.gz",
+      "records": 50,
+      "sha256": "12261f0e53c19a7d52b64e26f2b25d40363adace080d434197908dfe0c8baaf0"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010165.jsonl.gz",
+      "records": 50,
+      "sha256": "f5b9910655c969a002727e73b6c650b0d21e85c752ae49298001940e5f20369c"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010252.jsonl.gz",
+      "records": 50,
+      "sha256": "3e879f0ea144c523d5d18b36867abd819ac93be974b13cf57f73e04bf933331a"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010383.jsonl.gz",
+      "records": 50,
+      "sha256": "e9b83943003a30b2d19b21bc66069fec7640727173c735395e4f8d8f00c13143"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010483.jsonl.gz",
+      "records": 50,
+      "sha256": "cde4bbd8bf7d4e453eb45474d8eab827a88ba15a20d389e3de36460d1f367e15"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010573.jsonl.gz",
+      "records": 50,
+      "sha256": "57d6740393995a5f2ef361ada4d741945c6f6aac9ba083caf7c3397de8411fb3"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily9680-external-r12-010664.jsonl.gz",
+      "records": 50,
+      "sha256": "b7db7dd5dc101e1b2b71319ee369906dd5b05f6941755b810c171b088e3d1a1c"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-010755.jsonl.gz",
+      "records": 50,
+      "sha256": "85fa96f4802dd5b362e145b0eabb8b8cdd7e7c5805614c176398192da8cc6597"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-010842.jsonl.gz",
+      "records": 50,
+      "sha256": "73dae9394454934dbeb4136236e95057f8c1ee65f55a61d513a9eebcf0604966"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-010922.jsonl.gz",
+      "records": 50,
+      "sha256": "673b348cec41125d8db9fbd6a75db946e6b1d947865c713447fc77b13d55e9f9"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011018.jsonl.gz",
+      "records": 50,
+      "sha256": "bd2a0c5305d60af66c0dc0a848784164c747c21387ded056b290a7797a53d98c"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011107.jsonl.gz",
+      "records": 50,
+      "sha256": "c8086bb796dd0e05d5905de3b9de5aa99d96476c0b6f308b8d0a6487dd435612"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011218.jsonl.gz",
+      "records": 50,
+      "sha256": "c0f7338b0bab17f6ae16714ed73077532dc3725715c9251655675c16aaaba553"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011335.jsonl.gz",
+      "records": 50,
+      "sha256": "de4508feb54ad25f9f4e60a29e4d2e13370fe6096474e347235d255507692f52"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011428.jsonl.gz",
+      "records": 50,
+      "sha256": "302e7dc25f644ec37c4972dfabdefc3402f778d3c217ae941a65c0e4dd098cfa"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011490.jsonl.gz",
+      "records": 50,
+      "sha256": "aeef983b299b72fd72f5bce9a63edb78ca0072563a4af5ec968469741f4a7f7f"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily10755-external-r13-011555.jsonl.gz",
+      "records": 50,
+      "sha256": "522f17f5de0dd2977e64b561e2116309a3963e24452f7a412076b4ee4c8868f2"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-011713.jsonl.gz",
+      "records": 50,
+      "sha256": "0e629a508ef3ce96fd17359d2667ec81ddc34d785053a0fbfb3eaa8adbfe4f4b"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-011828.jsonl.gz",
+      "records": 50,
+      "sha256": "be37f54501a2ff0b4faa25f05daf04ede3b470b675fdaec22fd223a1d2cc0ee0"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-011912.jsonl.gz",
+      "records": 50,
+      "sha256": "3f41eae99dc77a3cd31c347c17f47c8563187247edad9443ee8103a5602a37de"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012009.jsonl.gz",
+      "records": 50,
+      "sha256": "e90371e0ae1b3b7892b60f6bf705c4a3add40602306807d8c63618bec267c96b"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012095.jsonl.gz",
+      "records": 50,
+      "sha256": "d474a077d234f4a954771e015d72c372186cc12986c8af00e3bd70fed3a82293"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012157.jsonl.gz",
+      "records": 50,
+      "sha256": "65b9c1a773aea1e93bdf6166c8d77678c813fd947f2a7918e55d8d3c4f45ecbb"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012219.jsonl.gz",
+      "records": 50,
+      "sha256": "4a1054d7fad2183fc06ba843a9d1b77504ed86e42fc815a813ee0bcbcffa0929"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012291.jsonl.gz",
+      "records": 50,
+      "sha256": "e328eb276367d4b1dea3d802ce6649dc95733b69e067920581bfb2b6e8235ac0"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012362.jsonl.gz",
+      "records": 50,
+      "sha256": "45de5c389c7209457922e38a4c664d2fb5d9470502c1a83791c662cd175d8560"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/resume-daily11713-external-r14-012433.jsonl.gz",
+      "records": 50,
+      "sha256": "a878ac79e729c044d7de81262f862e8e17c1b1cfa27c82ee2d457f9ddb355db5"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/cs-support128-r6.jsonl.gz",
+      "records": 28,
+      "sha256": "e00e97225496db484662fb3bbd62f17b8c51b5358773d3b81c23874883b8155d"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/glr-abdi-six-extended-window.jsonl.gz",
+      "records": 6,
+      "sha256": "02cbc2a9289caf0e16020e3a2834097aee1f0194a992e08166913b338cf287bc"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/fiscal-r67-row102274-wide-r17.jsonl.gz",
+      "records": 1,
+      "sha256": "3779fb541c7219c2e20e17723693bb773667f7bbcfe404979796ae688bc0f2d3"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/fiscal-r67-row102298-wide-r17.jsonl.gz",
+      "records": 1,
+      "sha256": "e929260a88696a7f5c32df76caafb5efda44c6c15beb83d152a5f3a46d983177"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/open-limit-failed17-fixed-r18.jsonl.gz",
+      "records": 17,
+      "sha256": "87ee588c717d0dd4cb22a8bbd8816337069c67f45cbbc406c354ccc21a5e83f9"
+    },
+    {
+      "path": "evidence/factor_catalog_20260916/row6170-liquidity-beta-fixed.jsonl.gz",
+      "records": 1,
+      "sha256": "45160ad17bed903e3d3aa43114116947bee019bc8d5c8d7e9e4db78ae1641d3c"
+    },
+    {
+      "path": "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012503.jsonl.gz",
+      "records": 50,
+      "sha256": "e9b42634b484aabc1efbcfc195452380bafaf7545dbb24ee5582749295ad124b"
+    },
+    {
+      "path": "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012610.jsonl.gz",
+      "records": 50,
+      "sha256": "e701f672d6e2a1ec7372c995d848aadd60388242f238c9a06c15e32f02f2668a"
+    },
+    {
+      "path": "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012674.jsonl.gz",
+      "records": 50,
+      "sha256": "49b363441ce3ff78d9d415ca3ffb0352b11620d65c38c6db6f106e0b65e69eb1"
+    },
+    {
+      "path": "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012760.jsonl.gz",
+      "records": 50,
+      "sha256": "2a99921cc98196e387f6642e9fc63fc456cf39006b739dc21014e52e0356efd8"
+    },
+    {
+      "path": "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012840.jsonl.gz",
+      "records": 50,
+      "sha256": "efe5cff1bf4c422ba92f23430622caab7401eae7484d547c7fd95d88c2aa64ac"
+    },
+    {
+      "path": "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012901.jsonl.gz",
+      "records": 50,
+      "sha256": "ac96542af03b6c8ba47b55ec15b5d2cba1a7ea6368d962f75e8727abd43735ef"
+    },
+    {
+      "path": "evidence/factor_catalog_20260915/resume-daily12503-external-r15-012966.jsonl.gz",
+      "records": 50,
+      "sha256": "21c9c95d795ea5d70d61842c581a4f64e5f23cc9646ca7ad1256988ed38512dd"
+    },
+    {
+      "path": "evidence/factor_catalog_20260915/resume-daily12503-external-r15-013024.jsonl.gz",
+      "records": 50,
+      "sha256": "9e262aaa4415b40beba75f1788d661429f48ed24d3da0124e808ff48e9af4a53"
+    },
+    {
+      "path": "evidence/factor_catalog_20260915/resume-daily12503-external-r15-013132.jsonl.gz",
+      "records": 50,
+      "sha256": "467d919dc2eb6591b45ec6634fd0808da7194be0fa83cbe75b45d1631d1158ac"
+    },
+    {
+      "path": "evidence/factor_catalog_20260915/resume-daily12503-external-r15-013193.jsonl.gz",
+      "records": 50,
+      "sha256": "e99ead8415176aabbbbd70efc9ea4f398d4279ce292264dc54b5626bdfd3c832"
+    },
+    {
+      "path": "evidence/factor_catalog_20260916/intraday-limit-redesign-real-smoke.jsonl.gz",
+      "records": 1,
+      "sha256": "765448515d6669d05ca3c4bd79cc9ed1adce8df86cfeb86fe8c586f2f7947c1c"
+    },
+    {
+      "path": "evidence/factor_catalog_20260916/intraday-limit-redesign-real-smoke-r2.jsonl.gz",
+      "records": 1,
+      "sha256": "74ab8ad182fa42be8a57a436a131a9cbea6c8447d40336fb2f9f71051811331e"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/compile-full-latest.jsonl.gz",
+      "records": 114132,
+      "sha256": "383a774453b9291e4e624d7306acf15c89b6c20c34313a100dc671f365fd7ac6"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/compile-recipe-r6.jsonl.gz",
+      "records": 5144,
+      "sha256": "143791d354f6dc1b9454e4d59ebfdaaede4d6bc665c2b562b4cb4b31efe42d88"
+    },
+    {
+      "path": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/compile-recipe-r6-tail.jsonl.gz",
+      "records": 2097,
+      "sha256": "1bea1c6267ec2bc6ea1fe9e4b6a8191f17ae7c85e2effe6f344738f94f9fecce"
+    }
+  ],
+  "scope": "checkpoint_not_final_all_factor_execution",
+  "validation_scope": "historical_formula_matched_not_current_code_certification"
+}

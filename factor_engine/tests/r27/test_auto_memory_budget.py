@@ -195,22 +195,28 @@ def test_rlimit_address_space_zero_denies_even_when_rss_headroom_positive():
 
 # -- ResourceBroker MemoryLease 软池 ----------------------------------------
 
-def test_memory_lease_respects_global_hard_invariant():
-    # (d) SUM(leases) + candidate <= ExecutionBudget 强制。
+def test_memory_lease_respects_global_hard_invariant(monkeypatch):
+    # Freeze external measurements, not the production lease/accounting logic.
+    from factor_engine.runtime import resource_governor
     broker = _broker(8 * 1024**3)
+    snapshot = broker.snapshot()
+    monkeypatch.setattr(broker, "_refresh", lambda force=False: snapshot)
+    remaining = resource_governor._cgroup_v2_memory_remaining_bytes()
+    monkeypatch.setattr(resource_governor, "_cgroup_v2_memory_remaining_bytes", lambda: remaining)
     exec_budget = broker.execution_budget()
     assert exec_budget > 0
-    # 先拿整块（占满 ExecutionBudget）。
-    lease1 = broker.acquire_memory(MemoryLeaseKind.COMPUTE, exec_budget)
+    # Compute must leave egress room. An egress lease can consume the full
+    # shared pool; use it to test the global boundary without bypassing reserve.
+    assert broker.acquire_memory(MemoryLeaseKind.COMPUTE, exec_budget) is None
+    lease1 = broker.acquire_memory(MemoryLeaseKind.RESULT_QUEUE, exec_budget)
     assert lease1 is not None
-    assert broker._lease_sum_bytes() <= exec_budget
-    # 超过 budget → 拒绝（fail-closed）。
-    over = broker.acquire_memory(MemoryLeaseKind.COMPUTE, 1)
-    assert over is None
-    assert broker._lease_sum_bytes() <= exec_budget
-    # 释放后可再拿。
+    assert broker._lease_sum_bytes() == exec_budget
+    assert broker.acquire_memory(MemoryLeaseKind.RESULT_QUEUE, 1) is None
+    assert broker._lease_sum_bytes() == exec_budget
     lease1.release()
-    assert broker.acquire_memory(MemoryLeaseKind.COMPUTE, exec_budget) is not None
+    lease2 = broker.acquire_memory(MemoryLeaseKind.RESULT_QUEUE, exec_budget)
+    assert lease2 is not None
+    lease2.release()
 
 
 def test_soft_pool_borrowing_idle_pool_lends_to_busy_pool():

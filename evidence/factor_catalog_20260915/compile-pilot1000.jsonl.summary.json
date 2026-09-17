@@ -1,0 +1,49 @@
+{
+  "processed": 1000,
+  "counts": {
+    "COMPILED": 993,
+    "COMPILE_FAILED": 7
+  },
+  "seconds": 17.758604767965153,
+  "rows_per_second": 56.31073009766542,
+  "failures": [
+    {
+      "error_type": "TypedInputContractError",
+      "error": "ts_max_drawdown_activity_cost on return input input[1]: drawdown requires a level / wealth-index input (audit P1-T)",
+      "count": 4,
+      "example": {
+        "source_row": 703,
+        "formula": "ts_max_drawdown_activity_cost(vwap, abs(ret), window=60)"
+      }
+    },
+    {
+      "error_type": "TypedInputContractError",
+      "error": "ts_spectral_entropy requires typed input in ['ReturnDecimal']; got 'NonNegativeActivity'",
+      "count": 1,
+      "example": {
+        "source_row": 3,
+        "formula": "where(gt(ts_spectral_entropy(turnover_ratio, window=60), 0.75), neg(ts_mean(ret, 5)), ts_sum(ret, 20))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_regression_tstat.add_intercept: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_regression_tstat.add_intercept [planning]: add_intercept must be a boolean, not int (1)",
+      "count": 1,
+      "example": {
+        "source_row": 851,
+        "formula": "rank(ts_regression_tstat(ret, log_returns(volume), 20, 10, 1))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_regression_intercept.add_intercept: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_regression_intercept.add_intercept [planning]: add_intercept must be a boolean, not int (1)",
+      "count": 1,
+      "example": {
+        "source_row": 925,
+        "formula": "rank(ts_regression_intercept(ret, log_returns(volume), 20, 10, 1))"
+      }
+    }
+  ],
+  "failure_groups_truncated": false,
+  "scope": "compile_preflight_only_not_execution_certification"
+}

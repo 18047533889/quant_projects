@@ -1,0 +1,30 @@
+{
+  "recipe_set": "r13_nested",
+  "counts": {
+    "rows": 114132,
+    "execution:EXECUTED": 7911,
+    "execution:EXECUTED_ALL_NONFINITE": 186,
+    "execution:NOT_RUN": 105856,
+    "execution:EXECUTION_FAILED": 26,
+    "execution:COMPILE_FAILED": 119,
+    "execution:PREPARE_FAILED": 14,
+    "execution:NATIVE_CRASH": 20,
+    "changed": 30,
+    "changed_static:FIELDS_UNRESOLVED": 10,
+    "changed_compile:COMPILED": 24,
+    "changed_static:PARSED_FIELDS_BOUND": 19,
+    "changed_compile:COMPILE_FAILED": 6,
+    "changed_static:PARSE_FAILED": 1,
+    "migration_rejected": 435
+  },
+  "unique_factor_ids": 113893,
+  "source_checkpoint": "evidence/factor_catalog_20260916/factor_catalog_review_r13c.csv.gz",
+  "source_sha256": "fb11fcd9f1a8d90763bd96714da73e70a3045edf665acc821477c5d154aed5b1",
+  "output_sha256": {
+    "checkpoint": "63b28cadbfba0660a37b29711b8a6b5203fba10304eedb6f742dd67aa3ad1514",
+    "decisions": "b0294b95ec8e193815b3f1ffac09042f5949c1ec1b90b6ae629cacca56ea47f7",
+    "input": "25863690d2a37448e21f5b371d3486afeecf3758abbcca727e3f27b8325105e0"
+  },
+  "scope": "reviewed_changes_compile_not_execution",
+  "authorization": "user requested explanation-backed DSL completion; explicit decisions retained"
+}

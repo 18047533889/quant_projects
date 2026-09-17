@@ -1,0 +1,2047 @@
+................F.FF.F............                                       [100%]
+=================================== FAILURES ===================================
+____________________ test_micro_batch_coalesces_cheap_roots ____________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x79eb002bd100>
+
+    def test_micro_batch_coalesces_cheap_roots(monkeypatch):
+        """20 个低成本 root → micro_batch_task_count < 20，且 20 个结果全部正确。"""
+        monkeypatch.setenv("FACTOR_ENGINE_HYBRID_FORCE", "thread")
+        sched = _make_scheduler()
+        dag = _bare_dag(20)
+    
+        def _execute_root(task):
+            return f"v:{task.factor_name}"
+    
+>       out = sched.run(dag, backend=None, ctx=_Ctx(), execute_root=_execute_root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+factor_engine/tests/r39/test_perf_scheduler_2026_08.py:285: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/runtime/adaptive_batch_scheduler.py:1370: in run
+    return self._run_impl(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <factor_engine.runtime.adaptive_batch_scheduler.AdaptiveBatchScheduler object at 0x79eb02c7ce00>
+plan = PhysicalFactorDAG(tasks={'root:F0': PhysicalFactorTask(task_id='root:F0', op='add', task_type='ROOT', inputs=(), consu..., 'root:F12', 'root:F13', 'root:F14', 'root:F15', 'root:F16', 'root:F17', 'root:F18', 'root:F19'), writers=(), meta={})
+backend = None
+ctx = <factor_engine.tests.r39.test_perf_scheduler_2026_08._Ctx object at 0x79eb002bc650>
+execute_root = <function test_micro_batch_coalesces_cheap_roots.<locals>._execute_root at 0x79eb002ed440>
+materialize_shared = <function AdaptiveBatchScheduler._run_impl.<locals>.<lambda> at 0x79eb002ed580>
+sink = None, result_handler = None, input_dq_check = False
+input_dq_strict = True, input_dq_thresholds = None
+
+    def _run_impl(
+        self,
+        plan: SchedulerPlan,
+        *,
+        backend: Any,
+        ctx: Any,
+        execute_root: Callable[[PhysicalFactorTask], Any] | None = None,
+        materialize_shared: Callable[[str, Any], Any] | None = None,
+        sink: StreamingResultSink | None = None,
+        result_handler: Callable[[str, Any], None] | None = None,
+        input_dq_check: bool = False,
+        input_dq_strict: bool = True,
+        input_dq_thresholds: Any = None,
+    ) -> dict[str, Any]:
+        """执行 DAG：read waves + ready queue + admission + FIRST_COMPLETED。
+    
+        R33 升级：
+            - P0-016 read wave 在 SOURCE_SCAN ready 时真实执行（prefetch union 列
+              一次 → BufferRef 进结果表 → consumers 复用共享缓存）。
+            - P0-008 barrier 规划视图自动提交（不占 resource lease）。
+            - P0-038 ``running < dynamic_concurrency_limit`` 显式并发闸。
+            - P0-039 ready set 按 priority 排序主导 admission。
+            - P0-040 ``wait(FIRST_COMPLETED)`` 事件驱动（不再固定 50ms 轮询）。
+        """
+        # 本次 run 的 ctx（shard 时间窗 / 真实交易日历推导用，P0-009）。
+        self._run_ctx = ctx
+        from factor_engine.runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
+        from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
+    
+        def _default_execute_root(task: PhysicalFactorTask) -> Any:
+            # R31-P0-002：lowerer 生成的 ROOT task 的 node_ref 是裸 plan；
+            # 旧 DAGPlan 路径 node_ref 是 FactorPlan（带 .root）。
+            node = getattr(task, "node_ref", None)
+            plan = getattr(node, "root", node)
+            result, _path = _execute_root_with_path(
+                backend, plan, ctx, run_mode=getattr(ctx, "run_mode", None),
+                factor_name=task.factor_name,
+                task_id=task.task_id,
+                factor_id=task.factor_name,
+            )
+            return result
+    
+        execute_root = execute_root or _default_execute_root
+        materialize_shared = materialize_shared or (
+            lambda sid, node: _materialize_shared_subplan(backend, node, ctx, sid)
+        )
+        self._input_dq_reports = []
+        sink = sink or self.sink
+        # 接受 SchedulerPlan（含 physical_dag）或裸 PhysicalFactorDAG。
+        dag = getattr(plan, "physical_dag", plan)
+    
+        pending: list[str] = dag.topological_order()
+        committed: set[str] = set()
+        futures: dict[str, Future] = {}
+        # R31-005: future → task_id / lease 双向绑定（失败/取消也能知道归属并释放）。
+        future_to_task_id: dict[Future, str] = {}
+        future_leases: dict[Future, ReservationLease] = {}
+        self._cleanup_leases = future_leases
+        # R31-P0-022：fusion group 登记（root task_id → group）。
+        fusion_groups = list(getattr(plan, "fusion_groups", []) or [])
+        group_by_root: dict[str, Any] = {}
+        fusion_done: set[str] = set()
+        future_group_roots: dict[Future, tuple[str, ...]] = {}
+        for _g in fusion_groups:
+            for _tid in _g.roots:
+                group_by_root[_tid] = _g
+        remaining = set(pending)
+        # R39-PERF-018/019：本 run 的 micro-batch 状态 + 结构化性能计数。
+        micro_batched: set[str] = set()
+        future_micro_batch_roots: dict[Future, tuple[str, ...]] = {}
+        #: microbatch key -> 合成资源契约（token-sum 门用其真实 footprint）。
+        micro_batch_contracts: dict[str, Any] = {}
+        self._perf_metrics = {
+            "future_count": 0,
+            "factor_count": sum(
+                1
+                for _t in dag.tasks.values()
+                if getattr(_t, "task_type", "") == TASK_ROOT
+            ),
+            "micro_batch_task_count": 0,
+            "micro_batch_root_count": 0,
+            "scheduler_wait_polling_count": 0,
+        }
+        # R33-P0-016：read wave 真实执行 trace。
+        self._wave_summary = {"waves_planned": 0, "waves_executed": 0, "events": []}
+        self._scheduler_stats: dict[str, Any] = {}
+        virtual_done = 0
+        real_done = 0
+        wave_scan_done = 0
+        admitted_this_round = 0
+        no_progress_rounds = 0
+        while remaining or futures:
+            # R31-069/P1-040：取消 → 不再 admit 新 task；无在跑任务时提前结束。
+            if self._cancelled and not futures:
+                self._explain(
+                    f"CANCELLED: stopping with {len(remaining)} pending tasks not admitted"
+                )
+                break
+            # R40 #96: request-scoped CancellationToken —— cancel/deadline 一到，
+            # 若无在跑 future 则提前结束（有在跑 future 时 _admit_and_run 拒新 admission）。
+            try:
+                from factor_engine.runtime.exceptions import get_active_cancellation_token
+    
+                _req_token = get_active_cancellation_token()
+                if (
+                    _req_token is not None
+                    and (_req_token.is_cancelled or _req_token.expired)
+                    and not futures
+                ):
+                    self._cancelled = True
+                    self._explain(
+                        f"REQUEST_CANCELLED: stopping with {len(remaining)} "
+                        "pending tasks not admitted"
+                    )
+                    break
+            except Exception:  # noqa: BLE001
+                pass
+                self._explain(
+                    f"CANCELLED: stopping with {len(remaining)} pending tasks not admitted"
+                )
+                break
+            # P0-023：writer fatal → 立即停止 admission（不等 finish() 才暴露）——
+            # compute 不再往已死的 writer 队列塞结果。
+            if sink is not None and getattr(sink, "fatal_error", None) is not None:
+                self._explain(
+                    f"SINK_FATAL: writer failed ({type(sink.fatal_error).__name__}); "
+                    "stopping admission"
+                )
+                break
+            # R36 P0-002/003：每个 control tick 消费 broker 的 ResourceDecision——
+            # 压力升高 AIMD fast down、压力解除稳定后 slow up、动态 budgets
+            # （wave/block/sink）全部在此刷新（§301 伪代码 scheduler.set_targets）。
+            decision = self.broker.resource_decision(
+                job_memory_lease_bytes=self._job_memory_cap(),
+                sink_backpressure=float(sink.backpressure_ratio) if sink is not None else 0.0,
+            )
+            self._last_decision = decision
+            # R36 P0-010：dynamic read wave（§35/36）——运行中不拆已执行 wave，
+            # 只影响后续 plan / 新 wave。
+            self.wave_memory_budget = int(decision.read_wave_bytes)
+            # R38 P0-043（§17）：sink 队列预算随压力弹性调整（缩容不丢 item，
+            # producer 阻塞等消费降到新 target 以下）。
+            if sink is not None:
+                try:
+                    sink.set_target_bytes(int(decision.result_queue_bytes))
+                except Exception:
+                    pass
+            # R38 P0-041（§16）：wave 预算显著缩小时，对未执行 SOURCE_SCAN 重排
+            # wave（运行中压力变大 → 已生成的 read waves 重新拆小）。
+            try:
+                self._maybe_repartition_waves(plan, dag, committed)
+            except Exception:
+                pass
+            # 0) read waves：SOURCE_SCAN ready → 真实 scan（R33-P0-016）。
+            wave_scan_done += self._execute_read_waves(
+                plan, dag, committed, remaining, ctx,
+                input_dq_check=input_dq_check,
+                input_dq_strict=input_dq_strict,
+                input_dq_thresholds=input_dq_thresholds,
+                defer_on_pressure=True,
+            )
+            # 0.5) barrier 规划视图自动提交（R33-P0-008，不占 lease）。
+            virtual_done += self._admit_virtual(dag, remaining, committed, futures)
+            # 1) fusion group admission：组内全部 root 就绪 → 一次 native query。
+            for group in fusion_groups:
+                gkey = f"fusion:{group.group_id}"
+                if gkey in futures or gkey in fusion_done:
+                    continue
+                roots = [t for t in group.roots if t in dag.tasks]
+                if not roots or any(t in futures or t in committed for t in roots):
+                    continue
+                if not all(all(p in committed for p in dag.tasks[t].inputs) for t in roots):
+                    continue
+                if len(futures) >= self._dynamic_concurrency_limit(sink):
+                    self._explain(
+                        f"fusion group {group.group_id}: deferred (concurrency limit)"
+                    )
+                    continue
+                leases: list[ReservationLease] = []
+                ok = True
+                for t in roots:
+                    contract = dag.tasks[t].resource_contract
+                    if contract is not None:
+                        lease = self._reserve_task(contract, task_id=t)
+                        if lease is None:
+                            ok = False
+                            break
+                        leases.append(lease)
+                if not ok:
+                    for lease in leases:
+                        lease.release()
+                    continue
+                try:
+                    future = self._submit(
+                        group.backend,
+                        _dispatch_fusion, group, dag.tasks, backend, ctx, execute_root,
+                        prefer=self._execution_policy,
+                    )
+                except BaseException:
+                    _release_lease(leases)
+                    raise
+                futures[gkey] = future
+                future_to_task_id[future] = gkey
+                future_leases[future] = leases
+                future_group_roots[future] = tuple(roots)
+                for t in roots:
+                    remaining.discard(t)
+                admitted_this_round += 1
+                self._perf_metrics["future_count"] += 1
+                self._explain(
+                    f"fusion group {group.group_id}: admitted {len(roots)} roots "
+                    f"(backend={group.backend})"
+                )
+            # 2) admission：predecessor 全 committed 的 executable task，按 priority
+            #    排序主导（R33-P0-039）。显式并发上限（R33-P0-038）。
+            # 2.0) R38 P1-065：P99 已超 SafeEnvelope 的 ready ROOT 在首次 admission
+            #     前就真实 pre-shard（不等 200 轮 no-progress）。
+            self._maybe_preshard_oversized(dag, remaining)
+            concurrency_limit = self._dynamic_concurrency_limit(sink)
+            cpu_token_budget = self._decision_cpu_token_budget()
+            ready: list[tuple[float, str]] = []
+            for tid in remaining:
+                if tid in futures or tid in committed or tid in group_by_root:
+                    continue
+                task = dag.tasks[tid]
+                if not task.executable:
+                    continue
+                if not all(p in committed for p in task.inputs):
+                    continue
+                priority = self._priority_score(dag, task)
+                ready.append((priority, tid))
+            ready.sort(reverse=True)
+            # 2.1) R39-PERF-018：低成本 ready ROOT 合并成 micro-batch（scheduler
+            #      dispatch coalescing，不是 native fusion）。先 micro-batch（共享
+            #      backend + axis + source buffers 的 cheap root 一组一个 Future），
+            #      剩余 root 再逐 root 走原有 admission。admission 仍走 broker
+            #      try_reserve（R36/R37/R38 资源治理原样保留），但 micro-batch 是
+            #      串行执行单元 → 用合成契约（真实 footprint）计一份租约。
+            if not self._cancelled:
+                try:
+                    stage = self.broker.pressure_stage()
+                except Exception:
+                    stage = ""
+                if stage not in {"PRESSURE_3", "PRESSURE_4", "CRITICAL"} and \
+                        os.environ.get("FACTOR_ENGINE_MICRO_BATCH") != "0":
+                    micro_batches = self._plan_micro_batches(
+                        ready, dag, group_by_root, micro_batched
+                    )
+                    for mb in micro_batches:
+                        if len(futures) >= concurrency_limit:
+                            self._explain(
+                                f"microbatch: deferred (concurrency_limit={concurrency_limit})"
+                            )
+                            break
+                        mb_key = f"microbatch:{self._next_micro_batch_id()}"
+                        mb_contract = self._micro_batch_contract(mb, dag)
+                        lease = None
+                        if mb_contract is not None:
+                            lease = self._reserve_task(
+                                mb_contract, task_id=mb_key
+                            )
+                            if lease is None:
+                                self._explain(
+                                    f"microbatch {mb_key}: deferred (admission)"
+                                )
+                                continue
+                        # P0-017：micro-batch 合成契约的 CPU token 也受
+                        # ``target_cpu_tokens`` 约束（token-sum 门）。
+                        if cpu_token_budget is not None:
+                            mb_tokens = (
+                                int(getattr(mb_contract, "cpu_tokens", 0) or 0)
+                                if mb_contract is not None
+                                else 0
+                            )
+                            running_tokens = self._running_cpu_tokens(
+                                futures, dag, micro_batch_contracts
+                            )
+                            if running_tokens + mb_tokens > cpu_token_budget:
+                                _release_lease(lease)
+                                self._explain(
+                                    f"microbatch {mb_key}: deferred (cpu_tokens "
+                                    f"{running_tokens}+{mb_tokens} > "
+                                    f"target_cpu_tokens={cpu_token_budget})"
+                                )
+                                continue
+                        # P0-015：消费的 CSE 共享 sid 在消费期内 pin（同逐 root 路径）。
+                        for tid in mb.roots:
+                            _t = dag.tasks.get(tid)
+                            if _t is not None:
+                                self._pin_consumed_sids(ctx, _t)
+                        import time
+    
+                        for tid in mb.roots:
+                            self._task_started_at[tid] = time.monotonic() * 1000.0
+                        try:
+                            future = self._submit(
+                                mb.backend, dispatch_micro_batch, mb.roots, dag.tasks,
+                                execute_root, prefer=self._execution_policy,
+                            )
+                        except BaseException:
+                            _release_lease(lease)
+                            raise
+                        futures[mb_key] = future
+                        future_to_task_id[future] = mb_key
+                        future_micro_batch_roots[future] = mb.roots
+                        if mb_contract is not None:
+                            future_leases[future] = lease
+                            micro_batch_contracts[mb_key] = mb_contract
+                        for tid in mb.roots:
+                            micro_batched.add(tid)
+                            remaining.discard(tid)
+                        admitted_this_round += 1
+                        self._perf_metrics["future_count"] += 1
+                        self._perf_metrics["micro_batch_task_count"] += 1
+                        self._perf_metrics["micro_batch_root_count"] += len(mb.roots)
+                        self._explain(
+                            f"microbatch {mb_key}: {len(mb.roots)} roots "
+                            f"(backend={mb.backend}, work={mb.estimated_total_work:.0f})"
+                        )
+            # 2.2) 逐 root admission（与 R33 相同；跳过已在 micro-batch 中的 root）。
+            for _priority, tid in ready:
+                if tid in futures or tid in committed or tid in micro_batched:
+                    continue
+                if len(futures) >= concurrency_limit:
+                    self._explain(f"task={tid}: deferred (concurrency_limit={concurrency_limit})")
+                    break
+                # P0-017：CPU token 总和也受 ``target_cpu_tokens`` 约束——任务数达标
+                # 但 token 总和已满（8-thread DuckDB 占 8 token）时不再 admit。
+                task = dag.tasks[tid]
+                if cpu_token_budget is not None:
+                    token_cost = int(getattr(task.resource_contract, "cpu_tokens", 0) or 0)
+                    running_tokens = self._running_cpu_tokens(
+                        futures, dag, micro_batch_contracts
+                    )
+                    if running_tokens + token_cost > cpu_token_budget:
+                        if not futures and running_tokens == 0:
+                            decision = self.broker.request_minimum_cpu_width(
+                                task.resource_contract, decision=self._last_decision)
+                            self._last_decision = decision
+                            cpu_token_budget = int(decision.target_cpu_tokens)
+                            concurrency_limit = 1
+                            self._explain(f"task={tid}: broker minimum CPU width admitted={cpu_token_budget}")
+                        else:
+                            self._explain(
+                                f"task={tid}: deferred (cpu_tokens {running_tokens}+"
+                                f"{token_cost} > target_cpu_tokens={cpu_token_budget})"
+                            )
+                            continue
+                future, lease = self._admit_and_run(
+                    task,
+                    backend=backend,
+                    ctx=ctx,
+                    execute_root=execute_root,
+                    materialize_shared=materialize_shared,
+                )
+                if future is not None:
+                    futures[tid] = future
+                    future_to_task_id[future] = tid
+                    if lease is not None:
+                        future_leases[future] = lease
+                    remaining.discard(tid)
+                    admitted_this_round += 1
+                    self._perf_metrics["future_count"] += 1
+            # 3) FIRST_COMPLETED：有 future 时等第一个完成（R33-P0-040 事件驱动）。
+            # R39-PERF-019：正常路径不依赖周期 polling——wait 事件驱动返回非空
+            # done；只有 wait 因 timeout 兜底返回空（watchdog/deadlock fallback）
+            # 才计一次 ``scheduler_wait_polling_count``（happy path 应为 0）。
+            done: set[Future] = set()
+            if futures:
+                done = wait(list(futures.values()), timeout=_EVENT_WAIT_TIMEOUT_S,
+                            return_when=FIRST_COMPLETED)[0]
+                if not done:
+                    self._perf_metrics["scheduler_wait_polling_count"] += 1
+            for future in done:
+                key = future_to_task_id.pop(future, None)
+                if key is None:
+                    continue
+                lease = future_leases.pop(future, None)
+                self._processing_lease = lease
+                futures.pop(key, None)
+                # R39-PERF-018：micro-batch future 完成 → 逐 root 处理（结果 /
+                # 失败按 root 独立；成功 root 照常提交，失败 root 走原有 retry/raise）。
+                # 整个 micro-batch 只持有一份合成租约（``lease``），在组内全部
+                # root 处理完一次性释放（exactly once）。
+                mb_roots = future_micro_batch_roots.pop(future, None)
+                if mb_roots is not None:
+                    micro_batch_contracts.pop(key, None)
+                    try:
+                        results_by_root, failures_by_root = future.result(timeout=1.0)
+                    except Exception as exc:  # noqa: BLE001
+                        _release_lease(lease)
+                        kind = classify_error(exc)
+                        for _tid in mb_roots:
+                            micro_batched.discard(_tid)
+                            if _tid not in dag.tasks:
+                                continue
+                            if kind == ERROR_OOM:
+                                if self._handle_oom(_tid, exc, dag, remaining):
+                                    continue
+                                raise
+                            retries = self._retries_remaining.get(_tid, _inner_retry_default())
+                            if kind != ERROR_TRANSIENT or retries <= 0:
+                                raise
+                            self._retries_remaining[_tid] = retries - 1
+                            remaining.add(_tid)
+                        self._explain(
+                            f"microbatch {key}: FUTURE_FAILED "
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                        continue
+                    for _tid in mb_roots:
+                        micro_batched.discard(_tid)
+                        # P0-010 attempt 隔离：OOM replan 后旧 root 已不在 dag.tasks
+                        # → 结果/异常都不触碰新 DAG 状态（租约在组末统一释放）。
+                        if _tid not in dag.tasks:
+                            continue
+                        if _tid in failures_by_root:
+                            _exc = failures_by_root[_tid]
+                            _kind = classify_error(_exc)
+                            if _kind == ERROR_OOM:
+                                if self._handle_oom(_tid, _exc, dag, remaining):
+                                    continue
+                                self._explain(
+                                    f"task={_tid}: OOM_NOT_REPLANNABLE "
+                                    f"{type(_exc).__name__}: {_exc}"
+                                )
+                                raise _exc
+                            _retries = self._retries_remaining.get(_tid, _inner_retry_default())
+                            if _retries > 0 and _kind == ERROR_TRANSIENT:
+                                self._retries_remaining[_tid] = _retries - 1
+                                self._explain(
+                                    f"task={_tid}: FAILED {type(_exc).__name__}: "
+                                    f"{_exc} (class={_kind}, retrying, "
+                                    f"{_retries - 1} left)"
+                                )
+                                remaining.add(_tid)
+                                continue
+                            self._explain(
+                                f"task={_tid}: FAILED_FATAL {type(_exc).__name__}: "
+                                f"{_exc} (class={_kind})"
+                            )
+                            raise _exc
+                        committed.add(_tid)
+                        real_done += 1
+                        self._record_timing(_tid, dag.tasks[_tid])
+                        self._record_task_calibration(
+                            _tid, dag.tasks[_tid], results_by_root[_tid]
+                        )
+                        _tt = dag.tasks[_tid].task_type
+                        if _tt in (TASK_ROOT, TASK_MERGE):
+                            if sink is not None:
+                                if not sink.submit(
+                                    dag.tasks[_tid].factor_name, results_by_root[_tid]
+                                ):
+                                    self._explain(
+                                        f"sink.submit FALSE (microbatch) for "
+                                        f"{dag.tasks[_tid].factor_name} — writer "
+                                        "fatal; abort generation"
+                                    )
+                                    raise RuntimeError(
+                                        f"sink.submit returned False for "
+                                        f"{dag.tasks[_tid].factor_name} "
+                                        "(R39-PERF-018: writer failure must abort)"
+                                    )
+                            if result_handler is not None:
+                                result_handler(
+                                    dag.tasks[_tid].factor_name, results_by_root[_tid]
+                                )
+                            elif sink is None:
+                                self._results[dag.tasks[_tid].factor_name] = (
+                                    results_by_root[_tid]
+                                )
+                        if _tt in (TASK_ROOT, TASK_MERGE):
+                            self._release_consumed(dag, _tid, ctx)
+                    _release_lease(lease)
+                    continue
+                # P0-010 attempt 隔离：OOM replan 后旧 attempt 的 in-flight future
+                # 完成时其 task id 已不在 dag.tasks（被 ``:attempt:N:`` 新 id 取代）→
+                # 直接丢弃（结果/异常都不触碰新 DAG 状态，绝不写入新 partial map）。
+                if key not in dag.tasks and not key.startswith("fusion:"):
+                    _release_lease(lease)
+                    continue
+                try:
+                    _ret_key, result = future.result(timeout=1.0)
+                except Exception as exc:  # noqa: BLE001
+                    _release_lease(lease)
+                    kind = classify_error(exc)
+                    # R38 P0-004/005（§5）：OOM → smaller-shape replan，然后重试。
+                    if kind == ERROR_OOM:
+                        if self._handle_oom(key, exc, dag, remaining):
+                            continue
+                        self._explain(
+                            f"task={key}: OOM_NOT_REPLANNABLE {type(exc).__name__}: {exc}"
+                        )
+                        raise
+                    retries = self._retries_remaining.get(key, _inner_retry_default())
+                    # R31-006：只有 transient（或未知=保守单次）自动 retry；
+                    # permanent（PIT/semantic/参数/不支持算子/确定性错误）不重跑。
+                    if retries > 0 and kind == ERROR_TRANSIENT:
+                        self._retries_remaining[key] = retries - 1
+                        self._explain(
+                            f"task={key}: FAILED {type(exc).__name__}: {exc} "
+                            f"(class={kind}, retrying, {retries - 1} left)"
+                        )
+                        if key.startswith("fusion:"):
+                            # fusion 失败 → 回退逐 root 重新调度（honest fallback）。
+                            gr = future_group_roots.pop(future, None)
+                            if gr is not None:
+                                for _t in gr:
+                                    remaining.add(_t)
+                        else:
+                            remaining.add(key)
+                        continue
+                    # R27-042：不直接 kill 运行中 task；永久失败如实抛出。
+                    self._explain(
+                        f"task={key}: FAILED_FATAL {type(exc).__name__}: {exc} "
+                        f"(class={kind})"
+                    )
+                    raise
+                task = dag.tasks.get(key)
+                if task is not None and task.task_type == TASK_CSE_SHARED:
+                    transferred = self._transfer_cse_memory_ownership(ctx, key, lease)
+                    if transferred is False:
+                        sid = key.split(":", 1)[1]
+                        store = getattr(ctx, "shared_buffers", None)
+                        if store is not None:
+                            store.release(sid)
+                        _release_lease(lease)
+                        lease = None
+                        from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
+    
+                        raise ResourceBudgetExceeded(
+                            f"CSE memory ownership transfer failed for {key}"
+                        )
+                    if transferred:
+                        lease = None
+                _release_lease(lease)
+                # fusion group 完成：逐 root 处理结果（honest per-root fallback
+                # 结果也已进入 dict）。
+                group_roots = future_group_roots.pop(future, None)
+                if group_roots is not None:
+                    fusion_done.add(key)
+                    results_by_root = result if isinstance(result, dict) else {}
+                    for _tid in group_roots:
+                        committed.add(_tid)
+                        real_done += 1
+                        # P0-011：先取 ``_res`` 再用——旧顺序在 ``_record_task_calibration``
+                        # 时 ``_res`` 还没赋值（首轮 UnboundLocalError / 上一轮残留值）。
+                        _res = results_by_root.get(_tid)
+                        self._record_timing(_tid, dag.tasks[_tid])
+                        self._record_task_calibration(_tid, dag.tasks[_tid], _res)
+                        if dag.tasks[_tid].task_type == TASK_ROOT:
+                            if sink is not None:
+                                if not sink.submit(dag.tasks[_tid].factor_name, _res):
+                                    self._explain(
+                                        f"sink.submit FALSE (fusion) for "
+                                        f"{dag.tasks[_tid].factor_name} — writer fatal; "
+                                        "abort generation"
+                                    )
+                                    raise RuntimeError(
+                                        f"sink.submit returned False for "
+                                        f"{dag.tasks[_tid].factor_name} (P0-023: writer "
+                                        "failure must abort the generation)"
+                                    )
+                            if result_handler is not None:
+                                result_handler(dag.tasks[_tid].factor_name, _res)
+                            elif sink is None:
+                                self._results[dag.tasks[_tid].factor_name] = _res
+                        self._release_consumed(dag, _tid, ctx)
+                    continue
+                committed.add(key)
+                real_done += 1
+                self._record_timing(key, dag.tasks[key])
+                self._record_task_calibration(key, dag.tasks[key], result)
+                task_type = dag.tasks[key].task_type
+                if task_type == TASK_SHARD:
+                    # R38 P0-001：shard 子任务完成 → 结果写入 merge 的 partials
+                    #（大结果 spool 到磁盘，merge 前不全部常驻内存，§P0-003）。
+                    merge_id = key.rsplit(":shard:", 1)[0] + ":merge"
+                    # R39-PERF-027：spool 阈值自适应（live_headroom / writer 队列
+                    # 余量 / 盘吞吐 / merge 邻近）。全部信号缺失时 policy 安全回退
+                    # 固定 512MiB（与原行为一致），绝不比旧行为更激进地 spool。
+                    try:
+                        from factor_engine.runtime.spool_policy import default_spool_policy_factory
+    
+                        policy = default_spool_policy_factory(
+                            broker=self.broker, sink=self.sink
+                        )
+                        stored = self._shard_executor().spool_or_keep(
+                            result, policy=policy
+                        )
+                    except Exception:  # noqa: BLE001
+                        stored = self._shard_executor().spool_or_keep(result)
+                    self._shard_partials.setdefault(merge_id, {})[key] = stored
+                    continue
+                # R38 P0-001：MERGE 任务结果 = 因子最终结果（同 ROOT 处理）。
+                if task_type in (TASK_ROOT, TASK_MERGE):
+                    if sink is not None:
+                        if not sink.submit(dag.tasks[key].factor_name, result):
+                            self._explain(
+                                f"sink.submit FALSE for {dag.tasks[key].factor_name} "
+                                f"— writer fatal / queue closed; abort generation"
+                            )
+                            raise RuntimeError(
+                                f"sink.submit returned False for "
+                                f"{dag.tasks[key].factor_name} (R38-P0-046: writer "
+                                "failure must abort the generation)"
+                            )
+                    if result_handler is not None:
+                        result_handler(dag.tasks[key].factor_name, result)
+                    elif sink is None:
+                        self._results[dag.tasks[key].factor_name] = result
+                # 释放已消费的 CSE sid（引用计数归零立即释放）。
+                if task_type in (TASK_ROOT, TASK_MERGE):
+                    self._release_consumed(dag, key, ctx)
+            # 4) R36 P0-003：动态 CPU 由 ResourceController 双向控制（每 tick 在
+            #    顶部决策里 fast down / slow up）——不再一次性写死 0.6。
+            # 5) 无进展保护：admission 全部被拒且没有在跑 future → 等资源释放后
+            #    再试；连续多轮无进展则**先 auto-shard replan smaller**（§100），
+            #    再失败——不能只报 stuck。
+            if admitted_this_round == 0 and not futures and remaining:
+                no_progress_rounds += 1
+                if no_progress_rounds >= 200:
+                    replanned = self._auto_shard_replan(dag, remaining)
+                    if replanned:
+                        self._explain(
+                            f"R36_AUTO_SHARD: replanned {replanned} task(s) smaller "
+                            f"(remaining={len(remaining)})"
+                        )
+                        no_progress_rounds = 0
+                        continue
+                    self._explain(
+                        "STUCK: no task admitted for 200 rounds; broker headroom="
+                        f"{self.broker.snapshot().live_headroom} remaining={sorted(remaining)[:5]}"
+                    )
+>                   raise RuntimeError(
+                        "AdaptiveBatchScheduler made no progress: all ready tasks "
+                        "rejected by ResourceBroker admission (auto-shard not legal); "
+                        f"broker={self.broker.summary()} remaining={sorted(remaining)[:10]}"
+                    )
+E                   RuntimeError: AdaptiveBatchScheduler made no progress: all ready tasks rejected by ResourceBroker admission (auto-shard not legal); broker={'hard_memory_limit': 8589934592, 'hard_cpu_slots': 32, 'live_headroom': 0, 'host_mem_available': 28532301824, 'process_family_rss': 371113984, 'process_family_pss': 278209536, 'spill_total_bytes': 2164375941120, 'spill_free_bytes': 817097289728, 'disk_busy': 0.006, 'reserve_bytes': 1073741824, 'usable_spill_bytes': 600659695616, 'pressure_stage': 'PRESSURE_3', 'recommended_concurrency': 8, 'cpu': {'hard_slots': 32, 'soft_budget': 1, 'in_use': 0}, 'io': {'concurrency': 32, 'in_use': 0}, 'running_tasks': 0, 'running_peak_sum': 0, 'admission_events': [], 'pressure_log': [], 'base_uncertainty': 1.3, 'external_cpu_ema': 0.364, 'auto_memory_budget': {'hard_memory_limit': 8589934592, 'emergency_reserve': 1073741824, 'safe_live_budget': 0, 'execution_budget': 0, 'safety_factor': 0.8, 'candidates': {'cgroup_remaining': 0, 'host_remaining': 27458560000, 'configured_remaining': 8218820608}, 'measurement_state': 'KNOWN_ZERO'}, 'memory_lease_bytes': 0, 'active_memory_leases': 0} remaining=['root:F0', 'root:F1', 'root:F10', 'root:F11', 'root:F12', 'root:F13', 'root:F14', 'root:F15', 'root:F16', 'root:F17']
+
+factor_engine/runtime/adaptive_batch_scheduler.py:2035: RuntimeError
+________________ test_micro_batch_error_isolation_via_scheduler ________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x79eb0010ac90>
+
+    def test_micro_batch_error_isolation_via_scheduler(monkeypatch):
+        """调度器级错误隔离：F3 失败走 retry→FAILED_FATAL 抛出；其余 19 个 root 在
+        抛错前已提交且结果正确（失败不阻断同批其它 root 执行）。"""
+        monkeypatch.setenv("FACTOR_ENGINE_HYBRID_FORCE", "thread")
+        sched = _make_scheduler()
+        captured: dict[str, str] = {}
+    
+        def _execute_root(task):
+            if task.factor_name == "F3":
+                raise RuntimeError("custom_factor_failure")
+            return f"v:{task.factor_name}"
+    
+>       with pytest.raises(RuntimeError, match="custom_factor_failure"):
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'custom_factor_failure'
+E         Actual message: "AdaptiveBatchScheduler made no progress: all ready tasks rejected by ResourceBroker admission (auto-shard not legal); broker={'hard_memory_limit': 8589934592, 'hard_cpu_slots': 32, 'live_headroom': 0, 'host_mem_available': 25089536000, 'process_family_rss': 382607360, 'process_family_pss': 273822720, 'spill_total_bytes': 2164375941120, 'spill_free_bytes': 817096732672, 'disk_busy': 0.0, 'reserve_bytes': 1073741824, 'usable_spill_bytes': 600659138560, 'pressure_stage': 'PRESSURE_3', 'recommended_concurrency': 8, 'cpu': {'hard_slots': 32, 'soft_budget': 1, 'in_use': 0}, 'io': {'concurrency': 32, 'in_use': 0}, 'running_tasks': 0, 'running_peak_sum': 0, 'admission_events': [], 'pressure_log': [], 'base_uncertainty': 1.3, 'external_cpu_ema': 0.266, 'auto_memory_budget': {'hard_memory_limit': 8589934592, 'emergency_reserve': 1073741824, 'safe_live_budget': 0, 'execution_budget': 0, 'safety_factor': 0.8, 'candidates': {'cgroup_remaining': 0, 'host_remaining': 24015794176, 'configured_remaining': 8207327232}, 'measurement_state': 'KNOWN_ZERO'}, 'memory_lease_bytes': 0, 'active_memory_leases': 0} remaining=['root:F0', 'root:F1', 'root:F10', 'root:F11', 'root:F12', 'root:F13', 'root:F14', 'root:F15', 'root:F16', 'root:F17']"
+
+factor_engine/tests/r39/test_perf_scheduler_2026_08.py:329: AssertionError
+______________________ test_future_per_factor_ratio_drops ______________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x79eb002bc3b0>
+
+    def test_future_per_factor_ratio_drops(monkeypatch):
+        """开启 micro-batch 后 future_count/factor_count 显著下降 vs 不开启。"""
+        monkeypatch.setenv("FACTOR_ENGINE_HYBRID_FORCE", "thread")
+        dag = _bare_dag(20)
+    
+        # with micro-batch
+        sched = _make_scheduler()
+>       out_on = sched.run(
+            dag, backend=None, ctx=_Ctx(), execute_root=lambda t: f"v:{t.factor_name}"
+        )
+
+factor_engine/tests/r39/test_perf_scheduler_2026_08.py:352: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/runtime/adaptive_batch_scheduler.py:1370: in run
+    return self._run_impl(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <factor_engine.runtime.adaptive_batch_scheduler.AdaptiveBatchScheduler object at 0x79eaeaff23c0>
+plan = PhysicalFactorDAG(tasks={'root:F0': PhysicalFactorTask(task_id='root:F0', op='add', task_type='ROOT', inputs=(), consu..., 'root:F12', 'root:F13', 'root:F14', 'root:F15', 'root:F16', 'root:F17', 'root:F18', 'root:F19'), writers=(), meta={})
+backend = None
+ctx = <factor_engine.tests.r39.test_perf_scheduler_2026_08._Ctx object at 0x79eaeaff3680>
+execute_root = <function test_future_per_factor_ratio_drops.<locals>.<lambda> at 0x79eb001f7ce0>
+materialize_shared = <function AdaptiveBatchScheduler._run_impl.<locals>.<lambda> at 0x79eb001f7a60>
+sink = None, result_handler = None, input_dq_check = False
+input_dq_strict = True, input_dq_thresholds = None
+
+    def _run_impl(
+        self,
+        plan: SchedulerPlan,
+        *,
+        backend: Any,
+        ctx: Any,
+        execute_root: Callable[[PhysicalFactorTask], Any] | None = None,
+        materialize_shared: Callable[[str, Any], Any] | None = None,
+        sink: StreamingResultSink | None = None,
+        result_handler: Callable[[str, Any], None] | None = None,
+        input_dq_check: bool = False,
+        input_dq_strict: bool = True,
+        input_dq_thresholds: Any = None,
+    ) -> dict[str, Any]:
+        """执行 DAG：read waves + ready queue + admission + FIRST_COMPLETED。
+    
+        R33 升级：
+            - P0-016 read wave 在 SOURCE_SCAN ready 时真实执行（prefetch union 列
+              一次 → BufferRef 进结果表 → consumers 复用共享缓存）。
+            - P0-008 barrier 规划视图自动提交（不占 resource lease）。
+            - P0-038 ``running < dynamic_concurrency_limit`` 显式并发闸。
+            - P0-039 ready set 按 priority 排序主导 admission。
+            - P0-040 ``wait(FIRST_COMPLETED)`` 事件驱动（不再固定 50ms 轮询）。
+        """
+        # 本次 run 的 ctx（shard 时间窗 / 真实交易日历推导用，P0-009）。
+        self._run_ctx = ctx
+        from factor_engine.runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
+        from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
+    
+        def _default_execute_root(task: PhysicalFactorTask) -> Any:
+            # R31-P0-002：lowerer 生成的 ROOT task 的 node_ref 是裸 plan；
+            # 旧 DAGPlan 路径 node_ref 是 FactorPlan（带 .root）。
+            node = getattr(task, "node_ref", None)
+            plan = getattr(node, "root", node)
+            result, _path = _execute_root_with_path(
+                backend, plan, ctx, run_mode=getattr(ctx, "run_mode", None),
+                factor_name=task.factor_name,
+                task_id=task.task_id,
+                factor_id=task.factor_name,
+            )
+            return result
+    
+        execute_root = execute_root or _default_execute_root
+        materialize_shared = materialize_shared or (
+            lambda sid, node: _materialize_shared_subplan(backend, node, ctx, sid)
+        )
+        self._input_dq_reports = []
+        sink = sink or self.sink
+        # 接受 SchedulerPlan（含 physical_dag）或裸 PhysicalFactorDAG。
+        dag = getattr(plan, "physical_dag", plan)
+    
+        pending: list[str] = dag.topological_order()
+        committed: set[str] = set()
+        futures: dict[str, Future] = {}
+        # R31-005: future → task_id / lease 双向绑定（失败/取消也能知道归属并释放）。
+        future_to_task_id: dict[Future, str] = {}
+        future_leases: dict[Future, ReservationLease] = {}
+        self._cleanup_leases = future_leases
+        # R31-P0-022：fusion group 登记（root task_id → group）。
+        fusion_groups = list(getattr(plan, "fusion_groups", []) or [])
+        group_by_root: dict[str, Any] = {}
+        fusion_done: set[str] = set()
+        future_group_roots: dict[Future, tuple[str, ...]] = {}
+        for _g in fusion_groups:
+            for _tid in _g.roots:
+                group_by_root[_tid] = _g
+        remaining = set(pending)
+        # R39-PERF-018/019：本 run 的 micro-batch 状态 + 结构化性能计数。
+        micro_batched: set[str] = set()
+        future_micro_batch_roots: dict[Future, tuple[str, ...]] = {}
+        #: microbatch key -> 合成资源契约（token-sum 门用其真实 footprint）。
+        micro_batch_contracts: dict[str, Any] = {}
+        self._perf_metrics = {
+            "future_count": 0,
+            "factor_count": sum(
+                1
+                for _t in dag.tasks.values()
+                if getattr(_t, "task_type", "") == TASK_ROOT
+            ),
+            "micro_batch_task_count": 0,
+            "micro_batch_root_count": 0,
+            "scheduler_wait_polling_count": 0,
+        }
+        # R33-P0-016：read wave 真实执行 trace。
+        self._wave_summary = {"waves_planned": 0, "waves_executed": 0, "events": []}
+        self._scheduler_stats: dict[str, Any] = {}
+        virtual_done = 0
+        real_done = 0
+        wave_scan_done = 0
+        admitted_this_round = 0
+        no_progress_rounds = 0
+        while remaining or futures:
+            # R31-069/P1-040：取消 → 不再 admit 新 task；无在跑任务时提前结束。
+            if self._cancelled and not futures:
+                self._explain(
+                    f"CANCELLED: stopping with {len(remaining)} pending tasks not admitted"
+                )
+                break
+            # R40 #96: request-scoped CancellationToken —— cancel/deadline 一到，
+            # 若无在跑 future 则提前结束（有在跑 future 时 _admit_and_run 拒新 admission）。
+            try:
+                from factor_engine.runtime.exceptions import get_active_cancellation_token
+    
+                _req_token = get_active_cancellation_token()
+                if (
+                    _req_token is not None
+                    and (_req_token.is_cancelled or _req_token.expired)
+                    and not futures
+                ):
+                    self._cancelled = True
+                    self._explain(
+                        f"REQUEST_CANCELLED: stopping with {len(remaining)} "
+                        "pending tasks not admitted"
+                    )
+                    break
+            except Exception:  # noqa: BLE001
+                pass
+                self._explain(
+                    f"CANCELLED: stopping with {len(remaining)} pending tasks not admitted"
+                )
+                break
+            # P0-023：writer fatal → 立即停止 admission（不等 finish() 才暴露）——
+            # compute 不再往已死的 writer 队列塞结果。
+            if sink is not None and getattr(sink, "fatal_error", None) is not None:
+                self._explain(
+                    f"SINK_FATAL: writer failed ({type(sink.fatal_error).__name__}); "
+                    "stopping admission"
+                )
+                break
+            # R36 P0-002/003：每个 control tick 消费 broker 的 ResourceDecision——
+            # 压力升高 AIMD fast down、压力解除稳定后 slow up、动态 budgets
+            # （wave/block/sink）全部在此刷新（§301 伪代码 scheduler.set_targets）。
+            decision = self.broker.resource_decision(
+                job_memory_lease_bytes=self._job_memory_cap(),
+                sink_backpressure=float(sink.backpressure_ratio) if sink is not None else 0.0,
+            )
+            self._last_decision = decision
+            # R36 P0-010：dynamic read wave（§35/36）——运行中不拆已执行 wave，
+            # 只影响后续 plan / 新 wave。
+            self.wave_memory_budget = int(decision.read_wave_bytes)
+            # R38 P0-043（§17）：sink 队列预算随压力弹性调整（缩容不丢 item，
+            # producer 阻塞等消费降到新 target 以下）。
+            if sink is not None:
+                try:
+                    sink.set_target_bytes(int(decision.result_queue_bytes))
+                except Exception:
+                    pass
+            # R38 P0-041（§16）：wave 预算显著缩小时，对未执行 SOURCE_SCAN 重排
+            # wave（运行中压力变大 → 已生成的 read waves 重新拆小）。
+            try:
+                self._maybe_repartition_waves(plan, dag, committed)
+            except Exception:
+                pass
+            # 0) read waves：SOURCE_SCAN ready → 真实 scan（R33-P0-016）。
+            wave_scan_done += self._execute_read_waves(
+                plan, dag, committed, remaining, ctx,
+                input_dq_check=input_dq_check,
+                input_dq_strict=input_dq_strict,
+                input_dq_thresholds=input_dq_thresholds,
+                defer_on_pressure=True,
+            )
+            # 0.5) barrier 规划视图自动提交（R33-P0-008，不占 lease）。
+            virtual_done += self._admit_virtual(dag, remaining, committed, futures)
+            # 1) fusion group admission：组内全部 root 就绪 → 一次 native query。
+            for group in fusion_groups:
+                gkey = f"fusion:{group.group_id}"
+                if gkey in futures or gkey in fusion_done:
+                    continue
+                roots = [t for t in group.roots if t in dag.tasks]
+                if not roots or any(t in futures or t in committed for t in roots):
+                    continue
+                if not all(all(p in committed for p in dag.tasks[t].inputs) for t in roots):
+                    continue
+                if len(futures) >= self._dynamic_concurrency_limit(sink):
+                    self._explain(
+                        f"fusion group {group.group_id}: deferred (concurrency limit)"
+                    )
+                    continue
+                leases: list[ReservationLease] = []
+                ok = True
+                for t in roots:
+                    contract = dag.tasks[t].resource_contract
+                    if contract is not None:
+                        lease = self._reserve_task(contract, task_id=t)
+                        if lease is None:
+                            ok = False
+                            break
+                        leases.append(lease)
+                if not ok:
+                    for lease in leases:
+                        lease.release()
+                    continue
+                try:
+                    future = self._submit(
+                        group.backend,
+                        _dispatch_fusion, group, dag.tasks, backend, ctx, execute_root,
+                        prefer=self._execution_policy,
+                    )
+                except BaseException:
+                    _release_lease(leases)
+                    raise
+                futures[gkey] = future
+                future_to_task_id[future] = gkey
+                future_leases[future] = leases
+                future_group_roots[future] = tuple(roots)
+                for t in roots:
+                    remaining.discard(t)
+                admitted_this_round += 1
+                self._perf_metrics["future_count"] += 1
+                self._explain(
+                    f"fusion group {group.group_id}: admitted {len(roots)} roots "
+                    f"(backend={group.backend})"
+                )
+            # 2) admission：predecessor 全 committed 的 executable task，按 priority
+            #    排序主导（R33-P0-039）。显式并发上限（R33-P0-038）。
+            # 2.0) R38 P1-065：P99 已超 SafeEnvelope 的 ready ROOT 在首次 admission
+            #     前就真实 pre-shard（不等 200 轮 no-progress）。
+            self._maybe_preshard_oversized(dag, remaining)
+            concurrency_limit = self._dynamic_concurrency_limit(sink)
+            cpu_token_budget = self._decision_cpu_token_budget()
+            ready: list[tuple[float, str]] = []
+            for tid in remaining:
+                if tid in futures or tid in committed or tid in group_by_root:
+                    continue
+                task = dag.tasks[tid]
+                if not task.executable:
+                    continue
+                if not all(p in committed for p in task.inputs):
+                    continue
+                priority = self._priority_score(dag, task)
+                ready.append((priority, tid))
+            ready.sort(reverse=True)
+            # 2.1) R39-PERF-018：低成本 ready ROOT 合并成 micro-batch（scheduler
+            #      dispatch coalescing，不是 native fusion）。先 micro-batch（共享
+            #      backend + axis + source buffers 的 cheap root 一组一个 Future），
+            #      剩余 root 再逐 root 走原有 admission。admission 仍走 broker
+            #      try_reserve（R36/R37/R38 资源治理原样保留），但 micro-batch 是
+            #      串行执行单元 → 用合成契约（真实 footprint）计一份租约。
+            if not self._cancelled:
+                try:
+                    stage = self.broker.pressure_stage()
+                except Exception:
+                    stage = ""
+                if stage not in {"PRESSURE_3", "PRESSURE_4", "CRITICAL"} and \
+                        os.environ.get("FACTOR_ENGINE_MICRO_BATCH") != "0":
+                    micro_batches = self._plan_micro_batches(
+                        ready, dag, group_by_root, micro_batched
+                    )
+                    for mb in micro_batches:
+                        if len(futures) >= concurrency_limit:
+                            self._explain(
+                                f"microbatch: deferred (concurrency_limit={concurrency_limit})"
+                            )
+                            break
+                        mb_key = f"microbatch:{self._next_micro_batch_id()}"
+                        mb_contract = self._micro_batch_contract(mb, dag)
+                        lease = None
+                        if mb_contract is not None:
+                            lease = self._reserve_task(
+                                mb_contract, task_id=mb_key
+                            )
+                            if lease is None:
+                                self._explain(
+                                    f"microbatch {mb_key}: deferred (admission)"
+                                )
+                                continue
+                        # P0-017：micro-batch 合成契约的 CPU token 也受
+                        # ``target_cpu_tokens`` 约束（token-sum 门）。
+                        if cpu_token_budget is not None:
+                            mb_tokens = (
+                                int(getattr(mb_contract, "cpu_tokens", 0) or 0)
+                                if mb_contract is not None
+                                else 0
+                            )
+                            running_tokens = self._running_cpu_tokens(
+                                futures, dag, micro_batch_contracts
+                            )
+                            if running_tokens + mb_tokens > cpu_token_budget:
+                                _release_lease(lease)
+                                self._explain(
+                                    f"microbatch {mb_key}: deferred (cpu_tokens "
+                                    f"{running_tokens}+{mb_tokens} > "
+                                    f"target_cpu_tokens={cpu_token_budget})"
+                                )
+                                continue
+                        # P0-015：消费的 CSE 共享 sid 在消费期内 pin（同逐 root 路径）。
+                        for tid in mb.roots:
+                            _t = dag.tasks.get(tid)
+                            if _t is not None:
+                                self._pin_consumed_sids(ctx, _t)
+                        import time
+    
+                        for tid in mb.roots:
+                            self._task_started_at[tid] = time.monotonic() * 1000.0
+                        try:
+                            future = self._submit(
+                                mb.backend, dispatch_micro_batch, mb.roots, dag.tasks,
+                                execute_root, prefer=self._execution_policy,
+                            )
+                        except BaseException:
+                            _release_lease(lease)
+                            raise
+                        futures[mb_key] = future
+                        future_to_task_id[future] = mb_key
+                        future_micro_batch_roots[future] = mb.roots
+                        if mb_contract is not None:
+                            future_leases[future] = lease
+                            micro_batch_contracts[mb_key] = mb_contract
+                        for tid in mb.roots:
+                            micro_batched.add(tid)
+                            remaining.discard(tid)
+                        admitted_this_round += 1
+                        self._perf_metrics["future_count"] += 1
+                        self._perf_metrics["micro_batch_task_count"] += 1
+                        self._perf_metrics["micro_batch_root_count"] += len(mb.roots)
+                        self._explain(
+                            f"microbatch {mb_key}: {len(mb.roots)} roots "
+                            f"(backend={mb.backend}, work={mb.estimated_total_work:.0f})"
+                        )
+            # 2.2) 逐 root admission（与 R33 相同；跳过已在 micro-batch 中的 root）。
+            for _priority, tid in ready:
+                if tid in futures or tid in committed or tid in micro_batched:
+                    continue
+                if len(futures) >= concurrency_limit:
+                    self._explain(f"task={tid}: deferred (concurrency_limit={concurrency_limit})")
+                    break
+                # P0-017：CPU token 总和也受 ``target_cpu_tokens`` 约束——任务数达标
+                # 但 token 总和已满（8-thread DuckDB 占 8 token）时不再 admit。
+                task = dag.tasks[tid]
+                if cpu_token_budget is not None:
+                    token_cost = int(getattr(task.resource_contract, "cpu_tokens", 0) or 0)
+                    running_tokens = self._running_cpu_tokens(
+                        futures, dag, micro_batch_contracts
+                    )
+                    if running_tokens + token_cost > cpu_token_budget:
+                        if not futures and running_tokens == 0:
+                            decision = self.broker.request_minimum_cpu_width(
+                                task.resource_contract, decision=self._last_decision)
+                            self._last_decision = decision
+                            cpu_token_budget = int(decision.target_cpu_tokens)
+                            concurrency_limit = 1
+                            self._explain(f"task={tid}: broker minimum CPU width admitted={cpu_token_budget}")
+                        else:
+                            self._explain(
+                                f"task={tid}: deferred (cpu_tokens {running_tokens}+"
+                                f"{token_cost} > target_cpu_tokens={cpu_token_budget})"
+                            )
+                            continue
+                future, lease = self._admit_and_run(
+                    task,
+                    backend=backend,
+                    ctx=ctx,
+                    execute_root=execute_root,
+                    materialize_shared=materialize_shared,
+                )
+                if future is not None:
+                    futures[tid] = future
+                    future_to_task_id[future] = tid
+                    if lease is not None:
+                        future_leases[future] = lease
+                    remaining.discard(tid)
+                    admitted_this_round += 1
+                    self._perf_metrics["future_count"] += 1
+            # 3) FIRST_COMPLETED：有 future 时等第一个完成（R33-P0-040 事件驱动）。
+            # R39-PERF-019：正常路径不依赖周期 polling——wait 事件驱动返回非空
+            # done；只有 wait 因 timeout 兜底返回空（watchdog/deadlock fallback）
+            # 才计一次 ``scheduler_wait_polling_count``（happy path 应为 0）。
+            done: set[Future] = set()
+            if futures:
+                done = wait(list(futures.values()), timeout=_EVENT_WAIT_TIMEOUT_S,
+                            return_when=FIRST_COMPLETED)[0]
+                if not done:
+                    self._perf_metrics["scheduler_wait_polling_count"] += 1
+            for future in done:
+                key = future_to_task_id.pop(future, None)
+                if key is None:
+                    continue
+                lease = future_leases.pop(future, None)
+                self._processing_lease = lease
+                futures.pop(key, None)
+                # R39-PERF-018：micro-batch future 完成 → 逐 root 处理（结果 /
+                # 失败按 root 独立；成功 root 照常提交，失败 root 走原有 retry/raise）。
+                # 整个 micro-batch 只持有一份合成租约（``lease``），在组内全部
+                # root 处理完一次性释放（exactly once）。
+                mb_roots = future_micro_batch_roots.pop(future, None)
+                if mb_roots is not None:
+                    micro_batch_contracts.pop(key, None)
+                    try:
+                        results_by_root, failures_by_root = future.result(timeout=1.0)
+                    except Exception as exc:  # noqa: BLE001
+                        _release_lease(lease)
+                        kind = classify_error(exc)
+                        for _tid in mb_roots:
+                            micro_batched.discard(_tid)
+                            if _tid not in dag.tasks:
+                                continue
+                            if kind == ERROR_OOM:
+                                if self._handle_oom(_tid, exc, dag, remaining):
+                                    continue
+                                raise
+                            retries = self._retries_remaining.get(_tid, _inner_retry_default())
+                            if kind != ERROR_TRANSIENT or retries <= 0:
+                                raise
+                            self._retries_remaining[_tid] = retries - 1
+                            remaining.add(_tid)
+                        self._explain(
+                            f"microbatch {key}: FUTURE_FAILED "
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                        continue
+                    for _tid in mb_roots:
+                        micro_batched.discard(_tid)
+                        # P0-010 attempt 隔离：OOM replan 后旧 root 已不在 dag.tasks
+                        # → 结果/异常都不触碰新 DAG 状态（租约在组末统一释放）。
+                        if _tid not in dag.tasks:
+                            continue
+                        if _tid in failures_by_root:
+                            _exc = failures_by_root[_tid]
+                            _kind = classify_error(_exc)
+                            if _kind == ERROR_OOM:
+                                if self._handle_oom(_tid, _exc, dag, remaining):
+                                    continue
+                                self._explain(
+                                    f"task={_tid}: OOM_NOT_REPLANNABLE "
+                                    f"{type(_exc).__name__}: {_exc}"
+                                )
+                                raise _exc
+                            _retries = self._retries_remaining.get(_tid, _inner_retry_default())
+                            if _retries > 0 and _kind == ERROR_TRANSIENT:
+                                self._retries_remaining[_tid] = _retries - 1
+                                self._explain(
+                                    f"task={_tid}: FAILED {type(_exc).__name__}: "
+                                    f"{_exc} (class={_kind}, retrying, "
+                                    f"{_retries - 1} left)"
+                                )
+                                remaining.add(_tid)
+                                continue
+                            self._explain(
+                                f"task={_tid}: FAILED_FATAL {type(_exc).__name__}: "
+                                f"{_exc} (class={_kind})"
+                            )
+                            raise _exc
+                        committed.add(_tid)
+                        real_done += 1
+                        self._record_timing(_tid, dag.tasks[_tid])
+                        self._record_task_calibration(
+                            _tid, dag.tasks[_tid], results_by_root[_tid]
+                        )
+                        _tt = dag.tasks[_tid].task_type
+                        if _tt in (TASK_ROOT, TASK_MERGE):
+                            if sink is not None:
+                                if not sink.submit(
+                                    dag.tasks[_tid].factor_name, results_by_root[_tid]
+                                ):
+                                    self._explain(
+                                        f"sink.submit FALSE (microbatch) for "
+                                        f"{dag.tasks[_tid].factor_name} — writer "
+                                        "fatal; abort generation"
+                                    )
+                                    raise RuntimeError(
+                                        f"sink.submit returned False for "
+                                        f"{dag.tasks[_tid].factor_name} "
+                                        "(R39-PERF-018: writer failure must abort)"
+                                    )
+                            if result_handler is not None:
+                                result_handler(
+                                    dag.tasks[_tid].factor_name, results_by_root[_tid]
+                                )
+                            elif sink is None:
+                                self._results[dag.tasks[_tid].factor_name] = (
+                                    results_by_root[_tid]
+                                )
+                        if _tt in (TASK_ROOT, TASK_MERGE):
+                            self._release_consumed(dag, _tid, ctx)
+                    _release_lease(lease)
+                    continue
+                # P0-010 attempt 隔离：OOM replan 后旧 attempt 的 in-flight future
+                # 完成时其 task id 已不在 dag.tasks（被 ``:attempt:N:`` 新 id 取代）→
+                # 直接丢弃（结果/异常都不触碰新 DAG 状态，绝不写入新 partial map）。
+                if key not in dag.tasks and not key.startswith("fusion:"):
+                    _release_lease(lease)
+                    continue
+                try:
+                    _ret_key, result = future.result(timeout=1.0)
+                except Exception as exc:  # noqa: BLE001
+                    _release_lease(lease)
+                    kind = classify_error(exc)
+                    # R38 P0-004/005（§5）：OOM → smaller-shape replan，然后重试。
+                    if kind == ERROR_OOM:
+                        if self._handle_oom(key, exc, dag, remaining):
+                            continue
+                        self._explain(
+                            f"task={key}: OOM_NOT_REPLANNABLE {type(exc).__name__}: {exc}"
+                        )
+                        raise
+                    retries = self._retries_remaining.get(key, _inner_retry_default())
+                    # R31-006：只有 transient（或未知=保守单次）自动 retry；
+                    # permanent（PIT/semantic/参数/不支持算子/确定性错误）不重跑。
+                    if retries > 0 and kind == ERROR_TRANSIENT:
+                        self._retries_remaining[key] = retries - 1
+                        self._explain(
+                            f"task={key}: FAILED {type(exc).__name__}: {exc} "
+                            f"(class={kind}, retrying, {retries - 1} left)"
+                        )
+                        if key.startswith("fusion:"):
+                            # fusion 失败 → 回退逐 root 重新调度（honest fallback）。
+                            gr = future_group_roots.pop(future, None)
+                            if gr is not None:
+                                for _t in gr:
+                                    remaining.add(_t)
+                        else:
+                            remaining.add(key)
+                        continue
+                    # R27-042：不直接 kill 运行中 task；永久失败如实抛出。
+                    self._explain(
+                        f"task={key}: FAILED_FATAL {type(exc).__name__}: {exc} "
+                        f"(class={kind})"
+                    )
+                    raise
+                task = dag.tasks.get(key)
+                if task is not None and task.task_type == TASK_CSE_SHARED:
+                    transferred = self._transfer_cse_memory_ownership(ctx, key, lease)
+                    if transferred is False:
+                        sid = key.split(":", 1)[1]
+                        store = getattr(ctx, "shared_buffers", None)
+                        if store is not None:
+                            store.release(sid)
+                        _release_lease(lease)
+                        lease = None
+                        from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
+    
+                        raise ResourceBudgetExceeded(
+                            f"CSE memory ownership transfer failed for {key}"
+                        )
+                    if transferred:
+                        lease = None
+                _release_lease(lease)
+                # fusion group 完成：逐 root 处理结果（honest per-root fallback
+                # 结果也已进入 dict）。
+                group_roots = future_group_roots.pop(future, None)
+                if group_roots is not None:
+                    fusion_done.add(key)
+                    results_by_root = result if isinstance(result, dict) else {}
+                    for _tid in group_roots:
+                        committed.add(_tid)
+                        real_done += 1
+                        # P0-011：先取 ``_res`` 再用——旧顺序在 ``_record_task_calibration``
+                        # 时 ``_res`` 还没赋值（首轮 UnboundLocalError / 上一轮残留值）。
+                        _res = results_by_root.get(_tid)
+                        self._record_timing(_tid, dag.tasks[_tid])
+                        self._record_task_calibration(_tid, dag.tasks[_tid], _res)
+                        if dag.tasks[_tid].task_type == TASK_ROOT:
+                            if sink is not None:
+                                if not sink.submit(dag.tasks[_tid].factor_name, _res):
+                                    self._explain(
+                                        f"sink.submit FALSE (fusion) for "
+                                        f"{dag.tasks[_tid].factor_name} — writer fatal; "
+                                        "abort generation"
+                                    )
+                                    raise RuntimeError(
+                                        f"sink.submit returned False for "
+                                        f"{dag.tasks[_tid].factor_name} (P0-023: writer "
+                                        "failure must abort the generation)"
+                                    )
+                            if result_handler is not None:
+                                result_handler(dag.tasks[_tid].factor_name, _res)
+                            elif sink is None:
+                                self._results[dag.tasks[_tid].factor_name] = _res
+                        self._release_consumed(dag, _tid, ctx)
+                    continue
+                committed.add(key)
+                real_done += 1
+                self._record_timing(key, dag.tasks[key])
+                self._record_task_calibration(key, dag.tasks[key], result)
+                task_type = dag.tasks[key].task_type
+                if task_type == TASK_SHARD:
+                    # R38 P0-001：shard 子任务完成 → 结果写入 merge 的 partials
+                    #（大结果 spool 到磁盘，merge 前不全部常驻内存，§P0-003）。
+                    merge_id = key.rsplit(":shard:", 1)[0] + ":merge"
+                    # R39-PERF-027：spool 阈值自适应（live_headroom / writer 队列
+                    # 余量 / 盘吞吐 / merge 邻近）。全部信号缺失时 policy 安全回退
+                    # 固定 512MiB（与原行为一致），绝不比旧行为更激进地 spool。
+                    try:
+                        from factor_engine.runtime.spool_policy import default_spool_policy_factory
+    
+                        policy = default_spool_policy_factory(
+                            broker=self.broker, sink=self.sink
+                        )
+                        stored = self._shard_executor().spool_or_keep(
+                            result, policy=policy
+                        )
+                    except Exception:  # noqa: BLE001
+                        stored = self._shard_executor().spool_or_keep(result)
+                    self._shard_partials.setdefault(merge_id, {})[key] = stored
+                    continue
+                # R38 P0-001：MERGE 任务结果 = 因子最终结果（同 ROOT 处理）。
+                if task_type in (TASK_ROOT, TASK_MERGE):
+                    if sink is not None:
+                        if not sink.submit(dag.tasks[key].factor_name, result):
+                            self._explain(
+                                f"sink.submit FALSE for {dag.tasks[key].factor_name} "
+                                f"— writer fatal / queue closed; abort generation"
+                            )
+                            raise RuntimeError(
+                                f"sink.submit returned False for "
+                                f"{dag.tasks[key].factor_name} (R38-P0-046: writer "
+                                "failure must abort the generation)"
+                            )
+                    if result_handler is not None:
+                        result_handler(dag.tasks[key].factor_name, result)
+                    elif sink is None:
+                        self._results[dag.tasks[key].factor_name] = result
+                # 释放已消费的 CSE sid（引用计数归零立即释放）。
+                if task_type in (TASK_ROOT, TASK_MERGE):
+                    self._release_consumed(dag, key, ctx)
+            # 4) R36 P0-003：动态 CPU 由 ResourceController 双向控制（每 tick 在
+            #    顶部决策里 fast down / slow up）——不再一次性写死 0.6。
+            # 5) 无进展保护：admission 全部被拒且没有在跑 future → 等资源释放后
+            #    再试；连续多轮无进展则**先 auto-shard replan smaller**（§100），
+            #    再失败——不能只报 stuck。
+            if admitted_this_round == 0 and not futures and remaining:
+                no_progress_rounds += 1
+                if no_progress_rounds >= 200:
+                    replanned = self._auto_shard_replan(dag, remaining)
+                    if replanned:
+                        self._explain(
+                            f"R36_AUTO_SHARD: replanned {replanned} task(s) smaller "
+                            f"(remaining={len(remaining)})"
+                        )
+                        no_progress_rounds = 0
+                        continue
+                    self._explain(
+                        "STUCK: no task admitted for 200 rounds; broker headroom="
+                        f"{self.broker.snapshot().live_headroom} remaining={sorted(remaining)[:5]}"
+                    )
+>                   raise RuntimeError(
+                        "AdaptiveBatchScheduler made no progress: all ready tasks "
+                        "rejected by ResourceBroker admission (auto-shard not legal); "
+                        f"broker={self.broker.summary()} remaining={sorted(remaining)[:10]}"
+                    )
+E                   RuntimeError: AdaptiveBatchScheduler made no progress: all ready tasks rejected by ResourceBroker admission (auto-shard not legal); broker={'hard_memory_limit': 8589934592, 'hard_cpu_slots': 32, 'live_headroom': 0, 'host_mem_available': 28603187200, 'process_family_rss': 382607360, 'process_family_pss': 273818624, 'spill_total_bytes': 2164375941120, 'spill_free_bytes': 817096318976, 'disk_busy': 0.0, 'reserve_bytes': 1073741824, 'usable_spill_bytes': 600658724864, 'pressure_stage': 'PRESSURE_3', 'recommended_concurrency': 8, 'cpu': {'hard_slots': 32, 'soft_budget': 1, 'in_use': 0}, 'io': {'concurrency': 32, 'in_use': 0}, 'running_tasks': 0, 'running_peak_sum': 0, 'admission_events': [], 'pressure_log': [], 'base_uncertainty': 1.3, 'external_cpu_ema': 0.247, 'auto_memory_budget': {'hard_memory_limit': 8589934592, 'emergency_reserve': 1073741824, 'safe_live_budget': 0, 'execution_budget': 0, 'safety_factor': 0.8, 'candidates': {'cgroup_remaining': 0, 'host_remaining': 27529445376, 'configured_remaining': 8207327232}, 'measurement_state': 'KNOWN_ZERO'}, 'memory_lease_bytes': 0, 'active_memory_leases': 0} remaining=['root:F0', 'root:F1', 'root:F10', 'root:F11', 'root:F12', 'root:F13', 'root:F14', 'root:F15', 'root:F16', 'root:F17']
+
+factor_engine/runtime/adaptive_batch_scheduler.py:2035: RuntimeError
+______________ test_scheduler_wait_polling_count_zero_happy_path _______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x79eaeaff3e90>
+
+    def test_scheduler_wait_polling_count_zero_happy_path(monkeypatch):
+        """happy path：scheduler_wait_polling_count == 0（wait 事件驱动，无周期轮询）。"""
+        monkeypatch.setenv("FACTOR_ENGINE_HYBRID_FORCE", "thread")
+        sched = _make_scheduler()
+>       out = sched.run(
+            _bare_dag(20), backend=None, ctx=_Ctx(), execute_root=lambda t: f"v:{t.factor_name}"
+        )
+
+factor_engine/tests/r39/test_perf_scheduler_2026_08.py:392: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+factor_engine/runtime/adaptive_batch_scheduler.py:1370: in run
+    return self._run_impl(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <factor_engine.runtime.adaptive_batch_scheduler.AdaptiveBatchScheduler object at 0x79eaeaff0c80>
+plan = PhysicalFactorDAG(tasks={'root:F0': PhysicalFactorTask(task_id='root:F0', op='add', task_type='ROOT', inputs=(), consu..., 'root:F12', 'root:F13', 'root:F14', 'root:F15', 'root:F16', 'root:F17', 'root:F18', 'root:F19'), writers=(), meta={})
+backend = None
+ctx = <factor_engine.tests.r39.test_perf_scheduler_2026_08._Ctx object at 0x79eaeaff05f0>
+execute_root = <function test_scheduler_wait_polling_count_zero_happy_path.<locals>.<lambda> at 0x79eb002adda0>
+materialize_shared = <function AdaptiveBatchScheduler._run_impl.<locals>.<lambda> at 0x79eb002ae020>
+sink = None, result_handler = None, input_dq_check = False
+input_dq_strict = True, input_dq_thresholds = None
+
+    def _run_impl(
+        self,
+        plan: SchedulerPlan,
+        *,
+        backend: Any,
+        ctx: Any,
+        execute_root: Callable[[PhysicalFactorTask], Any] | None = None,
+        materialize_shared: Callable[[str, Any], Any] | None = None,
+        sink: StreamingResultSink | None = None,
+        result_handler: Callable[[str, Any], None] | None = None,
+        input_dq_check: bool = False,
+        input_dq_strict: bool = True,
+        input_dq_thresholds: Any = None,
+    ) -> dict[str, Any]:
+        """执行 DAG：read waves + ready queue + admission + FIRST_COMPLETED。
+    
+        R33 升级：
+            - P0-016 read wave 在 SOURCE_SCAN ready 时真实执行（prefetch union 列
+              一次 → BufferRef 进结果表 → consumers 复用共享缓存）。
+            - P0-008 barrier 规划视图自动提交（不占 resource lease）。
+            - P0-038 ``running < dynamic_concurrency_limit`` 显式并发闸。
+            - P0-039 ready set 按 priority 排序主导 admission。
+            - P0-040 ``wait(FIRST_COMPLETED)`` 事件驱动（不再固定 50ms 轮询）。
+        """
+        # 本次 run 的 ctx（shard 时间窗 / 真实交易日历推导用，P0-009）。
+        self._run_ctx = ctx
+        from factor_engine.runtime.batch_service import _execute_root_with_path, _materialize_shared_subplan
+        from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
+    
+        def _default_execute_root(task: PhysicalFactorTask) -> Any:
+            # R31-P0-002：lowerer 生成的 ROOT task 的 node_ref 是裸 plan；
+            # 旧 DAGPlan 路径 node_ref 是 FactorPlan（带 .root）。
+            node = getattr(task, "node_ref", None)
+            plan = getattr(node, "root", node)
+            result, _path = _execute_root_with_path(
+                backend, plan, ctx, run_mode=getattr(ctx, "run_mode", None),
+                factor_name=task.factor_name,
+                task_id=task.task_id,
+                factor_id=task.factor_name,
+            )
+            return result
+    
+        execute_root = execute_root or _default_execute_root
+        materialize_shared = materialize_shared or (
+            lambda sid, node: _materialize_shared_subplan(backend, node, ctx, sid)
+        )
+        self._input_dq_reports = []
+        sink = sink or self.sink
+        # 接受 SchedulerPlan（含 physical_dag）或裸 PhysicalFactorDAG。
+        dag = getattr(plan, "physical_dag", plan)
+    
+        pending: list[str] = dag.topological_order()
+        committed: set[str] = set()
+        futures: dict[str, Future] = {}
+        # R31-005: future → task_id / lease 双向绑定（失败/取消也能知道归属并释放）。
+        future_to_task_id: dict[Future, str] = {}
+        future_leases: dict[Future, ReservationLease] = {}
+        self._cleanup_leases = future_leases
+        # R31-P0-022：fusion group 登记（root task_id → group）。
+        fusion_groups = list(getattr(plan, "fusion_groups", []) or [])
+        group_by_root: dict[str, Any] = {}
+        fusion_done: set[str] = set()
+        future_group_roots: dict[Future, tuple[str, ...]] = {}
+        for _g in fusion_groups:
+            for _tid in _g.roots:
+                group_by_root[_tid] = _g
+        remaining = set(pending)
+        # R39-PERF-018/019：本 run 的 micro-batch 状态 + 结构化性能计数。
+        micro_batched: set[str] = set()
+        future_micro_batch_roots: dict[Future, tuple[str, ...]] = {}
+        #: microbatch key -> 合成资源契约（token-sum 门用其真实 footprint）。
+        micro_batch_contracts: dict[str, Any] = {}
+        self._perf_metrics = {
+            "future_count": 0,
+            "factor_count": sum(
+                1
+                for _t in dag.tasks.values()
+                if getattr(_t, "task_type", "") == TASK_ROOT
+            ),
+            "micro_batch_task_count": 0,
+            "micro_batch_root_count": 0,
+            "scheduler_wait_polling_count": 0,
+        }
+        # R33-P0-016：read wave 真实执行 trace。
+        self._wave_summary = {"waves_planned": 0, "waves_executed": 0, "events": []}
+        self._scheduler_stats: dict[str, Any] = {}
+        virtual_done = 0
+        real_done = 0
+        wave_scan_done = 0
+        admitted_this_round = 0
+        no_progress_rounds = 0
+        while remaining or futures:
+            # R31-069/P1-040：取消 → 不再 admit 新 task；无在跑任务时提前结束。
+            if self._cancelled and not futures:
+                self._explain(
+                    f"CANCELLED: stopping with {len(remaining)} pending tasks not admitted"
+                )
+                break
+            # R40 #96: request-scoped CancellationToken —— cancel/deadline 一到，
+            # 若无在跑 future 则提前结束（有在跑 future 时 _admit_and_run 拒新 admission）。
+            try:
+                from factor_engine.runtime.exceptions import get_active_cancellation_token
+    
+                _req_token = get_active_cancellation_token()
+                if (
+                    _req_token is not None
+                    and (_req_token.is_cancelled or _req_token.expired)
+                    and not futures
+                ):
+                    self._cancelled = True
+                    self._explain(
+                        f"REQUEST_CANCELLED: stopping with {len(remaining)} "
+                        "pending tasks not admitted"
+                    )
+                    break
+            except Exception:  # noqa: BLE001
+                pass
+                self._explain(
+                    f"CANCELLED: stopping with {len(remaining)} pending tasks not admitted"
+                )
+                break
+            # P0-023：writer fatal → 立即停止 admission（不等 finish() 才暴露）——
+            # compute 不再往已死的 writer 队列塞结果。
+            if sink is not None and getattr(sink, "fatal_error", None) is not None:
+                self._explain(
+                    f"SINK_FATAL: writer failed ({type(sink.fatal_error).__name__}); "
+                    "stopping admission"
+                )
+                break
+            # R36 P0-002/003：每个 control tick 消费 broker 的 ResourceDecision——
+            # 压力升高 AIMD fast down、压力解除稳定后 slow up、动态 budgets
+            # （wave/block/sink）全部在此刷新（§301 伪代码 scheduler.set_targets）。
+            decision = self.broker.resource_decision(
+                job_memory_lease_bytes=self._job_memory_cap(),
+                sink_backpressure=float(sink.backpressure_ratio) if sink is not None else 0.0,
+            )
+            self._last_decision = decision
+            # R36 P0-010：dynamic read wave（§35/36）——运行中不拆已执行 wave，
+            # 只影响后续 plan / 新 wave。
+            self.wave_memory_budget = int(decision.read_wave_bytes)
+            # R38 P0-043（§17）：sink 队列预算随压力弹性调整（缩容不丢 item，
+            # producer 阻塞等消费降到新 target 以下）。
+            if sink is not None:
+                try:
+                    sink.set_target_bytes(int(decision.result_queue_bytes))
+                except Exception:
+                    pass
+            # R38 P0-041（§16）：wave 预算显著缩小时，对未执行 SOURCE_SCAN 重排
+            # wave（运行中压力变大 → 已生成的 read waves 重新拆小）。
+            try:
+                self._maybe_repartition_waves(plan, dag, committed)
+            except Exception:
+                pass
+            # 0) read waves：SOURCE_SCAN ready → 真实 scan（R33-P0-016）。
+            wave_scan_done += self._execute_read_waves(
+                plan, dag, committed, remaining, ctx,
+                input_dq_check=input_dq_check,
+                input_dq_strict=input_dq_strict,
+                input_dq_thresholds=input_dq_thresholds,
+                defer_on_pressure=True,
+            )
+            # 0.5) barrier 规划视图自动提交（R33-P0-008，不占 lease）。
+            virtual_done += self._admit_virtual(dag, remaining, committed, futures)
+            # 1) fusion group admission：组内全部 root 就绪 → 一次 native query。
+            for group in fusion_groups:
+                gkey = f"fusion:{group.group_id}"
+                if gkey in futures or gkey in fusion_done:
+                    continue
+                roots = [t for t in group.roots if t in dag.tasks]
+                if not roots or any(t in futures or t in committed for t in roots):
+                    continue
+                if not all(all(p in committed for p in dag.tasks[t].inputs) for t in roots):
+                    continue
+                if len(futures) >= self._dynamic_concurrency_limit(sink):
+                    self._explain(
+                        f"fusion group {group.group_id}: deferred (concurrency limit)"
+                    )
+                    continue
+                leases: list[ReservationLease] = []
+                ok = True
+                for t in roots:
+                    contract = dag.tasks[t].resource_contract
+                    if contract is not None:
+                        lease = self._reserve_task(contract, task_id=t)
+                        if lease is None:
+                            ok = False
+                            break
+                        leases.append(lease)
+                if not ok:
+                    for lease in leases:
+                        lease.release()
+                    continue
+                try:
+                    future = self._submit(
+                        group.backend,
+                        _dispatch_fusion, group, dag.tasks, backend, ctx, execute_root,
+                        prefer=self._execution_policy,
+                    )
+                except BaseException:
+                    _release_lease(leases)
+                    raise
+                futures[gkey] = future
+                future_to_task_id[future] = gkey
+                future_leases[future] = leases
+                future_group_roots[future] = tuple(roots)
+                for t in roots:
+                    remaining.discard(t)
+                admitted_this_round += 1
+                self._perf_metrics["future_count"] += 1
+                self._explain(
+                    f"fusion group {group.group_id}: admitted {len(roots)} roots "
+                    f"(backend={group.backend})"
+                )
+            # 2) admission：predecessor 全 committed 的 executable task，按 priority
+            #    排序主导（R33-P0-039）。显式并发上限（R33-P0-038）。
+            # 2.0) R38 P1-065：P99 已超 SafeEnvelope 的 ready ROOT 在首次 admission
+            #     前就真实 pre-shard（不等 200 轮 no-progress）。
+            self._maybe_preshard_oversized(dag, remaining)
+            concurrency_limit = self._dynamic_concurrency_limit(sink)
+            cpu_token_budget = self._decision_cpu_token_budget()
+            ready: list[tuple[float, str]] = []
+            for tid in remaining:
+                if tid in futures or tid in committed or tid in group_by_root:
+                    continue
+                task = dag.tasks[tid]
+                if not task.executable:
+                    continue
+                if not all(p in committed for p in task.inputs):
+                    continue
+                priority = self._priority_score(dag, task)
+                ready.append((priority, tid))
+            ready.sort(reverse=True)
+            # 2.1) R39-PERF-018：低成本 ready ROOT 合并成 micro-batch（scheduler
+            #      dispatch coalescing，不是 native fusion）。先 micro-batch（共享
+            #      backend + axis + source buffers 的 cheap root 一组一个 Future），
+            #      剩余 root 再逐 root 走原有 admission。admission 仍走 broker
+            #      try_reserve（R36/R37/R38 资源治理原样保留），但 micro-batch 是
+            #      串行执行单元 → 用合成契约（真实 footprint）计一份租约。
+            if not self._cancelled:
+                try:
+                    stage = self.broker.pressure_stage()
+                except Exception:
+                    stage = ""
+                if stage not in {"PRESSURE_3", "PRESSURE_4", "CRITICAL"} and \
+                        os.environ.get("FACTOR_ENGINE_MICRO_BATCH") != "0":
+                    micro_batches = self._plan_micro_batches(
+                        ready, dag, group_by_root, micro_batched
+                    )
+                    for mb in micro_batches:
+                        if len(futures) >= concurrency_limit:
+                            self._explain(
+                                f"microbatch: deferred (concurrency_limit={concurrency_limit})"
+                            )
+                            break
+                        mb_key = f"microbatch:{self._next_micro_batch_id()}"
+                        mb_contract = self._micro_batch_contract(mb, dag)
+                        lease = None
+                        if mb_contract is not None:
+                            lease = self._reserve_task(
+                                mb_contract, task_id=mb_key
+                            )
+                            if lease is None:
+                                self._explain(
+                                    f"microbatch {mb_key}: deferred (admission)"
+                                )
+                                continue
+                        # P0-017：micro-batch 合成契约的 CPU token 也受
+                        # ``target_cpu_tokens`` 约束（token-sum 门）。
+                        if cpu_token_budget is not None:
+                            mb_tokens = (
+                                int(getattr(mb_contract, "cpu_tokens", 0) or 0)
+                                if mb_contract is not None
+                                else 0
+                            )
+                            running_tokens = self._running_cpu_tokens(
+                                futures, dag, micro_batch_contracts
+                            )
+                            if running_tokens + mb_tokens > cpu_token_budget:
+                                _release_lease(lease)
+                                self._explain(
+                                    f"microbatch {mb_key}: deferred (cpu_tokens "
+                                    f"{running_tokens}+{mb_tokens} > "
+                                    f"target_cpu_tokens={cpu_token_budget})"
+                                )
+                                continue
+                        # P0-015：消费的 CSE 共享 sid 在消费期内 pin（同逐 root 路径）。
+                        for tid in mb.roots:
+                            _t = dag.tasks.get(tid)
+                            if _t is not None:
+                                self._pin_consumed_sids(ctx, _t)
+                        import time
+    
+                        for tid in mb.roots:
+                            self._task_started_at[tid] = time.monotonic() * 1000.0
+                        try:
+                            future = self._submit(
+                                mb.backend, dispatch_micro_batch, mb.roots, dag.tasks,
+                                execute_root, prefer=self._execution_policy,
+                            )
+                        except BaseException:
+                            _release_lease(lease)
+                            raise
+                        futures[mb_key] = future
+                        future_to_task_id[future] = mb_key
+                        future_micro_batch_roots[future] = mb.roots
+                        if mb_contract is not None:
+                            future_leases[future] = lease
+                            micro_batch_contracts[mb_key] = mb_contract
+                        for tid in mb.roots:
+                            micro_batched.add(tid)
+                            remaining.discard(tid)
+                        admitted_this_round += 1
+                        self._perf_metrics["future_count"] += 1
+                        self._perf_metrics["micro_batch_task_count"] += 1
+                        self._perf_metrics["micro_batch_root_count"] += len(mb.roots)
+                        self._explain(
+                            f"microbatch {mb_key}: {len(mb.roots)} roots "
+                            f"(backend={mb.backend}, work={mb.estimated_total_work:.0f})"
+                        )
+            # 2.2) 逐 root admission（与 R33 相同；跳过已在 micro-batch 中的 root）。
+            for _priority, tid in ready:
+                if tid in futures or tid in committed or tid in micro_batched:
+                    continue
+                if len(futures) >= concurrency_limit:
+                    self._explain(f"task={tid}: deferred (concurrency_limit={concurrency_limit})")
+                    break
+                # P0-017：CPU token 总和也受 ``target_cpu_tokens`` 约束——任务数达标
+                # 但 token 总和已满（8-thread DuckDB 占 8 token）时不再 admit。
+                task = dag.tasks[tid]
+                if cpu_token_budget is not None:
+                    token_cost = int(getattr(task.resource_contract, "cpu_tokens", 0) or 0)
+                    running_tokens = self._running_cpu_tokens(
+                        futures, dag, micro_batch_contracts
+                    )
+                    if running_tokens + token_cost > cpu_token_budget:
+                        if not futures and running_tokens == 0:
+                            decision = self.broker.request_minimum_cpu_width(
+                                task.resource_contract, decision=self._last_decision)
+                            self._last_decision = decision
+                            cpu_token_budget = int(decision.target_cpu_tokens)
+                            concurrency_limit = 1
+                            self._explain(f"task={tid}: broker minimum CPU width admitted={cpu_token_budget}")
+                        else:
+                            self._explain(
+                                f"task={tid}: deferred (cpu_tokens {running_tokens}+"
+                                f"{token_cost} > target_cpu_tokens={cpu_token_budget})"
+                            )
+                            continue
+                future, lease = self._admit_and_run(
+                    task,
+                    backend=backend,
+                    ctx=ctx,
+                    execute_root=execute_root,
+                    materialize_shared=materialize_shared,
+                )
+                if future is not None:
+                    futures[tid] = future
+                    future_to_task_id[future] = tid
+                    if lease is not None:
+                        future_leases[future] = lease
+                    remaining.discard(tid)
+                    admitted_this_round += 1
+                    self._perf_metrics["future_count"] += 1
+            # 3) FIRST_COMPLETED：有 future 时等第一个完成（R33-P0-040 事件驱动）。
+            # R39-PERF-019：正常路径不依赖周期 polling——wait 事件驱动返回非空
+            # done；只有 wait 因 timeout 兜底返回空（watchdog/deadlock fallback）
+            # 才计一次 ``scheduler_wait_polling_count``（happy path 应为 0）。
+            done: set[Future] = set()
+            if futures:
+                done = wait(list(futures.values()), timeout=_EVENT_WAIT_TIMEOUT_S,
+                            return_when=FIRST_COMPLETED)[0]
+                if not done:
+                    self._perf_metrics["scheduler_wait_polling_count"] += 1
+            for future in done:
+                key = future_to_task_id.pop(future, None)
+                if key is None:
+                    continue
+                lease = future_leases.pop(future, None)
+                self._processing_lease = lease
+                futures.pop(key, None)
+                # R39-PERF-018：micro-batch future 完成 → 逐 root 处理（结果 /
+                # 失败按 root 独立；成功 root 照常提交，失败 root 走原有 retry/raise）。
+                # 整个 micro-batch 只持有一份合成租约（``lease``），在组内全部
+                # root 处理完一次性释放（exactly once）。
+                mb_roots = future_micro_batch_roots.pop(future, None)
+                if mb_roots is not None:
+                    micro_batch_contracts.pop(key, None)
+                    try:
+                        results_by_root, failures_by_root = future.result(timeout=1.0)
+                    except Exception as exc:  # noqa: BLE001
+                        _release_lease(lease)
+                        kind = classify_error(exc)
+                        for _tid in mb_roots:
+                            micro_batched.discard(_tid)
+                            if _tid not in dag.tasks:
+                                continue
+                            if kind == ERROR_OOM:
+                                if self._handle_oom(_tid, exc, dag, remaining):
+                                    continue
+                                raise
+                            retries = self._retries_remaining.get(_tid, _inner_retry_default())
+                            if kind != ERROR_TRANSIENT or retries <= 0:
+                                raise
+                            self._retries_remaining[_tid] = retries - 1
+                            remaining.add(_tid)
+                        self._explain(
+                            f"microbatch {key}: FUTURE_FAILED "
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                        continue
+                    for _tid in mb_roots:
+                        micro_batched.discard(_tid)
+                        # P0-010 attempt 隔离：OOM replan 后旧 root 已不在 dag.tasks
+                        # → 结果/异常都不触碰新 DAG 状态（租约在组末统一释放）。
+                        if _tid not in dag.tasks:
+                            continue
+                        if _tid in failures_by_root:
+                            _exc = failures_by_root[_tid]
+                            _kind = classify_error(_exc)
+                            if _kind == ERROR_OOM:
+                                if self._handle_oom(_tid, _exc, dag, remaining):
+                                    continue
+                                self._explain(
+                                    f"task={_tid}: OOM_NOT_REPLANNABLE "
+                                    f"{type(_exc).__name__}: {_exc}"
+                                )
+                                raise _exc
+                            _retries = self._retries_remaining.get(_tid, _inner_retry_default())
+                            if _retries > 0 and _kind == ERROR_TRANSIENT:
+                                self._retries_remaining[_tid] = _retries - 1
+                                self._explain(
+                                    f"task={_tid}: FAILED {type(_exc).__name__}: "
+                                    f"{_exc} (class={_kind}, retrying, "
+                                    f"{_retries - 1} left)"
+                                )
+                                remaining.add(_tid)
+                                continue
+                            self._explain(
+                                f"task={_tid}: FAILED_FATAL {type(_exc).__name__}: "
+                                f"{_exc} (class={_kind})"
+                            )
+                            raise _exc
+                        committed.add(_tid)
+                        real_done += 1
+                        self._record_timing(_tid, dag.tasks[_tid])
+                        self._record_task_calibration(
+                            _tid, dag.tasks[_tid], results_by_root[_tid]
+                        )
+                        _tt = dag.tasks[_tid].task_type
+                        if _tt in (TASK_ROOT, TASK_MERGE):
+                            if sink is not None:
+                                if not sink.submit(
+                                    dag.tasks[_tid].factor_name, results_by_root[_tid]
+                                ):
+                                    self._explain(
+                                        f"sink.submit FALSE (microbatch) for "
+                                        f"{dag.tasks[_tid].factor_name} — writer "
+                                        "fatal; abort generation"
+                                    )
+                                    raise RuntimeError(
+                                        f"sink.submit returned False for "
+                                        f"{dag.tasks[_tid].factor_name} "
+                                        "(R39-PERF-018: writer failure must abort)"
+                                    )
+                            if result_handler is not None:
+                                result_handler(
+                                    dag.tasks[_tid].factor_name, results_by_root[_tid]
+                                )
+                            elif sink is None:
+                                self._results[dag.tasks[_tid].factor_name] = (
+                                    results_by_root[_tid]
+                                )
+                        if _tt in (TASK_ROOT, TASK_MERGE):
+                            self._release_consumed(dag, _tid, ctx)
+                    _release_lease(lease)
+                    continue
+                # P0-010 attempt 隔离：OOM replan 后旧 attempt 的 in-flight future
+                # 完成时其 task id 已不在 dag.tasks（被 ``:attempt:N:`` 新 id 取代）→
+                # 直接丢弃（结果/异常都不触碰新 DAG 状态，绝不写入新 partial map）。
+                if key not in dag.tasks and not key.startswith("fusion:"):
+                    _release_lease(lease)
+                    continue
+                try:
+                    _ret_key, result = future.result(timeout=1.0)
+                except Exception as exc:  # noqa: BLE001
+                    _release_lease(lease)
+                    kind = classify_error(exc)
+                    # R38 P0-004/005（§5）：OOM → smaller-shape replan，然后重试。
+                    if kind == ERROR_OOM:
+                        if self._handle_oom(key, exc, dag, remaining):
+                            continue
+                        self._explain(
+                            f"task={key}: OOM_NOT_REPLANNABLE {type(exc).__name__}: {exc}"
+                        )
+                        raise
+                    retries = self._retries_remaining.get(key, _inner_retry_default())
+                    # R31-006：只有 transient（或未知=保守单次）自动 retry；
+                    # permanent（PIT/semantic/参数/不支持算子/确定性错误）不重跑。
+                    if retries > 0 and kind == ERROR_TRANSIENT:
+                        self._retries_remaining[key] = retries - 1
+                        self._explain(
+                            f"task={key}: FAILED {type(exc).__name__}: {exc} "
+                            f"(class={kind}, retrying, {retries - 1} left)"
+                        )
+                        if key.startswith("fusion:"):
+                            # fusion 失败 → 回退逐 root 重新调度（honest fallback）。
+                            gr = future_group_roots.pop(future, None)
+                            if gr is not None:
+                                for _t in gr:
+                                    remaining.add(_t)
+                        else:
+                            remaining.add(key)
+                        continue
+                    # R27-042：不直接 kill 运行中 task；永久失败如实抛出。
+                    self._explain(
+                        f"task={key}: FAILED_FATAL {type(exc).__name__}: {exc} "
+                        f"(class={kind})"
+                    )
+                    raise
+                task = dag.tasks.get(key)
+                if task is not None and task.task_type == TASK_CSE_SHARED:
+                    transferred = self._transfer_cse_memory_ownership(ctx, key, lease)
+                    if transferred is False:
+                        sid = key.split(":", 1)[1]
+                        store = getattr(ctx, "shared_buffers", None)
+                        if store is not None:
+                            store.release(sid)
+                        _release_lease(lease)
+                        lease = None
+                        from factor_engine.runtime.resource_errors import ResourceBudgetExceeded
+    
+                        raise ResourceBudgetExceeded(
+                            f"CSE memory ownership transfer failed for {key}"
+                        )
+                    if transferred:
+                        lease = None
+                _release_lease(lease)
+                # fusion group 完成：逐 root 处理结果（honest per-root fallback
+                # 结果也已进入 dict）。
+                group_roots = future_group_roots.pop(future, None)
+                if group_roots is not None:
+                    fusion_done.add(key)
+                    results_by_root = result if isinstance(result, dict) else {}
+                    for _tid in group_roots:
+                        committed.add(_tid)
+                        real_done += 1
+                        # P0-011：先取 ``_res`` 再用——旧顺序在 ``_record_task_calibration``
+                        # 时 ``_res`` 还没赋值（首轮 UnboundLocalError / 上一轮残留值）。
+                        _res = results_by_root.get(_tid)
+                        self._record_timing(_tid, dag.tasks[_tid])
+                        self._record_task_calibration(_tid, dag.tasks[_tid], _res)
+                        if dag.tasks[_tid].task_type == TASK_ROOT:
+                            if sink is not None:
+                                if not sink.submit(dag.tasks[_tid].factor_name, _res):
+                                    self._explain(
+                                        f"sink.submit FALSE (fusion) for "
+                                        f"{dag.tasks[_tid].factor_name} — writer fatal; "
+                                        "abort generation"
+                                    )
+                                    raise RuntimeError(
+                                        f"sink.submit returned False for "
+                                        f"{dag.tasks[_tid].factor_name} (P0-023: writer "
+                                        "failure must abort the generation)"
+                                    )
+                            if result_handler is not None:
+                                result_handler(dag.tasks[_tid].factor_name, _res)
+                            elif sink is None:
+                                self._results[dag.tasks[_tid].factor_name] = _res
+                        self._release_consumed(dag, _tid, ctx)
+                    continue
+                committed.add(key)
+                real_done += 1
+                self._record_timing(key, dag.tasks[key])
+                self._record_task_calibration(key, dag.tasks[key], result)
+                task_type = dag.tasks[key].task_type
+                if task_type == TASK_SHARD:
+                    # R38 P0-001：shard 子任务完成 → 结果写入 merge 的 partials
+                    #（大结果 spool 到磁盘，merge 前不全部常驻内存，§P0-003）。
+                    merge_id = key.rsplit(":shard:", 1)[0] + ":merge"
+                    # R39-PERF-027：spool 阈值自适应（live_headroom / writer 队列
+                    # 余量 / 盘吞吐 / merge 邻近）。全部信号缺失时 policy 安全回退
+                    # 固定 512MiB（与原行为一致），绝不比旧行为更激进地 spool。
+                    try:
+                        from factor_engine.runtime.spool_policy import default_spool_policy_factory
+    
+                        policy = default_spool_policy_factory(
+                            broker=self.broker, sink=self.sink
+                        )
+                        stored = self._shard_executor().spool_or_keep(
+                            result, policy=policy
+                        )
+                    except Exception:  # noqa: BLE001
+                        stored = self._shard_executor().spool_or_keep(result)
+                    self._shard_partials.setdefault(merge_id, {})[key] = stored
+                    continue
+                # R38 P0-001：MERGE 任务结果 = 因子最终结果（同 ROOT 处理）。
+                if task_type in (TASK_ROOT, TASK_MERGE):
+                    if sink is not None:
+                        if not sink.submit(dag.tasks[key].factor_name, result):
+                            self._explain(
+                                f"sink.submit FALSE for {dag.tasks[key].factor_name} "
+                                f"— writer fatal / queue closed; abort generation"
+                            )
+                            raise RuntimeError(
+                                f"sink.submit returned False for "
+                                f"{dag.tasks[key].factor_name} (R38-P0-046: writer "
+                                "failure must abort the generation)"
+                            )
+                    if result_handler is not None:
+                        result_handler(dag.tasks[key].factor_name, result)
+                    elif sink is None:
+                        self._results[dag.tasks[key].factor_name] = result
+                # 释放已消费的 CSE sid（引用计数归零立即释放）。
+                if task_type in (TASK_ROOT, TASK_MERGE):
+                    self._release_consumed(dag, key, ctx)
+            # 4) R36 P0-003：动态 CPU 由 ResourceController 双向控制（每 tick 在
+            #    顶部决策里 fast down / slow up）——不再一次性写死 0.6。
+            # 5) 无进展保护：admission 全部被拒且没有在跑 future → 等资源释放后
+            #    再试；连续多轮无进展则**先 auto-shard replan smaller**（§100），
+            #    再失败——不能只报 stuck。
+            if admitted_this_round == 0 and not futures and remaining:
+                no_progress_rounds += 1
+                if no_progress_rounds >= 200:
+                    replanned = self._auto_shard_replan(dag, remaining)
+                    if replanned:
+                        self._explain(
+                            f"R36_AUTO_SHARD: replanned {replanned} task(s) smaller "
+                            f"(remaining={len(remaining)})"
+                        )
+                        no_progress_rounds = 0
+                        continue
+                    self._explain(
+                        "STUCK: no task admitted for 200 rounds; broker headroom="
+                        f"{self.broker.snapshot().live_headroom} remaining={sorted(remaining)[:5]}"
+                    )
+>                   raise RuntimeError(
+                        "AdaptiveBatchScheduler made no progress: all ready tasks "
+                        "rejected by ResourceBroker admission (auto-shard not legal); "
+                        f"broker={self.broker.summary()} remaining={sorted(remaining)[:10]}"
+                    )
+E                   RuntimeError: AdaptiveBatchScheduler made no progress: all ready tasks rejected by ResourceBroker admission (auto-shard not legal); broker={'hard_memory_limit': 8589934592, 'hard_cpu_slots': 32, 'live_headroom': 0, 'host_mem_available': 28672487424, 'process_family_rss': 384012288, 'process_family_pss': 300174336, 'spill_total_bytes': 2164375941120, 'spill_free_bytes': 818459328512, 'disk_busy': 0.0, 'reserve_bytes': 1073741824, 'usable_spill_bytes': 602021734400, 'pressure_stage': 'PRESSURE_3', 'recommended_concurrency': 8, 'cpu': {'hard_slots': 32, 'soft_budget': 1, 'in_use': 0}, 'io': {'concurrency': 32, 'in_use': 0}, 'running_tasks': 0, 'running_peak_sum': 0, 'admission_events': [], 'pressure_log': [], 'base_uncertainty': 1.3, 'external_cpu_ema': 0.207, 'auto_memory_budget': {'hard_memory_limit': 8589934592, 'emergency_reserve': 1073741824, 'safe_live_budget': 0, 'execution_budget': 0, 'safety_factor': 0.8, 'candidates': {'cgroup_remaining': 0, 'host_remaining': 27598745600, 'configured_remaining': 8205922304}, 'measurement_state': 'KNOWN_ZERO'}, 'memory_lease_bytes': 0, 'active_memory_leases': 0} remaining=['root:F0', 'root:F1', 'root:F10', 'root:F11', 'root:F12', 'root:F13', 'root:F14', 'root:F15', 'root:F16', 'root:F17']
+
+factor_engine/runtime/adaptive_batch_scheduler.py:2035: RuntimeError
+=========================== short test summary info ============================
+FAILED factor_engine/tests/r39/test_perf_scheduler_2026_08.py::test_micro_batch_coalesces_cheap_roots
+FAILED factor_engine/tests/r39/test_perf_scheduler_2026_08.py::test_micro_batch_error_isolation_via_scheduler
+FAILED factor_engine/tests/r39/test_perf_scheduler_2026_08.py::test_future_per_factor_ratio_drops
+FAILED factor_engine/tests/r39/test_perf_scheduler_2026_08.py::test_scheduler_wait_polling_count_zero_happy_path
+4 failed, 30 passed in 87.00s (0:01:26)

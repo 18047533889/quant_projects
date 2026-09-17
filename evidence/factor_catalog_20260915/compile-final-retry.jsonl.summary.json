@@ -1,0 +1,790 @@
+{
+  "processed": 4923,
+  "counts": {
+    "COMPILE_FAILED": 4923
+  },
+  "seconds": 53.16664059297182,
+  "rows_per_second": 92.59565669550277,
+  "failures": [
+    {
+      "error_type": "SyntaxError",
+      "error": "invalid syntax. Maybe you meant '==' or ':=' instead of '='? (<unknown>, line 1)",
+      "count": 276,
+      "example": {
+        "source_row": 95581,
+        "formula": "ts_markov_persistence [x=atr_pct]"
+      }
+    },
+    {
+      "error_type": "ValueError",
+      "error": "NON_FACTOR_OR_MISSING_ID",
+      "count": 239,
+      "example": null
+    },
+    {
+      "error_type": "TypedInputContractError",
+      "error": "ts_spectral_entropy requires typed input in ['ReturnDecimal']; got 'MIXED'",
+      "count": 178,
+      "example": {
+        "source_row": 8201,
+        "formula": "ts_spectral_entropy(safe_div_null(amount, free_market_cap), window=60)"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "cs_rank_gaussian.method: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): cs_rank_gaussian.method [planning]: method must be a string, not float (3.0)",
+      "count": 160,
+      "example": {
+        "source_row": 26549,
+        "formula": "rank(add(multiply(cs_rank_gaussian(rank(zscore(KeltnerLower(high, low, close, 10, 10, 2.0))), 3.0), cs_pct_rank(relative_volume(volume, 20))), neg(multiply(abs(rank(zscore(KeltnerLower(high, low, close, 10, 10, 2.0)))), cs_pct_rank(price_impact(ret, amount, 20))))))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_conditional_transfer_entropy.bins: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_conditional_transfer_entropy.bins [planning]: bins=5 is not an allowed choice [2, 3]",
+      "count": 145,
+      "example": {
+        "source_row": 48625,
+        "formula": "rank(ts_conditional_transfer_entropy(ret, turnover_ratio, gt(turnover_zscore(turnover_ratio, 20), 0.5), window=120, bins=5, lag=1, min_transitions=30, min_cells_ratio=0.1))"
+      }
+    },
+    {
+      "error_type": "TypedInputContractError",
+      "error": "ts_spectral_entropy requires typed input in ['ReturnDecimal']; got 'MinuteSeries'",
+      "count": 144,
+      "example": {
+        "source_row": 42564,
+        "formula": "rank(ts_spectral_entropy(rank(intra_return_activity_corr(minute_close, minute_volume, False)), window=60))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_markov_entropy_production.bins: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_markov_entropy_production.bins [planning]: bins=6 is not an allowed choice [3, 5, 8]",
+      "count": 130,
+      "example": {
+        "source_row": 48784,
+        "formula": "rank(ts_markov_entropy_production(ret, window=120, bins=6, lag=1, min_periods=60))"
+      }
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: OBV",
+      "count": 127,
+      "example": null
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "cs_rank_copula_entropy.grid: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): cs_rank_copula_entropy.grid [planning]: grid=10 is not an allowed choice [4, 8, 16]",
+      "count": 109,
+      "example": {
+        "source_row": 48523,
+        "formula": "rank(cs_rank_copula_entropy(subtract(exp(ts_sum(log(add(ret, 1.0)), 20)), 1.0), turnover_ratio, grid=10))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_quantile_crossing_spectral_concentration.quantile: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_quantile_crossing_spectral_concentration.quantile [planning]: quantile must be <= 0.5",
+      "count": 109,
+      "example": {
+        "source_row": 48826,
+        "formula": "rank(ts_quantile_crossing_spectral_concentration(ret, window=120, quantile=0.9, side='upper', fixed_threshold=False))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "cs_rank_copula_mi.grid: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): cs_rank_copula_mi.grid [planning]: grid=10 is not an allowed choice [4, 8, 16]",
+      "count": 108,
+      "example": {
+        "source_row": 48526,
+        "formula": "rank(cs_rank_copula_mi(subtract(exp(ts_sum(log(add(ret, 1.0)), 20)), 1.0), turnover_ratio, grid=10))"
+      }
+    },
+    {
+      "error_type": "TypedInputContractError",
+      "error": "ts_spectral_entropy requires typed input in ['ReturnDecimal']; got None",
+      "count": 103,
+      "example": {
+        "source_row": 2820,
+        "formula": "ts_spectral_entropy(ts_delta(roe, 1), window=60)"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_cross_extremogram.target_q: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_cross_extremogram.target_q [planning]: target_q must be <= 0.5",
+      "count": 102,
+      "example": {
+        "source_row": 48631,
+        "formula": "rank(ts_cross_extremogram(ret, turnover_ratio, window=120, target_q=0.9, source_q=0.9, lag=1, target_side='upper', source_side='upper', fixed_threshold=False))"
+      }
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: intraday_volume_clock_path_roughness",
+      "count": 100,
+      "example": null
+    },
+    {
+      "error_type": "DSLParseError",
+      "error": "_factory.<locals>.function() takes 0 positional arguments but 3 were given",
+      "count": 99,
+      "example": null
+    },
+    {
+      "error_type": "SyntaxError",
+      "error": "invalid syntax (<unknown>, line 1)",
+      "count": 97,
+      "example": null
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_cross_quantilogram.target_q: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_cross_quantilogram.target_q [planning]: target_q must be <= 0.5",
+      "count": 84,
+      "example": {
+        "source_row": 48634,
+        "formula": "rank(ts_cross_quantilogram(ret, turnover_ratio, window=120, target_q=0.9, source_q=0.9, lag=1, target_side='upper', source_side='upper', fixed_threshold=False))"
+      }
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: StochasticK",
+      "count": 81,
+      "example": null
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_active_information_storage.bins: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_active_information_storage.bins [planning]: bins=6 is not an allowed choice [2, 3]",
+      "count": 79,
+      "example": {
+        "source_row": 48586,
+        "formula": "rank(ts_active_information_storage(ret, window=120, bins=6, history_length=2))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_rolling_sr_gaussian_mean_shift_score.side: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_rolling_sr_gaussian_mean_shift_score.side [planning]: side='two_sided' is not an allowed choice ['up', 'down']",
+      "count": 79,
+      "example": {
+        "source_row": 48841,
+        "formula": "rank(ts_rolling_sr_gaussian_mean_shift_score(ret, window=120, shift_sigma=1.0, baseline_window=40, side='two_sided'))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_multiscale_permutation_entropy_slope: planning-time relational/active_when validation failed (R13 NEW-P0-20): ts_multiscale_permutation_entropy_slope: ts_multiscale_permutation_entropy_slope: coarsest scale must yield >= min_patterns ordinal patterns (window=120, order=3, min_patterns=20)",
+      "count": 77,
+      "example": {
+        "source_row": 48799,
+        "formula": "rank(ts_multiscale_permutation_entropy_slope(ret, window=120, order=3, min_patterns=20))"
+      }
+    },
+    {
+      "error_type": "DSLParseError",
+      "error": "Unsupported syntax node: Subscript",
+      "count": 77,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: ts_persistence_entropy",
+      "count": 69,
+      "example": {
+        "source_row": 6786,
+        "formula": "rank(ts_persistence_entropy(ret, window=60, tau=1, dim=3))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_extreme_cluster_ratio.q: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_extreme_cluster_ratio.q [planning]: q must be >= 1e-12",
+      "count": 68,
+      "example": {
+        "source_row": 12785,
+        "formula": "rank(neg(ts_extreme_cluster_ratio(ret, 60, 2.0, 0.0, 5, 5)))"
+      }
+    },
+    {
+      "error_type": "TypedInputContractError",
+      "error": "operator 'event_historical_response_mean' parameter 'event' declares input_types=['EventBool', 'MaskBool'], got 'DailySeries' on 'input[1]' (typed-IR #269)",
+      "count": 67,
+      "example": {
+        "source_row": 3023,
+        "formula": "rank(event_historical_response_mean(ret, ashare_limit_up_touch(high, high_limit, 0.005), history_window=60, horizon=5, mode='sum'))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_extremogram.quantile: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_extremogram.quantile [planning]: quantile must be <= 0.5",
+      "count": 67,
+      "example": {
+        "source_row": 48679,
+        "formula": "rank(ts_extremogram(ret, window=120, quantile=0.9, lag=1, side='upper', fixed_threshold=False))"
+      }
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: AROON",
+      "count": 64,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: CCI",
+      "count": 63,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: WilliamsR",
+      "count": 58,
+      "example": null
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_extremal_dependence_decay.quantile: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_extremal_dependence_decay.quantile [planning]: quantile must be <= 0.5",
+      "count": 55,
+      "example": {
+        "source_row": 48676,
+        "formula": "rank(ts_extremal_dependence_decay(ret, window=120, quantile=0.9, side='upper', max_lag=10, fixed_threshold=False))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "candlestick_pattern: planning-time relational/active_when validation failed (R13 NEW-P0-20): candlestick_pattern: parameter 'body_window' is inactive when pattern='hammer' (allowed: ['3_stars_south', 'abandoned_baby', 'advance_block', 'belt_hold', 'cdl_3_stars_south', 'cdl_abandoned_baby', 'cdl_advance_block', 'cdl_belt_hold', 'cdl_closing_marubozu', 'cdl_doji_star', 'cdl_high_wave', 'cdl_long_legged_doji', 'cdl_long_line', 'cdl_rickshaw_man', 'cdl_separating_lines', 'cdl_short_line', 'cdl_stall",
+      "count": 47,
+      "example": {
+        "source_row": 48490,
+        "formula": "rank(where(candlestick_pattern(open, high, low, close, pattern='hammer', body_window=20, shadow_window=20, penetration=0.3), CMF(high, low, close, volume, 20), neg(ts_std(ret, 20))))"
+      }
+    },
+    {
+      "error_type": "PassInvariantError",
+      "error": "pass composite_lowering invariant failure: SOURCE_DEPENDENCIES_PRESERVED: before=['{\"dialect\":\"lqtp\",\"dialect_version\":\"2026-07-19\",\"field\":\"AdjClose\",\"params\":{},\"table\":\"StockDailyBarAdj\",\"transform\":null,\"transform_params\":{}}', '{\"dialect\":\"lqtp\",\"dialect_version\":\"2026-07-19\",\"field\":\"AdjHigh\",\"params\":{},\"table\":\"StockDailyBarAdj\",\"transform\":null,\"transform_params\":{}}', '{\"dialect\":\"lqtp\",\"dialect_version\":\"2026-07-19\",\"field\":\"AdjLow\",\"params\":{},\"table\":\"StockDailyBarAdj\",\"transform\":n",
+      "count": 47,
+      "example": null
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "KAMA: planning-time relational/active_when validation failed (R13 NEW-P0-20): KAMA: fast_window must be < slow_window (fast={fast_window}, slow={slow_window})",
+      "count": 43,
+      "example": null
+    },
+    {
+      "error_type": "DSLParseError",
+      "error": "call arity 20 exceeds ComplexityBudget.max_call_arity=12",
+      "count": 42,
+      "example": null
+    },
+    {
+      "error_type": "TypedInputContractError",
+      "error": "operator 'event_historical_response_mean' parameter 'response' declares input_types=['NonNegativeActivity', 'NonNegativeWeight', 'PositiveLevel', 'PriceContinuous', 'PriceRaw', 'ReturnDecimal'], got 'DailySeries' on 'input[0]' (typed-IR #269); operator 'event_historical_response_mean' parameter 'event' declares input_types=['EventBool', 'MaskBool'], got 'DailySeries' on '__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlJldHVybiIsInBhcmFtcyI6e30sIn",
+      "count": 41,
+      "example": null
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_transition_count.missing_policy: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_transition_count.missing_policy [planning]: missing_policy must be a string, not float (0.0)",
+      "count": 38,
+      "example": {
+        "source_row": 14035,
+        "formula": "rank(ts_transition_count(ret, 20, 0.0))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_gap_fill_ratio.window: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_gap_fill_ratio.window [planning]: window must be an integer",
+      "count": 36,
+      "example": {
+        "source_row": 14750,
+        "formula": "rank(ts_gap_fill_ratio(close, open, pre_close, 0.01))"
+      }
+    },
+    {
+      "error_type": "TypedInputContractError",
+      "error": "ts_spectral_entropy requires typed input in ['ReturnDecimal']; got 'NonNegativeActivity'",
+      "count": 35,
+      "example": {
+        "source_row": 8127,
+        "formula": "ts_spectral_entropy(ts_zscore(turnover_ratio, 60), window=60)"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "cs_bucket.ascending: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): cs_bucket.ascending [planning]: ascending must be a boolean, not int (1)",
+      "count": 32,
+      "example": {
+        "source_row": 2204,
+        "formula": "rank(add(divide(cs_bucket(subtract(exp(ts_sum(log(add(ret, 1.0)), 20)), 1.0), 7, 1), 10.0), multiply(subtract(exp(ts_sum(log(add(ret, 1.0)), 20)), 1.0), 0.01)))"
+      }
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: RSI",
+      "count": 32,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: ATR",
+      "count": 32,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: DPO",
+      "count": 31,
+      "example": null
+    },
+    {
+      "error_type": "TypedInputContractError",
+      "error": "operator 'dollar_volume_zscore' parameter 'close' declares input_types=['OfficialLimitPrice', 'PositiveLevel', 'PriceContinuous', 'PriceRaw'], got 'DailySeries' on 'close' (typed-IR #269)",
+      "count": 29,
+      "example": {
+        "source_row": 1295,
+        "formula": "subtract(rank(dollar_volume_zscore(close, volume, 20)), rank(roll_spread_proxy(ret, 60)))"
+      }
+    },
+    {
+      "error_type": "SyntaxError",
+      "error": "invalid syntax. Perhaps you forgot a comma? (<unknown>, line 1)",
+      "count": 29,
+      "example": null
+    },
+    {
+      "error_type": "SyntaxError",
+      "error": "invalid character '×' (U+00D7) (<unknown>, line 1)",
+      "count": 28,
+      "example": {
+        "source_row": 95961,
+        "formula": "multiply/safe_div_null [ts_turnover_profit_share × momentum]"
+      }
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: ADXR",
+      "count": 24,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: TRIX",
+      "count": 24,
+      "example": null
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_tail_ratio.q_low: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_tail_ratio.q_low [planning]: q_low must be <= 0.999999999999",
+      "count": 23,
+      "example": {
+        "source_row": 18760,
+        "formula": "rank(subtract(rank(ts_tail_ratio(ret, 60, 2.0, 0.0, 5)), rank(ts_abs_entropy(ret, 60, True, 20))))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_conditional_mutual_information.bins: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_conditional_mutual_information.bins [planning]: bins must be <= 3",
+      "count": 21,
+      "example": {
+        "source_row": 85235,
+        "formula": "rank(ts_conditional_mutual_information(ret,turnover_ratio,ts_std(ret,20),window=60,bins=4))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_km_diffusion_gradient.bins: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_km_diffusion_gradient.bins [planning]: bins=6 is not an allowed choice [3, 5, 8]",
+      "count": 21,
+      "example": {
+        "source_row": 85271,
+        "formula": "rank(ts_km_diffusion_gradient(ret,window=80,bins=6,lag=1))"
+      }
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: max_drawdown",
+      "count": 21,
+      "example": null
+    },
+    {
+      "error_type": "PassInvariantError",
+      "error": "pass composite_lowering invariant failure: LEAF_COLUMNS_PRESERVED: before=[(('cardinality', 'many_to_one'), ('domain', 'price_volume'), ('dtype', 'float64'), ('field', 'minute_close'), ('field_id', 'StockMinuteBarAdj.minute_close'), ('field_registry_hash', '0d6850cbf29bdfdd79788249299b52be622fd0eff9db3412b92efc0cda0a4b7c'), ('frequency', 'minute'), ('name', '__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IkFkakNsb3NlIiwicGFyYW1zIjp7fSwic2NoZW1hX3Z",
+      "count": 19,
+      "example": null
+    },
+    {
+      "error_type": "TypedInputContractError",
+      "error": "operator 'event_historical_response_mean' parameter 'event' declares input_types=['EventBool', 'MaskBool'], got 'ReturnDecimal' on 'input[1]' (typed-IR #269)",
+      "count": 18,
+      "example": {
+        "source_row": 13892,
+        "formula": "rank(event_historical_response_mean(ret, gt(abs(ret), multiply(ts_std(ret, 20), 2.0)), history_window=120, horizon=5, mode='sum'))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_state_integral.lower: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_state_integral.lower [planning]: lower must be >= 0.0",
+      "count": 18,
+      "example": {
+        "source_row": 88479,
+        "formula": "rank(multiply(subtract(rank(ts_trend_tstat(log(close), 60)), 0.5), multiply(rank(ts_state_integral(ts_zscore(ts_sum(ret, 5), 60), upper=1.0, lower=-1.0, max_run=20, half_life=10.0)), rank(efficiency_ratio(close, 20)))))"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_quantilogram' kwargs must be literals, got 'side'",
+      "count": 18,
+      "example": {
+        "source_row": 95730,
+        "formula": "ts_quantilogram [x=ret_1d; side=lower]"
+      }
+    },
+    {
+      "error_type": "PassInvariantError",
+      "error": "pass composite_lowering invariant failure: LEAF_COLUMNS_PRESERVED: before=[(('cardinality', 'many_to_one'), ('domain', 'fundamental'), ('dtype', 'float64'), ('field', 'total_assets'), ('field_id', 'StockBalance.total_assets'), ('field_registry_hash', '0d6850cbf29bdfdd79788249299b52be622fd0eff9db3412b92efc0cda0a4b7c'), ('frequency', 'daily'), ('name', '__fe_source_ref_v1__eyJkaWFsZWN0IjoibHF0cCIsImRpYWxlY3RfdmVyc2lvbiI6IjIwMjYtMDctMTkiLCJmaWVsZCI6IlRvdGFsQXNzZXRzIiwicGFyYW1zIjp7fSwic2NoZW1hX3Zlcn",
+      "count": 18,
+      "example": null
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_downside_deviation.window: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_downside_deviation.window [planning]: window must be >= 2",
+      "count": 17,
+      "example": {
+        "source_row": 19531,
+        "formula": "rank(subtract(cs_pct_rank(ts_downside_deviation(ret, 0.0, 20, 10)), cs_pct_rank(amihud_illiquidity(ret, amount, 20))))"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'fiscal_sign_consistency' kwargs must be literals, got 'x'",
+      "count": 14,
+      "example": null
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'fiscal_direction_consistency' kwargs must be literals, got 'x'",
+      "count": 14,
+      "example": null
+    },
+    {
+      "error_type": "SameUnitInputContractError",
+      "error": "ts_first_passage_bias: same-unit contract cannot bind ['scale']",
+      "count": 13,
+      "example": null
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "cs_knn_local_linear_residual.k: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): cs_knn_local_linear_residual.k [planning]: k must be >= 20",
+      "count": 12,
+      "example": {
+        "source_row": 82763,
+        "formula": "rank(subtract(rank(cs_autoencoder_reconstruction_error(ts_return(close,20),ts_std(ret,20),turnover_ratio,amihud_illiquidity(ret,close,volume,20),window=60)), rank(cs_knn_local_linear_residual(ts_return(close,20),ts_std(ret,20),turnover_ratio,k=10))))"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_markov_persistence' kwargs must be literals, got 'x'",
+      "count": 11,
+      "example": {
+        "source_row": 95574,
+        "formula": "ts_markov_persistence [x=ret_1d]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_markov_state_entropy' kwargs must be literals, got 'x'",
+      "count": 11,
+      "example": {
+        "source_row": 95586,
+        "formula": "ts_markov_state_entropy [x=ret_1d]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_markov_transition_surprisal' kwargs must be literals, got 'x'",
+      "count": 11,
+      "example": {
+        "source_row": 95598,
+        "formula": "ts_markov_transition_surprisal [x=ret_1d]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_kramers_moyal_local_stability' kwargs must be literals, got 'x'",
+      "count": 11,
+      "example": {
+        "source_row": 95610,
+        "formula": "ts_kramers_moyal_local_stability [x=ret_1d]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_markov_entropy_production' kwargs must be literals, got 'x'",
+      "count": 11,
+      "example": {
+        "source_row": 95622,
+        "formula": "ts_markov_entropy_production [x=ret_1d]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_active_information_storage' kwargs must be literals, got 'x'",
+      "count": 11,
+      "example": {
+        "source_row": 95634,
+        "formula": "ts_active_information_storage [x=ret_1d]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_markov_committor' kwargs must be literals, got 'x'",
+      "count": 11,
+      "example": {
+        "source_row": 95646,
+        "formula": "ts_markov_committor [x=ret_1d]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_markov_mean_first_passage_time' kwargs must be literals, got 'x'",
+      "count": 11,
+      "example": {
+        "source_row": 95658,
+        "formula": "ts_markov_mean_first_passage_time [x=ret_1d]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_markov_spectral_gap' kwargs must be literals, got 'x'",
+      "count": 11,
+      "example": {
+        "source_row": 95670,
+        "formula": "ts_markov_spectral_gap [x=ret_1d]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_markov_stationary_surprisal' kwargs must be literals, got 'x'",
+      "count": 11,
+      "example": {
+        "source_row": 95682,
+        "formula": "ts_markov_stationary_surprisal [x=ret_1d]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_km_equilibrium_distance' kwargs must be literals, got 'x'",
+      "count": 11,
+      "example": {
+        "source_row": 95694,
+        "formula": "ts_km_equilibrium_distance [x=ret_1d]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_km_diffusion_gradient' kwargs must be literals, got 'x'",
+      "count": 11,
+      "example": {
+        "source_row": 95706,
+        "formula": "ts_km_diffusion_gradient [x=ret_1d]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_km_quasipotential_depth' kwargs must be literals, got 'x'",
+      "count": 11,
+      "example": {
+        "source_row": 95718,
+        "formula": "ts_km_quasipotential_depth [x=ret_1d]"
+      }
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: open_gap",
+      "count": 11,
+      "example": null
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "cs_knn_tangent_residual.k: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): cs_knn_tangent_residual.k [planning]: k must be >= 20",
+      "count": 10,
+      "example": {
+        "source_row": 82773,
+        "formula": "rank(add(rank(cs_knn_tangent_residual(ts_return(close,20),ts_std(ret,20),turnover_ratio,k=10)), rank(cs_knn_graph_dirichlet_energy(ts_return(close,20),ts_std(ret,20),turnover_ratio,k=10))))"
+      }
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "cs_knn_local_gradient_norm.k: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): cs_knn_local_gradient_norm.k [planning]: k must be >= 20",
+      "count": 10,
+      "example": {
+        "source_row": 82793,
+        "formula": "rank(multiply(rank(cs_knn_local_gradient_norm(ts_return(close,20),ts_std(ret,20),turnover_ratio,k=10)), rank(intra_jump_clustering(minute_close,2.5))))"
+      }
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: close_gap",
+      "count": 10,
+      "example": null
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_autocorr_decay_half_life.use_abs: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_autocorr_decay_half_life.use_abs [planning]: use_abs must be a boolean, not int (20)",
+      "count": 9,
+      "example": {
+        "source_row": 12654,
+        "formula": "rank(ts_autocorr_decay_half_life(ret, 60, 1, 20, 0.05))"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_extremogram' kwargs must be literals, got 'side'",
+      "count": 9,
+      "example": {
+        "source_row": 95732,
+        "formula": "ts_extremogram [x=ret_1d; side=lower]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_extremal_dependence_decay' kwargs must be literals, got 'side'",
+      "count": 9,
+      "example": {
+        "source_row": 95733,
+        "formula": "ts_extremal_dependence_decay [x=ret_1d; side=lower]"
+      }
+    },
+    {
+      "error_type": "SameUnitInputContractError",
+      "error": "ts_crossing_acceleration: same-unit contract cannot bind ['y']",
+      "count": 9,
+      "example": null
+    },
+    {
+      "error_type": "SameUnitInputContractError",
+      "error": "ts_crossing_speed: same-unit contract cannot bind ['y']",
+      "count": 9,
+      "example": null
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_threshold_cycle_period: planning-time relational/active_when validation failed (R13 NEW-P0-20): ts_threshold_cycle_period: lower must be < upper",
+      "count": 9,
+      "example": null
+    },
+    {
+      "error_type": "OperatorParameterError",
+      "error": "ts_quantile_skew.min_periods: planning-time parameter validation failed (R6 P0-04 / R13 NEW-P0-20): ts_quantile_skew.min_periods [planning]: min_periods must be an integer",
+      "count": 8,
+      "example": {
+        "source_row": 12918,
+        "formula": "multiply(rank(ts_quantile_skew(ret, 60, 0.1, 0.25, 0.75, 0.9)), rank(turnover_zscore(turnover_ratio, 20)))"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_expectile' kwargs must be literals, got 'tau'",
+      "count": 8,
+      "example": {
+        "source_row": 95804,
+        "formula": "ts_expectile [x=ret_1d; tau=low]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_cross_spectral_coherence' kwargs must be literals, got 'x'",
+      "count": 8,
+      "example": {
+        "source_row": 96326,
+        "formula": "ts_cross_spectral_coherence [x=ret_1d; y=turnover]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_cross_spectral_phase' kwargs must be literals, got 'x'",
+      "count": 8,
+      "example": {
+        "source_row": 96335,
+        "formula": "ts_cross_spectral_phase [x=ret_1d; y=turnover]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_transfer_entropy_peak_strength' kwargs must be literals, got 'x'",
+      "count": 8,
+      "example": {
+        "source_row": 96344,
+        "formula": "ts_transfer_entropy_peak_strength [x=ret_1d; y=turnover]"
+      }
+    },
+    {
+      "error_type": "NotImplementedError",
+      "error": "cleaned op 'ts_transfer_entropy_peak_lag' kwargs must be literals, got 'x'",
+      "count": 8,
+      "example": {
+        "source_row": 96353,
+        "formula": "ts_transfer_entropy_peak_lag [x=ret_1d; y=turnover]"
+      }
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: ts_quantile_regression_beta",
+      "count": 8,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: holder_concentration_change",
+      "count": 7,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: holder_count_change_rate",
+      "count": 7,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: AROON_up",
+      "count": 7,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: AROON_down",
+      "count": 7,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: BollingerUpper",
+      "count": 7,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: BollingerLower",
+      "count": 7,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: MOM",
+      "count": 7,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: ROC",
+      "count": 7,
+      "example": null
+    },
+    {
+      "error_type": "DSLUnknownOperatorError",
+      "error": "Unsupported function: StochasticD",
+      "count": 7,
+      "example": null
+    }
+  ],
+  "failure_groups_truncated": true,
+  "scope": "compile_preflight_only_not_execution_certification",
+  "start": 0
+}

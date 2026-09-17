@@ -58,6 +58,7 @@ def long_table_to_series(
     asset_col: str = "asset",
     value_col: str = VALUE_COLUMN,
     sort: bool = True,
+    preserve_sparse: bool = False,
 ) -> pd.Series:
     """因子长表转 MultiIndex Series。
     
@@ -99,6 +100,8 @@ def long_table_to_series(
     # timestamp (leave None).
     ts_level = indexed.index.get_level_values(0)
     try:
+        if preserve_sparse:
+            return indexed.astype("float64")
         uniq = pd.DatetimeIndex(ts_level.unique())
         if len(uniq) >= 2:
             inferred = pd.infer_freq(uniq)

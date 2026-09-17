@@ -1,0 +1,37 @@
+{
+  "input": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/input.jsonl.gz",
+  "output": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/fiscal-r67-row102274-wide-r17.jsonl.gz",
+  "processed": 1,
+  "offset": 102272,
+  "next_offset": 102273,
+  "complete": true,
+  "stopped_reason": null,
+  "counts": {
+    "EXECUTED": 1
+  },
+  "seconds": 19.043655237182975,
+  "window": [
+    "2020-01-01",
+    "2026-04-30"
+  ],
+  "symbols": [
+    "000001.SZ",
+    "000002.SZ",
+    "000063.SZ",
+    "000333.SZ",
+    "000651.SZ",
+    "000858.SZ",
+    "600000.SH",
+    "600519.SH"
+  ],
+  "dataset": "ashare_stock_daily_adj",
+  "max_rss_mib": 4096,
+  "timeout_seconds": 210,
+  "deadline_kind": "legacy-cooperative",
+  "requested_backend": "pandas",
+  "batch_size": 1,
+  "requested_limit": 1,
+  "prepare_chunk": 1,
+  "daily_only": false,
+  "input_records_scanned": 1
+}

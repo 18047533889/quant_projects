@@ -1,0 +1,36 @@
+{
+  "input": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/input.jsonl.gz",
+  "output": "/home/sunhaiwei/quant_projects/evidence/factor_catalog_20260915/minute-scope-row24-000022.jsonl.gz",
+  "processed": 1,
+  "offset": 22,
+  "next_offset": 23,
+  "complete": true,
+  "stopped_reason": null,
+  "counts": {
+    "EXECUTED_ALL_NONFINITE": 1
+  },
+  "seconds": 4.655891712056473,
+  "window": [
+    "2025-01-02",
+    "2025-01-08"
+  ],
+  "symbols": [
+    "000001.SZ",
+    "000002.SZ",
+    "000063.SZ",
+    "000333.SZ",
+    "000651.SZ",
+    "000858.SZ",
+    "600000.SH",
+    "600519.SH"
+  ],
+  "dataset": "ashare_stock_daily_adj",
+  "max_rss_mib": 2048,
+  "timeout_seconds": 600,
+  "deadline_kind": "batch_scaled_cooperative_individual_retry_external_watchdog_required",
+  "batch_size": 1,
+  "requested_limit": 1,
+  "prepare_chunk": 1,
+  "daily_only": false,
+  "input_records_scanned": 1
+}

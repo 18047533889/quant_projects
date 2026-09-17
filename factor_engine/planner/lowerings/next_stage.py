@@ -34,13 +34,17 @@ def _add(a: PlanNode, b: PlanNode) -> PlanNode:
 
 
 def _ratio(node: PlanNode) -> PlanNode:
-    if len(node.inputs) < 2:
+    # Extra inputs include fiscal period/alignment dependencies; retain the
+    # canonical operator rather than discard those required source columns.
+    if len(node.inputs) != 2:
         return node
     return _safe_div(node.inputs[0], node.inputs[1])
 
 
 def _ratio_abs_den(node: PlanNode) -> PlanNode:
-    if len(node.inputs) < 2:
+    # Extra inputs include fiscal period/alignment dependencies; retain the
+    # canonical operator rather than discard those required source columns.
+    if len(node.inputs) != 2:
         return node
     return _safe_div(node.inputs[0], _abs(node.inputs[1]))
 
@@ -98,63 +102,82 @@ for _name in (
 
 @register_lowering("fin_roe_cash_gap")
 def _lower_roe_cash_gap(node: PlanNode) -> PlanNode:
-    if len(node.inputs) < 3:
+    # Extra inputs include fiscal period/alignment dependencies; retain the
+    # canonical operator rather than discard those required source columns.
+    if len(node.inputs) != 3:
         return node
     return _safe_div(_sub(node.inputs[0], node.inputs[1]), node.inputs[2])
 
 
 @register_lowering("fin_contract_asset_liability_gap")
 def _lower_contract_gap(node: PlanNode) -> PlanNode:
-    if len(node.inputs) < 3:
+    # Extra inputs include fiscal period/alignment dependencies; retain the
+    # canonical operator rather than discard those required source columns.
+    if len(node.inputs) != 3:
         return node
     return _safe_div(_sub(node.inputs[0], node.inputs[1]), node.inputs[2])
 
 
 @register_lowering("fin_lease_intensity")
 def _lower_lease_intensity(node: PlanNode) -> PlanNode:
-    if len(node.inputs) < 3:
+    # Extra inputs include fiscal period/alignment dependencies; retain the
+    # canonical operator rather than discard those required source columns.
+    if len(node.inputs) != 3:
         return node
     return _safe_div(_add(node.inputs[0], node.inputs[1]), node.inputs[2])
 
 
 @register_lowering("fin_deferred_tax_gap")
 def _lower_deferred_tax_gap(node: PlanNode) -> PlanNode:
-    if len(node.inputs) < 3:
+    # Extra inputs include fiscal period/alignment dependencies; retain the
+    # canonical operator rather than discard those required source columns.
+    if len(node.inputs) != 3:
         return node
     return _safe_div(_sub(node.inputs[0], node.inputs[1]), node.inputs[2])
 
 
 @register_lowering("fin_impairment_intensity")
 def _lower_impairment(node: PlanNode) -> PlanNode:
-    if len(node.inputs) < 3:
+    # Extra inputs include fiscal period/alignment dependencies; retain the
+    # canonical operator rather than discard those required source columns.
+    if len(node.inputs) != 3:
         return node
     return _safe_div(_add(node.inputs[0], node.inputs[1]), node.inputs[2])
 
 
 @register_lowering("fin_net_borrowing_cashflow")
 def _lower_net_borrowing(node: PlanNode) -> PlanNode:
-    if len(node.inputs) < 4:
+    # The five-input contract carries period_id as a structural PIT/alignment
+    # dependency.  Algebraic lowering cannot represent that dependency, so it
+    # is safe only for the legacy four-value shape.
+    if len(node.inputs) != 4:
         return node
     return _safe_div(_sub(_add(node.inputs[0], node.inputs[1]), node.inputs[2]), node.inputs[3])
 
 
 @register_lowering("fin_rd_total_intensity")
 def _lower_rd_total(node: PlanNode) -> PlanNode:
-    if len(node.inputs) < 3:
+    # Extra inputs include fiscal period/alignment dependencies; retain the
+    # canonical operator rather than discard those required source columns.
+    if len(node.inputs) != 3:
         return node
     return _safe_div(_add(node.inputs[0], node.inputs[1]), node.inputs[2])
 
 
 @register_lowering("fin_rd_capitalization_ratio")
 def _lower_rd_capitalization(node: PlanNode) -> PlanNode:
-    if len(node.inputs) < 2:
+    # Extra inputs include fiscal period/alignment dependencies; retain the
+    # canonical operator rather than discard those required source columns.
+    if len(node.inputs) != 2:
         return node
     return _safe_div(node.inputs[0], _add(node.inputs[0], node.inputs[1]))
 
 
 @register_lowering("fin_debt_service_coverage_proxy")
 def _lower_debt_service(node: PlanNode) -> PlanNode:
-    if len(node.inputs) < 3:
+    # Extra inputs include fiscal period/alignment dependencies; retain the
+    # canonical operator rather than discard those required source columns.
+    if len(node.inputs) != 3:
         return node
     return _safe_div(node.inputs[0], _add(node.inputs[1], _abs(node.inputs[2])))
 

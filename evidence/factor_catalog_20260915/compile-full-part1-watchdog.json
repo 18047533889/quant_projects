@@ -1,0 +1,1 @@
+{"command": [".venv/bin/python", "evidence/factor_catalog_20260915/compile_catalog.py", "--start", "0", "--limit", "57000", "--output", "compile-full-part1.jsonl.gz"], "returncode": 0, "sampled_peak_family_rss_bytes": 418336768, "sampling_seconds": 0.1, "seconds": 3638.3356346781366, "test_guard_reason": null, "hard_memory_cap": false}
