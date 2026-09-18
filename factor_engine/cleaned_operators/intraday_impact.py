@@ -43,6 +43,8 @@ def _metadata(name: str, description: str, params: list[str]) -> OperatorMetadat
         category="intraday_microstructure",
         description=description,
         param_names=params,
+        panel_params=("ret", "amount"),
+        scalar_params=("horizon", "shock_quantile"),
         return_type="series",
         tags=[
             "intraday", "minute", "daily", "pit_safe", "causal", "deterministic",

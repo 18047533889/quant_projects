@@ -1,9 +1,4 @@
-# -*- coding: utf-8 -*-
-"""Tests for intraday_activity_duration operators.
-
-Coverage of 1 operators:
-1. intraday_activity_duration_curvature
-"""
+"""Meaningful tests for activity-duration curvature on an official grid."""
 from __future__ import annotations
 
 import numpy as np
@@ -12,76 +7,90 @@ import pytest
 
 from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.runtime.session_calendar import SessionCalendar
 
 ensure_cleaned_loaded()
 
-
-def _op(name: str, backend: str = "pandas_numpy"):
-    op = OperatorRegistry.get(name, backend)
-    assert op is not None, f"{name}/{backend}"
-    return op
+CALENDAR = SessionCalendar.ashare(timestamp_convention="bar_start")
 
 
-
-# ---------------------------------------------------------------------------
-# 1. intraday_activity_duration_curvature
-# ---------------------------------------------------------------------------
-def test_intraday_activity_duration_curvature_basic() -> None:
-    """Basic functionality test."""
-    np.random.seed(42)
-    idx = pd.date_range("2024-01-01", periods=20)
-    cols = [f"S{i}" for i in range(10)]
-    x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
-    op = _op("intraday_activity_duration_curvature")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-        assert result.shape == x.shape
-    except Exception as e:
-        pytest.fail(f"{op} basic test failed: {e}")
+def _op():
+    operator = OperatorRegistry.get("intraday_activity_duration_curvature", "pandas_numpy")
+    assert operator is not None
+    return operator
 
 
-def test_intraday_activity_duration_curvature_handles_nans() -> None:
-    """NaN handling test."""
-    idx = pd.date_range("2024-01-01", periods=10)
-    x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
-
-    op = _op("intraday_activity_duration_curvature")
-    try:
-        result = op.calculate(x)
-        assert isinstance(result, pd.DataFrame)
-    except Exception as e:
-        pytest.fail(f"NaN test failed: {e}")
+def _grid(day: str) -> pd.DatetimeIndex:
+    morning = pd.date_range(f"{day} 09:30", periods=120, freq="min")
+    afternoon = pd.date_range(f"{day} 13:00", periods=120, freq="min")
+    return morning.append(afternoon)
 
 
-def test_intraday_activity_duration_curvature_deterministic() -> None:
-    """Determinism test - same input yields same output."""
-    np.random.seed(123)
-    idx = pd.date_range("2024-01-01", periods=15)
-    x = pd.DataFrame(np.random.randn(15, 5), index=idx, columns=list("ABCDE"))
-
-    op = _op("intraday_activity_duration_curvature")
-    try:
-        result1 = op.calculate(x)
-        result2 = op.calculate(x)
-        pd.testing.assert_frame_equal(result1, result2, check_exact=False, rtol=1e-10)
-    except Exception:
-        pass  # Some operators may not be deterministic
+def _oracle(values: np.ndarray, buckets: int) -> float:
+    scaled = values / np.max(values)
+    cumulative = np.cumsum(scaled)
+    total = cumulative[-1]
+    completion = np.array(
+        [np.flatnonzero(cumulative >= k * total / buckets)[0] for k in range(1, buckets + 1)],
+        dtype=float,
+    )
+    second_difference = completion[2:] - 2 * completion[1:-1] + completion[:-2]
+    mad = np.median(np.abs(completion - np.median(completion)))
+    return float(np.mean(second_difference) / mad)
 
 
+def _panel():
+    first = np.linspace(1.0, 5.0, 240) ** 2
+    second = np.linspace(5.0, 1.0, 240) ** 2
+    index = _grid("2024-01-02").append(_grid("2024-01-03"))
+    return pd.DataFrame({"A": np.r_[first, second], "B": np.r_[second, first]}, index=index)
 
-# ---------------------------------------------------------------------------
-# Metadata validation
-# ---------------------------------------------------------------------------
-def test_intraday_activity_duration_metadata() -> None:
-    """Verify all operators have correct metadata."""
-    operators = [
-        "intraday_activity_duration_curvature"
-    ]
 
-    for op_name in operators:
-        op = _op(op_name)
-        meta = getattr(op, "metadata", None)
-        assert meta is not None, f"{op_name} missing metadata"
-        assert hasattr(meta, "tags"), f"{op_name} missing tags"
+def test_curvature_matches_independent_bucket_completion_oracle():
+    activity = _panel()
+    result = _op().calculate(activity, buckets=6, calendar=CALENDAR)
+
+    expected = pd.DataFrame(
+        {
+            "A": [_oracle(activity["A"].iloc[:240].to_numpy(), 6), _oracle(activity["A"].iloc[240:].to_numpy(), 6)],
+            "B": [_oracle(activity["B"].iloc[:240].to_numpy(), 6), _oracle(activity["B"].iloc[240:].to_numpy(), 6)],
+        },
+        index=pd.to_datetime(["2024-01-02", "2024-01-03"]),
+    )
+    assert np.isfinite(result.to_numpy()).all()
+    pd.testing.assert_frame_equal(result, expected)
+
+
+def test_missing_calendar_fails_closed_instead_of_self_certifying_grid(monkeypatch):
+    from factor_engine.cleaned_operators import intraday_activity_duration
+    monkeypatch.setattr(intraday_activity_duration, "_WARNED_NO_CALENDAR", False)
+    with pytest.warns(RuntimeWarning, match="explicit.*calendar"):
+        result = _op().calculate(_panel(), buckets=6)
+    assert result.isna().all().all()
+
+
+def test_missing_minute_and_nan_activity_fail_only_the_affected_day_symbol():
+    activity = _panel()
+    activity = activity.drop(pd.Timestamp("2024-01-02 10:30"))
+    activity.loc[pd.Timestamp("2024-01-03 10:30"), "A"] = np.nan
+    result = _op().calculate(activity, buckets=6, calendar=CALENDAR)
+
+    assert result.loc[pd.Timestamp("2024-01-02")].isna().all()
+    assert np.isnan(result.loc[pd.Timestamp("2024-01-03"), "A"])
+    assert np.isfinite(result.loc[pd.Timestamp("2024-01-03"), "B"])
+
+
+def test_completed_day_is_prefix_stable_when_later_day_is_appended():
+    activity = _panel()
+    prefix = _op().calculate(activity.iloc[:240], buckets=6, calendar=CALENDAR)
+    full = _op().calculate(activity, buckets=6, calendar=CALENDAR)
+    pd.testing.assert_frame_equal(prefix, full.loc[[pd.Timestamp("2024-01-02")]])
+
+
+def test_curvature_metadata_declares_calendar_policy_and_daily_output():
+    meta = _op().metadata
+    assert meta.param_names == ["activity", "buckets", "calendar"]
+    assert meta.input_grain == "minute"
+    assert meta.output_grain == "daily"
+    assert meta.available_at == "session_close"
+    assert meta.same_session_usable is False
