@@ -1,0 +1,16 @@
+{
+  "recipes": [
+    {
+      "canonical": "cs_regression",
+      "inputs": ["y", "x"],
+      "params": {"mode": 0},
+      "provenance": "common/cross_sectional.py CSRegression metadata; _numpy_kernels.cs_regression_ requires >=3 pairwise-finite assets and nondegenerate x; tests/operators/test_polars_parity_tier6.py"
+    },
+    {
+      "canonical": "cs_resid",
+      "inputs": ["y", "x"],
+      "params": {},
+      "provenance": "common/cross_sectional.py CSResid metadata; _numpy_kernels.cs_resid_ requires >=3 pairwise-finite assets and nondegenerate x; tests/operators/test_r19_math_kernels.py"
+    }
+  ]
+}

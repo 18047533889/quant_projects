@@ -1,0 +1,777 @@
+{
+  "recipes": [
+    {
+      "canonical": "inverse",
+      "inputs": ["base"],
+      "params": {},
+      "provenance": "current canonical unary metadata"
+    },
+    {
+      "canonical": "log",
+      "inputs": ["base"],
+      "params": {},
+      "provenance": "current canonical unary metadata"
+    },
+    {
+      "canonical": "not_",
+      "inputs": ["condition"],
+      "params": {},
+      "provenance": "current canonical boolean unary metadata"
+    },
+    {
+      "canonical": "ts_sharpe",
+      "inputs": ["base"],
+      "params": {"window": 20},
+      "provenance": "current canonical metadata and backend parity tests"
+    },
+    {
+      "canonical": "abs",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "add",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "and_",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ceil",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "clip",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "hi": 3.0,
+        "lo": -3.0
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "coalesce",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "cs_count",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "cs_demean",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "cs_mad",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "cs_mad_zscore",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "cs_mean",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "cs_pct_rank",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "cs_std",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "cs_sum",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "divide",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "eq",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "exp",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "floor",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ge",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "group_count",
+      "inputs": [
+        "base",
+        "group"
+      ],
+      "params": {
+        "fallback_policy": "nan"
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "group_max",
+      "inputs": [
+        "base",
+        "group"
+      ],
+      "params": {
+        "fallback_policy": "nan"
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "group_mean",
+      "inputs": [
+        "base",
+        "group"
+      ],
+      "params": {
+        "fallback_policy": "nan"
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "group_min",
+      "inputs": [
+        "base",
+        "group"
+      ],
+      "params": {
+        "fallback_policy": "nan"
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "group_neutralize",
+      "inputs": [
+        "base",
+        "group"
+      ],
+      "params": {
+        "fallback_policy": "nan"
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "group_normalize",
+      "inputs": [
+        "base",
+        "group"
+      ],
+      "params": {
+        "fallback_policy": "nan"
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "group_rank",
+      "inputs": [
+        "base",
+        "group"
+      ],
+      "params": {
+        "fallback_policy": "nan"
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "group_std",
+      "inputs": [
+        "base",
+        "group"
+      ],
+      "params": {
+        "fallback_policy": "nan"
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "group_sum",
+      "inputs": [
+        "base",
+        "group"
+      ],
+      "params": {
+        "fallback_policy": "nan"
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "group_winsorize",
+      "inputs": [
+        "base",
+        "group"
+      ],
+      "params": {
+        "a": 0.05
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "group_zscore",
+      "inputs": [
+        "base",
+        "group"
+      ],
+      "params": {
+        "fallback_policy": "nan"
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "gt",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "le",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "log_abs",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "lt",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "maximum",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "minimum",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "multiply",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ne",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "neg",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "normalize",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "or_",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "power",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "y": 2.0
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "rank",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "sign",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "signed_sqrt",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "sqrt",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "subtract",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "tanh",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_alpha_beta_filter",
+      "params": {
+        "alpha": 0.35,
+        "beta": 0.08
+      }
+    },
+    {
+      "canonical": "ts_autocorr",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "lag": 1,
+        "min_periods": 3,
+        "window": 20
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_bessel_lowpass_causal",
+      "params": {
+        "cutoff": 0.08,
+        "order": 3
+      }
+    },
+    {
+      "canonical": "ts_beta",
+      "inputs": [
+        "other",
+        "base"
+      ],
+      "params": {
+        "min_periods": 3,
+        "window": 20
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_corr",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "min_periods": 2,
+        "window": 20
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_cov",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "ddof": 1,
+        "min_periods": 3,
+        "window": 20
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_delay",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "n": 1
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_delta",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "n": 1
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_fir_lowpass_causal",
+      "params": {
+        "cutoff": 0.1,
+        "ntaps": 15,
+        "window": "hamming"
+      }
+    },
+    {
+      "canonical": "ts_fisher_information_shift",
+      "params": {
+        "prior_window": 12,
+        "recent_window": 12
+      }
+    },
+    {
+      "canonical": "ts_h_infinity_level_filter",
+      "params": {
+        "gamma": 2.0,
+        "q": 0.02,
+        "r": 0.5
+      }
+    },
+    {
+      "canonical": "ts_log_return",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "d": 1
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_max",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 20
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_mean",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "min_periods": 1,
+        "window": 20
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_median",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 20
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_min",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 20
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_pct",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "d": 1
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_persistence_diagram_shift",
+      "params": {
+        "embedding_dim": 3,
+        "tau": 1,
+        "window": 24
+      }
+    },
+    {
+      "canonical": "ts_rank",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "min_periods": 1,
+        "window": 20
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_spectral_lowpass_trailing",
+      "params": {
+        "cutoff_freq": 3,
+        "window": 32
+      }
+    },
+    {
+      "canonical": "ts_std",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "ddof": 1,
+        "window": 20
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_student_t_kalman_filter",
+      "params": {
+        "dof": 5.0,
+        "q": 0.02,
+        "r": 0.5
+      }
+    },
+    {
+      "canonical": "ts_sum",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "min_periods": 1,
+        "window": 20
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_var",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "ddof": 1,
+        "min_periods": 1,
+        "window": 20
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "ts_zscore",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "ddof": 1,
+        "includes_current_bar": true,
+        "min_periods": 1,
+        "nan_policy": "propagate",
+        "null_policy": "ignore",
+        "window": 20,
+        "zero_std_policy": "zero"
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "where",
+      "inputs": [
+        "condition",
+        "base",
+        "other"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "winsorize",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "lower": 0.05,
+        "upper": 0.95
+      },
+      "provenance": "R21 admitted successful recipe"
+    },
+    {
+      "canonical": "zscore",
+      "inputs": [
+        "base"
+      ],
+      "params": {},
+      "provenance": "R21 admitted successful recipe"
+    },
+    {"canonical": "acos", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/backend/test_polars_math_extended.py"},
+    {"canonical": "acos_bounded", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/operators/test_auto_polars_all.py"},
+    {"canonical": "asin", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/backend/test_polars_math_extended.py"},
+    {"canonical": "asin_bounded", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/operators/test_auto_polars_all.py"},
+    {"canonical": "atan", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/backend/test_polars_math_extended.py"},
+    {"canonical": "atan2", "inputs": ["other", "base"], "params": {}, "provenance": "canonical y,x metadata; tests/backend/test_polars_math_extended.py"},
+    {"canonical": "avg2", "inputs": ["base", "other"], "params": {}, "provenance": "canonical x,y metadata; tests/backend/test_polars_math_extended.py"},
+    {"canonical": "benchmark_excess_return", "inputs": ["base", "other"], "params": {}, "provenance": "canonical ret,benchmark_ret metadata; tests/backend/test_polars_limit_misc.py"},
+    {"canonical": "benchmark_relative_price", "inputs": ["base", "other"], "params": {}, "provenance": "canonical price,benchmark_price metadata; tests/backend/test_polars_limit_misc.py"},
+    {"canonical": "cbrt", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/backend/test_polars_math_extended.py"},
+    {"canonical": "cos", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/backend/test_polars_math_extended.py"},
+    {"canonical": "cos_phase", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/operators/test_auto_polars_all.py"},
+    {"canonical": "cosh", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/operators/test_mining_admission.py"},
+    {"canonical": "cot", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/operators/test_mining_admission.py"},
+    {"canonical": "cross_event", "inputs": ["base", "other"], "params": {"direction": "up"}, "provenance": "canonical x,y,direction metadata; tests/operators/test_stateful_pack_2026_08.py"},
+    {"canonical": "cs_bucket", "inputs": ["base"], "params": {"buckets": 2, "ascending": true}, "provenance": "canonical metadata; tests/operators/test_operator_overhaul.py"},
+    {"canonical": "cs_coverage_ratio", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/backend/test_sql_pushdown_indicators_duckdb.py"},
+    {"canonical": "cs_fill_mean", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/operators/test_layer_governance.py"},
+    {"canonical": "cs_fill_median", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/operators/test_layer_governance.py"},
+    {"canonical": "cs_quantile", "inputs": ["base"], "params": {"p": 0.5}, "provenance": "canonical bounded-p metadata; tests/q_backend/test_q_backend.py"},
+    {"canonical": "cs_rank_gaussian", "inputs": ["base"], "params": {"method": "blom"}, "provenance": "canonical method choices; tests/market/test_capability_resolver.py"},
+    {"canonical": "directional_change_state", "inputs": ["base"], "params": {"threshold": 0.03}, "provenance": "canonical price,threshold metadata; tests/operators/test_stateful_pack_2026_08.py"},
+    {"canonical": "fillna_const", "inputs": ["base"], "params": {"value": 0.0}, "provenance": "canonical bounded value metadata; tests/backend_parity/test_p0_edge_cases_triple_parity.py"},
+    {"canonical": "cs_valid_count", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/backend/test_sql_pushdown_indicators_duckdb.py"},
+    {"canonical": "cs_weighted_demean", "inputs": ["base", "other"], "params": {}, "provenance": "canonical x,weight metadata; tests/backend/test_sql_pushdown_indicators_duckdb.py"},
+    {"canonical": "cs_weighted_mean", "inputs": ["base", "other"], "params": {}, "provenance": "canonical x,weight metadata; tests/operators/test_cos_fiscal_primitives.py"},
+    {"canonical": "cs_weighted_percentile_rank", "inputs": ["base", "other"], "params": {}, "provenance": "canonical x,weight metadata; tests/operators/test_gemini_pack_2026_08.py"},
+    {"canonical": "csc", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/operators/test_auto_polars_all.py"},
+    {"canonical": "cube", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/backend/test_r2_p0_021_window_moments.py"},
+    {"canonical": "exp_neg", "inputs": ["base"], "params": {}, "provenance": "canonical metadata; tests/operators/test_auto_polars_all.py"}
+  ],
+  "schema_version": 2,
+  "unmigrated": []
+}

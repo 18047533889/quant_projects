@@ -1,0 +1,1598 @@
+{
+  "reviewed_kernel_commit": "10dcd360",
+  "integration_commit": "3c38b275",
+  "scope": "Direct canonical-kernel small-sample checks; not full production eligibility, all-parameter or 113893-factor execution certification.",
+  "manifest_canonicals": 1756,
+  "reviewed_passed": 132,
+  "remaining_unverified": 1624,
+  "main_protocol_sha256": "397cd52916fd522376a9d4e6a60baa2072ccbf566800274dd62ca7d8df8e5203",
+  "extra_protocol_sha256": "fc71d1e7ae6d546c6735bebc46b0b92d4cffce7a1075cf7455df899bc9b8719f",
+  "cross_section_protocol_sha256": "69548c1a8330502aeb851ce63ab274f2c3fdf1d99a8abe4dbb40552816e28353",
+  "historical_failure_resolution": "cs_regression and cs_resid previously used an invalid two-asset fixture. Final 12-asset tests meet >=3 pairwise-finite samples and nondegenerate x, and match an independent intercept OLS residual oracle. Historical failed rows remain in ledgers.",
+  "operators": [
+    {
+      "canonical": "abs",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "6b146e0bd81d697ed58e15b5c725c37751a585df7d3daebf4a6841b4cce60228",
+        "polars": "98b2e2a706a346fb4a0ead626c99dff48f3bb704306f36ad7cb377f8f6f86d72"
+      }
+    },
+    {
+      "canonical": "acos",
+      "passed": true,
+      "pandas_finite": 127,
+      "polars_finite": 127,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "f3b5bd5ff3bc44e60061de72b01b22c0ab160f0af6057030614f29f34f165129",
+        "polars": "8a2277aa8e4a61adf2a7cf017a45486e083f689ef68afd8fec775d238fe171f2"
+      }
+    },
+    {
+      "canonical": "acos_bounded",
+      "passed": true,
+      "pandas_finite": 127,
+      "polars_finite": 127,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "81a12152276d979200ee0b3e10e75eae8b170910b92299310419fb46c48e1141",
+        "polars": "7d326f639adc5f813dbcf05e3ce54cb4a44c592dee80828e9a5e4f9c02515ff1"
+      }
+    },
+    {
+      "canonical": "add",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "10566283c00fe7d78727f62e4854b8760e991cb3e87670b30ada7a4166500540",
+        "polars": "916d814f74d90c6e614b990644a050cc5b4e477ff85b809c51f3e596628558c0"
+      }
+    },
+    {
+      "canonical": "and_",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "d409c0c7798f9cbd657b699d0df4d5eca751e6aaa0efd7fb3e407d0944961224",
+        "polars": "d618f22892d68245ce94d27dd01099c3c6a8a52757b7c4fd9857d7123e4dfd8e"
+      }
+    },
+    {
+      "canonical": "ashare_limit_distance",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "4c784c01c2618f6f8b86a856216d4f2938e670bf2b8b9acfb82ac9a6a681d5d6",
+        "polars": "0196f7a5da84bf0f97d2d48e08e61ef245175e0569730f3032ddabafa56fad22"
+      }
+    },
+    {
+      "canonical": "asin",
+      "passed": true,
+      "pandas_finite": 127,
+      "polars_finite": 127,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "23af506672d29cb452d699a436d91481b925cf87db690c4833c66a027ab70ffd",
+        "polars": "6711974db9506fbd4cfa2cd6d0e2b206c0a38183f27471d8eb2e426238d53bd0"
+      }
+    },
+    {
+      "canonical": "asin_bounded",
+      "passed": true,
+      "pandas_finite": 127,
+      "polars_finite": 127,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "b9123b764f8c39c70c47cc5e7f501aec0d78b58187e70c8c12ca99d4d41c3028",
+        "polars": "c8b36969e4693f3e5442285e5ec397d5bacabf04e5381fd38f06faed7239543a"
+      }
+    },
+    {
+      "canonical": "atan",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "d596b18b7c96dda8085e1712b334b8fa714fcb1037c0d060fe2512b08578d08a",
+        "polars": "e661eb1a84f91890d24ae922a62363f90a16392f7ae866f2aafb97146e9db8a4"
+      }
+    },
+    {
+      "canonical": "atan2",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "f3224eaa623aed7ce138c878d9c5c9726c652f6a08d4960726be4609fbbe757f",
+        "polars": "52b66c4b90a94c206039b3cf1183e612557a7b289e4166b151fdc31f85bec591"
+      }
+    },
+    {
+      "canonical": "avg2",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "80f4aeb83565993e997b62280ecc15627b5ce939d888e84d11c28f41ea81e454",
+        "polars": "bcddcef4f83cb832492e20f34205fcfb65226c64379463bae13a992413d83a6d"
+      }
+    },
+    {
+      "canonical": "benchmark_excess_return",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "ad624d9eb6587127b38129d4bc7e374d70d4ded058491d0afde3a974ad999add",
+        "polars": "7562e7d17e725a3806afadff9c325df462ed3d7c4928fa262b869d90a9d3d25b"
+      }
+    },
+    {
+      "canonical": "benchmark_relative_price",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "04b09b21db4838b6a8a9b6fd99338354519310fc4d58c5b68b5e0157c6722e5b",
+        "polars": "fead15a603576d0b583bf8bf519e71bab7161df64d44763cb397dad9bf103815"
+      }
+    },
+    {
+      "canonical": "book_to_price",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "f08fc9b7c1cf5927760d4d276829f1ca052f35bc182614328c6ce742bf925bb7",
+        "polars": "888b3a8eb7c303c1d1138ada82d038be3e6b7d5af3eed7de017e7ba49ae22328"
+      }
+    },
+    {
+      "canonical": "candle_abs_body",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "2cafde67b03cc180870c0842c12168203aeb94a085ed6827e72bc14fdeb8b5b0",
+        "polars": "1e7604a6f4ed85ae018fc4bba2ac50f79bb44ca2d4e43717c64beb58370b6ffa"
+      }
+    },
+    {
+      "canonical": "candle_body",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "e7a158d61528354cedf2ebd35ac0148714968a1df2986e0f15aae255da346a5b",
+        "polars": "1654f5c8334d40a12994317264f1acfaef71170be2b7e464d96b5a67e39d935d"
+      }
+    },
+    {
+      "canonical": "candle_close_location",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "e4942ed33e8f7dc877a702168e8b3e211d811560d08eecc76cf7f2fd5c203218",
+        "polars": "e294bf59bab19aeec8c74867fbc8e377d7ae30d32ecf0ddd247db512d92cdcb6"
+      }
+    },
+    {
+      "canonical": "candle_close_strength",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "3bd769989d08453bb0c0abedd251162bb981a33781c1bf9ee3214fad03825988",
+        "polars": "4ef2e8d9c4762d9aaf428ba4bcd06058bd16f0243475c0bda25fce7bb82f5396"
+      }
+    },
+    {
+      "canonical": "candle_direction",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "e400a4b0fdf0e50b1f708710a887470d1a9fec0ada8b52da1e11b25dc37fe008",
+        "polars": "ee50b316acadb9e062b88c12cfdd249becd6cc79b674b88821ef9f6455020009"
+      }
+    },
+    {
+      "canonical": "candle_gap",
+      "passed": true,
+      "pandas_finite": 190,
+      "polars_finite": 190,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "85b802ca750a39044bafaaa26df57bef2d5b1334ceda24e7fc072fd69e645202",
+        "polars": "d5c30be873fb097ea481a732caa117e06c0d26e327f56f506e3d05c71f43cd60"
+      }
+    },
+    {
+      "canonical": "candle_gap_pct",
+      "passed": true,
+      "pandas_finite": 190,
+      "polars_finite": 190,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "ef90b5dd7a1b6e4cc257e65b7b5265bee215b0e573ca99f4a2587e0ccbd64762",
+        "polars": "723e4529115420406ce760a385e10e3f4acfef06952cf3bc94c51b828d0ef4d4"
+      }
+    },
+    {
+      "canonical": "candle_inside_ratio",
+      "passed": true,
+      "pandas_finite": 59,
+      "polars_finite": 59,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "9a82c6b9459b27a7f155e37525d597ace761a1caa524bc4ea1f324671ed1d3f3",
+        "polars": "7d8870fd548682628bf208a7136fbe7d953b169522bb05075fe901f4a8774ce8"
+      }
+    },
+    {
+      "canonical": "candle_lower_shadow",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "a190cc1f7139b944f71ea457801cbc93f9bdb782b641685e8b8f8d6f512e82b0",
+        "polars": "ffef3a74fc58c4f5e896f8bae2e0a83e905199eb8731d3b9fd8d86597989c9db"
+      }
+    },
+    {
+      "canonical": "candle_overlap_ratio",
+      "passed": true,
+      "pandas_finite": 190,
+      "polars_finite": 190,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "ac2e2c60e55bf4cabc33c31fb5ef8ccb3f7eb829883362d35099542a3000d788",
+        "polars": "a6103874d331fc0f3cdf717187ea54b715f3f8a6e0ac50c403856cb3c8dd3b6a"
+      }
+    },
+    {
+      "canonical": "candle_range",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "768996d3e54ce864e8c7e9f0101277bd422d81a75478ee38079de9e16a84b1d6",
+        "polars": "7abed52dc466b1f428d74b4c258af1648b8777dbac59cebb9e924b343ad958ff"
+      }
+    },
+    {
+      "canonical": "candle_upper_shadow",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "37fef7acee6b9bf92bcde4f7334af6fc2fcae25fdedb3ab4ae11f444712891ae",
+        "polars": "96b565079163eea61d6ba1da263ab3aeb1e6adafa19854091609d1478bff2562"
+      }
+    },
+    {
+      "canonical": "capital_change_magnitude",
+      "passed": true,
+      "pandas_finite": 190,
+      "polars_finite": 190,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "a7ce789da7254c337ac157ae908821c03685c6c436ab4cf244b70c3c6abaf6d4",
+        "polars": "bf8769b698104e41e82fd5f55a4ed281912be20bc54791748781bfff8eed7f5f"
+      }
+    },
+    {
+      "canonical": "cbrt",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "f5c92b3921590db42fc098118f517ab17fa69f075061a388f0f2a18a1b7564ca",
+        "polars": "9634a942e222ee25090c1b8315f093406551820e9706f93e917642fa3dda5069"
+      }
+    },
+    {
+      "canonical": "ceil",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "67f9bba51f6263461b6ff53fc6108c7fa9291ff2e6c43040c67a3a10735bd6c3",
+        "polars": "70b7c0b0901aa413f5337694682a4c5a1d2d77676b91bfdbc4109e4b13900c8b"
+      }
+    },
+    {
+      "canonical": "clip",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "b6fd4487ff3a6a9b373753a95fbd5fdf5092b4a763e7c07df380fd37bdb87171",
+        "polars": "6e9ffb396af5c924dcf84e7eac68ca841b0687e9d876be6c319c54057226753a"
+      }
+    },
+    {
+      "canonical": "coalesce",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "bf6839735bb94629403a0b61558f0cbbb2fcf001a15603fc7d3fd6170c5aed73",
+        "polars": "7d4503abe86745bf920edf122442c5f351280490065d33b3c86614c24a41bceb"
+      }
+    },
+    {
+      "canonical": "cos",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "2ce70576cb201fbcda25b83a2a310156a7bf5e9ec580c78caca015aca149e365",
+        "polars": "7e73d48833c8bd04f859ed4dd020e2f90e97c100406c664f5cd34cf53d60a738"
+      }
+    },
+    {
+      "canonical": "cos_phase",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "630b06ff8ae5f4058ad6a0495b5c53b39fe50178a0e26b83afea99b640c6ee39",
+        "polars": "e3a7a90ffc97b33501e104fe9fdda6127ee1f0e34b12da3fabe9ebf2a7aeb57a"
+      }
+    },
+    {
+      "canonical": "cosh",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "bd066b1c6af6c7481d7bf137af779807d14476fb560a08e9b8fa178d57f347dc",
+        "polars": "e89367ebe32a4899fe91337b6213c5ffd2c26b37a87bf3a72444db71860f9914"
+      }
+    },
+    {
+      "canonical": "cot",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "0010560041e19fa1ad19bc7c47826d83f1bc62d7381c86818f1e8ff7c274a6e4",
+        "polars": "d3ff45bf8b85875182c01b88b72ee76a7965812aece3205a6bb7790cd003e891"
+      }
+    },
+    {
+      "canonical": "cross_event",
+      "passed": true,
+      "pandas_finite": 190,
+      "polars_finite": 190,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "2189dc3358c0f828a2691e9224a7a61fd0c253f282342e2811104923f4ac576b",
+        "polars": "3dc7eea4a25e9b781271ea2c8e404471f2c89e51fdc0f726837d0be39f4168dc"
+      }
+    },
+    {
+      "canonical": "cs_bucket",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "2b8e7a9ad8b375ef8e73a99a0794ac6eb98e1cf89df8531f7de422abdff10c5e",
+        "polars": "abdaf953210884654e12e276ec20c2449670164b762d25035d5f7bad050f5f3d"
+      }
+    },
+    {
+      "canonical": "cs_count",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "4628d18e0179cfff50d22a24d821680e64f4d4017c4f21ca17d611a1f887bfbf",
+        "polars": "7e5643a664be1b192a8d14793ac336ab00009665fb48e476321d77eea4cc47bf"
+      }
+    },
+    {
+      "canonical": "cs_coverage_ratio",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "c156609a3e15795f5651b65231592ebd08b9428c1302a999d482e62dd87bab28",
+        "polars": "1a57fe42fd4b12c054b1e87d50cb435d84bc03205e1cfd4736fc4c9a537a9163"
+      }
+    },
+    {
+      "canonical": "cs_demean",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "4d77395fdd1c80722938342df33429752ebc4ad9dde56377851822243d39fd1b",
+        "polars": "e3649929a429ec5482f5904d089862f29eaec73d27fd338b1c19df719673408d"
+      }
+    },
+    {
+      "canonical": "cs_fill_mean",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "92918991740ca32f076474ce5ea286786879da73041cbdbadb83a4d079eb45c5",
+        "polars": "61d103c2e4961490932b8d408d85ad3425c2da9c9c206dda4bbf1abfe6751173"
+      }
+    },
+    {
+      "canonical": "cs_fill_median",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "0b7dd068155bbc74988f1060c93f86158d7dfe3773b7abbef73a9bfb7d566d05",
+        "polars": "e736c6789f16491a7d6ed99bea78f7c797ac6be1371d40ba616cba503ecf10c3"
+      }
+    },
+    {
+      "canonical": "cs_mad",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "6e8d01789339e02cc3315cafe47ad767d00061960b5256f6dfb99f61400eb0c3",
+        "polars": "d34f32525ff2716620b275c7d4eccf73f41b5b29b6ae032e78b96f7cf4beda0f"
+      }
+    },
+    {
+      "canonical": "cs_mad_zscore",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "4ba0a2aa2c0defb8e2bd2a8c1df14ede3c986f21e48822cdec739aaa7788cbef",
+        "polars": "e348e233c40a5494dd5845733753553f2a51cdb37c3fac5f406deb473b39c579"
+      }
+    },
+    {
+      "canonical": "cs_mean",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "fff472d94f29dc4bf96a01cb35ae1ef7b7302a91bdf055533d9434e1bc352818",
+        "polars": "ab9293c0a62170d59b420426cd2b52338939d7ffd8ae0d6a8b696760c4e83884"
+      }
+    },
+    {
+      "canonical": "cs_pct_rank",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "656dd8b10d106c0e465c3632d3b0afc624a15af831e1df575f991a388bd7125c",
+        "polars": "4a7c991af92598b361f2902d19d225369931db6fb12703c2cb6f8bc1e367dcd7"
+      }
+    },
+    {
+      "canonical": "cs_quantile",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "69eb40794b32cf174a9a6c48d52c65eb3a8a2d489e4c00b42dee25480d11e38f",
+        "polars": "47b13c470989e0c42438ccd94ad1d6d81873e0e61924da37960d15794acd66f4"
+      }
+    },
+    {
+      "canonical": "cs_rank_gaussian",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "a72ba565885715eaaffe9bc611fc232633c95f518c565bdaecbc47f0fd3a7308",
+        "polars": "89a32579159d4f766db4c545a36a880b2b62442f0ce7cac1dfb71ba7a567cb25"
+      }
+    },
+    {
+      "canonical": "cs_regression",
+      "passed": true,
+      "pandas_finite": 576,
+      "polars_finite": 576,
+      "fixture_domain": "cross_section_12_asset_nondegenerate_v1",
+      "independent_ols_oracle_equal": true,
+      "backend_fingerprints": {
+        "pandas_numpy": "7e37bb7feff6dc8b433af7684baf81f7c983d64cd27053e7eba181145cf6fff9",
+        "polars": "e4c736b04dd1a25c80a67aa87782981139f041aae309caa9562b8f1288ae78f4"
+      }
+    },
+    {
+      "canonical": "cs_resid",
+      "passed": true,
+      "pandas_finite": 576,
+      "polars_finite": 576,
+      "fixture_domain": "cross_section_12_asset_nondegenerate_v1",
+      "independent_ols_oracle_equal": true,
+      "backend_fingerprints": {
+        "pandas_numpy": "c3653e8f02074cd1a320932273dba88e58dbdec4436f5a1377904642ee07bf19",
+        "polars": "5ae0feeb1e4189f14301d0b3c330376e99b38aaf76b0091d052bb8214be9255f"
+      }
+    },
+    {
+      "canonical": "cs_std",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "7c2644b6ccdb0ba24535d5431f19fdeecfd77ed2f8d3748b630b9e2f06125504",
+        "polars": "a5621ebdce795d018ed4b9e12603a9fbb5d4bf46313386206d3d6f081987a348"
+      }
+    },
+    {
+      "canonical": "cs_sum",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "eb0d092ed9925b4e416f337ce99be408dd771f259ba2e260fc78652d9d0ab57b",
+        "polars": "8c7e4ec52042deef85db5d2989054e8289621057dff45e7bce720b3093e71594"
+      }
+    },
+    {
+      "canonical": "cs_valid_count",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "0214bb447b7501316e33804c5a0f64d2bff1a5abcc75c8d38443fb58a8b6cd14",
+        "polars": "7debccf5e2ef5c8f1ee56244224f01c6bcd82746338f8d9642e0385d671eec1a"
+      }
+    },
+    {
+      "canonical": "cs_weighted_demean",
+      "passed": true,
+      "pandas_finite": 156,
+      "polars_finite": 156,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "ae39a11b698c03b9fe9cb99ec7107ee007f4a7fe50575b28e193b2e1b45a876c",
+        "polars": "4cab5aefb827ad15c7e9892f2d626339d7013fd38cc8a21c8c2f638fd98c23c8"
+      }
+    },
+    {
+      "canonical": "cs_weighted_mean",
+      "passed": true,
+      "pandas_finite": 156,
+      "polars_finite": 156,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "cf9baa646294dea1215a4fabefa1a831e1ed57028a1cb1a8602c4197b78aa96a",
+        "polars": "2056beeebe8f3a9d1aeda68c2992b64b033b75032583b0c3ab1d1e989829c917"
+      }
+    },
+    {
+      "canonical": "cs_weighted_percentile_rank",
+      "passed": true,
+      "pandas_finite": 120,
+      "polars_finite": 120,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "029d2d6e954c1e19f63a40e92a2361909193e2b4a6326e4006132ff704f332ac",
+        "polars": "2b6d9e4cdccb219aba10b368b7cee6536e82612d694bc36e825dfb4904ee3a27"
+      }
+    },
+    {
+      "canonical": "csc",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "ec0476abb14cf549e1430a958bc5d07be18f202528a3ccf1f66cf2f38bcb69fe",
+        "polars": "eb99833b0ad4bec655c94d3891e6f62a3fca38875634012c244321a5af2b9d34"
+      }
+    },
+    {
+      "canonical": "cube",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "8f34618720987f4b480cbd84e742e3c7f2bbcc6dc56b61e039567d43dfffcf55",
+        "polars": "990c7c20d1cedc2eac8bc8d9f8134977816794ead7cc960af0e04b19da0218e2"
+      }
+    },
+    {
+      "canonical": "directional_change_state",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "22f9426c8f2546887347543fadac9ecd9cd99419af9d8e3835f9009512f968fd",
+        "polars": "8fc6185a27daf01055c25fa2d8d74f6aad81db79ceb55bd3784690212991aee3"
+      }
+    },
+    {
+      "canonical": "divide",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "586f60189d2bdd92506aabf0aaf5e329775d9ccc3e66602144838f0368997964",
+        "polars": "e123a073e44f557156dcfdb26175cc63f917a17494c38777d6b5d6bfdbab8905"
+      }
+    },
+    {
+      "canonical": "dollar_volume",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "9472a1c99b1b13438785bc5fde69c33dbac1d4371de64cd8c28391d14fc3955b",
+        "polars": "ca5a0155c66b4fea333f899370d0df74c3a52be0b8a82dee66c434de1d78ec61"
+      }
+    },
+    {
+      "canonical": "earnings_yield",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "840ff2b9ccc444d8e28c04f9f21d44483280106e4a44e7b8a6f4c3f4e5c2acc8",
+        "polars": "b85e02d4bf662bb3cf80e79b08c7b0272f498b3c18c643a24778a00d7aed5791"
+      }
+    },
+    {
+      "canonical": "eq",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "8be7cba888911c971175d2c2201658ca01cc2692c5e0e1636b8f053ce6c33b28",
+        "polars": "29c8ea542f81f712e2099cb502de2eac73bd3d6b1a64b1d4c586f0b0b392e453"
+      }
+    },
+    {
+      "canonical": "exp",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "2ddf0e8f347aa0997d919fe6032456ff969623775d8379081b2e1db5f59917a6",
+        "polars": "22fa3bca5f072caf9cb56c352c4ebbe100311615e2db6ba08020236e07f61c71"
+      }
+    },
+    {
+      "canonical": "exp_neg",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "db3f6805502c722e77c2fa401b13b6a1bcef5e1421becae435c2231062d05b3d",
+        "polars": "6a4ff9b9fc7f219b796eec23f73babca30f293afe25cd027e329dc282dca6226"
+      }
+    },
+    {
+      "canonical": "fillna_const",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "c77d03f24882d8e20c7f390d644fc91a4266db057e45ed5db1c252e806326265",
+        "polars": "f5d4635600f3a3ad61008bc0c1a5f6be5cf9d50578045bba2141bdad50609a89"
+      }
+    },
+    {
+      "canonical": "float_share_ratio",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "39212c1705336d414cdc217e2911039c78dcffea8008f3cfc08ade828e6223bd",
+        "polars": "2a5244b5794386ba27932919a649bde2c9237dc21ea706e6d3f5dab33991ee16"
+      }
+    },
+    {
+      "canonical": "floor",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "157df2eee7492e76d85fd2ca959cb7f780727bfcf0369cd9794b4bb8fdc12766",
+        "polars": "a0e02a8e8e6ebc27f2bdd87d54b1c425d08aba2748063cc1b81dbbeaecf5dd9c"
+      }
+    },
+    {
+      "canonical": "free_float_share_ratio",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "e9f0b76a3fc763c414208a6736301cb873cd9f1054fd61e843b598e9c13efe96",
+        "polars": "d0f96ef570a43282a7ef1db83846a7c72ab59c9381832b3b7630d8802a1dd4b2"
+      }
+    },
+    {
+      "canonical": "free_to_circulating_ratio",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "positive_market_ohlc_shares_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "0cf3a34fdeb6b538fbd81d00a68417a5bb217c0df4c4afa52b9ab74eeef84c0b",
+        "polars": "fa51de3f382b52ba2f85095f58f54ba7ae0261a9baee60167e72e402e85121d9"
+      }
+    },
+    {
+      "canonical": "ge",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "a37f6113704f74bc46606e0311c9b67d316d0271c311e2e514cc75d56a58456d",
+        "polars": "ea60108c8f4d69f4cb2636b178487d2a3df787b145c6e988f021eec03e0f845b"
+      }
+    },
+    {
+      "canonical": "group_count",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "e060365c689d088194b2f6034a49c18e3f10cfd0ee842bc99b403dc7e6dde6d8",
+        "polars": "caefae45e57e5d4eb78be94143df2252fe6a7c9147c78d5ce0f232d0556e54fa"
+      }
+    },
+    {
+      "canonical": "group_max",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "aa2a13146c60f7781e7c7779be830893d71431b64a303fe7e1768db3692d8f9d",
+        "polars": "80c8ede7737c74785d7523537e8040f244d0107a3f080471144ab953b3884ef0"
+      }
+    },
+    {
+      "canonical": "group_mean",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "baec90727b8cd7d5988ba7133553c4e53d0f9ce996e868bcb18a3fb8715a59d6",
+        "polars": "f54715cf8963591225bae18999ad36d45e4061c2e39791265b35397445f62fc5"
+      }
+    },
+    {
+      "canonical": "group_min",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "12df9a324a3bf87f970474a4265964b6274479edc51ec2e39274e69aa2168f6a",
+        "polars": "e0194963c3bc07513c39a48ebe8507ea3b66b5a43750bcc406a29bd873023b86"
+      }
+    },
+    {
+      "canonical": "group_neutralize",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "a7d2d1eb52b0df457eac1abe0c0a806a2c347d78c6b4e68d7145ff3f3b354630",
+        "polars": "346fd094d48389d5bbc666fb5f354be271cd9e35313fba02cab43b5a9fb236dc"
+      }
+    },
+    {
+      "canonical": "group_normalize",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "97101e642c291e9c67cfde66b55e74791665e1c699e6cebb2aa7d533e85a3975",
+        "polars": "483ca006a3036c2744c07f2bfa0d8de4561225357b0675e2f4667e75666ea00c"
+      }
+    },
+    {
+      "canonical": "group_rank",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "d6c315ce83550894238fb25733deec0a666b54f00c4d91512a046cc4a09704bb",
+        "polars": "f8f3632d21f54f78ae8925a1f6033a00a2d4f9e3e715032859f930f096192954"
+      }
+    },
+    {
+      "canonical": "group_std",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "6d500888b3e93776517699fa724e25f0aa014e501159c168061151c43b1ba056",
+        "polars": "c2253a620bdc37541a5212ebc0889c5136fb013b1cc5f701963cdfc8b974cc6a"
+      }
+    },
+    {
+      "canonical": "group_sum",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "76ab4821a75e0767191777477747d49b20ab494e20d28844981c8f4a10df419b",
+        "polars": "18e56a6a64ea291e3ca75d5ef853004c9eef0e7a240fe7be4991db1a68e08366"
+      }
+    },
+    {
+      "canonical": "group_winsorize",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "813f9839b7e4fad99b6e9924f6579ce443c9712e19a38e9e855262aa13211dc0",
+        "polars": "a41283159b4d14e82a9f989e8df582748b9eaa87e576da9001f536c2ea2a5f3a"
+      }
+    },
+    {
+      "canonical": "group_zscore",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "4a095252fc3f6d90d929cabe4f00ef564c7be5fe72ecb9903c1f449fdf231d68",
+        "polars": "4ea8363b8bb2c05b3c57f2bc5ff6450a3badcfce46fd295a9b688cd6e1033732"
+      }
+    },
+    {
+      "canonical": "gt",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "9e9e2a50cd0460432ce6730c6d08601a7239345f356ed039530ec14ba411d2ca",
+        "polars": "8229a033ee36a409851e3269aa2ae203a7da3f6386a736e80cee273670e4f3c7"
+      }
+    },
+    {
+      "canonical": "inverse",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "238d96e21b34980344979f7ae2cf7664ebcaa6038cf5fe726cd54f18eaeff84e",
+        "polars": "5c15ed02ae0cf5114c296f9f5d441b66ec759c79aab3c8e3cf302e165095d3d3"
+      }
+    },
+    {
+      "canonical": "le",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "4d39b79c25a27ea56de2bd06c8795a2b247c46e2871be0cdc7b4163cf3e6b20d",
+        "polars": "4f242ceb127806de83bc7f05f7fca2effbd755538149275cb26ea65944e858c7"
+      }
+    },
+    {
+      "canonical": "log",
+      "passed": true,
+      "pandas_finite": 138,
+      "polars_finite": 138,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "40f4340ab93f6fb5429eb65543252fe8e8d8755a9d38a3a76f1e4e8c3155b452",
+        "polars": "512e9cb7ae1afd2622b9d6a436f30b640252b25214d0177cdae0ab0e0bb70a48"
+      }
+    },
+    {
+      "canonical": "log_abs",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "cf8b48e8cc6406b1bdd7e8965b5eca320077b3b1c91fe3b2a75b07f6183c7fcf",
+        "polars": "93d0c6dd061b4fc247992abdbe89294ba8b9da0f2cdc90d1422bb5d87c303269"
+      }
+    },
+    {
+      "canonical": "lt",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "80d510bbb86e9c4c6c141d7ae45c181429e8dcd42c9bedb8d634441ff2d8041a",
+        "polars": "ad77a45cd44439196a218d9b9fa270b612b3d5f7337f79a4e44764d6470d4344"
+      }
+    },
+    {
+      "canonical": "maximum",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "9a42df60e68459b2755e39f5305bf00e4f66d8778ef0bcb35c5f0ecd7e0c8179",
+        "polars": "7fdae55ba550a14b5efca22a07258c75f098c9f41d7da377d985d891e95d3323"
+      }
+    },
+    {
+      "canonical": "minimum",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "70005326c0135453bb19585bf2f292e07475766f3345eb9289f669d8f3fadbda",
+        "polars": "6c380c61ac4c5d17dd21504532cc6c482ce27dcabbd0cbf178b967d91ce82c9f"
+      }
+    },
+    {
+      "canonical": "multiply",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "04bbbee9322fa00bda8558deca799d6339ccc795c37d8602f8c9431005d27a1c",
+        "polars": "bf3665e53792a85e8f187cb5a8244f6bb15a8c4854f08549830a5f9b6ae8f159"
+      }
+    },
+    {
+      "canonical": "ne",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "0227fbc459574c57cb42afc727bd90450fab104c6097cabf10293593eb509929",
+        "polars": "5ec87da5cff9d6ba8ea993bf3f1a1280eff3e29ed42557e8f0e60949038aecdb"
+      }
+    },
+    {
+      "canonical": "neg",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "1459bf06c17f411c3679bd7fd05040804c230904db99b3dcf115cc4cba26df8c",
+        "polars": "ea02e956a59f868ed7d1e9485b452df7451b0340d44838f636c176d17f6e9aa4"
+      }
+    },
+    {
+      "canonical": "normalize",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "98927aa48c9e6a6fc25f930d2e5d9da1675e873290d9fb814b03131987b4c63d",
+        "polars": "551667087b21c382155f7c72c18bda09baeecac85d5ad41eb726c3e56900e342"
+      }
+    },
+    {
+      "canonical": "not_",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "bee9264dc7e8c6edb30d8e58fdd702e067d42a929e5ca790c3583cb2e7de01cc",
+        "polars": "0d297f0969f42972366679634500224888c2deb30ca15243293c8afa43d613de"
+      }
+    },
+    {
+      "canonical": "or_",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "df441f031e31ffdad3f5bee26a8a4156ad340008146f20051eec1b7a7f3337b4",
+        "polars": "b6d9572cac9a758e6b55935f87d75a9da3c188d46390d24476119abb8470d273"
+      }
+    },
+    {
+      "canonical": "power",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "1a71336027be755df387d1c558fa8e6fe72d90cf814a9471e0ab6be90d017576",
+        "polars": "6ae8ad11d18f5fb7d48af64524fffd6eda4bf521a75826525ecbaef9bb76d9b7"
+      }
+    },
+    {
+      "canonical": "rank",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "fa1287f7a64548df17f46b595705703102c8c2bed562e2044e33800a4b332de5",
+        "polars": "3223a326f1bc6826b8511453dc97b100b029021ebc0415dd2805c26863b29564"
+      }
+    },
+    {
+      "canonical": "sign",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "b724f348e0009d000e46bc61aefb2515c1cdf69b870fe81ef2da1597763954d2",
+        "polars": "1d29d6440bf1f372b4ab8cd2d4fc82e3d3bdadd7283112d28ccae0b4c4f44598"
+      }
+    },
+    {
+      "canonical": "signed_sqrt",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "87179cf0a2bd3330d8fcd895b66754ac2d41bc0e125b8a4627671b670564371a",
+        "polars": "42cf8fe789c4153900e7b6d67acaa807e31c366aafa969632c5bf4c519dc2288"
+      }
+    },
+    {
+      "canonical": "sqrt",
+      "passed": true,
+      "pandas_finite": 138,
+      "polars_finite": 138,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "7b9c3d4b28e2e9decf2fe83a70513800f8198be67a595089cfb285f7a1d7fd5d",
+        "polars": "a0888015f28e7271090f50d4a060fe6c918be17d20926b834a3dc060135575aa"
+      }
+    },
+    {
+      "canonical": "subtract",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "de013e47ff975b9adfc0b15ce26719602dbed1deaa52ac2d983b82a6feb30c16",
+        "polars": "288356e33787bd0837fc84f53ce4a830ec065c1c9b05e84460042b5feb3be611"
+      }
+    },
+    {
+      "canonical": "tanh",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "ecc71313589dc1e07b31c002e147c184980df2c37e7fefda39c5cf16830b4e7b",
+        "polars": "a0fc6fed9fa0e4b963062bd1e0ba179cd42d1ba75ede421cff12097163789ffa"
+      }
+    },
+    {
+      "canonical": "ts_alpha_beta_filter",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "6c28ca8ca6545ff96a4e61809e3a75f140dddf1b7ddc63458de41968af3d0f91",
+        "polars": "aba0c9167cad60628f807f2d4bec5d7f37d869968da15c846f62f4904914760c"
+      }
+    },
+    {
+      "canonical": "ts_autocorr",
+      "passed": true,
+      "pandas_finite": 186,
+      "polars_finite": 186,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "1052c3793f6068d2dce1e92b5bb9af4a2ef3b5d8ac6f14eb9e5324afa3821380",
+        "polars": "51a3385d4e3aa57f79e722b33a39b6288724a7fff1d9474dff9ebbddd5e2e64e"
+      }
+    },
+    {
+      "canonical": "ts_bessel_lowpass_causal",
+      "passed": true,
+      "pandas_finite": 186,
+      "polars_finite": 186,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "73c38609926c57d3dac0ff14e1928c38d87467a33180461db309f25cab334dc0",
+        "polars": "9df34b6380412e1809c4f4c837c9d7e7a9f213be9e719cde529371475b0b3f9d"
+      }
+    },
+    {
+      "canonical": "ts_beta",
+      "passed": true,
+      "pandas_finite": 188,
+      "polars_finite": 188,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "8e5f7f2490d2112b19353277872e2c45fd7520e21299ef1df0290f251a81a3f7",
+        "polars": "0bb1dac365e2741c4d72b7eb76e6513e7e298ee56cb7e9970e0ff33b3c7dd523"
+      }
+    },
+    {
+      "canonical": "ts_corr",
+      "passed": true,
+      "pandas_finite": 190,
+      "polars_finite": 190,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "8e8917d31fc4e903dcebf916d3ce0d38dbbbd13313da143d055931678d1aee68",
+        "polars": "2169cf8ceef466c18e03e1a6c0467d8a0cae08ae915f78026d07a9fb1c71af43"
+      }
+    },
+    {
+      "canonical": "ts_cov",
+      "passed": true,
+      "pandas_finite": 188,
+      "polars_finite": 188,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "9b7babb93ce2ed1e22e8a0090dfa00711256fc62d4310ec5eef0f5d4a178c05a",
+        "polars": "3c501b4876a0754d6aad692a010c9414a326af3846f9801925eca0ce1fba4ac9"
+      }
+    },
+    {
+      "canonical": "ts_delay",
+      "passed": true,
+      "pandas_finite": 190,
+      "polars_finite": 190,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "5016c1261015b7e1ddf54a573a613df721821c22c812f2c0dd35bcb572f56938",
+        "polars": "177937b82899fa756fca994b8bea7cefd0e9abe49a91a26fe3946f9bf46ce91f"
+      }
+    },
+    {
+      "canonical": "ts_delta",
+      "passed": true,
+      "pandas_finite": 190,
+      "polars_finite": 190,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "2e7f8a34fa1fdb6c630d9dbd58b485e502e66109c9886af0e76940ecc4112e56",
+        "polars": "f208f4f8cdc0de72f7133c31b61e352afe459fe0a4afdf7d1b7e0dc35e2ae388"
+      }
+    },
+    {
+      "canonical": "ts_fir_lowpass_causal",
+      "passed": true,
+      "pandas_finite": 164,
+      "polars_finite": 164,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "2a191f329f42760bcb33189238e47a479eb7ea37589207e311294d5953ba66ce",
+        "polars": "c67ae046abe0a7e01ff2c5b7997362f9001a1aac589a686c097e6bf2716a473e"
+      }
+    },
+    {
+      "canonical": "ts_fisher_information_shift",
+      "passed": true,
+      "pandas_finite": 146,
+      "polars_finite": 146,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "0be12305d10e08001ca48332afca39b74e7ae3b52d8292bb51a7faedafaf2f69",
+        "polars": "9553c513d25617cfd7a3575582628a58595df1945198adb8790fbb9c7c59cf78"
+      }
+    },
+    {
+      "canonical": "ts_h_infinity_level_filter",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "db581b9fc7888dea2331eabdf44ff25ddf2ade738eb150951a70103cbebc56f0",
+        "polars": "f5f3cacc24a18f3c43695bb0bd15db1c127beb5af133adcd3db0161c8121c896"
+      }
+    },
+    {
+      "canonical": "ts_log_return",
+      "passed": true,
+      "pandas_finite": 128,
+      "polars_finite": 128,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "b9b492e3ad014514c0bc4ac31b8922193811689145e3b59c19fd5076f22c721b",
+        "polars": "fe13a4461da3dc0fb5401e57acc44a0e3804b13773e2942b9d5df524d367cf0c"
+      }
+    },
+    {
+      "canonical": "ts_max",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "17d205d17e69aaf244aa52950e00ec8e658d87486c8219b646396ecc6488f632",
+        "polars": "6c7a8dae651ca23ee258cccb8b3cd3b812d65c413af618f278957a6bfd19a1fd"
+      }
+    },
+    {
+      "canonical": "ts_mean",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "835d2aef5b043051e4297212822228c3d768ecdea56d1512f67ed532d73c5c2d",
+        "polars": "34262fe527df78ae794fe99f047018ef623f661ccce324c9fe05b43ad2fa4a76"
+      }
+    },
+    {
+      "canonical": "ts_median",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "67e41761bdab1232467048575fa0ddc982824d4559f0716f1a76300db332ba5b",
+        "polars": "6d1f3ab724382ad21ed8df70fa6364fcfc8278fee9fd3c6a5a8d111f96fbaaeb"
+      }
+    },
+    {
+      "canonical": "ts_min",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "cc789b27598dc45fca180e374ae18fe86607777f0d15daab137734c6b75ec5fc",
+        "polars": "9fff935ccb433454098b1b4c3d69481a4db1b03d7fccdb902758937936d24828"
+      }
+    },
+    {
+      "canonical": "ts_pct",
+      "passed": true,
+      "pandas_finite": 190,
+      "polars_finite": 190,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "b1ed20d560c1ea06ad3df9dad09c44d76cf7e4fb4b71516138fb3b482fae4b0f",
+        "polars": "cfbfc1671e615181b238a2c14c29e69489748ed76a2dae82c6555719a440bb6d"
+      }
+    },
+    {
+      "canonical": "ts_persistence_diagram_shift",
+      "passed": true,
+      "pandas_finite": 134,
+      "polars_finite": 134,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "f431d066497d125992287e48a906ee564763cfc3386e77f503473d7e611de74b",
+        "polars": "a4521b996ae2f77586c0886c8532217da92ec7817780b03a9cd2692d55525b29"
+      }
+    },
+    {
+      "canonical": "ts_rank",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "cbc3c62c9dea0ee174f6e36324b9124699d51426233691fcb8cbdcd5037b6562",
+        "polars": "12bac48ac6c3ee30d7f909b897634de57c2df144489deadd8f62726e45b90ef7"
+      }
+    },
+    {
+      "canonical": "ts_sharpe",
+      "passed": true,
+      "pandas_finite": 182,
+      "polars_finite": 182,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "4733a09e3365fa70493eaaebe082e2e2e4f4d06195a05a842533631e5ff57db2",
+        "polars": "8022ba7efb7e2e5b1c85d44bb925d56e73e0c4cd4dea92df77f1b00d75881c68"
+      }
+    },
+    {
+      "canonical": "ts_spectral_lowpass_trailing",
+      "passed": true,
+      "pandas_finite": 130,
+      "polars_finite": 130,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "8d45d7cdf3af3d94dc5e39c1c557e846f654c860852a3f5eff95ff298e4bbcda",
+        "polars": "f28793f4445fe354bca52994e7b91e47a4f387b346c756205c599980f6d91ac3"
+      }
+    },
+    {
+      "canonical": "ts_std",
+      "passed": true,
+      "pandas_finite": 190,
+      "polars_finite": 190,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "15a30bfc9877682a8d46fccdf866f54f398c96c789047e344b64ab6d76caceec",
+        "polars": "697c04d289cf105606554069111a249133e52925cdb8347a9088e0f6a2187075"
+      }
+    },
+    {
+      "canonical": "ts_student_t_kalman_filter",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "5e27bef7c99a979ca7048f84e8f309419d9fd37efc4b0543556c382889c0de09",
+        "polars": "b6da5d4db1f065a5256c6a8c784d576504b6505a6d8fc242661ff43a261ad8cb"
+      }
+    },
+    {
+      "canonical": "ts_sum",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "e90e8606897bcba1a127a31c1bf73e003a7d40f693f30ae02d715524b5a36ab4",
+        "polars": "f3b63c9e3f76515e140148d49608e10278721561b9e0553598c3a3cd3324f242"
+      }
+    },
+    {
+      "canonical": "ts_var",
+      "passed": true,
+      "pandas_finite": 190,
+      "polars_finite": 190,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "334a56cb814d64f80bd432f39ac8cedb33efeab3aebc5e9510641d994d5742ea",
+        "polars": "e8f48f4ffa49f39bed7792b4ec0793cb60fa8f28c2412448c0b6c0ace0fea972"
+      }
+    },
+    {
+      "canonical": "ts_zscore",
+      "passed": true,
+      "pandas_finite": 190,
+      "polars_finite": 190,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "b5778b611056ee207208cf703baf2d77e2dbf344c1927479e1324e87e2b59be6",
+        "polars": "b20a89b88a2d066b2033e1a128c665c64ee6df183e794a50bfb51d6582d5b1d3"
+      }
+    },
+    {
+      "canonical": "where",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "37151e9c5d9a2b0bbf7e6d056d4b61245405b1e484930652e18e12f209175026",
+        "polars": "c355eba811b2de1a6f346d05e1aa669713f9e368bea1e11a7470f94cb0229760"
+      }
+    },
+    {
+      "canonical": "winsorize",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "490dad927450d6c8a66068aad800ce65836a03ca77e0f965667489b0595295e5",
+        "polars": "b2f506a9f0582fc4af7360816a5b5a77dae63ba7d90d75ed1d4a03e9e6881107"
+      }
+    },
+    {
+      "canonical": "zscore",
+      "passed": true,
+      "pandas_finite": 192,
+      "polars_finite": 192,
+      "fixture_domain": "reviewed_numeric_v1",
+      "independent_ols_oracle_equal": null,
+      "backend_fingerprints": {
+        "pandas_numpy": "3d51199bcde54adb7723b3d8ba26faf08ea90b9b59ada41bed145f3201845693",
+        "polars": "ecae2aa2ea0adb5e30e8ff4168533aeb181d988d6b00164df9e429cda05f3d87"
+      }
+    }
+  ]
+}

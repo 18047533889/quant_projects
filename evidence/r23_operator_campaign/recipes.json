@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "recipes": [
+    {"canonical": "ts_persistence_diagram_shift", "params": {"window": 24, "tau": 1, "embedding_dim": 3}},
+    {"canonical": "ts_fisher_information_shift", "params": {"recent_window": 12, "prior_window": 12}},
+    {"canonical": "ts_bessel_lowpass_causal", "params": {"order": 3, "cutoff": 0.08}},
+    {"canonical": "ts_fir_lowpass_causal", "params": {"ntaps": 15, "cutoff": 0.1, "window": "hamming"}},
+    {"canonical": "ts_spectral_lowpass_trailing", "params": {"window": 32, "cutoff_freq": 3}},
+    {"canonical": "ts_alpha_beta_filter", "params": {"alpha": 0.35, "beta": 0.08}},
+    {"canonical": "ts_h_infinity_level_filter", "params": {"gamma": 2.0, "q": 0.02, "r": 0.5}},
+    {"canonical": "ts_student_t_kalman_filter", "params": {"q": 0.02, "r": 0.5, "dof": 5.0}}
+  ]
+}

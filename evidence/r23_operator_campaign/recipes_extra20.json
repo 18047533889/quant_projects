@@ -1,0 +1,124 @@
+{
+  "recipes": [
+    {
+      "canonical": "ashare_limit_distance",
+      "inputs": ["close", "upper_limit"],
+      "params": {},
+      "provenance": "daily numeric metadata; auto_polars_all.py signature close,upper_limit; tests/operators/test_r6_ashare_ops_repair.py"
+    },
+    {
+      "canonical": "book_to_price",
+      "inputs": ["pb"],
+      "params": {},
+      "provenance": "daily numeric metadata; valuation ops signature pb; tests/runtime/test_r6_valuation_contracts.py"
+    },
+    {
+      "canonical": "candle_abs_body",
+      "inputs": ["open", "close"],
+      "params": {},
+      "provenance": "daily numeric metadata; candle signature open,close; tests/backend/test_polars_candle.py"
+    },
+    {
+      "canonical": "candle_body",
+      "inputs": ["open", "close"],
+      "params": {},
+      "provenance": "daily numeric metadata; candle signature open,close; tests/backend/test_polars_candle.py"
+    },
+    {
+      "canonical": "candle_close_location",
+      "inputs": ["high", "low", "close"],
+      "params": {},
+      "provenance": "daily numeric metadata; candle signature high,low,close; tests/backend/test_polars_candle.py"
+    },
+    {
+      "canonical": "candle_close_strength",
+      "inputs": ["high", "low", "close"],
+      "params": {},
+      "provenance": "daily numeric metadata; candle signature high,low,close; tests/operators/test_r11_round3_candle.py"
+    },
+    {
+      "canonical": "candle_direction",
+      "inputs": ["open", "close"],
+      "params": {},
+      "provenance": "daily numeric metadata; candle signature open,close; tests/backend/test_polars_candle.py"
+    },
+    {
+      "canonical": "candle_gap",
+      "inputs": ["open", "close"],
+      "params": {},
+      "provenance": "daily numeric metadata; candle signature open,close; tests/backend/test_polars_candle.py"
+    },
+    {
+      "canonical": "candle_gap_pct",
+      "inputs": ["open", "close"],
+      "params": {},
+      "provenance": "daily numeric metadata; candle signature open,close; tests/backend/test_polars_candle.py"
+    },
+    {
+      "canonical": "candle_inside_ratio",
+      "inputs": ["high", "low"],
+      "params": {},
+      "provenance": "daily numeric metadata; candle signature high,low; tests/operators/test_r11_round3_candle.py"
+    },
+    {
+      "canonical": "candle_lower_shadow",
+      "inputs": ["open", "low", "close"],
+      "params": {},
+      "provenance": "daily numeric metadata; candle signature open,low,close; tests/backend/test_polars_candle.py"
+    },
+    {
+      "canonical": "candle_overlap_ratio",
+      "inputs": ["high", "low"],
+      "params": {},
+      "provenance": "daily numeric metadata; candle signature high,low; tests/operators/test_r11_round3_candle.py"
+    },
+    {
+      "canonical": "candle_range",
+      "inputs": ["high", "low"],
+      "params": {},
+      "provenance": "daily numeric metadata; candle signature high,low; tests/backend/test_polars_candle.py"
+    },
+    {
+      "canonical": "candle_upper_shadow",
+      "inputs": ["open", "high", "close"],
+      "params": {},
+      "provenance": "daily numeric metadata; candle signature open,high,close; tests/backend/test_polars_candle.py"
+    },
+    {
+      "canonical": "capital_change_magnitude",
+      "inputs": ["total_capital"],
+      "params": {},
+      "provenance": "daily numeric metadata; valuation ops signature total_capital; tests/backend_parity/test_volval_wave3_parity.py"
+    },
+    {
+      "canonical": "dollar_volume",
+      "inputs": ["close", "volume"],
+      "params": {},
+      "provenance": "daily numeric metadata; liquidity signature close,volume; tests/backend/test_polars_liquidity_v2.py"
+    },
+    {
+      "canonical": "earnings_yield",
+      "inputs": ["pe"],
+      "params": {},
+      "provenance": "daily numeric metadata; valuation signature pe; tests/runtime/test_r6_valuation_contracts.py"
+    },
+    {
+      "canonical": "float_share_ratio",
+      "inputs": ["float_shares", "total_shares"],
+      "params": {},
+      "provenance": "daily numeric metadata; valuation signature float_shares,total_shares; tests/backend_parity/test_volval_wave3_parity.py"
+    },
+    {
+      "canonical": "free_float_share_ratio",
+      "inputs": ["free_float_shares", "total_shares"],
+      "params": {},
+      "provenance": "daily numeric metadata; valuation signature free_float_shares,total_shares; tests/backend_parity/test_volval_wave3_parity.py"
+    },
+    {
+      "canonical": "free_to_circulating_ratio",
+      "inputs": ["free_cap", "circulating_cap"],
+      "params": {},
+      "provenance": "daily numeric metadata; valuation signature free_cap,circulating_cap; tests/backend_parity/test_volval_wave3_parity.py"
+    }
+  ]
+}
