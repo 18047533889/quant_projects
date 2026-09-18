@@ -390,10 +390,19 @@ def group_demean_panel_(x: np.ndarray, group: np.ndarray | None = None, fallback
         pos = np.flatnonzero(valid)[ok]
         c = codes[ok]
         vals = row[valid][ok]
-        for code in np.unique(c):
-            members = c == code
-            member_vals = vals[members]
-            out[i, pos[members]] = member_vals - _stable_finite_mean(member_vals)
+        # Normalize within each group before summing. This avoids overflowing
+        # weighted sums without scanning all members again for every group.
+        scales = np.zeros(int(c.max()) + 1, dtype=float)
+        np.maximum.at(scales, c, np.abs(vals))
+        scaled = np.divide(
+            vals, scales[c], out=np.zeros_like(vals), where=scales[c] > 0.0
+        )
+        counts = np.bincount(c)
+        sums = np.bincount(c, weights=scaled)
+        means = np.divide(
+            sums, counts, out=np.zeros_like(sums), where=counts > 0
+        ) * scales
+        out[i, pos] = vals - means[c]
     return out
 
 

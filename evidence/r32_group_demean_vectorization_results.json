@@ -1,0 +1,29 @@
+{
+  "scope": "Synthetic numeric aggregation microbenchmark only; excludes factor planning, data loading, groups factorization and output writes. Not an end-to-end performance claim.",
+  "parity": true,
+  "iterations_per_sample": 10,
+  "samples": 5,
+  "results": [
+    {
+      "members": 5000,
+      "groups": 50,
+      "group_loop_seconds": 0.0007963164011016488,
+      "scaled_bincount_seconds": 0.00005022550467401743,
+      "speedup": 15.85482129587436
+    },
+    {
+      "members": 5000,
+      "groups": 500,
+      "group_loop_seconds": 0.005998676898889244,
+      "scaled_bincount_seconds": 0.000051811384037137034,
+      "speedup": 115.7791286677374
+    },
+    {
+      "members": 10000,
+      "groups": 1000,
+      "group_loop_seconds": 0.02307456689886749,
+      "scaled_bincount_seconds": 0.0001539865043014288,
+      "speedup": 149.84798183157008
+    }
+  ]
+}
