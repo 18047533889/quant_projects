@@ -202,31 +202,29 @@ def test_transfer_entropy_peak_lag_detects_coupled_lag():
     assert abs(float(np.nanmean(late)) - 0.3) < 0.15  # l* = 3 / 10
 
 
-def test_report_change_breadth_all_rising():
-    n = 600
-    idx = pd.date_range("2019-01-01", periods=n, freq="B")
-    quarters: list[pd.Timestamp] = []
-    y, q = 2019, 1
-    for _ in range(40):
-        quarters.append(pd.Timestamp(year=y, month=3 * q, day=28) if q in (1, 2)
-                        else pd.Timestamp(year=y, month=3 * q - 2, day=30))
-        q += 1
-        if q == 5:
-            q = 1
-            y += 1
-    per = np.array(quarters, dtype=object)
-    period = pd.DataFrame(index=idx, columns=["S0"], dtype=object)
-    col = np.full(n, None, dtype=object); col[0::15] = per[: len(col[0::15])]; period["S0"] = col
-    base = np.linspace(100.0, 300.0, n)
-    f1 = pd.DataFrame({"S0": base * 1.01}, index=idx)
-    f2 = pd.DataFrame({"S0": base * 0.5}, index=idx)
-    f3 = pd.DataFrame({"S0": 200.0 + base * 0.3}, index=idx)
-    b = _get("report_change_breadth").calculate(f1, f2, f3, period, periods=1).to_numpy(dtype=float)
-    c = _get("report_change_coherence").calculate(f1, f2, f3, period, periods=1).to_numpy(dtype=float)
-    fin_b = b[np.isfinite(b)]
-    fin_c = c[np.isfinite(c)]
-    assert float(np.nanmean(fin_b)) > 0.5   # all rising -> breadth near +1
-    assert float(np.nanmean(fin_c)) > 0.9   # dominant direction shared
+@pytest.mark.parametrize("accelerating", [False, True])
+def test_report_change_breadth_uses_standardized_growth_not_level(accelerating):
+    count = 16
+    t = np.arange(count, dtype=float)
+    values = 100.0 * np.exp(0.005 * t ** 2) if accelerating else 100.0 + 20.0 * t
+    index = pd.date_range("2019-03-31", periods=count, freq="QE")
+    period = pd.DataFrame({"S0": pd.period_range("2019Q1", periods=count, freq="Q").astype(str)}, index=index)
+    fields = [pd.DataFrame({"S0": values * scale}, index=index) for scale in (1.0, 2.0, 3.0)]
+    breadth = _get("report_change_breadth").calculate(*fields, period, periods=1)["S0"].to_numpy()
+    coherence = _get("report_change_coherence").calculate(*fields, period, periods=1)["S0"].to_numpy()
+    changes = values[1:] / values[:-1] - 1.0
+    expected = np.full(count, np.nan)
+    for row in range(4, count):
+        history = changes[:row - 1]
+        median = np.median(history)
+        mad = np.median(np.abs(history - median))
+        z = (changes[row - 1] - median) / (1.4826 * mad)
+        expected[row] = float(z > 0.5) - float(z < -0.5)
+    np.testing.assert_allclose(breadth, expected, equal_nan=True, atol=1e-12)
+    np.testing.assert_allclose(coherence[4:], 1.0, atol=1e-12)
+    # Both price-level sequences rise. Linear levels have slowing relative
+    # growth, so their centered growth breadth is negative, not positive.
+    assert breadth[-1] == (1.0 if accelerating else -1.0)
 
 
 def test_intraday_rv_signature_slope_noise_negative():

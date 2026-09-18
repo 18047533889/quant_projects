@@ -195,10 +195,16 @@ def test_migrated_factor_ops_classify_daily() -> None:
         "cs_bucket", "cs_bucket_fixed", "fin_yoy", "fin_ttm_quarterly",
         "group_ts_decay_linear", "cdl_doji", "pattern_double_top", "amihud_illiquidity",
         # second-round promotion: experimental factor operators now daily
-        "cs_robust_resid", "ts_transition_count", "suspension_frequency",
+        "ts_transition_count", "suspension_frequency",
         "listing_age", "index_reconstitution_churn", "intra_realized_variance",
     ):
         assert S.classify_canonical(name) == "daily", name
+
+
+def test_deprecated_robust_residual_alias_keeps_honest_extended_canonical():
+    assert S.classify_canonical("cs_robust_resid") == "extended"
+    assert S.classify_canonical("cs_trimmed_ols_resid") == "extended"
+    assert OperatorRegistry.get("cs_robust_resid") is OperatorRegistry.get("cs_trimmed_ols_resid")
 
 
 def test_third_round_promoted_ops_classify_daily() -> None:

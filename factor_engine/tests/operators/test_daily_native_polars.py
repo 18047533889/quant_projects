@@ -46,9 +46,12 @@ def test_daily_native_polars_backend_registered(name: str) -> None:
         }
         else "expression_native"
     )
+    # Group normalization uses the exact pandas delegate; do not call it native.
+    if name == "group_normalize":
+        expected_kind = "polars_udf_pandas_delegate"
     assert meta.get("polars", {}).get("execution_kind") == expected_kind
     assert bool(meta.get("polars", {}).get("materializes_full_panel")) == (
-        expected_kind == "polars_eager_native"
+        expected_kind in {"polars_eager_native", "polars_udf_pandas_delegate"}
     )
 
 
