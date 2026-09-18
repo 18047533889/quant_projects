@@ -4470,8 +4470,16 @@ def _compile_polars_impl(
             .then(-delta)
             .otherwise(0.0)
         )
-        avg_gain = gain.ewm_mean(alpha=alpha, adjust=False, min_periods=w).over(_INST, order_by=_TS)
-        avg_loss = loss.ewm_mean(alpha=alpha, adjust=False, min_periods=w).over(_INST, order_by=_TS)
+        # Pandas' canonical EWM carries the last established average across
+        # missing observations. Polars emits null at those positions instead;
+        # fill the EWM output (not the input) within each instrument, preserving
+        # warmup nulls and ignore_nulls=False gap-weight decay.
+        avg_gain = gain.ewm_mean(
+            alpha=alpha, adjust=False, min_samples=w, ignore_nulls=False,
+        ).forward_fill().over(_INST, order_by=_TS)
+        avg_loss = loss.ewm_mean(
+            alpha=alpha, adjust=False, min_samples=w, ignore_nulls=False,
+        ).forward_fill().over(_INST, order_by=_TS)
         rs = avg_gain / pl.when(avg_loss == 0).then(None).otherwise(avg_loss)
         expr = (
             pl.when((avg_loss == 0) & (avg_gain > 0))

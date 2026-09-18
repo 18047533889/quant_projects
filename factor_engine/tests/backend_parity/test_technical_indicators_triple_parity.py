@@ -31,7 +31,7 @@ from factor_engine.api.columns import col
 from factor_engine.api.factor import Factor
 from factor_engine.backend.factory import build_backend
 from factor_engine.cleaned_operators import load_all
-from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.runtime.engine import FactorEngine
 from factor_engine.storage.factory import build_data_source
@@ -209,7 +209,7 @@ def test_ema_pandas_polars_parity(panel, span):
 @pytest.mark.parametrize("window", [6, 14, 20])
 def test_rsi_pandas_polars_parity(panel, window):
     """Test Relative Strength Index (RSI_WILDER) parity."""
-    if "RSI_WILDER" not in DAILY_CANONICALS:
+    if classify_canonical("RSI_WILDER") != "daily":
         pytest.skip("RSI_WILDER not in daily surface")
 
     expr = make_cleaned_call_factory("RSI_WILDER")(col("close"), window)
@@ -226,7 +226,7 @@ def test_rsi_pandas_polars_parity(panel, window):
 @pytest.mark.parametrize("fast,slow", [(12, 26), (5, 10), (8, 17)])
 def test_macd_line_pandas_polars_parity(panel, fast, slow):
     """Test MACD line (fast EMA - slow EMA) parity."""
-    if "MACD_line" not in DAILY_CANONICALS:
+    if classify_canonical("MACD_line") != "daily":
         pytest.skip("MACD_line not in daily surface")
 
     expr = make_cleaned_call_factory("MACD_line")(col("close"), fast, slow)
@@ -243,7 +243,7 @@ def test_macd_line_pandas_polars_parity(panel, fast, slow):
 @pytest.mark.parametrize("fast,slow,signal", [(12, 26, 9), (5, 10, 5)])
 def test_macd_signal_pandas_polars_parity(panel, fast, slow, signal):
     """Test MACD signal line parity."""
-    if "MACD_signal" not in DAILY_CANONICALS:
+    if classify_canonical("MACD_signal") != "daily":
         pytest.skip("MACD_signal not in daily surface")
 
     expr = make_cleaned_call_factory("MACD_signal")(col("close"), fast, slow, signal)
@@ -260,7 +260,7 @@ def test_macd_signal_pandas_polars_parity(panel, fast, slow, signal):
 @pytest.mark.parametrize("window,std_dev", [(20, 2.0), (10, 1.5), (15, 2.5)])
 def test_bollinger_upper_pandas_polars_parity(panel, window, std_dev):
     """Test Bollinger Upper Band parity."""
-    if "BollingerUpper" not in DAILY_CANONICALS:
+    if classify_canonical("BollingerUpper") != "daily":
         pytest.skip("BollingerUpper not in daily surface")
 
     expr = make_cleaned_call_factory("BollingerUpper")(col("close"), window, std_dev)
@@ -277,7 +277,7 @@ def test_bollinger_upper_pandas_polars_parity(panel, window, std_dev):
 @pytest.mark.parametrize("window,std_dev", [(20, 2.0), (10, 1.5), (15, 2.5)])
 def test_bollinger_mid_pandas_polars_parity(panel, window, std_dev):
     """Test Bollinger Middle Band (BollingerBands) parity."""
-    if "BollingerBands" not in DAILY_CANONICALS:
+    if classify_canonical("BollingerBands") != "daily":
         pytest.skip("BollingerBands not in daily surface")
 
     expr = make_cleaned_call_factory("BollingerBands")(col("close"), window, std_dev)
@@ -294,7 +294,7 @@ def test_bollinger_mid_pandas_polars_parity(panel, window, std_dev):
 @pytest.mark.parametrize("window,std_dev", [(20, 2.0), (10, 1.5), (15, 2.5)])
 def test_bollinger_lower_pandas_polars_parity(panel, window, std_dev):
     """Test Bollinger Lower Band parity."""
-    if "BollingerLower" not in DAILY_CANONICALS:
+    if classify_canonical("BollingerLower") != "daily":
         pytest.skip("BollingerLower not in daily surface")
 
     expr = make_cleaned_call_factory("BollingerLower")(col("close"), window, std_dev)
@@ -378,7 +378,7 @@ def test_ema_short_window(panel):
 
 def test_rsi_warmup_period(panel):
     """Verify RSI warmup period behavior."""
-    if "RSI_WILDER" not in DAILY_CANONICALS:
+    if classify_canonical("RSI_WILDER") != "daily":
         pytest.skip("RSI_WILDER not in daily surface")
 
     window = 14
@@ -401,7 +401,7 @@ def test_rsi_warmup_period(panel):
 
 def test_bollinger_bands_consistency(panel):
     """Verify Bollinger Bands relationship: lower < mid < upper."""
-    if not all(op in DAILY_CANONICALS for op in ["BollingerUpper", "BollingerBands", "BollingerLower"]):
+    if not all(classify_canonical(op) == "daily" for op in ["BollingerUpper", "BollingerBands", "BollingerLower"]):
         pytest.skip("Bollinger operators not in daily surface")
 
     window = 20
@@ -419,7 +419,7 @@ def test_bollinger_bands_consistency(panel):
 
 def test_macd_line_vs_signal_timing(panel):
     """Verify MACD signal lags MACD line (warmup periods)."""
-    if not all(op in DAILY_CANONICALS for op in ["MACD_line", "MACD_signal"]):
+    if not all(classify_canonical(op) == "daily" for op in ["MACD_line", "MACD_signal"]):
         pytest.skip("MACD operators not in daily surface")
 
     fast, slow, signal = 12, 26, 9
