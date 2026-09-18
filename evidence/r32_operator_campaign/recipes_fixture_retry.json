@@ -1,0 +1,7 @@
+{"recipes":[
+{"canonical":"ts_best_lag_corr_excess","inputs":["base","other"],"params":{"window":24,"max_lag":4}},
+{"canonical":"ts_huber_regression_forecast_error_z","inputs":["base","other","third","fourth","fifth"],"params":{"window":30,"coefficient_index":0,"min_periods":8,"add_intercept":true,"warmup_policy":"expanding"}},
+{"canonical":"ts_huber_regression_resid_z","inputs":["base","other","third","fourth","fifth"],"params":{"window":30,"coefficient_index":0,"min_periods":8,"add_intercept":true,"warmup_policy":"expanding"}},
+{"canonical":"ts_multi_regression_forecast_error_z","inputs":["base","other","third","fourth","fifth"],"params":{"window":30,"coefficient_index":0,"min_periods":8,"add_intercept":true,"warmup_policy":"expanding"}},
+{"canonical":"ts_multi_regression_resid_z","inputs":["base","other","third","fourth","fifth"],"params":{"window":30,"coefficient_index":0,"min_periods":8,"add_intercept":true,"warmup_policy":"expanding"}}
+]}

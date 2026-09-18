@@ -1,0 +1,124 @@
+{
+  "recipes": [
+    {
+      "canonical": "ts_ar_coeff_stability",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "post-fix canonical timing retry"
+    },
+    {
+      "canonical": "ts_ar_fitted_value",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "post-fix canonical timing retry"
+    },
+    {
+      "canonical": "ts_ar_forecast",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "post-fix canonical timing retry"
+    },
+    {
+      "canonical": "ts_ar_in_sample_resid",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "post-fix canonical timing retry"
+    },
+    {
+      "canonical": "ts_ar_innovation",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "post-fix canonical timing retry"
+    },
+    {
+      "canonical": "ts_ar_innovation_z",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "post-fix canonical timing retry"
+    },
+    {
+      "canonical": "ts_ar_prior_coeff",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "post-fix canonical timing retry"
+    },
+    {
+      "canonical": "ts_ar_prior_forecast",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "post-fix canonical timing retry"
+    },
+    {
+      "canonical": "ts_ar_prior_innovation",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "post-fix canonical timing retry"
+    },
+    {
+      "canonical": "ts_ar_prior_innovation_z",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "post-fix canonical timing retry"
+    }
+  ]
+}

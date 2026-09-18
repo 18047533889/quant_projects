@@ -1,0 +1,4430 @@
+[
+  {
+    "canonical": "ts_ar_coeff_stability",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.ar_meanrev._ar_op.<locals>._ArOp",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSARCoeffStabilityNative",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ar_fitted_value",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.ar_meanrev._ar_op.<locals>._ArOp",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSARFittedValueNative",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ar_forecast",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.ar_meanrev._ar_op.<locals>._ArOp",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSARForecastNative",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ar_in_sample_resid",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.ar_meanrev._ar_op.<locals>._ArOp",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSARInSampleResidNative",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ar_innovation",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.ar_meanrev._ar_op.<locals>._ArOp",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSARInnovationNative",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ar_innovation_z",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.ar_meanrev._ar_op.<locals>._ArOp",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSARInnovationZNative",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ar_prior_coeff",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.ar_meanrev._ar_op.<locals>._ArOp",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSARPriorCoeffNative",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ar_prior_forecast",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.ar_meanrev._ar_op.<locals>._ArOp",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSARPriorForecastNative",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ar_prior_innovation",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.ar_meanrev._ar_op.<locals>._ArOp",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSARPriorInnovationNative",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ar_prior_innovation_z",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.ar_meanrev._ar_op.<locals>._ArOp",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSARPriorInnovationZNative",
+      "params": [
+        "x",
+        "window",
+        "order",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "order": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_autocorr_decay_half_life",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.sequence_complexity.TsAutocorrDecayHalfLife",
+      "params": [
+        "x",
+        "window",
+        "max_lag",
+        "use_abs",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "max_lag": {
+          "default": "10",
+          "min": 2,
+          "max": 30,
+          "choices": null
+        },
+        "use_abs": {
+          "default": "False",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "2",
+          "min": 2,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "x",
+        "window",
+        "max_lag",
+        "use_abs",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "max_lag": {
+          "default": "10",
+          "min": 2,
+          "max": 30,
+          "choices": null
+        },
+        "use_abs": {
+          "default": "False",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "2",
+          "min": 2,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_autocorrelation_time",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.memory_ext.TsAutocorrelationTime",
+      "params": [
+        "x",
+        "window",
+        "max_lag"
+      ],
+      "specs": {
+        "window": {
+          "default": "120",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "max_lag": {
+          "default": "20",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.polars_geometry_math._register_polars_backends.<locals>._PolarsGeometryMathBackend",
+      "params": [
+        "x",
+        "window",
+        "max_lag"
+      ],
+      "specs": {
+        "window": {
+          "default": "120",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "max_lag": {
+          "default": "20",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_best_lag_corr_excess",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.downside_risk.TsBestLagCorrExcess",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "max_lag"
+      ],
+      "specs": {
+        "window": {
+          "default": "20",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "max_lag": {
+          "default": "5",
+          "min": 0,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_robust_stats.PolarsRobustStats_ts_best_lag_corr_excess",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "max_lag"
+      ],
+      "specs": {
+        "window": {
+          "default": "20",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "max_lag": {
+          "default": "5",
+          "min": 0,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_best_lag_corr_raw",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.downside_risk.TsBestLagCorrRaw",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "max_lag"
+      ],
+      "specs": {
+        "window": {
+          "default": "20",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "max_lag": {
+          "default": "5",
+          "min": 0,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_robust_stats.PolarsRobustStats_ts_best_lag_corr_raw",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "max_lag"
+      ],
+      "specs": {
+        "window": {
+          "default": "20",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "max_lag": {
+          "default": "5",
+          "min": 0,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_lag_of_peak_corr",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.stateful.sequential.TsLagOfPeakCorr",
+      "params": [
+        "x",
+        "y",
+        "window",
+        "max_lag",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "20",
+          "min": 3,
+          "max": null,
+          "choices": null
+        },
+        "max_lag": {
+          "default": "5",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "None",
+          "min": 2,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "x",
+        "y",
+        "window",
+        "max_lag",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "20",
+          "min": 3,
+          "max": null,
+          "choices": null
+        },
+        "max_lag": {
+          "default": "5",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "None",
+          "min": 2,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_robust_zscore_inclusive",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.robust_stats.TsRobustZscore",
+      "params": [
+        "x",
+        "window",
+        "center",
+        "scale",
+        "clip"
+      ],
+      "specs": {
+        "window": {
+          "default": "20",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "center": {
+          "default": "'median'",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "scale": {
+          "default": "'mad'",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "clip": {
+          "default": "None",
+          "min": 5e-324,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.robust_stats_native.make.<locals>.RobustNative",
+      "params": [
+        "x",
+        "window",
+        "center",
+        "scale",
+        "clip"
+      ],
+      "specs": {
+        "window": {
+          "default": "20",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "center": {
+          "default": "'median'",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "scale": {
+          "default": "'mad'",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "clip": {
+          "default": "None",
+          "min": 5e-324,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_robust_zscore_prior",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.robust_stats.TsRobustZscorePrior",
+      "params": [
+        "x",
+        "window",
+        "center",
+        "scale",
+        "clip",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "20",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "None",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "center": {
+          "default": "'median'",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "scale": {
+          "default": "'mad'",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "clip": {
+          "default": "None",
+          "min": 5e-324,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.robust_stats_native.make.<locals>.RobustNative",
+      "params": [
+        "x",
+        "window",
+        "center",
+        "scale",
+        "clip",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "20",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "None",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "center": {
+          "default": "'median'",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "scale": {
+          "default": "'mad'",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "clip": {
+          "default": "None",
+          "min": 5e-324,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_fractional_difference",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.memory_ext.TsFractionalDifference",
+      "params": [
+        "x",
+        "fd",
+        "cutoff",
+        "max_discarded_weight_mass"
+      ],
+      "specs": {
+        "fd": {
+          "default": "0.4",
+          "min": -0.9999999999999999,
+          "max": 0.9999999999999999,
+          "choices": null
+        },
+        "cutoff": {
+          "default": "20",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "max_discarded_weight_mass": {
+          "default": "0.5",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.polars_geometry_math._register_polars_backends.<locals>._PolarsGeometryMathBackend",
+      "params": [
+        "x",
+        "fd",
+        "cutoff",
+        "max_discarded_weight_mass"
+      ],
+      "specs": {
+        "fd": {
+          "default": "0.4",
+          "min": -0.9999999999999999,
+          "max": 0.9999999999999999,
+          "choices": null
+        },
+        "cutoff": {
+          "default": "20",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "max_discarded_weight_mass": {
+          "default": "0.5",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_fractional_difference_discarded_weight_mass",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.memory_ext.TsFractionalDifferenceDiscardedWeightMass",
+      "params": [
+        "x",
+        "fd",
+        "cutoff"
+      ],
+      "specs": {
+        "fd": {
+          "default": "0.4",
+          "min": -0.9999999999999999,
+          "max": 0.9999999999999999,
+          "choices": null
+        },
+        "cutoff": {
+          "default": "20",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.memory_delegate.register.<locals>.MemoryPolars",
+      "params": [
+        "x",
+        "fd",
+        "cutoff"
+      ],
+      "specs": {
+        "fd": {
+          "default": "0.4",
+          "min": -0.9999999999999999,
+          "max": 0.9999999999999999,
+          "choices": null
+        },
+        "cutoff": {
+          "default": "20",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ffill_limited",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.overhaul.base.PandasFunctionOperator",
+      "params": [
+        "x",
+        "max_gap",
+        "lineage"
+      ],
+      "specs": {
+        "max_gap": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "lineage": {
+          "default": "None",
+          "min": null,
+          "max": null,
+          "choices": [
+            "price"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.overhaul.base.PolarsFunctionOperator",
+      "params": [
+        "x",
+        "max_gap",
+        "lineage"
+      ],
+      "specs": {
+        "max_gap": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "lineage": {
+          "default": "None",
+          "min": null,
+          "max": null,
+          "choices": [
+            "price"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_huber_regression_coeff",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_huber_regression_coeff_prior",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_huber_regression_forecast_error",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_huber_regression_forecast_error_z",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_huber_regression_in_sample_resid",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.regression_models.TsHuberRegressionInSampleResid",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSHuberRegressionInSampleResidNative",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_huber_regression_predictive_resid",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.regression_models.TsHuberRegressionPredictiveResid",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSHuberRegressionPredictiveResidNative",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_huber_regression_resid_z",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ridge_regression_coeff",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ridge_regression_coeff_prior",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ridge_regression_forecast_error",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ridge_regression_forecast_error_z",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ridge_regression_in_sample_resid",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.regression_models.TsRidgeRegressionInSampleResid",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "alpha",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "alpha": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSRidgeRegressionInSampleResidNative",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "alpha",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "alpha": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ridge_regression_predictive_resid",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.regression_models.TsRidgeRegressionPredictiveResid",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "alpha",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "alpha": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSRidgeRegressionPredictiveResidNative",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "alpha",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "alpha": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_ridge_regression_resid_z",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_quantile_regression_coeff",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression.TsQuantileRegressionCoeff",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "0.5",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "0.5",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_quantile_regression_coeff_prior",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression.TsQuantileRegressionCoeffPrior",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSQuantileRegressionCoeffPriorNative",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_quantile_regression_resid",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression.TsQuantileRegressionResid",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "0.5",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "0.5",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_poly2_coeff",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.common.time_series.TSPoly2Coeff",
+      "params": [
+        "x",
+        "d"
+      ],
+      "specs": {
+        "d": {
+          "default": "20",
+          "min": 3,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_robust_stats.PolarsRobustStats_ts_poly2_coeff",
+      "params": [
+        "x",
+        "d"
+      ],
+      "specs": {
+        "d": {
+          "default": "20",
+          "min": 3,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_poly2_forecast_error",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.common.time_series.TSPoly2ForecastError",
+      "params": [
+        "x",
+        "d"
+      ],
+      "specs": {
+        "d": {
+          "default": "20",
+          "min": 3,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSPoly2ForecastErrorNative",
+      "params": [
+        "x",
+        "d"
+      ],
+      "specs": {
+        "d": {
+          "default": "20",
+          "min": 3,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_poly2_forecast_error_z",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.common.time_series.TSPoly2ForecastErrorZ",
+      "params": [
+        "x",
+        "d"
+      ],
+      "specs": {
+        "d": {
+          "default": "20",
+          "min": 3,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSPoly2ForecastErrorZNative",
+      "params": [
+        "x",
+        "d"
+      ],
+      "specs": {
+        "d": {
+          "default": "20",
+          "min": 3,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_poly2_prior_coeff",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.common.time_series.TSPoly2PriorCoeff",
+      "params": [
+        "x",
+        "d"
+      ],
+      "specs": {
+        "d": {
+          "default": "20",
+          "min": 3,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_ts_advanced.TSPoly2PriorCoeffNative",
+      "params": [
+        "x",
+        "d"
+      ],
+      "specs": {
+        "d": {
+          "default": "20",
+          "min": 3,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_poly2_resid",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.common.time_series.TSPoly2Resid",
+      "params": [
+        "y",
+        "x",
+        "d"
+      ],
+      "specs": {
+        "d": {
+          "default": "20",
+          "min": 3,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.common.polars_robust_stats.PolarsRobustStats_ts_poly2_resid",
+      "params": [
+        "y",
+        "x",
+        "d"
+      ],
+      "specs": {
+        "d": {
+          "default": "20",
+          "min": 3,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_regression_resid_mean",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.overhaul.base.PandasFunctionOperator",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "min_periods",
+        "add_intercept"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "None",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "min_periods",
+        "add_intercept"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "None",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_expectile_regression_coeff",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._expectile_op.<locals>._ExpectileOp",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_expectile_regression_coeff_prior",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._expectile_op.<locals>._ExpectileOp",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_expectile_regression_forecast_error",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._expectile_op.<locals>._ExpectileOp",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_expectile_regression_resid",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._expectile_op.<locals>._ExpectileOp",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x",
+        "window",
+        "q",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "q": {
+          "default": "MISSING",
+          "min": 0.0,
+          "max": 1.0,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "MISSING",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_multi_regression_coeff",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_multi_regression_coeff_prior",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_multi_regression_coeff_stability",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_multi_regression_forecast_error",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_multi_regression_forecast_error_z",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_multi_regression_r2",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_multi_regression_r2_prior",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_multi_regression_resid",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_multi_regression_resid_z",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_multi_regression_adjusted_r2_prior",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.ts_model.dynamic_regression._register_multi.<locals>._MultiOp",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "y",
+        "x1",
+        "x2",
+        "x3",
+        "x4",
+        "window",
+        "coefficient_index",
+        "min_periods",
+        "add_intercept",
+        "warmup_policy"
+      ],
+      "specs": {
+        "window": {
+          "default": "60",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "coefficient_index": {
+          "default": "1",
+          "min": 0,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "10",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "add_intercept": {
+          "default": "True",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "warmup_policy": {
+          "default": "'expanding'",
+          "min": null,
+          "max": null,
+          "choices": [
+            "expanding",
+            "full"
+          ]
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_kama",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.filter_smooth.TSKama",
+      "params": [
+        "x",
+        "er_window",
+        "fast_period",
+        "slow_period",
+        "min_periods"
+      ],
+      "specs": {
+        "er_window": {
+          "default": "10",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "fast_period": {
+          "default": "2",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "slow_period": {
+          "default": "30",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "None",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "x",
+        "er_window",
+        "fast_period",
+        "slow_period",
+        "min_periods"
+      ],
+      "specs": {
+        "er_window": {
+          "default": "10",
+          "min": 2,
+          "max": null,
+          "choices": null
+        },
+        "fast_period": {
+          "default": "2",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "slow_period": {
+          "default": "30",
+          "min": 1,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "None",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_trend_tstat",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.overhaul.base.PandasFunctionOperator",
+      "params": [
+        "x",
+        "window",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 3,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "None",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "x",
+        "window",
+        "min_periods"
+      ],
+      "specs": {
+        "window": {
+          "default": "MISSING",
+          "min": 3,
+          "max": null,
+          "choices": null
+        },
+        "min_periods": {
+          "default": "None",
+          "min": 1,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  },
+  {
+    "canonical": "ts_adaptive_noise_kalman",
+    "pandas_numpy": {
+      "class": "factor_engine.cleaned_operators.technical.kalman_variants.TSAdaptiveNoiseKalman",
+      "params": [
+        "x",
+        "q_init",
+        "r_init",
+        "window",
+        "adapt_rate"
+      ],
+      "specs": {
+        "q_init": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "r_init": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "window": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "adapt_rate": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": null
+        }
+      }
+    },
+    "polars": {
+      "class": "factor_engine.cleaned_operators.rolling_pack.register_polars_udf.<locals>._PolarsUdf",
+      "params": [
+        "x",
+        "q_init",
+        "r_init",
+        "window",
+        "adapt_rate"
+      ],
+      "specs": {
+        "q_init": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "r_init": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "window": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": null
+        },
+        "adapt_rate": {
+          "default": "MISSING",
+          "min": null,
+          "max": null,
+          "choices": null
+        }
+      }
+    }
+  }
+]

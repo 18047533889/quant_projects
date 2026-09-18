@@ -1,0 +1,5 @@
+{"recipes":[
+{"canonical":"ts_huber_regression_in_sample_resid","inputs":["base","third"],"params":{"window":24,"min_periods":8}},
+{"canonical":"ts_ridge_regression_in_sample_resid","inputs":["base","third"],"params":{"window":24,"alpha":1.0,"min_periods":8}},
+{"canonical":"ts_quantile_regression_coeff_prior","inputs":["base","third"],"params":{"window":24,"q":0.5,"min_periods":8}}
+]}

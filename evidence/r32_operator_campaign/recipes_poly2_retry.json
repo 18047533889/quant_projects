@@ -1,0 +1,5 @@
+{"recipes":[
+{"canonical":"ts_poly2_forecast_error","inputs":["base"],"params":{"d":24}},
+{"canonical":"ts_poly2_forecast_error_z","inputs":["base"],"params":{"d":24}},
+{"canonical":"ts_poly2_prior_coeff","inputs":["base"],"params":{"d":24}}
+]}

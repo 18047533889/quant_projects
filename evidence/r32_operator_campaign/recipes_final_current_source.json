@@ -1,0 +1,848 @@
+{
+  "recipes": [
+    {
+      "canonical": "ts_ar_coeff_stability",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_ar_fitted_value",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_ar_forecast",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_ar_in_sample_resid",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_ar_innovation",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_ar_innovation_z",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_ar_prior_coeff",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_ar_prior_forecast",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_ar_prior_innovation",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_ar_prior_innovation_z",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "order": 2,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_autocorr_decay_half_life",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 30,
+        "max_lag": 6,
+        "use_abs": true,
+        "min_periods": 10
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_autocorrelation_time",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 30,
+        "max_lag": 6
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_best_lag_corr_excess",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "max_lag": 4
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_best_lag_corr_raw",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "max_lag": 4
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_lag_of_peak_corr",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "max_lag": 4,
+        "min_periods": 8
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_robust_zscore_inclusive",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 20,
+        "center": "median",
+        "scale": "mad",
+        "clip": 5
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_robust_zscore_prior",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 20,
+        "center": "median",
+        "scale": "mad",
+        "clip": 5,
+        "min_periods": 5
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_fractional_difference",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "fd": 0.4,
+        "cutoff": 12,
+        "max_discarded_weight_mass": 0.5
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_fractional_difference_discarded_weight_mass",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "fd": 0.4,
+        "cutoff": 12
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_ffill_limited",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "max_gap": 3,
+        "lineage": "price"
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_huber_regression_coeff",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_huber_regression_coeff_prior",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_huber_regression_forecast_error",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_huber_regression_forecast_error_z",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_huber_regression_resid_z",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_huber_regression_in_sample_resid",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "min_periods": 8
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_huber_regression_predictive_resid",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "min_periods": 8
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_ridge_regression_coeff",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_ridge_regression_coeff_prior",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_ridge_regression_forecast_error",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_ridge_regression_forecast_error_z",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_ridge_regression_resid_z",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_ridge_regression_in_sample_resid",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "alpha": 1,
+        "min_periods": 8
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_ridge_regression_predictive_resid",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "alpha": 1,
+        "min_periods": 8
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_quantile_regression_coeff",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "q": 0.5,
+        "min_periods": 8
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_quantile_regression_coeff_prior",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "q": 0.5,
+        "min_periods": 8
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_quantile_regression_resid",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "q": 0.5,
+        "min_periods": 8
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_poly2_coeff",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "d": 24
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_poly2_forecast_error",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "d": 24
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_poly2_forecast_error_z",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "d": 24
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_poly2_prior_coeff",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "d": 24
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_poly2_resid",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "d": 24
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_regression_resid_mean",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "min_periods": 8,
+        "add_intercept": true
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_expectile_regression_coeff",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "q": 0.4,
+        "min_periods": 8
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_expectile_regression_coeff_prior",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "q": 0.4,
+        "min_periods": 8
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_expectile_regression_forecast_error",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "q": 0.4,
+        "min_periods": 8
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_expectile_regression_resid",
+      "inputs": [
+        "base",
+        "other"
+      ],
+      "params": {
+        "window": 24,
+        "q": 0.4,
+        "min_periods": 8
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_multi_regression_coeff",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_coeff_prior",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_coeff_stability",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_forecast_error",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_forecast_error_z",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_r2",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_r2_prior",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_resid",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_resid_z",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_adjusted_r2_prior",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_kama",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "er_window": 10,
+        "fast_period": 2,
+        "slow_period": 20,
+        "min_periods": 11
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_trend_tstat",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "window": 24,
+        "min_periods": 8
+      },
+      "provenance": "canonical contract"
+    },
+    {
+      "canonical": "ts_adaptive_noise_kalman",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "q_init": 0.01,
+        "r_init": 0.1,
+        "window": 10,
+        "adapt_rate": 0.1
+      },
+      "provenance": "extended signal contract"
+    }
+  ]
+}

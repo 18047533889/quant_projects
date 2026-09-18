@@ -1,0 +1,377 @@
+{
+  "recipes": [
+    {
+      "canonical": "ts_huber_regression_coeff",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_huber_regression_coeff_prior",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_huber_regression_forecast_error",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_huber_regression_forecast_error_z",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_huber_regression_resid_z",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_coeff",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_coeff_prior",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_coeff_stability",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_forecast_error",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_forecast_error_z",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_r2",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_r2_prior",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_resid",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_resid_z",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_multi_regression_adjusted_r2_prior",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_ridge_regression_coeff",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_ridge_regression_coeff_prior",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_ridge_regression_forecast_error",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_ridge_regression_forecast_error_z",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_ridge_regression_resid_z",
+      "inputs": [
+        "base",
+        "other",
+        "third",
+        "fourth",
+        "fifth"
+      ],
+      "params": {
+        "window": 30,
+        "coefficient_index": 0,
+        "min_periods": 8,
+        "add_intercept": true,
+        "warmup_policy": "expanding"
+      },
+      "provenance": "corrected configured-history recipe"
+    },
+    {
+      "canonical": "ts_kama",
+      "inputs": [
+        "base"
+      ],
+      "params": {
+        "er_window": 10,
+        "fast_period": 2,
+        "slow_period": 20,
+        "min_periods": 11
+      },
+      "provenance": "corrected configured-history recipe"
+    }
+  ]
+}

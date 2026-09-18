@@ -35,9 +35,40 @@ except ImportError:  # pragma: no cover
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.cleaned_operators.parameter_validation import strict_integer, strict_finite_scalar
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.cleaned_operators.common._polars_bridge import (
+    SKIP as _PANEL_METADATA_COLUMNS,
+    verify_frames_share_identity,
+)
 
-_SKIP = frozenset({"date", "stock_code"})
+_SKIP = _PANEL_METADATA_COLUMNS
 _SRC = "polars_ts_advanced_phase3"
+
+
+def _cpu_delegate_spec(
+    canonical: str,
+    parameter_domain: str,
+    pathway: str = "Eager Polars -> NumPy/Pandas CPU kernel -> Polars delegate; full panel materialized.",
+) -> PhysicalImplementationSpec:
+    """Declare the repaired Polars wrappers' actual eager CPU execution path."""
+    return PhysicalImplementationSpec(
+        canonical=canonical,
+        backend="polars",
+        execution_kind=ExecutionKind.DELEGATE_PYTHON,
+        supports_lazy=False,
+        supports_streaming=False,
+        stateful=False,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=False,
+        implementation_source_hash=f"polars_ts_advanced:{canonical}:cpu_delegate:v1",
+        kernel_identity=f"{canonical}:numpy_or_pandas_cpu_kernel:v1",
+        parameter_domain_hash=parameter_domain,
+        semantic_contract_hash=f"{canonical}:canonical_pandas_parity:v1",
+        notes=pathway,
+    )
 
 
 def _numeric_cols(df: pl.DataFrame) -> list[str]:
@@ -128,6 +159,39 @@ class TSARCoefficientNative(SeriesOperator):
         ])
 
 
+def _canonical_ar_panel(
+    x: pl.DataFrame, window: int, order: int, warmup_policy: str,
+    *, stat: str, fit_lag: int = 0, stability_k: int = 0,
+) -> pl.DataFrame:
+    """Execute the versioned AR contract without reconnecting missing rows."""
+    from factor_engine.cleaned_operators.ts_model.ar_meanrev import (
+        _ar_apply, validate_ar_configured_history,
+    )
+
+    w = strict_integer(window, "window", minimum=2)
+    p = strict_integer(order, "order", minimum=1)
+    policy = str(warmup_policy)
+    if policy not in ("expanding", "full"):
+        raise ValueError(
+            "warmup_policy must be 'expanding' or 'full', "
+            f"got {warmup_policy!r}"
+        )
+    validate_ar_configured_history(w, p, fit_lag=fit_lag)
+    cols = _numeric_cols(x)
+    values = x.select(cols).to_numpy().astype(float, copy=False)
+    out = np.full(values.shape, np.nan, dtype=float)
+    for index in range(values.shape[1]):
+        out[:, index] = _ar_apply(
+            values[:, index], w, p, stat, fit_lag=fit_lag,
+            stability_k=stability_k, warmup_policy=policy,
+        )
+    return x.with_columns([
+        pl.Series(name, out[:, index], dtype=pl.Float64)
+        for index, name in enumerate(cols)
+    ])
+
+
+
 @register_operator(
     name="ts_ar_fitted_value",
     category="time_series",
@@ -138,13 +202,15 @@ class TSARCoefficientNative(SeriesOperator):
 class TSARFittedValueNative(SeriesOperator):
     """Rolling AR(p) fitted value (in-sample prediction)."""
 
+    _physical_spec = _cpu_delegate_spec("ts_ar_fitted_value", "window:int>=2,order:int>=1,warmup_policy:{expanding,full}")
+
     metadata = OperatorMetadata(
         name="ts_ar_fitted_value",
         category="time_series",
         description="AR(p) 拟合值",
         param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
             "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -152,36 +218,14 @@ class TSARFittedValueNative(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1,
-                          warmup_policy: str = "exact", **kwargs) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(order, "order", minimum=1)
-        lag = p
-        cols = _numeric_cols(x)
-
-        def _ar_fitted(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < p + 2:
-                return np.nan
-            arr = arr[valid]
-            if len(arr) < p + 2:
-                return np.nan
-            y = arr[p:]
-            X = np.column_stack([arr[p-i-1:-i-1] for i in range(p)])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                x_last = arr[-p:][::-1]
-                return float(np.dot(coef, x_last))
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_ar_fitted, window_size=w, min_samples=p+2).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+    def _calculate_series(
+        self, x: pl.DataFrame, window: int = 60, order: int = 1,
+        warmup_policy: str = "expanding", **kwargs,
+    ) -> pl.DataFrame:
+        return _canonical_ar_panel(
+            x, window, order, warmup_policy, stat="forecast",
+            fit_lag=0, stability_k=0,
+        )
 
 @register_operator(
     name="ts_ar_forecast",
@@ -193,13 +237,15 @@ class TSARFittedValueNative(SeriesOperator):
 class TSARForecastNative(SeriesOperator):
     """Rolling AR(p) one-step-ahead forecast."""
 
+    _physical_spec = _cpu_delegate_spec("ts_ar_forecast", "window:int>=2,order:int>=1,warmup_policy:{expanding,full}")
+
     metadata = OperatorMetadata(
         name="ts_ar_forecast",
         category="time_series",
         description="AR(p) 预测值",
         param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
             "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -207,37 +253,14 @@ class TSARForecastNative(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1,
-                          warmup_policy: str = "exact", **kwargs) -> pl.DataFrame:
-        # Forecast at t uses data up to t-1, predicts t
-        w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(order, "order", minimum=1)
-        lag = p
-        cols = _numeric_cols(x)
-
-        def _ar_forecast(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < p + 2:
-                return np.nan
-            arr = arr[valid]
-            if len(arr) < p + 2:
-                return np.nan
-            y = arr[p:]
-            X = np.column_stack([arr[p-i-1:-i-1] for i in range(p)])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                x_last = arr[-p:][::-1]
-                return float(np.dot(coef, x_last))
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).shift(1).rolling_map(_ar_forecast, window_size=w, min_samples=p+2).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+    def _calculate_series(
+        self, x: pl.DataFrame, window: int = 60, order: int = 1,
+        warmup_policy: str = "expanding", **kwargs,
+    ) -> pl.DataFrame:
+        return _canonical_ar_panel(
+            x, window, order, warmup_policy, stat="forecast",
+            fit_lag=0, stability_k=0,
+        )
 
 @register_operator(
     name="ts_ar_innovation",
@@ -249,13 +272,15 @@ class TSARForecastNative(SeriesOperator):
 class TSARInnovationNative(SeriesOperator):
     """AR(p) innovation (forecast error): y_t - forecast_t."""
 
+    _physical_spec = _cpu_delegate_spec("ts_ar_innovation", "window:int>=2,order:int>=1,warmup_policy:{expanding,full}")
+
     metadata = OperatorMetadata(
         name="ts_ar_innovation",
         category="time_series",
         description="AR(p) 创新项",
         param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
             "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -263,43 +288,14 @@ class TSARInnovationNative(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1,
-                          warmup_policy: str = "exact", **kwargs) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(order, "order", minimum=1)
-        lag = p
-        cols = _numeric_cols(x)
-
-        def _ar_innov(vals):
-            arr = np.asarray(vals, dtype=float)
-            if len(arr) < w:
-                return np.nan
-            current = arr[-1]
-            if np.isnan(current):
-                return np.nan
-            past = arr[:-1]
-            valid = ~np.isnan(past)
-            if np.sum(valid) < p + 2:
-                return np.nan
-            past = past[valid]
-            if len(past) < p + 2:
-                return np.nan
-            y = past[p:]
-            X = np.column_stack([past[p-i-1:-i-1] for i in range(p)])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                x_last = past[-p:][::-1]
-                forecast = np.dot(coef, x_last)
-                return float(current - forecast)
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_ar_innov, window_size=w+1, min_samples=p+3).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+    def _calculate_series(
+        self, x: pl.DataFrame, window: int = 60, order: int = 1,
+        warmup_policy: str = "expanding", **kwargs,
+    ) -> pl.DataFrame:
+        return _canonical_ar_panel(
+            x, window, order, warmup_policy, stat="innovation",
+            fit_lag=0, stability_k=0,
+        )
 
 @register_operator(
     name="ts_ar_innovation_z",
@@ -311,13 +307,15 @@ class TSARInnovationNative(SeriesOperator):
 class TSARInnovationZNative(SeriesOperator):
     """Standardized AR(p) innovation: innovation / std(innovation)."""
 
+    _physical_spec = _cpu_delegate_spec("ts_ar_innovation_z", "window:int>=2,order:int>=1,warmup_policy:{expanding,full}")
+
     metadata = OperatorMetadata(
         name="ts_ar_innovation_z",
         category="time_series",
         description="AR(p) 标准化创新项",
         param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
             "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -325,49 +323,14 @@ class TSARInnovationZNative(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1,
-                          warmup_policy: str = "exact", **kwargs) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(order, "order", minimum=1)
-        lag = p
-        cols = _numeric_cols(x)
-
-        def _ar_innov_z(vals):
-            arr = np.asarray(vals, dtype=float)
-            if len(arr) < w:
-                return np.nan
-            current = arr[-1]
-            if np.isnan(current):
-                return np.nan
-            past = arr[:-1]
-            valid = ~np.isnan(past)
-            if np.sum(valid) < p + 2:
-                return np.nan
-            past = past[valid]
-            if len(past) < p + 2:
-                return np.nan
-            y = past[p:]
-            X = np.column_stack([past[p-i-1:-i-1] for i in range(p)])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                fitted = X @ coef
-                resid = y - fitted
-                std = np.std(resid, ddof=1)
-                if std < 1e-12:
-                    return np.nan
-                x_last = past[-p:][::-1]
-                forecast = np.dot(coef, x_last)
-                innov = current - forecast
-                return (float(innov) / (std)) if std != 0 else np.nan
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_ar_innov_z, window_size=w+1, min_samples=p+3).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+    def _calculate_series(
+        self, x: pl.DataFrame, window: int = 60, order: int = 1,
+        warmup_policy: str = "expanding", **kwargs,
+    ) -> pl.DataFrame:
+        return _canonical_ar_panel(
+            x, window, order, warmup_policy, stat="innovation_z",
+            fit_lag=0, stability_k=0,
+        )
 
 @register_operator(
     name="ts_ar_in_sample_resid",
@@ -379,13 +342,15 @@ class TSARInnovationZNative(SeriesOperator):
 class TSARInSampleResidNative(SeriesOperator):
     """AR(p) in-sample residual std."""
 
+    _physical_spec = _cpu_delegate_spec("ts_ar_in_sample_resid", "window:int>=2,order:int>=1,warmup_policy:{expanding,full}")
+
     metadata = OperatorMetadata(
         name="ts_ar_in_sample_resid",
         category="time_series",
         description="AR(p) 样本内残差标准差",
         param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
             "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -393,36 +358,14 @@ class TSARInSampleResidNative(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1, warmup_policy: str = "expanding", **kwargs) -> pl.DataFrame:
-        # R4-100 parity: canonical (x, window, order, warmup_policy); lag is the legacy alias.
-        w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(kwargs.get("lag", order), "order", minimum=1)
-        cols = _numeric_cols(x)
-
-        def _ar_resid(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < p + 2:
-                return np.nan
-            arr = arr[valid]
-            if len(arr) < p + 2:
-                return np.nan
-            y = arr[p:]
-            X = np.column_stack([arr[p-i-1:-i-1] for i in range(p)])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                fitted = X @ coef
-                resid = y - fitted
-                return float(np.std(resid, ddof=1))
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_ar_resid, window_size=w, min_samples=p+2).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+    def _calculate_series(
+        self, x: pl.DataFrame, window: int = 60, order: int = 1,
+        warmup_policy: str = "expanding", **kwargs,
+    ) -> pl.DataFrame:
+        return _canonical_ar_panel(
+            x, window, order, warmup_policy, stat="innovation",
+            fit_lag=0, stability_k=0,
+        )
 
 @register_operator(
     name="ts_ar_coeff_stability",
@@ -434,13 +377,15 @@ class TSARInSampleResidNative(SeriesOperator):
 class TSARCoeffStabilityNative(SeriesOperator):
     """AR coefficient stability: std of coefficient over sub-windows."""
 
+    _physical_spec = _cpu_delegate_spec("ts_ar_coeff_stability", "window:int>=2,order:int>=1,warmup_policy:{expanding,full}")
+
     metadata = OperatorMetadata(
         name="ts_ar_coeff_stability",
         category="time_series",
         description="AR 系数稳定性",
         param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
             "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -449,63 +394,13 @@ class TSARCoeffStabilityNative(SeriesOperator):
     )
 
     def _calculate_series(
-        self, x: pl.DataFrame, window: int = 60, lag: int = 1, coef_index: int = 0, **kwargs
+        self, x: pl.DataFrame, window: int = 60, order: int = 1,
+        warmup_policy: str = "expanding", **kwargs,
     ) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=10)
-        p = strict_integer(lag, "lag", minimum=1)
-        idx = strict_integer(coef_index, "coef_index", minimum=0)
-
-        if idx >= p:
-            from factor_engine.backend.operator_errors import OperatorParameterError
-            raise OperatorParameterError(f"coef_index {idx} must be < lag {p}")
-
-        cols = _numeric_cols(x)
-
-        def _coef_stability(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < w:
-                return np.nan
-            arr = arr[valid]
-            if len(arr) < w:
-                return np.nan
-
-            sub_w = max(p + 5, w // 3)
-            n_subs = max(2, (len(arr) - sub_w) // 5)
-            coefs = []
-
-            for i in range(n_subs):
-                start = i * 5
-                end = start + sub_w
-                if end > len(arr):
-                    break
-                sub = arr[start:end]
-                if len(sub) < p + 2:
-                    continue
-                y = sub[p:]
-                X = np.column_stack([sub[p-i-1:-i-1] for i in range(p)])
-                try:
-                    coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                    if idx < len(coef):
-                        coefs.append(coef[idx])
-                except:
-                    pass
-
-            if len(coefs) < 2:
-                return np.nan
-            return float(np.std(coefs, ddof=1))
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_coef_stability, window_size=w, min_samples=w).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
-
-# ---------------------------------------------------------------------------
-# AR Prior Operators (uses data strictly before forecast window)
-# ---------------------------------------------------------------------------
-
+        return _canonical_ar_panel(
+            x, window, order, warmup_policy, stat="coeff_stability",
+            fit_lag=1, stability_k=5,
+        )
 
 @register_operator(
     name="ts_ar_prior_coeff",
@@ -517,13 +412,15 @@ class TSARCoeffStabilityNative(SeriesOperator):
 class TSARPriorCoeffNative(SeriesOperator):
     """AR coefficient estimated on prior window (before current)."""
 
+    _physical_spec = _cpu_delegate_spec("ts_ar_prior_coeff", "window:int>=2,order:int>=1,warmup_policy:{expanding,full}")
+
     metadata = OperatorMetadata(
         name="ts_ar_prior_coeff",
         category="time_series",
         description="AR 历史系数",
         param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
             "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -532,40 +429,13 @@ class TSARPriorCoeffNative(SeriesOperator):
     )
 
     def _calculate_series(
-        self, x: pl.DataFrame, window: int = 20, order: int = 1, **kwargs
+        self, x: pl.DataFrame, window: int = 60, order: int = 1,
+        warmup_policy: str = "expanding", **kwargs,
     ) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(order, "order", minimum=1)
-        idx = 0
-
-        if idx >= p:
-            from factor_engine.backend.operator_errors import OperatorParameterError
-            raise OperatorParameterError(f"coef_index {idx} must be < lag {p}")
-
-        cols = _numeric_cols(x)
-
-        def _ar_coef(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < p + 2:
-                return np.nan
-            arr = arr[valid]
-            if len(arr) < p + 2:
-                return np.nan
-            y = arr[p:]
-            X = np.column_stack([arr[p-i-1:-i-1] for i in range(p)])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                return float(coef[idx]) if idx < len(coef) else np.nan
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).shift(1).rolling_map(_ar_coef, window_size=w, min_samples=p+2).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+        return _canonical_ar_panel(
+            x, window, order, warmup_policy, stat="coeff",
+            fit_lag=1, stability_k=0,
+        )
 
 @register_operator(
     name="ts_ar_prior_forecast",
@@ -577,13 +447,15 @@ class TSARPriorCoeffNative(SeriesOperator):
 class TSARPriorForecastNative(SeriesOperator):
     """AR forecast using prior window only."""
 
+    _physical_spec = _cpu_delegate_spec("ts_ar_prior_forecast", "window:int>=2,order:int>=1,warmup_policy:{expanding,full}")
+
     metadata = OperatorMetadata(
         name="ts_ar_prior_forecast",
         category="time_series",
         description="AR 历史预测",
         param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
             "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -591,36 +463,14 @@ class TSARPriorForecastNative(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1,
-                          warmup_policy: str = "exact", **kwargs) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(order, "order", minimum=1)
-        lag = p
-        cols = _numeric_cols(x)
-
-        def _ar_forecast(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < p + 2:
-                return np.nan
-            arr = arr[valid]
-            if len(arr) < p + 2:
-                return np.nan
-            y = arr[p:]
-            X = np.column_stack([arr[p-i-1:-i-1] for i in range(p)])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                x_last = arr[-p:][::-1]
-                return float(np.dot(coef, x_last))
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).shift(1).rolling_map(_ar_forecast, window_size=w, min_samples=p+2).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+    def _calculate_series(
+        self, x: pl.DataFrame, window: int = 60, order: int = 1,
+        warmup_policy: str = "expanding", **kwargs,
+    ) -> pl.DataFrame:
+        return _canonical_ar_panel(
+            x, window, order, warmup_policy, stat="forecast",
+            fit_lag=1, stability_k=0,
+        )
 
 @register_operator(
     name="ts_ar_prior_innovation",
@@ -632,13 +482,15 @@ class TSARPriorForecastNative(SeriesOperator):
 class TSARPriorInnovationNative(SeriesOperator):
     """AR innovation using prior window forecast."""
 
+    _physical_spec = _cpu_delegate_spec("ts_ar_prior_innovation", "window:int>=2,order:int>=1,warmup_policy:{expanding,full}")
+
     metadata = OperatorMetadata(
         name="ts_ar_prior_innovation",
         category="time_series",
         description="AR 历史创新项",
         param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
             "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -646,43 +498,14 @@ class TSARPriorInnovationNative(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1,
-                          warmup_policy: str = "exact", **kwargs) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(order, "order", minimum=1)
-        lag = p
-        cols = _numeric_cols(x)
-
-        def _ar_innov(vals):
-            arr = np.asarray(vals, dtype=float)
-            if len(arr) < w + 1:
-                return np.nan
-            current = arr[-1]
-            if np.isnan(current):
-                return np.nan
-            past = arr[:-1]
-            valid = ~np.isnan(past)
-            if np.sum(valid) < p + 2:
-                return np.nan
-            past = past[valid]
-            if len(past) < p + 2:
-                return np.nan
-            y = past[p:]
-            X = np.column_stack([past[p-i-1:-i-1] for i in range(p)])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                x_last = past[-p:][::-1]
-                forecast = np.dot(coef, x_last)
-                return float(current - forecast)
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_ar_innov, window_size=w+1, min_samples=p+3).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+    def _calculate_series(
+        self, x: pl.DataFrame, window: int = 60, order: int = 1,
+        warmup_policy: str = "expanding", **kwargs,
+    ) -> pl.DataFrame:
+        return _canonical_ar_panel(
+            x, window, order, warmup_policy, stat="innovation",
+            fit_lag=1, stability_k=0,
+        )
 
 @register_operator(
     name="ts_ar_prior_innovation_z",
@@ -694,13 +517,15 @@ class TSARPriorInnovationNative(SeriesOperator):
 class TSARPriorInnovationZNative(SeriesOperator):
     """Standardized AR innovation using prior window."""
 
+    _physical_spec = _cpu_delegate_spec("ts_ar_prior_innovation_z", "window:int>=2,order:int>=1,warmup_policy:{expanding,full}")
+
     metadata = OperatorMetadata(
         name="ts_ar_prior_innovation_z",
         category="time_series",
         description="AR 历史标准化创新项",
         param_names=["x", "window", "order", "warmup_policy"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
             "order": ParamSpec(dtype=int, min=1, searchable=False, param_role=ParamRole.ESTIMATOR_RESOLUTION),
@@ -708,48 +533,14 @@ class TSARPriorInnovationZNative(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, order: int = 1, warmup_policy: str = "expanding", **kwargs) -> pl.DataFrame:
-        # R4-100 parity: canonical (x, window, order, warmup_policy); lag is legacy.
-        w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(kwargs.get("lag", order), "order", minimum=1)
-        cols = _numeric_cols(x)
-
-        def _ar_innov_z(vals):
-            arr = np.asarray(vals, dtype=float)
-            if len(arr) < w + 1:
-                return np.nan
-            current = arr[-1]
-            if np.isnan(current):
-                return np.nan
-            past = arr[:-1]
-            valid = ~np.isnan(past)
-            if np.sum(valid) < p + 2:
-                return np.nan
-            past = past[valid]
-            if len(past) < p + 2:
-                return np.nan
-            y = past[p:]
-            X = np.column_stack([past[p-i-1:-i-1] for i in range(p)])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                fitted = X @ coef
-                resid = y - fitted
-                std = np.std(resid, ddof=1)
-                if std < 1e-12:
-                    return np.nan
-                x_last = past[-p:][::-1]
-                forecast = np.dot(coef, x_last)
-                innov = current - forecast
-                return (float(innov) / (std)) if std != 0 else np.nan
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_ar_innov_z, window_size=w+1, min_samples=p+3).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+    def _calculate_series(
+        self, x: pl.DataFrame, window: int = 60, order: int = 1,
+        warmup_policy: str = "expanding", **kwargs,
+    ) -> pl.DataFrame:
+        return _canonical_ar_panel(
+            x, window, order, warmup_policy, stat="innovation_z",
+            fit_lag=1, stability_k=0,
+        )
 
 # ---------------------------------------------------------------------------
 # Polynomial Regression Operators
@@ -820,50 +611,28 @@ class TSPoly2CoeffNative(SeriesOperator):
 class TSPoly2ForecastErrorNative(SeriesOperator):
     """Quadratic polynomial forecast error."""
 
+    _physical_spec = _cpu_delegate_spec("ts_poly2_forecast_error", "d:int>=3")
+
     metadata = OperatorMetadata(
         name="ts_poly2_forecast_error",
         category="time_series",
         description="二次多项式预测误差",
         param_names=["x", "d"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "d": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
+    def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators._numpy_kernels import ts_poly2_forecast_error_
+        w = strict_integer(d, "d", minimum=3)
         cols = _numeric_cols(x)
-
-        def _poly2_error(vals):
-            arr = np.asarray(vals, dtype=float)
-            if len(arr) < w:
-                return np.nan
-            current = arr[-1]
-            if np.isnan(current):
-                return np.nan
-            past = arr[:-1]
-            valid = ~np.isnan(past)
-            if np.sum(valid) < 3:
-                return np.nan
-            y = past[valid]
-            t = np.arange(len(y))
-            X = np.column_stack([np.ones(len(t)), t, t**2])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                t_next = len(y)
-                forecast = coef[0] + coef[1] * t_next + coef[2] * t_next**2
-                return float(current - forecast)
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_poly2_error, window_size=w+1, min_samples=4).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+        return x.with_columns([
+            pl.Series(column, ts_poly2_forecast_error_(x[column].to_numpy(), w), dtype=pl.Float64)
+            for column in cols
+        ])
 
 @register_operator(
     name="ts_poly2_forecast_error_z",
@@ -875,56 +644,28 @@ class TSPoly2ForecastErrorNative(SeriesOperator):
 class TSPoly2ForecastErrorZNative(SeriesOperator):
     """Standardized quadratic polynomial forecast error."""
 
+    _physical_spec = _cpu_delegate_spec("ts_poly2_forecast_error_z", "d:int>=3")
+
     metadata = OperatorMetadata(
         name="ts_poly2_forecast_error_z",
         category="time_series",
         description="二次多项式标准化预测误差",
         param_names=["x", "d"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "d": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, **kwargs) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
+    def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators._numpy_kernels import ts_poly2_forecast_error_z_
+        w = strict_integer(d, "d", minimum=3)
         cols = _numeric_cols(x)
-
-        def _poly2_error_z(vals):
-            arr = np.asarray(vals, dtype=float)
-            if len(arr) < w:
-                return np.nan
-            current = arr[-1]
-            if np.isnan(current):
-                return np.nan
-            past = arr[:-1]
-            valid = ~np.isnan(past)
-            if np.sum(valid) < 3:
-                return np.nan
-            y = past[valid]
-            t = np.arange(len(y))
-            X = np.column_stack([np.ones(len(t)), t, t**2])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                fitted = X @ coef
-                resid = y - fitted
-                std = np.std(resid, ddof=1)
-                if std < 1e-12:
-                    return np.nan
-                t_next = len(y)
-                forecast = coef[0] + coef[1] * t_next + coef[2] * t_next**2
-                error = current - forecast
-                return (float(error) / (std)) if std != 0 else np.nan
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_poly2_error_z, window_size=w+1, min_samples=4).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+        return x.with_columns([
+            pl.Series(column, ts_poly2_forecast_error_z_(x[column].to_numpy(), w), dtype=pl.Float64)
+            for column in cols
+        ])
 
 @register_operator(
     name="ts_poly2_prior_coeff",
@@ -936,49 +677,28 @@ class TSPoly2ForecastErrorZNative(SeriesOperator):
 class TSPoly2PriorCoeffNative(SeriesOperator):
     """Quadratic polynomial coefficient from prior window."""
 
+    _physical_spec = _cpu_delegate_spec("ts_poly2_prior_coeff", "d:int>=3")
+
     metadata = OperatorMetadata(
         name="ts_poly2_prior_coeff",
         category="time_series",
         description="二次多项式历史系数",
         param_names=["x", "d"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "d": ParamSpec(dtype=int, min=3, default=20, searchable=True, param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(
-        self, x: pl.DataFrame, window: int = 20, coef_index: int = 0, **kwargs
-    ) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
-        idx = strict_integer(coef_index, "coef_index", minimum=0)
-        if idx > 2:
-            from factor_engine.backend.operator_errors import OperatorParameterError
-            raise OperatorParameterError(f"coef_index {idx} must be <= 2")
-
+    def _calculate_series(self, x: pl.DataFrame, d: int = 20, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators._numpy_kernels import ts_poly2_prior_coeff_
+        w = strict_integer(d, "d", minimum=3)
         cols = _numeric_cols(x)
-
-        def _poly2_coef(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < 3:
-                return np.nan
-            y = arr[valid]
-            t = np.arange(len(y))
-            X = np.column_stack([np.ones(len(t)), t, t**2])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                return float(coef[idx])
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).shift(1).rolling_map(_poly2_coef, window_size=w, min_samples=3).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+        return x.with_columns([
+            pl.Series(column, ts_poly2_prior_coeff_(x[column].to_numpy(), w), dtype=pl.Float64)
+            for column in cols
+        ])
 
 @register_operator(
     name="ts_poly2_resid",
@@ -1262,13 +982,18 @@ class TSRidgeRegressionForecastErrorZNative(SeriesOperator):
 class TSRidgeRegressionInSampleResidNative(SeriesOperator):
     """Ridge regression in-sample residual std."""
 
+    _physical_spec = _cpu_delegate_spec(
+        "ts_ridge_regression_in_sample_resid",
+        "window:int>=2,alpha:finite>=0,min_periods:int>=2",
+    )
+
     metadata = OperatorMetadata(
         name="ts_ridge_regression_in_sample_resid",
         category="time_series",
         description="Ridge 回归样本内残差",
         param_names=["y", "x", "window", "alpha", "min_periods"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         param_specs={
             "window": ParamSpec(dtype=int, min=2, searchable=True, param_role=ParamRole.HORIZON),
             "alpha": ParamSpec(dtype=float, min=0.0, searchable=False, param_role=ParamRole.NUMERICAL),
@@ -1276,35 +1001,22 @@ class TSRidgeRegressionInSampleResidNative(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, alpha: float = 1.0, **kwargs) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
+    def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, window: int = 20, alpha: float = 0.1, min_periods: int = 5, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.regression_models import _regression_resid
+        verify_frames_share_identity("ts_ridge_regression_in_sample_resid", y, x)
+        w = strict_integer(window, "window", minimum=2)
+        mp = max(3, strict_integer(min_periods, "min_periods", minimum=1))
         a = strict_finite_scalar(alpha, "alpha", minimum=0.0)
-        cols = _numeric_cols(x)
-
-        def _ridge_resid(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < 3:
-                return np.nan
-            y = arr[valid]
-            t = np.arange(len(y))
-            X = np.column_stack([np.ones(len(t)), t])
-            try:
-                XtX = X.T @ X + a * np.eye(X.shape[1])
-                Xty = X.T @ y
-                coef = np.linalg.solve(XtX, Xty)
-                fitted = X @ coef
-                resid = y - fitted
-                return float(np.std(resid, ddof=1))
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_ridge_resid, window_size=w, min_samples=3).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+        cols = _numeric_cols(y)
+        if _numeric_cols(x) != cols or y.height != x.height:
+            raise ValueError("ridge inputs must have identical axes")
+        out = np.full((y.height, len(cols)), np.nan, dtype=float)
+        for j, column in enumerate(cols):
+            yv, xv = y[column].to_numpy(), x[column].to_numpy()
+            for row in range(y.height):
+                start = max(0, row - w + 1)
+                out[row, j] = _regression_resid(yv[start:row + 1], xv[start:row + 1], method="ridge", min_periods=mp, alpha=a)
+        return y.with_columns([pl.Series(c, out[:, j]) for j, c in enumerate(cols)])
 
 @register_operator(
     name="ts_ridge_regression_predictive_resid",
@@ -1696,13 +1408,18 @@ class TSHuberRegressionForecastErrorZNative(SeriesOperator):
 class TSHuberRegressionInSampleResidNative(SeriesOperator):
     """Huber robust regression in-sample residual std."""
 
+    _physical_spec = _cpu_delegate_spec(
+        "ts_huber_regression_in_sample_resid",
+        "window:int>=2,min_periods:int>=2",
+    )
+
     metadata = OperatorMetadata(
         name="ts_huber_regression_in_sample_resid",
         category="time_series",
         description="Huber 鲁棒回归样本内残差",
                 param_names=["y", "x", "window", "min_periods"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "shared_numpy_kernel", "causal"],
         # P0-23 single-logical-authority: canonical (regression_models) owns the
         # contract.  `delta` is a kernel-internal NUMERICAL knob aliased to the
         # canonical warmup_policy-free surface (default mirrors _HUBER_DELTA).
@@ -1713,46 +1430,21 @@ class TSHuberRegressionInSampleResidNative(SeriesOperator):
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, delta: float = 1.35, **kwargs) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
-        d = strict_finite_scalar(delta, "delta", minimum=0.0)
-        cols = _numeric_cols(x)
-
-        def _huber_resid(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < 3:
-                return np.nan
-            y = arr[valid]
-            t = np.arange(len(y))
-            X = np.column_stack([np.ones(len(t)), t])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                for _ in range(3):
-                    fitted = X @ coef
-                    resid = y - fitted
-                    scale = (np.median(np.abs(resid))) / 0.6745 if 0.6745 != 0 else np.nan
-                    if scale < 1e-12:
-                        break
-                    weights = np.where(
-                        np.abs(resid / scale) <= d,
-                        1.0,
-                        d / (np.abs(resid / scale) + 1e-12)
-                    )
-                    W = np.diag(weights)
-                    coef = np.linalg.lstsq(W @ X, W @ y, rcond=None)[0]
-                fitted = X @ coef
-                resid = y - fitted
-                return float(np.std(resid, ddof=1))
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_huber_resid, window_size=w, min_samples=3).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
-
+    def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, window: int = 20, min_periods: int = 5, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.regression_models import _regression_resid
+        verify_frames_share_identity("ts_huber_regression_in_sample_resid", y, x)
+        w = strict_integer(window, "window", minimum=2)
+        mp = max(3, strict_integer(min_periods, "min_periods", minimum=1))
+        cols = _numeric_cols(y)
+        if _numeric_cols(x) != cols or y.height != x.height:
+            raise ValueError("huber inputs must have identical axes")
+        out = np.full((y.height, len(cols)), np.nan, dtype=float)
+        for j, column in enumerate(cols):
+            yv, xv = y[column].to_numpy(), x[column].to_numpy()
+            for row in range(y.height):
+                start = max(0, row - w + 1)
+                out[row, j] = _regression_resid(yv[start:row + 1], xv[start:row + 1], method="huber", min_periods=mp)
+        return y.with_columns([pl.Series(c, out[:, j]) for j, c in enumerate(cols)])
 
 @register_operator(
     name="ts_huber_regression_predictive_resid",
@@ -1943,13 +1635,19 @@ class TSQuantileRegressionCoeffNative(SeriesOperator):
 class TSQuantileRegressionCoeffPriorNative(SeriesOperator):
     """Quantile regression coefficient from prior window."""
 
+    _physical_spec = _cpu_delegate_spec(
+        "ts_quantile_regression_coeff_prior",
+        "window:int>=2,q:0<q<1,min_periods:int>=2",
+        "Eager Polars -> NumPy -> Pandas -> NumPy -> Polars CPU delegate; full panel materialized.",
+    )
+
     metadata = OperatorMetadata(
         name="ts_quantile_regression_coeff_prior",
         category="time_series",
         description="分位数回归历史系数",
         param_names=["y", "x", "window", "q", "min_periods"],
         return_type="series",
-        tags=["time_series", "polars", "native", "causal"],
+        tags=["time_series", "polars", "pandas_cpu_delegate", "causal"],
         # P0-23 single-logical-authority: canonical (dynamic_regression) owns
         # q (ECONOMIC) — `quantile`/`coef_index` are kernel-internal aliases only.
         param_aliases={"quantile": "q", "coef_index": "coefficient_index"},
@@ -1960,40 +1658,22 @@ class TSQuantileRegressionCoeffPriorNative(SeriesOperator):
         },
     )
 
-    def _calculate_series(
-        self, x: pl.DataFrame, window: int = 20, quantile: float = 0.5, coef_index: int = 0, **kwargs
-    ) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
-        q = strict_finite_scalar(quantile, "quantile", minimum=0.0, maximum=1.0)
-        idx = strict_integer(coef_index, "coef_index", minimum=0)
-
-        cols = _numeric_cols(x)
-
-        def _quantile_coef(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < 3:
-                return np.nan
-            y = arr[valid]
-            t = np.arange(len(y))
-            X = np.column_stack([np.ones(len(t)), t])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                for _ in range(2):
-                    fitted = X @ coef
-                    resid = y - fitted
-                    weights = np.where(resid >= 0, q, 1 - q)
-                    W = np.diag(weights)
-                    coef = np.linalg.lstsq(W @ X, W @ y, rcond=None)[0]
-                return float(coef[idx]) if idx < len(coef) else np.nan
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).shift(1).rolling_map(_quantile_coef, window_size=w, min_samples=3).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
+    def _calculate_series(self, y: pl.DataFrame, x: pl.DataFrame, window: int = 60, q: float = 0.5, min_periods: int = 10, **kwargs) -> pl.DataFrame:
+        import pandas as pd
+        from factor_engine.cleaned_operators.ts_model.dynamic_regression import _single_regression, pinball_quantile_fit
+        verify_frames_share_identity("ts_quantile_regression_coeff_prior", y, x)
+        w = strict_integer(window, "window", minimum=2)
+        mp = strict_integer(min_periods, "min_periods", minimum=1)
+        quantile = strict_finite_scalar(q, "q", minimum=0.0, maximum=1.0)
+        if not 0.0 < quantile < 1.0:
+            raise ValueError("q must be in (0, 1)")
+        cols = _numeric_cols(y)
+        if _numeric_cols(x) != cols or y.height != x.height:
+            raise ValueError("quantile regression inputs must have identical axes")
+        yp = pd.DataFrame({c: y[c].to_numpy() for c in cols})
+        xp = pd.DataFrame({c: x[c].to_numpy() for c in cols})
+        result = _single_regression(yp, xp, w, mp, True, pinball_quantile_fit, quantile, "coeff", quantile, 1, fit_lag=1)
+        return y.with_columns([pl.Series(c, result[c].to_numpy()) for c in cols])
 
 
 class TSQuantileRegressionResidNative(SeriesOperator):
@@ -2036,15 +1716,16 @@ class TSQuantileRegressionResidNative(SeriesOperator):
                 fitted = X @ coef
                 resid = y - fitted
                 return float(np.std(resid, ddof=1))
-            except:
+            except Exception:
                 return np.nan
 
         exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_quantile_resid, window_size=w, min_samples=3).alias(c)
+            pl.col(c).fill_nan(None).rolling_map(
+                _quantile_resid, window_size=w, min_samples=3
+            ).alias(c)
             for c in cols
         ]
         return x.with_columns(exprs)
-
 
 @register_operator(
     name="ts_quantile_regression_slope",
@@ -2641,4 +2322,3 @@ class TSMultiRegressionAdjustedR2PriorNative(SeriesOperator):
             for c in cols
         ]
         return x.with_columns(exprs)
-
