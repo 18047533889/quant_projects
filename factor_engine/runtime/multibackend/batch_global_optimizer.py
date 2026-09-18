@@ -70,6 +70,9 @@ def _canonical_cost_op(node: PlanNode) -> str | None:
     op = str(getattr(node, "op", "") or "")
     if not op or op in {"column", "literal", "plan_ref", "materialized_series"}:
         return None
+    if op == "custom":
+        attrs = dict(getattr(node, "attrs", None) or {})
+        op = str(attrs.get("canonical") or op)
     try:
         from factor_engine.cleaned_operators.registry import OperatorRegistry
 
@@ -2207,8 +2210,12 @@ class PhysicalBatchGlobalOptimizer:
         node: PlanNode, choice: NodeBackendChoice, rows: int
     ) -> int:
         """Additional live window buffers beyond the node's base panel estimate."""
-        op = getattr(node, "op", "")
-        if op == "ts_corr" and choice.backend in {
+        op = _canonical_cost_op(node) or str(getattr(node, "op", "") or "")
+        staged_pairwise_ops = {
+            "ts_corr", "ts_cov", "ts_regression_slope",
+            "ts_regression_intercept", "ts_regression_resid", "ts_regression_r2",
+        }
+        if op in staged_pairwise_ops and choice.backend in {
             PhysicalBackend.POLARS_LONG,
             PhysicalBackend.POLARS_PANEL,
         }:
@@ -2217,11 +2224,19 @@ class PhysicalBatchGlobalOptimizer:
                 window = int(PairWindowSpec.from_plan_node(node).size)
             except Exception:
                 window = max(20, PhysicalBatchGlobalOptimizer._bound_window(node))
-            # Native centered correlation keeps raw pair shifts plus centered /
-            # recentered square and cross-product expressions live per trailing
-            # window.  Twelve Float64-equivalent payloads (96 bytes/pair) plus
-            # input/output/mask headroom (24 bytes/row) is a conservative
+            # The native staged pairwise kernel keeps raw pair shifts plus
+            # centered/recentered square and cross-product expressions live per
+            # trailing window. Twelve Float64-equivalent payloads (96 bytes/pair)
+            # plus input/output/mask headroom (24 bytes/row) is a conservative
             # planning bound supplied by the implementation owner, not RSS.
+            # Keep the older ts_cov POLARS_LONG allowance (192 bytes/pair plus
+            # 64 bytes/row) because that route may use the more expensive long
+            # emitter; POLARS_PANEL uses the shared staged-kernel bound.
+            if op == "ts_cov" and choice.backend == PhysicalBackend.POLARS_LONG:
+                return min(
+                    sys.maxsize,
+                    max(0, int(rows)) * (192 * max(1, window) + 64),
+                )
             return min(
                 sys.maxsize,
                 max(0, int(rows)) * (96 * max(1, window) + 24),

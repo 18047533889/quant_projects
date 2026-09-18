@@ -55,7 +55,14 @@ def test_workspace_zero_rows_and_saturation():
     assert Optimizer._node_execution_memory_bytes(n, choice, sys.maxsize, 800) == sys.maxsize
 
 
-@pytest.mark.parametrize("op", ["ts_cov", "ts_var", "ts_std"])
+@pytest.mark.parametrize("op", ["ts_var", "ts_std"])
 def test_panel_registry_route_is_not_charged_long_emitter_list_buffers(op):
     choice = NS(backend=PhysicalBackend.POLARS_PANEL)
     assert Optimizer._node_additional_workspace_bytes(node(op, 7), choice, 100) == 0
+
+
+def test_panel_ts_cov_is_charged_for_native_staged_pairwise_buffers():
+    choice = NS(backend=PhysicalBackend.POLARS_PANEL)
+    assert Optimizer._node_additional_workspace_bytes(
+        node("ts_cov", 7), choice, 100
+    ) == 100 * (96 * 7 + 24)
