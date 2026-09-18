@@ -1,0 +1,125 @@
+{
+  "rows": 96,
+  "checks": [
+    {
+      "canonical": "ts_mean_abs_deviation",
+      "params": {
+        "window": 20
+      },
+      "backends": {
+        "pandas_numpy": {
+          "oracle_equal": true,
+          "checked_cells": 154
+        },
+        "polars": {
+          "oracle_equal": true,
+          "checked_cells": 154
+        }
+      }
+    },
+    {
+      "canonical": "ts_median_abs_deviation",
+      "params": {
+        "window": 20
+      },
+      "backends": {
+        "pandas_numpy": {
+          "oracle_equal": true,
+          "checked_cells": 154
+        },
+        "polars": {
+          "oracle_equal": true,
+          "checked_cells": 154
+        }
+      }
+    },
+    {
+      "canonical": "ts_product",
+      "params": {
+        "window": 12,
+        "min_periods": 3,
+        "skipna": true
+      },
+      "backends": {
+        "pandas_numpy": {
+          "oracle_equal": true,
+          "checked_cells": 170
+        },
+        "polars": {
+          "oracle_equal": true,
+          "checked_cells": 170
+        }
+      }
+    },
+    {
+      "canonical": "ts_valid_count",
+      "params": {
+        "window": 20,
+        "min_periods": 1
+      },
+      "backends": {
+        "pandas_numpy": {
+          "oracle_equal": true,
+          "checked_cells": 154
+        },
+        "polars": {
+          "oracle_equal": true,
+          "checked_cells": 154
+        }
+      }
+    },
+    {
+      "canonical": "ts_coverage_ratio",
+      "params": {
+        "window": 20,
+        "min_periods": 1
+      },
+      "backends": {
+        "pandas_numpy": {
+          "oracle_equal": true,
+          "checked_cells": 154
+        },
+        "polars": {
+          "oracle_equal": true,
+          "checked_cells": 154
+        }
+      }
+    },
+    {
+      "canonical": "ts_positive_ratio",
+      "params": {
+        "window": 20,
+        "threshold": 0.0,
+        "min_periods": 3
+      },
+      "backends": {
+        "pandas_numpy": {
+          "oracle_equal": true,
+          "checked_cells": 154
+        },
+        "polars": {
+          "oracle_equal": true,
+          "checked_cells": 154
+        }
+      }
+    },
+    {
+      "canonical": "ts_negative_ratio",
+      "params": {
+        "window": 20,
+        "threshold": 0.0,
+        "min_periods": 3
+      },
+      "backends": {
+        "pandas_numpy": {
+          "oracle_equal": true,
+          "checked_cells": 154
+        },
+        "polars": {
+          "oracle_equal": true,
+          "checked_cells": 154
+        }
+      }
+    }
+  ]
+}
