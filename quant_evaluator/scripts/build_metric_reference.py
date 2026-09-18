@@ -19,6 +19,24 @@ from quant_evaluator.registry.metrics import list_metrics, get_metric, CANONICAL
 OUTPUT = ROOT / "quant_evaluator/docs/METRIC_REFERENCE.md"
 
 
+def portable_math(markdown: str) -> str:
+    """Use a conservative TeX subset, including in inline expressions.
+
+    Raw asterisks may be consumed by Markdown before math rendering.
+    Some GitHub math paths reject operatorname even when KaTeX accepts it.
+    """
+    def replace(match):
+        delimiter = "$$" if match.group(1) is not None else "$"
+        body = match.group(1) if match.group(1) is not None else match.group(2)
+        if delimiter == "$" and body.startswith("`") and body.endswith("`"):
+            body = body[1:-1]
+        body = body.replace(r"\operatorname", r"\mathrm")
+        body = body.replace("^*", r"^{\ast}").replace("*", r"\ast ")
+        # Explicit inline delimiters avoid Markdown/CJK boundary ambiguity.
+        return "$`" + body + "`$" if delimiter == "$" else "\n```math\n" + body.strip() + "\n```\n"
+    return re.sub(r"\$\$([\s\S]*?)\$\$|(?<!\$)\$([^$\n]+)\$(?!\$)", replace, markdown)
+
+
 def function(fn):
     while isinstance(fn, functools.partial):
         fn = fn.func
@@ -150,7 +168,7 @@ def render():
     for identity, fn in sorted({**implementations, **helpers}.items()):
         lines.append(f"| `{identity}` | `{hashlib.sha256(source(fn).encode()).hexdigest()}` |")
     lines += ["", "</details>"]
-    return "\n".join(line.rstrip() for line in "\n".join(lines).splitlines()) + "\n"
+    return portable_math("\n".join(line.rstrip() for line in "\n".join(lines).splitlines()) + "\n")
 
 
 def main():

@@ -9,11 +9,15 @@ None/NaN/unsupported不代表0；状态stable也不代表生产可交易或GPU�
 
 ## 公共符号与阅读规则
 
-除逐项另有定义：$t$ 为时间，$i$ 为资产，$f$ 为因子，$x$ 为因子值，$y$ 为预测标签，$r$ 为单期收益，$w$ 为权重；$T,N,Q$ 分别为有效期数、资产数、桶数。
+除逐项另有定义：$`t`$ 为时间，$`i`$ 为资产，$`f`$ 为因子，$`x`$ 为因子值，$`y`$ 为预测标签，$`r`$ 为单期收益，$`w`$ 为权重；$`T,N,Q`$ 分别为有效期数、资产数、桶数。
 
-$$\bar z=\frac{1}{n}\sum_{j=1}^{n}z_j,\qquad s(z)=\sqrt{\frac{\sum_{j=1}^{n}(z_j-\bar z)^2}{n-1}}$$
 
-$\mathbf 1(\cdot)$ 是条件成立取1、否则取0的指示函数；$\operatorname{rank}$ 默认使用平均并列秩；$\operatorname{Corr}$ 是相关系数。有限值集合及有效掩码按各项定义筛选；没有足够样本时为不可用，不自动补0。某些分布指标使用总体矩或其他分母，以该项公式为准。
+```math
+\bar z=\frac{1}{n}\sum_{j=1}^{n}z_j,\qquad s(z)=\sqrt{\frac{\sum_{j=1}^{n}(z_j-\bar z)^2}{n-1}}
+```
+
+
+$`\mathbf 1(\cdot)`$ 是条件成立取1、否则取0的指示函数；$`\mathrm{rank}`$ 默认使用平均并列秩；$`\mathrm{Corr}`$ 是相关系数。有限值集合及有效掩码按各项定义筛选；没有足够样本时为不可用，不自动补0。某些分布指标使用总体矩或其他分母，以该项公式为准。
 
 GitHub 渲染数学公式；若使用本地 Markdown 阅读器，请开启 LaTeX/MathJax 数学显示。
 
@@ -204,13 +208,15 @@ Tie-aware ACTUAL fixed quantile-bin count feasible per factor on every date (pla
 
 
 
-$$
-Q^*=\max_{Q\in\mathcal Q}\{Q:\ \forall t,\ B_t(Q)=Q,\ \min_b n_{t,b}\ge n_{\min}\}
-$$
+
+```math
+Q^{\ast}=\max_{Q\in\mathcal Q}\{Q:\ \forall t,\ B_t(Q)=Q,\ \min_b n_{t,b}\ge n_{\min}\}
+```
 
 
 
-其中 $B_t(Q)$ 为日期 $t$ 实际占用桶数。任一日期缺失或无候选可行时为 NaN；直接传入既有二维分位收益矩阵时，仅当该因子整列全为有限值才返回矩阵行数，否则 NaN。并列处理默认 `tie_policy=max`。
+
+其中 $`B_t(Q)`$ 为日期 $`t`$ 实际占用桶数。任一日期缺失或无候选可行时为 NaN；直接传入既有二维分位收益矩阵时，仅当该因子整列全为有限值才返回矩阵行数，否则 NaN。并列处理默认 `tie_policy=max`。
 
 ### 函数层默认参数
 
@@ -241,13 +247,15 @@ Autocorrelation of IC values at specified lags
 
 
 
-$$
+
+```math
 \rho_k=\frac{\sum_{t\in P_k}(x_t-\bar x_k^{(1)})(x_{t-k}-\bar x_k^{(0)})}{\sqrt{\sum_{t\in P_k}(x_t-\bar x_k^{(1)})^2\sum_{t\in P_k}(x_{t-k}-\bar x_k^{(0)})^2}},\quad k=0,\ldots,20
-$$
+```
 
 
 
-$P_k$ 只含原时间轴上两端都有限的配对，均值也按该阶配对分别计算；不会压缩 NaN 后重建滞后。默认 `max_lag=20,min_obs=30`；总长度或某阶配对不足、任一侧零方差则该值 NaN，0 阶在证据充分时为 1。
+
+$`P_k`$ 只含原时间轴上两端都有限的配对，均值也按该阶配对分别计算；不会压缩 NaN 后重建滞后。默认 `max_lag=20,min_obs=30`；总长度或某阶配对不足、任一侧零方差则该值 NaN，0 阶在证据充分时为 1。
 
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
@@ -266,13 +274,15 @@ Benjamini-Hochberg FDR correction: controls the false discovery rate (spec §34)
 
 ### 数学公式与计算口径
 
-对 $m$ 个有限 p 值升序为 $p_{(1)}\le\cdots\le p_{(m)}$，实际返回保持单调的 BH 调整值：
+对 $`m`$ 个有限 p 值升序为 $`p_{(1)}\le\cdots\le p_{(m)}`$，实际返回保持单调的 BH 调整值：
 
 
 
-$$
+
+```math
 q_{(i)}=\min\!\left(1,\min_{j\ge i}\frac{m}{j}p_{(j)}\right)
-$$
+```
+
 
 
 
@@ -300,17 +310,19 @@ Signed mean beta-style exposure of the factor (typed per-style field). NaN when 
 
 ### 数学公式与计算口径
 
-逐日用因子、全部风格暴露均有限且权重严格为正的共同支持做含截距 WLS，得到原始斜率 $b_{t,k}$。在同一支持上令 $\tilde w_{t,i}=w_{t,i}/\sum_jw_{t,j}$，并用加权标准差把斜率标准化：
+逐日用因子、全部风格暴露均有限且权重严格为正的共同支持做含截距 WLS，得到原始斜率 $`b_{t,k}`$。在同一支持上令 $`\tilde w_{t,i}=w_{t,i}/\sum_jw_{t,j}`$，并用加权标准差把斜率标准化：
 
 
 
-$$
-\tilde\beta_{t,k}=b_{t,k}\frac{\sqrt{\sum_i\tilde w_{t,i}(Z_{t,i,k}-\bar Z_{t,k}^{w})^2}}{\sqrt{\sum_i\tilde w_{t,i}(x_{t,i}-\bar x_t^{w})^2}},\qquad E_{beta}=\operatorname{MeanFinite}_t(\tilde\beta_{t,beta})
-$$
+
+```math
+\tilde\beta_{t,k}=b_{t,k}\frac{\sqrt{\sum_i\tilde w_{t,i}(Z_{t,i,k}-\bar Z_{t,k}^{w})^2}}{\sqrt{\sum_i\tilde w_{t,i}(x_{t,i}-\bar x_t^{w})^2}},\qquad E_{beta}=\mathrm{MeanFinite}_t(\tilde\beta_{t,beta})
+```
 
 
 
-默认 `min_obs=10`；ExposurePanel 已绑定权重时沿用，未绑定则等权。回归不可估、$R^2$ 非有限、因子加权标准差为 0 或 beta 风格加权标准差为 0 时当日载荷为 NaN；缺少 `beta` typed field 或无有限日也为 NaN。输出是有符号标准化暴露。
+
+默认 `min_obs=10`；ExposurePanel 已绑定权重时沿用，未绑定则等权。回归不可估、$`R^2`$ 非有限、因子加权标准差为 0 或 beta 风格加权标准差为 0 时当日载荷为 NaN；缺少 `beta` typed field 或无有限日也为 NaN。输出是有符号标准化暴露。
 
 ### 函数层默认参数
 
@@ -336,17 +348,19 @@ $$
 
 ### 数学公式与计算口径
 
-注册适配器返回置信区间半宽，而不是上下界本身。完整共同日历上以长度 $L$ 的连续块有放回抽样，得到均值 $\bar x^{*(b)}$ 后：
+注册适配器返回置信区间半宽，而不是上下界本身。完整共同日历上以长度 $`L`$ 的连续块有放回抽样，得到均值 $`\bar x^{\ast (b)}`$ 后：
 
 
 
-$$
-H=\frac{Q_{(1+c)/2}(\bar x^*)-Q_{(1-c)/2}(\bar x^*)}{2}
-$$
+
+```math
+H=\frac{Q_{(1+c)/2}(\bar x^{\ast})-Q_{(1-c)/2}(\bar x^{\ast})}{2}
+```
 
 
 
-默认 `min_periods=60,block_length=10,num_bootstrap=1000,confidence_level=0.95,random_seed=0`。同一请求各因子共享抽样起点；列中任何 NaN/Inf 使底层区间为 NaN，$T<2L$ 也为 NaN；注册层有限 IC 少于 60 期时强制 NaN。
+
+默认 `min_periods=60,block_length=10,num_bootstrap=1000,confidence_level=0.95,random_seed=0`。同一请求各因子共享抽样起点；列中任何 NaN/Inf 使底层区间为 NaN，$`T<2L`$ 也为 NaN；注册层有限 IC 少于 60 期时强制 NaN。
 
 ### 函数层默认参数
 
@@ -374,17 +388,19 @@ Bonferroni multiple-testing correction: adjusted p = min(p * n, 1). Controls the
 
 ### 数学公式与计算口径
 
-对 $m$ 个有效检验逐个调整：
+对 $`m`$ 个有效检验逐个调整：
 
 
 
-$$
+
+```math
 p_i^{adj}=\min(1,mp_i)
-$$
+```
 
 
 
-$m$ 按实现中的有效 p 值集合计数；非有限输入保持 NaN。输出为调整 p 值，不是显著性布尔值。
+
+$`m`$ 按实现中的有效 p 值集合计数；非有限输入保持 NaN。输出为调整 p 值，不是显著性布尔值。
 
 ### 函数层默认参数
 
@@ -408,13 +424,15 @@ Bottom-quantile cliff: ret[1] - ret[0], per factor. The jump in return from the 
 
 ### 数学公式与计算口径
 
-对从低因子值到高因子值排列的分位收益 $r_1,\ldots,r_Q$，实现的一格底部悬崖为：
+对从低因子值到高因子值排列的分位收益 $`r_1,\ldots,r_Q`$，实现的一格底部悬崖为：
 
 
 
-$$
+
+```math
 C_{bottom}=r_2-r_1
-$$
+```
+
 
 
 
@@ -441,13 +459,15 @@ ROBUST bottom cliff per factor: Q_1 - mean(Q_2..Q_4) (plan §14.4 mirror). Direc
 
 
 
-$$
+
+```math
 C_{bottom}^{robust}=r_2-\frac{r_2+r_3+r_4}{3}
-$$
+```
 
 
 
-注意它不是 $r_1-\operatorname{mean}(r_2,r_3,r_4)$；这是当前源码的实际索引语义。少于四桶或这四格任一非有限则 NaN。
+
+注意它不是 $`r_1-\mathrm{mean}(r_2,r_3,r_4)`$；这是当前源码的实际索引语义。少于四桶或这四格任一非有限则 NaN。
 
 
 实现核对：[函数定义](../metrics/shape_evidence.py#L747)；`quant_evaluator.metrics.shape_evidence.compute_bottom_quantile_cliff_robust`。
@@ -470,9 +490,11 @@ Mean adjacent return difference over the BOTTOM segment of the quantile profile 
 
 
 
-$$
+
+```math
 S_{bottom}=\frac{(r_2-r_1)+(r_3-r_2)}{2}=\frac{r_3-r_1}{2}
-$$
+```
+
 
 
 
@@ -495,17 +517,19 @@ Calmar ratio: explicit arithmetic (legacy default) or CAGR annualization / max d
 
 ### 数学公式与计算口径
 
-先按复利财富路径求正的最大回撤幅度 $MDD$；默认分子是 CAGR：
+先按复利财富路径求正的最大回撤幅度 $`MDD`$；默认分子是 CAGR：
 
 
 
-$$
+
+```math
 Calmar=\frac{(\prod_{t=1}^{T}(1+r_t))^{P/T}-1}{MDD}
-$$
+```
 
 
 
-默认 `periods_per_year=252,min_periods=20,annualization=cagr,missing_return_policy=unknown`。因此任何非有限收益都会令默认结果 NaN（不会悄悄压缩日历）；样本不足、财富路径无效或 $MDD\le0$ 时 NaN。显式 `annualization=arithmetic` 才改用 $P\bar r$。
+
+默认 `periods_per_year=252,min_periods=20,annualization=cagr,missing_return_policy=unknown`。因此任何非有限收益都会令默认结果 NaN（不会悄悄压缩日历）；样本不足、财富路径无效或 $`MDD\le0`$ 时 NaN。显式 `annualization=arithmetic` 才改用 $`P\bar r`$。
 
 ### 函数层默认参数
 
@@ -536,9 +560,11 @@ CUSUM-based change-point score: max |cumulative deviation from the mean IC|, per
 
 
 
-$$
+
+```math
 S=\max_t\left|\sum_{s\le t}(IC_s-\overline{IC})\mathbf 1_{IC_s\ finite}\right|
-$$
+```
+
 
 
 
@@ -570,9 +596,11 @@ Per-factor fraction of the (T, N) panel with jointly valid factor and label valu
 
 
 
-$$
+
+```math
 Coverage_f=\frac{\sum_{t,n}\mathbf 1\{x_{tnf},y_{tn}\text{ jointly valid}\}}{TN}
-$$
+```
+
 
 
 
@@ -600,17 +628,19 @@ Variance of factor coverage across periods
 
 ### 数学公式与计算口径
 
-当前注册项没有可直接调用的 `compute_fn`，因此通过统一注册执行器不可用，不能据此生成实测值。注册描述要求的是逐日覆盖率方差；若由显式上游入口提供逐日覆盖率 $c_{t,f}$，目标归约为：
+当前注册项没有可直接调用的 `compute_fn`，因此通过统一注册执行器不可用，不能据此生成实测值。注册描述要求的是逐日覆盖率方差；若由显式上游入口提供逐日覆盖率 $`c_{t,f}`$，目标归约为：
 
 
 
-$$
+
+```math
 V_f=\frac1T\sum_{t=1}^{T}(c_{t,f}-\bar c_f)^2
-$$
+```
 
 
 
-其中 $c_{t,f}=N^{-1}\sum_n\mathbf1\{x_{tnf},y_{tn}\text{共同有效}\}$。但注册仅定位到返回 $T\times F$ 逐日覆盖矩阵的函数，并未绑定把矩阵归约成方差的可调用适配器；`ddof` 也未在注册中落实，故不得声称已有可执行标量结果。
+
+其中 $`c_{t,f}=N^{-1}\sum_n\mathbf1\{x_{tnf},y_{tn}\text{共同有效}\}`$。但注册仅定位到返回 $`T\times F`$ 逐日覆盖矩阵的函数，并未绑定把矩阵归约成方差的可调用适配器；`ddof` 也未在注册中落实，故不得声称已有可执行标量结果。
 
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
@@ -633,9 +663,11 @@ Mean number of distinct values per day (cross-section cardinality), per factor (
 
 
 
-$$
+
+```math
 C_f=\frac1{|D_f|}\sum_{t\in D_f}\left|\{x_{tnf}:x_{tnf}\ finite\}\right|
-$$
+```
+
 
 
 
@@ -662,13 +694,15 @@ CUSUM break score: max |cumulative deviation| normalised by std*sqrt(T), per fac
 
 
 
-$$
+
+```math
 S=\frac{\max_t\left|\sum_{s\le t}(IC_s-\bar{IC})\mathbf1_{IC_s\ finite}\right|}{s_{IC}\sqrt n}
-$$
+```
 
 
 
-$n$ 与样本标准差 $s_{IC}$ 只由有限值计算，缺失时点在累积和中贡献 0。默认 `min_periods=20`；样本不足或 $s_{IC}\le10^{-12}$ 时 NaN。
+
+$`n`$ 与样本标准差 $`s_{IC}`$ 只由有限值计算，缺失时点在累积和中贡献 0。默认 `min_periods=20`；样本不足或 $`s_{IC}\le10^{-12}`$ 时 NaN。
 
 ### 函数层默认参数
 
@@ -692,19 +726,21 @@ Conditional Value at Risk (Expected Shortfall) at 95%
 
 ### 数学公式与计算口径
 
-当前注册项没有可直接调用的 `compute_fn`，统一注册执行器不可用，不能生成实测值。注册定位的源码函数在显式调用并取置信度 $c=0.95$ 时语义如下。
+当前注册项没有可直接调用的 `compute_fn`，统一注册执行器不可用，不能生成实测值。注册定位的源码函数在显式调用并取置信度 $`c=0.95`$ 时语义如下。
 
-设有限收益数为 $n$，将损失 $\ell_i=-r_i$ 从大到小排序，尾部质量 $m=(1-c)n$、$k=\lfloor m\rfloor$、$a=m-k$。源码用固定尾部质量和边界分数权重：
+设有限收益数为 $`n`$，将损失 $`\ell_i=-r_i`$ 从大到小排序，尾部质量 $`m=(1-c)n`$、$`k=\lfloor m\rfloor`$、$`a=m-k`$。源码用固定尾部质量和边界分数权重：
 
 
 
-$$
+
+```math
 ES_c^{signed}=\frac{\sum_{i=1}^{k}\ell_{(i)}+a\ell_{(k+1)}}{m},\qquad CVaR_c=\max(0,ES_c^{signed})
-$$
+```
 
 
 
-这不是简单对 $r\le q$ 的样本平均；当尾部质量不足 1 个观测时实际退化为最坏损失。底层默认 `method=historical,min_periods=20`，只使用有限收益。
+
+这不是简单对 $`r\le q`$ 的样本平均；当尾部质量不足 1 个观测时实际退化为最坏损失。底层默认 `method=historical,min_periods=20`，只使用有限收益。
 
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
@@ -723,19 +759,21 @@ Conditional Value at Risk (Expected Shortfall) at 99%
 
 ### 数学公式与计算口径
 
-当前注册项没有可直接调用的 `compute_fn`，统一注册执行器不可用，不能生成实测值。注册定位的源码函数在显式调用并取置信度 $c=0.99$ 时语义如下。
+当前注册项没有可直接调用的 `compute_fn`，统一注册执行器不可用，不能生成实测值。注册定位的源码函数在显式调用并取置信度 $`c=0.99`$ 时语义如下。
 
-设有限收益数为 $n$，将损失 $\ell_i=-r_i$ 从大到小排序，尾部质量 $m=(1-c)n$、$k=\lfloor m\rfloor$、$a=m-k$。源码用固定尾部质量和边界分数权重：
+设有限收益数为 $`n`$，将损失 $`\ell_i=-r_i`$ 从大到小排序，尾部质量 $`m=(1-c)n`$、$`k=\lfloor m\rfloor`$、$`a=m-k`$。源码用固定尾部质量和边界分数权重：
 
 
 
-$$
+
+```math
 ES_c^{signed}=\frac{\sum_{i=1}^{k}\ell_{(i)}+a\ell_{(k+1)}}{m},\qquad CVaR_c=\max(0,ES_c^{signed})
-$$
+```
 
 
 
-这不是简单对 $r\le q$ 的样本平均；当尾部质量不足 1 个观测时实际退化为最坏损失。底层默认 `method=historical,min_periods=20`，只使用有限收益。
+
+这不是简单对 $`r\le q`$ 的样本平均；当尾部质量不足 1 个观测时实际退化为最坏损失。底层默认 `method=historical,min_periods=20`，只使用有限收益。
 
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
@@ -754,17 +792,19 @@ Historical CVaR / expected shortfall at 95% of the probe daily PnL series (deleg
 
 ### 数学公式与计算口径
 
-该可调用 ID 是一维 95% 历史 ES 适配器。设有限收益数为 $n$，将损失 $\ell_i=-r_i$ 从大到小排序，尾部质量 $m=(1-c)n$、$k=\lfloor m\rfloor$、$a=m-k$。源码用固定尾部质量和边界分数权重：
+该可调用 ID 是一维 95% 历史 ES 适配器。设有限收益数为 $`n`$，将损失 $`\ell_i=-r_i`$ 从大到小排序，尾部质量 $`m=(1-c)n`$、$`k=\lfloor m\rfloor`$、$`a=m-k`$。源码用固定尾部质量和边界分数权重：
 
 
 
-$$
+
+```math
 ES_c^{signed}=\frac{\sum_{i=1}^{k}\ell_{(i)}+a\ell_{(k+1)}}{m},\qquad CVaR_c=\max(0,ES_c^{signed})
-$$
+```
 
 
 
-这不是简单对 $r\le q$ 的样本平均；当尾部质量不足 1 个观测时实际退化为最坏损失。适配器默认 `confidence_level=0.95`；底层 `method=historical,min_periods=20`，只使用有限收益。
+
+这不是简单对 $`r\le q`$ 的样本平均；当尾部质量不足 1 个观测时实际退化为最坏损失。适配器默认 `confidence_level=0.95`；底层 `method=historical,min_periods=20`，只使用有限收益。
 
 ### 函数层默认参数
 
@@ -793,13 +833,15 @@ Mean of valid per-date increasing-adjacent-pair fractions; missing pairs and dat
 
 
 
-$$
+
+```math
 m_{t,f}=\frac{\sum_{q=1}^{Q-1}\mathbf1(r_{t,q+1,f}>r_{t,q,f})\mathbf1_{pair}}{\sum_{q=1}^{Q-1}\mathbf1_{pair}},\qquad Rate_f=\frac1{|D_f|}\sum_{t\in D_f}m_{t,f}
-$$
+```
 
 
 
-默认 `n_quantiles=5,min_assets=10,min_periods=20`。非有限相邻对不进入当日分母；当日无有效对则 $m_t$ 为 NaN；有效日期少于 20 时最终 NaN，相等不算上升。
+
+默认 `n_quantiles=5,min_assets=10,min_periods=20`。非有限相邻对不进入当日分母；当日无有效对则 $`m_t`$ 为 NaN；有效日期少于 20 时最终 NaN，相等不算上升。
 
 ### 函数层默认参数
 
@@ -829,13 +871,15 @@ Per-date fraction of increasing finite adjacent quantile-return pairs. This is d
 
 
 
-$$
+
+```math
 m_{t,f}=\frac{\sum_{q=1}^{Q-1}\mathbf1(r_{t,q+1,f}>r_{t,q,f})\mathbf1\{r_{t,q,f},r_{t,q+1,f}\ finite\}}{\sum_{q=1}^{Q-1}\mathbf1\{r_{t,q,f},r_{t,q+1,f}\ finite\}}
-$$
+```
 
 
 
-默认 `n_quantiles=5,min_assets=10`。$r_{t,q,f}$ 是当日分位标签均值；非有限相邻对逐对排除而非要求整条曲线完整，分母为 0 的日期 NaN，相等不算上升。
+
+默认 `n_quantiles=5,min_assets=10`。$`r_{t,q,f}`$ 是当日分位标签均值；非有限相邻对逐对排除而非要求整条曲线完整，分母为 0 的日期 NaN，相等不算上升。
 
 ### 函数层默认参数
 
@@ -864,9 +908,11 @@ Mean fraction of distinct values among finite factor values per day, per factor.
 
 
 
-$$
-D_f=\frac1{|\mathcal T_f|}\sum_{t\in\mathcal T_f}\frac{|\operatorname{unique}(x_{t,:,f}^{finite})|}{n_{t,f}}
-$$
+
+```math
+D_f=\frac1{|\mathcal T_f|}\sum_{t\in\mathcal T_f}\frac{|\mathrm{unique}(x_{t,:,f}^{finite})|}{n_{t,f}}
+```
+
 
 
 
@@ -893,9 +939,11 @@ Annualized downside deviation (RMS of negative excess returns) of the probe dail
 
 
 
-$$
+
+```math
 DD=\sqrt{P}\sqrt{\frac1{n_-}\sum_{r_t-r_f/P<0}(r_t-r_f/P)^2}
-$$
+```
+
 
 
 
@@ -931,9 +979,11 @@ Duration (in periods) of the longest drawdown
 
 
 
-$$
+
+```math
 D_{max}=\max_j(e_j-s_j+1)
-$$
+```
+
 
 
 
@@ -960,9 +1010,11 @@ Mean number of finite factor values per day, per factor. A measure of the effect
 
 
 
-$$
+
+```math
 N_{eff,f}=\frac1T\sum_{t=1}^T\sum_{n=1}^N\mathbf1(x_{tnf}\ finite)
-$$
+```
+
 
 
 
@@ -985,17 +1037,19 @@ Mean absolute change of the per-style exposure panel between adjacent periods (p
 
 ### 数学公式与计算口径
 
-逐日用因子、全部风格暴露均有限且权重严格为正的共同支持做含截距 WLS，得到原始斜率 $b_{t,k}$。在同一支持上令 $\tilde w_{t,i}=w_{t,i}/\sum_jw_{t,j}$，并用加权标准差把斜率标准化：相邻变化也基于该标准化载荷，而非原始回归斜率：
+逐日用因子、全部风格暴露均有限且权重严格为正的共同支持做含截距 WLS，得到原始斜率 $`b_{t,k}`$。在同一支持上令 $`\tilde w_{t,i}=w_{t,i}/\sum_jw_{t,j}`$，并用加权标准差把斜率标准化：相邻变化也基于该标准化载荷，而非原始回归斜率：
 
 
 
-$$
-Drift=\operatorname{mean}_{t:J_t\ne\varnothing}\left[\frac1{|J_t|}\sum_{k\in J_t}|\tilde\beta_{t+1,k}-\tilde\beta_{t,k}|\right],\qquad \tilde\beta_{t,k}=b_{t,k}\frac{s^w_{t,Z_k}}{s^w_{t,x}}
-$$
+
+```math
+Drift=\mathrm{mean}_{t:J_t\ne\varnothing}\left[\frac1{|J_t|}\sum_{k\in J_t}|\tilde\beta_{t+1,k}-\tilde\beta_{t,k}|\right],\qquad \tilde\beta_{t,k}=b_{t,k}\frac{s^w_{t,Z_k}}{s^w_{t,x}}
+```
 
 
 
-$J_t$ 是相邻两日都有限的风格集合，$s^w$ 使用同日归一化正权重。默认 `min_obs=10`；任一侧回归无效或因子/该风格加权标准差为 0，则对应标准化载荷缺失并不进入该对；少于两期或完全没有共同有限相邻项时 NaN。
+
+$`J_t`$ 是相邻两日都有限的风格集合，$`s^w`$ 使用同日归一化正权重。默认 `min_obs=10`；任一侧回归无效或因子/该风格加权标准差为 0，则对应标准化载荷缺失并不进入该对；少于两期或完全没有共同有限相邻项时 NaN。
 
 ### 函数层默认参数
 
@@ -1023,13 +1077,15 @@ Fraction of universe with non-null factor values
 
 当前注册项没有可直接调用的 `compute_fn`，因此通过统一注册执行器不可用，不能据此生成实测值。下式只说明注册所指向源码函数的计算语义；必须由显式上游制品或专门入口提供输入。
 
-该稳定 ID 的实际语义是逐因子有效因子单元占原始 $T\times N$ 面板的比例：
+该稳定 ID 的实际语义是逐因子有效因子单元占原始 $`T\times N`$ 面板的比例：
 
 
 
-$$
+
+```math
 Coverage_f^{factor}=\frac1{TN}\sum_{t,n}\mathbf1\{x_{tnf}\ finite\ \land\ validity_{tnf}\}
-$$
+```
+
 
 
 
@@ -1056,13 +1112,15 @@ Turnover rate of top/bottom quantile membership
 
 
 
-$$
-u_t=\frac{|A_t\triangle A_{t+1}|}{|V_t\cup V_{t+1}|},\qquad Turnover_f=\operatorname{mean}_{t:u_t\ finite}u_t
-$$
+
+```math
+u_t=\frac{|A_t\triangle A_{t+1}|}{|V_t\cup V_{t+1}|},\qquad Turnover_f=\mathrm{mean}_{t:u_t\ finite}u_t
+```
 
 
 
-$V_t$ 是当日因子有限的资产集。默认 `measure=universe_membership_change,min_periods=30`；两日各至少 10 个有限资产，且若前日入选资产次日信号缺失则该对日期为 NaN。有效相邻值不足 30 个时最终 NaN。
+
+$`V_t`$ 是当日因子有限的资产集。默认 `measure=universe_membership_change,min_periods=30`；两日各至少 10 个有限资产，且若前日入选资产次日信号缺失则该对日期为 NaN。有效相邻值不足 30 个时最终 NaN。
 
 ### 函数层默认参数
 
@@ -1091,13 +1149,15 @@ Two-sided HAC-robust p-value for mean(IC) != 0 per factor (canonical alias ic.ra
 
 
 
-$$
+
+```math
 \widehat V(\bar x)=\frac1n\left[\gamma_0+2\sum_{k=1}^{L}w_k\gamma_k\right],\quad t=\frac{\bar x}{\sqrt{\widehat V(\bar x)}},\quad p=2\Phi(-|t|)
-$$
+```
 
 
 
-默认 `min_periods=30,max_lag=5,kernel=bartlett`，$w_k=1-k/(L+1)$。只裁掉两端缺失；内部 NaN/Inf 使该列无证据。连续样本至少需 $L+10$，且注册层有限观测少于 30 时 NaN。
+
+默认 `min_periods=30,max_lag=5,kernel=bartlett`，$`w_k=1-k/(L+1)`$。只裁掉两端缺失；内部 NaN/Inf 使该列无证据。连续样本至少需 $`L+10`$，且注册层有限观测少于 30 时 NaN。
 
 ### 函数层默认参数
 
@@ -1127,13 +1187,15 @@ Newey–West HAC t 统计量：
 
 
 
-$$
+
+```math
 t_{HAC}=\frac{\bar x}{\sqrt{n^{-1}(\gamma_0+2\sum_{k=1}^{L}w_k\gamma_k)}}
-$$
+```
 
 
 
-默认 `min_periods=30,max_lag=5,kernel=bartlett`，$w_k=1-k/(L+1)$，各自协方差分母均为 $n$。底层只裁掉空的首尾；内部缺失或 Inf 返回 NaN，且连续样本至少需 $L+10$；注册层有限观测少于 30 也强制 NaN。
+
+默认 `min_periods=30,max_lag=5,kernel=bartlett`，$`w_k=1-k/(L+1)`$，各自协方差分母均为 $`n`$。底层只裁掉空的首尾；内部缺失或 Inf 返回 NaN，且连续样本至少需 $`L+10`$；注册层有限观测少于 30 也强制 NaN。
 
 ### 函数层默认参数
 
@@ -1163,13 +1225,15 @@ Centered AR(1) IC temporal persistence; not predictive horizon decay
 
 
 
-$$
+
+```math
 IC_t=\alpha+\phi IC_{t-1}+\varepsilon_t,\qquad h_{1/2}=-\frac{\log2}{\log\phi}
-$$
+```
 
 
 
-只用两端都有限的真实相邻对，不压缩缺失。默认 `min_periods=60`；有限值或相邻对不足、回归退化、$\phi\le0$ 或 $\phi\ge1$ 时 NaN。
+
+只用两端都有限的真实相邻对，不压缩缺失。默认 `min_periods=60`；有限值或相邻对不足、回归退化、$`\phi\le0`$ 或 $`\phi\ge1`$ 时 NaN。
 
 ### 函数层默认参数
 
@@ -1197,9 +1261,11 @@ Herfindahl-Hirschman Index of factor value concentration
 
 
 
-$$
+
+```math
 s_{t,i}=\frac{|w_{t,i}x_{t,i}|}{\sum_j|w_{t,j}x_{t,j}|},\qquad HHI_t=\sum_i s_{t,i}^2
-$$
+```
+
 
 
 
@@ -1226,9 +1292,11 @@ Effective number of groups (1/HHI) for factor concentration
 
 
 
-$$
+
+```math
 N_{eff,t}=\frac1{HHI_t},\qquad HHI_t=\sum_i\left(\frac{|w_{t,i}x_{t,i}|}{\sum_j|w_{t,j}x_{t,j}|}\right)^2
-$$
+```
+
 
 
 
@@ -1251,13 +1319,15 @@ Holm-Bonferroni step-down correction: more powerful than Bonferroni, controls th
 
 ### 数学公式与计算口径
 
-将 $m$ 个有限 p 值升序，做 Holm 逐步调整并保证单调：
+将 $`m`$ 个有限 p 值升序，做 Holm 逐步调整并保证单调：
 
 
 
-$$
+
+```math
 q_{(i)}=\min\left(1,\max_{j\le i}(m-j+1)p_{(j)}\right)
-$$
+```
+
 
 
 
@@ -1289,9 +1359,11 @@ First-order autocorrelation of IC series
 
 
 
-$$
+
+```math
 \rho_1=Corr(IC_t,IC_{t-1})
-$$
+```
+
 
 
 
@@ -1322,13 +1394,15 @@ IC decay: correlation at increasing forward horizons
 
 当前注册项没有可直接调用的 `compute_fn`，因此通过统一注册执行器不可用，不能据此生成实测值。下式只说明注册所指向源码函数的计算语义；必须由显式上游制品或专门入口提供输入。
 
-对每个输入预测期限 $h$ 分别计算逐日 IC，再对日期取有限均值，输出期限×因子矩阵：
+对每个输入预测期限 $`h`$ 分别计算逐日 IC，再对日期取有限均值，输出期限×因子矩阵：
 
 
 
-$$
-Decay_{h,f}=\operatorname{mean}_{t:\,IC_{t,f}^{(h)}\ finite}IC_{t,f}^{(h)}
-$$
+
+```math
+Decay_{h,f}=\mathrm{mean}_{t:\,IC_{t,f}^{(h)}\ finite}IC_{t,f}^{(h)}
+```
+
 
 
 
@@ -1355,9 +1429,11 @@ IC 信息比率是有限日 IC 的均值除以样本标准差：
 
 
 
-$$
+
+```math
 ICIR_f=\frac{\bar{IC}_f}{s_f},\qquad s_f^2=\frac1{n_f-1}\sum_t(IC_{t,f}-\bar{IC}_f)^2
-$$
+```
+
 
 
 
@@ -1389,9 +1465,11 @@ Time-median of the daily IC series per factor (canonical alias ic.rank.median)
 
 
 
-$$
-MedIC_f=\operatorname{median}\{IC_{t,f}:IC_{t,f}\ finite\}
-$$
+
+```math
+MedIC_f=\mathrm{median}\{IC_{t,f}:IC_{t,f}\ finite\}
+```
+
 
 
 
@@ -1423,9 +1501,11 @@ Fraction of finite daily IC values that are strictly positive, per factor. A val
 
 
 
-$$
+
+```math
 P_f^+=\frac{\sum_t\mathbf1(IC_{t,f}>0)}{\sum_t\mathbf1(IC_{t,f}\ finite)}
-$$
+```
+
 
 
 
@@ -1457,13 +1537,15 @@ $$
 
 
 
-$$
+
+```math
 \Delta_f=\frac{\overline{IC}_{last\ 63}-\overline{IC}_{all}}{s_{all}}
-$$
+```
 
 
 
-默认 `recent_days=63,min_periods=20`，均值和样本标准差均忽略 NaN。全历史有限数不足或 $s_{all}\le10^{-12}$ 时 NaN；最近窗口可短于 63 个轴位置。
+
+默认 `recent_days=63,min_periods=20`，均值和样本标准差均忽略 NaN。全历史有限数不足或 $`s_{all}\le10^{-12}`$ 时 NaN；最近窗口可短于 63 个轴位置。
 
 ### 函数层默认参数
 
@@ -1488,13 +1570,15 @@ Mean serial autocorrelation of one IC series; not predictive IC across label hor
 
 ### 数学公式与计算口径
 
-分别在原始时间轴计算 $k\in\{1,5,10,20\}$ 的配对 Pearson 自相关，并取有限阶均值：
+分别在原始时间轴计算 $`k\in\{1,5,10,20\}`$ 的配对 Pearson 自相关，并取有限阶均值：
 
 
 
-$$
-S_f=\operatorname{nanmean}_{k\in\{1,5,10,20\}}Corr(IC_t,IC_{t-k})
-$$
+
+```math
+S_f=\mathrm{nanmean}_{k\in\{1,5,10,20\}}Corr(IC_t,IC_{t-k})
+```
+
 
 
 
@@ -1527,9 +1611,11 @@ Fraction of finite daily IC values sharing the sign of the mean IC, per factor. 
 
 
 
-$$
+
+```math
 C_f=\frac1{n_f}\sum_{t:IC_t\ finite}\mathbf1\{sign(IC_t)=sign(\bar{IC})\}
-$$
+```
+
 
 
 
@@ -1561,9 +1647,11 @@ Fraction of adjacent finite IC pairs whose sign flips, per factor. Lower values 
 
 
 
-$$
+
+```math
 Flip_f=\frac{\sum_t\mathbf1\{sign(IC_t)\ne sign(IC_{t-1})\}\mathbf1_{pair}}{\sum_t\mathbf1_{pair}}
-$$
+```
+
 
 
 
@@ -1597,9 +1685,11 @@ Rolling correlation of IC values across sub-periods
 
 
 
-$$
+
+```math
 S_{w,f}=Corr(IC_{w:w+H-1,f},IC_{w+H:w+2H-1,f})
-$$
+```
+
 
 
 
@@ -1626,13 +1716,15 @@ Standard deviation of the daily IC series per factor (canonical alias ic.rank.st
 
 
 
-$$
+
+```math
 s_f=\sqrt{\frac1{n_f-1}\sum_t(IC_{t,f}-\bar{IC}_f)^2}
-$$
+```
 
 
 
-默认 `min_periods=20`，不足返回 NaN；采用 `ddof=1`，缺失不计入 $n_f$。
+
+默认 `min_periods=20`，不足返回 NaN；采用 `ddof=1`，缺失不计入 $`n_f`$。
 
 ### 函数层默认参数
 
@@ -1663,9 +1755,11 @@ Summary statistics (mean, std, skew, kurtosis) of IC time series
 
 
 
-$$
+
+```math
 \bar{IC},\quad s_{IC},\quad ICIR=\bar{IC}/s_{IC},\quad t=\bar{IC}/(s_{IC}/\sqrt n),\quad p=2F_{t,n-1}(-|t|)
-$$
+```
+
 
 
 
@@ -1688,17 +1782,19 @@ Signed mean industry-style exposure of the factor (typed per-style field, from t
 
 ### 数学公式与计算口径
 
-逐日用因子、全部风格暴露均有限且权重严格为正的共同支持做含截距 WLS，得到原始斜率 $b_{t,k}$。在同一支持上令 $\tilde w_{t,i}=w_{t,i}/\sum_jw_{t,j}$，并用加权标准差把斜率标准化：
+逐日用因子、全部风格暴露均有限且权重严格为正的共同支持做含截距 WLS，得到原始斜率 $`b_{t,k}`$。在同一支持上令 $`\tilde w_{t,i}=w_{t,i}/\sum_jw_{t,j}`$，并用加权标准差把斜率标准化：
 
 
 
-$$
-\tilde\beta_{t,k}=b_{t,k}\frac{\sqrt{\sum_i\tilde w_{t,i}(Z_{t,i,k}-\bar Z_{t,k}^{w})^2}}{\sqrt{\sum_i\tilde w_{t,i}(x_{t,i}-\bar x_t^{w})^2}},\qquad E_{industry}=\operatorname{MeanFinite}_t(\tilde\beta_{t,industry})
-$$
+
+```math
+\tilde\beta_{t,k}=b_{t,k}\frac{\sqrt{\sum_i\tilde w_{t,i}(Z_{t,i,k}-\bar Z_{t,k}^{w})^2}}{\sqrt{\sum_i\tilde w_{t,i}(x_{t,i}-\bar x_t^{w})^2}},\qquad E_{industry}=\mathrm{MeanFinite}_t(\tilde\beta_{t,industry})
+```
 
 
 
-默认 `min_obs=10`；未显式绑定权重时等权。回归不可估、$R^2$ 非有限、因子或 industry 风格的加权标准差为 0 时该日 NaN；缺少 `industry` typed field 或无有限日时 NaN。输出是有符号标准化暴露。
+
+默认 `min_obs=10`；未显式绑定权重时等权。回归不可估、$`R^2`$ 非有限、因子或 industry 风格的加权标准差为 0 时该日 NaN；缺少 `industry` typed field 或无有限日时 NaN。输出是有符号标准化暴露。
 
 ### 函数层默认参数
 
@@ -1728,13 +1824,15 @@ Benchmark/invested-capital evidence from an explicitly bound execution trajector
 
 
 
-$$
+
+```math
 IR=\sqrt P\frac{\bar r}{s_r}
-$$
+```
 
 
 
-默认 `periods_per_year=252,min_periods=2`，$s_r$ 为有限收益的样本标准差。样本不足、标准差为 0 或结果非有限时 NaN。
+
+默认 `periods_per_year=252,min_periods=2`，$`s_r`$ 为有限收益的样本标准差。样本不足、标准差为 0 或结果非有限时 NaN。
 
 ### 函数层默认参数
 
@@ -1759,17 +1857,19 @@ Inverted-U (hill) score in [0, 1] per factor. Mirror of u_shape_score with conca
 
 ### 数学公式与计算口径
 
-令分位坐标 $x_q\in[0,1]$，倒 U 模板 $z_q=-(x_q-0.5)^2$。分别做带截距的一元 OLS 得 $R_I^2$ 与线性模板 $R_L^2$，并计算负二阶差分占比 $c_-=mean[\Delta^2r_q<0]$。实际得分为：
+令分位坐标 $`x_q\in[0,1]`$，倒 U 模板 $`z_q=-(x_q-0.5)^2`$。分别做带截距的一元 OLS 得 $`R_I^2`$ 与线性模板 $`R_L^2`$，并计算负二阶差分占比 $`c_-=mean[\Delta^2r_q<0]`$。实际得分为：
 
 
 
-$$
+
+```math
 Score=0.5\max(R_I^2,0)+0.3c_-+0.2(\max(R_I^2,0)-R_L^2)
-$$
+```
 
 
 
-但若 $c_-<0.5$ 则返回 0；少于 4 个有限分位、无有限内部三点或回归不可定义则 NaN；常数曲线返回 0。实现以凹曲率区分倒 U，因为自由斜率使正负二次模板本身具有同样拟合能力。
+
+但若 $`c_-<0.5`$ 则返回 0；少于 4 个有限分位、无有限内部三点或回归不可定义则 NaN；常数曲线返回 0。实现以凹曲率区分倒 U，因为自由斜率使正负二次模板本身具有同样拟合能力。
 
 
 实现核对：[函数定义](../metrics/shape_evidence.py#L185)；`quant_evaluator.metrics.shape_evidence.compute_inverted_u_score`。
@@ -1788,9 +1888,11 @@ Fraction of universe with both factor and return available
 
 ### 数学公式与计算口径
 
-$$
-C_f=\frac{\sum_{t,i}\mathbf1[\operatorname{valid}(x_{tif})\land\operatorname{valid}(y_{ti})]}{TN}
-$$
+
+```math
+C_f=\frac{\sum_{t,i}\mathbf1[\mathrm{valid}(x_{tif})\land\mathrm{valid}(y_{ti})]}{TN}
+```
+
 
 
 
@@ -1813,9 +1915,11 @@ Excess kurtosis of the return distribution
 
 ### 数学公式与计算口径
 
-$$
-K=\operatorname{Kurtosis}_{\mathrm{unbiased}}(r)-3
-$$
+
+```math
+K=\mathrm{Kurtosis}_{\mathrm{unbiased}}(r)-3
+```
+
 
 
 
@@ -1838,13 +1942,15 @@ Fraction of (T, N) cells with a finite forward-return label, per factor. Measure
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 M_f=\frac1{TN}\sum_{t,i}\mathbf1[\mathrm{finite}(x_{tif})\land\mathrm{finite}(y_{ti})]
-$$
+```
 
 
 
-分母始终是完整 $T\times N$；因子或前瞻收益任一非有限都不计分子。
+
+分母始终是完整 $`T\times N`$；因子或前瞻收益任一非有限都不计分子。
 
 
 实现核对：[函数定义](../metrics/data_quality.py#L170)；`quant_evaluator.metrics.data_quality.compute_label_maturity`。
@@ -1863,13 +1969,15 @@ Mean right-minus-left mirrored quantile contrast; symmetric U and inverted-U are
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 A_f=\frac1m\sum_{j=1}^m(q_{Q+1-j,f}-q_{j,f}),\quad m=\lfloor Q/2\rfloor
-$$
+```
 
 
 
-奇数中央桶排除；要求 $Q\ge4$ 且所有镜像桶有限，否则 NaN。
+
+奇数中央桶排除；要求 $`Q\ge4`$ 且所有镜像桶有限，否则 NaN。
 
 
 实现核对：[函数定义](../metrics/shape_evidence.py#L491)；`quant_evaluator.metrics.shape_evidence.compute_left_right_asymmetry`。
@@ -1888,13 +1996,15 @@ Pearson correlation of the quantile profile with the linear quantile coordinate 
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 L_f=\mathrm{Corr}(z_j,q_{j,f})
-$$
+```
 
 
 
-$z_j$ 是线性桶坐标；仅用有限桶且至少 3 个。收益全相等返回 0，相关非有限返回 NaN。
+
+$`z_j`$ 是线性桶坐标；仅用有限桶且至少 3 个。收益全相等返回 0，相关非有限返回 NaN。
 
 
 实现核对：[函数定义](../metrics/shape_evidence.py#L514)；`quant_evaluator.metrics.shape_evidence.compute_linear_trend_score`。
@@ -1913,9 +2023,11 @@ Signed mean liquidity-style exposure of the factor (typed per-style field). NaN 
 
 ### 数学公式与计算口径
 
-$$
-x_{ti}=\alpha_t+\sum_k b_{tk}Z_{tik}+\varepsilon_{ti},\qquad E_{liq}=\operatorname{MeanFinite}_t\!\left(b_{t,liq}\frac{s_{Z,t,liq}}{s_{x,t}}\right)
-$$
+
+```math
+x_{ti}=\alpha_t+\sum_k b_{tk}Z_{tik}+\varepsilon_{ti},\qquad E_{liq}=\mathrm{MeanFinite}_t\!\left(b_{t,liq}\frac{s_{Z,t,liq}}{s_{x,t}}\right)
+```
+
 
 
 
@@ -1945,9 +2057,11 @@ Time series of long-minus-short portfolio returns, shape (T,) or (T, F). Portfol
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 R^{LS}_{tf}=\sum_i w_{tif}y_{ti},\qquad w_{tif}=\frac{\mathbf1[i\in L_{tf}]-\mathbf1[i\in S_{tf}]}{|L_{tf}|+|S_{tf}|}
-$$
+```
+
 
 
 
@@ -1979,13 +2093,15 @@ The style dimension with the largest mean absolute exposure (dict: style / value
 
 ### 数学公式与计算口径
 
-$$
-a_s=\operatorname{MeanFinite}_t|\tilde\beta_{ts}|,\qquad s^*=\arg\max_{s:n_s\ge m}a_s
-$$
+
+```math
+a_s=\mathrm{MeanFinite}_t|\tilde\beta_{ts}|,\qquad s^{\ast}=\arg\max_{s:n_s\ge m}a_s
+```
 
 
 
-$\tilde\beta_{ts}=b_{ts}s_{Z,ts}/s_{x,t}$ 来自同支持含截距 WLS。默认 min_finite=5、回归 min_obs=10；胜出风格按最大平均绝对载荷选，但返回的 value 是该风格带符号标准化载荷的时间均值，另返回 absolute_mean 与 counts。无合格风格为 unknown/NaN/0。
+
+$`\tilde\beta_{ts}=b_{ts}s_{Z,ts}/s_{x,t}`$ 来自同支持含截距 WLS。默认 min_finite=5、回归 min_obs=10；胜出风格按最大平均绝对载荷选，但返回的 value 是该风格带符号标准化载荷的时间均值，另返回 absolute_mean 与 counts。无合格风格为 unknown/NaN/0。
 
 ### 函数层默认参数
 
@@ -2012,9 +2128,11 @@ Maximum compounded portfolio NAV drawdown including initial capital and default
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 D_{max}=-\min_t d_t,\qquad d_t=\frac{W_t}{\max_{0\le u\le t}W_u}-1,\quad W_0=1
-$$
+```
+
 
 
 
@@ -2042,9 +2160,11 @@ Longest continuous stretch (periods) of the probe daily PnL series staying below
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 U_{max}=\max_e|e|,\quad e:\; W_t<\max_{u\le t}W_u\text{ 的连续区间}
-$$
+```
+
 
 
 
@@ -2072,9 +2192,11 @@ Time-averaged Pearson information coefficient: the time-mean of daily Pearson IC
 
 ### 数学公式与计算口径
 
-$$
-\bar{IC}_f=\operatorname{nanmean}_t(IC^P_{tf})
-$$
+
+```math
+\bar{IC}_f=\mathrm{nanmean}_t(IC^P_{tf})
+```
+
 
 
 
@@ -2103,9 +2225,11 @@ Benchmark/invested-capital evidence from an explicitly bound execution trajector
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 \bar I_f=\frac1{n_f}\sum_{t:I_{tf}\text{ finite}}I_{tf}
-$$
+```
+
 
 
 
@@ -2133,9 +2257,11 @@ Mean length (periods) of underwater episodes of the probe daily PnL series. NaN 
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 \bar U=E^{-1}\sum_{e=1}^E|e|
-$$
+```
+
 
 
 
@@ -2163,9 +2289,11 @@ Fraction of (T, N) cells with non-finite factor values, per factor (spec §35).
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 R_f=(TN)^{-1}\sum_{t,i}\mathbf1[\neg\mathrm{finite}(x_{tif})]
-$$
+```
+
 
 
 
@@ -2188,9 +2316,11 @@ Fraction of time periods with any missing factor value, per factor. 1.0 means ev
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 R_f=T^{-1}\sum_t\mathbf1[\exists i:\neg\mathrm{finite}(x_{tif})]
-$$
+```
+
 
 
 
@@ -2213,9 +2343,11 @@ Signed mean momentum-style exposure of the factor (typed per-style field). NaN w
 
 ### 数学公式与计算口径
 
-$$
-x_{ti}=\alpha_t+\sum_k b_{tk}Z_{tik}+\varepsilon_{ti},\qquad E_{mom}=\operatorname{MeanFinite}_t\!\left(b_{t,mom}\frac{s_{Z,t,mom}}{s_{x,t}}\right)
-$$
+
+```math
+x_{ti}=\alpha_t+\sum_k b_{tk}Z_{tik}+\varepsilon_{ti},\qquad E_{mom}=\mathrm{MeanFinite}_t\!\left(b_{t,mom}\frac{s_{Z,t,mom}}{s_{x,t}}\right)
+```
+
 
 
 
@@ -2245,9 +2377,11 @@ Fraction of months whose mean IC matches the overall IC sign, per factor (spec �
 
 ### 数学公式与计算口径
 
-$$
-C_f=|G_f|^{-1}\sum_{g\in G_f}\mathbf1[\operatorname{sign}(\bar{IC}_{gf})=\operatorname{sign}(\bar{IC}_f)]
-$$
+
+```math
+C_f=|G_f|^{-1}\sum_{g\in G_f}\mathbf1[\mathrm{sign}(\bar{IC}_{gf})=\mathrm{sign}(\bar{IC}_f)]
+```
+
 
 
 
@@ -2276,9 +2410,11 @@ Mean of the per-month mean rank IC, per factor (spec §28).
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 M_f=|G_f|^{-1}\sum_{g\in G_f}\bar{IC}^{rank}_{gf}
-$$
+```
+
 
 
 
@@ -2307,9 +2443,11 @@ Cross-sectional residual (neutralized) rank IC: per date regress the factor on t
 
 ### 数学公式与计算口径
 
-$$
-NIC=\operatorname{Mean}_t\rho_S(e_t,y_t),\qquad e_t=x_t-[\mathbf1,Z_t]\hat\gamma_t
-$$
+
+```math
+NIC=\mathrm{Mean}_t\rho_S(e_t,y_t),\qquad e_t=x_t-[\mathbf1,Z_t]\hat\gamma_t
+```
+
 
 
 
@@ -2337,9 +2475,11 @@ Fraction of finite factor values that are z-score outliers (|z|>3), per factor (
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 O_f=|V_f|^{-1}\sum_{(t,i)\in V_f}\mathbf1[|z_{tif}|>c]
-$$
+```
+
 
 
 
@@ -2368,13 +2508,15 @@ Parameter-generalization summary per factor (plan §13.6): the robust retention 
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 PG_f=R_f=\frac{v_f}{t_f}\quad\text{仅当 }|t_f|\ge\tau\text{ 且未触发近零反号保护}
-$$
+```
 
 
 
-$t_f,v_f$ 是因子 $f$ 的训练/验证预测维度证据，$\tau=$ RetentionPolicy.min_abs_train，反号保护使用 sign_flip_guard。任一端非有限记 insufficient_data，训练近零记 train_near_zero，保护触发记 sign_flip_guard；这些情形该因子结果均为 NaN/None。运行时 TrainVsValidationArtifact.parameter_generalization 直接保存 tuple(retentions)，注册 compute_fn 仅将该逐因子数组透传，绝不跨因子平均；底层 compute_validation_retention 的跨因子均值辅助结果不是此注册指标的公开输出。
+
+$`t_f,v_f`$ 是因子 $`f`$ 的训练/验证预测维度证据，$`\tau=`$ RetentionPolicy.min_abs_train，反号保护使用 sign_flip_guard。任一端非有限记 insufficient_data，训练近零记 train_near_zero，保护触发记 sign_flip_guard；这些情形该因子结果均为 NaN/None。运行时 TrainVsValidationArtifact.parameter_generalization 直接保存 tuple(retentions)，注册 compute_fn 仅将该逐因子数组透传，绝不跨因子平均；底层 compute_validation_retention 的跨因子均值辅助结果不是此注册指标的公开输出。
 
 
 实现核对：[函数定义](../registry/metrics.py#L4085)；`quant_evaluator.registry.metrics.<lambda>`。
@@ -2393,9 +2535,11 @@ Time-mean of daily Pearson IC between factor values and labels (canonical alias 
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 PIC_f=n_f^{-1}\sum_{t\in V_f}\mathrm{Corr}_P(x_{tf},y_t)
-$$
+```
+
 
 
 
@@ -2424,9 +2568,11 @@ Mean Pearson IC divided by Pearson IC standard deviation per factor (canonical a
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 IR_f=\bar{IC}^P_f/s(IC^P_{tf})
-$$
+```
+
 
 
 
@@ -2454,13 +2600,15 @@ Daily Pearson IC per factor over time, shape (T, F) (canonical alias ic.pearson.
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 IC^P_{tf}=\frac{\sum_{i\in V}(x_i-\bar x)(y_i-\bar y)}{\sqrt{\sum_{i\in V}(x_i-\bar x)^2\sum_{i\in V}(y_i-\bar y)^2}}
-$$
+```
 
 
 
-$V$ 是同时有限配对；默认 min_assets=20。不足或常数截面为 NaN；输出 $T\times F$。
+
+$`V`$ 是同时有限配对；默认 min_assets=20。不足或常数截面为 NaN；输出 $`T\times F`$。
 
 ### 函数层默认参数
 
@@ -2484,9 +2632,11 @@ Standard deviation of the daily Pearson IC series per factor (canonical alias ic
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 s_f=\sqrt{(n_f-1)^{-1}\sum_{t\in V_f}(IC^P_{tf}-\bar{IC}^P_f)^2}
-$$
+```
+
 
 
 
@@ -2515,9 +2665,11 @@ Time mean of 1 - R-squared from same-support weighted factor-on-risk regression 
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 P=\mathrm{Mean}_t(1-R_t^2),\quad x_t=\alpha_t+Z_t\gamma_t+e_t
-$$
+```
+
 
 
 
@@ -2548,13 +2700,15 @@ Mean absolute return difference between adjacent quantiles, per factor. A measur
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 S_f=|A_f|^{-1}\sum_{q\in A_f}|r_{q+1,f}-r_{q,f}|
-$$
+```
 
 
 
-$A_f$ 仅含两端均有限的相邻对；无有效对为 NaN。
+
+$`A_f`$ 仅含两端均有限的相邻对；无有效对为 NaN。
 
 
 实现核对：[函数定义](../metrics/quantile_shape.py#L133)；`quant_evaluator.metrics.quantile_shape.compute_quantile_adjacent_spread`。
@@ -2573,9 +2727,11 @@ Signed curvature of the quantile-return profile (mean second difference), per fa
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 C_f=|I_f|^{-1}\sum_{q\in I_f}(r_{q+1,f}-2r_{q,f}+r_{q-1,f})
-$$
+```
+
 
 
 
@@ -2598,9 +2754,11 @@ Mean of the top and bottom quantile cliffs, per factor. A large value means the 
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 E_f=[(r_Q-r_{Q-1})+(r_2-r_1)]/2
-$$
+```
+
 
 
 
@@ -2623,9 +2781,11 @@ Fraction of adjacent quantile steps that are monotone increasing, per factor. 1.
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 M_f=|A_f|^{-1}\sum_{q\in A_f}\mathbf1[r_{q+1,f}>r_{q,f}]
-$$
+```
+
 
 
 
@@ -2648,9 +2808,11 @@ Spearman(bucket index, mean bucket return), [-1,1]; requires all buckets finite 
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 M_f=\rho_S((1,\ldots,Q),(r_{1f},\ldots,r_{Qf}))
-$$
+```
+
 
 
 
@@ -2673,9 +2835,11 @@ Average forward return per quantile bucket
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 r_{tqf}=|B_{tqf}|^{-1}\sum_{i\in B_{tqf}}y_{ti}
-$$
+```
+
 
 
 
@@ -2698,9 +2862,11 @@ Unreduced T×Q×F diagnostic returns, counts and masks; no implicit scalar objec
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 r_{tqf}=n_{tqf}^{-1}\sum_{i\in B_{tqf}}y_{ti},\quad v_{tqf}=\mathbf1[\mathrm{finite}(r_{tqf})\land n_{tqf}\ge m]
-$$
+```
+
 
 
 
@@ -2736,13 +2902,15 @@ Per-quantile time-averaged returns as a VECTOR per factor — shape (n_quantiles
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 \bar r_{qf}=n_{qf}^{-1}\sum_{t:r_{tqf}\mathrm{finite}}r_{tqf}
-$$
+```
 
 
 
-默认 Q=5、min_periods=20；每个桶-因子有限日不足则 NaN。输出 $Q\times F$，不是标量。
+
+默认 Q=5、min_periods=20；每个桶-因子有限日不足则 NaN。输出 $`Q\times F`$，不是标量。
 
 ### 函数层默认参数
 
@@ -2767,9 +2935,11 @@ Return spread between top and bottom quantiles
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 S_f=n_f^{-1}\sum_{t\in V_f}(r_{tQf}-r_{t1f})
-$$
+```
+
 
 
 
@@ -2798,9 +2968,11 @@ Stability of quantile return rankings across time
 
 ### 数学公式与计算口径
 
-$$
-\operatorname{quantile\_stability}=\operatorname{unavailable}
-$$
+
+```math
+\mathrm{quantile\_stability}=\mathrm{unavailable}
+```
+
 
 
 
@@ -2823,9 +2995,11 @@ Asymmetry between the top and bottom quantile tails, per factor. Positive = top 
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 A_f=(r_{Qf}-r_{mf})-(r_{mf}-r_{1f}),\quad m=\lfloor Q/2\rfloor+1
-$$
+```
+
 
 
 
@@ -2848,9 +3022,11 @@ Fraction of quarters whose mean IC matches the overall IC sign, per factor (spec
 
 ### 数学公式与计算口径
 
-$$
-C_f=|G_f|^{-1}\sum_{g\in G_f}\mathbf1[\operatorname{sign}(\bar{IC}_{gf})=\operatorname{sign}(\bar{IC}_f)]
-$$
+
+```math
+C_f=|G_f|^{-1}\sum_{g\in G_f}\mathbf1[\mathrm{sign}(\bar{IC}_{gf})=\mathrm{sign}(\bar{IC}_f)]
+```
+
 
 
 
@@ -2879,9 +3055,11 @@ Mean of the per-quarter mean rank IC, per factor (spec §28).
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 QIC_f=|G_f|^{-1}\sum_{g\in G_f}\bar{IC}^{rank}_{gf}
-$$
+```
+
 
 
 
@@ -2910,15 +3088,19 @@ rank_ic has exactly ONE meaning: the time-mean of daily Spearman rank IC between
 
 ### 数学公式与计算口径
 
-$$
-IC_t=\operatorname{corr}(\operatorname{rank}_{avg}f_{t,i},\operatorname{rank}_{avg}y_{t,i})
-$$
+
+```math
+IC_t=\mathrm{corr}(\mathrm{rank}_{avg}f_{t,i},\mathrm{rank}_{avg}y_{t,i})
+```
 
 
 
-$$
-RankIC={1\over n}\sum_{t\in T^*}IC_t
-$$
+
+
+```math
+RankIC={1\over n}\sum_{t\in T^{\ast}}IC_t
+```
+
 
  每日保留成对有限值，默认 min_assets=20；再以 min_periods=1 检查有效日。
 
@@ -2945,9 +3127,11 @@ Rank IC computed cross-sectionally for each date
 
 ### 数学公式与计算口径
 
-$$
-IC_t=\operatorname{corr}(\operatorname{rank}_{avg}f_{t,i},\operatorname{rank}_{avg}y_{t,i})
-$$
+
+```math
+IC_t=\mathrm{corr}(\mathrm{rank}_{avg}f_{t,i},\mathrm{rank}_{avg}y_{t,i})
+```
+
 
  输出逐日截面序列；注册项无 compute_fn，只声明 daily-IC 上游制品，不能独立执行。
 
@@ -2968,11 +3152,13 @@ Mean IC serial autocorrelation across lags {1, 5, 10, 20}; NOT predictive horizo
 
 ### 数学公式与计算口径
 
-$$
-a_h={\sum_{(t,t-h)\in P_h}(IC_t-\bar I_h^+)(IC_{t-h}-\bar I_h^-)\over\sqrt{\sum( IC_t-\bar I_h^+)^2\sum( IC_{t-h}-\bar I_h^-)^2}},\quad M={1\over |H^*|}\sum_{h\in H^*}a_h
-$$
 
- $H=(1,5,10,20)$；各滞后仅用原时钟上成对有限值，至少 2 对且非零方差；总体默认 min_periods=20。
+```math
+a_h={\sum_{(t,t-h)\in P_h}(IC_t-\bar I_h^+)(IC_{t-h}-\bar I_h^-)\over\sqrt{\sum( IC_t-\bar I_h^+)^2\sum( IC_{t-h}-\bar I_h^-)^2}},\quad M={1\over |H^{\ast}|}\sum_{h\in H^{\ast}}a_h
+```
+
+
+ $`H=(1,5,10,20)`$；各滞后仅用原时钟上成对有限值，至少 2 对且非零方差；总体默认 min_periods=20。
 
 ### 函数层默认参数
 
@@ -2997,9 +3183,11 @@ Fraction of finite daily rank-IC values that are strictly positive, per factor (
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 M={\sum_t\mathbf1(IC_t>0,\ IC_t\ finite)\over\sum_t\mathbf1(IC_t\ finite)}
-$$
+```
+
 
  零不算正值；默认 min_periods=20。
 
@@ -3025,11 +3213,13 @@ Daily Spearman rank IC per factor over time, shape (T, F) (canonical alias ic.ra
 
 ### 数学公式与计算口径
 
-$$
-IC_t=\operatorname{corr}(\operatorname{rank}_{avg}f_{t,i},\operatorname{rank}_{avg}y_{t,i})
-$$
 
- 输出逐日 $IC_t$，不做时间聚合；默认 min_assets=20，资产不足或常数秩截面为 NaN。
+```math
+IC_t=\mathrm{corr}(\mathrm{rank}_{avg}f_{t,i},\mathrm{rank}_{avg}y_{t,i})
+```
+
+
+ 输出逐日 $`IC_t`$，不做时间聚合；默认 min_assets=20，资产不足或常数秩截面为 NaN。
 
 ### 函数层默认参数
 
@@ -3053,9 +3243,11 @@ Rank IC computed per time slice, returned as a time series
 
 ### 数学公式与计算口径
 
-$$
-IC_t=\operatorname{corr}(\operatorname{rank}_{avg}f_{t,i},\operatorname{rank}_{avg}y_{t,i})
-$$
+
+```math
+IC_t=\mathrm{corr}(\mathrm{rank}_{avg}f_{t,i},\mathrm{rank}_{avg}y_{t,i})
+```
+
 
  输出逐时点序列；注册项无 compute_fn，只能读取显式 daily-IC 制品，不能独立执行。
 
@@ -3076,9 +3268,11 @@ Spearman correlation of factor ranks across time
 
 ### 数学公式与计算口径
 
-$$
-s_t=\rho(f_{t,\cdot},f_{t-\ell,\cdot}),\qquad M={1\over |T^*|}\sum_ts_t
-$$
+
+```math
+s_t=\rho(f_{t,\cdot},f_{t-\ell,\cdot}),\qquad M={1\over |T^{\ast}|}\sum_ts_t
+```
+
 
  默认 lag=1、method='spearman'、min_periods=20；每对日期只用共同有限资产。
 
@@ -3106,9 +3300,11 @@ Mean rank IC over the most recent ~12 months (252 trading days), per factor (spe
 
 ### 数学公式与计算口径
 
-$$
-M={1\over n_W}\sum_{t\in\{T-251,\ldots,T\}\cap T^*}IC_t
-$$
+
+```math
+M={1\over n_W}\sum_{t\in\{T-251,\ldots,T\}\cap T^{\ast}}IC_t
+```
+
 
  尾窗为 252 个原始位置；默认全序列有限 IC 总数 min_periods=20，尾窗均值忽略 NaN。
 
@@ -3134,9 +3330,11 @@ Mean rank IC over the most recent ~3 months (63 trading days), per factor (spec 
 
 ### 数学公式与计算口径
 
-$$
-M={1\over n_W}\sum_{t\in\{T-62,\ldots,T\}\cap T^*}IC_t
-$$
+
+```math
+M={1\over n_W}\sum_{t\in\{T-62,\ldots,T\}\cap T^{\ast}}IC_t
+```
+
 
  尾窗为 63 个原始位置；默认全序列有限 IC 总数 min_periods=20，尾窗均值忽略 NaN。
 
@@ -3162,9 +3360,11 @@ Mean rank IC over the most recent ~6 months (126 trading days), per factor (spec
 
 ### 数学公式与计算口径
 
-$$
-M={1\over n_W}\sum_{t\in\{T-125,\ldots,T\}\cap T^*}IC_t
-$$
+
+```math
+M={1\over n_W}\sum_{t\in\{T-125,\ldots,T\}\cap T^{\ast}}IC_t
+```
+
 
  尾窗为 126 个原始位置；默认全序列有限 IC 总数 min_periods=20，尾窗均值忽略 NaN。
 
@@ -3190,11 +3390,13 @@ Recent degradation: (full mean IC - recent mean IC) / full std, per factor. Posi
 
 ### 数学公式与计算口径
 
-$$
-M={\bar I_{all}-\bar I_{last\ 63}\over s_{all}},\qquad s_{all}=\operatorname{std}(IC_t,ddof=1)
-$$
 
- 默认 recent_days=63、min_periods=20；$s_{all}\le10^{-12}$ 或证据不足为 NaN；正值才表示近期退化。
+```math
+M={\bar I_{all}-\bar I_{last\ 63}\over s_{all}},\qquad s_{all}=\mathrm{std}(IC_t,ddof=1)
+```
+
+
+ 默认 recent_days=63、min_periods=20；$`s_{all}\le10^{-12}`$ 或证据不足为 NaN；正值才表示近期退化。
 
 ### 函数层默认参数
 
@@ -3219,9 +3421,11 @@ Mean IC in the late (recent) regime, per factor. Measures the factor's current p
 
 ### 数学公式与计算口径
 
-$$
-m=\lfloor T/2\rfloor,\qquad M=\operatorname{mean}_{t=m}^{T-1}IC_t
-$$
+
+```math
+m=\lfloor T/2\rfloor,\qquad M=\mathrm{mean}_{t=m}^{T-1}IC_t
+```
+
 
  regime 实际固定为原序列前/后半段，此项返回后半段均值；默认 min_periods=20（检查全序列有限数）。
 
@@ -3247,9 +3451,11 @@ Absolute difference between early and late regime mean IC, per factor. Larger va
 
 ### 数学公式与计算口径
 
-$$
-M=|e-l|,\quad e=\operatorname{mean}_{t<m}IC_t,\ l=\operatorname{mean}_{t\ge m}IC_t
-$$
+
+```math
+M=|e-l|,\quad e=\mathrm{mean}_{t<m}IC_t,\ l=\mathrm{mean}_{t\ge m}IC_t
+```
+
 
  固定前后半段，均值忽略 NaN；默认 min_periods=20。
 
@@ -3275,11 +3481,13 @@ $$
 
 ### 数学公式与计算口径
 
-$$
-M=\mathbf1[\operatorname{sign}(e)=\operatorname{sign}(l)]
-$$
 
- $e,l$ 为前后半段有限 IC 均值；任一不可定义则 NaN，默认 min_periods=20。
+```math
+M=\mathbf1[\mathrm{sign}(e)=\mathrm{sign}(l)]
+```
+
+
+ $`e,l`$ 为前后半段有限 IC 均值；任一不可定义则 NaN，默认 min_periods=20。
 
 ### 函数层默认参数
 
@@ -3303,9 +3511,11 @@ Minimum of the early/late regime mean IC, per factor. The weaker of the two regi
 
 ### 数学公式与计算口径
 
-$$
-e=\operatorname{mean}_{t<m}IC_t,\quad l=\operatorname{mean}_{t\ge m}IC_t,\quad M=\min(e,l)
-$$
+
+```math
+e=\mathrm{mean}_{t<m}IC_t,\quad l=\mathrm{mean}_{t\ge m}IC_t,\quad M=\min(e,l)
+```
+
 
  固定前后半段，不是财富或外部市场状态；默认 min_periods=20。
 
@@ -3331,11 +3541,13 @@ Benchmark/invested-capital evidence from an explicitly bound execution trajector
 
 ### 数学公式与计算口径
 
-$$
-W_0=1,\qquad W_t=W_{t-1}(1+r_t^{rel}),\qquad M=\max_t\left(1-{W_t\over\max_{0\le u\le t}W_u}\right)
-$$
 
- 输入必须是 probe_pnl 明确绑定的 relative_return 轨迹腿，即相对财富的收益增量，不是 active_return（组合收益减基准收益）或直接传入的财富水平。返回正回撤幅度；默认 min_periods=1、missing_return_policy='unknown'，任何非有限增量使该列结果未知，$r_t^{rel}=-1$ 则财富归零并返回 1。
+```math
+W_0=1,\qquad W_t=W_{t-1}(1+r_t^{rel}),\qquad M=\max_t\left(1-{W_t\over\max_{0\le u\le t}W_u}\right)
+```
+
+
+ 输入必须是 probe_pnl 明确绑定的 relative_return 轨迹腿，即相对财富的收益增量，不是 active_return（组合收益减基准收益）或直接传入的财富水平。返回正回撤幅度；默认 min_periods=1、missing_return_policy='unknown'，任何非有限增量使该列结果未知，$`r_t^{rel}=-1`$ 则财富归零并返回 1。
 
 ### 函数层默认参数
 
@@ -3359,9 +3571,11 @@ Named alias of neutralized_rank_ic (residual version of the rank IC, residualize
 
 ### 数学公式与计算口径
 
-$$
-f_{t,i}=\alpha_t+X_{t,i,\cdot}\beta_t+e_{t,i},\qquad M={1\over |T^*|}\sum_{t\in T^*}\rho_S(e_{t,i},y_{t,i})
-$$
+
+```math
+f_{t,i}=\alpha_t+X_{t,i,\cdot}\beta_t+e_{t,i},\qquad M={1\over |T^{\ast}|}\sum_{t\in T^{\ast}}\rho_S(e_{t,i},y_{t,i})
+```
+
 
  每日回归支持集先要求因子、全部暴露及回归权重有效且正权重；若 ExposurePanel 绑定 regression_weights 则做带截距 WLS，否则等权。残差生成后再与 forward return 取共同有限支持做 Spearman，因此回归支持与最终标签配对支持不同；两步均默认 min_obs=10。
 
@@ -3387,9 +3601,11 @@ Fraction of universe with non-null forward returns
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 C={\#\{(t,i):y_{t,i}\ finite\}\over\#\{(t,i):i\in U_t\}}
-$$
+```
+
 
  注册项无 compute_fn，只声明 quality coverage 上游制品；实际 universe 分母必须由上游给出，不可独立猜算。
 
@@ -3410,11 +3626,13 @@ Sample skewness of the probe daily PnL return series (adjusted Fisher-Pearson, b
 
 ### 数学公式与计算口径
 
-$$
-g_1={1\over n}\sum_t((r_t-\bar r)/\sigma_0)^3,\qquad M={\sqrt{n(n-1)}\over n-2}g_1
-$$
 
- 默认 bias=False、min_periods=20；$n<\max(20,3)$ 或总体标准差 $\sigma_0\le10^{-12}$ 为 NaN。
+```math
+g_1={1\over n}\sum_t((r_t-\bar r)/\sigma_0)^3,\qquad M={\sqrt{n(n-1)}\over n-2}g_1
+```
+
+
+ 默认 bias=False、min_periods=20；$`n<\max(20,3)`$ 或总体标准差 $`\sigma_0\le10^{-12}`$ 为 NaN。
 
 ### 函数层默认参数
 
@@ -3439,11 +3657,13 @@ Minimum rolling-252-period annualized Sharpe of the probe daily PnL series (wors
 
 ### 数学公式与计算口径
 
-$$
-S_t=\sqrt{252}\,\bar r_t/s_t,\quad M=\min_t S_t
-$$
 
- 默认 window=252、min_periods=30、risk_free_rate=0、periods_per_year=252；时间轴必须先具有至少 252 个位置；每个长度 252 的完整对齐位置窗口只要求至少 30 个有限收益，其余 NaN 由 Sharpe 内部剔除，$s_t$ 为 ddof=1；无合格窗口返回 NaN。
+```math
+S_t=\sqrt{252}\,\bar r_t/s_t,\quad M=\min_t S_t
+```
+
+
+ 默认 window=252、min_periods=30、risk_free_rate=0、periods_per_year=252；时间轴必须先具有至少 252 个位置；每个长度 252 的完整对齐位置窗口只要求至少 30 个有限收益，其余 NaN 由 Sharpe 内部剔除，$`s_t`$ 为 ddof=1；无合格窗口返回 NaN。
 
 ### 函数层默认参数
 
@@ -3470,11 +3690,13 @@ $$
 
 ### 数学公式与计算口径
 
-$$
-S_t=\sqrt{252}\,\bar r_t/s_t,\quad M=Q_{0.1}(\{S_t\})
-$$
 
- 默认 window=252、min_periods=30、risk_free_rate=0、periods_per_year=252；时间轴必须先具有至少 252 个位置；每个长度 252 的完整对齐位置窗口只要求至少 30 个有限收益，其余 NaN 由 Sharpe 内部剔除，$s_t$ 为 ddof=1；无合格窗口返回 NaN。
+```math
+S_t=\sqrt{252}\,\bar r_t/s_t,\quad M=Q_{0.1}(\{S_t\})
+```
+
+
+ 默认 window=252、min_periods=30、risk_free_rate=0、periods_per_year=252；时间轴必须先具有至少 252 个位置；每个长度 252 的完整对齐位置窗口只要求至少 30 个有限收益，其余 NaN 由 Sharpe 内部剔除，$`s_t`$ 为 ddof=1；无合格窗口返回 NaN。
 
 ### 函数层默认参数
 
@@ -3501,11 +3723,13 @@ Rolling window IC values over time
 
 ### 数学公式与计算口径
 
-$$
-\mu_t={1\over n_t}\sum_{j=\max(0,t-w+1)}^tIC_j
-$$
 
- 注册项无 compute_fn，声明为 rolling-IC timeseries 上游制品；窗口 $w$ 与输出字段必须由制品给出，不能自行设为 60 或求总均值。
+```math
+\mu_t={1\over n_t}\sum_{j=\max(0,t-w+1)}^tIC_j
+```
+
+
+ 注册项无 compute_fn，声明为 rolling-IC timeseries 上游制品；窗口 $`w`$ 与输出字段必须由制品给出，不能自行设为 60 或求总均值。
 
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
@@ -3524,11 +3748,13 @@ Mean of the rolling-window IC drawdown (peak-to-trough), per factor. A more nega
 
 ### 数学公式与计算口径
 
-$$
-\mu_t={\sum_{j=\max(0,t-59)}^tIC_j\mathbf1_{finite}\over n_t},\quad C_t=\sum_{u\le t}\tilde\mu_u,\quad d_t=C_t-\max_{v\le t}C_v,\quad M=\operatorname{mean}_td_t
-$$
 
- 默认 window=60、min_periods=20；$n_t<20$ 时 $\mu_t$ 为 NaN，累加时以 0 代替该 NaN；这是累计滚动均值的加法回撤，不是财富回撤。
+```math
+\mu_t={\sum_{j=\max(0,t-59)}^tIC_j\mathbf1_{finite}\over n_t},\quad C_t=\sum_{u\le t}\tilde\mu_u,\quad d_t=C_t-\max_{v\le t}C_v,\quad M=\mathrm{mean}_td_t
+```
+
+
+ 默认 window=60、min_periods=20；$`n_t<20`$ 时 $`\mu_t`$ 为 NaN，累加时以 0 代替该 NaN；这是累计滚动均值的加法回撤，不是财富回撤。
 
 ### 函数层默认参数
 
@@ -3553,9 +3779,11 @@ Time-mean of the rolling-window IC standard deviation, per factor. Lower values 
 
 ### 数学公式与计算口径
 
-$$
-s_t=\sqrt{{\sum_{j\in W_t}(IC_j-\bar I_t)^2\over n_t-1}},\qquad M=\operatorname{mean}_{t:s_t\ finite}s_t
-$$
+
+```math
+s_t=\sqrt{{\sum_{j\in W_t}(IC_j-\bar I_t)^2\over n_t-1}},\qquad M=\mathrm{mean}_{t:s_t\ finite}s_t
+```
+
 
  默认 window=60、min_periods=20；窗口使用有限 IC，输出是滚动样本标准差的时间均值。
 
@@ -3582,11 +3810,13 @@ Time-mean of the rolling-window IC information ratio, per factor (spec §28).
 
 ### 数学公式与计算口径
 
-$$
-IR_t={\mu_t\over s_t},\qquad M=\operatorname{mean}_{t:IR_t\ finite}IR_t
-$$
 
- 默认 window=60、min_periods=20；$s_t$ 是窗口样本标准差（ddof=1），零方差窗口无效，不年化。
+```math
+IR_t={\mu_t\over s_t},\qquad M=\mathrm{mean}_{t:IR_t\ finite}IR_t
+```
+
+
+ 默认 window=60、min_periods=20；$`s_t`$ 是窗口样本标准差（ddof=1），零方差窗口无效，不年化。
 
 ### 函数层默认参数
 
@@ -3611,9 +3841,11 @@ Time-mean of the rolling-window mean rank IC, per factor. A smoother estimate of
 
 ### 数学公式与计算口径
 
-$$
-\mu_t={1\over n_t}\sum_{j\in W_t}IC_j,\qquad M=\operatorname{mean}_{t:\mu_t\ finite}\mu_t
-$$
+
+```math
+\mu_t={1\over n_t}\sum_{j\in W_t}IC_j,\qquad M=\mathrm{mean}_{t:\mu_t\ finite}\mu_t
+```
+
 
  默认 window=60、min_periods=20；输出是滚动均值序列的时间均值，不是序列本身。
 
@@ -3640,11 +3872,13 @@ Descriptive moving-block bootstrap RANK AGREEMENT, not U-shape probability, per 
 
 ### 数学公式与计算口径
 
-$$
-\bar q=\operatorname{mean}_{w=1}^Wq_w,\quad \bar q^{(b)}=\operatorname{mean}_{w\in B_b}q_w,\quad M={\sum_{b\in B^*}\mathbf1[\rho_S(\bar q^{(b)},\bar q)\ge\tau]\over|B^*|}
-$$
 
- 两 ID 调同一实现；默认 block_length=2、resamples=100、seed=0、$\tau=0.5$；移动块采样窗口，$W<3$ 或可比有限分位少于 3 为 NaN。
+```math
+\bar q=\mathrm{mean}_{w=1}^Wq_w,\quad \bar q^{(b)}=\mathrm{mean}_{w\in B_b}q_w,\quad M={\sum_{b\in B^{\ast}}\mathbf1[\rho_S(\bar q^{(b)},\bar q)\ge\tau]\over|B^{\ast}|}
+```
+
+
+ 两 ID 调同一实现；默认 block_length=2、resamples=100、seed=0、$`\tau=0.5`$；移动块采样窗口，$`W<3`$ 或可比有限分位少于 3 为 NaN。
 
 ### 函数层默认参数
 
@@ -3671,11 +3905,13 @@ Descriptive moving-block resampling agreement with the observed mean rank profil
 
 ### 数学公式与计算口径
 
-$$
-\bar q=\operatorname{mean}_{w=1}^Wq_w,\quad \bar q^{(b)}=\operatorname{mean}_{w\in B_b}q_w,\quad M={\sum_{b\in B^*}\mathbf1[\rho_S(\bar q^{(b)},\bar q)\ge\tau]\over|B^*|}
-$$
 
- 两 ID 调同一实现；默认 block_length=2、resamples=100、seed=0、$\tau=0.5$；移动块采样窗口，$W<3$ 或可比有限分位少于 3 为 NaN。
+```math
+\bar q=\mathrm{mean}_{w=1}^Wq_w,\quad \bar q^{(b)}=\mathrm{mean}_{w\in B_b}q_w,\quad M={\sum_{b\in B^{\ast}}\mathbf1[\rho_S(\bar q^{(b)},\bar q)\ge\tau]\over|B^{\ast}|}
+```
+
+
+ 两 ID 调同一实现；默认 block_length=2、resamples=100、seed=0、$`\tau=0.5`$；移动块采样窗口，$`W<3`$ 或可比有限分位少于 3 为 NaN。
 
 ### 函数层默认参数
 
@@ -3702,9 +3938,11 @@ Regime version of shape stability: inverse-Fisher correlation of CONSECUTIVE win
 
 ### 数学公式与计算口径
 
-$$
-r_w=\operatorname{corr}(q_w,q_{w+1}),\qquad M=\tanh\left({1\over K}\sum_w\operatorname{arctanh}(r_w)\right)
-$$
+
+```math
+r_w=\mathrm{corr}(q_w,q_{w+1}),\qquad M=\tanh\left({1\over K}\sum_w\mathrm{arctanh}(r_w)\right)
+```
+
 
  实际比较连续窗口的 Pearson profile 相关；至少 3 个窗口、每对至少 3 个共同有限分位；单 profile/证据不足返回 NaN。
 
@@ -3725,9 +3963,11 @@ Inverse-Fisher aggregated window-vs-leave-one-out correlation of the quantile pr
 
 ### 数学公式与计算口径
 
-$$
-r_w=\operatorname{corr}(q_w,\operatorname{mean}_{u\ne w}q_u),\qquad M=\tanh\left({1\over K}\sum_{w\in K}\operatorname{arctanh}(r_w)\right)
-$$
+
+```math
+r_w=\mathrm{corr}(q_w,\mathrm{mean}_{u\ne w}q_u),\qquad M=\tanh\left({1\over K}\sum_{w\in K}\mathrm{arctanh}(r_w)\right)
+```
+
 
  需要至少 2 个窗口；每次至少 3 个共同有限分位且两 profile 非常数；单 profile 明确返回 NaN。
 
@@ -3748,11 +3988,13 @@ Annualized Sharpe ratio of a return series per factor: mean(excess return) / std
 
 ### 数学公式与计算口径
 
-$$
-x_t=r_t-r_f/A,\qquad M=\sqrt A\,{\bar x\over s_x}
-$$
 
- 默认 $r_f=0$、$A=252$、min_periods=20；$s_x$ 为 ddof=1，非有限收益剔除，$s_x\le10^{-10}$ 为 NaN。
+```math
+x_t=r_t-r_f/A,\qquad M=\sqrt A\,{\bar x\over s_x}
+```
+
+
+ 默认 $`r_f=0`$、$`A=252`$、min_periods=20；$`s_x`$ 为 ddof=1，非有限收益剔除，$`s_x\le10^{-10}`$ 为 NaN。
 
 ### 函数层默认参数
 
@@ -3778,9 +4020,11 @@ Sidak multiple-testing correction: adjusted p = 1 - (1 - p)^n. Assumes independe
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 m=\#\{p_i\ finite\},\quad \alpha_S=1-(1-\alpha)^{1/m},\quad p_i'=\min\{1,1-(1-p_i)^m\},\quad reject_i=\mathbf1[p_i\le\alpha_S]
-$$
+```
+
 
  默认 alpha=0.05；非有限 p 保持 NaN 且 reject=False，有限 p 必须在 [0,1]。
 
@@ -3806,9 +4050,11 @@ Signed mean size-style exposure of the factor (typed per-style field). NaN when 
 
 ### 数学公式与计算口径
 
-$$
-z_{t,size}=\beta_{t,size}{sd_w(X_{t,size})\over sd_w(f_t)},\qquad M={1\over |T^*|}\sum_{t\in T^*}z_{t,size}
-$$
+
+```math
+z_{t,size}=\beta_{t,size}{sd_w(X_{t,size})\over sd_w(f_t)},\qquad M={1\over |T^{\ast}|}\sum_{t\in T^{\ast}}z_{t,size}
+```
+
 
  实际先逐日以截距和全部 style 暴露对因子做加权最小二乘，再标准化 size 系数，最后取其有限时间均值；不是证券暴露的加权平均，也不是 raw OLS 系数。默认 min_obs=10、weights=None；已有 FactorLoadingSeries 已绑定因子和权重，缺少 size 字段返回 NaN。
 
@@ -3836,9 +4082,11 @@ Skewness of the return distribution
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 g_1={1\over n}\sum((x-\bar x)/\sigma_0)^3,\qquad M={\sqrt{n(n-1)}\over n-2}g_1
-$$
+```
+
 
  实现为 scipy.stats.skew(nan_policy='omit', bias=False)，默认 axis=0、min_obs=10；注册项无 compute_fn，只能使用该上游 distribution 制品。
 
@@ -3859,11 +4107,13 @@ Annualized Sortino ratio of a return series per factor: mean(excess return) / do
 
 ### 数学公式与计算口径
 
-$$
-x_t=r_t-h,\quad d=\sqrt{{\sum_{x_t<0}x_t^2\over D}},\quad M={\bar x\over d}\times\begin{cases}\sqrt A,&annualization='sqrt_frequency'\\1,&'none'\end{cases}
-$$
 
- 默认 $A=252$、risk_free_rate=0、mar=None、min_periods=20、downside_denominator='negative'，故 $h=r_f/A$、$D$ 为负 excess 个数；若 denominator='all' 则 $D=n$。无下行或 $d\le10^{-12}$ 为 NaN。
+```math
+x_t=r_t-h,\quad d=\sqrt{{\sum_{x_t<0}x_t^2\over D}},\quad M={\bar x\over d}\times\begin{cases}\sqrt A,&annualization='sqrt_frequency'\\1,&'none'\end{cases}
+```
+
+
+ 默认 $`A=252`$、risk_free_rate=0、mar=None、min_periods=20、downside_denominator='negative'，故 $`h=r_f/A`$、$`D`$ 为负 excess 个数；若 denominator='all' 则 $`D=n`$。无下行或 $`d\le10^{-12}`$ 为 NaN。
 
 ### 函数层默认参数
 
@@ -3892,9 +4142,11 @@ Spearman rank correlation between factor values and forward returns
 
 ### 数学公式与计算口径
 
-$$
-IC_t=\operatorname{corr}(\operatorname{rank}_{avg}f_{t,i},\operatorname{rank}_{avg}y_{t,i})
-$$
+
+```math
+IC_t=\mathrm{corr}(\mathrm{rank}_{avg}f_{t,i},\mathrm{rank}_{avg}y_{t,i})
+```
+
 
  注册项无 compute_fn，只声明 daily-IC 上游实现；逐日删除非有限配对并使用平均秩，不能独立执行或擅自再做时间均值。
 
@@ -3915,11 +4167,13 @@ Mean fraction of assets whose value is unchanged from the prior day, per factor.
 
 ### 数学公式与计算口径
 
-$$
-M={\sum_{t=1}^{T-1}\sum_i\mathbf1[f_{t,i}=f_{t-1,i},\ f_{t,i},f_{t-1,i}\ finite]\over\sum_{t=1}^{T-1}\sum_i\mathbf1[f_{t,i},f_{t-1,i}\ finite]}
-$$
 
- 按因子对所有相邻日/资产共同有限配对汇总；$T<2$ 返回 NaN，共同有限数为 0 时实现分母钳到 1、结果为 0。
+```math
+M={\sum_{t=1}^{T-1}\sum_i\mathbf1[f_{t,i}=f_{t-1,i},\ f_{t,i},f_{t-1,i}\ finite]\over\sum_{t=1}^{T-1}\sum_i\mathbf1[f_{t,i},f_{t-1,i}\ finite]}
+```
+
+
+ 按因子对所有相邻日/资产共同有限配对汇总；$`T<2`$ 返回 NaN，共同有限数为 0 时实现分母钳到 1、结果为 0。
 
 
 实现核对：[函数定义](../metrics/data_quality.py#L68)；`quant_evaluator.metrics.data_quality.compute_staleness`。
@@ -3938,11 +4192,13 @@ Standard deviation of mean IC across bootstrap subsamples
 
 ### 数学公式与计算口径
 
-$$
-m=\max(1,\lfloor0.8T\rfloor),\quad S_b\sim\operatorname{SampleWithoutReplacement}(\{1,\ldots,T\},m),\quad \bar I_b=\operatorname{nanmean}_{t\in S_b}IC_t,\quad M=\sqrt{{\sum_{b\in B^*}(\bar I_b-\bar{\bar I})^2\over |B^*|-1}}
-$$
 
- 实际返回 100 个无放回随机子样本均值之间的样本标准差（ddof=1），非 $1-std$、也不是有放回 bootstrap；默认 num_subsamples=100、subsample_fraction=0.8、random_seed=0。外层先要求原 IC 序列有限值数 min_periods=40；子样本均值忽略 NaN，最终标准差也忽略非有限子样本均值。
+```math
+m=\max(1,\lfloor0.8T\rfloor),\quad S_b\sim\mathrm{SampleWithoutReplacement}(\{1,\ldots,T\},m),\quad \bar I_b=\mathrm{nanmean}_{t\in S_b}IC_t,\quad M=\sqrt{{\sum_{b\in B^{\ast}}(\bar I_b-\bar{\bar I})^2\over |B^{\ast}|-1}}
+```
+
+
+ 实际返回 100 个无放回随机子样本均值之间的样本标准差（ddof=1），非 $`1-std`$、也不是有放回 bootstrap；默认 num_subsamples=100、subsample_fraction=0.8、random_seed=0。外层先要求原 IC 序列有限值数 min_periods=40；子样本均值忽略 NaN，最终标准差也忽略非有限子样本均值。
 
 ### 函数层默认参数
 
@@ -3969,15 +4225,17 @@ Mean |tail returns - middle return| per factor (tails = outer quartiles of the q
 
 ### 数学公式与计算口径
 
-令桶均值为 $g_0,\ldots,g_{Q-1}$，采用零基索引。设 $m=\lfloor Q/2\rfloor$，$\ell=\max(1,\min(m-1,\operatorname{round}(Q/4)))$，$h=\min(Q-1,\max(m+1,\operatorname{round}(3Q/4)))$，尾桶集合 $A=\{0,\ldots,\ell-1,h,\ldots,Q-1\}$。
+令桶均值为 $`g_0,\ldots,g_{Q-1}`$，采用零基索引。设 $`m=\lfloor Q/2\rfloor`$，$`\ell=\max(1,\min(m-1,\mathrm{round}(Q/4)))`$，$`h=\min(Q-1,\max(m+1,\mathrm{round}(3Q/4)))`$，尾桶集合 $`A=\{0,\ldots,\ell-1,h,\ldots,Q-1\}`$。
 
 
-$$
+
+```math
 C=\frac1{|A|}\sum_{q\in A}|g_q-g_m|
-$$
+```
 
 
-至少6桶，中央桶及所有尾桶必须有限，否则NaN。round 使用最接近整数、半整数到偶数规则；当边界不在中央两侧时改为 $\ell=m-1,h=m+1$。结果非负，U形与倒U形都可能高，不能据此判断方向。
+
+至少6桶，中央桶及所有尾桶必须有限，否则NaN。round 使用最接近整数、半整数到偶数规则；当边界不在中央两侧时改为 $`\ell=m-1,h=m+1`$。结果非负，U形与倒U形都可能高，不能据此判断方向。
 
 
 实现核对：[函数定义](../metrics/shape_evidence.py#L457)；`quant_evaluator.metrics.shape_evidence.compute_tail_vs_middle_contrast`。
@@ -3996,15 +4254,17 @@ Mean fraction of finite factor values that are tied with another value, per fact
 
 ### 数学公式与计算口径
 
-令 $n_t$ 为当日有限因子值数、$u_t$ 为其中不同值数，$D=\{t:n_t>0\}$。
+令 $`n_t`$ 为当日有限因子值数、$`u_t`$ 为其中不同值数，$`D=\{t:n_t>0\}`$。
 
 
-$$
+
+```math
 Tie=1-\frac1{|D|}\sum_{t\in D}\frac{u_t}{n_t}
-$$
+```
 
 
-先应用因子 validity；全空日期跳过，全部日期为空返回NaN。这是“1−不同取值占比”，不是“所有属于重复组的资产占比”：例如 $(1,1,2)$ 得 $1/3$，而不是 $2/3$。
+
+先应用因子 validity；全空日期跳过，全部日期为空返回NaN。这是“1−不同取值占比”，不是“所有属于重复组的资产占比”：例如 $`(1,1,2)`$ 得 $`1/3`$，而不是 $`2/3`$。
 
 
 实现核对：[函数定义](../metrics/data_quality.py#L143)；`quant_evaluator.metrics.data_quality.compute_tie_ratio`。
@@ -4023,12 +4283,14 @@ Mean time (periods) from an underwater episode's trough back to a new wealth hig
 
 ### 数学公式与计算口径
 
-对财富曲线识别回撤事件。设事件 $e$ 的谷底位置为 $b_e$、首次恢复原峰值的位置为 $r_e$，$E$ 仅包括已恢复事件。
+对财富曲线识别回撤事件。设事件 $`e`$ 的谷底位置为 $`b_e`$、首次恢复原峰值的位置为 $`r_e`$，$`E`$ 仅包括已恢复事件。
 
 
-$$
+
+```math
 TTR=\frac1{|E|}\sum_{e\in E}(r_e-b_e)
-$$
+```
+
 
 
 单位为输入轴上的期数，**从谷底起算**，不是从峰值起算。默认至少10个有限收益；未知估值导致不可确定路径时NaN。未恢复事件不伪造恢复时间；无已恢复事件也为NaN。可选 max_recovery_lookback 按事件过滤超过上限的已恢复间隔。
@@ -4056,12 +4318,14 @@ Top-quantile cliff: ret[top] - ret[top-1], per factor. The jump in return from t
 
 ### 数学公式与计算口径
 
-桶序由低因子到高因子，$g_q$ 为第 $q$ 桶的平均收益。
+桶序由低因子到高因子，$`g_q`$ 为第 $`q`$ 桶的平均收益。
 
 
-$$
+
+```math
 C_{\rm top}=g_Q-g_{Q-1}
-$$
+```
+
 
 
 至少2桶，最高两桶都有限，否则NaN。正值表示最高桶相对次高桶跳升。
@@ -4083,12 +4347,14 @@ ROBUST top cliff per factor: Q_K - mean(Q_(K-3)..Q_(K-1)) (plan §14.4 - contras
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 C_{\rm top,robust}=g_Q-\frac{g_{Q-1}+g_{Q-2}+g_{Q-3}}3
-$$
+```
 
 
-$g_q$ 为按因子升序排列的桶平均收益；至少4桶，最高四桶都有限。这里对照的是三个不同的先前桶，不包含最高桶；缺失则NaN。
+
+$`g_q`$ 为按因子升序排列的桶平均收益；至少4桶，最高四桶都有限。这里对照的是三个不同的先前桶，不包含最高桶；缺失则NaN。
 
 
 实现核对：[函数定义](../metrics/shape_evidence.py#L724)；`quant_evaluator.metrics.shape_evidence.compute_top_quantile_cliff_robust`。
@@ -4107,12 +4373,14 @@ Mean adjacent return difference over the TOP segment of the quantile profile as 
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 S_{\rm top}=\frac{(g_Q-g_{Q-1})+(g_{Q-1}-g_{Q-2})}{2}=\frac{g_Q-g_{Q-2}}2
-$$
+```
 
 
-$g_q$ 为第 $q$ 桶收益。至少3桶，最高三桶全有限，否则NaN。单位为每跨一个桶的收益变化，不是对时间回归的斜率。
+
+$`g_q`$ 为第 $`q`$ 桶收益。至少3桶，最高三桶全有限，否则NaN。单位为每跨一个桶的收益变化，不是对时间回归的斜率。
 
 
 实现核对：[函数定义](../metrics/shape_evidence.py#L418)；`quant_evaluator.metrics.shape_evidence.compute_top_tail_slope`。
@@ -4131,15 +4399,17 @@ Benchmark/invested-capital evidence from an explicitly bound execution trajector
 
 ### 数学公式与计算口径
 
-对已绑定的净主动收益 $a_t$（策略净收益减基准）：
+对已绑定的净主动收益 $`a_t`$（策略净收益减基准）：
 
 
-$$
+
+```math
 TE=\sqrt{A}\sqrt{\frac{\sum_{t\in V}(a_t-\bar a)^2}{|V|-1}}
-$$
+```
 
 
-$V$ 是有限收益集合，$A$ 默认252；默认至少2期。函数自身不再减一次基准，必须由输入轨迹保证主动收益口径。常数序列的TE为0；样本不足为NaN。
+
+$`V`$ 是有限收益集合，$`A`$ 默认252；默认至少2期。函数自身不再减一次基准，必须由输入轨迹保证主动收益口径。常数序列的TE为0；样本不足为NaN。
 
 ### 函数层默认参数
 
@@ -4164,12 +4434,14 @@ Fraction of days with at least ``min_assets`` jointly valid cells, per factor. A
 
 ### 数学公式与计算口径
 
-设 $v_{tif}=1$ 当且仅当应用 validity 后因子和标签共同有限，$T$ 为全部日期数。
+设 $`v_{tif}=1`$ 当且仅当应用 validity 后因子和标签共同有限，$`T`$ 为全部日期数。
 
 
-$$
+
+```math
 C_f=\frac1T\sum_{t=1}^T\mathbf1\left(\sum_i v_{tif}\ge m\right),\qquad m=10
-$$
+```
+
 
 
 这是达到最低有效配对数的“日期比例”，不是资产单元覆盖率，也不自动证明这些股票能真实成交。
@@ -4196,12 +4468,14 @@ Train-side predictive dimension of the authorized train-vs-validation comparison
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 D_f^{\mathrm{train}}=A.\mathrm{train_predictive_dimension}_f
-$$
+```
 
 
-这里 $A$ 为训练—验证证据制品，$D$ 是显式绑定的预测维度（例如该分区的平均RankIC），并非“有效因子个数”。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
+
+这里 $`A`$ 为训练—验证证据制品，$`D`$ 是显式绑定的预测维度（例如该分区的平均RankIC），并非“有效因子个数”。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
 
 实现核对：[函数定义](../registry/metrics.py#L3917)；`quant_evaluator.registry.metrics.<lambda>`。
@@ -4220,9 +4494,11 @@ Absolute ICIR delta (validation - train) per factor (plan §13.6). Delta, never 
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 \Delta_f=ICIR_{\mathrm{validation},f}-ICIR_{\mathrm{train},f}
-$$
+```
+
 
 
 这是验证减训练的**有符号差值**，不是取绝对值，也不是比率。任一侧非有限则NaN；接近零的训练值并不阻止计算差值。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
@@ -4244,9 +4520,11 @@ Absolute rank-IC delta (validation - train) per factor (plan §13.6). A DELTA, n
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 \Delta_f=\overline{RankIC}_{\mathrm{validation},f}-\overline{RankIC}_{\mathrm{train},f}
-$$
+```
+
 
 
 这是验证减训练的**有符号差值**，不是取绝对值，也不是比率。任一侧非有限则NaN；接近零的训练值并不阻止计算差值。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
@@ -4268,9 +4546,11 @@ Absolute shape-evidence delta (validation - train) per factor (plan §13.6). Del
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 \Delta_f=Shape_{\mathrm{validation},f}-Shape_{\mathrm{train},f}
-$$
+```
+
 
 
 这是验证减训练的**有符号差值**，不是取绝对值，也不是比率。任一侧非有限则NaN；接近零的训练值并不阻止计算差值。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
@@ -4292,9 +4572,11 @@ Absolute long/short Sharpe delta (validation - train) per factor (plan §13.6). 
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 \Delta_f=Sharpe_{\mathrm{validation},f}-Sharpe_{\mathrm{train},f}
-$$
+```
+
 
 
 这是验证减训练的**有符号差值**，不是取绝对值，也不是比率。任一侧非有限则NaN；接近零的训练值并不阻止计算差值。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
@@ -4316,15 +4598,17 @@ Average turnover rate for factor-based portfolios
 
 ### 数学公式与计算口径
 
-当日至少有2个有效因子值时，先将有效值转为平均并列秩 $R_{ti}$；无信号资产的代理权重明确设0：
+当日至少有2个有效因子值时，先将有效值转为平均并列秩 $`R_{ti}`$；无信号资产的代理权重明确设0：
 
 
-$$
+
+```math
 w_{ti}=\frac{R_{ti}}{\sum_{j\in V_t}R_{tj}}\ (i\in V_t),\quad w_{ti}=0\ (i\notin V_t),\qquad \tau_t=\frac12\sum_i|w_{ti}-w_{t-1,i}|,\qquad TO=\frac1{|D|}\sum_{t\in D}\tau_t
-$$
+```
 
 
-$D$ 是两日权重均已知的相邻转换集合。人数不足的日期整行未知，涉及该日的换手为NaN。默认 min_periods=2，因此至少1个有效相邻转换。它是排名代理权重的半L1换手，**不是 $(1-\rho_S)/2$，也不是真实成交额**。
+
+$`D`$ 是两日权重均已知的相邻转换集合。人数不足的日期整行未知，涉及该日的换手为NaN。默认 min_periods=2，因此至少1个有效相邻转换。它是排名代理权重的半L1换手，**不是 $`(1-\rho_S)/2`$，也不是真实成交额**。
 
 ### 函数层默认参数
 
@@ -4348,12 +4632,14 @@ IC adjusted for turnover-induced transaction costs
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 M=\mathrm{UNAVAILABLE}
-$$
+```
 
 
-该注册ID没有直接 compute_fn，不能输出实测“换手调整IC”。implementation_id 指向的低层函数实际计算逐资产换手贡献，并未落实IC调整公式；不能猜成 $IC/TO$。必须由显式上游合同补足定义后另行接线。
+
+该注册ID没有直接 compute_fn，不能输出实测“换手调整IC”。implementation_id 指向的低层函数实际计算逐资产换手贡献，并未落实IC调整公式；不能猜成 $`IC/TO`$。必须由显式上游合同补足定义后另行接线。
 
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
@@ -4372,12 +4658,14 @@ Mean realized per-period declared execution cost drag in basis points
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 Cost_{\rm bp}=10^4\frac1{|V|}\sum_{t\in V}c_t
-$$
+```
 
 
-$c_t$ 必须来自带类型的 cost_drag 成本轨迹，是非负成本率，不能传收益、毛净收益差或因子排名换手。NaN视为未观测，负数和无穷报错；默认至少1个观测。结果单位为基点。
+
+$`c_t`$ 必须来自带类型的 cost_drag 成本轨迹，是非负成本率，不能传收益、毛净收益差或因子排名换手。NaN视为未观测，负数和无穷报错；默认至少1个观测。结果单位为基点。
 
 ### 函数层默认参数
 
@@ -4401,9 +4689,11 @@ Average rate of change in factor ranking between periods
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 \tau=\frac12\sum_i|w_i^{\rm new}-w_i^{\rm old}|
-$$
+```
+
 
 
 这是该ID所定位的低层权重换手函数的实际公式，输入为同形一维权重，任一未知/无穷坐标使本次换手NaN。 当前注册项无直接 compute_fn，统一执行器不可独立计算此ID；低层公式说明不等于已接线。
@@ -4425,9 +4715,11 @@ Variance of turnover rate across periods
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 \tau=\frac12\sum_i|w_i^{\rm new}-w_i^{\rm old}|
-$$
+```
+
 
 
 这是该ID所定位的低层权重换手函数的实际公式，输入为同形一维权重，任一未知/无穷坐标使本次换手NaN。但并未绑定跨期“稳定性”的归约公式；不能把上述单次换手称为标准差或稳定度。 当前注册项无直接 compute_fn，统一执行器不可独立计算此ID；低层公式说明不等于已接线。
@@ -4449,15 +4741,17 @@ U-shape score in [0, 1] per factor (plan §14.3). NOT RankIC-about-0 detection: 
 
 ### 数学公式与计算口径
 
-将桶位置映射到 $x_q\in[0,1]$，分别对桶收益 $g_q$ 拟合带截距的一元回归：U模板 $(x_q-0.5)^2$ 与线性模板 $x_q$，得到 $R_U^2,R_L^2$。令 $c_+$ 为有效连续三桶的二阶差分严格为正的比例。
+将桶位置映射到 $`x_q\in[0,1]`$，分别对桶收益 $`g_q`$ 拟合带截距的一元回归：U模板 $`(x_q-0.5)^2`$ 与线性模板 $`x_q`$，得到 $`R_U^2,R_L^2`$。令 $`c_+`$ 为有效连续三桶的二阶差分严格为正的比例。
 
 
-$$
+
+```math
 U=\begin{cases}0,&R_U^2\le R_L^2\ \text{或}\ c_+<0.5,\\0.5\max(R_U^2,0)+0.3c_++0.2(\max(R_U^2,0)-R_L^2),&\text{其他情况}.\end{cases}
-$$
+```
 
 
-至少4个有限桶，且有连续三桶可计算曲率；否则NaN。全平曲线为0。各回归 $R^2=1-\sum(g-\hat g)^2/\sum(g-\bar g)^2$。此分数综合模板拟合和曲率，不是“RankIC接近0就算U形”。
+
+至少4个有限桶，且有连续三桶可计算曲率；否则NaN。全平曲线为0。各回归 $`R^2=1-\sum(g-\hat g)^2/\sum(g-\bar g)^2`$。此分数综合模板拟合和曲率，不是“RankIC接近0就算U形”。
 
 
 实现核对：[函数定义](../metrics/shape_evidence.py#L125)；`quant_evaluator.metrics.shape_evidence.compute_u_shape_score`。
@@ -4476,15 +4770,17 @@ Mean fraction of the tradable universe that changes membership per day, per fact
 
 ### 数学公式与计算口径
 
-令 $v_{tif}$ 表示因子与标签共同有效，原资产轴大小为 $N$：
+令 $`v_{tif}`$ 表示因子与标签共同有效，原资产轴大小为 $`N`$：
 
 
-$$
+
+```math
 Churn_f=\frac1{T-1}\sum_{t=2}^{T}\frac{\sum_i\mathbf1(v_{tif}\ne v_{t-1,i,f})}{N}
-$$
+```
 
 
-validity先应用，缺失代表不在该日共同有效集合。少于2期NaN；分母是完整资产轴 $N$，不是两日有效集合的并集。
+
+validity先应用，缺失代表不在该日共同有效集合。少于2期NaN；分母是完整资产轴 $`N`$，不是两日有效集合的并集。
 
 
 实现核对：[函数定义](../metrics/data_quality.py#L208)；`quant_evaluator.metrics.data_quality.compute_universe_churn`。
@@ -4503,12 +4799,14 @@ Validation-side predictive dimension of the authorized train-vs-validation compa
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 D_f^{\mathrm{validation}}=A.\mathrm{validation_predictive_dimension}_f
-$$
+```
 
 
-这里 $A$ 为训练—验证证据制品，$D$ 是显式绑定的预测维度（例如该分区的平均RankIC），并非“有效因子个数”。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
+
+这里 $`A`$ 为训练—验证证据制品，$`D`$ 是显式绑定的预测维度（例如该分区的平均RankIC），并非“有效因子个数”。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
 
 实现核对：[函数定义](../registry/metrics.py#L3940)；`quant_evaluator.registry.metrics.<lambda>`。
@@ -4527,15 +4825,17 @@ Robust validation/train retention per factor (plan §13.6): validation/train whe
 
 ### 数学公式与计算口径
 
-设训练预测维度为 $a_f$、验证维度为 $b_f$。令不稳定条件 $U_f$ 为：两者异号且 $|a_f|<g\max(|a_f|,|b_f|,10^{-9})$。
+设训练预测维度为 $`a_f`$、验证维度为 $`b_f`$。令不稳定条件 $`U_f`$ 为：两者异号且 $`|a_f|<g\max(|a_f|,|b_f|,10^{-9})`$。
 
 
-$$
+
+```math
 R_f=\begin{cases}b_f/a_f,&a_f,b_f\ \text{有限},\ |a_f|\ge\epsilon,\ \neg U_f,\\\mathrm{NaN},&\text{其他情况}.\end{cases}
-$$
+```
 
 
-默认版本化策略 $\epsilon=0.05,g=0.5$。该指标逐因子返回保留率，允许负值；不跨因子平均。记录分母接近零、符号保护或缺失原因；训练为零时不盲目相除。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
+
+默认版本化策略 $`\epsilon=0.05,g=0.5`$。该指标逐因子返回保留率，允许负值；不跨因子平均。记录分母接近零、符号保护或缺失原因；训练为零时不盲目相除。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
 
 实现核对：[函数定义](../registry/metrics.py#L3967)；`quant_evaluator.registry.metrics.<lambda>`。
@@ -4554,12 +4854,14 @@ Value at Risk at 95% confidence level
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 VaR_c=\max(0,-Q_{1-c}(r)),\qquad c=0.95
-$$
+```
 
 
-这是所定位低层函数在**显式给定该置信度、historical方法**下的公式；$Q$ 是有限收益样本的线性插值经验分位数，默认最低20期，输出正损失幅度。当前注册ID无直接 compute_fn，未落实独立调用；低层 compute_var 自身默认置信度0.95，不能仅凭 var_99 名称认为已自动传0.99。其他参数化方法不是此历史法公式。
+
+这是所定位低层函数在**显式给定该置信度、historical方法**下的公式；$`Q`$ 是有限收益样本的线性插值经验分位数，默认最低20期，输出正损失幅度。当前注册ID无直接 compute_fn，未落实独立调用；低层 compute_var 自身默认置信度0.95，不能仅凭 var_99 名称认为已自动传0.99。其他参数化方法不是此历史法公式。
 
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
@@ -4578,12 +4880,14 @@ Value at Risk at 99% confidence level
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 VaR_c=\max(0,-Q_{1-c}(r)),\qquad c=0.99
-$$
+```
 
 
-这是所定位低层函数在**显式给定该置信度、historical方法**下的公式；$Q$ 是有限收益样本的线性插值经验分位数，默认最低20期，输出正损失幅度。当前注册ID无直接 compute_fn，未落实独立调用；低层 compute_var 自身默认置信度0.95，不能仅凭 var_99 名称认为已自动传0.99。其他参数化方法不是此历史法公式。
+
+这是所定位低层函数在**显式给定该置信度、historical方法**下的公式；$`Q`$ 是有限收益样本的线性插值经验分位数，默认最低20期，输出正损失幅度。当前注册ID无直接 compute_fn，未落实独立调用；低层 compute_var 自身默认置信度0.95，不能仅凭 var_99 名称认为已自动传0.99。其他参数化方法不是此历史法公式。
 
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
@@ -4602,15 +4906,17 @@ Signed mean volatility-style exposure of the factor (typed per-style field). NaN
 
 ### 数学公式与计算口径
 
-每日在因子与全部暴露共同有效且回归权重为正的支持上做含截距WLS。设原始斜率为 $b_{tk}$、归一化观测权重为 $\omega_{ti}$：
+每日在因子与全部暴露共同有效且回归权重为正的支持上做含截距WLS。设原始斜率为 $`b_{tk}`$、归一化观测权重为 $`\omega_{ti}`$：
 
 
-$$
+
+```math
 b_t=\arg\min_b\sum_i\omega_{ti}(x_{ti}-Z_{ti}b)^2,\quad s_{\omega}(z)=\sqrt{\sum_i\omega_i(z_i-\bar z_\omega)^2},\quad \beta_{tk}=b_{tk}\frac{s_\omega(Z_k)}{s_\omega(x)},\quad E_{\rm vol}=\frac1{|D|}\sum_{t\in D}\beta_{t,\rm volatility}
-$$
+```
 
 
-$Z$ 包含截距列；标准化只用于非截距风格斜率。$D$ 是目标标准化载荷有限的日期；默认每期至少10个共同有效样本，并满足回归自由度/秩条件。返回 volatility 风格的**标准化有符号载荷**均值，不是原始回归系数或证券暴露均值。零方差、缺少字段或无有效载荷NaN；输入已绑定载荷制品时直接复用，不重复估计。
+
+$`Z`$ 包含截距列；标准化只用于非截距风格斜率。$`D`$ 是目标标准化载荷有限的日期；默认每期至少10个共同有效样本，并满足回归自由度/秩条件。返回 volatility 风格的**标准化有符号载荷**均值，不是原始回归系数或证券暴露均值。零方差、缺少字段或无有效载荷NaN；输入已绑定载荷制品时直接复用，不重复估计。
 
 ### 函数层默认参数
 
@@ -4636,12 +4942,14 @@ Win rate of a return series per factor: fraction of finite returns that are stri
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 WinRate=\frac{\sum_{t\in V}\mathbf1(r_t>0)}{|V|}
-$$
+```
 
 
-$V$ 只含有限收益；等于0不算胜。至少一个有限值即可由低层函数计算，全无有效收益NaN。
+
+$`V`$ 只含有限收益；等于0不算胜。至少一个有限值即可由低层函数计算，全无有效收益NaN。
 
 
 实现核对：[函数定义](../metrics/portfolio_stats.py#L645)；`quant_evaluator.metrics.portfolio_stats.compute_win_rate`。
@@ -4660,12 +4968,14 @@ Worst fixed 252-period (trading) block compounded return of the probe daily PnL 
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 R_{\rm worst}(L)=\min_{0\le s\le T-L}\left[\prod_{j=s}^{s+L-1}(1+r_j)-1\right]
-$$
+```
 
 
-这是固定长度交易期的滚动最差复利收益，不是自然12个月。底层 period='month'/'quarter'/'year' 对应 $L=21/63/252$，min_periods 默认10（实际检查输入轴长度），不足一个完整窗口NaN。**当前该ID直接绑定同一未预设参数的函数，默认仍是 period='month'（21期），不能按名称推断为252期。** 应显式传相应 period，或优先使用对应 worst_rolling_* 指标。 原时间轴不压缩，任一NaN污染窗口后最终普通min也可能返回NaN；不是忽略坏窗口的新版滚动接口。 公共注册层另有最短时间轴门槛252期；不要将函数层默认10与注册门槛混为一谈。
+
+这是固定长度交易期的滚动最差复利收益，不是自然12个月。底层 period='month'/'quarter'/'year' 对应 $`L=21/63/252`$，min_periods 默认10（实际检查输入轴长度），不足一个完整窗口NaN。**当前该ID直接绑定同一未预设参数的函数，默认仍是 period='month'（21期），不能按名称推断为252期。** 应显式传相应 period，或优先使用对应 worst_rolling_* 指标。 原时间轴不压缩，任一NaN污染窗口后最终普通min也可能返回NaN；不是忽略坏窗口的新版滚动接口。 公共注册层另有最短时间轴门槛252期；不要将函数层默认10与注册门槛混为一谈。
 
 ### 函数层默认参数
 
@@ -4690,12 +5000,14 @@ Worst calendar-period compounded probe return; explicit DA calendar and partial-
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 R_{\rm worst}=\min_{p\in P_{\rm eligible}}\left[\prod_{t\in S_p}(1+r_t)-1\right]
-$$
+```
 
 
-$S_p$ 是绑定 CalendarSnapshot 按本地时区划分的自然月交易日集合。默认 partial_policy='exclude'：日历快照需在该周期两端都有外侧交易日作边界证明，观测覆盖全部预期交易日且收益全部有限，才纳入 $P_{\rm eligible}$。显式 include 可以纳入部分周期，但所有实际观测仍须有限。无合格周期NaN；不以21/63/252期滚动窗口代替自然周期。
+
+$`S_p`$ 是绑定 CalendarSnapshot 按本地时区划分的自然月交易日集合。默认 partial_policy='exclude'：日历快照需在该周期两端都有外侧交易日作边界证明，观测覆盖全部预期交易日且收益全部有限，才纳入 $`P_{\rm eligible}`$。显式 include 可以纳入部分周期，但所有实际观测仍须有限。无合格周期NaN；不以21/63/252期滚动窗口代替自然周期。
 
 ### 函数层默认参数
 
@@ -4719,12 +5031,14 @@ Worst calendar-period compounded probe return; explicit DA calendar and partial-
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 R_{\rm worst}=\min_{p\in P_{\rm eligible}}\left[\prod_{t\in S_p}(1+r_t)-1\right]
-$$
+```
 
 
-$S_p$ 是绑定 CalendarSnapshot 按本地时区划分的自然季度交易日集合。默认 partial_policy='exclude'：日历快照需在该周期两端都有外侧交易日作边界证明，观测覆盖全部预期交易日且收益全部有限，才纳入 $P_{\rm eligible}$。显式 include 可以纳入部分周期，但所有实际观测仍须有限。无合格周期NaN；不以21/63/252期滚动窗口代替自然周期。
+
+$`S_p`$ 是绑定 CalendarSnapshot 按本地时区划分的自然季度交易日集合。默认 partial_policy='exclude'：日历快照需在该周期两端都有外侧交易日作边界证明，观测覆盖全部预期交易日且收益全部有限，才纳入 $`P_{\rm eligible}`$。显式 include 可以纳入部分周期，但所有实际观测仍须有限。无合格周期NaN；不以21/63/252期滚动窗口代替自然周期。
 
 ### 函数层默认参数
 
@@ -4748,12 +5062,14 @@ Worst calendar-period compounded probe return; explicit DA calendar and partial-
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 R_{\rm worst}=\min_{p\in P_{\rm eligible}}\left[\prod_{t\in S_p}(1+r_t)-1\right]
-$$
+```
 
 
-$S_p$ 是绑定 CalendarSnapshot 按本地时区划分的自然年交易日集合。默认 partial_policy='exclude'：日历快照需在该周期两端都有外侧交易日作边界证明，观测覆盖全部预期交易日且收益全部有限，才纳入 $P_{\rm eligible}$。显式 include 可以纳入部分周期，但所有实际观测仍须有限。无合格周期NaN；不以21/63/252期滚动窗口代替自然周期。
+
+$`S_p`$ 是绑定 CalendarSnapshot 按本地时区划分的自然年交易日集合。默认 partial_policy='exclude'：日历快照需在该周期两端都有外侧交易日作边界证明，观测覆盖全部预期交易日且收益全部有限，才纳入 $`P_{\rm eligible}`$。显式 include 可以纳入部分周期，但所有实际观测仍须有限。无合格周期NaN；不以21/63/252期滚动窗口代替自然周期。
 
 ### 函数层默认参数
 
@@ -4777,12 +5093,14 @@ Worst fixed 21-period (trading) block compounded return of the probe daily PnL s
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 R_{\rm worst}(L)=\min_{0\le s\le T-L}\left[\prod_{j=s}^{s+L-1}(1+r_j)-1\right]
-$$
+```
 
 
-这是固定长度交易期的滚动最差复利收益，不是自然月。底层 period='month'/'quarter'/'year' 对应 $L=21/63/252$，min_periods 默认10（实际检查输入轴长度），不足一个完整窗口NaN。该ID默认 period='month'，即21期。 原时间轴不压缩，任一NaN污染窗口后最终普通min也可能返回NaN；不是忽略坏窗口的新版滚动接口。 公共注册层另有最短时间轴门槛21期；不要将函数层默认10与注册门槛混为一谈。
+
+这是固定长度交易期的滚动最差复利收益，不是自然月。底层 period='month'/'quarter'/'year' 对应 $`L=21/63/252`$，min_periods 默认10（实际检查输入轴长度），不足一个完整窗口NaN。该ID默认 period='month'，即21期。 原时间轴不压缩，任一NaN污染窗口后最终普通min也可能返回NaN；不是忽略坏窗口的新版滚动接口。 公共注册层另有最短时间轴门槛21期；不要将函数层默认10与注册门槛混为一谈。
 
 ### 函数层默认参数
 
@@ -4807,12 +5125,14 @@ Worst fixed 63-period (trading) block compounded return of the probe daily PnL s
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 R_{\rm worst}(L)=\min_{0\le s\le T-L}\left[\prod_{j=s}^{s+L-1}(1+r_j)-1\right]
-$$
+```
 
 
-这是固定长度交易期的滚动最差复利收益，不是自然季度。底层 period='month'/'quarter'/'year' 对应 $L=21/63/252$，min_periods 默认10（实际检查输入轴长度），不足一个完整窗口NaN。**当前该ID直接绑定同一未预设参数的函数，默认仍是 period='month'（21期），不能按名称推断为63期。** 应显式传相应 period，或优先使用对应 worst_rolling_* 指标。 原时间轴不压缩，任一NaN污染窗口后最终普通min也可能返回NaN；不是忽略坏窗口的新版滚动接口。 公共注册层另有最短时间轴门槛63期；不要将函数层默认10与注册门槛混为一谈。
+
+这是固定长度交易期的滚动最差复利收益，不是自然季度。底层 period='month'/'quarter'/'year' 对应 $`L=21/63/252`$，min_periods 默认10（实际检查输入轴长度），不足一个完整窗口NaN。**当前该ID直接绑定同一未预设参数的函数，默认仍是 period='month'（21期），不能按名称推断为63期。** 应显式传相应 period，或优先使用对应 worst_rolling_* 指标。 原时间轴不压缩，任一NaN污染窗口后最终普通min也可能返回NaN；不是忽略坏窗口的新版滚动接口。 公共注册层另有最短时间轴门槛63期；不要将函数层默认10与注册门槛混为一谈。
 
 ### 函数层默认参数
 
@@ -4837,12 +5157,14 @@ Minimum per-quarter mean rank IC (the factor's worst quarter), per factor (spec 
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 \mu_p=\frac1{|V_p|}\sum_{t\in V_p}RankIC_t,\qquad M=\min_{p:|V_p|>0}\mu_p
-$$
+```
 
 
-$V_p$ 为季度组中的有效日集合，结果是最差组的平均RankIC，不是最差一天。有可解析且长度匹配的 time_index 时按自然周期分组，否则低层实现退回从起点划分的固定交易期块（季度63、年度252，末尾不足块保留）。每组只平均有限IC；总体至少20个有限IC，否则NaN。
+
+$`V_p`$ 为季度组中的有效日集合，结果是最差组的平均RankIC，不是最差一天。有可解析且长度匹配的 time_index 时按自然周期分组，否则低层实现退回从起点划分的固定交易期块（季度63、年度252，末尾不足块保留）。每组只平均有限IC；总体至少20个有限IC，否则NaN。
 
 ### 函数层默认参数
 
@@ -4867,12 +5189,14 @@ Worst fully matured fixed-length compounded return; never a calendar period
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 R_{\rm worst}=\min_{s\in D_L}\left[\prod_{j=s}^{s+L-1}(1+r_j)-1\right],\qquad L=21
-$$
+```
 
 
-$D_L$ 只含原时间轴上已经完整成熟、每期收益均有限的长度 $L$ 窗口。默认 min_periods=1，指至少一个**有效完整窗口**，不许可扩展前缀。未知窗口跳过但不压缩日历，等未知行移出后窗口可恢复有效；输入有限收益低于−100%报错。没有有效窗口NaN。
+
+$`D_L`$ 只含原时间轴上已经完整成熟、每期收益均有限的长度 $`L`$ 窗口。默认 min_periods=1，指至少一个**有效完整窗口**，不许可扩展前缀。未知窗口跳过但不压缩日历，等未知行移出后窗口可恢复有效；输入有限收益低于−100%报错。没有有效窗口NaN。
 
 ### 函数层默认参数
 
@@ -4899,12 +5223,14 @@ Worst fully matured fixed-length compounded return; never a calendar period
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 R_{\rm worst}=\min_{s\in D_L}\left[\prod_{j=s}^{s+L-1}(1+r_j)-1\right],\qquad L=252
-$$
+```
 
 
-$D_L$ 只含原时间轴上已经完整成熟、每期收益均有限的长度 $L$ 窗口。默认 min_periods=1，指至少一个**有效完整窗口**，不许可扩展前缀。未知窗口跳过但不压缩日历，等未知行移出后窗口可恢复有效；输入有限收益低于−100%报错。没有有效窗口NaN。
+
+$`D_L`$ 只含原时间轴上已经完整成熟、每期收益均有限的长度 $`L`$ 窗口。默认 min_periods=1，指至少一个**有效完整窗口**，不许可扩展前缀。未知窗口跳过但不压缩日历，等未知行移出后窗口可恢复有效；输入有限收益低于−100%报错。没有有效窗口NaN。
 
 ### 函数层默认参数
 
@@ -4931,12 +5257,14 @@ Worst fully matured fixed-length compounded return; never a calendar period
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 R_{\rm worst}=\min_{s\in D_L}\left[\prod_{j=s}^{s+L-1}(1+r_j)-1\right],\qquad L=63
-$$
+```
 
 
-$D_L$ 只含原时间轴上已经完整成熟、每期收益均有限的长度 $L$ 窗口。默认 min_periods=1，指至少一个**有效完整窗口**，不许可扩展前缀。未知窗口跳过但不压缩日历，等未知行移出后窗口可恢复有效；输入有限收益低于−100%报错。没有有效窗口NaN。
+
+$`D_L`$ 只含原时间轴上已经完整成熟、每期收益均有限的长度 $`L`$ 窗口。默认 min_periods=1，指至少一个**有效完整窗口**，不许可扩展前缀。未知窗口跳过但不压缩日历，等未知行移出后窗口可恢复有效；输入有限收益低于−100%报错。没有有效窗口NaN。
 
 ### 函数层默认参数
 
@@ -4963,12 +5291,14 @@ Minimum per-year mean rank IC (the factor's worst year), per factor. A robustnes
 
 ### 数学公式与计算口径
 
-$$
+
+```math
 \mu_p=\frac1{|V_p|}\sum_{t\in V_p}RankIC_t,\qquad M=\min_{p:|V_p|>0}\mu_p
-$$
+```
 
 
-$V_p$ 为年度组中的有效日集合，结果是最差组的平均RankIC，不是最差一天。有可解析且长度匹配的 time_index 时按自然周期分组，否则低层实现退回从起点划分的固定交易期块（季度63、年度252，末尾不足块保留）。每组只平均有限IC；总体至少20个有限IC，否则NaN。
+
+$`V_p`$ 为年度组中的有效日集合，结果是最差组的平均RankIC，不是最差一天。有可解析且长度匹配的 time_index 时按自然周期分组，否则低层实现退回从起点划分的固定交易期块（季度63、年度252，末尾不足块保留）。每组只平均有限IC；总体至少20个有限IC，否则NaN。
 
 ### 函数层默认参数
 
@@ -4993,12 +5323,14 @@ Fraction of years whose mean IC matches the overall IC sign, per factor. A robus
 
 ### 数学公式与计算口径
 
-$$
-\mu_p=\operatorname{mean}_{t\in V_p}IC_t,\qquad C=\frac{\sum_{p\in P}\mathbf1(\operatorname{sign}\mu_p=\operatorname{sign}\bar{IC})}{|P|}
-$$
+
+```math
+\mu_p=\mathrm{mean}_{t\in V_p}IC_t,\qquad C=\frac{\sum_{p\in P}\mathbf1(\mathrm{sign}\mu_p=\mathrm{sign}\bar{IC})}{|P|}
+```
 
 
-$P$ 为有有限组均值的年度组；$\bar{IC}$ 为全体有效日的等权均值。零与零同号，零与正负不同号。有可解析且长度匹配的 time_index 时按自然周期分组，否则低层实现退回从起点划分的固定交易期块（季度63、年度252，末尾不足块保留）。每组只平均有限IC；总体至少20个有限IC，否则NaN。
+
+$`P`$ 为有有限组均值的年度组；$`\bar{IC}`$ 为全体有效日的等权均值。零与零同号，零与正负不同号。有可解析且长度匹配的 time_index 时按自然周期分组，否则低层实现退回从起点划分的固定交易期块（季度63、年度252，末尾不足块保留）。每组只平均有限IC；总体至少20个有限IC，否则NaN。
 
 ### 函数层默认参数
 
@@ -5023,9 +5355,11 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 
 ### 数学公式与计算口径
 
-$$
-\mu_p=\operatorname{mean}_{t\in V_p}RankIC_t,\qquad Y=\frac1{|P|}\sum_{p\in P}\mu_p
-$$
+
+```math
+\mu_p=\mathrm{mean}_{t\in V_p}RankIC_t,\qquad Y=\frac1{|P|}\sum_{p\in P}\mu_p
+```
+
 
 
 先求各年均值，再对有数据的年份等权；不同年份有效日数不同，结果不等于全体日期直接等权均值。有可解析且长度匹配的 time_index 时按自然周期分组，否则低层实现退回从起点划分的固定交易期块（季度63、年度252，末尾不足块保留）。每组只平均有限IC；总体至少20个有限IC，否则NaN。
