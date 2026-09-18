@@ -271,6 +271,12 @@ def _mk(
     metadata = _meta(name, description, params, unit=unit, input_units=input_units)
 
     scalar_specs = dict(_SCALAR_SPECS_BY_CANONICAL.get(name, {}))
+    import inspect
+    authored_defaults = {
+        key: parameter.default
+        for key, parameter in inspect.signature(fn).parameters.items()
+        if key in params and parameter.default is not inspect.Parameter.empty
+    }
 
     def _calculate_series(self, *args, **kwargs):
         """Bind generated operators by their declared names before calling kernels.
@@ -290,6 +296,8 @@ def _mk(
         for param, spec in scalar_specs.items():
             if param not in bound:
                 bound[param] = spec.default
+        for param, value in authored_defaults.items():
+            bound.setdefault(param, value)
         missing = [param for param in params if param not in bound]
         if missing:
             raise TypeError(f"missing required argument(s): {', '.join(missing)}")
@@ -298,7 +306,8 @@ def _mk(
     cls = type(
         f"Shareholder_{name}",
         (SeriesOperator,),
-        {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
+        {"metadata": metadata, "_calculate_series": _calculate_series,
+         "_contract_callable": staticmethod(fn), "__module__": __name__},
     )
     register_operator(
         name=name,
@@ -910,3 +919,32 @@ _mk(
     _ID_PARAMS[:20],
     lambda *args: _frame_like(args[0], _disclosure_metrics(*args)[2]),
 )
+
+# A report snapshot may remain visible for arbitrarily many daily rows.  A
+# fixed bar overlap cannot reconstruct distinct report history (or revisions).
+# Until a real restore/checkpoint exists, replay is required.  The canonical
+# execution contract is conservative even for the optional no-snapshot path;
+# do not advertise a segmented implementation that only works in that mode.
+def _snapshot_history_count(canonical, params):
+    window = params.get("window", 8)
+    if isinstance(window, (bool, np.bool_)) or not isinstance(window, (int, np.integer)):
+        return None
+    if window < 3:
+        return None
+    return int(window) + int(canonical == "holder_concentration_acceleration")
+
+
+def _declare_snapshot_history():
+    from factor_engine.runtime.execution_contract import declare_stateful
+
+    for canonical in ("holder_concentration_slope", "holder_concentration_acceleration"):
+        declare_stateful(
+            canonical,
+            state_model="recursive",
+            chunking="required_full_history",
+            history_kind="report_count",
+            history_count=_snapshot_history_count,
+        )
+
+
+_declare_snapshot_history()

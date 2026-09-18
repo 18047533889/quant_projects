@@ -36,6 +36,7 @@ def _register(name: str, description: str, params: list[str], fn):
     )
     class _ShareholderPolars(SeriesOperator):
         metadata = _meta(name, description, params)
+        _contract_callable = staticmethod(fn)
 
         def _calculate_series(self, *args, **kwargs):
             return fn(*args, **kwargs)
