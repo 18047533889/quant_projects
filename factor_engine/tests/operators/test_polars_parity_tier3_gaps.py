@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import os
+import numpy as np
 
 import pytest
 
@@ -39,7 +40,7 @@ def source():
         names=["timestamp", "instrument"],
     )
     x = pd.Series([1.0, 2.0, 4.0, 8.0, 10.0, 20.0, 40.0, 80.0], index=idx)
-    grp = pd.Series([1, 1, 1, 1, 2, 2, 2, 2], index=idx, dtype=float)
+    grp = pd.Series([1] * len(idx), index=idx, dtype=float)
     return InMemorySeriesSource(data={"x": x, "grp": grp})
 
 
@@ -52,14 +53,19 @@ def _run_pair(source, expr):
         b = eng_pl.run(Factor(name="t", expr=expr))["result"]
     finally:
         os.environ.pop("FACTOR_ENGINE_DISABLE_BOTTLENECK", None)
-    return a, b
+    # Compare labeled values, not backend-specific storage row order.
+    assert a.index.is_unique and b.index.is_unique
+    return a.sort_index(), b.sort_index()
 
 
 def test_ts_decay_linear_parity_regression(source):
     a, b = _run_pair(source, ts_decay_linear(col("x"), 2))
     pd.testing.assert_series_equal(a, b, check_names=False, rtol=1e-10, atol=1e-10)
+    np.testing.assert_allclose(a.xs("A", level="instrument").iloc[1:], [5/3, 10/3, 20/3])
 
 
 def test_group_zscore_parity_regression(source):
     a, b = _run_pair(source, group_zscore(col("x"), col("grp")))
     pd.testing.assert_series_equal(a, b, check_names=False, rtol=1e-10, atol=1e-10)
+    np.testing.assert_allclose(a.xs("A", level="instrument"), -1 / np.sqrt(2))
+    np.testing.assert_allclose(a.xs("B", level="instrument"), 1 / np.sqrt(2))

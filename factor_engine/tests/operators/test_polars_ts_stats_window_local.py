@@ -58,14 +58,14 @@ def _oracle_skew(values: np.ndarray, window: int) -> np.ndarray:
     return np.asarray(out)
 
 
-def _oracle_trim(values: np.ndarray, window: int, trim: float) -> np.ndarray:
+def _oracle_trim(values: np.ndarray, window: int, trim_ratio: float, min_periods: int) -> np.ndarray:
     out = []
     for chunk in _windows(values, window):
         v = np.sort(_finite(chunk))
-        if v.size < window:
+        if v.size < min_periods:
             out.append(np.nan)
             continue
-        cut = int(np.floor(trim * v.size))
+        cut = int(np.floor(trim_ratio * v.size))
         out.append(np.nan if v.size == 0 or cut * 2 >= v.size else np.mean(v[cut : v.size - cut]))
     return np.asarray(out)
 
@@ -104,13 +104,17 @@ def _oracle_es(values: np.ndarray, window: int, alpha: float) -> np.ndarray:
     return np.asarray(out)
 
 
-def _zscore_oracle(values: np.ndarray, window: int) -> np.ndarray:
+def _zscore_oracle(values: np.ndarray, window: int, *, nan_policy: str = "propagate") -> np.ndarray:
     result = []
     for end in range(len(values)):
         raw = values[max(0, end - window + 1) : end + 1]
         finite = raw[np.isfinite(raw)]
         current = values[end]
-        if not np.isfinite(current) or finite.size < 2:
+        if (
+            not np.isfinite(current)
+            or finite.size < 2
+            or (nan_policy == "propagate" and finite.size != raw.size)
+        ):
             result.append(np.nan)
             continue
         std = float(np.std(finite, ddof=1))
@@ -121,14 +125,23 @@ def _zscore_oracle(values: np.ndarray, window: int) -> np.ndarray:
 def test_active_ts_zscore_polars_matches_pandas_reference_for_nonfinite_values():
     values = np.asarray([1.0, 2.0, np.nan, 4.0, np.inf, -np.inf, 4.0, 4.0, 5.0])
     result = TSZScorePolars().calculate(
-        pl.DataFrame({"x": values}), window=5
+        pl.DataFrame({"x": values}), window=5, nan_policy="ignore"
     )["x"].to_numpy()
-    expected = _zscore_oracle(values, 5)
+    expected = _zscore_oracle(values, 5, nan_policy="ignore")
     np.testing.assert_allclose(result, expected, equal_nan=True, rtol=1e-12, atol=1e-12)
     assert np.isnan(result[2])
     assert np.isnan(result[4])
     assert np.isnan(result[5])
     assert result[6] == 0.0
+
+
+def test_active_ts_zscore_default_propagates_nonfinite_window_members():
+    values = np.asarray([1.0, 2.0, np.nan, 4.0, 5.0, 6.0, 7.0, 8.0])
+    result = TSZScorePolars().calculate(pl.DataFrame({"x": values}), window=3)["x"].to_numpy()
+    expected = _zscore_oracle(values, 3, nan_policy="propagate")
+    np.testing.assert_allclose(result, expected, equal_nan=True, rtol=1e-12, atol=1e-12)
+    assert np.isnan(result[2:5]).all()
+    assert np.isfinite(result[5:]).all()
 
 
 def test_active_ts_zscore_polars_matches_pandas_warmup_and_zero_std():
@@ -156,10 +169,13 @@ def test_active_ts_zscore_polars_zero_std_does_not_fill_nonfinite_current():
 
 
 def test_active_ts_zscore_polars_public_api_matches_pandas_reference():
-    assert TSZScorePolars.metadata.param_names == ["x", "window"]
-    with pytest.raises(OperatorParameterError, match="min_periods"):
+    assert TSZScorePolars.metadata.param_names == [
+        "x", "window", "min_periods", "null_policy", "nan_policy",
+        "includes_current_bar", "ddof", "zero_std_policy",
+    ]
+    with pytest.raises(OperatorParameterError, match="undeclared keyword"):
         TSZScorePolars().calculate(
-            pl.DataFrame({"x": [1.0, 2.0]}), window=2, min_periods=2
+            pl.DataFrame({"x": [1.0, 2.0]}), window=2, hidden_min_periods=2
         )
 
 
@@ -207,7 +223,7 @@ def stats_module(monkeypatch):
     ("operator_name", "kwargs", "oracle"),
     [
         ("TSSkewNative", {"window": 10}, _oracle_skew),
-        ("TSTrimmedMeanNative", {"window": 10, "trim_pct": 0.25}, lambda x, window, trim_pct: _oracle_trim(x, window, trim_pct)),
+        ("TSTrimmedMeanNative", {"window": 10, "trim_ratio": 0.25, "min_periods": 5}, _oracle_trim),
         ("TSQnScaleNative", {"window": 10}, _oracle_qn),
         ("TSExpectedShortfallNative", {"window": 10, "alpha": 0.25}, lambda x, window, alpha: _oracle_es(x, window, alpha)),
     ],
@@ -243,17 +259,19 @@ def test_constants_ties_and_invalid_parameters_fail_closed(stats_module):
     constant = pl.DataFrame({"x": [2.0] * 10})
     assert math.isnan(TSSkewNative()._calculate_series(constant, window=10)["x"][-1])
     assert TSQnScaleNative()._calculate_series(constant, window=10)["x"][-1] == 0.0
-    assert TSTrimmedMeanNative()._calculate_series(constant, window=10, trim_pct=0.25)["x"][-1] == 2.0
+    assert TSTrimmedMeanNative()._calculate_series(constant, window=10, trim_ratio=0.25)["x"][-1] == 2.0
 
     with pytest.raises(ValueError):
         TSExpectedShortfallNative()._calculate_series(constant, window=10, alpha=0.0)
     with pytest.raises(ValueError):
-        TSTrimmedMeanNative()._calculate_series(constant, window=10, trim_pct=0.5)
+        TSTrimmedMeanNative()._calculate_series(constant, window=10, trim_ratio=0.5)
+    with pytest.raises(OperatorParameterError, match="undeclared keyword.*trim_pct"):
+        TSTrimmedMeanNative().calculate(constant, window=10, trim_pct=0.25)
 
 
 def test_future_values_do_not_change_prior_result(stats_module):
     TSTrimmedMeanNative = stats_module.TSTrimmedMeanNative
     prefix = np.asarray([1.0, 2.0, 3.0, 4.0])
-    first = TSTrimmedMeanNative()._calculate_series(pl.DataFrame({"x": prefix}), window=5, trim_pct=0.25)["x"].to_numpy()
-    extended = TSTrimmedMeanNative()._calculate_series(pl.DataFrame({"x": np.r_[prefix, 10_000.0]}), window=5, trim_pct=0.25)["x"].to_numpy()
+    first = TSTrimmedMeanNative()._calculate_series(pl.DataFrame({"x": prefix}), window=5, trim_ratio=0.25)["x"].to_numpy()
+    extended = TSTrimmedMeanNative()._calculate_series(pl.DataFrame({"x": np.r_[prefix, 10_000.0]}), window=5, trim_ratio=0.25)["x"].to_numpy()
     np.testing.assert_array_equal(first, extended[: prefix.size])
