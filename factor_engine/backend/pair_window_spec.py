@@ -26,7 +26,13 @@ class PairWindowSpec:
         default_size: int = 20,
         default_min_periods: int = 2,
     ) -> PairWindowSpec:
-        base = window_spec_from_plan_node(node, default=default_size)
+        # Pairwise rolling contract: inputs are (x, y, window[, min_periods]), so the
+        # window sits at index 2. Declare it instead of letting the generic
+        # "first non-column child is the window" heuristic misread a derived
+        # second operand (ts_corr(a, <expr>, n)) as the window.
+        base = window_spec_from_plan_node(
+            node, default=default_size, window_input_index=2
+        )
         attrs = node.attrs or {}
         if attrs.get("min_periods") is not None:
             mp = max(int(base.min_periods), 2)

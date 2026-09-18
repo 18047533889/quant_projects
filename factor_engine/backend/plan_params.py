@@ -70,11 +70,22 @@ def window_from_plan_node(node: PlanNode, *, default: int = 3) -> int:
     return WindowSpec.from_plan_node(node, default_size=default).size
 
 
-def window_spec_from_plan_node(node: PlanNode, *, default: int = 3):
-    """返回完整 ``WindowSpec``（含 min_periods / ddof / null_policy）。"""
+def window_spec_from_plan_node(
+    node: PlanNode,
+    *,
+    default: int = 3,
+    window_input_index: int | None = None,
+):
+    """返回完整 ``WindowSpec``（含 min_periods / ddof / null_policy）。
+
+    ``window_input_index`` 透传给 :meth:`WindowSpec.from_plan_node`，供位置参数
+    固定的二元 rolling 算子声明窗口下标。
+    """
     from factor_engine.backend.window_spec import WindowSpec
 
-    return WindowSpec.from_plan_node(node, default_size=default)
+    return WindowSpec.from_plan_node(
+        node, default_size=default, window_input_index=window_input_index
+    )
 
 
 def int_mode_from_plan_node(

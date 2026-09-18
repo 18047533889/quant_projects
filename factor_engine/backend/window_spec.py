@@ -82,8 +82,17 @@ class WindowSpec:
         default_size: int = 3,
         default_min_periods: int = 1,
         default_ddof: int = 1,
+        window_input_index: int | None = None,
     ) -> WindowSpec:
-        """从 plan 节点解析 WindowSpec（拒绝非 literal 动态窗口）。"""
+        """从 plan 节点解析 WindowSpec（拒绝非 literal 动态窗口）。
+
+        ``window_input_index`` 供位置参数固定的算子声明窗口下标。二元 rolling
+        算子的参数是 ``x, y, window[, min_periods]``，第二个操作数本身可以是
+        series 表达式（``ts_corr(ret, log_returns(volume), 60)``）。没有该下标时
+        只能靠"第一个非列子节点即窗口"的启发式，上述写法就会被误判成 window 并
+        抛 PlanParamError；给出下标后按位置精确取值，双序列调用不再误伤，同时
+        一元算子的动态窗口仍然严格拒绝。
+        """
         attrs = node.attrs or {}
         size = default_size
         for key in ("d", "window", "n", "periods", "span"):
@@ -91,23 +100,34 @@ class WindowSpec:
                 size = parse_positive_int_literal(attrs[key], label=key)
                 break
         else:
-            found_window = False
-            for idx in range(1, len(node.inputs)):
-                child = node.inputs[idx]
-                if child.op in {"column", "materialized_series", "plan_ref"}:
-                    continue
-                if child.op != "literal":
-                    raise PlanParamError(
-                        f"window 必须为整数 literal，收到动态输入 {child.op!r}"
-                    )
-                val = child.attrs.get("value")
-                if val is None:
-                    continue
-                size = parse_positive_int_literal(val, label="window")
-                found_window = True
-                break
-            if not found_window:
-                size = default_size
+            if window_input_index is not None:
+                if len(node.inputs) > window_input_index:
+                    child = node.inputs[window_input_index]
+                    if child.op != "literal":
+                        raise PlanParamError(
+                            f"window 必须为整数 literal，收到动态输入 {child.op!r}"
+                        )
+                    val = child.attrs.get("value")
+                    if val is not None:
+                        size = parse_positive_int_literal(val, label="window")
+            else:
+                found_window = False
+                for idx in range(1, len(node.inputs)):
+                    child = node.inputs[idx]
+                    if child.op in {"column", "materialized_series", "plan_ref"}:
+                        continue
+                    if child.op != "literal":
+                        raise PlanParamError(
+                            f"window 必须为整数 literal，收到动态输入 {child.op!r}"
+                        )
+                    val = child.attrs.get("value")
+                    if val is None:
+                        continue
+                    size = parse_positive_int_literal(val, label="window")
+                    found_window = True
+                    break
+                if not found_window:
+                    size = default_size
 
         min_periods = default_min_periods
         if "min_periods" in attrs and attrs["min_periods"] is not None:
