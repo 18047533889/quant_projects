@@ -135,7 +135,7 @@ DAILY_PACK = PACK - RESEARCH_ONLY
 
 
 def test_pack_all_registered_and_daily():
-    missing = [c for c in PACK if OperatorRegistry.get(c, "pandas_numpy") is None]
+    missing = [c for c in PACK if OperatorRegistry.get(c, "pandas_numpy", mode="any" if c in RESEARCH_ONLY else "production") is None]
     assert not missing, f"missing runtimes: {missing}"
     not_daily = [c for c in sorted(DAILY_PACK) if classify_canonical(c) != "daily"]
     assert not not_daily, f"not daily surface: {not_daily}"
@@ -143,6 +143,7 @@ def test_pack_all_registered_and_daily():
     # mining whitelist.
     assert classify_canonical("micro_bvc_vpin") == "research"
     assert "micro_bvc_vpin" not in DAILY_PACK
+    assert OperatorRegistry.get("micro_bvc_vpin", mode="production") is None
     live_extended = frozenset(_surface_mod.EXTENDED_ONLY_CANONICALS)
     not_extended = sorted(DAILY_PACK - live_extended)
     assert not not_extended, f"not in EXTENDED_ONLY (partition contract): {not_extended}"
@@ -151,7 +152,7 @@ def test_pack_all_registered_and_daily():
 def test_pack_policies_pit_safe_with_intended_scope():
     bad = []
     for canonical in sorted(PACK):
-        op = OperatorRegistry.get(canonical, "pandas_numpy")
+        op = OperatorRegistry.get(canonical, "pandas_numpy", mode="any" if canonical in RESEARCH_ONLY else "production")
         policy = infer_operator_policy(op, canonical=canonical)
         if not policy.pit_safe:
             bad.append(f"{canonical}: pit_safe=False")
@@ -166,7 +167,7 @@ def test_pack_policies_pit_safe_with_intended_scope():
 def test_pack_deterministic_and_axes(canonical):
     panels = _daily_panels()
     args, kw = _call_for(canonical, panels)
-    op = OperatorRegistry.get(canonical, "pandas_numpy")
+    op = OperatorRegistry.get(canonical, "pandas_numpy", mode="any" if canonical in RESEARCH_ONLY else "production")
     if canonical == "micro_bvc_vpin" and op is None:
         # P2/research-only is intentionally absent from a production-frozen
         # registry; test its real reference owner without weakening that gate.
@@ -201,7 +202,7 @@ def test_constant_window_fails_closed():
         ("ts_cpt_value", (cpt_ret,), {"window": 20, "preset": "bmw2016"}),
     ]
     for canonical, panels, kw in cases:
-        out = OperatorRegistry.get(canonical, "pandas_numpy").calculate(*panels, **kw)
+        out = OperatorRegistry.get(canonical, "pandas_numpy", mode="any" if canonical in RESEARCH_ONLY else "production").calculate(*panels, **kw)
         if canonical == "ts_cpt_value":
             # CPT of an all-zero return sample is exactly 0 (finite); early rows
             # are NaN only because of the internal min_periods warm-up.
@@ -332,8 +333,8 @@ def test_polars_parity_daily():
             continue
         args, kw = _call_for(canonical, panels)
         pl_args = tuple(pl_panels[_name(a, panels)] for a in args)
-        pd_out = OperatorRegistry.get(canonical, "pandas_numpy").calculate(*args, **kw)
-        pl_out = OperatorRegistry.get(canonical, "polars").calculate(*pl_args, **kw)
+        pd_out = OperatorRegistry.get(canonical, "pandas_numpy", mode="any" if canonical in RESEARCH_ONLY else "production").calculate(*args, **kw)
+        pl_out = OperatorRegistry.get(canonical, "polars", mode="any" if canonical in RESEARCH_ONLY else "production").calculate(*pl_args, **kw)
         pl_df = pl_out.to_pandas().set_index("date").sort_index().reindex(
             index=pd_out.index, columns=pd_out.columns)
         both = ~(pd_out.isna() & pl_df.isna())
@@ -351,8 +352,8 @@ def test_polars_parity_minute():
                       "micro_bvc_vpin"):
         args, kw = _call_for(canonical, panels)
         pl_args = tuple(pl_panels[_minute_name(a, m)] for a in args)
-        pd_out = OperatorRegistry.get(canonical, "pandas_numpy").calculate(*args, **kw)
-        pl_out = OperatorRegistry.get(canonical, "polars").calculate(*pl_args, **kw)
+        pd_out = OperatorRegistry.get(canonical, "pandas_numpy", mode="any" if canonical in RESEARCH_ONLY else "production").calculate(*args, **kw)
+        pl_out = OperatorRegistry.get(canonical, "polars", mode="any" if canonical in RESEARCH_ONLY else "production").calculate(*pl_args, **kw)
         pl_df = pl_out.to_pandas().set_index("date").sort_index().reindex(
             index=pd_out.sort_index().index, columns=pd_out.columns)
         pd_out = pd_out.sort_index()

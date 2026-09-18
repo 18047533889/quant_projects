@@ -23,6 +23,14 @@ def _op(name: str, backend: str = "pandas_numpy"):
     assert op is not None, f"{name}/{backend}"
     return op
 
+def _response_call(op, x: pd.DataFrame):
+    """Conditional response requires distinct y and x panels, not one series."""
+    trend = pd.DataFrame(
+        np.repeat(np.sin(np.arange(len(x)) / 3.)[:, None], len(x.columns), axis=1),
+        index=x.index, columns=x.columns,
+    )
+    y = 0.7 * x + 0.2 * x.pow(2) + 0.1 * trend
+    return op.calculate(y, x, window=20)
 
 
 # ---------------------------------------------------------------------------
@@ -43,7 +51,7 @@ def test_ts_binned_response_monotonicity_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -68,7 +76,7 @@ def test_ts_binned_response_monotonicity_handles_nans() -> None:
     op = _op("ts_binned_response_monotonicity")
 
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -89,7 +97,7 @@ def test_ts_binned_response_monotonicity_handles_inf() -> None:
     op = _op("ts_binned_response_monotonicity")
 
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -104,7 +112,7 @@ def test_ts_binned_response_monotonicity_empty_input() -> None:
     op = _op("ts_binned_response_monotonicity")
 
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -122,7 +130,7 @@ def test_ts_binned_response_monotonicity_single_column() -> None:
     op = _op("ts_binned_response_monotonicity")
 
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -148,7 +156,7 @@ def test_ts_binned_response_curvature_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -173,7 +181,7 @@ def test_ts_binned_response_curvature_handles_nans() -> None:
     op = _op("ts_binned_response_curvature")
 
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -194,7 +202,7 @@ def test_ts_binned_response_curvature_handles_inf() -> None:
     op = _op("ts_binned_response_curvature")
 
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -209,7 +217,7 @@ def test_ts_binned_response_curvature_empty_input() -> None:
     op = _op("ts_binned_response_curvature")
 
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -227,7 +235,7 @@ def test_ts_binned_response_curvature_single_column() -> None:
     op = _op("ts_binned_response_curvature")
 
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -253,7 +261,7 @@ def test_ts_response_slope_asymmetry_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -278,7 +286,7 @@ def test_ts_response_slope_asymmetry_handles_nans() -> None:
     op = _op("ts_response_slope_asymmetry")
 
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -299,7 +307,7 @@ def test_ts_response_slope_asymmetry_handles_inf() -> None:
     op = _op("ts_response_slope_asymmetry")
 
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -314,7 +322,7 @@ def test_ts_response_slope_asymmetry_empty_input() -> None:
     op = _op("ts_response_slope_asymmetry")
 
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -332,7 +340,7 @@ def test_ts_response_slope_asymmetry_single_column() -> None:
     op = _op("ts_response_slope_asymmetry")
 
     try:
-        result = op.calculate(x)
+        result = _response_call(op, x)
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -358,3 +366,48 @@ def test_binned_response_metadata() -> None:
         assert meta is not None, f"{op_name} missing metadata"
         assert hasattr(meta, "tags"), f"{op_name} missing tags"
         assert meta.name == op_name, f"{op_name} name mismatch"
+
+
+@pytest.mark.parametrize("backend", ["pandas_numpy", "polars"])
+@pytest.mark.parametrize("kind", ["monotonicity", "curvature", "asymmetry"])
+def test_response_independent_final_window_oracle_and_future_prefix(backend, kind):
+    import polars as pl
+    from scipy.stats import rankdata
+    canonical = ("ts_response_slope_asymmetry" if kind == "asymmetry"
+                 else "ts_binned_response_" + kind)
+    index = pd.date_range("2026-01-01", periods=60)
+    xv = np.linspace(-2, 3, 60)
+    yv = 0.2 * xv ** 2 + 0.7 * xv + 0.08 * np.sin(np.arange(60))
+    x = pd.DataFrame({"A": xv}, index=index)
+    y = pd.DataFrame({"A": yv}, index=index)
+    def physical(frame):
+        return (pl.from_pandas(frame.reset_index(names="date"))
+                if backend == "polars" else frame)
+    op = _op(canonical, backend)
+    full = op.calculate(physical(y), physical(x), window=30)
+    values = full["A"].to_numpy()
+    xx, yy = xv[-30:], yv[-30:]
+    if kind == "asymmetry":
+        order = np.argsort(xx, kind="stable")
+        left, right = order[:15], order[15:]
+        lo = np.corrcoef(xx[left], yy[left])[0, 1]
+        hi = np.corrcoef(xx[right], yy[right])[0, 1]
+        expected = (hi - lo) / (abs(hi) + abs(lo))
+    else:
+        bins = np.searchsorted(np.quantile(xx, np.linspace(0, 1, 6)[1:-1]), xx, side="right")
+        medians = np.array([np.median(yy[bins == b]) for b in range(5)])
+        if kind == "monotonicity":
+            expected = np.corrcoef(np.arange(5), rankdata(medians))[0, 1]
+        else:
+            pct = rankdata(xx) / len(xx)
+            centers = np.array([np.median(pct[bins == b]) for b in range(5)])
+            design = np.column_stack([np.ones(5), centers, centers ** 2])
+            expected = np.linalg.lstsq(design, medians, rcond=None)[0][2] / medians.std()
+    assert np.isfinite(values[-1])
+    assert values[-1] == pytest.approx(expected, rel=1e-9, abs=1e-10)
+    changed = y.copy()
+    changed.iloc[45:] += 1000
+    mutated = op.calculate(physical(changed), physical(x), window=30)["A"].to_numpy()
+    np.testing.assert_allclose(values[:45], mutated[:45], equal_nan=True)
+    if backend == "polars":
+        assert full["date"].to_list() == physical(y)["date"].to_list()

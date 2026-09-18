@@ -124,7 +124,8 @@ def test_tier1_bivariate_prefix_invariant(canonical: str):
     x = _panel(8, cols=("A", "B"))
 
     def calc(df):
-        kwargs = {"window": 3}
-        return op.calculate(df[["A"]], df[["B"]], **kwargs)
+        kwargs = {"window": 3} if canonical in {"ts_corr", "ewm_corr"} else {}
+        # Two fields for the same instrument, not two different asset axes.
+        return op.calculate(df[["A"]], df[["B"]].rename(columns={"B": "A"}), **kwargs)
 
     _assert_prefix_invariant_on_result(calc, x)
