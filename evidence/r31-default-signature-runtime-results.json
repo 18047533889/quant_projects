@@ -1,0 +1,396 @@
+{
+  "rows": [
+    {
+      "backend": "pandas_numpy",
+      "canonical": "MACD_line",
+      "equal": true,
+      "explicit": {
+        "signal": 9
+      },
+      "finite_explicit": 192,
+      "finite_omitted": 192,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "polars",
+      "canonical": "MACD_line",
+      "equal": true,
+      "explicit": {
+        "signal": 9
+      },
+      "finite_explicit": 192,
+      "finite_omitted": 192,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "power",
+      "equal": true,
+      "explicit": {
+        "y": 2
+      },
+      "finite_explicit": 192,
+      "finite_omitted": 192,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "polars",
+      "canonical": "power",
+      "equal": true,
+      "explicit": {
+        "y": 2
+      },
+      "finite_explicit": 192,
+      "finite_omitted": 192,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "scale",
+      "equal": true,
+      "explicit": {
+        "to": 1
+      },
+      "finite_explicit": 192,
+      "finite_omitted": 192,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "polars",
+      "canonical": "scale",
+      "equal": true,
+      "explicit": {
+        "to": 1
+      },
+      "finite_explicit": 192,
+      "finite_omitted": 192,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "signed_power",
+      "equal": true,
+      "explicit": {
+        "c": 2
+      },
+      "finite_explicit": 192,
+      "finite_omitted": 192,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "polars",
+      "canonical": "signed_power",
+      "equal": true,
+      "explicit": {
+        "c": 2
+      },
+      "finite_explicit": 192,
+      "finite_omitted": 192,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "trade_when",
+      "equal": true,
+      "explicit": {
+        "fallback": 0
+      },
+      "finite_explicit": 192,
+      "finite_omitted": 192,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "polars",
+      "canonical": "trade_when",
+      "equal": true,
+      "explicit": {
+        "fallback": 0
+      },
+      "finite_explicit": 192,
+      "finite_omitted": 192,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_bottomk_mean",
+      "equal": true,
+      "explicit": {
+        "window": 20
+      },
+      "finite_explicit": 176,
+      "finite_omitted": 176,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_bottomk_mean",
+      "equal": true,
+      "explicit": {
+        "window": 20
+      },
+      "finite_explicit": 176,
+      "finite_omitted": 176,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_bottomk_std",
+      "equal": true,
+      "explicit": {
+        "window": 20
+      },
+      "finite_explicit": 176,
+      "finite_omitted": 176,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_bottomk_std",
+      "equal": true,
+      "explicit": {
+        "window": 20
+      },
+      "finite_explicit": 176,
+      "finite_omitted": 176,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_bottomk_sum",
+      "equal": true,
+      "explicit": {
+        "window": 20
+      },
+      "finite_explicit": 176,
+      "finite_omitted": 176,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_bottomk_sum",
+      "equal": true,
+      "explicit": {
+        "window": 20
+      },
+      "finite_explicit": 176,
+      "finite_omitted": 176,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_tail_mean",
+      "equal": true,
+      "explicit": {
+        "min_periods": 2
+      },
+      "finite_explicit": 188,
+      "finite_omitted": 188,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_tail_mean",
+      "equal": true,
+      "explicit": {
+        "min_periods": 2
+      },
+      "finite_explicit": 188,
+      "finite_omitted": 188,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_topk_mean",
+      "equal": true,
+      "explicit": {
+        "window": 20
+      },
+      "finite_explicit": 176,
+      "finite_omitted": 176,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_topk_mean",
+      "equal": true,
+      "explicit": {
+        "window": 20
+      },
+      "finite_explicit": 176,
+      "finite_omitted": 176,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_topk_std",
+      "equal": true,
+      "explicit": {
+        "window": 20
+      },
+      "finite_explicit": 176,
+      "finite_omitted": 176,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_topk_std",
+      "equal": true,
+      "explicit": {
+        "window": 20
+      },
+      "finite_explicit": 176,
+      "finite_omitted": 176,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_topk_sum",
+      "equal": true,
+      "explicit": {
+        "d": 20
+      },
+      "finite_explicit": 116,
+      "finite_omitted": 116,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_topk_sum",
+      "equal": true,
+      "explicit": {
+        "d": 20
+      },
+      "finite_explicit": 116,
+      "finite_omitted": 116,
+      "max_abs_diff": 0,
+      "shape": [
+        48,
+        4
+      ],
+      "status": "EQUIVALENT"
+    }
+  ],
+  "source_sha256": {
+    "factor_engine/cleaned_operators/common/cross_sectional.py": "da37f6ffec7a5f317d97e486660b4e28fde865c0ee82bfffb97ee4cabe48271d",
+    "factor_engine/cleaned_operators/common/elementwise.py": "d3f13bbd3bd54966396b07c3446c0fb995bbff25f5b00b37b2b371f4f35c6c1f",
+    "factor_engine/cleaned_operators/layer_topk_compat.py": "cce95af9999cd2b07e2f355fc55e118120b4fa6ebdb0b0ffb58a9f7d793fee24",
+    "factor_engine/cleaned_operators/overhaul/daily.py": "c8ac48f2d19c993c92f137d9fcc1b7c2389775bf9c6f098cffb55633f8358301",
+    "factor_engine/cleaned_operators/overhaul/technical.py": "f58dd90d166c23e7ba3738208c7f2f0c48dec5fcc874faaf3619785a5b5a837a",
+    "factor_engine/cleaned_operators/technical/signal.py": "8aec88159971e8defa25fd9d01b9e28b497ba46e157f13afc0657de0a2fd372a"
+  }
+}
