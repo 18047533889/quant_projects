@@ -14,6 +14,12 @@ class OperatorSemanticVersion:
 
 # 已知语义变更历史（新因子应使用最新 version）
 OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
+    # R39/R41: correct quadratic coefficient order and finite scored pairs.
+    "ts_poly2_resid": 2,
+    # R40/R42: replace effective Polars placeholders with canonical estimators.
+    "ts_extremal_index": 2,
+    "ts_gpd_shape_pwm": 2,
+    "ts_deviation_from_mean": 2,
     # R21: finite-only cross-sections across reference/Polars/SQL paths;
     # normalize also enforces constant-support and singleton/null policies.
     "normalize": 2,
@@ -380,7 +386,7 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_markov_mean_first_passage_time": 3,  # R21: replace incorrect Polars placeholder
     "ts_markov_spectral_gap": 2,
     "ts_markov_stationary_surprisal": 2,
-    "ts_km_equilibrium_distance": 2,  # v2: corrected equilibrium state semantics
+    "ts_km_equilibrium_distance": 3,  # R43: Polars nearest attractor and bracketed zero plateaus
     "ts_km_diffusion_gradient": 3,  # R21: exact reference-backed Polars path
     "ts_km_quasipotential_depth": 3,  # R21: replace Polars volatility placeholder
     "ts_active_information_storage": 3,  # R21: replace all-NaN Polars placeholder

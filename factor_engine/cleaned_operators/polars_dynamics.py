@@ -160,6 +160,35 @@ def _mk(canonical: str, description: str, params: list[str], fn):
                    "materialized Polars columns; no pandas conversion, lazy "
                    "execution, streaming, GPU, or Polars-expression claim."),
         )
+    elif canonical == "ts_km_equilibrium_distance":
+        from factor_engine.cleaned_operators.markov_dynamics import TsKmEquilibriumDistance
+        metadata = copy.deepcopy(TsKmEquilibriumDistance.metadata)
+        source_payload = "\n".join(
+            inspect.getsource(obj)
+            for obj in (_state_dynamics_series, _stable_attractor_root, _markov_series, _rebuild)
+        )
+        source_hash = hashlib.sha256(source_payload.encode("utf-8")).hexdigest()
+        physical_spec = PhysicalImplementationSpec(
+            canonical=canonical,
+            backend="polars",
+            execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
+            supports_lazy=False,
+            supports_streaming=False,
+            materializes_full_panel=True,
+            requires_sorted=True,
+            supports_nulls=True,
+            supports_nan=True,
+            supports_inf=False,
+            implementation_source_hash=source_hash,
+            kernel_identity="polars_dynamics._markov_series:equilibrium:v2",
+            kernel_signature="(series,window,bins,lag,min_count,equilibrium,min_state_support,min_history)->float64-series",
+            parameter_domain_hash="window>=2,bins>=2,lag>=1,min_count>=1,min_state_support>=1,min_history>=2",
+            semantic_contract_hash="nearest-stable-attractor:downward-crossing:bracketed-zero-plateau:past-window-mad:v2",
+            implementation_closure_hash=source_hash,
+            notes=("Eager fully materialized Polars columns feed the shared NumPy "
+                   "state-dynamics kernel and a per-column equilibrium evaluator; "
+                   "no pandas conversion, lazy execution, streaming, or GPU path."),
+        )
 
     def _calculate_series(self, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -192,6 +221,32 @@ def _mk(canonical: str, description: str, params: list[str], fn):
 # ---------------------------------------------------------------------------
 # Local Markov dynamics (shared DiscreteStateDynamicsKernel).
 # ---------------------------------------------------------------------------
+
+def _stable_attractor_root(d1: np.ndarray, centers: np.ndarray, current_center: float) -> float:
+    """Return the identifiable stable root nearest the current state center."""
+    if not np.all(np.isfinite(d1)) or not np.all(np.isfinite(centers)):
+        return np.nan
+    roots: list[float] = []
+    B = d1.shape[0]
+    for m in range(B - 1):
+        a, b = d1[m], d1[m + 1]
+        if a > 0.0 and b < 0.0:
+            roots.append(float(centers[m] + (centers[m + 1] - centers[m]) * (a / (a - b))))
+    m = 0
+    while m < B:
+        if d1[m] != 0.0:
+            m += 1
+            continue
+        start = m
+        while m + 1 < B and d1[m + 1] == 0.0:
+            m += 1
+        end = m
+        if start > 0 and end + 1 < B and d1[start - 1] > 0.0 and d1[end + 1] < 0.0:
+            roots.append(float(0.5 * (centers[start] + centers[end])))
+        m += 1
+    if not roots:
+        return np.nan
+    return min(roots, key=lambda root: abs(root - current_center))
 
 def _markov_series(
     series: np.ndarray, window: int, bins: int, lag: int, min_count: int, kind: str,
@@ -393,16 +448,8 @@ def _markov_series(
             c = res["centers"][t]
             if not np.all(np.isfinite(d1)) or not np.all(np.isfinite(c)):
                 continue
-            xstar = None
-            for m in range(B - 1):
-                a, b = d1[m], d1[m + 1]
-                if np.isnan(a) or np.isnan(b):
-                    continue
-                if a > 0.0 and b < 0.0:
-                    denom = a - b
-                    xstar = c[m] + (c[m + 1] - c[m]) * (a / denom) if abs(denom) > _EPS else c[m]
-                    break
-            if xstar is None:
+            xstar = _stable_attractor_root(d1, c, c[k])
+            if not np.isfinite(xstar):
                 continue
             lo = max(0, t - int(window))
             past = series[lo:t]
