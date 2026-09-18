@@ -490,6 +490,8 @@ class CsKnnTangentResidual(SeriesOperator):
         ["f1", "f2", "f3", "k"],
         unit="distance",
         cost=8,
+        panel_params=("f1", "f2", "f3"),
+        scalar_params=("k",),
         # R15-INC-171: default k raised to the DOF floor; estimator resolution.
         param_specs={
             "k": ParamSpec(

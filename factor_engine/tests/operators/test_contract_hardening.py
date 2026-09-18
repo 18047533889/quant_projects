@@ -181,7 +181,7 @@ def test_misaligned_panels_fail_closed() -> None:
 def test_top_bottom_k_sample_std_rejects_singleton_k() -> None:
     values = pd.DataFrame({"A": [1.0, 2.0, 3.0]})
     for name in ("ts_topk_std", "ts_bottomk_std"):
-        with pytest.raises(ValueError, match="k >= 2"):
+        with pytest.raises(ValueError, match=r"k.*>= 2"):
             _pd(name).calculate(values, 3, 1)
         constraints = OperatorRegistry.catalog()[name]["parameter_constraints"]
         assert constraints["k"]["minimum"] == 2
@@ -215,8 +215,11 @@ def test_technical_and_tail_risk_policy_metadata_is_corrected() -> None:
 
 
 def test_every_active_operator_has_one_unified_contract() -> None:
+    # One immutable registry snapshot is enough; rebuilding the entire catalog
+    # for every operator made this read-only audit quadratic in catalog size.
+    snapshot = OperatorRegistry.catalog()
     for canonical in OperatorRegistry.list_canonical():
-        catalog = OperatorRegistry.catalog()[canonical]
+        catalog = snapshot[canonical]
         contract = catalog["contract"]
         assert contract["canonical"] == canonical
         assert contract["version"] == "2.1"

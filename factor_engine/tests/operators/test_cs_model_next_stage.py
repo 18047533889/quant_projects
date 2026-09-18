@@ -58,7 +58,10 @@ def test_peer_deviation_index_zero_center() -> None:
     rng = np.random.default_rng(0)
     a = pd.DataFrame(rng.standard_normal((30, 4)), index=dates, columns=[f"C{i}" for i in range(4)])
     b = pd.DataFrame(rng.standard_normal((30, 4)), index=dates, columns=[f"C{i}" for i in range(4)])
-    out = OperatorRegistry.get("group_peer_deviation_index").calculate(a, b)
+    components = [a, b] + [_panel(n=30, seed=seed, cols=4) for seed in (21, 22, 23)]
+    out = OperatorRegistry.get("group_peer_deviation_index").calculate(*components)
+    expected = sum((frame.sub(frame.mean(axis=1), axis=0)).div(frame.std(axis=1, ddof=0), axis=0) for frame in components)
+    pd.testing.assert_frame_equal(out, expected)
     assert out.shape == a.shape
     # cross-section mean of the index should be ~0 per day (z-score sum)
     assert out.mean(axis=1).abs().max() < 1e-6
