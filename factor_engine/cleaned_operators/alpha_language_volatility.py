@@ -21,7 +21,14 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from factor_engine.cleaned_operators.rolling_pack import (
     check_window,
     frame_like,
@@ -89,6 +96,20 @@ def _metadata(name: str, description: str, params: list[str], *, unit: str) -> O
         panel_params=tuple(p for p in params if p not in _VOL_DEFAULTS[name]),
         scalar_params=tuple(_VOL_DEFAULTS[name]),
         param_specs=_vol_specs(name),
+        relational_specs=(
+            [
+                RelationalParamSpec(
+                    "min_periods <= inner_window",
+                    "min_periods must be <= inner_window",
+                ),
+                RelationalParamSpec(
+                    "min_periods <= outer_window",
+                    "min_periods must be <= outer_window",
+                ),
+            ]
+            if name == "ts_vol_of_vol"
+            else []
+        ),
     )
 
 
@@ -133,9 +154,15 @@ class TsVolOfVol(SeriesOperator):
     def _calculate_series(
         self, ret: pd.DataFrame, inner_window: int = 5, outer_window: int = 40, min_periods: int = 2, **_: Any
     ) -> pd.DataFrame:
+        from factor_engine.cleaned_operators.common.strict_params import strict_int
+
         wi = check_window(inner_window, name="inner_window")
         wo = check_window(outer_window, name="outer_window")
-        mp = max(2, int(min_periods))
+        mp = strict_int(min_periods, "min_periods", minimum=2)
+        if mp > wi:
+            raise ValueError("min_periods must be <= inner_window")
+        if mp > wo:
+            raise ValueError("min_periods must be <= outer_window")
         rv = ret.to_numpy(dtype=float)
         inner = map_rolling(rv, wi, lambda c: _std(c, mp))
         logv = np.log(inner + _EPS)
