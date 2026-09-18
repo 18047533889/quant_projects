@@ -68,16 +68,8 @@ _register(
 
 
 def _reconstitution_churn(member, window):
-    w = int(window)
-    m = member
-    cols = _cols(m)
-    out = []
-    for c in cols:
-        flag = m[c].fill_null(0.0)
-        entries = ((flag == 1) & (flag.shift(1).fill_null(0.0) != 1)).cast(pl.Float64)
-        exits = ((flag != 1) & (flag.shift(1).fill_null(0.0) == 1)).cast(pl.Float64)
-        out.append((entries + exits).rolling_sum(w).alias(c))
-    return m.with_columns(out)
+    from factor_engine.cleaned_operators.common.polars_membership import reconstitution_churn
+    return reconstitution_churn(member, window)
 
 
 _register("index_reconstitution_churn", "窗口内纳入+剔除次数（Polars）。", ["member", "window"],

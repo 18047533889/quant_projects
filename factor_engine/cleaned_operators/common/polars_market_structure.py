@@ -626,7 +626,7 @@ class IndexReconstitutionChurnNative(SeriesOperator):
         name="index_reconstitution_churn",
         category="market_structure",
         description="指数重构流动性",
-        param_names=["membership", "window"],
+        param_names=["member", "window"],
         return_type="series",
         tags=["market_structure", "index", "polars", "native"],
         param_specs={
@@ -635,22 +635,10 @@ class IndexReconstitutionChurnNative(SeriesOperator):
     )
 
     def _calculate_series(
-        self, membership: pl.DataFrame, window: int = 60, **kwargs
+        self, member: pl.DataFrame, window: int = 60, **kwargs
     ) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.parameter_validation import strict_integer
-
-        w = strict_integer(window, "window", minimum=1)
-        cols = _numeric_cols(membership)
-        exprs = []
-        for c in cols:
-            mem = membership[c]
-            is_member = (mem > 0).cast(pl.Int32)
-            prev_member = is_member.shift(1).fill_null(0)
-            event = (is_member - prev_member).abs()
-            churn = event.rolling_sum(window_size=w)
-            exprs.append(churn.alias(c))
-        result = membership.with_columns(exprs)
-        return result
+        from factor_engine.cleaned_operators.common.polars_membership import reconstitution_churn
+        return reconstitution_churn(member, window)
 
 
 @register_operator(

@@ -106,7 +106,8 @@ def _reconstitution_churn(member, window=60):
     transition when both the current and the previous status are known.
     """
     assert_condition_bool(member, name="member")
-    m = member.copy()
+    # Infinite membership values are unknown, never implicit entry/exit states.
+    m = member.where(np.isfinite(member))
     known = m.notna()
     # Previous-row known mask: build explicitly to avoid shift+fillna
     # downcast deprecation.

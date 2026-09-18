@@ -20,6 +20,8 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_h_infinity_level_filter": 2,
     # R44: genuine normal-distribution Lilliefors test, not swallowed AttributeError.
     "ts_expanding_lilliefors_pvalue": 2,
+    # R49: first membership observations and unknown boundaries are not transitions.
+    "index_reconstitution_churn": 2,
     # R47: correct return bipower and physical-pair autocorrelation estimators.
     "ts_jump_bipower": 2,
     "ts_lag1_autocorr": 2,
