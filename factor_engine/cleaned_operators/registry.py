@@ -1738,6 +1738,7 @@ class OperatorRegistry:
             # R40 #208: freeze 后 live dict 变为不可变（MappingProxyType）——
             # 直接 ``_operators.pop`` / ``_operators[canonical] = …`` 抛 TypeError，
             # 公开读走 ``_frozen`` 不可变快照。
+            frozen_catalog = _deepfreeze_catalog(cls._catalog)
             cls._frozen = {
                 "version": cls._version,
                 "operators": MappingProxyType({
@@ -1745,7 +1746,7 @@ class OperatorRegistry:
                     for _c, _impls in cls._operators.items()
                 }),
                 "aliases": MappingProxyType(dict(cls._aliases)),
-                "catalog": _deepfreeze_catalog(cls._catalog),
+                "catalog": frozen_catalog,
             }
             # R40 #208 + P0-14: the LIVE dicts become fully immutable —
             # including every nested catalog entry (previously only the outer
@@ -1763,7 +1764,7 @@ class OperatorRegistry:
                 for _c, _impls in cls._operators.items()
             })
             cls._aliases = MappingProxyType(dict(cls._aliases))
-            cls._catalog = _deepfreeze_catalog(cls._catalog)
+            cls._catalog = frozen_catalog
             cls._lifecycle = cls.Lifecycle.FROZEN
             cls._mutation_token = None
             cls._version += 1
