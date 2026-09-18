@@ -64,7 +64,7 @@ def _assert_condition_bool(condition: Any, name: str = "condition") -> None:
         )
 
 
-def pd_count_if(condition: pd.DataFrame, window: int, min_periods: int = 1, **_: Any) -> pd.DataFrame:
+def pd_count_if(condition: pd.DataFrame, window: int = 20, min_periods: int = 1, **_: Any) -> pd.DataFrame:
     _assert_condition_bool(condition)
     w, mp = window_params(window, min_periods)
     valid = condition.notna()
@@ -95,19 +95,19 @@ def pd_conditional(x, condition, window, min_periods, op, ddof=1):
     return result.where(count >= required).replace([np.inf, -np.inf], np.nan)
 
 
-def pd_sum_if(x, condition, window, min_periods=1, **_):
+def pd_sum_if(x, condition, window=20, min_periods=1, **_):
     return pd_conditional(x, condition, window, min_periods, "sum")
 
 
-def pd_mean_if(x, condition, window, min_periods=1, **_):
+def pd_mean_if(x, condition, window=20, min_periods=1, **_):
     return pd_conditional(x, condition, window, min_periods, "mean")
 
 
-def pd_std_if(x, condition, window, min_periods=2, ddof=1, **_):
+def pd_std_if(x, condition, window=20, min_periods=2, ddof=1, **_):
     return pd_conditional(x, condition, window, min_periods, "std", ddof)
 
 
-def pd_last_if(x, condition, window, **_):
+def pd_last_if(x, condition, window=20, **_):
     x, condition = aligned_pd(x, condition)
     _assert_condition_bool(condition)
     w, _ = window_params(window, 1)
@@ -168,7 +168,7 @@ def pd_true_streak(condition, **_):
     return frame_pd(condition, out)
 
 
-def pl_count_if(condition, window, min_periods=1, **_):
+def pl_count_if(condition, window=20, min_periods=1, **_):
     _assert_condition_bool(condition)
     w, mp = window_params(window, min_periods)
     replacements = {}
@@ -208,19 +208,19 @@ def pl_conditional(x, condition, window, min_periods, op, ddof=1):
     return pl_base_with(x, replacements)
 
 
-def pl_sum_if(x, condition, window, min_periods=1, **_):
+def pl_sum_if(x, condition, window=20, min_periods=1, **_):
     return pl_conditional(x, condition, window, min_periods, "sum")
 
 
-def pl_mean_if(x, condition, window, min_periods=1, **_):
+def pl_mean_if(x, condition, window=20, min_periods=1, **_):
     return pl_conditional(x, condition, window, min_periods, "mean")
 
 
-def pl_std_if(x, condition, window, min_periods=2, ddof=1, **_):
+def pl_std_if(x, condition, window=20, min_periods=2, ddof=1, **_):
     return pl_conditional(x, condition, window, min_periods, "std", ddof)
 
 
-def pl_last_if(x, condition, window, **_):
+def pl_last_if(x, condition, window=20, **_):
     _assert_condition_bool(condition)
     w, _ = window_params(window, 1)
     replacements = {}
@@ -373,11 +373,11 @@ def pd_argext(x, window, pick, min_periods=1):
     return frame_pd(x, out)
 
 
-def pd_argmax(x, window, min_periods=1, **_):
+def pd_argmax(x, window=20, min_periods=1, **_):
     return pd_argext(x, window, "max", min_periods)
 
 
-def pd_argmin(x, window, min_periods=1, **_):
+def pd_argmin(x, window=20, min_periods=1, **_):
     return pd_argext(x, window, "min", min_periods)
 
 
@@ -394,11 +394,11 @@ def pl_argext(x, window, pick, min_periods=1):
     return pl_unary_rolling_map(x, w, 1, fn)
 
 
-def pl_argmax(x, window, min_periods=1, **_):
+def pl_argmax(x, window=20, min_periods=1, **_):
     return pl_argext(x, window, "max", min_periods)
 
 
-def pl_argmin(x, window, min_periods=1, **_):
+def pl_argmin(x, window=20, min_periods=1, **_):
     return pl_argext(x, window, "min", min_periods)
 
 
@@ -433,7 +433,7 @@ def pl_topbottom(x, window, k, min_periods, top, stat):
     return pl_unary_rolling_map(x, w, 1, fn)
 
 
-def pd_tail_mean(x, window, q=0.1, side="lower", min_periods=None, **_):
+def pd_tail_mean(x, window=20, q=0.1, side="lower", min_periods=None, **_):
     w, mp = window_params(window, min_periods, default_mp=2)
     q = strict_finite_scalar(q, "q")
     if not 0 < q <= 0.5:
@@ -453,7 +453,7 @@ def pd_tail_mean(x, window, q=0.1, side="lower", min_periods=None, **_):
     return frame_pd(x, out)
 
 
-def pl_tail_mean(x, window, q=0.1, side="lower", min_periods=None, **_):
+def pl_tail_mean(x, window=20, q=0.1, side="lower", min_periods=None, **_):
     w, mp = window_params(window, min_periods, default_mp=2)
     q = strict_finite_scalar(q, "q")
     if not 0 < q <= 0.5 or side not in {"lower", "upper"}:
