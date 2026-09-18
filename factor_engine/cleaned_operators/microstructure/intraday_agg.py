@@ -1342,6 +1342,11 @@ def _daily_limit_agg(frame, limits, fn, *, side: str) -> pd.DataFrame:
         raise ValueError("side must be 'up' or 'down'")
     frame = _as_panel(frame)
     limit_frame = _as_panel(limits) if limits is not None else None
+    if limit_frame is not None and isinstance(limit_frame.index, pd.DatetimeIndex) and limit_frame.index.tz is not None:
+        # Limits and minute bars bind on the same exchange-local trading date.
+        # Comparing naive session dates against UTC-aware labels loses valid limits.
+        limit_frame = limit_frame.copy()
+        limit_frame.index = limit_frame.index.tz_convert(_DEFAULT_SESSION_TZ).tz_localize(None).normalize()
     if not frame.columns.is_unique or (limit_frame is not None and (
         not limit_frame.columns.is_unique or not limit_frame.index.is_unique
     )):
@@ -1350,7 +1355,7 @@ def _daily_limit_agg(frame, limits, fn, *, side: str) -> pd.DataFrame:
     for inst in frame.columns:
         limit_series = None
         if isinstance(limits, pd.Series):
-            limit_series = limits
+            limit_series = limit_frame.iloc[:, 0]
         elif limit_frame is not None and inst in limit_frame.columns:
             limit_series = limit_frame[inst]
 

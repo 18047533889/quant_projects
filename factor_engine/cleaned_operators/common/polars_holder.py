@@ -2,7 +2,8 @@
 """Holder/shareholder operators - Polars native implementations.
 
 Holder and shareholder operators for concentration, churn, overlap, and network analysis.
-All implementations use pure Polars expressions without pandas fallback.
+Simple kernels use native Polars expressions; complex contract-repaired kernels
+delegate explicitly to the authoritative pandas implementation.
 """
 from __future__ import annotations
 
@@ -13,9 +14,21 @@ except ImportError:  # pragma: no cover
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.cleaned_operators.common.polars_share_ratio import bounded_share_ratio
 
 _SKIP = frozenset({"date", "stock_code"})
 _SRC = "factor_dsl_polars_holder"
+_ID_PARAMS = [
+    *(f"s{i}" for i in range(1, 11)), *(f"sid{i}" for i in range(1, 11)),
+    *(f"p{i}" for i in range(1, 11)), *(f"psid{i}" for i in range(1, 11)),
+]
+_DISCLOSURE_PARAMS = _ID_PARAMS[:20]
+
+
+def _delegate(canonical: str, panels: tuple, kwargs: dict) -> pl.DataFrame:
+    from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+    return _call_pandas_delegate(canonical, panels, kwargs)
 
 
 def _numeric_cols(df: pl.DataFrame) -> list[str]:
@@ -48,15 +61,14 @@ class HolderConcentrationNative(SeriesOperator):
         name="holder_concentration",
         category="holder",
         description="股东集中度",
-        param_names=["x"],
+        param_names=["top_holder_shares", "total_shares"],
         return_type="series",
-        tags=["holder", "concentration", "polars", "native"],
+        tags=["holder", "concentration", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [(pl.col(c) ** 2).alias(c) for c in cols]
+    def _calculate_series(self, top_holder_shares, total_shares, **kwargs) -> pl.DataFrame:
+        return _delegate(
+            "holder_concentration", (top_holder_shares, total_shares), kwargs
         )
 
 
@@ -75,18 +87,16 @@ class HolderConcentrationAccelerationNative(SeriesOperator):
         name="holder_concentration_acceleration",
         category="holder",
         description="股东集中度加速度",
-        param_names=["x"],
+        param_names=["concentration", "window", "snapshot_date"],
         return_type="series",
-        tags=["holder", "concentration", "polars", "native"],
+        tags=["holder", "concentration", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [
-                (pl.col(c) - 2 * pl.col(c).shift(1) + pl.col(c).shift(2)).alias(c)
-                for c in cols
-            ]
+    def _calculate_series(self, concentration, window=8, snapshot_date=None, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate(
+            "holder_concentration_acceleration", (concentration,),
+            {"window": window, "snapshot_date": snapshot_date, **kwargs},
         )
 
 
@@ -105,25 +115,20 @@ class HolderConcentrationSlopeNative(SeriesOperator):
         name="holder_concentration_slope",
         category="holder",
         description="股东集中度变化率",
-        param_names=["x", "window"],
+        param_names=["concentration", "window", "snapshot_date"],
         return_type="series",
-        tags=["holder", "concentration", "polars", "native"],
+        tags=["holder", "concentration", "polars", "delegate:pandas_numpy"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=2, default=4, searchable=True,
+            "window": ParamSpec(dtype=int, min=3, default=8, searchable=True,
                                param_role=ParamRole.HORIZON),
         },
     )
 
-    def _calculate_series(self, x: pl.DataFrame, window: int = 4, **kwargs) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.parameter_validation import strict_integer
-        w = strict_integer(window, "window", minimum=2)
-
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [
-                (pl.col(c) - pl.col(c).shift(w)).alias(c)
-                for c in cols
-            ]
+    def _calculate_series(self, concentration, window=8, snapshot_date=None, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate(
+            "holder_concentration_slope", (concentration,),
+            {"window": window, "snapshot_date": snapshot_date, **kwargs},
         )
 
 
@@ -142,16 +147,13 @@ class HolderTopkShareSumNative(SeriesOperator):
         name="holder_topk_share_sum",
         category="holder",
         description="前K大股东持股占比",
-        param_names=["x"],
+        param_names=_DISCLOSURE_PARAMS,
         return_type="series",
-        tags=["holder", "concentration", "polars", "native"],
+        tags=["holder", "concentration", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [pl.col(c).alias(c) for c in cols]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        return _delegate("holder_topk_share_sum", panels, kwargs)
 
 
 @register_operator(
@@ -169,16 +171,14 @@ class HolderCompanyOwnershipHhiNative(SeriesOperator):
         name="holder_company_ownership_hhi",
         category="holder",
         description="公司股权HHI指数",
-        param_names=["x"],
+        param_names=[f"s{i}" for i in range(1, 11)],
         return_type="series",
-        tags=["holder", "concentration", "polars", "native"],
+        tags=["holder", "concentration", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [(pl.col(c) ** 2).alias(c) for c in cols]
-        )
+    def _calculate_series(self, s1,s2,s3,s4,s5,s6,s7,s8,s9,s10, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate("holder_company_ownership_hhi", (s1,s2,s3,s4,s5,s6,s7,s8,s9,s10), kwargs)
 
 
 @register_operator(
@@ -196,15 +196,16 @@ class HolderObservedTopkHhiNative(SeriesOperator):
         name="holder_observed_topk_hhi",
         category="holder",
         description="观测前K股东HHI",
-        param_names=["x"],
+        param_names=[*(f"s{i}" for i in range(1, 11)), "missing_semantic"],
         return_type="series",
-        tags=["holder", "concentration", "polars", "native"],
+        tags=["holder", "concentration", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [(pl.col(c) ** 2).alias(c) for c in cols]
+    def _calculate_series(self, s1,s2,s3,s4,s5,s6,s7,s8,s9,s10,
+                          missing_semantic="outside_top_k", **kwargs) -> pl.DataFrame:
+        return _delegate(
+            "holder_observed_topk_hhi", (s1,s2,s3,s4,s5,s6,s7,s8,s9,s10),
+            {"missing_semantic": missing_semantic, **kwargs},
         )
 
 
@@ -228,21 +229,15 @@ class HolderClassEntropyNative(SeriesOperator):
         name="holder_class_entropy",
         category="holder",
         description="股东类别熵",
-        param_names=["x"],
+        param_names=["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"],
         return_type="series",
-        tags=["holder", "entropy", "polars", "native"],
+        tags=["holder", "entropy", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [
-                pl.when(pl.col(c) <= 0)
-                .then(0.0)
-                .otherwise(-pl.col(c) * pl.col(c).log())
-                .alias(c)
-                for c in cols
-            ]
+    def _calculate_series(self, s1, s2, s3, s4, s5, s6, s7, s8, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate(
+            "holder_class_entropy", (s1, s2, s3, s4, s5, s6, s7, s8), kwargs
         )
 
 
@@ -261,22 +256,14 @@ class HolderNatureEntropyNative(SeriesOperator):
         name="holder_nature_entropy",
         category="holder",
         description="股东性质熵",
-        param_names=["x"],
+        param_names=["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"],
         return_type="series",
-        tags=["holder", "entropy", "polars", "native"],
+        tags=["holder", "entropy", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [
-                pl.when(pl.col(c) <= 0)
-                .then(0.0)
-                .otherwise(-pl.col(c) * pl.col(c).log())
-                .alias(c)
-                for c in cols
-            ]
-        )
+    def _calculate_series(self, s1, s2, s3, s4, s5, s6, s7, s8, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate("holder_nature_entropy", (s1,s2,s3,s4,s5,s6,s7,s8), kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -299,16 +286,13 @@ class HolderDisclosureCountNative(SeriesOperator):
         name="holder_disclosure_count",
         category="holder",
         description="股东披露次数",
-        param_names=["x"],
+        param_names=_DISCLOSURE_PARAMS,
         return_type="series",
-        tags=["holder", "disclosure", "polars", "native"],
+        tags=["holder", "disclosure", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [pl.col(c).is_not_null().cast(pl.Float64).alias(c) for c in cols]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        return _delegate("holder_disclosure_count", panels, kwargs)
 
 
 @register_operator(
@@ -326,24 +310,13 @@ class HolderDisclosureCoverageNative(SeriesOperator):
         name="holder_disclosure_coverage",
         category="holder",
         description="股东披露覆盖率",
-        param_names=["disclosed", "total"],
+        param_names=_DISCLOSURE_PARAMS,
         return_type="series",
-        tags=["holder", "disclosure", "polars", "native"],
+        tags=["holder", "disclosure", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, disclosed: pl.DataFrame, total: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
-        if total is None:
-            raise ValueError("holder_disclosure_coverage requires total")
-        cols = _numeric_cols(disclosed)
-        return disclosed.with_columns(
-            [
-                pl.when(pl.col(c).from_(total).is_null() | (pl.col(c).from_(total) == 0))
-                .then(None)
-                .otherwise(pl.col(c) / pl.col(c).from_(total))
-                .alias(c)
-                for c in cols
-            ]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        return _delegate("holder_disclosure_coverage", panels, kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -366,16 +339,13 @@ class HolderEntryShareNative(SeriesOperator):
         name="holder_entry_share",
         category="holder",
         description="新进股东占比",
-        param_names=["x"],
+        param_names=_ID_PARAMS,
         return_type="series",
-        tags=["holder", "churn", "polars", "native"],
+        tags=["holder", "churn", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [pl.col(c).alias(c) for c in cols]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        return _delegate("holder_entry_share", panels, kwargs)
 
 
 @register_operator(
@@ -393,16 +363,13 @@ class HolderExitShareNative(SeriesOperator):
         name="holder_exit_share",
         category="holder",
         description="退出股东占比",
-        param_names=["x"],
+        param_names=_ID_PARAMS,
         return_type="series",
-        tags=["holder", "churn", "polars", "native"],
+        tags=["holder", "churn", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [pl.col(c).alias(c) for c in cols]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        return _delegate("holder_exit_share", panels, kwargs)
 
 
 @register_operator(
@@ -420,21 +387,13 @@ class HolderNetEntryShareNative(SeriesOperator):
         name="holder_net_entry_share",
         category="holder",
         description="净新进股东占比",
-        param_names=["entry", "exit"],
+        param_names=_ID_PARAMS,
         return_type="series",
-        tags=["holder", "churn", "polars", "native"],
+        tags=["holder", "churn", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, entry: pl.DataFrame, exit: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
-        if exit is None:
-            raise ValueError("holder_net_entry_share requires exit")
-        cols = _numeric_cols(entry)
-        return entry.with_columns(
-            [
-                (pl.col(c) - pl.col(c).from_(exit)).alias(c)
-                for c in cols
-            ]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        return _delegate("holder_net_entry_share", panels, kwargs)
 
 
 @register_operator(
@@ -452,16 +411,13 @@ class HolderIdMatchedEntryShareNative(SeriesOperator):
         name="holder_id_matched_entry_share",
         category="holder",
         description="ID匹配新进股东占比",
-        param_names=["x"],
+        param_names=_ID_PARAMS,
         return_type="series",
         tags=["holder", "churn", "polars", "native"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [pl.col(c).alias(c) for c in cols]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        return _delegate("holder_id_matched_entry_share", panels, kwargs)
 
 
 @register_operator(
@@ -479,16 +435,13 @@ class HolderIdMatchedExitShareNative(SeriesOperator):
         name="holder_id_matched_exit_share",
         category="holder",
         description="ID匹配退出股东占比",
-        param_names=["x"],
+        param_names=_ID_PARAMS,
         return_type="series",
         tags=["holder", "churn", "polars", "native"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [pl.col(c).alias(c) for c in cols]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        return _delegate("holder_id_matched_exit_share", panels, kwargs)
 
 
 @register_operator(
@@ -506,21 +459,13 @@ class HolderIdMatchedChurnNative(SeriesOperator):
         name="holder_id_matched_churn",
         category="holder",
         description="ID匹配股东流动率",
-        param_names=["entry", "exit"],
+        param_names=_ID_PARAMS,
         return_type="series",
         tags=["holder", "churn", "polars", "native"],
     )
 
-    def _calculate_series(self, entry: pl.DataFrame, exit: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
-        if exit is None:
-            raise ValueError("holder_id_matched_churn requires exit")
-        cols = _numeric_cols(entry)
-        return entry.with_columns(
-            [
-                (pl.col(c) + pl.col(c).from_(exit)).alias(c)
-                for c in cols
-            ]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        return _delegate("holder_id_matched_churn", panels, kwargs)
 
 
 @register_operator(
@@ -538,21 +483,13 @@ class HolderWeightedChurnNative(SeriesOperator):
         name="holder_weighted_churn",
         category="holder",
         description="持股加权流动率",
-        param_names=["churn", "share"],
+        param_names=_ID_PARAMS,
         return_type="series",
         tags=["holder", "churn", "polars", "native"],
     )
 
-    def _calculate_series(self, churn: pl.DataFrame, share: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
-        if share is None:
-            raise ValueError("holder_weighted_churn requires share")
-        cols = _numeric_cols(churn)
-        return churn.with_columns(
-            [
-                (pl.col(c) * pl.col(c).from_(share)).alias(c)
-                for c in cols
-            ]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        return _delegate("holder_weighted_churn", panels, kwargs)
 
 
 @register_operator(
@@ -570,16 +507,13 @@ class HolderRankStabilityNative(SeriesOperator):
         name="holder_rank_stability",
         category="holder",
         description="股东排名稳定性",
-        param_names=["x"],
+        param_names=_ID_PARAMS,
         return_type="series",
         tags=["holder", "stability", "polars", "native"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [pl.col(c).alias(c) for c in cols]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        return _delegate("holder_rank_stability", panels, kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -602,18 +536,13 @@ class HolderIdOverlapRatioNative(SeriesOperator):
         name="holder_id_overlap_ratio",
         category="holder",
         description="股东ID重叠率",
-        param_names=["x", "y"],
+        param_names=_ID_PARAMS,
         return_type="series",
         tags=["holder", "overlap", "polars", "native"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
-        if y is None:
-            raise ValueError("holder_id_overlap_ratio requires y")
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [pl.col(c).alias(c) for c in cols]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        return _delegate("holder_id_overlap_ratio", panels, kwargs)
 
 
 @register_operator(
@@ -631,17 +560,15 @@ class HolderShareholderOverlapRatioNative(SeriesOperator):
         name="holder_shareholder_overlap_ratio",
         category="holder",
         description="公司股东重叠率",
-        param_names=["x", "y"],
+        param_names=["shared_holders", "total_holders"],
         return_type="series",
-        tags=["holder", "overlap", "polars", "native"],
+        tags=["holder", "overlap", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
-        if y is None:
-            raise ValueError("holder_shareholder_overlap_ratio requires y")
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [pl.col(c).alias(c) for c in cols]
+    def _calculate_series(self, shared_holders, total_holders, **kwargs) -> pl.DataFrame:
+        return _delegate(
+            "holder_shareholder_overlap_ratio",
+            (shared_holders, total_holders), kwargs,
         )
 
 
@@ -665,24 +592,15 @@ class HolderFreezeRatioNative(SeriesOperator):
         name="holder_freeze_ratio",
         category="holder",
         description="冻结股比例",
-        param_names=["frozen", "total"],
+        param_names=["freeze_shares", "total_capital"],
         return_type="series",
         tags=["holder", "restricted", "polars", "native"],
     )
 
-    def _calculate_series(self, frozen: pl.DataFrame, total: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
-        if total is None:
+    def _calculate_series(self, freeze_shares: pl.DataFrame, total_capital: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
+        if total_capital is None:
             raise ValueError("holder_freeze_ratio requires total")
-        cols = _numeric_cols(frozen)
-        return frozen.with_columns(
-            [
-                pl.when(pl.col(c).from_(total).is_null() | (pl.col(c).from_(total) == 0))
-                .then(None)
-                .otherwise(pl.col(c) / pl.col(c).from_(total))
-                .alias(c)
-                for c in cols
-            ]
-        )
+        return bounded_share_ratio(freeze_shares, total_capital)
 
 
 @register_operator(
@@ -700,16 +618,14 @@ class HolderFreezeConcentrationNative(SeriesOperator):
         name="holder_freeze_concentration",
         category="holder",
         description="冻结股集中度",
-        param_names=["x"],
+        param_names=[f"s{i}" for i in range(1, 11)],
         return_type="series",
-        tags=["holder", "restricted", "polars", "native"],
+        tags=["holder", "restricted", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [(pl.col(c) ** 2).alias(c) for c in cols]
-        )
+    def _calculate_series(self, s1,s2,s3,s4,s5,s6,s7,s8,s9,s10, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate("holder_freeze_concentration", (s1,s2,s3,s4,s5,s6,s7,s8,s9,s10), kwargs)
 
 
 @register_operator(
@@ -727,20 +643,15 @@ class HolderFloatConcentrationGapNative(SeriesOperator):
         name="holder_float_concentration_gap",
         category="holder",
         description="流通集中度差距",
-        param_names=["total_conc", "float_conc"],
+        param_names=["top10_concentration", "top10_float_concentration"],
         return_type="series",
-        tags=["holder", "restricted", "polars", "native"],
+        tags=["holder", "restricted", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, total_conc: pl.DataFrame, float_conc: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
-        if float_conc is None:
-            raise ValueError("holder_float_concentration_gap requires float_conc")
-        cols = _numeric_cols(total_conc)
-        return total_conc.with_columns(
-            [
-                (pl.col(c) - pl.col(c).from_(float_conc)).alias(c)
-                for c in cols
-            ]
+    def _calculate_series(self, top10_concentration, top10_float_concentration, **kwargs) -> pl.DataFrame:
+        return _delegate(
+            "holder_float_concentration_gap",
+            (top10_concentration, top10_float_concentration), kwargs,
         )
 
 
@@ -759,24 +670,15 @@ class HolderLockedShareRatioNative(SeriesOperator):
         name="holder_locked_share_ratio",
         category="holder",
         description="限售股比例",
-        param_names=["locked", "total"],
+        param_names=["locked_shares", "total_capital"],
         return_type="series",
         tags=["holder", "restricted", "polars", "native"],
     )
 
-    def _calculate_series(self, locked: pl.DataFrame, total: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
-        if total is None:
+    def _calculate_series(self, locked_shares: pl.DataFrame, total_capital: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
+        if total_capital is None:
             raise ValueError("holder_locked_share_ratio requires total")
-        cols = _numeric_cols(locked)
-        return locked.with_columns(
-            [
-                pl.when(pl.col(c).from_(total).is_null() | (pl.col(c).from_(total) == 0))
-                .then(None)
-                .otherwise(pl.col(c) / pl.col(c).from_(total))
-                .alias(c)
-                for c in cols
-            ]
-        )
+        return bounded_share_ratio(locked_shares, total_capital)
 
 
 # ---------------------------------------------------------------------------
@@ -799,24 +701,15 @@ class HolderPledgeRatioNative(SeriesOperator):
         name="holder_pledge_ratio",
         category="holder",
         description="质押股比例",
-        param_names=["pledged", "total"],
+        param_names=["pledge_shares", "total_capital"],
         return_type="series",
         tags=["holder", "pledge", "polars", "native"],
     )
 
-    def _calculate_series(self, pledged: pl.DataFrame, total: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
-        if total is None:
+    def _calculate_series(self, pledge_shares: pl.DataFrame, total_capital: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
+        if total_capital is None:
             raise ValueError("holder_pledge_ratio requires total")
-        cols = _numeric_cols(pledged)
-        return pledged.with_columns(
-            [
-                pl.when(pl.col(c).from_(total).is_null() | (pl.col(c).from_(total) == 0))
-                .then(None)
-                .otherwise(pl.col(c) / pl.col(c).from_(total))
-                .alias(c)
-                for c in cols
-            ]
-        )
+        return bounded_share_ratio(pledge_shares, total_capital)
 
 
 @register_operator(
@@ -834,16 +727,14 @@ class HolderPledgeConcentrationNative(SeriesOperator):
         name="holder_pledge_concentration",
         category="holder",
         description="质押股集中度",
-        param_names=["x"],
+        param_names=[f"s{i}" for i in range(1, 11)],
         return_type="series",
-        tags=["holder", "pledge", "polars", "native"],
+        tags=["holder", "pledge", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [(pl.col(c) ** 2).alias(c) for c in cols]
-        )
+    def _calculate_series(self, s1,s2,s3,s4,s5,s6,s7,s8,s9,s10, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate("holder_pledge_concentration", (s1,s2,s3,s4,s5,s6,s7,s8,s9,s10), kwargs)
 
 
 @register_operator(
@@ -898,19 +789,14 @@ class HolderPledgeChurnNative(SeriesOperator):
         name="holder_pledge_churn",
         category="holder",
         description="质押股流动率",
-        param_names=["x"],
+        param_names=[*(f"s{i}" for i in range(1, 11)), *(f"p{i}" for i in range(1, 11))],
         return_type="series",
-        tags=["holder", "pledge", "polars", "native"],
+        tags=["holder", "pledge", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [
-                (pl.col(c) - pl.col(c).shift(1)).abs().alias(c)
-                for c in cols
-            ]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate("holder_pledge_churn", panels, kwargs)
 
 
 @register_operator(
@@ -928,16 +814,14 @@ class HolderPledgedHolderCountNative(SeriesOperator):
         name="holder_pledged_holder_count",
         category="holder",
         description="质押股东数量",
-        param_names=["x"],
+        param_names=[f"s{i}" for i in range(1, 11)],
         return_type="series",
-        tags=["holder", "pledge", "polars", "native"],
+        tags=["holder", "pledge", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [pl.col(c).is_not_null().cast(pl.Float64).alias(c) for c in cols]
-        )
+    def _calculate_series(self, s1,s2,s3,s4,s5,s6,s7,s8,s9,s10, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate("holder_pledged_holder_count", (s1,s2,s3,s4,s5,s6,s7,s8,s9,s10), kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -987,20 +871,16 @@ class HolderCommonHoldingPeerReturnNative(SeriesOperator):
         name="holder_common_holding_peer_return",
         category="holder",
         description="共同持股股票加权收益",
-        param_names=["ret", "weight"],
+        param_names=["peer_return", "own_return", "overlap"],
         return_type="series",
-        tags=["holder", "network", "polars", "native"],
+        tags=["holder", "network", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, ret: pl.DataFrame, weight: pl.DataFrame | None = None, **kwargs) -> pl.DataFrame:
-        if weight is None:
-            raise ValueError("holder_common_holding_peer_return requires weight")
-        cols = _numeric_cols(ret)
-        return ret.with_columns(
-            [
-                (pl.col(c) * pl.col(c).from_(weight)).alias(c)
-                for c in cols
-            ]
+    def _calculate_series(self, peer_return, own_return, overlap, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate(
+            "holder_common_holding_peer_return",
+            (peer_return, own_return, overlap), kwargs,
         )
 
 
@@ -1019,16 +899,13 @@ class HolderShareWeightedRankMigrationNative(SeriesOperator):
         name="holder_share_weighted_rank_migration",
         category="holder",
         description="持股加权排名迁移",
-        param_names=["x"],
+        param_names=_ID_PARAMS,
         return_type="series",
         tags=["holder", "network", "polars", "native"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [pl.col(c).alias(c) for c in cols]
-        )
+    def _calculate_series(self, *panels, **kwargs) -> pl.DataFrame:
+        return _delegate("holder_share_weighted_rank_migration", panels, kwargs)
 
 
 @register_operator(
@@ -1046,16 +923,14 @@ class HolderShareholderNetworkCentralityNative(SeriesOperator):
         name="holder_shareholder_network_centrality",
         category="holder",
         description="股东网络中心性",
-        param_names=["x"],
+        param_names=["degree", "total"],
         return_type="series",
-        tags=["holder", "network", "polars", "native"],
+        tags=["holder", "network", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [pl.col(c).alias(c) for c in cols]
-        )
+    def _calculate_series(self, degree, total, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+        return _call_pandas_delegate("holder_shareholder_network_centrality", (degree, total), kwargs)
 
 
 @register_operator(
@@ -1073,16 +948,63 @@ class HolderClassJsShiftNative(SeriesOperator):
         name="holder_class_js_shift",
         category="holder",
         description="股东类别分布JS变化",
-        param_names=["x"],
+        param_names=["s1", "s2", "s3", "s4", "s5", "ps1", "ps2", "ps3", "ps4", "ps5"],
         return_type="series",
-        tags=["holder", "diversity", "polars", "native"],
+        tags=["holder", "diversity", "polars", "delegate:pandas_numpy"],
     )
 
-    def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
-        cols = _numeric_cols(x)
-        return x.with_columns(
-            [
-                ((pl.col(c) - pl.col(c).shift(1)) ** 2).alias(c)
-                for c in cols
-            ]
+    def _calculate_series(
+        self, s1, s2, s3, s4, s5, ps1, ps2, ps3, ps4, ps5, **kwargs
+    ) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.rolling_pack import _call_pandas_delegate
+
+        return _call_pandas_delegate(
+            "holder_class_js_shift",
+            (s1, s2, s3, s4, s5, ps1, ps2, ps3, ps4, ps5),
+            kwargs,
         )
+
+
+_PANDAS_DELEGATE_CLASSES = (
+    HolderConcentrationNative,
+    HolderConcentrationAccelerationNative,
+    HolderConcentrationSlopeNative,
+    HolderTopkShareSumNative,
+    HolderCompanyOwnershipHhiNative,
+    HolderObservedTopkHhiNative,
+    HolderClassEntropyNative,
+    HolderNatureEntropyNative,
+    HolderDisclosureCountNative,
+    HolderDisclosureCoverageNative,
+    HolderEntryShareNative,
+    HolderExitShareNative,
+    HolderNetEntryShareNative,
+    HolderIdMatchedEntryShareNative,
+    HolderIdMatchedExitShareNative,
+    HolderIdMatchedChurnNative,
+    HolderWeightedChurnNative,
+    HolderRankStabilityNative,
+    HolderIdOverlapRatioNative,
+    HolderShareholderOverlapRatioNative,
+    HolderFloatConcentrationGapNative,
+    HolderFreezeConcentrationNative,
+    HolderPledgeConcentrationNative,
+    HolderPledgeChurnNative,
+    HolderPledgedHolderCountNative,
+    HolderCommonHoldingPeerReturnNative,
+    HolderShareWeightedRankMigrationNative,
+    HolderShareholderNetworkCentralityNative,
+    HolderClassJsShiftNative,
+)
+for _delegate_cls in _PANDAS_DELEGATE_CLASSES:
+    _delegate_cls._physical_spec = PhysicalImplementationSpec(
+        canonical=_delegate_cls.metadata.name,
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False,
+        supports_streaming=False,
+        materializes_full_panel=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+    )

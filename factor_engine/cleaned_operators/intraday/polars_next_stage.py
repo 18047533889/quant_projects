@@ -57,6 +57,20 @@ def _pivot(df: pl.DataFrame, value: str) -> pl.DataFrame:
     return piv.fill_null(float("nan"))
 
 
+def _daily_like(df: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
+    """Keep source date/symbol identities when estimates are unavailable."""
+    tc = _time_col(source)
+    columns = [c for c in source.columns if c != tc]
+    dates = source.select(pl.col(tc).cast(pl.Datetime).dt.date().alias("date")).unique()
+    grid = dates.join(pl.DataFrame({"instrument": columns}, schema={"instrument": pl.String}), how="cross")
+    aligned = grid.join(df.select("date", "instrument", "v"), on=["date", "instrument"], how="left")
+    result = _pivot(aligned, "v")
+    missing = [c for c in columns if c not in result.columns]
+    if missing:
+        result = result.with_columns([pl.lit(float("nan"), dtype=pl.Float64).alias(c) for c in missing])
+    return result.select("date", *columns).sort("date")
+
+
 def _mk(canonical: str, description: str, params: list[str], fn, panel_params=None, scalar_params=None, param_specs=None):
     metadata = OperatorMetadata(
         name=canonical,
@@ -151,25 +165,37 @@ _mk("intra_jump_variation", "日内跳跃方差 max(RV-BV,0)（Polars）。", ["
 
 
 def _jump_stats(close: pl.DataFrame, stat: str, threshold_scale: float) -> pl.DataFrame:
+    if not math.isfinite(threshold_scale) or threshold_scale <= 0.0:
+        raise ValueError("threshold_scale must be a finite number > 0")
     long = _melt(close, "close")
     long = long.with_columns(pl.col("ts").dt.date().alias("date"))
     long = _returns(long)
     r = pl.col("r")
+    finite_r = r.is_finite().fill_null(False)
     rv = long.group_by(["date", "instrument"]).agg(
-        pl.col("r").count().alias("n"),
-        (r * r).sum().alias("rv"),
+        finite_r.cast(pl.UInt32).sum().alias("n"),
+        pl.when(finite_r).then(r * r).otherwise(None).sum().alias("rv"),
     ).with_columns(
-        pl.when(pl.col("n" != 0).then(pl.col("rv") / pl.col("n").otherwise(None)).sqrt() * float(threshold_scale)).alias("thresh")
+        pl.when((pl.col("n") >= 2) & pl.col("rv").is_finite() & (pl.col("rv") > _EPS))
+        .then((pl.col("rv") / pl.col("n")).sqrt() * threshold_scale)
+        .otherwise(None)
+        .alias("thresh")
     )
     long = long.join(rv, on=["date", "instrument"])
-    long = long.with_columns((r.abs() > pl.col("thresh")).alias("jump"))
+    long = long.with_columns(
+        (finite_r & pl.col("thresh").is_not_null() & (r.abs() > pl.col("thresh")))
+        .fill_null(False)
+        .alias("jump")
+    )
     jr = pl.col("r")
+    jump = pl.col("jump")
+    jump_sq = pl.when(jump).then(jr * jr).otherwise(0.0)
     stats = long.group_by(["date", "instrument"]).agg(
-        pl.col("jump").sum().alias("count"),
-        ((jr * jr) * pl.col("jump") * (jr > 0)).sum().alias("pos"),
-        ((jr * jr) * pl.col("jump") * (jr < 0)).sum().alias("neg"),
-        ((jr * jr) * pl.col("jump")).sum().alias("total"),
-        ((jr * jr) * pl.col("jump")).pow(2).sum().alias("conc_num"),
+        jump.sum().alias("count"),
+        pl.when(jump & (jr > 0)).then(jr * jr).otherwise(0.0).sum().alias("pos"),
+        pl.when(jump & (jr < 0)).then(jr * jr).otherwise(0.0).sum().alias("neg"),
+        jump_sq.sum().alias("total"),
+        jump_sq.pow(2).sum().alias("conc_num"),
     )
     has_jump = pl.col("count") > 0
     if stat == "count":
@@ -196,7 +222,7 @@ def _jump_stats(close: pl.DataFrame, stat: str, threshold_scale: float) -> pl.Da
             .otherwise(None)
             .alias("v")
         ).select(["date", "instrument", "v"])
-    return _pivot(out, "v")
+    return _daily_like(out, close)
 
 
 _mk("intra_positive_jump_variation", "日内正跳跃方差（Polars）。", ["close", "threshold_scale"],
@@ -261,19 +287,37 @@ _mk("intra_interval_amount_share", "区间成交额占比（Polars）。", ["amo
 def _max_path(close: pl.DataFrame, side: str) -> pl.DataFrame:
     long = _melt(close, "close")
     long = long.with_columns(pl.col("ts").dt.date().alias("date"))
-    long = long.with_columns(
+    finite = long.filter(pl.col("close").is_finite().fill_null(False)).sort(
+        ["date", "instrument", "ts"]
+    )
+    finite = finite.with_columns(
         pl.col("close").cum_max().over(["date", "instrument"]).alias("run_max"),
         pl.col("close").cum_min().over(["date", "instrument"]).alias("run_min"),
     )
     if side == "down":
-        out = long.group_by(["date", "instrument"]).agg(
-            pl.when(pl.col("run_max" != 0).then(pl.col("close") / pl.col("run_max").otherwise(None)) - 1.0).min().alias("v")
+        out = finite.group_by(["date", "instrument"]).agg(
+            pl.len().alias("n"),
+            (pl.col("run_max") == 0).any().alias("undefined_reference"),
+            pl.when(pl.col("run_max") != 0)
+            .then(pl.col("close") / pl.col("run_max") - 1.0)
+            .otherwise(None)
+            .min()
+            .alias("path_v"),
         )
     else:
-        out = long.group_by(["date", "instrument"]).agg(
-            pl.when(pl.col("run_min" != 0).then(pl.col("close") / pl.col("run_min").otherwise(None)) - 1.0).max().alias("v")
+        out = finite.group_by(["date", "instrument"]).agg(
+            pl.len().alias("n"),
+            (pl.col("run_min") == 0).any().alias("undefined_reference"),
+            pl.when(pl.col("run_min") != 0)
+            .then(pl.col("close") / pl.col("run_min") - 1.0)
+            .otherwise(None)
+            .max()
+            .alias("path_v"),
         )
-    return _pivot(out, "v")
+    out = out.with_columns(
+        pl.when((pl.col("n") >= 2) & ~pl.col("undefined_reference")).then(pl.col("path_v")).otherwise(None).alias("v")
+    )
+    return _daily_like(out, close)
 
 
 _mk("intra_max_drawdown", "日内最大回撤（Polars）。", ["close"],

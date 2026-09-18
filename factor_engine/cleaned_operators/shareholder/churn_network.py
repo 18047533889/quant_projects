@@ -474,11 +474,13 @@ def _share_hhi(*args):
     # UNKNOWN, never a confirmed 0%.  nan_to_num'ing unknown back to 0 silently
     # understates the top-10 concentration.  One unknown share poisons the HHI
     # -> fail closed to NaN.
-    unknown = np.isnan(stacked).any(axis=0)
-    values = np.nan_to_num(stacked)
-    total = values.sum(axis=0)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        shares = values / np.where(total > 0, total, 1)
+    unknown = ((~np.isfinite(stacked)) | (stacked < 0)).any(axis=0)
+    values = np.where(np.isfinite(stacked) & (stacked >= 0), stacked, 0.0)
+    scale = values.max(axis=0)
+    with np.errstate(divide="ignore", invalid="ignore", under="ignore"):
+        scaled = np.divide(values, scale, out=np.zeros_like(values), where=scale > 0)
+        total = scaled.sum(axis=0)
+        shares = np.divide(scaled, total, out=np.zeros_like(scaled), where=total > 0)
         hhi = np.sum(shares * shares, axis=0)
     return _frame_like(args[0], np.where((total > 0) & ~unknown, hhi, np.nan))
 
@@ -500,8 +502,8 @@ _mk(
 def _pledged_holder_count(*args):
     stacked = _stack(list(args))
     # P1-135: NaN (unknown pledge) must not be counted as a non-pledged holder.
-    unknown = np.isnan(stacked).any(axis=0)
-    count = np.sum(np.nan_to_num(stacked) > 0, axis=0).astype(float)
+    unknown = ((~np.isfinite(stacked)) | (stacked < 0)).any(axis=0)
+    count = np.sum(stacked > 0, axis=0).astype(float)
     return _frame_like(args[0], np.where(unknown, np.nan, count))
 
 
@@ -529,9 +531,10 @@ def _pledge_churn(*args):
     cur, prev = _cur_prev_ranked(args)
     # P1-135: unknown (NaN) pledge on either side makes the period change
     # undefined; it must not be silently zero-filled as "no change".
-    unknown = np.isnan(cur) | np.isnan(prev)
-    churn = np.nansum(np.abs(np.nan_to_num(cur) - np.nan_to_num(prev)), axis=0)
-    return _frame_like(args[0], np.where(unknown.any(axis=0), np.nan, churn))
+    unknown = (~np.isfinite(cur)) | (~np.isfinite(prev)) | (cur < 0) | (prev < 0)
+    with np.errstate(over="ignore", invalid="ignore"):
+        churn = np.sum(np.abs(cur - prev), axis=0)
+    return _frame_like(args[0], np.where(unknown.any(axis=0) | ~np.isfinite(churn), np.nan, churn))
 
 
 _mk(
@@ -721,15 +724,19 @@ _mk(
 
 
 def _weighted_entropy(*args):
-    stacked = np.nan_to_num(_stack(list(args)))
-    total = stacked.sum(axis=0)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        w = np.where(total[None, :, :] > 0, stacked / total, np.nan)
-        valid = w > 0
-        wv = np.where(valid, w, 0.0)
-        h = -np.nansum(np.where(valid, wv * np.log(wv), 0.0), axis=0)
-    n = np.sum(valid, axis=0).astype(float)
-    out = np.where(n >= 2, h / np.log(n), np.nan)
+    raw = _stack(list(args))
+    # Missing ranked holders are absent under this source contract. Negative
+    # and infinite weights are invalid observations, not probability mass.
+    invalid = np.any(np.isinf(raw) | (raw < 0), axis=0)
+    stacked = np.where(np.isfinite(raw) & (raw >= 0), raw, 0.0)
+    scale = stacked.max(axis=0)
+    n = (stacked > 0).sum(axis=0)
+    with np.errstate(divide="ignore", invalid="ignore", under="ignore"):
+        scaled = np.divide(stacked, scale, out=np.zeros_like(stacked), where=scale > 0)
+        total = scaled.sum(axis=0)
+        w = np.divide(scaled, total, out=np.zeros_like(scaled), where=total > 0)
+        h = -np.sum(np.where(w > 0, w * np.log(w), 0.0), axis=0)
+        out = np.where((~invalid) & (n >= 2), h / np.log(n), np.nan)
     return _frame_like(args[0], out)
 
 

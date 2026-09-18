@@ -91,7 +91,9 @@ def holder_concentration(top_holder_shares, total_shares):
     for i, c in enumerate(cols):
         num, den = top_holder_shares[c].to_numpy(), total_shares[c].to_numpy()
         out[:, i] = np.divide(num, den, out=np.full(rows, np.nan), where=den != 0)
-    return _make(top_holder_shares, cols, out)
+    return top_holder_shares.with_columns(
+        [pl.Series(name=col, values=out[:, i]) for i, col in enumerate(cols)]
+    )
 
 
 # ---------------------------------------------------------------------------

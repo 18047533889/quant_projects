@@ -245,18 +245,39 @@ _mk("intra_segment_vwap_deviation", "指定时段末价相对该时段累计 VWA
    lambda close, amount, volume, segment="morning", session_tz=None: _seg_vwap_dev(close, amount, volume, segment))
 
 
-def _seg_realized_vol(close: pl.DataFrame, segment: str) -> pl.DataFrame:
-    long = _with_mod(_with_date(_melt(close, "close"))).filter(pl.col("close").is_finite())
-    long = long.filter(_segment_mask(pl.col("mod"), segment))
-    long = _log_returns_long(long)
-    out = long.group_by(["date", "instrument"]).agg(
-        (pl.col("r") * pl.col("r")).fill_nan(0.0).sum().sqrt().alias("v")
-    )
-    return _pivot(out, "v")
+def _seg_realized_vol(close: pl.DataFrame, segment: str, session_tz: str | None) -> pl.DataFrame:
+    """Exact bounded delegate: the reference owns official-grid/coverage policy."""
+    import pandas as pd
+
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    tc = _time_col(close)
+    pdf = close.to_pandas()
+    pdf.index = pd.DatetimeIndex(pdf.pop(tc))
+    reference = OperatorRegistry.get("intra_segment_realized_vol", backend="pandas_numpy")
+    result = reference.calculate(pdf, segment=segment, session_tz=session_tz)
+    result.index.name = "date"
+    return pl.from_pandas(result.reset_index()).with_columns(pl.col("date").cast(pl.Date))
 
 
-_mk("intra_segment_realized_vol", "指定时段已实现波动率 sqrt(sum(r_t^2))（Polars）。", ["close", "segment", "session_tz"],
-   lambda close, segment="morning", session_tz=None: _seg_realized_vol(close, segment))
+_IntraSegmentRealizedVolPolars = _mk(
+    "intra_segment_realized_vol",
+    "指定时段已实现波动率 sqrt(sum(r_t^2))（authoritative CPU delegate）。",
+    ["close", "segment", "session_tz"],
+    lambda close, segment="morning", session_tz=None: _seg_realized_vol(close, segment, session_tz),
+    extra_tags=["delegate:pandas_numpy"],
+)
+_IntraSegmentRealizedVolPolars.metadata.tags = [
+    tag for tag in _IntraSegmentRealizedVolPolars.metadata.tags if tag != "native"
+]
+from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+_IntraSegmentRealizedVolPolars._physical_spec = PhysicalImplementationSpec(
+    canonical="intra_segment_realized_vol", backend="polars",
+    execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+    supports_lazy=False, supports_streaming=False,
+    materializes_full_panel=True, supports_nulls=True, supports_nan=True, supports_inf=True,
+    notes="Authoritative pandas SessionPanel delegate; CPU only, no native acceleration.",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1050,12 +1071,9 @@ for _name, _desc, _fn in (
 def _jump_mask_long(close: pl.DataFrame, threshold_scale: float) -> pl.DataFrame:
     """Per-bar significant-jump mask |r| > scale * sqrt(RV/N); NaN r -> no jump.
 
-    P1-100 slot-axis rule: RV/N and the per-bar threshold use the RAW-grid
-    log-returns (missing bars stay rows, so RV = sum of finite r^2 over the
-    grid and N = number of r entries on the grid).  The pandas reference
-    (``higher_moments._jump_mask``) computes over ``log_returns(v)`` on the
-    original 240-slot grid.  The old path filtered finite closes first, which
-    compressed N and bridged gaps — the threshold therefore no longer matched."""
+    Physical slots remain rows so missing prices cannot create adjacent
+    returns across a gap. RV and N use only finite returns, matching the
+    canonical estimator; retaining a slot must not inflate finite support."""
     ts = float(threshold_scale)
     long = _with_date(_melt(close, "close"))
     # P1-100 slot-axis rule: RV/N and the per-bar threshold use the RAW-grid
@@ -1064,8 +1082,8 @@ def _jump_mask_long(close: pl.DataFrame, threshold_scale: float) -> pl.DataFrame
     long = long.sort(["date", "instrument", "ts"])
     long = _log_returns_diff_on_grid(long)
     rv = long.group_by(["date", "instrument"]).agg(
-        (pl.col("r") * pl.col("r")).fill_nan(0.0).sum().alias("rv"),
-        pl.col("r").count().alias("n"),
+        pl.when(pl.col("r").is_finite()).then(pl.col("r") * pl.col("r")).otherwise(None).sum().alias("rv"),
+        pl.col("r").is_finite().fill_null(False).cast(pl.UInt32).sum().alias("n"),
     )
     long = long.join(rv, on=["date", "instrument"]).with_columns(
         pl.when((pl.col("rv") > _EPS) & (pl.col("n") >= 2))

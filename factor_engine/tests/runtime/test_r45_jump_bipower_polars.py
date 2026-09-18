@@ -70,3 +70,13 @@ def test_jump_bipower_empty_validation_backend_and_physical_path():
     assert spec.execution_kind is ExecutionKind.POLARS_NATIVE_EXPR
     assert not spec.materializes_full_panel
     assert not spec.supports_lazy
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_jump_bipower_recovers_after_nonfinite_window_exits(bad):
+    values = np.tile([.01,-.02,.03,.04,.01], 6)
+    values[7] = bad
+    frame = pl.DataFrame({"timestamp": pd.date_range("2024-01-01", periods=len(values)), "A": values})
+    actual = TSJumpBipowerPolarsNative().calculate(frame, window=5)["A"].to_numpy()
+    np.testing.assert_allclose(actual, _oracle(values, 5), equal_nan=True)
+    assert np.isfinite(actual[12:]).all()

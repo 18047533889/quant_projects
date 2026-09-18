@@ -25,6 +25,31 @@ def _flow_reference(reference_cls, *panels, **kwargs):
     return pl.from_pandas(out.rename_axis("date").reset_index())
 
 
+def _limit_reference(reference_cls, *panels, **kwargs):
+    """Delegate limit kernels while restoring their labelled time axes."""
+    import pandas as pd
+    from factor_engine.cleaned_operators.common._polars_bridge import to_pandas_panel
+
+    converted = []
+    for panel in panels:
+        if panel is None or not isinstance(panel, pl.DataFrame):
+            converted.append(panel)
+            continue
+        out = to_pandas_panel(panel)
+        time_col = next(
+            (name for name in ("__fe_time__", "QuoteTime", "date", "timestamp", "trade_date", "datetime")
+             if name in panel.columns),
+            None,
+        )
+        if time_col is not None:
+            out = out.drop(columns=[time_col], errors="ignore")
+            out.index = pd.DatetimeIndex(panel[time_col].to_pandas())
+            out.index = out.index.rename(time_col)
+        converted.append(out)
+    result = reference_cls()._calculate_series(*converted, **kwargs)
+    return pl.from_pandas(result.rename_axis("date").reset_index())
+
+
 def _flow_metadata(reference_cls):
     metadata = copy.deepcopy(reference_cls.metadata)
     metadata.tags = list(metadata.tags or []) + [
@@ -847,82 +872,42 @@ class IntraImpulseEventDetectorPolarsNativeV2(SeriesOperator):
 
 @register_operator(name="intra_limit_duration", backend="polars")
 class IntraLimitDurationPolarsNative(SeriesOperator):
-    """Total minutes spent at daily price limits."""
+    """Exact labelled-panel delegate for official-grid limit duration."""
 
-    metadata = OperatorMetadata(
-        name="intra_limit_duration",
-        category="intraday",
-        description="Total minutes spent at daily price limits",
-        param_names=["close", "high_limit", "low_limit", "side"],
-        param_types={"close": pl.Series, "high_limit": pl.Series, "low_limit": pl.Series, "side": str},
-        tags=["intraday", "limit", "duration", "polars_native"],
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import IntraLimitDuration as _Reference
+    metadata = _flow_metadata(_Reference)
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="intra_limit_duration", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
 
     def _calculate_series(self, close, high_limit=None, low_limit=None, side: str = "up", **kwargs):
-        # R4-100 parity: adopt the pandas reference arity (close, high_limit,
-        # low_limit, side).  Best-effort limit-duration: fraction of the
-        # minute grid at the chosen limit price.
-        limit_panel = high_limit if (side == "up" and high_limit is not None) else low_limit
-        cdf = close if isinstance(close, pl.DataFrame) else close.to_frame("v")
-        ldf = limit_panel if isinstance(limit_panel, pl.DataFrame) else (limit_panel.to_frame("v") if limit_panel is not None else None)
-        cols = [c for c in cdf.columns if c not in PANEL_SKIP_COLUMNS]
-        if ldf is None:
-            out = cdf.with_columns([pl.lit(0.0).alias(c) for c in cols])
-            return out
-        cv = cdf[cols].to_numpy(dtype=float)
-        lv = ldf[[c for c in cols if c in ldf.columns] or cols[0]].to_numpy(dtype=float).ravel() if len(cols) == 1 else ldf[cols].to_numpy(dtype=float)
-        out = np.zeros_like(cv, dtype=float)
-        rows = cv.shape[0]
-        for idx in range(len(cols)):
-            ccol = cv[:, idx]
-            lcol = lv[:, idx] if lv.ndim > 1 else lv
-            tol = 1e-6
-            out[:, idx] = (np.abs(ccol - lcol) / np.maximum(np.abs(lcol), 1e-12) <= tol).astype(float)
-        data = {}
-        for idx, col in enumerate(cols):
-            data[col] = out[:, idx]
-        return _result_df(data, cdf)
+        return _limit_reference(
+            self._Reference, close, high_limit, low_limit, side=side, **kwargs
+        )
 
 
 @register_operator(name="intra_limit_first_hit_time", backend="polars")
 class IntraLimitFirstHitTimePolarsNative(SeriesOperator):
-    """Minute-of-day when price first hits the daily limit."""
+    """Exact labelled-panel delegate for official-slot first-hit time."""
 
-    metadata = OperatorMetadata(
-        name="intra_limit_first_hit_time",
-        category="intraday",
-        description="Minute-of-day when price first hits the daily limit",
-        param_names=["close", "high", "low", "high_limit", "low_limit", "side"],
-        param_types={"close": pl.Series, "high": pl.Series, "low": pl.Series,
-                     "high_limit": pl.Series, "low_limit": pl.Series, "side": str},
-        tags=["intraday", "limit", "first", "hit", "time", "polars_native"],
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import IntraLimitFirstHitTime as _Reference
+    metadata = _flow_metadata(_Reference)
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="intra_limit_first_hit_time", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
 
     def _calculate_series(self, close, high=None, low=None, high_limit=None,
                           low_limit=None, side="up", **kwargs):
-        # R4-100 parity: adopt the pandas reference arity (close, high, low,
-        # high_limit, low_limit, side).  Best-effort first-hit-time in session
-        # minutes.
-        touch = high if (side == "up" and high is not None) else (low if (side == "down" and low is not None) else close)
-        tdf = touch if isinstance(touch, pl.DataFrame) else touch.to_frame("v")
-        limit_panel = high_limit if side == "up" else low_limit
-        ldf = limit_panel if isinstance(limit_panel, pl.DataFrame) else (limit_panel.to_frame("v") if limit_panel is not None else None)
-        cols = [c for c in tdf.columns if c not in PANEL_SKIP_COLUMNS]
-        tv = tdf[cols].to_numpy(dtype=float)
-        lv = ldf[cols].to_numpy(dtype=float) if ldf is not None else None
-        out = np.full_like(tv, np.nan, dtype=float)
-        rows = tv.shape[0]
-        for i in range(rows):
-            if lv is None:
-                out[i, :] = 0.0
-                continue
-            for idx in range(len(cols)):
-                if np.isfinite(tv[i, idx]) and np.isfinite(lv[i, idx]) and abs(tv[i, idx] / lv[i, idx] - 1.0) <= 1e-6:
-                    out[i, idx] = float(i)
-        data = {}
-        for idx, col in enumerate(cols):
-            data[col] = out[:, idx]
-        return _result_df(data, tdf)
+        return _limit_reference(
+            self._Reference, close, high, low, high_limit, low_limit,
+            side=side, **kwargs
+        )
 
 
 @register_operator(name="intra_limit_pre_hit_pressure_profile", backend="polars")
@@ -963,38 +948,23 @@ class IntraLimitPreHitPressureProfilePolarsNative(SeriesOperator):
 
 @register_operator(name="intra_limit_reopen_count", backend="polars")
 class IntraLimitReopenCountPolarsNative(SeriesOperator):
-    """Number of times price reopens after hitting limit."""
+    """Exact labelled-panel delegate for official-grid limit transitions."""
 
-    metadata = OperatorMetadata(
-        name="intra_limit_reopen_count",
-        category="intraday",
-        description="Number of times price reopens after hitting limit",
-        param_names=["close", "high_limit", "low_limit", "side", "transition"],
-        param_types={"close": pl.Series, "high_limit": pl.Series, "low_limit": pl.Series,
-                     "side": str, "transition": str},
-        tags=["intraday", "limit", "reopen", "count", "polars_native"],
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import IntraLimitReopenCount as _Reference
+    metadata = _flow_metadata(_Reference)
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="intra_limit_reopen_count", backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
     )
 
     def _calculate_series(self, close, high_limit=None, low_limit=None, side="up",
                           transition="open", **kwargs):
-        # R4-100 parity: adopt the pandas reference arity (close, high_limit,
-        # low_limit, side, transition).  Best-effort reopen transition count.
-        limit_panel = high_limit if side == "up" else low_limit
-        cdf = close if isinstance(close, pl.DataFrame) else close.to_frame("v")
-        ldf = limit_panel if isinstance(limit_panel, pl.DataFrame) else (limit_panel.to_frame("v") if limit_panel is not None else None)
-        cols = [c for c in cdf.columns if c not in PANEL_SKIP_COLUMNS]
-        cv = cdf[cols].to_numpy(dtype=float)
-        lv = ldf[cols].to_numpy(dtype=float) if ldf is not None else None
-        out = np.zeros_like(cv, dtype=float)
-        if lv is not None:
-            for idx in range(len(cols)):
-                touched = (np.abs(cv[:, idx] - lv[:, idx]) / np.maximum(np.abs(lv[:, idx]), 1e-12) <= 1e-6).astype(float)
-                trans = np.abs(np.diff(touched, prepend=0.0)).sum()
-                out[:, idx] = trans
-        data = {}
-        for idx, col in enumerate(cols):
-            data[col] = out[:, idx]
-        return _result_df(data, cdf)
+        return _limit_reference(
+            self._Reference, close, high_limit, low_limit,
+            side=side, transition=transition, **kwargs
+        )
 
 
 @register_operator(name="intra_liquidity_resilience_curve_fit", backend="polars")

@@ -1,0 +1,74 @@
+.........................................................FFF.....        [100%]
+=================================== FAILURES ===================================
+_ test_public_registry_winner_enforces_mask_and_preserves_timestamp[holder_freeze_ratio] _
+factor_engine/tests/operators/test_r48_polars_holder_bounded_ratio.py:75: in test_public_registry_winner_enforces_mask_and_preserves_timestamp
+    result = operator.calculate(numerator, denominator)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base_polars.py:160: in calculate
+    processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base_polars.py:118: in _prepare_call
+    processed_args, processed_kwargs = validate_operator_call(self, args, kwargs)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2269: in validate_operator_call
+    call = bind_operator_call(operator, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2216: in bind_operator_call
+    processed_args, processed_kwargs = _normalise_call(
+factor_engine/cleaned_operators/base.py:1677: in _normalise_call
+    _validate_declared_call_arity(metadata, args, kwargs, defaults=defaults)
+factor_engine/cleaned_operators/base.py:1620: in _validate_declared_call_arity
+    raise OperatorParameterError(
+E   factor_engine.backend.operator_errors.OperatorParameterError: holder_freeze_ratio: missing required parameters ['freeze_shares', 'total_capital']
+_ test_public_registry_winner_enforces_mask_and_preserves_timestamp[holder_locked_share_ratio] _
+factor_engine/tests/operators/test_r48_polars_holder_bounded_ratio.py:75: in test_public_registry_winner_enforces_mask_and_preserves_timestamp
+    result = operator.calculate(numerator, denominator)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base_polars.py:160: in calculate
+    processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base_polars.py:118: in _prepare_call
+    processed_args, processed_kwargs = validate_operator_call(self, args, kwargs)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2269: in validate_operator_call
+    call = bind_operator_call(operator, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2216: in bind_operator_call
+    processed_args, processed_kwargs = _normalise_call(
+factor_engine/cleaned_operators/base.py:1677: in _normalise_call
+    _validate_declared_call_arity(metadata, args, kwargs, defaults=defaults)
+factor_engine/cleaned_operators/base.py:1620: in _validate_declared_call_arity
+    raise OperatorParameterError(
+E   factor_engine.backend.operator_errors.OperatorParameterError: holder_locked_share_ratio: missing required parameters ['locked_shares', 'total_capital']
+_ test_public_registry_winner_enforces_mask_and_preserves_timestamp[holder_pledge_ratio] _
+factor_engine/tests/operators/test_r48_polars_holder_bounded_ratio.py:75: in test_public_registry_winner_enforces_mask_and_preserves_timestamp
+    result = operator.calculate(numerator, denominator)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base_polars.py:160: in calculate
+    processed_args, processed_kwargs = self._prepare_call(args, kwargs)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base_polars.py:118: in _prepare_call
+    processed_args, processed_kwargs = validate_operator_call(self, args, kwargs)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2269: in validate_operator_call
+    call = bind_operator_call(operator, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+factor_engine/cleaned_operators/base.py:2216: in bind_operator_call
+    processed_args, processed_kwargs = _normalise_call(
+factor_engine/cleaned_operators/base.py:1677: in _normalise_call
+    _validate_declared_call_arity(metadata, args, kwargs, defaults=defaults)
+factor_engine/cleaned_operators/base.py:1620: in _validate_declared_call_arity
+    raise OperatorParameterError(
+E   factor_engine.backend.operator_errors.OperatorParameterError: holder_pledge_ratio: missing required parameters ['pledge_shares', 'total_capital']
+=============================== warnings summary ===============================
+factor_engine/tests/runtime/test_r49_repaired_identity.py::test_repaired_identities_change[index_reconstitution_churn-2]
+factor_engine/tests/runtime/test_r49_repaired_identity.py::test_repaired_identities_change[index_reconstitution_churn-2]
+  /home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED factor_engine/tests/operators/test_r48_polars_holder_bounded_ratio.py::test_public_registry_winner_enforces_mask_and_preserves_timestamp[holder_freeze_ratio]
+FAILED factor_engine/tests/operators/test_r48_polars_holder_bounded_ratio.py::test_public_registry_winner_enforces_mask_and_preserves_timestamp[holder_locked_share_ratio]
+FAILED factor_engine/tests/operators/test_r48_polars_holder_bounded_ratio.py::test_public_registry_winner_enforces_mask_and_preserves_timestamp[holder_pledge_ratio]
+3 failed, 62 passed, 2 warnings in 48.53s

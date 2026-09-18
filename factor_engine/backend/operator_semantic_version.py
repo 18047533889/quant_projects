@@ -20,6 +20,56 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_h_infinity_level_filter": 2,
     # R44: genuine normal-distribution Lilliefors test, not swallowed AttributeError.
     "ts_expanding_lilliefors_pvalue": 2,
+    # R52: replace holder placeholders with exact multi-panel contracts.
+    "holder_shareholder_overlap_ratio": 2,
+    "holder_float_concentration_gap": 2,
+    "holder_concentration": 2,
+    "holder_topk_share_sum": 2,
+    "holder_observed_topk_hhi": 2,
+    "holder_disclosure_count": 2,
+    "holder_disclosure_coverage": 2,
+    "holder_entry_share": 2,
+    "holder_exit_share": 2,
+    "holder_net_entry_share": 2,
+    "holder_id_matched_entry_share": 2,
+    "holder_id_matched_exit_share": 2,
+    "holder_id_matched_churn": 2,
+    "holder_weighted_churn": 2,
+    "holder_rank_stability": 2,
+    "holder_id_overlap_ratio": 2,
+    "holder_share_weighted_rank_migration": 2,
+    # R50: exact holder contracts and finite nonnegative normalized entropy.
+    "holder_class_entropy": 2,
+    "holder_nature_entropy": 2,
+    "holder_class_js_shift": 2,
+    "holder_common_holding_peer_return": 2,
+    "holder_concentration_acceleration": 2,
+    "holder_concentration_slope": 2,
+    "holder_freeze_concentration": 2,
+    "holder_pledge_churn": 2,
+    "holder_pledge_concentration": 2,
+    "holder_pledged_holder_count": 2,
+    "holder_shareholder_network_centrality": 2,
+    # R50: bounded finite share ratios across actual Polars registrations.
+    "holder_freeze_ratio": 2,
+    "holder_locked_share_ratio": 2,
+    "holder_pledge_ratio": 2,
+    # R49: repaired daily path/segment kernels and finite-support jump detection.
+    "intra_max_drawdown": 2,
+    "intra_max_drawup": 2,
+    "intra_segment_realized_vol": 2,
+    "intra_positive_jump_variation": 2,
+    "intra_negative_jump_variation": 2,
+    "intra_signed_jump_ratio": 2,
+    "intra_jump_count": 2,
+    "intra_jump_concentration": 2,
+    "intra_jump_first_time": 2,
+    "intra_jump_last_time": 2,
+    "intra_jump_clustering": 2,
+    "intra_positive_tail_variation": 2,
+    "intra_negative_tail_variation": 2,
+    "intra_tail_event_count": 2,
+    "intra_signed_tail_variation_ratio": 2,
     # R49: first membership observations and unknown boundaries are not transitions.
     "index_reconstitution_churn": 2,
     # R47: correct return bipower and physical-pair autocorrelation estimators.
@@ -101,7 +151,7 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_extrema_divergence_strength": 2,
     "ts_extrema_confirmation_rate": 2,
     "ts_state_density": 2,
-    "holder_company_ownership_hhi": 2,
+    "holder_company_ownership_hhi": 3,
     "holder_concentration_change": 2,
     "holder_count_change_rate": 2,
     # R6: strict copula/session contracts and real conditional covariance.
@@ -567,9 +617,9 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "downside_beta": 2,  # v2: downside mask after paired finite alignment
     "tail_beta": 2,  # v2: tail mask after paired finite alignment
     "intra_entropy": 2,  # v2: normalized histogram probability entropy
-    "intra_limit_first_hit_time": 2,  # v2: limits bind by date+instrument identity
-    "intra_limit_duration": 2,  # v2: limits bind by date+instrument identity
-    "intra_limit_reopen_count": 2,  # v2: labelled limits + strict transition domain
+    "intra_limit_first_hit_time": 3,  # v3: labelled timezone-preserving exact Polars delegate
+    "intra_limit_duration": 3,  # v3: daily grid and exchange-local daily limit binding
+    "intra_limit_reopen_count": 3,  # v3: daily transitions and exchange-local limit binding
     "fin_component_score": 3,  # v2: finite FALSE contributes 0; missing remains NaN
     "ts_kurt": 3,  # v2: backend emitter parity for finite/Inf handling
     "cs_quantile": 3,  # v3: full p contract and finite-scale quantile interpolation

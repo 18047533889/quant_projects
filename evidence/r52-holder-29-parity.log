@@ -1,0 +1,38 @@
+....F........................                                            [100%]
+=================================== FAILURES ===================================
+_ test_repaired_holder_public_contract_and_reference_parity[holder_concentration] _
+
+canonical = 'holder_concentration'
+
+    @pytest.mark.parametrize("canonical", sorted(_PARAMS))
+    def test_repaired_holder_public_contract_and_reference_parity(canonical):
+        reference = OperatorRegistry.get(canonical, backend="pandas_numpy")
+        polars_op = OperatorRegistry.get(canonical, backend="polars")
+        assert reference is not None and polars_op is not None
+        assert len(reference.metadata.param_names) == _PARAMS[canonical]
+        assert len(polars_op.metadata.param_names) == _PARAMS[canonical]
+    
+        args = _args(canonical)
+        polars_args = [_to_polars(arg) if isinstance(arg, pd.DataFrame) else arg for arg in args]
+        expected = reference.calculate(*args)
+        actual = _to_pandas(polars_op.calculate(*polars_args))
+    
+>       assert actual.index.equals(expected.index), canonical
+E       AssertionError: holder_concentration
+E       assert False
+E        +  where False = equals(DatetimeIndex(['2024-01-02', '2024-01-03', '2024-01-04', '2024-01-05',\n               '2024-01-06', '2024-01-07'],\n              dtype='datetime64[ns]', freq='D'))
+E        +    where equals = RangeIndex(start=0, stop=6, step=1).equals
+E        +      where RangeIndex(start=0, stop=6, step=1) =      A    B\n0  0.2  0.2\n1  0.2  0.2\n2  0.2  0.2\n3  0.2  0.2\n4  0.2  0.2\n5  0.2  NaN.index
+E        +    and   DatetimeIndex(['2024-01-02', '2024-01-03', '2024-01-04', '2024-01-05',\n               '2024-01-06', '2024-01-07'],\n              dtype='datetime64[ns]', freq='D') =               A    B\n2024-01-02  0.2  0.2\n2024-01-03  0.2  0.2\n2024-01-04  0.2  0.2\n2024-01-05  0.2  0.2\n2024-01-06  0.2  0.2\n2024-01-07  0.2  NaN.index
+
+factor_engine/tests/operators/test_r52_polars_holder_contract_parity.py:125: AssertionError
+=============================== warnings summary ===============================
+factor_engine/backend/polars_backend_kind.py:248
+factor_engine/backend/polars_backend_kind.py:248
+  /home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED factor_engine/tests/operators/test_r52_polars_holder_contract_parity.py::test_repaired_holder_public_contract_and_reference_parity[holder_concentration]
+1 failed, 28 passed, 2 warnings in 47.05s

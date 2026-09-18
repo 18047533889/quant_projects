@@ -199,11 +199,12 @@ def test_intraday_polars_parity(name: str) -> None:
         lim_up = _daily_panel(n=10, seed=5, cols=pdf.shape[1]) * 1.1
         lim_down = _daily_panel(n=10, seed=5, cols=pdf.shape[1]) * 0.9
         pkw = {"high_limit": lim_up, "low_limit": lim_down}
-        plkw = {"high_limit": _to_pl(lim_up), "low_limit": _to_pl(lim_down)}
+        plkw = {"high_limit": _to_pl(lim_up, time_col="QuoteTime"), "low_limit": _to_pl(lim_down, time_col="QuoteTime")}
     elif kind == "beta":
         cap = _daily_panel(n=2, seed=3, cols=pdf.shape[1])
+        cap.index = pd.DatetimeIndex(pdf.index.normalize().unique())
         pkw = {"free_market_cap": cap}
-        plkw = {"free_market_cap": _to_pl(cap)}
+        plkw = {"free_market_cap": _to_pl(cap, time_col="QuoteTime")}
     else:
         pkw, plkw = {}, {}
 
@@ -225,14 +226,12 @@ def test_intraday_polars_parity(name: str) -> None:
     pop = OperatorRegistry.get(name, backend="polars")
     ref = op.calculate(*pargs, **{**kw, **pkw})
     got = pop.calculate(*plargs, **{**kw, **plkw})
-    ref_d = _to_pd(got).reindex(index=ref.index, columns=ref.columns)
-    for col in ref.columns:
-        a = ref[col].dropna()
-        b = ref_d[col].dropna()
-        if len(a) == 0 or len(b) == 0:
-            continue
-        assert a.index.equals(b.index), f"{name}: index mismatch"
-        assert np.allclose(a.values, b.values, atol=1e-8, equal_nan=True), f"{name}: {col}"
+    ref_d = _to_pd(got)
+    assert ref_d.index.is_unique and ref.index.is_unique
+    assert set(ref_d.columns) == set(ref.columns), f"{name}: instrument mismatch"
+    assert ref_d.index.as_unit("ns").sort_values().equals(ref.index.as_unit("ns").sort_values()), f"{name}: date mismatch"
+    ref_d = ref_d.reindex(index=ref.index, columns=ref.columns)
+    np.testing.assert_allclose(ref_d.to_numpy(), ref.to_numpy(), atol=1e-8, equal_nan=True, err_msg=name)
 
 
 @pytest.mark.parametrize("name", sorted(set(_DAILY)))
@@ -243,7 +242,9 @@ def test_daily_polars_parity(name: str) -> None:
     b = _daily_panel(n, seed=4, cols=cols)
     c = _daily_panel(n, seed=5, cols=cols)
     d = _daily_panel(n, seed=6, cols=cols)
-    pl_a, pl_b, pl_c, pl_d = _to_pl(a), _to_pl(b), _to_pl(c), _to_pl(d)
+    e = _daily_panel(n, seed=7, cols=cols)
+    bool_a, bool_b, bool_c = (p.gt(0.8).astype(float) for p in (a, b, c))
+    groups = pd.DataFrame(np.tile(["G1", "G1", "G2", "G2"], (n, 1)), index=a.index, columns=a.columns)
     op = OperatorRegistry.get(name)
     args_map = {
         "free_float_ratio": [a, b], "valuation_pe_ttm_lyr_gap": [a, b], "market_cap_free_cap_gap": [a, b],
@@ -262,12 +263,13 @@ def test_daily_polars_parity(name: str) -> None:
         "holder_float_concentration_gap": [a, b], "holder_pledge_change": [a],
         "holder_common_holding_peer_return": [a, b, c], "holder_peer_return_breadth": [a],
         "holder_shareholder_network_centrality": [a, b], "holder_shareholder_overlap_ratio": [a, b],
-        "index_weight_gap_to_free_float": [a, b], "suspension_frequency": [a],
-        "index_reconstitution_churn": [a], "multi_index_entry_intensity": [a, b, c],
+        "index_weight_gap_to_free_float": [a, b], "suspension_frequency": [bool_a],
+        "index_reconstitution_churn": [bool_a], "multi_index_entry_intensity": [bool_a, bool_b, bool_c],
         "ts_mean_reversion_half_life": [a],
         "ts_variance_ratio_slope": [a], "ts_market_liquidity_beta": [a, b],
         "ts_industry_liquidity_beta": [a, b],
-        "group_peer_deviation_index": [a, b, c],
+        "group_peer_deviation_index": [a, b, c, d, e],
+        "group_peer_beta_deviation": [a, groups, b],
     }
     if name not in args_map:
         pytest.skip(f"no args map for {name}")
@@ -283,10 +285,9 @@ def test_daily_polars_parity(name: str) -> None:
     ref = op.calculate(*args)
     pop = OperatorRegistry.get(name, backend="polars")
     got = pop.calculate(*pl_args)
-    ref_d = _to_pd(got).reindex(index=ref.index, columns=ref.columns)
-    for col in ref.columns:
-        a_s, b_s = ref[col].dropna(), ref_d[col].dropna()
-        if len(a_s) == 0 or len(b_s) == 0:
-            continue
-        if len(a_s) == len(b_s):
-            assert np.allclose(a_s.values, b_s.values, atol=1e-6, equal_nan=True), f"{name}: {col}"
+    ref_d = _to_pd(got)
+    assert ref_d.index.is_unique
+    assert set(ref_d.columns) == set(ref.columns)
+    assert ref_d.index.as_unit("ns").equals(ref.index.as_unit("ns"))
+    np.testing.assert_allclose(ref_d.loc[:, ref.columns].to_numpy(), ref.to_numpy(),
+                               atol=1e-6, equal_nan=True, err_msg=name)

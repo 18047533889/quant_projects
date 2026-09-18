@@ -18,6 +18,7 @@ from factor_engine.cleaned_operators.common._polars_bridge import (
     numeric_cols,
     verify_frames_share_identity,
 )
+from factor_engine.cleaned_operators.common.polars_share_ratio import bounded_share_ratio
 
 _EPS = 1e-12
 
@@ -56,11 +57,11 @@ def _safe_div(a, b):
 
 
 _register("holder_pledge_ratio", "股东质押/总股本（Polars）。", ["pledge_shares", "total_capital"],
-          lambda ps, tc: _binary(ps, tc, _safe_div))
+          lambda pledge_shares, total_capital: bounded_share_ratio(pledge_shares, total_capital))
 _register("holder_freeze_ratio", "股东冻结/总股本（Polars）。", ["freeze_shares", "total_capital"],
-          lambda fs, tc: _binary(fs, tc, _safe_div))
+          lambda freeze_shares, total_capital: bounded_share_ratio(freeze_shares, total_capital))
 _register("holder_locked_share_ratio", "限售股份占比（Polars）。", ["locked_shares", "total_capital"],
-          lambda ls, tc: _binary(ls, tc, _safe_div))
+          lambda locked_shares, total_capital: bounded_share_ratio(locked_shares, total_capital))
 _register("holder_float_concentration_gap", "前十大集中度差（Polars）。", ["top10_concentration", "top10_float_concentration"],
           lambda a, b: _binary(a, b, lambda x, y: x - y))
 _register("holder_pledge_change", "质押率变化（Polars）。", ["pledge_ratio", "lag"],
@@ -86,9 +87,10 @@ def _three(a, b, c, expr_fn):
 
 
 def _ranked(*frames):
+    verify_frames_share_identity("ranked holder shares", *frames)
     base = frames[0]
-    cols = [c for c in base.columns if c != "date"]
-    arrays = [f for f in frames]
+    cols = numeric_cols(base)
+    arrays = list(frames)
     return base, cols, arrays
 
 
@@ -105,15 +107,15 @@ def _hhi(*frames):
     base, cols, arrays = _ranked(*frames)
     out = []
     for c in cols:
-        filled = [f[c].fill_null(0.0) for f in arrays]
-        total = sum(filled)
-        # P1-135: NaN (unknown pledge/freeze) must not be zero-filled back to 0;
-        # an unknown share makes the top-10 HHI undefined -> fail closed to null.
-        any_unknown = pl.any_horizontal([f[c].is_null() for f in arrays])
-        shares = [f / total for f in filled]
-        hhi = sum((s * s) for s in shares)
+        valid = pl.all_horizontal([
+            (f[c].is_finite() & (f[c] >= 0)).fill_null(False) for f in arrays
+        ])
+        scale = pl.max_horizontal([f[c] for f in arrays])
+        scaled = [f[c] / scale for f in arrays]
+        total = pl.sum_horizontal(scaled)
+        hhi = pl.sum_horizontal([(value / total).pow(2) for value in scaled])
         out.append(
-            pl.when((~any_unknown) & (total > 0)).then(hhi).otherwise(None).alias(c)
+            pl.when(valid & (scale > 0)).then(hhi).otherwise(float("nan")).alias(c)
         )
     return base.with_columns(out)
 
@@ -128,10 +130,11 @@ def _pledged_count(*frames):
     base, cols, arrays = _ranked(*frames)
     out = []
     for c in cols:
-        # P1-135: NaN (unknown pledge) must not be counted as a non-pledger.
-        any_unknown = pl.any_horizontal([f[c].is_null() for f in arrays])
-        cnt = sum((f[c].fill_null(0.0) > 0).cast(pl.Float64) for f in arrays)
-        out.append(pl.when(~any_unknown).then(cnt).otherwise(None).alias(c))
+        valid = pl.all_horizontal([
+            (f[c].is_finite() & (f[c] >= 0)).fill_null(False) for f in arrays
+        ])
+        cnt = pl.sum_horizontal([(f[c] > 0).cast(pl.Float64) for f in arrays])
+        out.append(pl.when(valid).then(cnt).otherwise(float("nan")).alias(c))
     return base.with_columns(out)
 
 

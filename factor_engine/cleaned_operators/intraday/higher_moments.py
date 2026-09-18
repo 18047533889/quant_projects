@@ -109,7 +109,7 @@ def _jump_mask(r: np.ndarray, threshold_scale: float) -> np.ndarray:
         return mask
     thresh = ts * per_bar_vol
     with np_errstate():
-        mask = np.abs(r) > thresh
+        mask = np.isfinite(r) & (np.abs(r) > thresh)
     return mask
 
 
