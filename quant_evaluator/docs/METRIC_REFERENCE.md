@@ -1,11 +1,21 @@
 # QuantEvaluator 全部注册指标计算手册
 
-与 [统一口径与取舍](METRIC_CONVENTIONS.md) 配套。由实际注册表、函数说明与源公式生成；不得手工只改数字。
+与 [统一口径与取舍](METRIC_CONVENTIONS.md) 配套。正文使用数学公式与中文解释，源码只作为核对链接。
 
 注册 ID 共 **164** 个，别名不重复计数。下面逐项列出全部 ID，包括实验性或不能单独执行的项目。
 默认参数是函数层默认；公开入口额外构建策略见统一口径，尤其 IC 的每日20配对、分桶人数及观察期。
-实现源码是精确定义的一部分：保留掩码、分母、边界分支，避免将自定义指标写成名称相近的标准公式。
+公式按当前实际实现编写，非仅按指标名称套用教科书定义。输入合同与公开入口可能比低层函数施加更严格的限制。
 None/NaN/unsupported不代表0；状态stable也不代表生产可交易或GPU已验收。
+
+## 公共符号与阅读规则
+
+除逐项另有定义：$t$ 为时间，$i$ 为资产，$f$ 为因子，$x$ 为因子值，$y$ 为预测标签，$r$ 为单期收益，$w$ 为权重；$T,N,Q$ 分别为有效期数、资产数、桶数。
+
+$$\bar z=\frac{1}{n}\sum_{j=1}^{n}z_j,\qquad s(z)=\sqrt{\frac{\sum_{j=1}^{n}(z_j-\bar z)^2}{n-1}}$$
+
+$\mathbf 1(\cdot)$ 是条件成立取1、否则取0的指示函数；$\operatorname{rank}$ 默认使用平均并列秩；$\operatorname{Corr}$ 是相关系数。有限值集合及有效掩码按各项定义筛选；没有足够样本时为不可用，不自动补0。某些分布指标使用总体矩或其他分母，以该项公式为准。
+
+GitHub 渲染数学公式；若使用本地 Markdown 阅读器，请开启 LaTeX/MathJax 数学显示。
 
 ## 完整目录
 
@@ -188,168 +198,28 @@ Tie-aware ACTUAL fixed quantile-bin count feasible per factor on every date (pla
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_adaptive_quantile_count`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_adaptive_quantile_count(factor_batch, policy=None, tie_policy='max')
-```
+实现是逐日可行性选择，不是连续公式。候选桶数按策略顺序（默认 20，再退化到 10、5）检验；选中的 Q 必须在每个日期都有 Q 个非空桶，且每桶有效样本达到策略下限：
 
-Resolve a tie-aware fixed quantile count independently per factor.
 
-The public path accepts a :class:`FactorBatch`, applies the canonical
-quantile tie rule on every date, and returns a ``ScalarMetricArtifact``
-whose provenance contains the complete per-date feasibility evidence.
-A candidate Q is selected only when every date has all Q occupied buckets
-with the policy's minimum effective names.  Missing dates are recorded and
-make the fixed-Q comparison insufficient; they are never dropped.
 
-Plain quantile profiles remain accepted for backwards-compatible direct
-helper use, where this function only reports their already-built row count.
+$$
+Q^*=\max_{Q\in\mathcal Q}\{Q:\ \forall t,\ B_t(Q)=Q,\ \min_b n_{t,b}\ge n_{\min}\}
+$$
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_adaptive_quantile_count(factor_batch, policy=None, tie_policy="max"):
-    """Resolve a tie-aware fixed quantile count independently per factor.
 
-    The public path accepts a :class:`FactorBatch`, applies the canonical
-    quantile tie rule on every date, and returns a ``ScalarMetricArtifact``
-    whose provenance contains the complete per-date feasibility evidence.
-    A candidate Q is selected only when every date has all Q occupied buckets
-    with the policy's minimum effective names.  Missing dates are recorded and
-    make the fixed-Q comparison insufficient; they are never dropped.
+其中 $B_t(Q)$ 为日期 $t$ 实际占用桶数。任一日期缺失或无候选可行时为 NaN；直接传入既有二维分位收益矩阵时，仅当该因子整列全为有限值才返回矩阵行数，否则 NaN。并列处理默认 `tie_policy=max`。
 
-    Plain quantile profiles remain accepted for backwards-compatible direct
-    helper use, where this function only reports their already-built row count.
-    """
-    if not (hasattr(factor_batch, "time_axis") and hasattr(factor_batch, "validity")):
-        qr_or_artifact = factor_batch
-        if hasattr(qr_or_artifact, "n_quantiles"):
-            nq = int(qr_or_artifact.n_quantiles)
-            values = np.asarray(qr_or_artifact.values, dtype=np.float64)
-        else:
-            values = np.asarray(qr_or_artifact, dtype=np.float64)
-            if values.ndim == 1:
-                values = values[:, None]
-            nq = int(values.shape[0])
-        if values.ndim != 2 or values.shape[0] == 0:
-            return np.array([np.nan], dtype=np.float64)
-        return np.where(np.all(np.isfinite(values), axis=0), float(nq), np.nan)
+### 函数层默认参数
 
-    from quant_evaluator.contracts.adaptive_bins_policy import (
-        AdaptiveBinsDateEvidence,
-        AdaptiveBinsFactorEvidence,
-        AdaptiveBinsPolicy,
-        AdaptiveBinsResolution,
-    )
-    from quant_evaluator.contracts.axis_refs import FactorAxisRef
-    from quant_evaluator.contracts.metric_artifacts import ScalarMetricArtifact
-    from quant_evaluator.contracts.quantile_policy import validate_tie_policy
-    from quant_evaluator.metrics.quantile import assign_quantiles_batch
+| 参数 | 默认值 |
+|---|---|
+| `policy` | `None` |
+| `tie_policy` | `'max'` |
 
-    if policy is None:
-        policy = AdaptiveBinsPolicy()
-    elif not isinstance(policy, AdaptiveBinsPolicy):
-        from collections.abc import Mapping
-        if isinstance(policy, Mapping):
-            policy = AdaptiveBinsPolicy.from_dict(policy)
-    if not isinstance(policy, AdaptiveBinsPolicy):
-        raise TypeError("policy must be AdaptiveBinsPolicy")
-    tie_policy_value = validate_tie_policy(tie_policy).value
-    values = np.asarray(factor_batch.values, dtype=np.float64)
-    if factor_batch.validity is not None:
-        values = np.where(factor_batch.validity, values, np.nan)
-
-    candidates = policy.candidate_bin_counts()
-    assignments = {
-        q: assign_quantiles_batch(values, n_quantiles=q, method=tie_policy_value)
-        for q in candidates
-    }
-    if values.shape[2] == 1:
-        assignments = {q: a[:, :, None] for q, a in assignments.items()}
-
-    output = np.full(factor_batch.num_factors, np.nan, dtype=np.float64)
-    factor_evidence = []
-    observation_counts = []
-    for f, factor_id in enumerate(factor_batch.factor_ids):
-        date_rows = []
-        candidate_minima = {q: [] for q in candidates}
-        for t in range(factor_batch.num_times):
-            finite = np.isfinite(values[t, :, f])
-            finite_names = int(finite.sum())
-            distinct = int(np.unique(values[t, finite, f]).size) if finite_names else 0
-            observed = []
-            for q in candidates:
-                assigned = assignments[q][t, :, f]
-                valid_bins = assigned[assigned >= 0]
-                minimum = (
-                    int(np.bincount(valid_bins, minlength=q).min())
-                    if valid_bins.size else None
-                )
-                observed.append((q, minimum))
-                candidate_minima[q].append(minimum)
-            applicable = finite_names > 0
-            date_rows.append(AdaptiveBinsDateEvidence(
-                date_index=t,
-                applicable=applicable,
-                finite_names=finite_names,
-                distinct_levels=distinct,
-                candidate_min_bucket_counts=tuple(observed),
-                reason="evaluated" if applicable else "missing_factor_values",
-            ))
-
-        selected = None
-        selected_minimum = None
-        for q in candidates:
-            counts = candidate_minima[q]
-            if counts and all(
-                count is not None and count >= policy.min_effective_names_per_bin
-                for count in counts
-            ):
-                selected = q
-                selected_minimum = float(min(counts))
-                break
-        reason = (
-            "preferred" if selected == policy.preferred_bins
-            else "fallback" if selected is not None
-            else "insufficient"
-        )
-        resolution = AdaptiveBinsResolution(
-            bin_count=selected,
-            reason=reason,
-            min_names_per_bin=selected_minimum,
-            policy_id=policy.policy_id,
-            policy_version=policy.policy_version,
-        )
-        if selected is not None:
-            output[f] = float(selected)
-        observation_counts.append(sum(row.applicable for row in date_rows))
-        factor_evidence.append(AdaptiveBinsFactorEvidence(
-            factor_id=factor_id,
-            resolution=resolution,
-            tie_policy=tie_policy_value,
-            comparison_policy="largest_fixed_q_feasible_on_every_date",
-            dates=tuple(date_rows),
-        ))
-
-    return ScalarMetricArtifact(
-        metric_id="adaptive_quantile_count",
-        domain="quantile_shape",
-        values=output,
-        factor_axis=FactorAxisRef(tuple(factor_batch.factor_ids)),
-        provenance={
-            "adaptive_bins_policy": {
-                "policy_id": policy.policy_id,
-                "policy_version": policy.policy_version,
-                "preferred_bins": policy.preferred_bins,
-                "fallback_bins": tuple(policy.fallback_bins),
-                "min_effective_names_per_bin": policy.min_effective_names_per_bin,
-            },
-            "adaptive_bins_coverage": tuple(row.to_dict() for row in factor_evidence),
-            "observation_counts": tuple(observation_counts),
-        },
-    )
-```
+实现核对：[函数定义](../metrics/shape_evidence.py#L245)；`quant_evaluator.metrics.shape_evidence.compute_adaptive_quantile_count`。
 
 <a id="metric-autocorrelation_ic"></a>
 ## autocorrelation_ic — autocorrelation_ic
@@ -362,6 +232,23 @@ Autocorrelation of IC values at specified lags
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.temporal.compute_ic_autocorrelation`。
+
+### 数学公式与计算口径
+
+当前注册项没有可直接调用的 `compute_fn`，因此通过统一注册执行器不可用，不能据此生成实测值。下式只说明注册所指向源码函数的计算语义；必须由显式上游制品或专门入口提供输入。
+
+返回每日 IC 序列在原始时间轴上的自相关函数（含 0 阶）：
+
+
+
+$$
+\rho_k=\frac{\sum_{t\in P_k}(x_t-\bar x_k^{(1)})(x_{t-k}-\bar x_k^{(0)})}{\sqrt{\sum_{t\in P_k}(x_t-\bar x_k^{(1)})^2\sum_{t\in P_k}(x_{t-k}-\bar x_k^{(0)})^2}},\quad k=0,\ldots,20
+$$
+
+
+
+$P_k$ 只含原时间轴上两端都有限的配对，均值也按该阶配对分别计算；不会压缩 NaN 后重建滞后。默认 `max_lag=20,min_obs=30`；总长度或某阶配对不足、任一侧零方差则该值 NaN，0 阶在证据充分时为 1。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -377,113 +264,27 @@ Benjamini-Hochberg FDR correction: controls the false discovery rate (spec §34)
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.multiple_testing.benjamini_hochberg_correction`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.multiple_testing.benjamini_hochberg_correction(p_values: numpy.ndarray, alpha: float = 0.05) -> Tuple[numpy.ndarray, numpy.ndarray, int]
-```
+对 $m$ 个有限 p 值升序为 $p_{(1)}\le\cdots\le p_{(m)}$，实际返回保持单调的 BH 调整值：
 
-Apply Benjamini-Hochberg FDR correction for multiple testing.
 
-Args:
-    p_values: Array of p-values, any shape. Non-finite entries are
-        treated as missing tests (see module docstring); finite
-        entries must lie in [0, 1].
-    alpha: False discovery rate, strictly inside (0, 1)
 
-Returns:
-    (adjusted_p_values, reject_mask, n_discoveries)
-    adjusted_p_values: BH-adjusted p-values
-    reject_mask: Boolean mask where null hypothesis is rejected
-    n_discoveries: Number of discoveries (rejections)
+$$
+q_{(i)}=\min\!\left(1,\min_{j\ge i}\frac{m}{j}p_{(j)}\right)
+$$
 
-Raises:
-    ValueError: If ``p_values`` is empty, contains finite values
-        outside [0, 1], or ``alpha`` is not strictly inside (0, 1)
 
-### 精确计算公式（实际实现）
 
-```python
-def benjamini_hochberg_correction(
-    p_values: np.ndarray,
-    alpha: float = 0.05,
-) -> Tuple[np.ndarray, np.ndarray, int]:
-    """
-    Apply Benjamini-Hochberg FDR correction for multiple testing.
+再映射回原顺序。非有限输入保留为 NaN，不作为有效检验；这是调整后的 p 值，不是拒绝指示。
 
-    Args:
-        p_values: Array of p-values, any shape. Non-finite entries are
-            treated as missing tests (see module docstring); finite
-            entries must lie in [0, 1].
-        alpha: False discovery rate, strictly inside (0, 1)
+### 函数层默认参数
 
-    Returns:
-        (adjusted_p_values, reject_mask, n_discoveries)
-        adjusted_p_values: BH-adjusted p-values
-        reject_mask: Boolean mask where null hypothesis is rejected
-        n_discoveries: Number of discoveries (rejections)
+| 参数 | 默认值 |
+|---|---|
+| `alpha` | `0.05` |
 
-    Raises:
-        ValueError: If ``p_values`` is empty, contains finite values
-            outside [0, 1], or ``alpha`` is not strictly inside (0, 1)
-    """
-    alpha = _validate_alpha(alpha)
-    p_values = _validate_p_values(p_values)
-
-    # Flatten for processing
-    original_shape = p_values.shape
-    p_flat = p_values.ravel()
-
-    # Extract valid p-values with their indices
-    valid_mask = np.isfinite(p_flat)
-    valid_indices = np.where(valid_mask)[0]
-    p_valid = p_flat[valid_mask]
-
-    n_tests = len(p_valid)
-
-    if n_tests == 0:
-        return np.full_like(p_values, np.nan), np.zeros_like(p_values, dtype=bool), 0
-
-    # Sort p-values and track original indices
-    sort_idx = np.argsort(p_valid)
-    p_sorted = p_valid[sort_idx]
-    original_idx = valid_indices[sort_idx]
-
-    # Compute BH critical values
-    ranks = np.arange(1, n_tests + 1)
-    bh_critical = (ranks / n_tests) * alpha
-
-    # Find largest i where p[i] <= (i/m) * alpha
-    comparisons = p_sorted <= bh_critical
-    if np.any(comparisons):
-        max_idx = np.where(comparisons)[0][-1]
-        n_discoveries = max_idx + 1
-    else:
-        n_discoveries = 0
-
-    # Compute BH adjusted p-values. In sorted order, they must be
-    # non-decreasing, so propagate each smaller value toward lower ranks.
-    adjusted_sorted = np.minimum.accumulate(
-        (p_sorted * n_tests / ranks)[::-1]
-    )[::-1]
-    adjusted_sorted = np.minimum(adjusted_sorted, 1.0)
-
-    # Map back to original positions
-    adjusted_flat = np.full_like(p_flat, np.nan)
-    adjusted_flat[original_idx] = adjusted_sorted
-
-    # Rejection mask
-    reject_flat = np.zeros_like(p_flat, dtype=bool)
-    if n_discoveries > 0:
-        reject_indices = original_idx[:n_discoveries]
-        reject_flat[reject_indices] = True
-
-    return (
-        adjusted_flat.reshape(original_shape),
-        reject_flat.reshape(original_shape),
-        n_discoveries,
-    )
-```
+实现核对：[函数定义](../metrics/multiple_testing.py#L114)；`quant_evaluator.metrics.multiple_testing.benjamini_hochberg_correction`。
 
 <a id="metric-beta_exposure"></a>
 ## beta_exposure — Beta Exposure
@@ -497,21 +298,29 @@ Signed mean beta-style exposure of the factor (typed per-style field). NaN when 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.exposure_evidence.compute_beta_exposure`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.exposure_evidence.compute_beta_exposure(panel: 'FactorLoadingSeries', *, factor_values=None, min_obs=10, weights=None) -> 'float'
-```
+逐日用因子、全部风格暴露均有限且权重严格为正的共同支持做含截距 WLS，得到原始斜率 $b_{t,k}$。在同一支持上令 $\tilde w_{t,i}=w_{t,i}/\sum_jw_{t,j}$，并用加权标准差把斜率标准化：
 
-Signed mean beta-style exposure of the factor (one typed field).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_beta_exposure(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
-    """Signed mean beta-style exposure of the factor (one typed field)."""
-    return _select_style(panel, "beta",factor_values=factor_values,min_obs=min_obs,weights=weights)
-```
+$$
+\tilde\beta_{t,k}=b_{t,k}\frac{\sqrt{\sum_i\tilde w_{t,i}(Z_{t,i,k}-\bar Z_{t,k}^{w})^2}}{\sqrt{\sum_i\tilde w_{t,i}(x_{t,i}-\bar x_t^{w})^2}},\qquad E_{beta}=\operatorname{MeanFinite}_t(\tilde\beta_{t,beta})
+$$
+
+
+
+默认 `min_obs=10`；ExposurePanel 已绑定权重时沿用，未绑定则等权。回归不可估、$R^2$ 非有限、因子加权标准差为 0 或 beta 风格加权标准差为 0 时当日载荷为 NaN；缺少 `beta` typed field 或无有限日也为 NaN。输出是有符号标准化暴露。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `factor_values` | `None` |
+| `min_obs` | `10` |
+| `weights` | `None` |
+
+实现核对：[函数定义](../metrics/exposure_evidence.py#L627)；`quant_evaluator.metrics.exposure_evidence.compute_beta_exposure`。
 
 <a id="metric-block_bootstrap_ci"></a>
 ## block_bootstrap_ci — Block Bootstrap Confidence Interval
@@ -525,47 +334,31 @@ def compute_beta_exposure(panel: FactorLoadingSeries, *, factor_values=None, min
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`block_bootstrap_ci`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_block_bootstrap_ci_value(ic_series: numpy.ndarray, min_periods: int = 60, block_length: int = 10, num_bootstrap: int = 1000, confidence_level: float = 0.95, random_seed: int = 0) -> numpy.ndarray
-```
+注册适配器返回置信区间半宽，而不是上下界本身。完整共同日历上以长度 $L$ 的连续块有放回抽样，得到均值 $\bar x^{*(b)}$ 后：
 
-Return the block-bootstrap CI half-width per factor.
 
-compute_block_bootstrap_ci returns a (lower, upper) tuple; the registry
-exposes the scalar half-width (upper - lower) / 2, NaN below min_periods
-(matching the other ic_series adapters' contract).
 
-### 精确计算公式（实际实现）
+$$
+H=\frac{Q_{(1+c)/2}(\bar x^*)-Q_{(1-c)/2}(\bar x^*)}{2}
+$$
 
-```python
-def compute_block_bootstrap_ci_value(
-    ic_series: np.ndarray,
-    min_periods: int = 60,
-    block_length: int = 10,
-    num_bootstrap: int = 1000,
-    confidence_level: float = 0.95,
-    random_seed: int = 0,
-) -> np.ndarray:
-    """Return the block-bootstrap CI half-width per factor.
 
-    compute_block_bootstrap_ci returns a (lower, upper) tuple; the registry
-    exposes the scalar half-width (upper - lower) / 2, NaN below min_periods
-    (matching the other ic_series adapters' contract).
-    """
-    ci_lower, ci_upper = compute_block_bootstrap_ci(
-        ic_series,
-        block_length=block_length,
-        num_bootstrap=num_bootstrap,
-        confidence_level=confidence_level,
-        random_seed=random_seed,
-    )
-    valid_periods = np.sum(np.isfinite(ic_series), axis=0)
-    with np.errstate(invalid="ignore"):
-        half_width = (ci_upper - ci_lower) / 2.0
-    return np.where(valid_periods >= min_periods, half_width, np.nan)
-```
+
+默认 `min_periods=60,block_length=10,num_bootstrap=1000,confidence_level=0.95,random_seed=0`。同一请求各因子共享抽样起点；列中任何 NaN/Inf 使底层区间为 NaN，$T<2L$ 也为 NaN；注册层有限 IC 少于 60 期时强制 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `60` |
+| `block_length` | `10` |
+| `num_bootstrap` | `1000` |
+| `confidence_level` | `0.95` |
+| `random_seed` | `0` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L271)；`quant_evaluator.metrics.registry_adapters.compute_block_bootstrap_ci_value`。
 
 <a id="metric-bonferroni_correction"></a>
 ## bonferroni_correction — Bonferroni Correction
@@ -579,78 +372,27 @@ Bonferroni multiple-testing correction: adjusted p = min(p * n, 1). Controls the
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.multiple_testing.bonferroni_correction`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.multiple_testing.bonferroni_correction(p_values: numpy.ndarray, alpha: float = 0.05) -> Tuple[numpy.ndarray, numpy.ndarray]
-```
+对 $m$ 个有效检验逐个调整：
 
-Apply Bonferroni correction for multiple testing.
 
-Args:
-    p_values: Array of p-values, any shape. Non-finite entries are
-        treated as missing tests (see module docstring); finite
-        entries must lie in [0, 1].
-    alpha: Family-wise error rate, strictly inside (0, 1)
 
-Returns:
-    (adjusted_p_values, reject_mask)
-    adjusted_p_values: Bonferroni-adjusted p-values (min(p * n_tests, 1.0))
-    reject_mask: Boolean mask where null hypothesis is rejected
+$$
+p_i^{adj}=\min(1,mp_i)
+$$
 
-Raises:
-    ValueError: If ``p_values`` is empty, contains finite values
-        outside [0, 1], or ``alpha`` is not strictly inside (0, 1)
 
-### 精确计算公式（实际实现）
 
-```python
-def bonferroni_correction(
-    p_values: np.ndarray,
-    alpha: float = 0.05,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Apply Bonferroni correction for multiple testing.
+$m$ 按实现中的有效 p 值集合计数；非有限输入保持 NaN。输出为调整 p 值，不是显著性布尔值。
 
-    Args:
-        p_values: Array of p-values, any shape. Non-finite entries are
-            treated as missing tests (see module docstring); finite
-            entries must lie in [0, 1].
-        alpha: Family-wise error rate, strictly inside (0, 1)
+### 函数层默认参数
 
-    Returns:
-        (adjusted_p_values, reject_mask)
-        adjusted_p_values: Bonferroni-adjusted p-values (min(p * n_tests, 1.0))
-        reject_mask: Boolean mask where null hypothesis is rejected
+| 参数 | 默认值 |
+|---|---|
+| `alpha` | `0.05` |
 
-    Raises:
-        ValueError: If ``p_values`` is empty, contains finite values
-            outside [0, 1], or ``alpha`` is not strictly inside (0, 1)
-    """
-    alpha = _validate_alpha(alpha)
-    p_values = _validate_p_values(p_values)
-
-    # Flatten for processing
-    original_shape = p_values.shape
-    p_flat = p_values.ravel()
-
-    # Count valid (non-NaN) p-values
-    valid_mask = np.isfinite(p_flat)
-    n_tests = np.sum(valid_mask)
-
-    if n_tests == 0:
-        return np.full_like(p_values, np.nan), np.zeros_like(p_values, dtype=bool)
-
-    # Adjust p-values
-    adjusted = np.full_like(p_flat, np.nan)
-    adjusted[valid_mask] = np.minimum(p_flat[valid_mask] * n_tests, 1.0)
-
-    # Rejection mask
-    reject = np.zeros_like(p_flat, dtype=bool)
-    reject[valid_mask] = adjusted[valid_mask] <= alpha
-
-    return adjusted.reshape(original_shape), reject.reshape(original_shape)
-```
+实现核对：[函数定义](../metrics/multiple_testing.py#L67)；`quant_evaluator.metrics.multiple_testing.bonferroni_correction`。
 
 <a id="metric-bottom_quantile_cliff"></a>
 ## bottom_quantile_cliff — Bottom Quantile Cliff
@@ -664,30 +406,22 @@ Bottom-quantile cliff: ret[1] - ret[0], per factor. The jump in return from the 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quantile_shape.compute_bottom_quantile_cliff`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.quantile_shape.compute_bottom_quantile_cliff(qr: 'np.ndarray') -> 'np.ndarray'
-```
+对从低因子值到高因子值排列的分位收益 $r_1,\ldots,r_Q$，实现的一格底部悬崖为：
 
-Bottom-quantile cliff: ret[1] - ret[0], (F,).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_bottom_quantile_cliff(qr: np.ndarray) -> np.ndarray:
-    """Bottom-quantile cliff: ret[1] - ret[0], (F,)."""
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 2:
-        return out
-    for f in range(F):
-        col = m[:, f]
-        if np.isfinite(col[1]) and np.isfinite(col[0]):
-            out[f] = col[1] - col[0]
-    return out
-```
+$$
+C_{bottom}=r_2-r_1
+$$
+
+
+
+至少需要两个分位，且所需两格必须有限，否则 NaN。正值表示从最低桶进入次低桶时收益上升。
+
+
+实现核对：[函数定义](../metrics/quantile_shape.py#L193)；`quant_evaluator.metrics.quantile_shape.compute_bottom_quantile_cliff`。
 
 <a id="metric-bottom_quantile_cliff_robust"></a>
 ## bottom_quantile_cliff_robust — Bottom Quantile Cliff (Robust)
@@ -701,41 +435,22 @@ ROBUST bottom cliff per factor: Q_1 - mean(Q_2..Q_4) (plan §14.4 mirror). Direc
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_bottom_quantile_cliff_robust`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_bottom_quantile_cliff_robust(qr: 'np.ndarray') -> 'np.ndarray'
-```
+实现与名称旁注严格一致，取最低四桶但计算为：
 
-Robust bottom cliff: ``ret[1] - mean(ret[1:4])`` per factor, (F,).
 
-Plan §14.4 symmetric variant: contrast the FIRST bucket against the mean
-of the three next buckets.  Direction ``higher_is_better``.  NaN when
-the bottom 4 quantile returns are not all finite.
 
-### 精确计算公式（实际实现）
+$$
+C_{bottom}^{robust}=r_2-\frac{r_2+r_3+r_4}{3}
+$$
 
-```python
-def compute_bottom_quantile_cliff_robust(qr: np.ndarray) -> np.ndarray:
-    """Robust bottom cliff: ``ret[1] - mean(ret[1:4])`` per factor, (F,).
 
-    Plan §14.4 symmetric variant: contrast the FIRST bucket against the mean
-    of the three next buckets.  Direction ``higher_is_better``.  NaN when
-    the bottom 4 quantile returns are not all finite.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 4:
-        return out
-    for f in range(F):
-        col = m[:, f]
-        seg = col[:4]
-        if not np.all(np.isfinite(seg)):
-            continue
-        out[f] = seg[1] - float(np.mean(seg[1:4]))
-    return out
-```
+
+注意它不是 $r_1-\operatorname{mean}(r_2,r_3,r_4)$；这是当前源码的实际索引语义。少于四桶或这四格任一非有限则 NaN。
+
+
+实现核对：[函数定义](../metrics/shape_evidence.py#L747)；`quant_evaluator.metrics.shape_evidence.compute_bottom_quantile_cliff_robust`。
 
 <a id="metric-bottom_tail_slope"></a>
 ## bottom_tail_slope — Bottom Tail Slope
@@ -749,39 +464,22 @@ Mean adjacent return difference over the BOTTOM segment of the quantile profile 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_bottom_tail_slope`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_bottom_tail_slope(qr: 'np.ndarray') -> 'np.ndarray'
-```
+底部三格上的两个相邻差的均值：
 
-Bottom-tail slope per factor, (F,).
 
-Mean adjacent return difference over the BOTTOM segment of the curve as
-drawn (quantile 0..2).  For a positively inclined factor this is
-POSITIVE (returns rise out of the bottom bucket).  NaN when the first
-3 quantile returns are not all finite.
 
-### 精确计算公式（实际实现）
+$$
+S_{bottom}=\frac{(r_2-r_1)+(r_3-r_2)}{2}=\frac{r_3-r_1}{2}
+$$
 
-```python
-def compute_bottom_tail_slope(qr: np.ndarray) -> np.ndarray:
-    """Bottom-tail slope per factor, (F,).
 
-    Mean adjacent return difference over the BOTTOM segment of the curve as
-    drawn (quantile 0..2).  For a positively inclined factor this is
-    POSITIVE (returns rise out of the bottom bucket).  NaN when the first
-    3 quantile returns are not all finite.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 3:
-        return out
-    for f in range(F):
-        out[f] = _bottom_tail_slope_value(m[:, f], n_adj=2)
-    return out
-```
+
+分位按因子值由低到高排列。少于三桶或前三格任一非有限时 NaN；正值表示底部曲线向右上升。
+
+
+实现核对：[函数定义](../metrics/shape_evidence.py#L439)；`quant_evaluator.metrics.shape_evidence.compute_bottom_tail_slope`。
 
 <a id="metric-calmar_ratio"></a>
 ## calmar_ratio — calmar_ratio
@@ -795,92 +493,30 @@ Calmar ratio: explicit arithmetic (legacy default) or CAGR annualization / max d
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.portfolio_stats.compute_calmar_ratio`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.portfolio_stats.compute_calmar_ratio(returns: numpy.ndarray, periods_per_year: int = 252, min_periods: int = 20, annualization: str = 'cagr', missing_return_policy: str = 'unknown') -> numpy.ndarray
-```
+先按复利财富路径求正的最大回撤幅度 $MDD$；默认分子是 CAGR：
 
-Compute Calmar ratio with explicit arithmetic (legacy) or CAGR numerator.
 
-Args:
-    returns: Return series (T,) or (T, F)
-    periods_per_year: Number of periods per year
-    min_periods: Minimum periods required
 
-Returns:
-    Calmar ratio, scalar or shape (F,)
+$$
+Calmar=\frac{(\prod_{t=1}^{T}(1+r_t))^{P/T}-1}{MDD}
+$$
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_calmar_ratio(
-    returns: np.ndarray,
-    periods_per_year: int = 252,
-    min_periods: int = 20,
-    annualization: str = "cagr",
-    missing_return_policy: str = "unknown",
-) -> np.ndarray:
-    """
-    Compute Calmar ratio with explicit arithmetic (legacy) or CAGR numerator.
 
-    Args:
-        returns: Return series (T,) or (T, F)
-        periods_per_year: Number of periods per year
-        min_periods: Minimum periods required
+默认 `periods_per_year=252,min_periods=20,annualization=cagr,missing_return_policy=unknown`。因此任何非有限收益都会令默认结果 NaN（不会悄悄压缩日历）；样本不足、财富路径无效或 $MDD\le0$ 时 NaN。显式 `annualization=arithmetic` 才改用 $P\bar r$。
 
-    Returns:
-        Calmar ratio, scalar or shape (F,)
-    """
-    if annualization not in {"arithmetic", "cagr"}:
-        raise ValueError("annualization must be arithmetic or cagr")
-    if missing_return_policy not in {"unknown", "zero_fill", "fail"}:
-        raise ValueError("invalid missing_return_policy")
-    if missing_return_policy == "fail" and np.any(~np.isfinite(returns)):
-        raise ValueError("nonfinite returns with missing_return_policy='fail'")
-    if not np.isfinite(periods_per_year) or periods_per_year <= 0:
-        raise ValueError("periods_per_year must be positive finite")
-    if returns.ndim == 1:
-        returns = returns[:, np.newaxis]
-        squeeze = True
-    else:
-        squeeze = False
+### 函数层默认参数
 
-    T, F = returns.shape
-    calmar = np.full(F, np.nan)
+| 参数 | 默认值 |
+|---|---|
+| `periods_per_year` | `252` |
+| `min_periods` | `20` |
+| `annualization` | `'cagr'` |
+| `missing_return_policy` | `'unknown'` |
 
-    for f in range(F):
-        ret_f = returns[:, f]
-        valid = np.isfinite(ret_f)
-        n_valid = np.sum(valid)
-
-        if n_valid < min_periods:
-            continue
-
-        ret_valid = ret_f[valid]
-
-        if missing_return_policy == "unknown" and n_valid != T:
-            continue
-        if missing_return_policy == "zero_fill":
-            ret_valid = np.where(valid, ret_f, 0.0)
-            n_valid = T
-
-        # Annualized return
-        mean_ret = np.mean(ret_valid)
-        ann_ret = mean_ret * periods_per_year
-        if annualization == "cagr":
-            ann_ret = np.prod(1.0 + ret_valid) ** (periods_per_year / n_valid) - 1.0
-
-        # Maximum drawdown
-        max_dd, _, _ = compute_maximum_drawdown(ret_valid, missing_return_policy=missing_return_policy)
-
-        if not np.isfinite(max_dd) or max_dd <= 1e-12:
-            continue
-
-        calmar[f] = ann_ret / max_dd
-
-    return calmar[0] if squeeze else calmar
-```
+实现核对：[函数定义](../metrics/portfolio_stats.py#L498)；`quant_evaluator.metrics.portfolio_stats.compute_calmar_ratio`。
 
 <a id="metric-change_point_score"></a>
 ## change_point_score — Change-Point Score
@@ -894,34 +530,27 @@ CUSUM-based change-point score: max |cumulative deviation from the mean IC|, per
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.stability_regime.compute_change_point_score`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.stability_regime.compute_change_point_score(ic_series: 'np.ndarray', min_periods: 'int' = 20) -> 'np.ndarray'
-```
+注册的实际实现是未标准化 CUSUM 最大偏离（不是相邻 60 日窗口版本）：
 
-CUSUM-based change-point score: max |cumulative deviation|, (F,).
 
-A large score indicates a structural break in the IC level.
 
-### 精确计算公式（实际实现）
+$$
+S=\max_t\left|\sum_{s\le t}(IC_s-\overline{IC})\mathbf 1_{IC_s\ finite}\right|
+$$
 
-```python
-def compute_change_point_score(ic_series: np.ndarray, min_periods: int = 20) -> np.ndarray:
-    """CUSUM-based change-point score: max |cumulative deviation|, (F,).
 
-    A large score indicates a structural break in the IC level.
-    """
-    s = _as_series(ic_series)
-    valid = np.isfinite(s)
-    n = np.sum(valid, axis=0)
-    with np.errstate(invalid="ignore"):
-        mean = np.nanmean(s, axis=0)
-    dev = np.where(valid, s - mean[None, :], 0.0)
-    cum = np.cumsum(dev, axis=0)
-    score = np.max(np.abs(cum), axis=0)
-    return np.where(n >= min_periods, score, np.nan)
-```
+
+缺失位置贡献 0，但均值只用有限 IC。默认 `min_periods=20`，不足则 NaN；常数序列得到 0。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/stability_regime.py#L195)；`quant_evaluator.metrics.stability_regime.compute_change_point_score`。
 
 <a id="metric-coverage"></a>
 ## coverage — Coverage Rate
@@ -935,38 +564,27 @@ Per-factor fraction of the (T, N) panel with jointly valid factor and label valu
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`coverage`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_coverage_value(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, min_assets: int = 10) -> numpy.ndarray
-```
+逐因子统计因子值与标签在有效性掩码下共同有限的单元格比例：
 
-Return the coverage fraction per factor, shape (F,).
 
-Uses :func:`quant_evaluator.metrics.quality.compute_coverage_per_factor`
-(the single truth for coverage semantics): no aggregation across factor
-columns, and ``min_assets`` is honoured for day-level diagnostics.
 
-### 精确计算公式（实际实现）
+$$
+Coverage_f=\frac{\sum_{t,n}\mathbf 1\{x_{tnf},y_{tn}\text{ jointly valid}\}}{TN}
+$$
 
-```python
-def compute_coverage_value(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    min_assets: int = 10,
-) -> np.ndarray:
-    """Return the coverage fraction per factor, shape (F,).
 
-    Uses :func:`quant_evaluator.metrics.quality.compute_coverage_per_factor`
-    (the single truth for coverage semantics): no aggregation across factor
-    columns, and ``min_assets`` is honoured for day-level diagnostics.
-    """
-    report = compute_coverage_per_factor(factor_batch, label_bundle, min_assets=min_assets)
-    return np.asarray(
-        [report[factor_id]["coverage"] for factor_id in factor_batch.factor_ids],
-        dtype=np.float64,
-    )
-```
+
+默认 `min_assets=10` 只用于报告中的有效日/低样本日诊断，不改变该比例分子。空面板按底层报告规则返回 0；不会跨因子平均。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_assets` | `10` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L326)；`quant_evaluator.metrics.registry_adapters.compute_coverage_value`。
 
 <a id="metric-coverage_stability"></a>
 ## coverage_stability — coverage_stability
@@ -979,6 +597,21 @@ Variance of factor coverage across periods
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quality.compute_per_time_coverage`。
+
+### 数学公式与计算口径
+
+当前注册项没有可直接调用的 `compute_fn`，因此通过统一注册执行器不可用，不能据此生成实测值。注册描述要求的是逐日覆盖率方差；若由显式上游入口提供逐日覆盖率 $c_{t,f}$，目标归约为：
+
+
+
+$$
+V_f=\frac1T\sum_{t=1}^{T}(c_{t,f}-\bar c_f)^2
+$$
+
+
+
+其中 $c_{t,f}=N^{-1}\sum_n\mathbf1\{x_{tnf},y_{tn}\text{共同有效}\}$。但注册仅定位到返回 $T\times F$ 逐日覆盖矩阵的函数，并未绑定把矩阵归约成方差的可调用适配器；`ddof` 也未在注册中落实，故不得声称已有可执行标量结果。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -994,34 +627,22 @@ Mean number of distinct values per day (cross-section cardinality), per factor (
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.data_quality.compute_cross_section_cardinality`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.data_quality.compute_cross_section_cardinality(factor_batch: 'FactorBatch') -> 'np.ndarray'
-```
+逐日计算有限因子值的不同取值数，再对有至少一个有限值的日期取均值：
 
-Mean number of distinct values per day (cross-section cardinality), (F,).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_cross_section_cardinality(factor_batch: FactorBatch) -> np.ndarray:
-    """Mean number of distinct values per day (cross-section cardinality), (F,)."""
-    values = _factor_values(factor_batch)
-    T, N, F = values.shape
-    out = np.full(F, np.nan)
-    for f in range(F):
-        counts = []
-        for t in range(T):
-            row = values[t, :, f]
-            finite = row[np.isfinite(row)]
-            if finite.size == 0:
-                continue
-            counts.append(np.unique(finite).size)
-        if counts:
-            out[f] = float(np.mean(counts))
-    return out
-```
+$$
+C_f=\frac1{|D_f|}\sum_{t\in D_f}\left|\{x_{tnf}:x_{tnf}\ finite\}\right|
+$$
+
+
+
+validity=false 先转为 NaN；全日期均无有限值时 NaN。
+
+
+实现核对：[函数定义](../metrics/data_quality.py#L152)；`quant_evaluator.metrics.data_quality.compute_cross_section_cardinality`。
 
 <a id="metric-cusum_break_score"></a>
 ## cusum_break_score — CUSUM Break Score
@@ -1035,38 +656,27 @@ CUSUM break score: max |cumulative deviation| normalised by std*sqrt(T), per fac
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.stability_regime.compute_cusum_break_score`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.stability_regime.compute_cusum_break_score(ic_series: 'np.ndarray', min_periods: 'int' = 20) -> 'np.ndarray'
-```
+标准化 CUSUM 断点分数：
 
-CUSUM break score: max cumulative deviation normalised by std, (F,).
 
-``max|cumsum(ic - mean)| / (std * sqrt(T))`` — a standardised change-point
-statistic.  Larger values flag a stronger break.
 
-### 精确计算公式（实际实现）
+$$
+S=\frac{\max_t\left|\sum_{s\le t}(IC_s-\bar{IC})\mathbf1_{IC_s\ finite}\right|}{s_{IC}\sqrt n}
+$$
 
-```python
-def compute_cusum_break_score(ic_series: np.ndarray, min_periods: int = 20) -> np.ndarray:
-    """CUSUM break score: max cumulative deviation normalised by std, (F,).
 
-    ``max|cumsum(ic - mean)| / (std * sqrt(T))`` — a standardised change-point
-    statistic.  Larger values flag a stronger break.
-    """
-    s = _as_series(ic_series)
-    valid = np.isfinite(s)
-    n = np.sum(valid, axis=0)
-    with np.errstate(invalid="ignore"):
-        mean = np.nanmean(s, axis=0)
-        std = np.nanstd(s, axis=0, ddof=1)
-    dev = np.where(valid, s - mean[None, :], 0.0)
-    cum = np.cumsum(dev, axis=0)
-    score = np.max(np.abs(cum), axis=0) / np.maximum(std * np.sqrt(n), 1e-12)
-    score = np.where(std > 1e-12, score, np.nan)
-    return np.where(n >= min_periods, score, np.nan)
-```
+
+$n$ 与样本标准差 $s_{IC}$ 只由有限值计算，缺失时点在累积和中贡献 0。默认 `min_periods=20`；样本不足或 $s_{IC}\le10^{-12}$ 时 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/stability_regime.py#L211)；`quant_evaluator.metrics.stability_regime.compute_cusum_break_score`。
 
 <a id="metric-cvar_95"></a>
 ## cvar_95 — cvar_95
@@ -1079,6 +689,23 @@ Conditional Value at Risk (Expected Shortfall) at 95%
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.risk.var_cvar.compute_cvar`。
+
+### 数学公式与计算口径
+
+当前注册项没有可直接调用的 `compute_fn`，统一注册执行器不可用，不能生成实测值。注册定位的源码函数在显式调用并取置信度 $c=0.95$ 时语义如下。
+
+设有限收益数为 $n$，将损失 $\ell_i=-r_i$ 从大到小排序，尾部质量 $m=(1-c)n$、$k=\lfloor m\rfloor$、$a=m-k$。源码用固定尾部质量和边界分数权重：
+
+
+
+$$
+ES_c^{signed}=\frac{\sum_{i=1}^{k}\ell_{(i)}+a\ell_{(k+1)}}{m},\qquad CVaR_c=\max(0,ES_c^{signed})
+$$
+
+
+
+这不是简单对 $r\le q$ 的样本平均；当尾部质量不足 1 个观测时实际退化为最坏损失。底层默认 `method=historical,min_periods=20`，只使用有限收益。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -1094,6 +721,23 @@ Conditional Value at Risk (Expected Shortfall) at 99%
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.risk.var_cvar.compute_cvar`。
 
+### 数学公式与计算口径
+
+当前注册项没有可直接调用的 `compute_fn`，统一注册执行器不可用，不能生成实测值。注册定位的源码函数在显式调用并取置信度 $c=0.99$ 时语义如下。
+
+设有限收益数为 $n$，将损失 $\ell_i=-r_i$ 从大到小排序，尾部质量 $m=(1-c)n$、$k=\lfloor m\rfloor$、$a=m-k$。源码用固定尾部质量和边界分数权重：
+
+
+
+$$
+ES_c^{signed}=\frac{\sum_{i=1}^{k}\ell_{(i)}+a\ell_{(k+1)}}{m},\qquad CVaR_c=\max(0,ES_c^{signed})
+$$
+
+
+
+这不是简单对 $r\le q$ 的样本平均；当尾部质量不足 1 个观测时实际退化为最坏损失。底层默认 `method=historical,min_periods=20`，只使用有限收益。
+
+
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
 <a id="metric-cvar_expected_shortfall"></a>
@@ -1108,49 +752,28 @@ Historical CVaR / expected shortfall at 95% of the probe daily PnL series (deleg
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.underwater.compute_cvar_expected_shortfall`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.underwater.compute_cvar_expected_shortfall(returns: 'np.ndarray', confidence_level: 'float' = 0.95, min_periods: 'int' = 20) -> 'float'
-```
+该可调用 ID 是一维 95% 历史 ES 适配器。设有限收益数为 $n$，将损失 $\ell_i=-r_i$ 从大到小排序，尾部质量 $m=(1-c)n$、$k=\lfloor m\rfloor$、$a=m-k$。源码用固定尾部质量和边界分数权重：
 
-Historical CVaR / expected shortfall at ``confidence_level`` (95%).
 
-Reuses the existing ``risk/var_cvar.compute_cvar`` historical method; a
-wrapper so the evidence output has its own registered id while the
-numeric semantics stay the single-source policy of ``var_cvar.py``.
-Returns positive loss magnitude; 0.0 when no returns fall at/below the
-VaR threshold; NaN when insufficient observations.
 
-### 精确计算公式（实际实现）
+$$
+ES_c^{signed}=\frac{\sum_{i=1}^{k}\ell_{(i)}+a\ell_{(k+1)}}{m},\qquad CVaR_c=\max(0,ES_c^{signed})
+$$
 
-```python
-def compute_cvar_expected_shortfall(
-    returns: np.ndarray,
-    confidence_level: float = 0.95,
-    min_periods: int = 20,
-) -> float:
-    """Historical CVaR / expected shortfall at ``confidence_level`` (95%).
 
-    Reuses the existing ``risk/var_cvar.compute_cvar`` historical method; a
-    wrapper so the evidence output has its own registered id while the
-    numeric semantics stay the single-source policy of ``var_cvar.py``.
-    Returns positive loss magnitude; 0.0 when no returns fall at/below the
-    VaR threshold; NaN when insufficient observations.
-    """
-    from quant_evaluator.metrics.risk.var_cvar import compute_cvar
 
-    ret = _as_1d(returns)
-    if ret.size < min_periods:
-        return np.nan
-    val = compute_cvar(
-        ret,
-        confidence_level=confidence_level,
-        method="historical",
-        min_periods=min_periods,
-    )
-    return float(val)
-```
+这不是简单对 $r\le q$ 的样本平均；当尾部质量不足 1 个观测时实际退化为最坏损失。适配器默认 `confidence_level=0.95`；底层 `method=historical,min_periods=20`，只使用有限收益。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `confidence_level` | `0.95` |
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/underwater.py#L259)；`quant_evaluator.metrics.underwater.compute_cvar_expected_shortfall`。
 
 <a id="metric-daily_quantile_monotonicity_rate"></a>
 ## daily_quantile_monotonicity_rate — Daily Quantile Monotonicity Rate
@@ -1164,31 +787,29 @@ Mean of valid per-date increasing-adjacent-pair fractions; missing pairs and dat
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_rate_value`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_rate_value(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, n_quantiles: int = 5, min_assets: int = 10, min_periods: int = 20) -> numpy.ndarray
-```
+先逐日计算有效相邻分位对中收益上升的比例，再对有效日期取均值；名称中的 rate 不是达到某阈值的日期占比：
 
-Mean valid daily-profile monotonicity fraction per factor.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_daily_quantile_monotonicity_rate_value(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    n_quantiles: int = 5,
-    min_assets: int = 10,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Mean valid daily-profile monotonicity fraction per factor."""
-    series = compute_daily_quantile_monotonicity_series_value(
-        factor_batch, label_bundle, n_quantiles=n_quantiles, min_assets=min_assets)
-    counts = np.isfinite(series).sum(axis=0)
-    means = np.nansum(series, axis=0) / np.maximum(counts, 1)
-    return np.where(counts >= min_periods, means, np.nan)
-```
+$$
+m_{t,f}=\frac{\sum_{q=1}^{Q-1}\mathbf1(r_{t,q+1,f}>r_{t,q,f})\mathbf1_{pair}}{\sum_{q=1}^{Q-1}\mathbf1_{pair}},\qquad Rate_f=\frac1{|D_f|}\sum_{t\in D_f}m_{t,f}
+$$
+
+
+
+默认 `n_quantiles=5,min_assets=10,min_periods=20`。非有限相邻对不进入当日分母；当日无有效对则 $m_t$ 为 NaN；有效日期少于 20 时最终 NaN，相等不算上升。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `n_quantiles` | `5` |
+| `min_assets` | `10` |
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L257)；`quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_rate_value`。
 
 <a id="metric-daily_quantile_monotonicity_series"></a>
 ## daily_quantile_monotonicity_series — Daily Quantile Monotonicity Series
@@ -1202,42 +823,28 @@ Per-date fraction of increasing finite adjacent quantile-return pairs. This is d
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_series_value`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_series_value(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, n_quantiles: int = 5, min_assets: int = 10) -> numpy.ndarray
-```
+输出逐日有效相邻分位对中的收益上升比例：
 
-Per-date increasing-adjacent-pair fraction, shape ``(T,F)``.
 
-This is deliberately distinct from ``quantile_monotonicity``, which is
-computed once on the long-run mean profile. Non-finite adjacent pairs do
-not enter a date's denominator; a date with no valid pair is NaN.
 
-### 精确计算公式（实际实现）
+$$
+m_{t,f}=\frac{\sum_{q=1}^{Q-1}\mathbf1(r_{t,q+1,f}>r_{t,q,f})\mathbf1\{r_{t,q,f},r_{t,q+1,f}\ finite\}}{\sum_{q=1}^{Q-1}\mathbf1\{r_{t,q,f},r_{t,q+1,f}\ finite\}}
+$$
 
-```python
-def compute_daily_quantile_monotonicity_series_value(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    n_quantiles: int = 5,
-    min_assets: int = 10,
-) -> np.ndarray:
-    """Per-date increasing-adjacent-pair fraction, shape ``(T,F)``.
 
-    This is deliberately distinct from ``quantile_monotonicity``, which is
-    computed once on the long-run mean profile. Non-finite adjacent pairs do
-    not enter a date's denominator; a date with no valid pair is NaN.
-    """
-    daily, _ = compute_quantile_returns_fast(
-        factor_batch, label_bundle, n_quantiles=n_quantiles, min_assets=min_assets)
-    pairs = np.isfinite(daily[:, :-1, :]) & np.isfinite(daily[:, 1:, :])
-    denominator = pairs.sum(axis=1)
-    increasing = ((daily[:, 1:, :] > daily[:, :-1, :]) & pairs).sum(axis=1)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        values = increasing / denominator
-    return np.where(denominator > 0, values, np.nan)
-```
+
+默认 `n_quantiles=5,min_assets=10`。$r_{t,q,f}$ 是当日分位标签均值；非有限相邻对逐对排除而非要求整条曲线完整，分母为 0 的日期 NaN，相等不算上升。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `n_quantiles` | `5` |
+| `min_assets` | `10` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L235)；`quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_series_value`。
 
 <a id="metric-distinct_level_ratio"></a>
 ## distinct_level_ratio — Distinct Level Ratio
@@ -1251,39 +858,22 @@ Mean fraction of distinct values among finite factor values per day, per factor.
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.data_quality.compute_distinct_level_ratio`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.data_quality.compute_distinct_level_ratio(factor_batch: 'FactorBatch') -> 'np.ndarray'
-```
+逐日以有限截面计算不同值占比，再跨有效日期平均：
 
-Mean fraction of distinct values among finite factor values per day, (F,).
 
-A low ratio indicates heavy duplication / coarse factor values.
 
-### 精确计算公式（实际实现）
+$$
+D_f=\frac1{|\mathcal T_f|}\sum_{t\in\mathcal T_f}\frac{|\operatorname{unique}(x_{t,:,f}^{finite})|}{n_{t,f}}
+$$
 
-```python
-def compute_distinct_level_ratio(factor_batch: FactorBatch) -> np.ndarray:
-    """Mean fraction of distinct values among finite factor values per day, (F,).
 
-    A low ratio indicates heavy duplication / coarse factor values.
-    """
-    values = _factor_values(factor_batch)
-    T, N, F = values.shape
-    out = np.full(F, np.nan)
-    for f in range(F):
-        ratios = []
-        for t in range(T):
-            row = values[t, :, f]
-            finite = row[np.isfinite(row)]
-            if finite.size == 0:
-                continue
-            ratios.append(np.unique(finite).size / finite.size)
-        if ratios:
-            out[f] = float(np.mean(ratios))
-    return out
-```
+
+validity=false 先变 NaN；空截面日期跳过，若所有日期均空则 NaN。
+
+
+实现核对：[函数定义](../metrics/data_quality.py#L122)；`quant_evaluator.metrics.data_quality.compute_distinct_level_ratio`。
 
 <a id="metric-downside_deviation"></a>
 ## downside_deviation — Downside Deviation
@@ -1297,46 +887,29 @@ Annualized downside deviation (RMS of negative excess returns) of the probe dail
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.underwater.compute_downside_deviation`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.underwater.compute_downside_deviation(returns: 'np.ndarray', risk_free_rate: 'float' = 0.0, periods_per_year: 'int' = 252, min_periods: 'int' = 20) -> 'float'
-```
+只在负的超额收益子集上计算 RMS，并年化：
 
-Annualized downside deviation (semicovariance) of the return series.
 
-Definition matches the existing ``portfolio_stats.compute_sortino_ratio``
-family: RMS of *negative excess* returns only (no ddof), annualized by
-sqrt(periods_per_year).  NaN when there are fewer than ``min_periods``
-finite returns or no negative excess returns.
 
-### 精确计算公式（实际实现）
+$$
+DD=\sqrt{P}\sqrt{\frac1{n_-}\sum_{r_t-r_f/P<0}(r_t-r_f/P)^2}
+$$
 
-```python
-def compute_downside_deviation(
-    returns: np.ndarray,
-    risk_free_rate: float = 0.0,
-    periods_per_year: int = _PERIODS_PER_YEAR,
-    min_periods: int = 20,
-) -> float:
-    """Annualized downside deviation (semicovariance) of the return series.
 
-    Definition matches the existing ``portfolio_stats.compute_sortino_ratio``
-    family: RMS of *negative excess* returns only (no ddof), annualized by
-    sqrt(periods_per_year).  NaN when there are fewer than ``min_periods``
-    finite returns or no negative excess returns.
-    """
-    ret = _as_1d(returns)
-    ret = ret[np.isfinite(ret)]
-    if ret.size < min_periods:
-        return np.nan
-    rf_per = risk_free_rate / periods_per_year
-    excess = ret - rf_per
-    downside = excess[excess < 0.0]
-    if downside.size == 0:
-        return np.nan
-    return float(np.sqrt(np.mean(downside ** 2)) * np.sqrt(periods_per_year))
-```
+
+默认 `risk_free_rate=0,periods_per_year=252,min_periods=20`。先仅保留有限收益；不足 20 个或没有负超额收益时 NaN。分母是负收益个数，不是全部观测数。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `risk_free_rate` | `0.0` |
+| `periods_per_year` | `252` |
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/underwater.py#L234)；`quant_evaluator.metrics.underwater.compute_downside_deviation`。
 
 <a id="metric-drawdown_duration"></a>
 ## drawdown_duration — drawdown_duration
@@ -1349,6 +922,23 @@ Duration (in periods) of the longest drawdown
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.risk.drawdown_analysis.compute_drawdown_duration`。
+
+### 数学公式与计算口径
+
+当前注册项没有可直接调用的 `compute_fn`，因此通过统一注册执行器不可用，不能据此生成实测值。下式只说明注册所指向源码函数的计算语义；必须由显式上游制品或专门入口提供输入。
+
+由财富曲线识别每段从跌破历史峰值到恢复峰值的水下区间；该注册 ID 返回最长持续期：
+
+
+
+$$
+D_{max}=\max_j(e_j-s_j+1)
+$$
+
+
+
+默认 `min_periods=10`。无回撤返回 0；有限收益不足或财富路径出现无效估值（如导致不可定义的复利路径）时 NaN。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -1364,24 +954,22 @@ Mean number of finite factor values per day, per factor. A measure of the effect
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.data_quality.compute_effective_n`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.data_quality.compute_effective_n(factor_batch: 'FactorBatch') -> 'np.ndarray'
-```
+每个日期统计有限因子值个数，然后对全部日期（包括计数为 0 的日期）取均值：
 
-Mean number of finite factor values per day, (F,).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_effective_n(factor_batch: FactorBatch) -> np.ndarray:
-    """Mean number of finite factor values per day, (F,)."""
-    values = _factor_values(factor_batch)
-    T, N, F = values.shape
-    n = np.sum(np.isfinite(values), axis=1)  # (T, F)
-    return np.mean(n, axis=0)
-```
+$$
+N_{eff,f}=\frac1T\sum_{t=1}^T\sum_{n=1}^N\mathbf1(x_{tnf}\ finite)
+$$
+
+
+
+validity=false 的单元先视为 NaN。它不是 Kish 有效样本量。
+
+
+实现核对：[函数定义](../metrics/data_quality.py#L114)；`quant_evaluator.metrics.data_quality.compute_effective_n`。
 
 <a id="metric-exposure_drift"></a>
 ## exposure_drift — Exposure Drift
@@ -1395,47 +983,29 @@ Mean absolute change of the per-style exposure panel between adjacent periods (p
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.exposure_evidence.compute_exposure_drift`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.exposure_evidence.compute_exposure_drift(panel: 'FactorLoadingSeries', *, factor_values=None, min_obs=10, weights=None) -> 'float'
-```
+逐日用因子、全部风格暴露均有限且权重严格为正的共同支持做含截距 WLS，得到原始斜率 $b_{t,k}$。在同一支持上令 $\tilde w_{t,i}=w_{t,i}/\sum_jw_{t,j}$，并用加权标准差把斜率标准化：相邻变化也基于该标准化载荷，而非原始回归斜率：
 
-Mean absolute change of the per-style exposure series between adjacent
-periods (a persistence / stability measure).
 
-``drift = mean_{t,k} |panel[t+1,k] - panel[t,k]|`` over jointly-finite
-adjacent cells.  NaN when the panel has fewer than 2 periods or no finite
-adjacent pair.
 
-### 精确计算公式（实际实现）
+$$
+Drift=\operatorname{mean}_{t:J_t\ne\varnothing}\left[\frac1{|J_t|}\sum_{k\in J_t}|\tilde\beta_{t+1,k}-\tilde\beta_{t,k}|\right],\qquad \tilde\beta_{t,k}=b_{t,k}\frac{s^w_{t,Z_k}}{s^w_{t,x}}
+$$
 
-```python
-def compute_exposure_drift(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
-    """Mean absolute change of the per-style exposure series between adjacent
-    periods (a persistence / stability measure).
 
-    ``drift = mean_{t,k} |panel[t+1,k] - panel[t,k]|`` over jointly-finite
-    adjacent cells.  NaN when the panel has fewer than 2 periods or no finite
-    adjacent pair.
-    """
-    panel=_as_factor_loadings(panel,factor_values,min_obs,weights)
-    arr=panel.values
-    T,K=arr.shape
-    if T < 2:
-        return np.nan
-    diffs: list[float] = []
-    for t in range(T - 1):
-        a = arr[t]
-        b = arr[t + 1]
-        joint = np.isfinite(a) & np.isfinite(b)
-        if not np.any(joint):
-            continue
-        diffs.append(float(np.mean(np.abs(a[joint] - b[joint]))))
-    if not diffs:
-        return np.nan
-    return float(np.mean(diffs))
-```
+
+$J_t$ 是相邻两日都有限的风格集合，$s^w$ 使用同日归一化正权重。默认 `min_obs=10`；任一侧回归无效或因子/该风格加权标准差为 0，则对应标准化载荷缺失并不进入该对；少于两期或完全没有共同有限相邻项时 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `factor_values` | `None` |
+| `min_obs` | `10` |
+| `weights` | `None` |
+
+实现核对：[函数定义](../metrics/exposure_evidence.py#L501)；`quant_evaluator.metrics.exposure_evidence.compute_exposure_drift`。
 
 <a id="metric-factor_coverage"></a>
 ## factor_coverage — factor_coverage
@@ -1448,6 +1018,23 @@ Fraction of universe with non-null factor values
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quality.compute_coverage`。
+
+### 数学公式与计算口径
+
+当前注册项没有可直接调用的 `compute_fn`，因此通过统一注册执行器不可用，不能据此生成实测值。下式只说明注册所指向源码函数的计算语义；必须由显式上游制品或专门入口提供输入。
+
+该稳定 ID 的实际语义是逐因子有效因子单元占原始 $T\times N$ 面板的比例：
+
+
+
+$$
+Coverage_f^{factor}=\frac1{TN}\sum_{t,n}\mathbf1\{x_{tnf}\ finite\ \land\ validity_{tnf}\}
+$$
+
+
+
+不要求标签共同有效。空输入或完全无证据按实现的缺失政策处理；不会跨因子平均。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -1463,43 +1050,28 @@ Turnover rate of top/bottom quantile membership
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`factor_turnover_rate`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_factor_turnover_rate_value(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, min_periods: int = 30, quantile: float = 0.9) -> numpy.ndarray
-```
+逐日取因子截面的顶部集合（默认 `quantile=0.9`），计算相邻日成员变化率后取有限均值：
 
-Return mean top-quantile membership turnover per factor.
 
-compute_factor_turnover_rate returns a (T-1, F) series; the registry
-exposes the time-averaged scalar per factor, NaN below min_periods.
 
-### 精确计算公式（实际实现）
+$$
+u_t=\frac{|A_t\triangle A_{t+1}|}{|V_t\cup V_{t+1}|},\qquad Turnover_f=\operatorname{mean}_{t:u_t\ finite}u_t
+$$
 
-```python
-def compute_factor_turnover_rate_value(
-    factor_batch: FactorBatch,
-    min_periods: int = 30,
-    quantile: float = 0.9,
-) -> np.ndarray:
-    """Return mean top-quantile membership turnover per factor.
 
-    compute_factor_turnover_rate returns a (T-1, F) series; the registry
-    exposes the time-averaged scalar per factor, NaN below min_periods.
-    """
-    values = np.asarray(factor_batch.values, dtype=np.float64)
-    if values.ndim != 3:
-        raise ValueError("factor_batch.values must be (T, N, F)")
-    if factor_batch.validity is not None:
-        values = np.where(factor_batch.validity, values, np.nan)
-    turnover_series = compute_factor_turnover_rate(values, quantile=quantile)
-    if turnover_series.size == 0:
-        return np.full(values.shape[2], np.nan, dtype=np.float64)
-    with np.errstate(invalid="ignore"):
-        means = np.nanmean(turnover_series, axis=0)
-    valid_counts = np.sum(np.isfinite(turnover_series), axis=0)
-    return np.where(valid_counts >= min_periods, means, np.nan)
-```
+
+$V_t$ 是当日因子有限的资产集。默认 `measure=universe_membership_change,min_periods=30`；两日各至少 10 个有限资产，且若前日入选资产次日信号缺失则该对日期为 NaN。有效相邻值不足 30 个时最终 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `30` |
+| `quantile` | `0.9` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L297)；`quant_evaluator.metrics.registry_adapters.compute_factor_turnover_rate_value`。
 
 <a id="metric-hac_pvalue"></a>
 ## hac_pvalue — HAC p-value
@@ -1513,40 +1085,29 @@ Two-sided HAC-robust p-value for mean(IC) != 0 per factor (canonical alias ic.ra
 - 别名： `ic.rank.hac_p` 。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`hac_pvalue`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_hac_pvalue_value(ic_series: numpy.ndarray, min_periods: int = 30, max_lag: int = 5, kernel: str = 'bartlett') -> numpy.ndarray
-```
+先按 Newey–West 得到均值的 HAC 方差，再用标准正态近似给双侧 p 值：
 
-Return the two-sided HAC p-value for mean(IC) != 0 per factor.
 
-Uses the HAC t-statistic with a Gaussian null approximation; NaN below
-min_periods (matching the hac_tstat adapter contract).
 
-### 精确计算公式（实际实现）
+$$
+\widehat V(\bar x)=\frac1n\left[\gamma_0+2\sum_{k=1}^{L}w_k\gamma_k\right],\quad t=\frac{\bar x}{\sqrt{\widehat V(\bar x)}},\quad p=2\Phi(-|t|)
+$$
 
-```python
-def compute_hac_pvalue_value(
-    ic_series: np.ndarray,
-    min_periods: int = 30,
-    max_lag: int = 5,
-    kernel: str = "bartlett",
-) -> np.ndarray:
-    """Return the two-sided HAC p-value for mean(IC) != 0 per factor.
 
-    Uses the HAC t-statistic with a Gaussian null approximation; NaN below
-    min_periods (matching the hac_tstat adapter contract).
-    """
-    from scipy import stats as _stats
 
-    t_stat, _ = compute_hac_tstat(ic_series, max_lag=max_lag, kernel=kernel)
-    valid_periods = np.sum(np.isfinite(ic_series), axis=0)
-    with np.errstate(invalid="ignore"):
-        p_values = 2.0 * _stats.norm.sf(np.abs(t_stat))
-    p_values = np.where(np.isfinite(p_values), p_values, np.nan)
-    return np.where(valid_periods >= min_periods, p_values, np.nan)
-```
+默认 `min_periods=30,max_lag=5,kernel=bartlett`，$w_k=1-k/(L+1)$。只裁掉两端缺失；内部 NaN/Inf 使该列无证据。连续样本至少需 $L+10$，且注册层有限观测少于 30 时 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `30` |
+| `max_lag` | `5` |
+| `kernel` | `'bartlett'` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L416)；`quant_evaluator.metrics.registry_adapters.compute_hac_pvalue_value`。
 
 <a id="metric-hac_tstat"></a>
 ## hac_tstat — HAC t-statistic
@@ -1560,28 +1121,29 @@ Heteroskedasticity and autocorrelation consistent t-statistic for IC
 - 别名： `ic.rank.hac_t` 。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`hac_tstat`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_hac_tstat_value(ic_series: numpy.ndarray, min_periods: int = 30, max_lag: int = 5, kernel: str = 'bartlett') -> numpy.ndarray
-```
+Newey–West HAC t 统计量：
 
-Return only the HAC t-statistic component per factor.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_hac_tstat_value(
-    ic_series: np.ndarray,
-    min_periods: int = 30,
-    max_lag: int = 5,
-    kernel: str = "bartlett",
-) -> np.ndarray:
-    """Return only the HAC t-statistic component per factor."""
-    t_stat, _ = compute_hac_tstat(ic_series, max_lag=max_lag, kernel=kernel)
-    valid_periods = np.sum(np.isfinite(ic_series), axis=0)
-    return np.where(valid_periods >= min_periods, t_stat, np.nan)
-```
+$$
+t_{HAC}=\frac{\bar x}{\sqrt{n^{-1}(\gamma_0+2\sum_{k=1}^{L}w_k\gamma_k)}}
+$$
+
+
+
+默认 `min_periods=30,max_lag=5,kernel=bartlett`，$w_k=1-k/(L+1)$，各自协方差分母均为 $n$。底层只裁掉空的首尾；内部缺失或 Inf 返回 NaN，且连续样本至少需 $L+10$；注册层有限观测少于 30 也强制 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `30` |
+| `max_lag` | `5` |
+| `kernel` | `'bartlett'` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L87)；`quant_evaluator.metrics.registry_adapters.compute_hac_tstat_value`。
 
 <a id="metric-half_life"></a>
 ## half_life — IC Temporal Persistence Half-Life
@@ -1595,24 +1157,27 @@ Centered AR(1) IC temporal persistence; not predictive horizon decay
 - 别名： `ic_temporal_persistence` 。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`half_life`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_half_life_value(ic_series: numpy.ndarray, min_periods: int = 60) -> numpy.ndarray
-```
+在原始相邻时间配对上拟合带截距 AR(1)（默认 `model=centered_ar1`）：
 
-Return estimated IC half-life per factor.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_half_life_value(
-    ic_series: np.ndarray,
-    min_periods: int = 60,
-) -> np.ndarray:
-    """Return estimated IC half-life per factor."""
-    return compute_half_life(ic_series, min_periods=min_periods)
-```
+$$
+IC_t=\alpha+\phi IC_{t-1}+\varepsilon_t,\qquad h_{1/2}=-\frac{\log2}{\log\phi}
+$$
+
+
+
+只用两端都有限的真实相邻对，不压缩缺失。默认 `min_periods=60`；有限值或相邻对不足、回归退化、$\phi\le0$ 或 $\phi\ge1$ 时 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `60` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L127)；`quant_evaluator.metrics.registry_adapters.compute_half_life_value`。
 
 <a id="metric-hhi_concentration"></a>
 ## hhi_concentration — hhi_concentration
@@ -1625,6 +1190,21 @@ Herfindahl-Hirschman Index of factor value concentration
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.exposure.compute_concentration_hhi`。
+
+### 数学公式与计算口径
+
+当前注册项没有可直接调用的 `compute_fn`，统一注册执行器不可用，不能生成实测标量。注册定位的 helper 实际逐日返回总绝对暴露的 HHI：
+
+
+
+$$
+s_{t,i}=\frac{|w_{t,i}x_{t,i}|}{\sum_j|w_{t,j}x_{t,j}|},\qquad HHI_t=\sum_i s_{t,i}^2
+$$
+
+
+
+默认权重为 1；仅保留因子与权重有限且权重严格为正的资产，权重先归一化（不改变上述份额）。总绝对暴露为 0 时该日 NaN。注册没有绑定把逐日序列归约为 scalar 的规则，故不得擅自取均值。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -1640,6 +1220,21 @@ Effective number of groups (1/HHI) for factor concentration
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.exposure.compute_concentration_hhi`。
 
+### 数学公式与计算口径
+
+当前注册项没有可直接调用的 `compute_fn`，且定位到的 helper 只返回逐日 HHI，没有实现或绑定 `1/HHI` 的标量归约；因此统一注册执行器不可用，实际结果应记为 NaN/不可用。名称所声明但尚未绑定的目标关系仅为：
+
+
+
+$$
+N_{eff,t}=\frac1{HHI_t},\qquad HHI_t=\sum_i\left(\frac{|w_{t,i}x_{t,i}|}{\sum_j|w_{t,j}x_{t,j}|}\right)^2
+$$
+
+
+
+不得把这条目标关系当作当前已执行结果，也不得擅自决定跨日期的 reducer。
+
+
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
 <a id="metric-holm_bonferroni_correction"></a>
@@ -1654,117 +1249,27 @@ Holm-Bonferroni step-down correction: more powerful than Bonferroni, controls th
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.multiple_testing.holm_bonferroni_correction`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.multiple_testing.holm_bonferroni_correction(p_values: numpy.ndarray, alpha: float = 0.05) -> Tuple[numpy.ndarray, numpy.ndarray, int]
-```
+将 $m$ 个有限 p 值升序，做 Holm 逐步调整并保证单调：
 
-Apply Holm-Bonferroni step-down correction.
 
-More powerful than Bonferroni, controls family-wise error rate.
 
-Args:
-    p_values: Array of p-values, any shape. Non-finite entries are
-        treated as missing tests (see module docstring); finite
-        entries must lie in [0, 1].
-    alpha: Family-wise error rate, strictly inside (0, 1)
+$$
+q_{(i)}=\min\left(1,\max_{j\le i}(m-j+1)p_{(j)}\right)
+$$
 
-Returns:
-    (adjusted_p_values, reject_mask, n_discoveries)
-    adjusted_p_values: Holm-adjusted p-values
-    reject_mask: Boolean mask where null hypothesis is rejected
-    n_discoveries: Number of discoveries (rejections)
 
-Raises:
-    ValueError: If ``p_values`` is empty, contains finite values
-        outside [0, 1], or ``alpha`` is not strictly inside (0, 1)
 
-### 精确计算公式（实际实现）
+再映射回原顺序。非有限值保持 NaN 且不进入有效检验数；输出是调整 p 值。
 
-```python
-def holm_bonferroni_correction(
-    p_values: np.ndarray,
-    alpha: float = 0.05,
-) -> Tuple[np.ndarray, np.ndarray, int]:
-    """
-    Apply Holm-Bonferroni step-down correction.
+### 函数层默认参数
 
-    More powerful than Bonferroni, controls family-wise error rate.
+| 参数 | 默认值 |
+|---|---|
+| `alpha` | `0.05` |
 
-    Args:
-        p_values: Array of p-values, any shape. Non-finite entries are
-            treated as missing tests (see module docstring); finite
-            entries must lie in [0, 1].
-        alpha: Family-wise error rate, strictly inside (0, 1)
-
-    Returns:
-        (adjusted_p_values, reject_mask, n_discoveries)
-        adjusted_p_values: Holm-adjusted p-values
-        reject_mask: Boolean mask where null hypothesis is rejected
-        n_discoveries: Number of discoveries (rejections)
-
-    Raises:
-        ValueError: If ``p_values`` is empty, contains finite values
-            outside [0, 1], or ``alpha`` is not strictly inside (0, 1)
-    """
-    alpha = _validate_alpha(alpha)
-    p_values = _validate_p_values(p_values)
-
-    # Flatten for processing
-    original_shape = p_values.shape
-    p_flat = p_values.ravel()
-
-    # Extract valid p-values
-    valid_mask = np.isfinite(p_flat)
-    valid_indices = np.where(valid_mask)[0]
-    p_valid = p_flat[valid_mask]
-
-    n_tests = len(p_valid)
-
-    if n_tests == 0:
-        return np.full_like(p_values, np.nan), np.zeros_like(p_values, dtype=bool), 0
-
-    # Sort p-values
-    sort_idx = np.argsort(p_valid)
-    p_sorted = p_valid[sort_idx]
-    original_idx = valid_indices[sort_idx]
-
-    # Compute Holm critical values (step-down)
-    ranks = np.arange(1, n_tests + 1)
-    holm_critical = alpha / (n_tests - ranks + 1)
-
-    # Find rejections (sequential)
-    n_discoveries = 0
-    for i in range(n_tests):
-        if p_sorted[i] <= holm_critical[i]:
-            n_discoveries = i + 1
-        else:
-            break
-
-    # Compute Holm adjusted p-values. In sorted order, adjusted values must
-    # be non-decreasing, so each rank inherits the largest prior value.
-    adjusted_sorted = np.minimum(
-        np.maximum.accumulate(p_sorted * (n_tests - ranks + 1)),
-        1.0,
-    )
-
-    # Map back to original positions
-    adjusted_flat = np.full_like(p_flat, np.nan)
-    adjusted_flat[original_idx] = adjusted_sorted
-
-    # Rejection mask
-    reject_flat = np.zeros_like(p_flat, dtype=bool)
-    if n_discoveries > 0:
-        reject_indices = original_idx[:n_discoveries]
-        reject_flat[reject_indices] = True
-
-    return (
-        adjusted_flat.reshape(original_shape),
-        reject_flat.reshape(original_shape),
-        n_discoveries,
-    )
-```
+实现核对：[函数定义](../metrics/multiple_testing.py#L195)；`quant_evaluator.metrics.multiple_testing.holm_bonferroni_correction`。
 
 <a id="metric-ic_autocorr_lag1"></a>
 ## ic_autocorr_lag1 — IC Autocorrelation (Lag 1)
@@ -1778,28 +1283,28 @@ First-order autocorrelation of IC series
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`ic_autocorr_lag1`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_ic_autocorr_lag1_value(ic_series: numpy.ndarray, min_periods: int = 30, max_lag: int = 20) -> numpy.ndarray
-```
+每日 IC 在原始时间轴上滞后 1 的 Pearson 相关：
 
-Return lag-one IC autocorrelation per factor.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_ic_autocorr_lag1_value(
-    ic_series: np.ndarray,
-    min_periods: int = 30,
-    max_lag: int = 20,
-) -> np.ndarray:
-    """Return lag-one IC autocorrelation per factor."""
-    acf = compute_ic_autocorrelation(
-        ic_series, max_lag=max_lag, min_obs=min_periods
-    )
-    return acf[1] if acf.shape[0] > 1 else np.full(ic_series.shape[1], np.nan)
-```
+$$
+\rho_1=Corr(IC_t,IC_{t-1})
+$$
+
+
+
+只使用真实相邻且两端有限的配对，配对内分别中心化；默认底层 ACF `min_obs=30`。配对不足或任一侧零方差时 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `30` |
+| `max_lag` | `20` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L99)；`quant_evaluator.metrics.registry_adapters.compute_ic_autocorr_lag1_value`。
 
 <a id="metric-ic_decay"></a>
 ## ic_decay — ic_decay
@@ -1812,6 +1317,23 @@ IC decay: correlation at increasing forward horizons
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.ic_summary.compute_ic_decay`。
+
+### 数学公式与计算口径
+
+当前注册项没有可直接调用的 `compute_fn`，因此通过统一注册执行器不可用，不能据此生成实测值。下式只说明注册所指向源码函数的计算语义；必须由显式上游制品或专门入口提供输入。
+
+对每个输入预测期限 $h$ 分别计算逐日 IC，再对日期取有限均值，输出期限×因子矩阵：
+
+
+
+$$
+Decay_{h,f}=\operatorname{mean}_{t:\,IC_{t,f}^{(h)}\ finite}IC_{t,f}^{(h)}
+$$
+
+
+
+默认 `method=pearson,min_assets=10`。它不是对期限拟合指数衰减率；某期限无有效日时该格 NaN。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -1827,24 +1349,27 @@ Mean IC divided by IC standard deviation per factor (canonical alias ic.rank.ir)
 - 别名： `ic.rank.ir` ,  `icir` ,  `rank_ic_ir` ,  `rank_icir` ,  `rank_icir_raw` ,  `rankicir` 。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`ic_ir`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_ic_ir_value(ic_series: numpy.ndarray, min_periods: int = 20) -> numpy.ndarray
-```
+IC 信息比率是有限日 IC 的均值除以样本标准差：
 
-Return the scalar IC information ratio per factor.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_ic_ir_value(
-    ic_series: np.ndarray,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Return the scalar IC information ratio per factor."""
-    return compute_icir(ic_series, min_periods=min_periods)
-```
+$$
+ICIR_f=\frac{\bar{IC}_f}{s_f},\qquad s_f^2=\frac1{n_f-1}\sum_t(IC_{t,f}-\bar{IC}_f)^2
+$$
+
+
+
+默认 `min_periods=20`。不足、常数序列或结果非有限时 NaN；不会对很小但非零的真实标准差做人为截断，也不年化。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L79)；`quant_evaluator.metrics.registry_adapters.compute_ic_ir_value`。
 
 <a id="metric-ic_median"></a>
 ## ic_median — Median IC
@@ -1858,32 +1383,27 @@ Time-median of the daily IC series per factor (canonical alias ic.rank.median)
 - 别名： `ic.rank.median` 。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`ic_median`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_ic_median_value(ic_series: numpy.ndarray, min_periods: int = 20) -> numpy.ndarray
-```
+有限每日 IC 的中位数：
 
-Return the time-median IC per factor, shape (F,).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_ic_median_value(
-    ic_series: np.ndarray,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Return the time-median IC per factor, shape (F,)."""
-    import warnings
+$$
+MedIC_f=\operatorname{median}\{IC_{t,f}:IC_{t,f}\ finite\}
+$$
 
-    valid_periods = np.sum(np.isfinite(ic_series), axis=0)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)
-        with np.errstate(invalid="ignore"):
-            medians = np.nanmedian(ic_series, axis=0)
-    medians = np.where(np.isfinite(medians), medians, np.nan)
-    return np.where(valid_periods >= min_periods, medians, np.nan)
-```
+
+
+默认注册适配器要求至少 20 个有限期；不足返回 NaN。缺失不按 0 计。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L400)；`quant_evaluator.metrics.registry_adapters.compute_ic_median_value`。
 
 <a id="metric-ic_positive_ratio"></a>
 ## ic_positive_ratio — IC Positive Ratio
@@ -1897,26 +1417,27 @@ Fraction of finite daily IC values that are strictly positive, per factor. A val
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_ic_positive_ratio`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_ic_positive_ratio(ic_series: 'np.ndarray', min_periods: 'int' = 20) -> 'np.ndarray'
-```
+有限每日 IC 中严格大于 0 的比例：
 
-Fraction of finite daily IC values that are strictly positive, (F,).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_ic_positive_ratio(ic_series: np.ndarray, min_periods: int = 20) -> np.ndarray:
-    """Fraction of finite daily IC values that are strictly positive, (F,)."""
-    s = _as_series(ic_series)
-    valid = np.isfinite(s)
-    n = np.sum(valid, axis=0)
-    pos = np.sum((s > 0) & valid, axis=0)
-    ratio = pos / np.maximum(n, 1)
-    return np.where(n >= min_periods, ratio, np.nan)
-```
+$$
+P_f^+=\frac{\sum_t\mathbf1(IC_{t,f}>0)}{\sum_t\mathbf1(IC_{t,f}\ finite)}
+$$
+
+
+
+默认 `min_periods=20`；不足则 NaN。恰等于 0 不计为正。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/predictive.py#L155)；`quant_evaluator.metrics.predictive.compute_ic_positive_ratio`。
 
 <a id="metric-ic_recent_vs_history_delta"></a>
 ## ic_recent_vs_history_delta — IC Recent vs History Delta
@@ -1930,41 +1451,28 @@ def compute_ic_positive_ratio(ic_series: np.ndarray, min_periods: int = 20) -> n
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_ic_recent_vs_history_delta`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_ic_recent_vs_history_delta(ic_series: 'np.ndarray', recent_days: 'int' = 63, min_periods: 'int' = 20) -> 'np.ndarray'
-```
+最近窗口均值相对全历史均值的标准化差：
 
-(recent mean IC - full-history mean IC) / full-history std, (F,).
 
-Positive means recent IC is stronger than the historical average; a
-strongly negative value flags recent degradation.
 
-### 精确计算公式（实际实现）
+$$
+\Delta_f=\frac{\overline{IC}_{last\ 63}-\overline{IC}_{all}}{s_{all}}
+$$
 
-```python
-def compute_ic_recent_vs_history_delta(
-    ic_series: np.ndarray,
-    recent_days: int = 63,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """(recent mean IC - full-history mean IC) / full-history std, (F,).
 
-    Positive means recent IC is stronger than the historical average; a
-    strongly negative value flags recent degradation.
-    """
-    s = _as_series(ic_series)
-    valid = np.isfinite(s)
-    n = np.sum(valid, axis=0)
-    with np.errstate(invalid="ignore"):
-        hist_mean = np.nanmean(s, axis=0)
-        hist_std = np.nanstd(s, axis=0, ddof=1)
-        recent_mean = _recent_mean(s, recent_days)
-    delta = (recent_mean - hist_mean) / np.maximum(hist_std, 1e-12)
-    delta = np.where(hist_std > 1e-12, delta, np.nan)
-    return np.where(n >= min_periods, delta, np.nan)
-```
+
+默认 `recent_days=63,min_periods=20`，均值和样本标准差均忽略 NaN。全历史有限数不足或 $s_{all}\le10^{-12}$ 时 NaN；最近窗口可短于 63 个轴位置。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `recent_days` | `63` |
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/predictive.py#L300)；`quant_evaluator.metrics.predictive.compute_ic_recent_vs_history_delta`。
 
 <a id="metric-ic_serial_autocorrelation_lags_1_5_10_20"></a>
 ## ic_serial_autocorrelation_lags_1_5_10_20 — IC Serial Autocorrelation (lags 1/5/10/20)
@@ -1978,36 +1486,28 @@ Mean serial autocorrelation of one IC series; not predictive IC across label hor
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_rank_ic_decay`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_rank_ic_decay(ic_series: 'np.ndarray', horizons=(1, 5, 10, 20), min_periods: 'int' = 20) -> 'np.ndarray'
-```
+分别在原始时间轴计算 $k\in\{1,5,10,20\}$ 的配对 Pearson 自相关，并取有限阶均值：
 
-Mean IC autocorrelation across the decay horizons {1,5,10,20}, (F,).
 
-A single scalar per factor summarising how quickly the IC series loses
-autocorrelation (decays) at increasing lags.
 
-### 精确计算公式（实际实现）
+$$
+S_f=\operatorname{nanmean}_{k\in\{1,5,10,20\}}Corr(IC_t,IC_{t-k})
+$$
 
-```python
-def compute_rank_ic_decay(
-    ic_series: np.ndarray,
-    horizons=(1, 5, 10, 20),
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Mean IC autocorrelation across the decay horizons {1,5,10,20}, (F,).
 
-    A single scalar per factor summarising how quickly the IC series loses
-    autocorrelation (decays) at increasing lags.
-    """
-    s = _as_series(ic_series)
-    acfs = [_autocorr_lag(s, h) for h in horizons]
-    with np.errstate(invalid="ignore"):
-        out = np.nanmean(np.stack(acfs, axis=0), axis=0)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+
+默认 `min_periods=20`（按全列有限 IC 检查）。每阶只用两端有限的原位置配对，不压缩缺失；不可定义的阶为 NaN，全部不可定义则结果 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `horizons` | `(1, 5, 10, 20)` |
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/predictive.py#L270)；`quant_evaluator.metrics.predictive.compute_rank_ic_decay`。
 
 <a id="metric-ic_sign_consistency"></a>
 ## ic_sign_consistency — IC Sign Consistency
@@ -2021,29 +1521,27 @@ Fraction of finite daily IC values sharing the sign of the mean IC, per factor. 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_ic_sign_consistency`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_ic_sign_consistency(ic_series: 'np.ndarray', min_periods: 'int' = 20) -> 'np.ndarray'
-```
+先求有限 IC 的均值符号，再计算同号比例：
 
-Fraction of finite daily IC values sharing the sign of the mean IC, (F,).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_ic_sign_consistency(ic_series: np.ndarray, min_periods: int = 20) -> np.ndarray:
-    """Fraction of finite daily IC values sharing the sign of the mean IC, (F,)."""
-    s = _as_series(ic_series)
-    valid = np.isfinite(s)
-    n = np.sum(valid, axis=0)
-    with np.errstate(invalid="ignore"):
-        mean = np.nanmean(s, axis=0)
-    sign = np.sign(mean)
-    same = np.sum((np.sign(s) == sign[None, :]) & valid, axis=0)
-    ratio = same / np.maximum(n, 1)
-    return np.where(n >= min_periods, ratio, np.nan)
-```
+$$
+C_f=\frac1{n_f}\sum_{t:IC_t\ finite}\mathbf1\{sign(IC_t)=sign(\bar{IC})\}
+$$
+
+
+
+默认 `min_periods=20`，不足则 NaN。若均值恰为 0，只有 IC 恰为 0 的日期计为一致。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/predictive.py#L287)；`quant_evaluator.metrics.predictive.compute_ic_sign_consistency`。
 
 <a id="metric-ic_sign_flip_rate"></a>
 ## ic_sign_flip_rate — IC Sign Flip Rate
@@ -2057,32 +1555,27 @@ Fraction of adjacent finite IC pairs whose sign flips, per factor. Lower values 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.stability_regime.compute_ic_sign_flip_rate`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.stability_regime.compute_ic_sign_flip_rate(ic_series: 'np.ndarray', min_periods: 'int' = 20) -> 'np.ndarray'
-```
+原始相邻日期中两端均有限且符号不同的比例：
 
-Fraction of adjacent finite IC pairs whose sign flips, (F,).
 
-Lower values indicate a more persistent (stable) IC sign.
 
-### 精确计算公式（实际实现）
+$$
+Flip_f=\frac{\sum_t\mathbf1\{sign(IC_t)\ne sign(IC_{t-1})\}\mathbf1_{pair}}{\sum_t\mathbf1_{pair}}
+$$
 
-```python
-def compute_ic_sign_flip_rate(ic_series: np.ndarray, min_periods: int = 20) -> np.ndarray:
-    """Fraction of adjacent finite IC pairs whose sign flips, (F,).
 
-    Lower values indicate a more persistent (stable) IC sign.
-    """
-    s = _as_series(ic_series)
-    finite = np.isfinite(s)
-    pair = finite[1:, :] & finite[:-1, :]
-    n = np.sum(pair, axis=0)
-    flip = np.sum((np.sign(s[1:, :]) != np.sign(s[:-1, :])) & pair, axis=0)
-    rate = flip / np.maximum(n, 1)
-    return np.where(n >= min_periods - 1, rate, np.nan)
-```
+
+默认 `min_periods=20`，因此至少需 19 个有效相邻对；缺失不会被压缩跨越。0 与正/负之间算符号变化。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/stability_regime.py#L181)；`quant_evaluator.metrics.stability_regime.compute_ic_sign_flip_rate`。
 
 <a id="metric-ic_stability"></a>
 ## ic_stability — ic_stability
@@ -2095,6 +1588,23 @@ Rolling correlation of IC values across sub-periods
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.ic_summary.compute_ic_stability`。
+
+### 数学公式与计算口径
+
+当前注册项没有可直接调用的 `compute_fn`，因此通过统一注册执行器不可用，不能据此生成实测值。下式只说明注册所指向源码函数的计算语义；必须由显式上游制品或专门入口提供输入。
+
+当前稳定 ID 使用滚动窗口前半与后半的相关作为弱稳定性代理：
+
+
+
+$$
+S_{w,f}=Corr(IC_{w:w+H-1,f},IC_{w+H:w+2H-1,f})
+$$
+
+
+
+默认 `window_size=60`、每半 `min_periods=20`，两半按相同相对位置成对删除缺失；任一半零方差则窗口 NaN。输出为窗口序列/其适配结果，单一标量解读需以注册适配器为准。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -2110,30 +1620,28 @@ Standard deviation of the daily IC series per factor (canonical alias ic.rank.st
 - 别名： `ic.rank.std` 。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`ic_std`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.ic.compute_ic_std(ic_series: numpy.ndarray, valid_counts: Optional[numpy.ndarray] = None, min_periods: int = 20) -> numpy.ndarray
-```
+有限每日 IC 的样本标准差：
 
-Compute only the IC standard-deviation component.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_ic_std(
-    ic_series: np.ndarray,
-    valid_counts: Optional[np.ndarray] = None,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Compute only the IC standard-deviation component."""
-    _, ic_std = compute_mean_ic(
-        ic_series,
-        valid_counts=valid_counts,
-        min_periods=min_periods,
-    )
-    return ic_std
-```
+$$
+s_f=\sqrt{\frac1{n_f-1}\sum_t(IC_{t,f}-\bar{IC}_f)^2}
+$$
+
+
+
+默认 `min_periods=20`，不足返回 NaN；采用 `ddof=1`，缺失不计入 $n_f$。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `valid_counts` | `None` |
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/ic.py#L277)；`quant_evaluator.metrics.ic.compute_ic_std`。
 
 <a id="metric-ic_summary"></a>
 ## ic_summary — ic_summary
@@ -2146,6 +1654,23 @@ Summary statistics (mean, std, skew, kurtosis) of IC time series
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats`。
+
+### 数学公式与计算口径
+
+当前注册项没有可直接调用的 `compute_fn`，因此通过统一注册执行器不可用，不能据此生成实测值。下式只说明注册所指向源码函数的计算语义；必须由显式上游制品或专门入口提供输入。
+
+这是分布型汇总产物而非单一数值公式；对同一每日 IC 列汇集实际实现的统计量，核心包括：
+
+
+
+$$
+\bar{IC},\quad s_{IC},\quad ICIR=\bar{IC}/s_{IC},\quad t=\bar{IC}/(s_{IC}/\sqrt n),\quad p=2F_{t,n-1}(-|t|)
+$$
+
+
+
+各字段只用有限 IC，并遵循各子统计默认最低 20 期与常数序列缺失规则。消费者不应把该 distribution 输出当作一个 scalar。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -2161,21 +1686,29 @@ Signed mean industry-style exposure of the factor (typed per-style field, from t
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.exposure_evidence.compute_industry_exposure`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.exposure_evidence.compute_industry_exposure(panel: 'FactorLoadingSeries', *, factor_values=None, min_obs=10, weights=None) -> 'float'
-```
+逐日用因子、全部风格暴露均有限且权重严格为正的共同支持做含截距 WLS，得到原始斜率 $b_{t,k}$。在同一支持上令 $\tilde w_{t,i}=w_{t,i}/\sum_jw_{t,j}$，并用加权标准差把斜率标准化：
 
-Signed mean industry-style exposure of the factor (one typed field).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_industry_exposure(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
-    """Signed mean industry-style exposure of the factor (one typed field)."""
-    return _select_style(panel, "industry",factor_values=factor_values,min_obs=min_obs,weights=weights)
-```
+$$
+\tilde\beta_{t,k}=b_{t,k}\frac{\sqrt{\sum_i\tilde w_{t,i}(Z_{t,i,k}-\bar Z_{t,k}^{w})^2}}{\sqrt{\sum_i\tilde w_{t,i}(x_{t,i}-\bar x_t^{w})^2}},\qquad E_{industry}=\operatorname{MeanFinite}_t(\tilde\beta_{t,industry})
+$$
+
+
+
+默认 `min_obs=10`；未显式绑定权重时等权。回归不可估、$R^2$ 非有限、因子或 industry 风格的加权标准差为 0 时该日 NaN；缺少 `industry` typed field 或无有限日时 NaN。输出是有符号标准化暴露。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `factor_values` | `None` |
+| `min_obs` | `10` |
+| `weights` | `None` |
+
+实现核对：[函数定义](../metrics/exposure_evidence.py#L617)；`quant_evaluator.metrics.exposure_evidence.compute_industry_exposure`。
 
 <a id="metric-information_ratio"></a>
 ## information_ratio — Information Ratio
@@ -2189,33 +1722,28 @@ Benchmark/invested-capital evidence from an explicitly bound execution trajector
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.long_only.compute_information_ratio`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.long_only.compute_information_ratio(returns, periods_per_year: 'int' = 252, min_periods: 'int' = 2)
-```
+对收益序列计算年化信息比率（实现中基准为 0）：
 
-Annualized mean(active)/sample-std(active); zero risk is undefined.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_information_ratio(returns, periods_per_year: int = 252, min_periods: int = 2):
-    """Annualized mean(active)/sample-std(active); zero risk is undefined."""
-    if isinstance(min_periods, bool) or not isinstance(min_periods, int) or min_periods < 2:
-        raise ValueError("min_periods must be an integer >= 2")
-    if not np.isfinite(periods_per_year) or periods_per_year <= 0:
-        raise ValueError("periods_per_year must be finite and positive")
-    x, squeeze = _matrix(returns)
-    out = np.full(x.shape[1], np.nan)
-    for f in range(x.shape[1]):
-        v = x[np.isfinite(x[:, f]), f]
-        if len(v) >= min_periods:
-            scale = np.std(v, ddof=1)
-            if np.isfinite(scale) and scale > 0:
-                out[f] = np.mean(v) / scale * np.sqrt(periods_per_year)
-    return out[0] if squeeze else out
-```
+$$
+IR=\sqrt P\frac{\bar r}{s_r}
+$$
+
+
+
+默认 `periods_per_year=252,min_periods=2`，$s_r$ 为有限收益的样本标准差。样本不足、标准差为 0 或结果非有限时 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `periods_per_year` | `252` |
+| `min_periods` | `2` |
+
+实现核对：[函数定义](../metrics/long_only.py#L32)；`quant_evaluator.metrics.long_only.compute_information_ratio`。
 
 <a id="metric-inverted_u_score"></a>
 ## inverted_u_score — Inverted-U Shape Score
@@ -2229,83 +1757,22 @@ Inverted-U (hill) score in [0, 1] per factor. Mirror of u_shape_score with conca
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_inverted_u_score`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_inverted_u_score(qr: 'np.ndarray') -> 'np.ndarray'
-```
+令分位坐标 $x_q\in[0,1]$，倒 U 模板 $z_q=-(x_q-0.5)^2$。分别做带截距的一元 OLS 得 $R_I^2$ 与线性模板 $R_L^2$，并计算负二阶差分占比 $c_-=mean[\Delta^2r_q<0]$。实际得分为：
 
-Inverted-U score per factor, (F,).
 
-Mirrors :func:`compute_u_shape_score` with the opposite curvature
-(concave: interior second differences NEGATIVE) and the opposite
-template (``-U(x)`` inverted-U template, concave).  NaN when fewer than
-4 finite quantile returns.
 
-NOTE on template fitting with a free scale: fitting ``a + b*T`` to ``y``
-with ``T = -(x-0.5)^2`` also fits ``-T`` perfectly when ``b`` is free
-(``b`` flips sign), so an inverted-U TEMPLATE fit alone cannot separate
-U from inverted-U — the concave-curvature term is the separator.  A pure
-U profile therefore reports a non-zero inverted-U score only from the
-template term; the concave fraction keeps it below the U score.
+$$
+Score=0.5\max(R_I^2,0)+0.3c_-+0.2(\max(R_I^2,0)-R_L^2)
+$$
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_inverted_u_score(qr: np.ndarray) -> np.ndarray:
-    """Inverted-U score per factor, (F,).
 
-    Mirrors :func:`compute_u_shape_score` with the opposite curvature
-    (concave: interior second differences NEGATIVE) and the opposite
-    template (``-U(x)`` inverted-U template, concave).  NaN when fewer than
-    4 finite quantile returns.
+但若 $c_-<0.5$ 则返回 0；少于 4 个有限分位、无有限内部三点或回归不可定义则 NaN；常数曲线返回 0。实现以凹曲率区分倒 U，因为自由斜率使正负二次模板本身具有同样拟合能力。
 
-    NOTE on template fitting with a free scale: fitting ``a + b*T`` to ``y``
-    with ``T = -(x-0.5)^2`` also fits ``-T`` perfectly when ``b`` is free
-    (``b`` flips sign), so an inverted-U TEMPLATE fit alone cannot separate
-    U from inverted-U — the concave-curvature term is the separator.  A pure
-    U profile therefore reports a non-zero inverted-U score only from the
-    template term; the concave fraction keeps it below the U score.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 4:
-        return out
-    x = _template_fit_x(nq)
-    it = -(x - 0.5) ** 2
-    for f in range(F):
-        col = m[:, f]
-        finite = np.isfinite(col)
-        if np.sum(finite) < 4:
-            continue
-        y = col[finite]
-        xi = it[finite]
-        xm = x[finite]
-        if np.ptp(y) == 0.0:
-            out[f] = 0.0
-            continue
-        r2_i = _fit_variance_explained(y, xi)
-        r2_m = _fit_variance_explained(y, xm)
-        if not (np.isfinite(r2_i) and np.isfinite(r2_m)):
-            continue
-        interior = finite[1:-1] & finite[:-2] & finite[2:]
-        if not np.any(interior):
-            continue
-        d2 = col[2:][interior] - 2.0 * col[1:-1][interior] + col[:-2][interior]
-        curv = float(np.mean(d2 < 0.0))
-        # A U profile is convex; without concave curvature the inverted-U
-        # label must not win even though the sign-flipped template fits.
-        if curv < 0.5:
-            out[f] = 0.0
-            continue
-        if r2_i <= r2_m:
-            out[f] = 0.0
-            continue
-        inv_fit = max(r2_i, 0.0)
-        out[f] = float(0.5 * inv_fit + 0.3 * curv + 0.2 * (inv_fit - r2_m))
-    return out
-```
+
+实现核对：[函数定义](../metrics/shape_evidence.py#L185)；`quant_evaluator.metrics.shape_evidence.compute_inverted_u_score`。
 
 <a id="metric-joint_coverage"></a>
 ## joint_coverage — joint_coverage
@@ -2318,6 +1785,17 @@ Fraction of universe with both factor and return available
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quality.compute_coverage_per_factor`。
+
+### 数学公式与计算口径
+
+$$
+C_f=\frac{\sum_{t,i}\mathbf1[\operatorname{valid}(x_{tif})\land\operatorname{valid}(y_{ti})]}{TN}
+$$
+
+
+
+valid 使用 FactorBatch 与 LabelBundle 的联合有效掩码，不只是 NaN 判断。实现默认 min_assets=10；该阈值不改变覆盖率分子分母，只决定 valid_days（当日联合有效资产数至少 10）及 days_below_min_assets。空面板实现覆盖率为 0.0；注册层无直接 compute_fn，运行时须绑定该覆盖报告。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -2333,6 +1811,17 @@ Excess kurtosis of the return distribution
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.distribution.compute_kurtosis`。
 
+### 数学公式与计算口径
+
+$$
+K=\operatorname{Kurtosis}_{\mathrm{unbiased}}(r)-3
+$$
+
+
+
+实际实现调用 scipy.stats.kurtosis，默认 axis=0、min_obs=10、excess=True（fisher=True）、bias=False、nan_policy=omit；omit 只忽略 NaN，并不忽略正负无穷。门槛计数使用 isfinite，少于 10 个有限观测强制 NaN；即使有限计数达标，数组中的无穷仍可使结果 NaN。excess=False 时不减 3。
+
+
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
 <a id="metric-label_maturity"></a>
@@ -2347,37 +1836,18 @@ Fraction of (T, N) cells with a finite forward-return label, per factor. Measure
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.data_quality.compute_label_maturity`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.data_quality.compute_label_maturity(factor_batch: 'FactorBatch', label_bundle: 'LabelBundle') -> 'np.ndarray'
-```
+$$
+M_f=\frac1{TN}\sum_{t,i}\mathbf1[\mathrm{finite}(x_{tif})\land\mathrm{finite}(y_{ti})]
+$$
 
-Fraction of (T, N) cells with a finite forward-return label, (F,).
 
-Measures how much of the factor's universe has a mature (available)
-label for evaluation.
 
-### 精确计算公式（实际实现）
+分母始终是完整 $T\times N$；因子或前瞻收益任一非有限都不计分子。
 
-```python
-def compute_label_maturity(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-) -> np.ndarray:
-    """Fraction of (T, N) cells with a finite forward-return label, (F,).
 
-    Measures how much of the factor's universe has a mature (available)
-    label for evaluation.
-    """
-    values = _factor_values(factor_batch)
-    labels = _labels(label_bundle, factor_batch.num_assets)
-    T, N, F = values.shape
-    label_finite = np.isfinite(labels)  # (T, N)
-    factor_finite = np.isfinite(values)  # (T, N, F)
-    mature = factor_finite & label_finite[:, :, None]
-    return np.sum(mature, axis=(0, 1)) / (T * N)
-```
+实现核对：[函数定义](../metrics/data_quality.py#L170)；`quant_evaluator.metrics.data_quality.compute_label_maturity`。
 
 <a id="metric-left_right_asymmetry"></a>
 ## left_right_asymmetry — Left-Right Asymmetry
@@ -2391,43 +1861,18 @@ Mean right-minus-left mirrored quantile contrast; symmetric U and inverted-U are
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_left_right_asymmetry`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_left_right_asymmetry(qr: 'np.ndarray') -> 'np.ndarray'
-```
+$$
+A_f=\frac1m\sum_{j=1}^m(q_{Q+1-j,f}-q_{j,f}),\quad m=\lfloor Q/2\rfloor
+$$
 
-Left-right asymmetry of the quantile profile per factor, (F,).
 
-Mean right-minus-left mirrored bucket contrast. Symmetric U and inverted-U
-profiles are zero; curvature is not asymmetry. The central bucket (odd Q)
-is excluded. All mirrored pairs must be finite; direction is descriptive.
 
-### 精确计算公式（实际实现）
+奇数中央桶排除；要求 $Q\ge4$ 且所有镜像桶有限，否则 NaN。
 
-```python
-def compute_left_right_asymmetry(qr: np.ndarray) -> np.ndarray:
-    """Left-right asymmetry of the quantile profile per factor, (F,).
 
-    Mean right-minus-left mirrored bucket contrast. Symmetric U and inverted-U
-    profiles are zero; curvature is not asymmetry. The central bucket (odd Q)
-    is excluded. All mirrored pairs must be finite; direction is descriptive.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 4:
-        return out
-    mid = nq // 2
-    for f in range(F):
-        col = m[:, f]
-        bottom = col[:mid]
-        top = col[-mid:][::-1]
-        if not np.all(np.isfinite(np.concatenate([bottom, top]))):
-            continue
-        out[f] = float(np.mean(top - bottom))
-    return out
-```
+实现核对：[函数定义](../metrics/shape_evidence.py#L491)；`quant_evaluator.metrics.shape_evidence.compute_left_right_asymmetry`。
 
 <a id="metric-linear_trend_score"></a>
 ## linear_trend_score — Linear Trend Score
@@ -2441,52 +1886,18 @@ Pearson correlation of the quantile profile with the linear quantile coordinate 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_linear_trend_score`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_linear_trend_score(qr: 'np.ndarray') -> 'np.ndarray'
-```
+$$
+L_f=\mathrm{Corr}(z_j,q_{j,f})
+$$
 
-Linear-trend score of the quantile profile per factor, (F,).
 
-Pearson correlation of the profile with the linear quantile coordinate,
-bounded to [-1, 1].  ``+1`` = perfectly monotone increasing, ``-1`` =
-perfectly monotone decreasing, ~0 = flat or U-shaped (the U-shape kite
-is separated by ``u_shape_score``).  Direction ``higher_is_better``.
-NaN when fewer than 3 finite quantile returns.
 
-### 精确计算公式（实际实现）
+$z_j$ 是线性桶坐标；仅用有限桶且至少 3 个。收益全相等返回 0，相关非有限返回 NaN。
 
-```python
-def compute_linear_trend_score(qr: np.ndarray) -> np.ndarray:
-    """Linear-trend score of the quantile profile per factor, (F,).
 
-    Pearson correlation of the profile with the linear quantile coordinate,
-    bounded to [-1, 1].  ``+1`` = perfectly monotone increasing, ``-1`` =
-    perfectly monotone decreasing, ~0 = flat or U-shaped (the U-shape kite
-    is separated by ``u_shape_score``).  Direction ``higher_is_better``.
-    NaN when fewer than 3 finite quantile returns.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 3:
-        return out
-    x = _template_fit_x(nq)
-    for f in range(F):
-        col = m[:, f]
-        finite = np.isfinite(col)
-        if np.sum(finite) < 3:
-            continue
-        y = col[finite]
-        xf = x[finite]
-        if np.ptp(y) == 0.0:
-            out[f] = 0.0
-            continue
-        r = np.corrcoef(xf, y)[0, 1]
-        out[f] = float(r) if np.isfinite(r) else np.nan
-    return out
-```
+实现核对：[函数定义](../metrics/shape_evidence.py#L514)；`quant_evaluator.metrics.shape_evidence.compute_linear_trend_score`。
 
 <a id="metric-liquidity_exposure"></a>
 ## liquidity_exposure — Liquidity Exposure
@@ -2500,21 +1911,25 @@ Signed mean liquidity-style exposure of the factor (typed per-style field). NaN 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.exposure_evidence.compute_liquidity_exposure`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.exposure_evidence.compute_liquidity_exposure(panel: 'FactorLoadingSeries', *, factor_values=None, min_obs=10, weights=None) -> 'float'
-```
+$$
+x_{ti}=\alpha_t+\sum_k b_{tk}Z_{tik}+\varepsilon_{ti},\qquad E_{liq}=\operatorname{MeanFinite}_t\!\left(b_{t,liq}\frac{s_{Z,t,liq}}{s_{x,t}}\right)
+$$
 
-Signed mean liquidity-style exposure of the factor (one typed field).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_liquidity_exposure(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
-    """Signed mean liquidity-style exposure of the factor (one typed field)."""
-    return _select_style(panel, "liquidity",factor_values=factor_values,min_obs=min_obs,weights=weights)
-```
+每日在因子、全部风格和正权重共同有限的同一支持上做含截距 WLS；括号内是标准化载荷。默认 min_obs=10；因子零方差、该风格零方差、回归无效、风格缺失或无有限日均返回 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `factor_values` | `None` |
+| `min_obs` | `10` |
+| `weights` | `None` |
+
+实现核对：[函数定义](../metrics/exposure_evidence.py#L632)；`quant_evaluator.metrics.exposure_evidence.compute_liquidity_exposure`。
 
 <a id="metric-long_short_returns"></a>
 ## long_short_returns — long_short_returns
@@ -2528,181 +1943,27 @@ Time series of long-minus-short portfolio returns, shape (T,) or (T, F). Portfol
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.portfolio_stats.compute_long_short_returns`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.portfolio_stats.compute_long_short_returns(factor_values: numpy.ndarray, forward_returns: numpy.ndarray, long_threshold: float = 0.8, short_threshold: float = 0.2, validity_mask: Optional[numpy.ndarray] = None, missing_return_policy: str = 'zero_fill', tie_policy: str = 'max') -> Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]
-```
+$$
+R^{LS}_{tf}=\sum_i w_{tif}y_{ti},\qquad w_{tif}=\frac{\mathbf1[i\in L_{tf}]-\mathbf1[i\in S_{tf}]}{|L_{tf}|+|S_{tf}|}
+$$
 
-Compute long/short portfolio returns based on factor quantiles.
 
-Missing-return policy (QE-METRIC P0-10):
 
-- ``"zero_fill"`` (default, back-compat): forward returns that are NaN
-  are treated as 0 for the assets selected into the long/short buckets.
-  This affects bucket means (a NaN-return asset contributes 0 instead
-  of being excluded) and is documented here precisely because it can
-  bias portfolio returns toward 0 in sparse universes.
-- ``"drop"``: assets with non-finite forward returns are excluded from
-  the bucket means; if a bucket ends up empty, that period's return is
-  NaN (never 0).
-- ``"fail"``: raise ValueError if any forward return is non-finite.
+默认上下阈值 0.8/0.2、tie_policy=max，至少 2 个有限因子值且两桶非空；这是总毛敞口 100% 的逐资产权重，并非多头均值减空头均值。missing_return_policy 默认 zero_fill；drop 在任何已选收益缺失时令整日 NaN（不删除资产、不重配权），fail 报错。
 
-Args:
-    factor_values: Factor values (T, N) or (T, N, F)
-    forward_returns: Forward returns (T, N)
-    long_threshold: Quantile threshold for long positions (default 0.8 = top 20%)
-    short_threshold: Quantile threshold for short positions (default 0.2 = bottom 20%)
-    validity_mask: Optional boolean mask (T, N) or (T, N, F)
-    missing_return_policy: "zero_fill" | "drop" | "fail" (see above)
+### 函数层默认参数
 
-Returns:
-    (long_returns, short_returns, long_short_returns)
-    Each shape (T,) or (T, F) for time series of portfolio returns
+| 参数 | 默认值 |
+|---|---|
+| `long_threshold` | `0.8` |
+| `short_threshold` | `0.2` |
+| `validity_mask` | `None` |
+| `missing_return_policy` | `'zero_fill'` |
+| `tie_policy` | `'max'` |
 
-### 精确计算公式（实际实现）
-
-```python
-def compute_long_short_returns(
-    factor_values: np.ndarray,
-    forward_returns: np.ndarray,
-    long_threshold: float = 0.8,
-    short_threshold: float = 0.2,
-    validity_mask: Optional[np.ndarray] = None,
-    missing_return_policy: str = "zero_fill",
-    tie_policy: str = "max",
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Compute long/short portfolio returns based on factor quantiles.
-
-    Missing-return policy (QE-METRIC P0-10):
-
-    - ``"zero_fill"`` (default, back-compat): forward returns that are NaN
-      are treated as 0 for the assets selected into the long/short buckets.
-      This affects bucket means (a NaN-return asset contributes 0 instead
-      of being excluded) and is documented here precisely because it can
-      bias portfolio returns toward 0 in sparse universes.
-    - ``"drop"``: assets with non-finite forward returns are excluded from
-      the bucket means; if a bucket ends up empty, that period's return is
-      NaN (never 0).
-    - ``"fail"``: raise ValueError if any forward return is non-finite.
-
-    Args:
-        factor_values: Factor values (T, N) or (T, N, F)
-        forward_returns: Forward returns (T, N)
-        long_threshold: Quantile threshold for long positions (default 0.8 = top 20%)
-        short_threshold: Quantile threshold for short positions (default 0.2 = bottom 20%)
-        validity_mask: Optional boolean mask (T, N) or (T, N, F)
-        missing_return_policy: "zero_fill" | "drop" | "fail" (see above)
-
-    Returns:
-        (long_returns, short_returns, long_short_returns)
-        Each shape (T,) or (T, F) for time series of portfolio returns
-    """
-    _validate_missing_return_policy(missing_return_policy)
-    from .quantile import _searchsorted_bins
-    from quant_evaluator.contracts.quantile_policy import validate_tie_policy
-    policy = validate_tie_policy(tie_policy)
-    factor_values = np.asarray(factor_values)
-    forward_returns = np.asarray(forward_returns)
-    if factor_values.ndim not in (2, 3) or forward_returns.shape != factor_values.shape[:2]:
-        raise ValueError("factor_values must be (T,N[,F]) and forward_returns must match (T,N)")
-    if not (np.isfinite(short_threshold) and np.isfinite(long_threshold)
-            and 0 < short_threshold < long_threshold < 1):
-        raise ValueError("thresholds require 0 < short_threshold < long_threshold < 1")
-    if validity_mask is not None:
-        validity_mask = np.asarray(validity_mask)
-        if validity_mask.dtype != np.dtype(bool) or validity_mask.shape not in (factor_values.shape, factor_values.shape[:2]):
-            raise ValueError("validity_mask must be boolean with matching panel or factor shape")
-    if missing_return_policy == "fail" and np.any(~np.isfinite(forward_returns)):
-        n_missing = int(np.sum(~np.isfinite(forward_returns)))
-        raise ValueError(
-            f"forward_returns contains {n_missing} non-finite value(s) and "
-            "missing_return_policy='fail'"
-        )
-
-    factor_values, forward_returns = np.asarray(factor_values), np.asarray(forward_returns)
-    if factor_values.ndim not in (2, 3) or forward_returns.shape != factor_values.shape[:2]:
-        raise ValueError("factor and label axes must match (T,N[,F]) and (T,N)")
-    if not 0 <= short_threshold < long_threshold <= 1:
-        raise ValueError("require 0 <= short_threshold < long_threshold <= 1")
-    if validity_mask is not None:
-        validity_mask = np.asarray(validity_mask)
-        if validity_mask.dtype != np.bool_ or validity_mask.shape not in (factor_values.shape[:2], factor_values.shape):
-            raise ValueError("validity_mask must be boolean (T,N) or match factor axes")
-    # Handle 3D factor values
-    if factor_values.ndim == 3:
-        T, N, F = factor_values.shape
-        long_rets = np.full((T, F), np.nan)
-        short_rets = np.full((T, F), np.nan)
-        ls_rets = np.full((T, F), np.nan)
-
-        for f in range(F):
-            fv = factor_values[:, :, f]
-            vm = (validity_mask[:, :, f] if validity_mask.ndim == 3 else validity_mask) if validity_mask is not None else None
-            long_rets[:, f], short_rets[:, f], ls_rets[:, f] = compute_long_short_returns(
-                fv, forward_returns, long_threshold, short_threshold, vm,
-                missing_return_policy=missing_return_policy,
-                tie_policy=tie_policy,
-            )
-        return long_rets, short_rets, ls_rets
-
-    # 2D case
-    T, N = factor_values.shape
-    long_returns = np.full(T, np.nan)
-    short_returns = np.full(T, np.nan)
-    long_short_returns = np.full(T, np.nan)
-
-    for t in range(T):
-        factor_t = factor_values[t, :]
-        ret_t = forward_returns[t, :]
-
-        # Apply validity mask
-        if validity_mask is not None:
-            valid = validity_mask[t, :]
-            factor_t = np.where(valid, factor_t, np.nan)
-
-        # Filter finite factor values. Missing-return policy:
-        # - "zero_fill": buckets are formed on finite factors only; NaN
-        #   forward returns contribute 0 to the bucket mean (documented).
-        # - "drop": assets with non-finite returns are excluded entirely.
-        finite_mask = np.isfinite(factor_t)
-        if missing_return_policy == "zero_fill":
-            ret_t = np.where(np.isfinite(ret_t), ret_t, 0.0)
-
-        if np.sum(finite_mask) < 2:
-            # QE-R2 (P0-FA-015 hardening): a long/short bucket needs at least
-            # two valid cross-sectional observations (a single asset cannot
-            # form a top-20%/bottom-20% bucket pair).  Leave the period NaN —
-            # an empty bucket is never a fabricated 0.
-            continue
-
-        factor_valid = factor_t[finite_mask]
-        ret_valid = ret_t[finite_mask]
-
-        # Compute quantiles
-        long_cutoff = np.quantile(factor_valid, long_threshold)
-        short_cutoff = np.quantile(factor_valid, short_threshold)
-
-        # Select long/short positions
-        bins = _searchsorted_bins(np.array([short_cutoff, long_cutoff]), factor_valid, 3, policy)
-        long_mask = bins == 2
-        short_mask = bins == 0
-        # Ex-post missing labels affect measured return, never membership.
-
-        if np.sum(long_mask) > 0:
-            long_returns[t] = np.mean(ret_valid[long_mask])
-
-        if np.sum(short_mask) > 0:
-            short_returns[t] = np.mean(ret_valid[short_mask])
-
-        if np.sum(long_mask) > 0 and np.sum(short_mask) > 0:
-            long_short_returns[t] = equal_gross_long_short_returns(
-                long_mask[None, :], short_mask[None, :], ret_valid[None, :],
-                missing_return_policy=missing_return_policy)[0]
-
-    return long_returns, short_returns, long_short_returns
-```
+实现核对：[函数定义](../metrics/portfolio_stats.py#L193)；`quant_evaluator.metrics.portfolio_stats.compute_long_short_returns`。
 
 <a id="metric-max_absolute_style_exposure"></a>
 ## max_absolute_style_exposure — Max Absolute Style Exposure
@@ -2716,55 +1977,26 @@ The style dimension with the largest mean absolute exposure (dict: style / value
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.exposure_evidence.compute_max_absolute_style_exposure`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.exposure_evidence.compute_max_absolute_style_exposure(panel: 'FactorLoadingSeries', min_finite: 'int' = 5, *, factor_values=None, min_obs=10, weights=None) -> 'Dict[str, Any]'
-```
+$$
+a_s=\operatorname{MeanFinite}_t|\tilde\beta_{ts}|,\qquad s^*=\arg\max_{s:n_s\ge m}a_s
+$$
 
-The style dimension with the largest mean *absolute* exposure.
 
-Returns a plain dict (``style`` / ``value`` / ``absolute_mean`` /
-``counts``) — the ``max_absolute_style_exposure`` evidence payload.
-``value`` is the signed mean exposure of the winning style; NaN when no
-style has at least ``min_finite`` finite observations.
 
-### 精确计算公式（实际实现）
+$\tilde\beta_{ts}=b_{ts}s_{Z,ts}/s_{x,t}$ 来自同支持含截距 WLS。默认 min_finite=5、回归 min_obs=10；胜出风格按最大平均绝对载荷选，但返回的 value 是该风格带符号标准化载荷的时间均值，另返回 absolute_mean 与 counts。无合格风格为 unknown/NaN/0。
 
-```python
-def compute_max_absolute_style_exposure(
-    panel: FactorLoadingSeries,
-    min_finite: int = 5,
-    *, factor_values=None, min_obs=10, weights=None,
-) -> Dict[str, Any]:
-    """The style dimension with the largest mean *absolute* exposure.
+### 函数层默认参数
 
-    Returns a plain dict (``style`` / ``value`` / ``absolute_mean`` /
-    ``counts``) — the ``max_absolute_style_exposure`` evidence payload.
-    ``value`` is the signed mean exposure of the winning style; NaN when no
-    style has at least ``min_finite`` finite observations.
-    """
-    panel=_as_factor_loadings(panel,factor_values,min_obs,weights)
-    if isinstance(min_finite,bool) or not isinstance(min_finite,(int,np.integer)) or min_finite<1:
-        raise ValueError("min_finite must be a positive integer")
-    ev = compute_style_exposure_evidence(panel, absolute=True)
-    valid = np.isfinite(ev.values) & (ev.counts >= min_finite)
-    if not np.any(valid):
-        return {
-            "style": ExposureStyle.UNKNOWN.value,
-            "value": np.nan,
-            "absolute_mean": np.nan,
-            "counts": 0,
-        }
-    idx = int(np.argmax(np.where(valid, ev.values, -np.inf)))
-    signed = compute_style_exposure_evidence(panel, absolute=False)
-    return {
-        "style": str(panel.style_names[idx]),
-        "value": float(signed.values[idx]),
-        "absolute_mean": float(ev.values[idx]),
-        "counts": int(ev.counts[idx]),
-    }
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_finite` | `5` |
+| `factor_values` | `None` |
+| `min_obs` | `10` |
+| `weights` | `None` |
+
+实现核对：[函数定义](../metrics/exposure_evidence.py#L467)；`quant_evaluator.metrics.exposure_evidence.compute_max_absolute_style_exposure`。
 
 <a id="metric-max_drawdown"></a>
 ## max_drawdown — max_drawdown
@@ -2778,144 +2010,23 @@ Maximum compounded portfolio NAV drawdown including initial capital and default
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown(returns: numpy.ndarray, missing_return_policy: str = 'unknown') -> Tuple[numpy.ndarray, numpy.ndarray, numpy.ndarray]
-```
+$$
+D_{max}=-\min_t d_t,\qquad d_t=\frac{W_t}{\max_{0\le u\le t}W_u}-1,\quad W_0=1
+$$
 
-Compute maximum drawdown from return series.
 
-This is the drawdown authority alongside
-``metrics/risk/drawdown_analysis.py``; zero wealth is an absorbing 100%
-loss and returns below -100% require a separate capital contract.
 
-Unknown valuation remains unknown by default. Explicit ``zero_fill`` is
-a legacy research assumption; ``fail`` rejects a nonfinite return.
+返回的是非负回撤幅度，同时返回负值回撤序列和峰值索引；初始本金纳入高水位。默认 missing_return_policy=unknown：任一非有限收益通常使最大回撤未知，破产收益 -1 则为 100%；zero_fill 才将缺失按 0，fail 报错。
 
-Args:
-    returns: Return series (T,) or (T, F)
-    missing_return_policy: "unknown", explicit "zero_fill", or "fail".
+### 函数层默认参数
 
-Returns:
-    (max_drawdown, drawdown_series, peak_indices)
-    max_drawdown: Maximum drawdown magnitude (positive), shape () or (F,)
-    drawdown_series: Drawdown at each time step, shape (T,) or (T, F);
-        -1 from the first zero wealth onward (observed default)
-    peak_indices: Index of the PEAK (last index where the running
-        maximum is attained at or before the maximum-drawdown trough),
-        shape () or (F,); -1 denotes initial capital before the first return.
+| 参数 | 默认值 |
+|---|---|
+| `missing_return_policy` | `'unknown'` |
 
-### 精确计算公式（实际实现）
-
-```python
-def compute_maximum_drawdown(
-    returns: np.ndarray,
-    missing_return_policy: str = "unknown",
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Compute maximum drawdown from return series.
-
-    This is the drawdown authority alongside
-    ``metrics/risk/drawdown_analysis.py``; zero wealth is an absorbing 100%
-    loss and returns below -100% require a separate capital contract.
-
-    Unknown valuation remains unknown by default. Explicit ``zero_fill`` is
-    a legacy research assumption; ``fail`` rejects a nonfinite return.
-
-    Args:
-        returns: Return series (T,) or (T, F)
-        missing_return_policy: "unknown", explicit "zero_fill", or "fail".
-
-    Returns:
-        (max_drawdown, drawdown_series, peak_indices)
-        max_drawdown: Maximum drawdown magnitude (positive), shape () or (F,)
-        drawdown_series: Drawdown at each time step, shape (T,) or (T, F);
-            -1 from the first zero wealth onward (observed default)
-        peak_indices: Index of the PEAK (last index where the running
-            maximum is attained at or before the maximum-drawdown trough),
-            shape () or (F,); -1 denotes initial capital before the first return.
-    """
-    if missing_return_policy not in ("unknown", "zero_fill", "fail"):
-        raise ValueError(
-            f"missing_return_policy must be 'unknown', 'zero_fill' or 'fail', "
-            f"got {missing_return_policy!r}"
-        )
-
-    if returns.ndim == 1:
-        returns = returns[:, np.newaxis]
-        squeeze = True
-    else:
-        squeeze = False
-
-    T, F = returns.shape
-
-    if missing_return_policy == "fail" and np.any(~np.isfinite(returns)):
-        n_missing = int(np.sum(~np.isfinite(returns)))
-        raise ValueError(
-            f"returns contains {n_missing} non-finite value(s) and "
-            "missing_return_policy='fail'"
-        )
-
-    if T == 0:
-        if squeeze:
-            return float("nan"), np.empty(0, dtype=np.float64), -1
-        return np.full(F, np.nan), np.empty((0, F)), np.full(F, -1, dtype=np.int64)
-    from .risk.drawdown_analysis import compute_drawdown_series
-    drawdown_series, cum_returns, running_max = compute_drawdown_series(returns)
-    if missing_return_policy == "unknown":
-        unknown = np.maximum.accumulate(~np.isfinite(returns), axis=0)
-        bankrupt = np.maximum.accumulate(returns == -1.0, axis=0)
-        drawdown_series = np.where(unknown & ~bankrupt, np.nan, drawdown_series)
-
-    # Maximum drawdown per factor (most negative, converted to positive).
-    max_dd = -np.min(np.where(np.isfinite(drawdown_series), drawdown_series, np.inf), axis=0)
-    max_dd = np.where(np.isfinite(max_dd), max_dd, np.nan)
-    if missing_return_policy == "unknown":
-        max_dd = np.where(np.any(~np.isfinite(returns), axis=0), np.nan, max_dd)
-        max_dd = np.where(np.any(returns == -1.0, axis=0), 1.0, max_dd)
-
-    # Trough index per factor: first occurrence of the minimum drawdown,
-    # NaN-safe (an all-NaN column has no
-    # defined trough; np.nanargmin would raise on it).
-    trough_indices = np.empty(F, dtype=np.int64)
-    for f in range(F):
-        col = drawdown_series[:, f]
-        finite_idx = np.nonzero(np.isfinite(col))[0]
-        if finite_idx.size == 0:
-            trough_indices[f] = 0
-            continue
-        vals = col[finite_idx]
-        min_val = np.min(vals)
-        trough_indices[f] = int(finite_idx[np.nonzero(vals == min_val)[0][0]])
-
-    # Peak index: last index at or before the trough where the wealth curve
-    # attains its running maximum (i.e. cum_returns == running_max). This is
-    # the true peak of the maximum drawdown episode, not the trough.
-    peak_indices = np.empty(F, dtype=np.int64)
-    for f in range(F):
-        trough = int(trough_indices[f])
-        col = drawdown_series[: trough + 1, f]
-        finite_idx = np.nonzero(np.isfinite(col))[0]
-        if finite_idx.size == 0:
-            # Entire prefix nonfinite: peak undefined,
-            # use index 0.
-            peak_indices[f] = 0
-            continue
-        trough_eff = int(finite_idx[-1])
-        # Exact high-water convention, identical to the drawdown magnitude.
-        at_max = cum_returns[: trough_eff + 1, f] == running_max[trough_eff, f]
-        if not np.any(at_max):
-            peak_indices[f] = -1
-            continue
-        # Last index where wealth equals the running max at the trough.
-        peak_indices[f] = int(np.nonzero(at_max)[0][-1])
-
-    if squeeze:
-        return max_dd[0], drawdown_series[:, 0], int(peak_indices[0])
-    else:
-        return max_dd, drawdown_series, peak_indices
-```
+实现核对：[函数定义](../metrics/portfolio_stats.py#L390)；`quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown`。
 
 <a id="metric-max_underwater_duration"></a>
 ## max_underwater_duration — Max Underwater Duration
@@ -2929,24 +2040,23 @@ Longest continuous stretch (periods) of the probe daily PnL series staying below
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.underwater.compute_max_underwater_duration`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.underwater.compute_max_underwater_duration(returns: 'np.ndarray', min_periods: 'int' = 10) -> 'float'
-```
+$$
+U_{max}=\max_e|e|,\quad e:\; W_t<\max_{u\le t}W_u\text{ 的连续区间}
+$$
 
-Longest underwater grid span; unknown valuation paths return NaN.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_max_underwater_duration(returns: np.ndarray, min_periods: int = 10) -> float:
-    """Longest underwater grid span; unknown valuation paths return NaN."""
-    events = _path_events(returns, min_periods)
-    if events is None:
-        return np.nan
-    return float(max((e["duration"] for e in events), default=0))
-```
+默认 min_periods=10；有限收益不足为 NaN，从未水下为 0。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `10` |
+
+实现核对：[函数定义](../metrics/underwater.py#L86)；`quant_evaluator.metrics.underwater.compute_max_underwater_duration`。
 
 <a id="metric-mean_ic"></a>
 ## mean_ic — Mean IC
@@ -2960,30 +2070,24 @@ Time-averaged Pearson information coefficient: the time-mean of daily Pearson IC
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`mean_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.ic.compute_mean_ic_value(ic_series: numpy.ndarray, valid_counts: Optional[numpy.ndarray] = None, min_periods: int = 20) -> numpy.ndarray
-```
+$$
+\bar{IC}_f=\operatorname{nanmean}_t(IC^P_{tf})
+$$
 
-Compute only the mean IC component for registry execution.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_mean_ic_value(
-    ic_series: np.ndarray,
-    valid_counts: Optional[np.ndarray] = None,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Compute only the mean IC component for registry execution."""
-    mean_ic, _ = compute_mean_ic(
-        ic_series,
-        valid_counts=valid_counts,
-        min_periods=min_periods,
-    )
-    return mean_ic
-```
+实现以非 NaN（不是 isfinite）计有效期，默认 min_periods=20；nanmean 只忽略 NaN。正负无穷会被计期并传播，最终非有限均值被置为 NaN。valid_counts 参数虽存在但实际未使用。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `valid_counts` | `None` |
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/ic.py#L263)；`quant_evaluator.metrics.ic.compute_mean_ic_value`。
 
 <a id="metric-mean_investment_fraction"></a>
 ## mean_investment_fraction — Mean Investment Fraction
@@ -2997,31 +2101,23 @@ Benchmark/invested-capital evidence from an explicitly bound execution trajector
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.long_only.compute_mean_investment_fraction`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.long_only.compute_mean_investment_fraction(returns, min_periods: 'int' = 1)
-```
+$$
+\bar I_f=\frac1{n_f}\sum_{t:I_{tf}\text{ finite}}I_{tf}
+$$
 
-Mean actual invested-capital fraction; all-cash is explicitly 0, not missing.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_mean_investment_fraction(returns, min_periods: int = 1):
-    """Mean actual invested-capital fraction; all-cash is explicitly 0, not missing."""
-    if isinstance(min_periods, bool) or not isinstance(min_periods, int) or min_periods < 1:
-        raise ValueError("min_periods must be an integer >= 1")
-    x, squeeze = _matrix(returns)
-    out = np.full(x.shape[1], np.nan)
-    for f in range(x.shape[1]):
-        v = x[np.isfinite(x[:, f]), f]
-        if len(v) >= min_periods:
-            if np.any(v < 0):
-                raise ValueError("investment fraction must be nonnegative")
-            out[f] = np.mean(v)
-    return out[0] if squeeze else out
-```
+输入必须是显式绑定的 investment_fraction 执行轨迹腿；compute_fn 为 compute_mean_investment_fraction，默认 min_periods=1。有限样本不足为 NaN，任一被采用的投资比例小于 0 会报错；全现金的显式 0 是有效观测并返回 0，不是缺失。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `1` |
+
+实现核对：[函数定义](../metrics/long_only.py#L61)；`quant_evaluator.metrics.long_only.compute_mean_investment_fraction`。
 
 <a id="metric-mean_underwater_duration"></a>
 ## mean_underwater_duration — Mean Underwater Duration
@@ -3035,24 +2131,23 @@ Mean length (periods) of underwater episodes of the probe daily PnL series. NaN 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.underwater.compute_mean_underwater_duration`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.underwater.compute_mean_underwater_duration(returns: 'np.ndarray', min_periods: 'int' = 10) -> 'float'
-```
+$$
+\bar U=E^{-1}\sum_{e=1}^E|e|
+$$
 
-Mean observed underwater span, including explicitly censored events.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_mean_underwater_duration(returns: np.ndarray, min_periods: int = 10) -> float:
-    """Mean observed underwater span, including explicitly censored events."""
-    events = _path_events(returns, min_periods)
-    if events is None:
-        return np.nan
-    return float(np.mean([e["duration"] for e in events])) if events else 0.0
-```
+默认 min_periods=10；有限收益不足为 NaN，从未水下明确返回 0.0。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `10` |
+
+实现核对：[函数定义](../metrics/underwater.py#L94)；`quant_evaluator.metrics.underwater.compute_mean_underwater_duration`。
 
 <a id="metric-missing_ratio"></a>
 ## missing_ratio — Missing Ratio
@@ -3066,24 +2161,18 @@ Fraction of (T, N) cells with non-finite factor values, per factor (spec §35).
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.data_quality.compute_missing_ratio`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.data_quality.compute_missing_ratio(factor_batch: 'FactorBatch') -> 'np.ndarray'
-```
+$$
+R_f=(TN)^{-1}\sum_{t,i}\mathbf1[\neg\mathrm{finite}(x_{tif})]
+$$
 
-Fraction of (T, N) cells with non-finite factor values, (F,).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_missing_ratio(factor_batch: FactorBatch) -> np.ndarray:
-    """Fraction of (T, N) cells with non-finite factor values, (F,)."""
-    values = _factor_values(factor_batch)
-    T, N, F = values.shape
-    missing = np.sum(~np.isfinite(values), axis=(0, 1))
-    return missing / (T * N)
-```
+NaN 与正负无穷均算缺失，分母为完整面板。
+
+
+实现核对：[函数定义](../metrics/data_quality.py#L48)；`quant_evaluator.metrics.data_quality.compute_missing_ratio`。
 
 <a id="metric-missing_timeline"></a>
 ## missing_timeline — Missing Timeline
@@ -3097,31 +2186,18 @@ Fraction of time periods with any missing factor value, per factor. 1.0 means ev
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.data_quality.compute_missing_timeline`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.data_quality.compute_missing_timeline(factor_batch: 'FactorBatch') -> 'np.ndarray'
-```
+$$
+R_f=T^{-1}\sum_t\mathbf1[\exists i:\neg\mathrm{finite}(x_{tif})]
+$$
 
-Fraction of time periods with any missing factor value, (F,).
 
-A value of 1.0 means every day has at least one missing asset; 0.0 means
-the factor is fully populated on every day.
 
-### 精确计算公式（实际实现）
+某日任一资产缺失，该日即计 1。
 
-```python
-def compute_missing_timeline(factor_batch: FactorBatch) -> np.ndarray:
-    """Fraction of time periods with any missing factor value, (F,).
 
-    A value of 1.0 means every day has at least one missing asset; 0.0 means
-    the factor is fully populated on every day.
-    """
-    values = _factor_values(factor_batch)
-    T, N, F = values.shape
-    any_missing = np.any(~np.isfinite(values), axis=1)  # (T, F)
-    return np.sum(any_missing, axis=0) / T
-```
+实现核对：[函数定义](../metrics/data_quality.py#L56)；`quant_evaluator.metrics.data_quality.compute_missing_timeline`。
 
 <a id="metric-momentum_exposure"></a>
 ## momentum_exposure — Momentum Exposure
@@ -3135,21 +2211,25 @@ Signed mean momentum-style exposure of the factor (typed per-style field). NaN w
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.exposure_evidence.compute_momentum_exposure`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.exposure_evidence.compute_momentum_exposure(panel: 'FactorLoadingSeries', *, factor_values=None, min_obs=10, weights=None) -> 'float'
-```
+$$
+x_{ti}=\alpha_t+\sum_k b_{tk}Z_{tik}+\varepsilon_{ti},\qquad E_{mom}=\operatorname{MeanFinite}_t\!\left(b_{t,mom}\frac{s_{Z,t,mom}}{s_{x,t}}\right)
+$$
 
-Signed mean momentum-style exposure of the factor (one typed field).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_momentum_exposure(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
-    """Signed mean momentum-style exposure of the factor (one typed field)."""
-    return _select_style(panel, "momentum",factor_values=factor_values,min_obs=min_obs,weights=weights)
-```
+每日在因子、全部风格和正权重共同有限的同一支持上做含截距 WLS。默认 min_obs=10；零方差、无效回归、风格缺失或无有限日均为 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `factor_values` | `None` |
+| `min_obs` | `10` |
+| `weights` | `None` |
+
+实现核对：[函数定义](../metrics/exposure_evidence.py#L642)；`quant_evaluator.metrics.exposure_evidence.compute_momentum_exposure`。
 
 <a id="metric-month_consistency"></a>
 ## month_consistency — Month Consistency
@@ -3163,27 +2243,24 @@ Fraction of months whose mean IC matches the overall IC sign, per factor (spec �
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.stability_regime.compute_month_consistency`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.stability_regime.compute_month_consistency(ic_series: 'np.ndarray', min_periods: 'int' = 20, time_index: 'Optional[Sequence]' = None) -> 'np.ndarray'
-```
+$$
+C_f=|G_f|^{-1}\sum_{g\in G_f}\mathbf1[\operatorname{sign}(\bar{IC}_{gf})=\operatorname{sign}(\bar{IC}_f)]
+$$
 
-Fraction of months whose mean IC matches the overall IC sign, (F,).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_month_consistency(
-    ic_series: np.ndarray,
-    min_periods: int = 20,
-    time_index: Optional[Sequence] = None,
-) -> np.ndarray:
-    """Fraction of months whose mean IC matches the overall IC sign, (F,)."""
-    s = _as_series(ic_series)
-    out = _period_consistency(s, "month", time_index)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+若 time_index 长度正确且可由 pandas 转换，则按日历月；否则按轴位置连续 21 期分块，末块以 NaN 补齐后求块均值。只在有限月均值中计比例，默认至少 20 个有限日度 IC，否则 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+| `time_index` | `None` |
+
+实现核对：[函数定义](../metrics/stability_regime.py#L110)；`quant_evaluator.metrics.stability_regime.compute_month_consistency`。
 
 <a id="metric-monthly_rank_ic"></a>
 ## monthly_rank_ic — Monthly Rank IC
@@ -3197,27 +2274,24 @@ Mean of the per-month mean rank IC, per factor (spec §28).
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_monthly_rank_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_monthly_rank_ic(ic_series: 'np.ndarray', min_periods: 'int' = 20, time_index: 'Optional[Sequence]' = None) -> 'np.ndarray'
-```
+$$
+M_f=|G_f|^{-1}\sum_{g\in G_f}\bar{IC}^{rank}_{gf}
+$$
 
-Mean of the per-month mean rank IC, (F,).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_monthly_rank_ic(
-    ic_series: np.ndarray,
-    min_periods: int = 20,
-    time_index: Optional[Sequence] = None,
-) -> np.ndarray:
-    """Mean of the per-month mean rank IC, (F,)."""
-    s = _as_series(ic_series)
-    out = _mean_of_period_means(s, "month", time_index)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+先求月均再按有效月份等权。time_index 可用时按日历月；缺失、长度不符或转换异常时按连续 21 期分块，末块 NaN 补齐。默认至少 20 个有限日度 IC，否则 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+| `time_index` | `None` |
+
+实现核对：[函数定义](../metrics/predictive.py#L181)；`quant_evaluator.metrics.predictive.compute_monthly_rank_ic`。
 
 <a id="metric-neutralized_rank_ic"></a>
 ## neutralized_rank_ic — Neutralized Rank IC
@@ -3231,82 +2305,23 @@ Cross-sectional residual (neutralized) rank IC: per date regress the factor on t
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.exposure_evidence.compute_neutralized_rank_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.exposure_evidence.compute_neutralized_rank_ic(factor_values: 'np.ndarray', forward_returns: 'np.ndarray', panel: 'ExposurePanel', min_obs: 'int' = 10) -> 'float'
-```
+$$
+NIC=\operatorname{Mean}_t\rho_S(e_t,y_t),\qquad e_t=x_t-[\mathbf1,Z_t]\hat\gamma_t
+$$
 
-Cross-sectional residual (neutralized) rank IC.
 
-Per date t: regress the factor cross-section on the exposure panel
-(intercept + K styles) via ``metrics/exposure.compute_factor_loadings``,
-take the OLS residuals, then Spearman-rank-correlate the residuals with
-forward returns.  The time-mean of the daily residual IC is the
-neutralized rank IC.  A factor whose IC survives neutralization has alpha
-orthogonal to the style exposures.
 
-CPU reference implementation (GPU optional; parity checked in tests).
-NaN when fewer than ``min_obs`` jointly-finite assets on every date, or
-when the factor/label/panel shapes are inconsistent.
+第一阶段在因子、全部暴露和正回归权重共同有效的支持上做含截距投影；ExposurePanel 若绑定 regression_weights 就使用加权、秩感知的载荷实现，否则等权。第二阶段再取残差与标签的共同有限支持计算 Spearman，因此并非全程同一支持；回归和最终相关均要求默认 min_obs=10，无有效日则 NaN。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_neutralized_rank_ic(
-    factor_values: np.ndarray,
-    forward_returns: np.ndarray,
-    panel: ExposurePanel,
-    min_obs: int = 10,
-) -> float:
-    """Cross-sectional residual (neutralized) rank IC.
+| 参数 | 默认值 |
+|---|---|
+| `min_obs` | `10` |
 
-    Per date t: regress the factor cross-section on the exposure panel
-    (intercept + K styles) via ``metrics/exposure.compute_factor_loadings``,
-    take the OLS residuals, then Spearman-rank-correlate the residuals with
-    forward returns.  The time-mean of the daily residual IC is the
-    neutralized rank IC.  A factor whose IC survives neutralization has alpha
-    orthogonal to the style exposures.
-
-    CPU reference implementation (GPU optional; parity checked in tests).
-    NaN when fewer than ``min_obs`` jointly-finite assets on every date, or
-    when the factor/label/panel shapes are inconsistent.
-    """
-    fv = np.asarray(factor_values, dtype=np.float64)
-    fwd = np.asarray(forward_returns, dtype=np.float64)
-    if fv.ndim != 2 or fwd.ndim != 2:
-        raise ValueError("factor_values / forward_returns must be (T, N)")
-    if fv.shape != fwd.shape:
-        raise ValueError(
-            f"factor_values {fv.shape} and forward_returns {fwd.shape} must match"
-        )
-    arr, _ = _panel_arrays(panel)
-    T, N, K = arr.shape
-    if (T, N) != fv.shape:
-        raise ValueError(
-            f"panel (T,N)=({T},{N}) must match factor (T,N)={fv.shape}"
-        )
-    # Regress per date with intercept; residuals (T, N) — NaN where invalid.
-    _, _, residuals = compute_factor_loadings(fv, arr, intercept=True, min_obs=min_obs,weights=panel.regression_weights)
-
-    daily_ics: list[float] = []
-    for t in range(T):
-        y = fwd[t]
-        resid = residuals[t]
-        joint = np.isfinite(y) & np.isfinite(resid)
-        if np.sum(joint) < 2:
-            continue
-        # ``min_obs`` is the declared per-date evidence floor for this metric,
-        # and applies to the final residual/label pair as well as the OLS fit.
-        rho = _spearman_rank_correlation(
-            resid[joint], y[joint], min_obs=min_obs
-        )
-        if np.isfinite(rho):
-            daily_ics.append(float(rho))
-    if not daily_ics:
-        return np.nan
-    return float(np.mean(daily_ics))
-```
+实现核对：[函数定义](../metrics/exposure_evidence.py#L541)；`quant_evaluator.metrics.exposure_evidence.compute_neutralized_rank_ic`。
 
 <a id="metric-outlier_ratio"></a>
 ## outlier_ratio — Outlier Ratio
@@ -3320,47 +2335,24 @@ Fraction of finite factor values that are z-score outliers (|z|>3), per factor (
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.data_quality.compute_outlier_ratio`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.data_quality.compute_outlier_ratio(factor_batch: 'FactorBatch', threshold: 'float' = 3.0, min_obs: 'int' = 10) -> 'np.ndarray'
-```
+$$
+O_f=|V_f|^{-1}\sum_{(t,i)\in V_f}\mathbf1[|z_{tif}|>c]
+$$
 
-Fraction of finite factor values that are z-score outliers, (F,).
 
-Outliers are defined per factor over the full (T, N) panel using a
-z-score threshold (default 3.0).
 
-### 精确计算公式（实际实现）
+仅有限值进入分母；默认 c=3、min_obs=10。样本不足或标准差无效为 NaN，边界严格大于。
 
-```python
-def compute_outlier_ratio(
-    factor_batch: FactorBatch,
-    threshold: float = 3.0,
-    min_obs: int = 10,
-) -> np.ndarray:
-    """Fraction of finite factor values that are z-score outliers, (F,).
+### 函数层默认参数
 
-    Outliers are defined per factor over the full (T, N) panel using a
-    z-score threshold (default 3.0).
-    """
-    values = _factor_values(factor_batch)
-    T, N, F = values.shape
-    out = np.full(F, np.nan)
-    for f in range(F):
-        col = values[:, :, f]
-        finite = np.isfinite(col)
-        n = np.sum(finite)
-        if n < min_obs:
-            continue
-        mean = np.nanmean(col)
-        std = np.nanstd(col, ddof=1)
-        if not np.isfinite(std) or std == 0:
-            continue
-        z = np.abs((col - mean) / std)
-        out[f] = np.sum((z > threshold) & finite) / n
-    return out
-```
+| 参数 | 默认值 |
+|---|---|
+| `threshold` | `3.0` |
+| `min_obs` | `10` |
+
+实现核对：[函数定义](../metrics/data_quality.py#L86)；`quant_evaluator.metrics.data_quality.compute_outlier_ratio`。
 
 <a id="metric-parameter_generalization"></a>
 ## parameter_generalization — Parameter Generalization
@@ -3374,19 +2366,18 @@ Parameter-generalization summary per factor (plan §13.6): the robust retention 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.generalization_evidence.compute_validation_retention`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.registry.metrics.<lambda>(v)
-```
+$$
+PG_f=R_f=\frac{v_f}{t_f}\quad\text{仅当 }|t_f|\ge\tau\text{ 且未触发近零反号保护}
+$$
 
-此函数没有独立说明；精确定义见下方源公式。
 
-### 精确计算公式（实际实现）
 
-```python
-compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
-```
+$t_f,v_f$ 是因子 $f$ 的训练/验证预测维度证据，$\tau=$ RetentionPolicy.min_abs_train，反号保护使用 sign_flip_guard。任一端非有限记 insufficient_data，训练近零记 train_near_zero，保护触发记 sign_flip_guard；这些情形该因子结果均为 NaN/None。运行时 TrainVsValidationArtifact.parameter_generalization 直接保存 tuple(retentions)，注册 compute_fn 仅将该逐因子数组透传，绝不跨因子平均；底层 compute_validation_retention 的跨因子均值辅助结果不是此注册指标的公开输出。
+
+
+实现核对：[函数定义](../registry/metrics.py#L4085)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-pearson_ic"></a>
 ## pearson_ic — Mean Pearson IC
@@ -3400,30 +2391,24 @@ Time-mean of daily Pearson IC between factor values and labels (canonical alias 
 - 别名： `ic.pearson.mean` 。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.ic.compute_daily_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_pearson_ic_value(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, min_periods: int = 1, min_assets: int = 20) -> numpy.ndarray
-```
+$$
+PIC_f=n_f^{-1}\sum_{t\in V_f}\mathrm{Corr}_P(x_{tf},y_t)
+$$
 
-Return the time-mean daily Pearson IC per factor, shape (F,).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_pearson_ic_value(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    min_periods: int = 1,
-    min_assets: int = 20,
-) -> np.ndarray:
-    """Return the time-mean daily Pearson IC per factor, shape (F,)."""
-    ic_series, _ = compute_daily_ic(
-        factor_batch, label_bundle, method="pearson", min_assets=min_assets
-    )
-    mean, _ = compute_mean_ic(ic_series, min_periods=min_periods)
-    return mean
-```
+每日只用同时有限配对，默认 min_assets=20；跨日默认 min_periods=1。样本不足或常数截面为 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `1` |
+| `min_assets` | `20` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L344)；`quant_evaluator.metrics.registry_adapters.compute_pearson_ic_value`。
 
 <a id="metric-pearson_ic_ir"></a>
 ## pearson_ic_ir — Pearson IC Information Ratio
@@ -3437,24 +2422,23 @@ Mean Pearson IC divided by Pearson IC standard deviation per factor (canonical a
 - 别名： `ic.pearson.ir` 。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`pearson_ic_ir`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_ic_ir_value(ic_series: numpy.ndarray, min_periods: int = 20) -> numpy.ndarray
-```
+$$
+IR_f=\bar{IC}^P_f/s(IC^P_{tf})
+$$
 
-Return the scalar IC information ratio per factor.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_ic_ir_value(
-    ic_series: np.ndarray,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Return the scalar IC information ratio per factor."""
-    return compute_icir(ic_series, min_periods=min_periods)
-```
+只用有限值，默认 min_periods=20；不足或标准差为 0/非有限时 NaN。不同于 Spearman 的 ic_ir。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L79)；`quant_evaluator.metrics.registry_adapters.compute_ic_ir_value`。
 
 <a id="metric-pearson_ic_series"></a>
 ## pearson_ic_series — Daily Pearson IC Series
@@ -3468,28 +2452,23 @@ Daily Pearson IC per factor over time, shape (T, F) (canonical alias ic.pearson.
 - 别名： `ic.pearson.daily` 。
 - 增量模式：`APPEND_EXACT`；注册实现定位：`pearson_ic_series`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_pearson_ic_series_value(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, min_assets: int = 20) -> numpy.ndarray
-```
+$$
+IC^P_{tf}=\frac{\sum_{i\in V}(x_i-\bar x)(y_i-\bar y)}{\sqrt{\sum_{i\in V}(x_i-\bar x)^2\sum_{i\in V}(y_i-\bar y)^2}}
+$$
 
-Return the daily Pearson IC series per factor, shape (T, F).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_pearson_ic_series_value(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    min_assets: int = 20,
-) -> np.ndarray:
-    """Return the daily Pearson IC series per factor, shape (T, F)."""
-    ic_series, _ = compute_daily_ic(
-        factor_batch, label_bundle, method="pearson", min_assets=min_assets
-    )
-    return ic_series
-```
+$V$ 是同时有限配对；默认 min_assets=20。不足或常数截面为 NaN；输出 $T\times F$。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_assets` | `20` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L376)；`quant_evaluator.metrics.registry_adapters.compute_pearson_ic_series_value`。
 
 <a id="metric-pearson_ic_std"></a>
 ## pearson_ic_std — Pearson IC Standard Deviation
@@ -3503,30 +2482,24 @@ Standard deviation of the daily Pearson IC series per factor (canonical alias ic
 - 别名： `ic.pearson.std` 。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`pearson_ic_std`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.ic.compute_ic_std(ic_series: numpy.ndarray, valid_counts: Optional[numpy.ndarray] = None, min_periods: int = 20) -> numpy.ndarray
-```
+$$
+s_f=\sqrt{(n_f-1)^{-1}\sum_{t\in V_f}(IC^P_{tf}-\bar{IC}^P_f)^2}
+$$
 
-Compute only the IC standard-deviation component.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_ic_std(
-    ic_series: np.ndarray,
-    valid_counts: Optional[np.ndarray] = None,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Compute only the IC standard-deviation component."""
-    _, ic_std = compute_mean_ic(
-        ic_series,
-        valid_counts=valid_counts,
-        min_periods=min_periods,
-    )
-    return ic_std
-```
+仅有限日度 IC，默认 min_periods=20；不足为 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `valid_counts` | `None` |
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/ic.py#L277)；`quant_evaluator.metrics.ic.compute_ic_std`。
 
 <a id="metric-purity_ratio"></a>
 ## purity_ratio — Purity Ratio
@@ -3540,34 +2513,26 @@ Time mean of 1 - R-squared from same-support weighted factor-on-risk regression 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.exposure_evidence.compute_purity_ratio`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.exposure_evidence.compute_purity_ratio(panel: 'FactorLoadingSeries', min_finite: 'int' = 5, *, factor_values=None, min_obs=10, weights=None) -> 'float'
-```
+$$
+P=\mathrm{Mean}_t(1-R_t^2),\quad x_t=\alpha_t+Z_t\gamma_t+e_t
+$$
 
-Time mean of residual/total weighted variance, exactly 1-R².
 
-Same factor, joint support, weights and intercept regression as its
-loadings. Constant factor, saturated model or no explanatory variation is
-undefined, not perfect purity. This is in-sample descriptive evidence.
 
-### 精确计算公式（实际实现）
+同支持加权回归且含截距。默认 min_finite=5、min_obs=10；常数因子或自由度不足为 NaN；是同日描述而非 OOS。
 
-```python
-def compute_purity_ratio(panel: FactorLoadingSeries, min_finite: int = 5, *, factor_values=None, min_obs=10, weights=None) -> float:
-    """Time mean of residual/total weighted variance, exactly 1-R².
+### 函数层默认参数
 
-    Same factor, joint support, weights and intercept regression as its
-    loadings. Constant factor, saturated model or no explanatory variation is
-    undefined, not perfect purity. This is in-sample descriptive evidence.
-    """
-    panel=_as_factor_loadings(panel,factor_values,min_obs,weights)
-    if isinstance(min_finite,bool) or not isinstance(min_finite,(int,np.integer)) or min_finite<1:
-        raise ValueError("min_finite must be a positive integer")
-    finite=panel.r_squared[np.isfinite(panel.r_squared)]
-    return float(np.mean(1.-finite)) if len(finite)>=min_finite else float("nan")
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_finite` | `5` |
+| `factor_values` | `None` |
+| `min_obs` | `10` |
+| `weights` | `None` |
+
+实现核对：[函数定义](../metrics/exposure_evidence.py#L527)；`quant_evaluator.metrics.exposure_evidence.compute_purity_ratio`。
 
 <a id="metric-quantile_adjacent_spread"></a>
 ## quantile_adjacent_spread — Quantile Adjacent Spread
@@ -3581,41 +2546,18 @@ Mean absolute return difference between adjacent quantiles, per factor. A measur
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quantile_shape.compute_quantile_adjacent_spread`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.quantile_shape.compute_quantile_adjacent_spread(qr: 'np.ndarray') -> 'np.ndarray'
-```
+$$
+S_f=|A_f|^{-1}\sum_{q\in A_f}|r_{q+1,f}-r_{q,f}|
+$$
 
-Mean absolute return difference between adjacent quantiles, (F,).
 
-A measure of how smooth (vs step-like) the quantile profile is.  NaN
-when fewer than 2 finite quantile returns.
 
-### 精确计算公式（实际实现）
+$A_f$ 仅含两端均有限的相邻对；无有效对为 NaN。
 
-```python
-def compute_quantile_adjacent_spread(qr: np.ndarray) -> np.ndarray:
-    """Mean absolute return difference between adjacent quantiles, (F,).
 
-    A measure of how smooth (vs step-like) the quantile profile is.  NaN
-    when fewer than 2 finite quantile returns.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    ok = _finite_columns(m)
-    if nq < 2:
-        return out
-    for f in np.where(ok)[0]:
-        col = m[:, f]
-        finite = np.isfinite(col)
-        pairs = finite[:-1] & finite[1:]
-        if not np.any(pairs):
-            continue
-        out[f] = float(np.mean(np.abs(col[1:][pairs] - col[:-1][pairs])))
-    return out
-```
+实现核对：[函数定义](../metrics/quantile_shape.py#L133)；`quant_evaluator.metrics.quantile_shape.compute_quantile_adjacent_spread`。
 
 <a id="metric-quantile_curvature"></a>
 ## quantile_curvature — Quantile Curvature
@@ -3629,46 +2571,18 @@ Signed curvature of the quantile-return profile (mean second difference), per fa
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quantile_shape.compute_quantile_curvature`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.quantile_shape.compute_quantile_curvature(qr: 'np.ndarray') -> 'np.ndarray'
-```
+$$
+C_f=|I_f|^{-1}\sum_{q\in I_f}(r_{q+1,f}-2r_{q,f}+r_{q-1,f})
+$$
 
-Signed curvature of the quantile-return profile, (F,).
 
-Estimated as the second difference of the mean quantile returns
-(``ret[q+1] - 2*ret[q] + ret[q-1]``) averaged over interior quantiles.
-Positive curvature = convex (accelerating) profile; negative = concave
-(decelerating).  NaN when fewer than 3 finite quantile returns.
 
-### 精确计算公式（实际实现）
+仅连续三桶都有限的内部位置；至少 3 桶且有有效三元组，否则 NaN。
 
-```python
-def compute_quantile_curvature(qr: np.ndarray) -> np.ndarray:
-    """Signed curvature of the quantile-return profile, (F,).
 
-    Estimated as the second difference of the mean quantile returns
-    (``ret[q+1] - 2*ret[q] + ret[q-1]``) averaged over interior quantiles.
-    Positive curvature = convex (accelerating) profile; negative = concave
-    (decelerating).  NaN when fewer than 3 finite quantile returns.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 3:
-        return out
-    for f in range(F):
-        col = m[:, f]
-        finite = np.isfinite(col)
-        # interior positions with all three neighbours finite
-        interior = finite[1:-1] & finite[:-2] & finite[2:]
-        if not np.any(interior):
-            continue
-        d2 = col[2:][interior] - 2.0 * col[1:-1][interior] + col[:-2][interior]
-        out[f] = float(np.mean(d2))
-    return out
-```
+实现核对：[函数定义](../metrics/quantile_shape.py#L87)；`quant_evaluator.metrics.quantile_shape.compute_quantile_curvature`。
 
 <a id="metric-quantile_extreme_cliff"></a>
 ## quantile_extreme_cliff — Quantile Extreme Cliff
@@ -3682,45 +2596,18 @@ Mean of the top and bottom quantile cliffs, per factor. A large value means the 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quantile_shape.compute_quantile_extreme_cliff`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.quantile_shape.compute_quantile_extreme_cliff(qr: 'np.ndarray') -> 'np.ndarray'
-```
+$$
+E_f=[(r_Q-r_{Q-1})+(r_2-r_1)]/2
+$$
 
-Mean of the top and bottom quantile cliffs, (F,).
 
-``(cliff_top + cliff_bottom) / 2`` where cliff_top = ret[top] - ret[top-1]
-and cliff_bottom = ret[1] - ret[0].  A large value means the extreme
-quantiles carry most of the spread (a cliff profile).  NaN when the
-required quantile returns are not finite.
 
-### 精确计算公式（实际实现）
+顶部与底部两桶均须有限且至少 2 桶，否则 NaN。
 
-```python
-def compute_quantile_extreme_cliff(qr: np.ndarray) -> np.ndarray:
-    """Mean of the top and bottom quantile cliffs, (F,).
 
-    ``(cliff_top + cliff_bottom) / 2`` where cliff_top = ret[top] - ret[top-1]
-    and cliff_bottom = ret[1] - ret[0].  A large value means the extreme
-    quantiles carry most of the spread (a cliff profile).  NaN when the
-    required quantile returns are not finite.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 2:
-        return out
-    for f in range(F):
-        col = m[:, f]
-        if not (np.isfinite(col[0]) and np.isfinite(col[1])
-                and np.isfinite(col[-1]) and np.isfinite(col[-2])):
-            continue
-        cliff_top = col[-1] - col[-2]
-        cliff_bottom = col[1] - col[0]
-        out[f] = (cliff_top + cliff_bottom) / 2.0
-    return out
-```
+实现核对：[函数定义](../metrics/quantile_shape.py#L155)；`quant_evaluator.metrics.quantile_shape.compute_quantile_extreme_cliff`。
 
 <a id="metric-quantile_monotonicity"></a>
 ## quantile_monotonicity — Adjacent Quantile Increase Fraction
@@ -3734,45 +2621,18 @@ Fraction of adjacent quantile steps that are monotone increasing, per factor. 1.
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quantile_shape.compute_quantile_monotonicity`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.quantile_shape.compute_quantile_monotonicity(qr: 'np.ndarray') -> 'np.ndarray'
-```
+$$
+M_f=|A_f|^{-1}\sum_{q\in A_f}\mathbf1[r_{q+1,f}>r_{q,f}]
+$$
 
-Fraction of adjacent quantile steps that are monotone increasing, (F,).
 
-For each factor, count adjacent pairs (q, q+1) where
-``ret[q+1] > ret[q]`` over the finite pairs, divided by the number of
-finite adjacent pairs.  NaN when fewer than 2 finite quantile returns.
 
-### 精确计算公式（实际实现）
+仅有限相邻对；严格大于才算，持平不算。无有效对为 NaN。
 
-```python
-def compute_quantile_monotonicity(qr: np.ndarray) -> np.ndarray:
-    """Fraction of adjacent quantile steps that are monotone increasing, (F,).
 
-    For each factor, count adjacent pairs (q, q+1) where
-    ``ret[q+1] > ret[q]`` over the finite pairs, divided by the number of
-    finite adjacent pairs.  NaN when fewer than 2 finite quantile returns.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    ok = _finite_columns(m)
-    if nq < 2:
-        return out
-    for f in np.where(ok)[0]:
-        col = m[:, f]
-        finite = np.isfinite(col)
-        pairs = finite[:-1] & finite[1:]
-        n_pairs = int(np.sum(pairs))
-        if n_pairs == 0:
-            continue
-        inc = np.sum((col[1:][pairs] > col[:-1][pairs]))
-        out[f] = inc / n_pairs
-    return out
-```
+实现核对：[函数定义](../metrics/quantile_shape.py#L42)；`quant_evaluator.metrics.quantile_shape.compute_quantile_monotonicity`。
 
 <a id="metric-quantile_rank_monotonicity"></a>
 ## quantile_rank_monotonicity — Signed Quantile Rank Monotonicity
@@ -3786,41 +2646,18 @@ Spearman(bucket index, mean bucket return), [-1,1]; requires all buckets finite 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quantile_shape.compute_quantile_rank_monotonicity`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.quantile_shape.compute_quantile_rank_monotonicity(qr: 'np.ndarray') -> 'np.ndarray'
-```
+$$
+M_f=\rho_S((1,\ldots,Q),(r_{1f},\ldots,r_{Qf}))
+$$
 
-Signed Spearman correlation of bucket index and mean bucket return.
 
-Requires every bucket to be finite and at least three buckets. Average
-ranks handle ties; an exactly flat profile is undefined (NaN). Range
-[-1, 1]. Unlike adjacent increase fraction this retains direction and
-refuses to score a partially observed quantile profile.
 
-### 精确计算公式（实际实现）
+至少 3 桶且全部有限；并列用平均秩。完全平坦或部分缺桶为 NaN。
 
-```python
-def compute_quantile_rank_monotonicity(qr: np.ndarray) -> np.ndarray:
-    """Signed Spearman correlation of bucket index and mean bucket return.
 
-    Requires every bucket to be finite and at least three buckets. Average
-    ranks handle ties; an exactly flat profile is undefined (NaN). Range
-    [-1, 1]. Unlike adjacent increase fraction this retains direction and
-    refuses to score a partially observed quantile profile.
-    """
-    from scipy.stats import spearmanr
-    m = _as_matrix(qr)
-    out = np.full(m.shape[1], np.nan)
-    if m.shape[0] < 3:
-        return out
-    for f in range(m.shape[1]):
-        col = m[:, f]
-        if np.isfinite(col).all() and np.any(col != col[0]):
-            out[f] = spearmanr(np.arange(len(col)), col).statistic
-    return out
-```
+实现核对：[函数定义](../metrics/quantile_shape.py#L67)；`quant_evaluator.metrics.quantile_shape.compute_quantile_rank_monotonicity`。
 
 <a id="metric-quantile_returns"></a>
 ## quantile_returns — quantile_returns
@@ -3833,6 +2670,17 @@ Average forward return per quantile bucket
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quantile.compute_quantile_returns`。
+
+### 数学公式与计算口径
+
+$$
+r_{tqf}=|B_{tqf}|^{-1}\sum_{i\in B_{tqf}}y_{ti}
+$$
+
+
+
+注册项无可直接调用 compute_fn；桶数、并列、最小资产与缺失收益规则须由上游制品给出，空桶为 NaN。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -3848,65 +2696,31 @@ Unreduced T×Q×F diagnostic returns, counts and masks; no implicit scalar objec
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.registry_adapters.build_daily_quantile_return_artifact`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.build_daily_quantile_return_artifact(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, n_quantiles: int = 5, min_assets: int = 10, min_periods: int = 20, *, tie_status_ref: str | None = None, tradability_ref: str | None = None, risk_exposure_ref: str | None = None, producer_version: str = '1.0.0', split_ref: str | None = None, config_hash: str | None = None) -> quant_evaluator.contracts.artifact_types.DailyQuantileReturnArtifact
-```
+$$
+r_{tqf}=n_{tqf}^{-1}\sum_{i\in B_{tqf}}y_{ti},\quad v_{tqf}=\mathbf1[\mathrm{finite}(r_{tqf})\land n_{tqf}\ge m]
+$$
 
-Build the non-aggregated daily TQF quantile evidence artifact.
 
-### 精确计算公式（实际实现）
 
-```python
-def build_daily_quantile_return_artifact(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    n_quantiles: int = 5,
-    min_assets: int = 10,
-    min_periods: int = 20,
-    *,
-    tie_status_ref: str | None = None,
-    tradability_ref: str | None = None,
-    risk_exposure_ref: str | None = None,
-    producer_version: str = "1.0.0",
-    split_ref: str | None = None,
-    config_hash: str | None = None,
-) -> DailyQuantileReturnArtifact:
-    """Build the non-aggregated daily TQF quantile evidence artifact."""
-    if min_periods < 1:
-        raise ValueError("min_periods must be positive")
-    returns, counts = compute_quantile_returns_fast(
-        factor_batch, label_bundle, n_quantiles=n_quantiles,
-        min_assets=min_assets,
-    )
-    counts = np.asarray(counts)
-    valid = np.isfinite(returns) & (counts >= min_assets)
-    time_axis = tuple(label_bundle.observation_time or label_bundle.decision_time)
-    return DailyQuantileReturnArtifact(
-        values=returns,
-        counts=counts.astype(np.int64, copy=False),
-        valid_mask=valid,
-        time_axis=time_axis,
-        quantile_axis=tuple(range(n_quantiles)),
-        factor_axis=tuple(factor_batch.factor_ids),
-        tie_status_ref=tie_status_ref,
-        tradability_ref=tradability_ref,
-        risk_exposure_ref=risk_exposure_ref,
-        producer_version=producer_version,
-        provenance={
-            "label_id": label_bundle.target_id,
-            "label_content_hash": label_bundle.content_hash,
-            "factor_value_hash": factor_batch.value_hash,
-            "n_quantiles": n_quantiles,
-            "min_assets": min_assets,
-            "min_periods": min_periods,
-            "split_ref": split_ref,
-            "config_hash": config_hash,
-            "valid_period_counts_qf": np.sum(valid, axis=0),
-        },
-    )
-```
+输出未聚合收益、计数、掩码。默认 Q=5、m=10、min_periods=20；后者只记录溯源，不在构建时删单元。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `n_quantiles` | `5` |
+| `min_assets` | `10` |
+| `min_periods` | `20` |
+| `tie_status_ref` | `None` |
+| `tradability_ref` | `None` |
+| `risk_exposure_ref` | `None` |
+| `producer_version` | `'1.0.0'` |
+| `split_ref` | `None` |
+| `config_hash` | `None` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L30)；`quant_evaluator.metrics.registry_adapters.build_daily_quantile_return_artifact`。
 
 <a id="metric-quantile_returns_full"></a>
 ## quantile_returns_full — Full Quantile Returns
@@ -3920,32 +2734,24 @@ Per-quantile time-averaged returns as a VECTOR per factor — shape (n_quantiles
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quantile_returns_full`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_quantile_returns_full_value(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, min_periods: int = 20, n_quantiles: int = 5) -> numpy.ndarray
-```
+$$
+\bar r_{qf}=n_{qf}^{-1}\sum_{t:r_{tqf}\mathrm{finite}}r_{tqf}
+$$
 
-Return per-quantile time-averaged returns, shape (n_quantiles, F).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_quantile_returns_full_value(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    min_periods: int = 20,
-    n_quantiles: int = 5,
-) -> np.ndarray:
-    """Return per-quantile time-averaged returns, shape (n_quantiles, F)."""
-    quantile_returns, _ = compute_quantile_returns_fast(
-        factor_batch, label_bundle, n_quantiles=n_quantiles
-    )
-    with np.errstate(invalid="ignore"):
-        means = np.nanmean(quantile_returns, axis=0)  # (n_quantiles, F)
-    valid_counts = np.sum(np.isfinite(quantile_returns), axis=0)  # (n_quantiles, F)
-    return np.where(valid_counts >= min_periods, means, np.nan)
-```
+默认 Q=5、min_periods=20；每个桶-因子有限日不足则 NaN。输出 $Q\times F$，不是标量。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+| `n_quantiles` | `5` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L219)；`quant_evaluator.metrics.registry_adapters.compute_quantile_returns_full_value`。
 
 <a id="metric-quantile_spread"></a>
 ## quantile_spread — Top-Bottom Quantile Spread
@@ -3959,34 +2765,24 @@ Return spread between top and bottom quantiles
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quantile.compute_top_bottom_spread`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_quantile_spread_value(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, min_periods: int = 20, n_quantiles: int = 5) -> numpy.ndarray
-```
+$$
+S_f=n_f^{-1}\sum_{t\in V_f}(r_{tQf}-r_{t1f})
+$$
 
-Return time-averaged top-minus-bottom quantile return spread per factor.
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_quantile_spread_value(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    min_periods: int = 20,
-    n_quantiles: int = 5,
-) -> np.ndarray:
-    """Return time-averaged top-minus-bottom quantile return spread per factor."""
-    quantile_returns, _ = compute_quantile_returns_fast(
-        factor_batch, label_bundle, n_quantiles=n_quantiles
-    )
-    # (T, n_quantiles, F) -> mean over time of Q_top - Q_bottom per factor.
-    with np.errstate(invalid="ignore"):
-        spread_series = quantile_returns[:, -1, :] - quantile_returns[:, 0, :]
-    valid_counts = np.sum(np.isfinite(spread_series), axis=0)
-    means = np.nanmean(spread_series, axis=0) if spread_series.size else np.array([])
-    return np.where(valid_counts >= min_periods, means, np.nan)
-```
+默认 Q=5、min_periods=20；只计顶底差有限日期，不足为 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+| `n_quantiles` | `5` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L183)；`quant_evaluator.metrics.registry_adapters.compute_quantile_spread_value`。
 
 <a id="metric-quantile_stability"></a>
 ## quantile_stability — quantile_stability
@@ -3999,6 +2795,17 @@ Stability of quantile return rankings across time
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.ic_summary.compute_ic_stability`。
+
+### 数学公式与计算口径
+
+$$
+\operatorname{quantile\_stability}=\operatorname{unavailable}
+$$
+
+
+
+该 ID 没有可直接调用的 compute_fn，且 implementation_id 实际指向 IC 序列的 compute_ic_stability（滚动窗口前后半段 Pearson 相关），并不实现注册描述所称的“分位收益排序跨时稳定性”。因此不能套用该函数或按名称臆造公式；须有专用实现/上游制品后才能给值，当前无证据为 NaN。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -4014,41 +2821,18 @@ Asymmetry between the top and bottom quantile tails, per factor. Positive = top 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quantile_shape.compute_quantile_tail_asymmetry`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.quantile_shape.compute_quantile_tail_asymmetry(qr: 'np.ndarray') -> 'np.ndarray'
-```
+$$
+A_f=(r_{Qf}-r_{mf})-(r_{mf}-r_{1f}),\quad m=\lfloor Q/2\rfloor+1
+$$
 
-Asymmetry between the top and bottom quantile tails, (F,).
 
-``(ret[top] - ret[mid]) - (ret[mid] - ret[bottom])`` where mid is the
-median quantile index.  Positive = top tail is stronger than the bottom
-tail.  NaN when the top/bottom/mid quantile returns are not all finite.
 
-### 精确计算公式（实际实现）
+实现以零基 Q//2 选中央桶；至少 3 桶且顶、底、中均有限，否则 NaN。
 
-```python
-def compute_quantile_tail_asymmetry(qr: np.ndarray) -> np.ndarray:
-    """Asymmetry between the top and bottom quantile tails, (F,).
 
-    ``(ret[top] - ret[mid]) - (ret[mid] - ret[bottom])`` where mid is the
-    median quantile index.  Positive = top tail is stronger than the bottom
-    tail.  NaN when the top/bottom/mid quantile returns are not all finite.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 3:
-        return out
-    mid = nq // 2
-    for f in range(F):
-        col = m[:, f]
-        if not (np.isfinite(col[0]) and np.isfinite(col[-1]) and np.isfinite(col[mid])):
-            continue
-        out[f] = (col[-1] - col[mid]) - (col[mid] - col[0])
-    return out
-```
+实现核对：[函数定义](../metrics/quantile_shape.py#L112)；`quant_evaluator.metrics.quantile_shape.compute_quantile_tail_asymmetry`。
 
 <a id="metric-quarter_consistency"></a>
 ## quarter_consistency — Quarter Consistency
@@ -4062,27 +2846,24 @@ Fraction of quarters whose mean IC matches the overall IC sign, per factor (spec
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.stability_regime.compute_quarter_consistency`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.stability_regime.compute_quarter_consistency(ic_series: 'np.ndarray', min_periods: 'int' = 20, time_index: 'Optional[Sequence]' = None) -> 'np.ndarray'
-```
+$$
+C_f=|G_f|^{-1}\sum_{g\in G_f}\mathbf1[\operatorname{sign}(\bar{IC}_{gf})=\operatorname{sign}(\bar{IC}_f)]
+$$
 
-Fraction of quarters whose mean IC matches the overall IC sign, (F,).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_quarter_consistency(
-    ic_series: np.ndarray,
-    min_periods: int = 20,
-    time_index: Optional[Sequence] = None,
-) -> np.ndarray:
-    """Fraction of quarters whose mean IC matches the overall IC sign, (F,)."""
-    s = _as_series(ic_series)
-    out = _period_consistency(s, "quarter", time_index)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+若 time_index 长度正确且可转换则按日历季度；否则按连续 63 期分块，末块 NaN 补齐。只比较有限季度均值，默认至少 20 个有限日度 IC，否则 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+| `time_index` | `None` |
+
+实现核对：[函数定义](../metrics/stability_regime.py#L99)；`quant_evaluator.metrics.stability_regime.compute_quarter_consistency`。
 
 <a id="metric-quarterly_rank_ic"></a>
 ## quarterly_rank_ic — Quarterly Rank IC
@@ -4096,27 +2877,24 @@ Mean of the per-quarter mean rank IC, per factor (spec §28).
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_quarterly_rank_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_quarterly_rank_ic(ic_series: 'np.ndarray', min_periods: 'int' = 20, time_index: 'Optional[Sequence]' = None) -> 'np.ndarray'
-```
+$$
+QIC_f=|G_f|^{-1}\sum_{g\in G_f}\bar{IC}^{rank}_{gf}
+$$
 
-Mean of the per-quarter mean rank IC, (F,).
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_quarterly_rank_ic(
-    ic_series: np.ndarray,
-    min_periods: int = 20,
-    time_index: Optional[Sequence] = None,
-) -> np.ndarray:
-    """Mean of the per-quarter mean rank IC, (F,)."""
-    s = _as_series(ic_series)
-    out = _mean_of_period_means(s, "quarter", time_index)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+先求季度均值再按有效季度等权。time_index 可用时按日历季度；缺失、长度不符或转换异常时按连续 63 期分块，末块 NaN 补齐。默认至少 20 个有限日度 IC，否则 NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+| `time_index` | `None` |
+
+实现核对：[函数定义](../metrics/predictive.py#L192)；`quant_evaluator.metrics.predictive.compute_quarterly_rank_ic`。
 
 <a id="metric-rank_ic"></a>
 ## rank_ic — Mean Rank IC
@@ -4130,37 +2908,28 @@ rank_ic has exactly ONE meaning: the time-mean of daily Spearman rank IC between
 - 别名： `ic.rank.mean` 。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.ic.compute_daily_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_rank_ic_value(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, min_periods: int = 1, min_assets: int = 20) -> numpy.ndarray
-```
+$$
+IC_t=\operatorname{corr}(\operatorname{rank}_{avg}f_{t,i},\operatorname{rank}_{avg}y_{t,i})
+$$
 
-Return the time-mean daily Spearman (rank) IC per factor, shape (F,).
 
-``rank_ic`` has exactly ONE meaning in this package: the time-average of
-daily Spearman rank IC between factor values and labels.
 
-### 精确计算公式（实际实现）
+$$
+RankIC={1\over n}\sum_{t\in T^*}IC_t
+$$
 
-```python
-def compute_rank_ic_value(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    min_periods: int = 1,
-    min_assets: int = 20,
-) -> np.ndarray:
-    """Return the time-mean daily Spearman (rank) IC per factor, shape (F,).
+ 每日保留成对有限值，默认 min_assets=20；再以 min_periods=1 检查有效日。
 
-    ``rank_ic`` has exactly ONE meaning in this package: the time-average of
-    daily Spearman rank IC between factor values and labels.
-    """
-    ic_series, _ = compute_daily_ic(
-        factor_batch, label_bundle, method="spearman", min_assets=min_assets
-    )
-    mean, _ = compute_mean_ic(ic_series, min_periods=min_periods)
-    return mean
-```
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `1` |
+| `min_assets` | `20` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L358)；`quant_evaluator.metrics.registry_adapters.compute_rank_ic_value`。
 
 <a id="metric-rank_ic_cross_section"></a>
 ## rank_ic_cross_section — rank_ic_cross_section
@@ -4173,6 +2942,15 @@ Rank IC computed cross-sectionally for each date
 - 缺失政策：`drop_pair`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.ic.compute_daily_ic`。
+
+### 数学公式与计算口径
+
+$$
+IC_t=\operatorname{corr}(\operatorname{rank}_{avg}f_{t,i},\operatorname{rank}_{avg}y_{t,i})
+$$
+
+ 输出逐日截面序列；注册项无 compute_fn，只声明 daily-IC 上游制品，不能独立执行。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -4188,36 +2966,22 @@ Mean IC serial autocorrelation across lags {1, 5, 10, 20}; NOT predictive horizo
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_rank_ic_decay`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_rank_ic_decay(ic_series: 'np.ndarray', horizons=(1, 5, 10, 20), min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+a_h={\sum_{(t,t-h)\in P_h}(IC_t-\bar I_h^+)(IC_{t-h}-\bar I_h^-)\over\sqrt{\sum( IC_t-\bar I_h^+)^2\sum( IC_{t-h}-\bar I_h^-)^2}},\quad M={1\over |H^*|}\sum_{h\in H^*}a_h
+$$
 
-Mean IC autocorrelation across the decay horizons {1,5,10,20}, (F,).
+ $H=(1,5,10,20)$；各滞后仅用原时钟上成对有限值，至少 2 对且非零方差；总体默认 min_periods=20。
 
-A single scalar per factor summarising how quickly the IC series loses
-autocorrelation (decays) at increasing lags.
+### 函数层默认参数
 
-### 精确计算公式（实际实现）
+| 参数 | 默认值 |
+|---|---|
+| `horizons` | `(1, 5, 10, 20)` |
+| `min_periods` | `20` |
 
-```python
-def compute_rank_ic_decay(
-    ic_series: np.ndarray,
-    horizons=(1, 5, 10, 20),
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Mean IC autocorrelation across the decay horizons {1,5,10,20}, (F,).
-
-    A single scalar per factor summarising how quickly the IC series loses
-    autocorrelation (decays) at increasing lags.
-    """
-    s = _as_series(ic_series)
-    acfs = [_autocorr_lag(s, h) for h in horizons]
-    with np.errstate(invalid="ignore"):
-        out = np.nanmean(np.stack(acfs, axis=0), axis=0)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+实现核对：[函数定义](../metrics/predictive.py#L270)；`quant_evaluator.metrics.predictive.compute_rank_ic_decay`。
 
 <a id="metric-rank_ic_positive_ratio"></a>
 ## rank_ic_positive_ratio — Rank IC Positive Ratio
@@ -4231,21 +2995,21 @@ Fraction of finite daily rank-IC values that are strictly positive, per factor (
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_rank_ic_positive_ratio`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_rank_ic_positive_ratio(ic_series: 'np.ndarray', min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+M={\sum_t\mathbf1(IC_t>0,\ IC_t\ finite)\over\sum_t\mathbf1(IC_t\ finite)}
+$$
 
-Fraction of finite daily rank-IC values that are strictly positive, (F,).
+ 零不算正值；默认 min_periods=20。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_rank_ic_positive_ratio(ic_series: np.ndarray, min_periods: int = 20) -> np.ndarray:
-    """Fraction of finite daily rank-IC values that are strictly positive, (F,)."""
-    return compute_ic_positive_ratio(ic_series, min_periods=min_periods)
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/predictive.py#L165)；`quant_evaluator.metrics.predictive.compute_rank_ic_positive_ratio`。
 
 <a id="metric-rank_ic_series"></a>
 ## rank_ic_series — Daily Rank IC Series
@@ -4259,28 +3023,21 @@ Daily Spearman rank IC per factor over time, shape (T, F) (canonical alias ic.ra
 - 别名： `ic.rank.daily` 。
 - 增量模式：`APPEND_EXACT`；注册实现定位：`rank_ic_series`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_rank_ic_series_value(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, label_bundle: quant_evaluator.contracts.label_bundle.LabelBundle, min_assets: int = 20) -> numpy.ndarray
-```
+$$
+IC_t=\operatorname{corr}(\operatorname{rank}_{avg}f_{t,i},\operatorname{rank}_{avg}y_{t,i})
+$$
 
-Return the daily Spearman (rank) IC series per factor, shape (T, F).
+ 输出逐日 $IC_t$，不做时间聚合；默认 min_assets=20，资产不足或常数秩截面为 NaN。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_rank_ic_series_value(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    min_assets: int = 20,
-) -> np.ndarray:
-    """Return the daily Spearman (rank) IC series per factor, shape (T, F)."""
-    ic_series, _ = compute_daily_ic(
-        factor_batch, label_bundle, method="spearman", min_assets=min_assets
-    )
-    return ic_series
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_assets` | `20` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L388)；`quant_evaluator.metrics.registry_adapters.compute_rank_ic_series_value`。
 
 <a id="metric-rank_ic_time_series"></a>
 ## rank_ic_time_series — rank_ic_time_series
@@ -4293,6 +3050,15 @@ Rank IC computed per time slice, returned as a time series
 - 缺失政策：`drop_pair`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.ic.compute_daily_ic`。
+
+### 数学公式与计算口径
+
+$$
+IC_t=\operatorname{corr}(\operatorname{rank}_{avg}f_{t,i},\operatorname{rank}_{avg}y_{t,i})
+$$
+
+ 输出逐时点序列；注册项无 compute_fn，只能读取显式 daily-IC 制品，不能独立执行。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -4308,32 +3074,23 @@ Spearman correlation of factor ranks across time
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`rank_stability`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_rank_stability_value(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, min_periods: int = 20, lag: int = 1, method: str = 'spearman') -> numpy.ndarray
-```
+$$
+s_t=\rho(f_{t,\cdot},f_{t-\ell,\cdot}),\qquad M={1\over |T^*|}\sum_ts_t
+$$
 
-Return time-averaged rank stability per factor.
+ 默认 lag=1、method='spearman'、min_periods=20；每对日期只用共同有限资产。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_rank_stability_value(
-    factor_batch: FactorBatch,
-    min_periods: int = 20,
-    lag: int = 1,
-    method: str = "spearman",
-) -> np.ndarray:
-    """Return time-averaged rank stability per factor."""
-    return compute_mean_rank_stability(
-        np.where(factor_batch.validity, factor_batch.values, np.nan)
-        if factor_batch.validity is not None else factor_batch.values,
-        lag=lag,
-        method=method,
-        min_periods=min_periods,
-    )
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+| `lag` | `1` |
+| `method` | `'spearman'` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L111)；`quant_evaluator.metrics.registry_adapters.compute_rank_stability_value`。
 
 <a id="metric-recent_12m_rank_ic"></a>
 ## recent_12m_rank_ic — Recent 12-Month Rank IC
@@ -4347,23 +3104,21 @@ Mean rank IC over the most recent ~12 months (252 trading days), per factor (spe
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_recent_12m_rank_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_recent_12m_rank_ic(ic_series: 'np.ndarray', min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+M={1\over n_W}\sum_{t\in\{T-251,\ldots,T\}\cap T^*}IC_t
+$$
 
-Mean rank IC over the most recent ~12 months (252 trading days), (F,).
+ 尾窗为 252 个原始位置；默认全序列有限 IC 总数 min_periods=20，尾窗均值忽略 NaN。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_recent_12m_rank_ic(ic_series: np.ndarray, min_periods: int = 20) -> np.ndarray:
-    """Mean rank IC over the most recent ~12 months (252 trading days), (F,)."""
-    s = _as_series(ic_series)
-    out = _recent_mean(s, 252)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/predictive.py#L241)；`quant_evaluator.metrics.predictive.compute_recent_12m_rank_ic`。
 
 <a id="metric-recent_3m_rank_ic"></a>
 ## recent_3m_rank_ic — Recent 3-Month Rank IC
@@ -4377,23 +3132,21 @@ Mean rank IC over the most recent ~3 months (63 trading days), per factor (spec 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_recent_3m_rank_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_recent_3m_rank_ic(ic_series: 'np.ndarray', min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+M={1\over n_W}\sum_{t\in\{T-62,\ldots,T\}\cap T^*}IC_t
+$$
 
-Mean rank IC over the most recent ~3 months (63 trading days), (F,).
+ 尾窗为 63 个原始位置；默认全序列有限 IC 总数 min_periods=20，尾窗均值忽略 NaN。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_recent_3m_rank_ic(ic_series: np.ndarray, min_periods: int = 20) -> np.ndarray:
-    """Mean rank IC over the most recent ~3 months (63 trading days), (F,)."""
-    s = _as_series(ic_series)
-    out = _recent_mean(s, 63)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/predictive.py#L227)；`quant_evaluator.metrics.predictive.compute_recent_3m_rank_ic`。
 
 <a id="metric-recent_6m_rank_ic"></a>
 ## recent_6m_rank_ic — Recent 6-Month Rank IC
@@ -4407,23 +3160,21 @@ Mean rank IC over the most recent ~6 months (126 trading days), per factor (spec
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_recent_6m_rank_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_recent_6m_rank_ic(ic_series: 'np.ndarray', min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+M={1\over n_W}\sum_{t\in\{T-125,\ldots,T\}\cap T^*}IC_t
+$$
 
-Mean rank IC over the most recent ~6 months (126 trading days), (F,).
+ 尾窗为 126 个原始位置；默认全序列有限 IC 总数 min_periods=20，尾窗均值忽略 NaN。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_recent_6m_rank_ic(ic_series: np.ndarray, min_periods: int = 20) -> np.ndarray:
-    """Mean rank IC over the most recent ~6 months (126 trading days), (F,)."""
-    s = _as_series(ic_series)
-    out = _recent_mean(s, 126)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/predictive.py#L234)；`quant_evaluator.metrics.predictive.compute_recent_6m_rank_ic`。
 
 <a id="metric-recent_degradation_score"></a>
 ## recent_degradation_score — Recent Degradation Score
@@ -4437,43 +3188,22 @@ Recent degradation: (full mean IC - recent mean IC) / full std, per factor. Posi
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.stability_regime.compute_recent_degradation_score`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.stability_regime.compute_recent_degradation_score(ic_series: 'np.ndarray', recent_days: 'int' = 63, min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+M={\bar I_{all}-\bar I_{last\ 63}\over s_{all}},\qquad s_{all}=\operatorname{std}(IC_t,ddof=1)
+$$
 
-Recent degradation: (recent mean IC - full mean IC) / full std, (F,).
+ 默认 recent_days=63、min_periods=20；$s_{all}\le10^{-12}$ 或证据不足为 NaN；正值才表示近期退化。
 
-Negative values indicate the factor's recent IC is weaker than its
-historical average (degradation).  This is the negative of the
-``ic_recent_vs_history_delta`` predictive metric.
+### 函数层默认参数
 
-### 精确计算公式（实际实现）
+| 参数 | 默认值 |
+|---|---|
+| `recent_days` | `63` |
+| `min_periods` | `20` |
 
-```python
-def compute_recent_degradation_score(
-    ic_series: np.ndarray,
-    recent_days: int = 63,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Recent degradation: (recent mean IC - full mean IC) / full std, (F,).
-
-    Negative values indicate the factor's recent IC is weaker than its
-    historical average (degradation).  This is the negative of the
-    ``ic_recent_vs_history_delta`` predictive metric.
-    """
-    s = _as_series(ic_series)
-    valid = np.isfinite(s)
-    n = np.sum(valid, axis=0)
-    with np.errstate(invalid="ignore"):
-        hist_mean = np.nanmean(s, axis=0)
-        hist_std = np.nanstd(s, axis=0, ddof=1)
-        recent_mean = np.nanmean(s[-recent_days:, :], axis=0)
-    score = (hist_mean - recent_mean) / np.maximum(hist_std, 1e-12)
-    score = np.where(hist_std > 1e-12, score, np.nan)
-    return np.where(n >= min_periods, score, np.nan)
-```
+实现核对：[函数定义](../metrics/stability_regime.py#L230)；`quant_evaluator.metrics.stability_regime.compute_recent_degradation_score`。
 
 <a id="metric-regime_conditional_ic"></a>
 ## regime_conditional_ic — Regime Conditional IC
@@ -4487,25 +3217,21 @@ Mean IC in the late (recent) regime, per factor. Measures the factor's current p
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.stability_regime.compute_regime_conditional_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.stability_regime.compute_regime_conditional_ic(ic_series: 'np.ndarray', min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+m=\lfloor T/2\rfloor,\qquad M=\operatorname{mean}_{t=m}^{T-1}IC_t
+$$
 
-Mean IC in the late (recent) regime, (F,).
+ regime 实际固定为原序列前/后半段，此项返回后半段均值；默认 min_periods=20（检查全序列有限数）。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_regime_conditional_ic(ic_series: np.ndarray, min_periods: int = 20) -> np.ndarray:
-    """Mean IC in the late (recent) regime, (F,)."""
-    s = _as_series(ic_series)
-    _, late = _regime_split(s)
-    with np.errstate(invalid="ignore"):
-        out = np.nanmean(late, axis=0)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/stability_regime.py#L260)；`quant_evaluator.metrics.stability_regime.compute_regime_conditional_ic`。
 
 <a id="metric-regime_dispersion"></a>
 ## regime_dispersion — Regime Dispersion
@@ -4519,34 +3245,21 @@ Absolute difference between early and late regime mean IC, per factor. Larger va
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.stability_regime.compute_regime_dispersion`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.stability_regime.compute_regime_dispersion(ic_series: 'np.ndarray', min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+M=|e-l|,\quad e=\operatorname{mean}_{t<m}IC_t,\ l=\operatorname{mean}_{t\ge m}IC_t
+$$
 
-Absolute difference between early and late regime mean IC, (F,).
+ 固定前后半段，均值忽略 NaN；默认 min_periods=20。
 
-Larger values indicate the factor's predictive power changed across
-regimes (instability).
+### 函数层默认参数
 
-### 精确计算公式（实际实现）
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
 
-```python
-def compute_regime_dispersion(ic_series: np.ndarray, min_periods: int = 20) -> np.ndarray:
-    """Absolute difference between early and late regime mean IC, (F,).
-
-    Larger values indicate the factor's predictive power changed across
-    regimes (instability).
-    """
-    s = _as_series(ic_series)
-    early, late = _regime_split(s)
-    with np.errstate(invalid="ignore"):
-        e = np.nanmean(early, axis=0)
-        l = np.nanmean(late, axis=0)
-    out = np.abs(e - l)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+实现核对：[函数定义](../metrics/stability_regime.py#L280)；`quant_evaluator.metrics.stability_regime.compute_regime_dispersion`。
 
 <a id="metric-regime_sign_consistency"></a>
 ## regime_sign_consistency — Regime Sign Consistency
@@ -4560,28 +3273,21 @@ def compute_regime_dispersion(ic_series: np.ndarray, min_periods: int = 20) -> n
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.stability_regime.compute_regime_sign_consistency`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.stability_regime.compute_regime_sign_consistency(ic_series: 'np.ndarray', min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+M=\mathbf1[\operatorname{sign}(e)=\operatorname{sign}(l)]
+$$
 
-1.0 if early and late regime mean IC share the same sign, else 0.0, (F,).
+ $e,l$ 为前后半段有限 IC 均值；任一不可定义则 NaN，默认 min_periods=20。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_regime_sign_consistency(ic_series: np.ndarray, min_periods: int = 20) -> np.ndarray:
-    """1.0 if early and late regime mean IC share the same sign, else 0.0, (F,)."""
-    s = _as_series(ic_series)
-    early, late = _regime_split(s)
-    with np.errstate(invalid="ignore"):
-        e = np.nanmean(early, axis=0)
-        l = np.nanmean(late, axis=0)
-    out = np.where(np.sign(e) == np.sign(l), 1.0, 0.0)
-    out = np.where(np.isfinite(e) & np.isfinite(l), out, np.nan)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/stability_regime.py#L295)；`quant_evaluator.metrics.stability_regime.compute_regime_sign_consistency`。
 
 <a id="metric-regime_worst_ic"></a>
 ## regime_worst_ic — Regime Worst IC
@@ -4595,27 +3301,21 @@ Minimum of the early/late regime mean IC, per factor. The weaker of the two regi
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.stability_regime.compute_regime_worst_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.stability_regime.compute_regime_worst_ic(ic_series: 'np.ndarray', min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+e=\operatorname{mean}_{t<m}IC_t,\quad l=\operatorname{mean}_{t\ge m}IC_t,\quad M=\min(e,l)
+$$
 
-Minimum of the early/late regime mean IC, (F,).
+ 固定前后半段，不是财富或外部市场状态；默认 min_periods=20。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_regime_worst_ic(ic_series: np.ndarray, min_periods: int = 20) -> np.ndarray:
-    """Minimum of the early/late regime mean IC, (F,)."""
-    s = _as_series(ic_series)
-    early, late = _regime_split(s)
-    with np.errstate(invalid="ignore"):
-        e = np.nanmean(early, axis=0)
-        l = np.nanmean(late, axis=0)
-    out = np.minimum(e, l)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/stability_regime.py#L269)；`quant_evaluator.metrics.stability_regime.compute_regime_worst_ic`。
 
 <a id="metric-relative_max_drawdown"></a>
 ## relative_max_drawdown — Relative Max Drawdown
@@ -4629,28 +3329,21 @@ Benchmark/invested-capital evidence from an explicitly bound execution trajector
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.long_only.compute_relative_max_drawdown`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.long_only.compute_relative_max_drawdown(returns, min_periods: 'int' = 1)
-```
+$$
+W_0=1,\qquad W_t=W_{t-1}(1+r_t^{rel}),\qquad M=\max_t\left(1-{W_t\over\max_{0\le u\le t}W_u}\right)
+$$
 
-Positive drawdown magnitude from relative-wealth return increments.
+ 输入必须是 probe_pnl 明确绑定的 relative_return 轨迹腿，即相对财富的收益增量，不是 active_return（组合收益减基准收益）或直接传入的财富水平。返回正回撤幅度；默认 min_periods=1、missing_return_policy='unknown'，任何非有限增量使该列结果未知，$r_t^{rel}=-1$ 则财富归零并返回 1。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_relative_max_drawdown(returns, min_periods: int = 1):
-    """Positive drawdown magnitude from relative-wealth return increments."""
-    if isinstance(min_periods, bool) or not isinstance(min_periods, int) or min_periods < 1:
-        raise ValueError("min_periods must be an integer >= 1")
-    x, squeeze = _matrix(returns); out = np.full(x.shape[1], np.nan)
-    for f in range(x.shape[1]):
-        v = x[:, f]
-        if np.count_nonzero(np.isfinite(v)) >= min_periods:
-            out[f] = np.asarray(compute_maximum_drawdown(v, missing_return_policy="unknown")[0]).item()
-    return out[0] if squeeze else out
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `1` |
+
+实现核对：[函数定义](../metrics/long_only.py#L49)；`quant_evaluator.metrics.long_only.compute_relative_max_drawdown`。
 
 <a id="metric-residual_rank_ic"></a>
 ## residual_rank_ic — Residual Rank IC
@@ -4664,28 +3357,21 @@ Named alias of neutralized_rank_ic (residual version of the rank IC, residualize
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.exposure_evidence.compute_residual_rank_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.exposure_evidence.compute_residual_rank_ic(factor_values: 'np.ndarray', forward_returns: 'np.ndarray', panel: 'ExposurePanel', min_obs: 'int' = 10) -> 'float'
-```
+$$
+f_{t,i}=\alpha_t+X_{t,i,\cdot}\beta_t+e_{t,i},\qquad M={1\over |T^*|}\sum_{t\in T^*}\rho_S(e_{t,i},y_{t,i})
+$$
 
-Named alias for ``compute_neutralized_rank_ic`` (residual_rank_ic id).
+ 每日回归支持集先要求因子、全部暴露及回归权重有效且正权重；若 ExposurePanel 绑定 regression_weights 则做带截距 WLS，否则等权。残差生成后再与 forward return 取共同有限支持做 Spearman，因此回归支持与最终标签配对支持不同；两步均默认 min_obs=10。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_residual_rank_ic(
-    factor_values: np.ndarray,
-    forward_returns: np.ndarray,
-    panel: ExposurePanel,
-    min_obs: int = 10,
-) -> float:
-    """Named alias for ``compute_neutralized_rank_ic`` (residual_rank_ic id)."""
-    return compute_neutralized_rank_ic(
-        factor_values, forward_returns, panel, min_obs=min_obs
-    )
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_obs` | `10` |
+
+实现核对：[函数定义](../metrics/exposure_evidence.py#L596)；`quant_evaluator.metrics.exposure_evidence.compute_residual_rank_ic`。
 
 <a id="metric-return_coverage"></a>
 ## return_coverage — return_coverage
@@ -4698,6 +3384,15 @@ Fraction of universe with non-null forward returns
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quality.compute_coverage`。
+
+### 数学公式与计算口径
+
+$$
+C={\#\{(t,i):y_{t,i}\ finite\}\over\#\{(t,i):i\in U_t\}}
+$$
+
+ 注册项无 compute_fn，只声明 quality coverage 上游制品；实际 universe 分母必须由上游给出，不可独立猜算。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -4713,39 +3408,22 @@ Sample skewness of the probe daily PnL return series (adjusted Fisher-Pearson, b
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.underwater.compute_return_skew`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.underwater.compute_return_skew(returns: 'np.ndarray', min_periods: 'int' = 20, *, bias: 'bool' = False) -> 'float'
-```
+$$
+g_1={1\over n}\sum_t((r_t-\bar r)/\sigma_0)^3,\qquad M={\sqrt{n(n-1)}\over n-2}g_1
+$$
 
-Sample skewness of the return series (population ``scipy.stats.skew``
-convention, bias=False; for the tail-risk registry family the existing
-``metrics/distribution.compute_skewness`` is the same statistic).
+ 默认 bias=False、min_periods=20；$n<\max(20,3)$ 或总体标准差 $\sigma_0\le10^{-12}$ 为 NaN。
 
-NaN when fewer than ``min_periods`` finite returns or when std is 0.
+### 函数层默认参数
 
-### 精确计算公式（实际实现）
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+| `bias` | `False` |
 
-```python
-def compute_return_skew(returns: np.ndarray, min_periods: int = 20, *, bias: bool = False) -> float:
-    """Sample skewness of the return series (population ``scipy.stats.skew``
-    convention, bias=False; for the tail-risk registry family the existing
-    ``metrics/distribution.compute_skewness`` is the same statistic).
-
-    NaN when fewer than ``min_periods`` finite returns or when std is 0.
-    """
-    ret = _as_1d(returns)
-    ret = ret[np.isfinite(ret)]
-    if ret.size < max(min_periods, 3):
-        return np.nan
-    mu = np.mean(ret)
-    std = np.std(ret, ddof=0)
-    if std <= EPS:
-        return np.nan
-    skew = float(np.mean(((ret - mu) / std) ** 3))
-    return skew if bias else float(np.sqrt(ret.size * (ret.size - 1)) / (ret.size - 2) * skew)
-```
+实现核对：[函数定义](../metrics/underwater.py#L215)；`quant_evaluator.metrics.underwater.compute_return_skew`。
 
 <a id="metric-rolling_1y_sharpe_min"></a>
 ## rolling_1y_sharpe_min — Rolling 1Y Sharpe Min
@@ -4759,69 +3437,24 @@ Minimum rolling-252-period annualized Sharpe of the probe daily PnL series (wors
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.underwater.compute_rolling_sharpe_tail`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.underwater.compute_rolling_sharpe_tail(returns: 'np.ndarray', window: 'int' = 252, quantile: 'float' = 0.1, min_periods: 'int' = 30, periods_per_year: 'int' = 252) -> 'float'
-```
+$$
+S_t=\sqrt{252}\,\bar r_t/s_t,\quad M=\min_t S_t
+$$
 
-Rolling-window annualized Sharpe tail statistic.
+ 默认 window=252、min_periods=30、risk_free_rate=0、periods_per_year=252；时间轴必须先具有至少 252 个位置；每个长度 252 的完整对齐位置窗口只要求至少 30 个有限收益，其余 NaN 由 Sharpe 内部剔除，$s_t$ 为 ddof=1；无合格窗口返回 NaN。
 
-Computes the rolling-window Sharpe (``quant_evaluator.metrics.
-portfolio_stats.compute_sharpe_ratio``) over every aligned window with at
-least ``min_periods`` finite returns, then returns the requested quantile:
+### 函数层默认参数
 
-- ``quantile=0.0``   -> ``rolling_1y_sharpe_min`` (minimum attained);
-- ``quantile=0.10``  -> ``rolling_1y_sharpe_q10``.
+| 参数 | 默认值 |
+|---|---|
+| `window` | `252` |
+| `quantile` | `0.1` |
+| `min_periods` | `30` |
+| `periods_per_year` | `252` |
 
-NaN when there are no valid rolling windows.
-
-### 精确计算公式（实际实现）
-
-```python
-def compute_rolling_sharpe_tail(
-    returns: np.ndarray,
-    window: int = _PERIODS_PER_YEAR,
-    quantile: float = 0.10,
-    min_periods: int = 30,
-    periods_per_year: int = _PERIODS_PER_YEAR,
-) -> float:
-    """Rolling-window annualized Sharpe tail statistic.
-
-    Computes the rolling-window Sharpe (``quant_evaluator.metrics.
-    portfolio_stats.compute_sharpe_ratio``) over every aligned window with at
-    least ``min_periods`` finite returns, then returns the requested quantile:
-
-    - ``quantile=0.0``   -> ``rolling_1y_sharpe_min`` (minimum attained);
-    - ``quantile=0.10``  -> ``rolling_1y_sharpe_q10``.
-
-    NaN when there are no valid rolling windows.
-    """
-    from quant_evaluator.metrics.portfolio_stats import compute_sharpe_ratio
-
-    ret = _as_1d(returns)
-    if ret.size < window:
-        return np.nan
-    roll: list[float] = []
-    for t in range(window - 1, ret.size):
-        seg = ret[t - window + 1 : t + 1]
-        if np.sum(np.isfinite(seg)) >= min_periods:
-            val = float(
-                compute_sharpe_ratio(
-                    seg,
-                    risk_free_rate=0.0,
-                    periods_per_year=periods_per_year,
-                    min_periods=min_periods,
-                )
-            )
-            if np.isfinite(val):
-                roll.append(val)
-    if not roll:
-        return np.nan
-    if quantile == 0.0:
-        return float(min(roll))
-    return float(np.quantile(roll, quantile))
-```
+实现核对：[函数定义](../metrics/underwater.py#L171)；`quant_evaluator.metrics.underwater.compute_rolling_sharpe_tail`。
 
 <a id="metric-rolling_1y_sharpe_q10"></a>
 ## rolling_1y_sharpe_q10 — Rolling 1Y Sharpe Q10
@@ -4835,69 +3468,24 @@ def compute_rolling_sharpe_tail(
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.underwater.compute_rolling_sharpe_tail`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.underwater.compute_rolling_sharpe_tail(returns: 'np.ndarray', window: 'int' = 252, quantile: 'float' = 0.1, min_periods: 'int' = 30, periods_per_year: 'int' = 252) -> 'float'
-```
+$$
+S_t=\sqrt{252}\,\bar r_t/s_t,\quad M=Q_{0.1}(\{S_t\})
+$$
 
-Rolling-window annualized Sharpe tail statistic.
+ 默认 window=252、min_periods=30、risk_free_rate=0、periods_per_year=252；时间轴必须先具有至少 252 个位置；每个长度 252 的完整对齐位置窗口只要求至少 30 个有限收益，其余 NaN 由 Sharpe 内部剔除，$s_t$ 为 ddof=1；无合格窗口返回 NaN。
 
-Computes the rolling-window Sharpe (``quant_evaluator.metrics.
-portfolio_stats.compute_sharpe_ratio``) over every aligned window with at
-least ``min_periods`` finite returns, then returns the requested quantile:
+### 函数层默认参数
 
-- ``quantile=0.0``   -> ``rolling_1y_sharpe_min`` (minimum attained);
-- ``quantile=0.10``  -> ``rolling_1y_sharpe_q10``.
+| 参数 | 默认值 |
+|---|---|
+| `window` | `252` |
+| `quantile` | `0.1` |
+| `min_periods` | `30` |
+| `periods_per_year` | `252` |
 
-NaN when there are no valid rolling windows.
-
-### 精确计算公式（实际实现）
-
-```python
-def compute_rolling_sharpe_tail(
-    returns: np.ndarray,
-    window: int = _PERIODS_PER_YEAR,
-    quantile: float = 0.10,
-    min_periods: int = 30,
-    periods_per_year: int = _PERIODS_PER_YEAR,
-) -> float:
-    """Rolling-window annualized Sharpe tail statistic.
-
-    Computes the rolling-window Sharpe (``quant_evaluator.metrics.
-    portfolio_stats.compute_sharpe_ratio``) over every aligned window with at
-    least ``min_periods`` finite returns, then returns the requested quantile:
-
-    - ``quantile=0.0``   -> ``rolling_1y_sharpe_min`` (minimum attained);
-    - ``quantile=0.10``  -> ``rolling_1y_sharpe_q10``.
-
-    NaN when there are no valid rolling windows.
-    """
-    from quant_evaluator.metrics.portfolio_stats import compute_sharpe_ratio
-
-    ret = _as_1d(returns)
-    if ret.size < window:
-        return np.nan
-    roll: list[float] = []
-    for t in range(window - 1, ret.size):
-        seg = ret[t - window + 1 : t + 1]
-        if np.sum(np.isfinite(seg)) >= min_periods:
-            val = float(
-                compute_sharpe_ratio(
-                    seg,
-                    risk_free_rate=0.0,
-                    periods_per_year=periods_per_year,
-                    min_periods=min_periods,
-                )
-            )
-            if np.isfinite(val):
-                roll.append(val)
-    if not roll:
-        return np.nan
-    if quantile == 0.0:
-        return float(min(roll))
-    return float(np.quantile(roll, quantile))
-```
+实现核对：[函数定义](../metrics/underwater.py#L171)；`quant_evaluator.metrics.underwater.compute_rolling_sharpe_tail`。
 
 <a id="metric-rolling_ic"></a>
 ## rolling_ic — rolling_ic
@@ -4910,6 +3498,15 @@ Rolling window IC values over time
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats`。
+
+### 数学公式与计算口径
+
+$$
+\mu_t={1\over n_t}\sum_{j=\max(0,t-w+1)}^tIC_j
+$$
+
+ 注册项无 compute_fn，声明为 rolling-IC timeseries 上游制品；窗口 $w$ 与输出字段必须由制品给出，不能自行设为 60 或求总均值。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -4925,48 +3522,22 @@ Mean of the rolling-window IC drawdown (peak-to-trough), per factor. A more nega
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.stability_regime.compute_rolling_ic_drawdown`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.stability_regime.compute_rolling_ic_drawdown(ic_series: 'np.ndarray', window: 'int' = 60, min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+\mu_t={\sum_{j=\max(0,t-59)}^tIC_j\mathbf1_{finite}\over n_t},\quad C_t=\sum_{u\le t}\tilde\mu_u,\quad d_t=C_t-\max_{v\le t}C_v,\quad M=\operatorname{mean}_td_t
+$$
 
-Mean of the rolling-window IC drawdown (peak-to-trough), (F,).
+ 默认 window=60、min_periods=20；$n_t<20$ 时 $\mu_t$ 为 NaN，累加时以 0 代替该 NaN；这是累计滚动均值的加法回撤，不是财富回撤。
 
-Computed on the cumulative sum of the rolling mean IC within each window.
+### 函数层默认参数
 
-### 精确计算公式（实际实现）
+| 参数 | 默认值 |
+|---|---|
+| `window` | `60` |
+| `min_periods` | `20` |
 
-```python
-def compute_rolling_ic_drawdown(
-    ic_series: np.ndarray,
-    window: int = 60,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Mean of the rolling-window IC drawdown (peak-to-trough), (F,).
-
-    Computed on the cumulative sum of the rolling mean IC within each window.
-    """
-    s = _as_series(ic_series)
-    T, F = s.shape
-    finite = np.isfinite(s)
-    x = np.where(finite, s, 0.0)
-    pref = np.concatenate([np.zeros((1, F)), np.cumsum(x, axis=0)], axis=0)
-    fpref = np.concatenate([np.zeros((1, F)), np.cumsum(finite, axis=0)], axis=0)
-    ends = np.arange(1, T + 1)
-    start = np.maximum(ends - window, 0)
-    cnt = fpref[ends] - fpref[start]
-    ssum = pref[ends] - pref[start]
-    with np.errstate(invalid="ignore", divide="ignore"):
-        mean = ssum / np.maximum(cnt, 1.0)
-    mean = np.where(cnt >= min_periods, mean, np.nan)
-    # cumulative sum of the rolling mean (NaN -> 0), then peak-to-trough
-    cum = np.cumsum(np.where(np.isfinite(mean), mean, 0.0), axis=0)
-    running_max = np.maximum.accumulate(cum, axis=0)
-    dd = cum - running_max
-    with np.errstate(invalid="ignore"):
-        return np.nanmean(dd, axis=0)
-```
+实现核对：[函数定义](../metrics/stability_regime.py#L151)；`quant_evaluator.metrics.stability_regime.compute_rolling_ic_drawdown`。
 
 <a id="metric-rolling_ic_volatility"></a>
 ## rolling_ic_volatility — Rolling IC Volatility
@@ -4980,48 +3551,22 @@ Time-mean of the rolling-window IC standard deviation, per factor. Lower values 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.stability_regime.compute_rolling_ic_volatility`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.stability_regime.compute_rolling_ic_volatility(ic_series: 'np.ndarray', window: 'int' = 60, min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+s_t=\sqrt{{\sum_{j\in W_t}(IC_j-\bar I_t)^2\over n_t-1}},\qquad M=\operatorname{mean}_{t:s_t\ finite}s_t
+$$
 
-Time-mean of the rolling-window IC standard deviation, (F,).
+ 默认 window=60、min_periods=20；窗口使用有限 IC，输出是滚动样本标准差的时间均值。
 
-Lower values indicate a more stable IC series.
+### 函数层默认参数
 
-### 精确计算公式（实际实现）
+| 参数 | 默认值 |
+|---|---|
+| `window` | `60` |
+| `min_periods` | `20` |
 
-```python
-def compute_rolling_ic_volatility(
-    ic_series: np.ndarray,
-    window: int = 60,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Time-mean of the rolling-window IC standard deviation, (F,).
-
-    Lower values indicate a more stable IC series.
-    """
-    s = _as_series(ic_series)
-    T, F = s.shape
-    finite = np.isfinite(s)
-    x = np.where(finite, s, 0.0)
-    pref = np.concatenate([np.zeros((1, F)), np.cumsum(x, axis=0)], axis=0)
-    fpref = np.concatenate([np.zeros((1, F)), np.cumsum(finite, axis=0)], axis=0)
-    pref_sq = np.concatenate([np.zeros((1, F)), np.cumsum(x * x, axis=0)], axis=0)
-    ends = np.arange(1, T + 1)
-    start = np.maximum(ends - window, 0)
-    cnt = fpref[ends] - fpref[start]
-    ssum = pref[ends] - pref[start]
-    ssq = pref_sq[ends] - pref_sq[start]
-    with np.errstate(invalid="ignore", divide="ignore"):
-        mean = ssum / np.maximum(cnt, 1.0)
-        var = ssq - cnt * mean * mean
-        std = np.sqrt(np.maximum(var, 0.0) / np.maximum(cnt - 1, 1.0))
-    std = np.where(cnt >= min_periods, std, np.nan)
-    with np.errstate(invalid="ignore"):
-        return np.nanmean(std, axis=0)
-```
+实现核对：[函数定义](../metrics/stability_regime.py#L121)；`quant_evaluator.metrics.stability_regime.compute_rolling_ic_volatility`。
 
 <a id="metric-rolling_rank_ic_ir"></a>
 ## rolling_rank_ic_ir — Rolling Rank IC IR
@@ -5035,28 +3580,22 @@ Time-mean of the rolling-window IC information ratio, per factor (spec §28).
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_rolling_rank_ic_ir`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_rolling_rank_ic_ir(ic_series: 'np.ndarray', window: 'int' = 60, min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+IR_t={\mu_t\over s_t},\qquad M=\operatorname{mean}_{t:IR_t\ finite}IR_t
+$$
 
-Time-mean of the rolling-window IC information ratio, (F,).
+ 默认 window=60、min_periods=20；$s_t$ 是窗口样本标准差（ddof=1），零方差窗口无效，不年化。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_rolling_rank_ic_ir(
-    ic_series: np.ndarray,
-    window: int = 60,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Time-mean of the rolling-window IC information ratio, (F,)."""
-    s = _as_series(ic_series)
-    _, ir = _rolling_mean_ir(s, window, min_periods)
-    with np.errstate(invalid="ignore"):
-        return np.nanmean(ir, axis=0)
-```
+| 参数 | 默认值 |
+|---|---|
+| `window` | `60` |
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/predictive.py#L215)；`quant_evaluator.metrics.predictive.compute_rolling_rank_ic_ir`。
 
 <a id="metric-rolling_rank_ic_mean"></a>
 ## rolling_rank_ic_mean — Rolling Rank IC Mean
@@ -5070,28 +3609,22 @@ Time-mean of the rolling-window mean rank IC, per factor. A smoother estimate of
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_rolling_rank_ic_mean`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_rolling_rank_ic_mean(ic_series: 'np.ndarray', window: 'int' = 60, min_periods: 'int' = 20) -> 'np.ndarray'
-```
+$$
+\mu_t={1\over n_t}\sum_{j\in W_t}IC_j,\qquad M=\operatorname{mean}_{t:\mu_t\ finite}\mu_t
+$$
 
-Time-mean of the rolling-window mean rank IC, (F,).
+ 默认 window=60、min_periods=20；输出是滚动均值序列的时间均值，不是序列本身。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_rolling_rank_ic_mean(
-    ic_series: np.ndarray,
-    window: int = 60,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """Time-mean of the rolling-window mean rank IC, (F,)."""
-    s = _as_series(ic_series)
-    mean, _ = _rolling_mean_ir(s, window, min_periods)
-    with np.errstate(invalid="ignore"):
-        return np.nanmean(mean, axis=0)
-```
+| 参数 | 默认值 |
+|---|---|
+| `window` | `60` |
+| `min_periods` | `20` |
+
+实现核对：[函数定义](../metrics/predictive.py#L203)；`quant_evaluator.metrics.predictive.compute_rolling_rank_ic_mean`。
 
 <a id="metric-shape_bootstrap_confidence"></a>
 ## shape_bootstrap_confidence — Shape Bootstrap Rank Agreement (legacy ID)
@@ -5105,84 +3638,24 @@ Descriptive moving-block bootstrap RANK AGREEMENT, not U-shape probability, per 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_shape_bootstrap_confidence`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_shape_bootstrap_confidence(qr: 'np.ndarray', block_length: 'int' = 2, resamples: 'int' = 100, random_seed: 'int' = 0, agreement_threshold: 'float' = 0.5) -> 'np.ndarray'
-```
+$$
+\bar q=\operatorname{mean}_{w=1}^Wq_w,\quad \bar q^{(b)}=\operatorname{mean}_{w\in B_b}q_w,\quad M={\sum_{b\in B^*}\mathbf1[\rho_S(\bar q^{(b)},\bar q)\ge\tau]\over|B^*|}
+$$
 
-Descriptive moving-block bootstrap rank-agreement frequency, not U probability.
+ 两 ID 调同一实现；默认 block_length=2、resamples=100、seed=0、$\tau=0.5$；移动块采样窗口，$W<3$ 或可比有限分位少于 3 为 NaN。
 
-For a 3-D ``(W, n_quantiles, F)`` input: fraction of bootstrap resamples
-(across the W windows) whose quantile-rank order (Spearman of the
-profile) reproduces the overall mean profile's rank order.  ``1`` = the
-shape's ordering is reproduced in every resample (high confidence),
-~0.5 = noisy.  Cost is CHEAP (W is small).  Deterministic via
-``random_seed``.  NaN for single-profile input.
+### 函数层默认参数
 
-### 精确计算公式（实际实现）
+| 参数 | 默认值 |
+|---|---|
+| `block_length` | `2` |
+| `resamples` | `100` |
+| `random_seed` | `0` |
+| `agreement_threshold` | `0.5` |
 
-```python
-def compute_shape_bootstrap_confidence(qr: np.ndarray, block_length: int = 2,
-                                      resamples: int = 100, random_seed: int = 0,
-                                      agreement_threshold: float = .5) -> np.ndarray:
-    """Descriptive moving-block bootstrap rank-agreement frequency, not U probability.
-
-    For a 3-D ``(W, n_quantiles, F)`` input: fraction of bootstrap resamples
-    (across the W windows) whose quantile-rank order (Spearman of the
-    profile) reproduces the overall mean profile's rank order.  ``1`` = the
-    shape's ordering is reproduced in every resample (high confidence),
-    ~0.5 = noisy.  Cost is CHEAP (W is small).  Deterministic via
-    ``random_seed``.  NaN for single-profile input.
-    """
-    m = np.asarray(qr, dtype=np.float64)
-    windows, multi = _windows_or_single(m)
-    nw = windows.shape[0]
-    if isinstance(block_length, bool) or not isinstance(block_length, (int, np.integer)) or block_length < 1:
-        raise ValueError("block_length must be a positive integer")
-    if isinstance(resamples, bool) or not isinstance(resamples, (int, np.integer)) or resamples < 1:
-        raise ValueError("resamples must be a positive integer")
-    if not np.isfinite(agreement_threshold) or not -1 <= agreement_threshold <= 1:
-        raise ValueError("agreement_threshold must be in [-1,1]")
-    rng = np.random.default_rng(random_seed)
-    if nw < 3:
-        return np.full(windows.shape[2], np.nan, dtype=np.float64)
-    if block_length > nw:
-        raise ValueError("block_length cannot exceed window count")
-    from scipy.stats import rankdata
-    # One request-level draw schedule for every factor: adding/reordering other
-    # factors cannot change a factor's evidence through RNG consumption.
-    starts = rng.integers(0, nw-block_length+1, size=(resamples,int(np.ceil(nw/block_length))))
-    bootstrap_indices = (starts[:,:,None]+np.arange(block_length)).reshape(resamples,-1)[:,:nw]
-    F = windows.shape[2]
-    out = np.full(F, np.nan)
-    mean_profile = _per_window_profile(windows)
-    for f in range(F):
-        mp = mean_profile[:, f]
-        if np.sum(np.isfinite(mp)) < 3:
-            continue
-        agreed = 0
-        drawn = 0
-        for idx in bootstrap_indices:
-            sample = windows[idx, :, f]
-            with np.errstate(invalid="ignore"):
-                sp = np.nanmean(sample, axis=0)
-            finite = np.isfinite(sp) & np.isfinite(mp)
-            if np.sum(finite) < 3:
-                continue
-            if np.ptp(sp[finite]) == 0.0 or np.ptp(mp[finite]) == 0.0:
-                continue
-            r = np.corrcoef(
-                rankdata(sp[finite],method="average"),
-                rankdata(mp[finite],method="average"),
-            )[0, 1]
-            drawn += 1
-            if np.isfinite(r) and r >= agreement_threshold:
-                agreed += 1
-        if drawn:
-            out[f] = agreed / drawn
-    return out
-```
+实现核对：[函数定义](../metrics/shape_evidence.py#L655)；`quant_evaluator.metrics.shape_evidence.compute_shape_bootstrap_confidence`。
 
 <a id="metric-shape_bootstrap_rank_agreement"></a>
 ## shape_bootstrap_rank_agreement — Block Bootstrap Rank Agreement
@@ -5196,84 +3669,24 @@ Descriptive moving-block resampling agreement with the observed mean rank profil
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_shape_bootstrap_confidence`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_shape_bootstrap_confidence(qr: 'np.ndarray', block_length: 'int' = 2, resamples: 'int' = 100, random_seed: 'int' = 0, agreement_threshold: 'float' = 0.5) -> 'np.ndarray'
-```
+$$
+\bar q=\operatorname{mean}_{w=1}^Wq_w,\quad \bar q^{(b)}=\operatorname{mean}_{w\in B_b}q_w,\quad M={\sum_{b\in B^*}\mathbf1[\rho_S(\bar q^{(b)},\bar q)\ge\tau]\over|B^*|}
+$$
 
-Descriptive moving-block bootstrap rank-agreement frequency, not U probability.
+ 两 ID 调同一实现；默认 block_length=2、resamples=100、seed=0、$\tau=0.5$；移动块采样窗口，$W<3$ 或可比有限分位少于 3 为 NaN。
 
-For a 3-D ``(W, n_quantiles, F)`` input: fraction of bootstrap resamples
-(across the W windows) whose quantile-rank order (Spearman of the
-profile) reproduces the overall mean profile's rank order.  ``1`` = the
-shape's ordering is reproduced in every resample (high confidence),
-~0.5 = noisy.  Cost is CHEAP (W is small).  Deterministic via
-``random_seed``.  NaN for single-profile input.
+### 函数层默认参数
 
-### 精确计算公式（实际实现）
+| 参数 | 默认值 |
+|---|---|
+| `block_length` | `2` |
+| `resamples` | `100` |
+| `random_seed` | `0` |
+| `agreement_threshold` | `0.5` |
 
-```python
-def compute_shape_bootstrap_confidence(qr: np.ndarray, block_length: int = 2,
-                                      resamples: int = 100, random_seed: int = 0,
-                                      agreement_threshold: float = .5) -> np.ndarray:
-    """Descriptive moving-block bootstrap rank-agreement frequency, not U probability.
-
-    For a 3-D ``(W, n_quantiles, F)`` input: fraction of bootstrap resamples
-    (across the W windows) whose quantile-rank order (Spearman of the
-    profile) reproduces the overall mean profile's rank order.  ``1`` = the
-    shape's ordering is reproduced in every resample (high confidence),
-    ~0.5 = noisy.  Cost is CHEAP (W is small).  Deterministic via
-    ``random_seed``.  NaN for single-profile input.
-    """
-    m = np.asarray(qr, dtype=np.float64)
-    windows, multi = _windows_or_single(m)
-    nw = windows.shape[0]
-    if isinstance(block_length, bool) or not isinstance(block_length, (int, np.integer)) or block_length < 1:
-        raise ValueError("block_length must be a positive integer")
-    if isinstance(resamples, bool) or not isinstance(resamples, (int, np.integer)) or resamples < 1:
-        raise ValueError("resamples must be a positive integer")
-    if not np.isfinite(agreement_threshold) or not -1 <= agreement_threshold <= 1:
-        raise ValueError("agreement_threshold must be in [-1,1]")
-    rng = np.random.default_rng(random_seed)
-    if nw < 3:
-        return np.full(windows.shape[2], np.nan, dtype=np.float64)
-    if block_length > nw:
-        raise ValueError("block_length cannot exceed window count")
-    from scipy.stats import rankdata
-    # One request-level draw schedule for every factor: adding/reordering other
-    # factors cannot change a factor's evidence through RNG consumption.
-    starts = rng.integers(0, nw-block_length+1, size=(resamples,int(np.ceil(nw/block_length))))
-    bootstrap_indices = (starts[:,:,None]+np.arange(block_length)).reshape(resamples,-1)[:,:nw]
-    F = windows.shape[2]
-    out = np.full(F, np.nan)
-    mean_profile = _per_window_profile(windows)
-    for f in range(F):
-        mp = mean_profile[:, f]
-        if np.sum(np.isfinite(mp)) < 3:
-            continue
-        agreed = 0
-        drawn = 0
-        for idx in bootstrap_indices:
-            sample = windows[idx, :, f]
-            with np.errstate(invalid="ignore"):
-                sp = np.nanmean(sample, axis=0)
-            finite = np.isfinite(sp) & np.isfinite(mp)
-            if np.sum(finite) < 3:
-                continue
-            if np.ptp(sp[finite]) == 0.0 or np.ptp(mp[finite]) == 0.0:
-                continue
-            r = np.corrcoef(
-                rankdata(sp[finite],method="average"),
-                rankdata(mp[finite],method="average"),
-            )[0, 1]
-            drawn += 1
-            if np.isfinite(r) and r >= agreement_threshold:
-                agreed += 1
-        if drawn:
-            out[f] = agreed / drawn
-    return out
-```
+实现核对：[函数定义](../metrics/shape_evidence.py#L655)；`quant_evaluator.metrics.shape_evidence.compute_shape_bootstrap_confidence`。
 
 <a id="metric-shape_regime_stability"></a>
 ## shape_regime_stability — Shape Regime Stability
@@ -5287,74 +3700,16 @@ Regime version of shape stability: inverse-Fisher correlation of CONSECUTIVE win
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_shape_regime_stability`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_shape_regime_stability(qr: 'np.ndarray') -> 'np.ndarray'
-```
+$$
+r_w=\operatorname{corr}(q_w,q_{w+1}),\qquad M=\tanh\left({1\over K}\sum_w\operatorname{arctanh}(r_w)\right)
+$$
 
-Shape stability across windows, aggregated within/against the mean, (F,).
+ 实际比较连续窗口的 Pearson profile 相关；至少 3 个窗口、每对至少 3 个共同有限分位；单 profile/证据不足返回 NaN。
 
-## This function serves a separate metric id from "shape_stability"
-## (id ``shape_regime_stability``, plan §13.4 "shape appears across
-## multiple windows").  Implementation note: this metric is currently
-## registered as ``UNSUPPORTED`` configuration in the presence of a
-## single profile (like ``shape_stability``).  The kernel contract below
-## IS the CPU reference for the multi-window case and matches
-## ``compute_shape_stability``'s value distribution so both resolve the
-## same "shape across windows" question with different cost/eyeballing.
 
-For a 3-D ``(W, n_quantiles, F)`` input: mean pairwise correlation of
-consecutive windows (regime version of shape stability) — measures the
-coherence of the profile as the regime rolls, damping a single-common
-shape that is stable overall but regime-uncorrelated.  NaN for a
-single-profile input.
-
-### 精确计算公式（实际实现）
-
-```python
-def compute_shape_regime_stability(qr: np.ndarray) -> np.ndarray:
-    """Shape stability across windows, aggregated within/against the mean, (F,).
-
-    ## This function serves a separate metric id from "shape_stability"
-    ## (id ``shape_regime_stability``, plan §13.4 "shape appears across
-    ## multiple windows").  Implementation note: this metric is currently
-    ## registered as ``UNSUPPORTED`` configuration in the presence of a
-    ## single profile (like ``shape_stability``).  The kernel contract below
-    ## IS the CPU reference for the multi-window case and matches
-    ## ``compute_shape_stability``'s value distribution so both resolve the
-    ## same "shape across windows" question with different cost/eyeballing.
-
-    For a 3-D ``(W, n_quantiles, F)`` input: mean pairwise correlation of
-    consecutive windows (regime version of shape stability) — measures the
-    coherence of the profile as the regime rolls, damping a single-common
-    shape that is stable overall but regime-uncorrelated.  NaN for a
-    single-profile input.
-    """
-    m = np.asarray(qr, dtype=np.float64)
-    windows, multi = _windows_or_single(m)
-    nw = windows.shape[0]
-    if nw < 3:
-        return np.full(windows.shape[2], np.nan, dtype=np.float64)
-    F = windows.shape[2]
-    out = np.full(F, np.nan)
-    for f in range(F):
-        corrs = []
-        for w in range(nw - 1):
-            a = windows[w, :, f]
-            b = windows[w + 1, :, f]
-            finite = np.isfinite(a) & np.isfinite(b)
-            if np.sum(finite) < 3:
-                continue
-            if np.ptp(a[finite]) == 0.0 or np.ptp(b[finite]) == 0.0:
-                continue
-            r = np.corrcoef(a[finite], b[finite])[0, 1]
-            if np.isfinite(r):
-                corrs.append(r)
-        if corrs:
-            out[f] = float(np.tanh(np.mean(np.arctanh(np.clip(corrs, -1 + 1e-9, 1 - 1e-9)))))
-    return out
-```
+实现核对：[函数定义](../metrics/shape_evidence.py#L612)；`quant_evaluator.metrics.shape_evidence.compute_shape_regime_stability`。
 
 <a id="metric-shape_stability"></a>
 ## shape_stability — Shape Stability
@@ -5368,59 +3723,16 @@ Inverse-Fisher aggregated window-vs-leave-one-out correlation of the quantile pr
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_shape_stability`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_shape_stability(qr: 'np.ndarray') -> 'np.ndarray'
-```
+$$
+r_w=\operatorname{corr}(q_w,\operatorname{mean}_{u\ne w}q_u),\qquad M=\tanh\left({1\over K}\sum_{w\in K}\operatorname{arctanh}(r_w)\right)
+$$
 
-Quantile-shape stability across windows per factor, (F,).
+ 需要至少 2 个窗口；每次至少 3 个共同有限分位且两 profile 非常数；单 profile 明确返回 NaN。
 
-For a 3-D ``(W, n_quantiles, F)`` input: mean Fisher-z-corrected
-correlation of each window's profile against the leave-one-window-out
-mean profile, inverse transformed to correlation units. ``1`` = stable,
-low = shape churns.  For a 2-D single profile input this returns NaN
-with an honest ``unsupported`` (single-profile stability is undefined —
-there is no second observation), never 0 or 1.
 
-### 精确计算公式（实际实现）
-
-```python
-def compute_shape_stability(qr: np.ndarray) -> np.ndarray:
-    """Quantile-shape stability across windows per factor, (F,).
-
-    For a 3-D ``(W, n_quantiles, F)`` input: mean Fisher-z-corrected
-    correlation of each window's profile against the leave-one-window-out
-    mean profile, inverse transformed to correlation units. ``1`` = stable,
-    low = shape churns.  For a 2-D single profile input this returns NaN
-    with an honest ``unsupported`` (single-profile stability is undefined —
-    there is no second observation), never 0 or 1.
-    """
-    m = np.asarray(qr, dtype=np.float64)
-    windows, multi = _windows_or_single(m)
-    nw = windows.shape[0]
-    if nw < 2:
-        # Single profile: stability is a missing-evidence scalar.
-        return np.full(windows.shape[2], np.nan, dtype=np.float64)
-    F = windows.shape[2]
-    out = np.full(F, np.nan)
-    for f in range(F):
-        corrs = []
-        for w in range(nw):
-            mp = _per_window_profile(np.delete(windows, w, axis=0))[:, f]
-            wp = windows[w, :, f]
-            finite = np.isfinite(wp) & np.isfinite(mp)
-            if np.sum(finite) < 3:
-                continue
-            if np.ptp(wp[finite]) == 0.0 or np.ptp(mp[finite]) == 0.0:
-                continue
-            r = np.corrcoef(wp[finite], mp[finite])[0, 1]
-            if np.isfinite(r):
-                corrs.append(r)
-        if corrs:
-            out[f] = float(np.tanh(np.mean(np.arctanh(np.clip(corrs, -1 + 1e-9, 1 - 1e-9)))))
-    return out
-```
+实现核对：[函数定义](../metrics/shape_evidence.py#L576)；`quant_evaluator.metrics.shape_evidence.compute_shape_stability`。
 
 <a id="metric-sharpe_ratio"></a>
 ## sharpe_ratio — sharpe_ratio
@@ -5434,81 +3746,23 @@ Annualized Sharpe ratio of a return series per factor: mean(excess return) / std
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.portfolio_stats.compute_sharpe_ratio`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.portfolio_stats.compute_sharpe_ratio(returns: numpy.ndarray, risk_free_rate: float = 0.0, periods_per_year: int = 252, min_periods: int = 20) -> numpy.ndarray
-```
+$$
+x_t=r_t-r_f/A,\qquad M=\sqrt A\,{\bar x\over s_x}
+$$
 
-Compute annualized Sharpe ratio.
+ 默认 $r_f=0$、$A=252$、min_periods=20；$s_x$ 为 ddof=1，非有限收益剔除，$s_x\le10^{-10}$ 为 NaN。
 
-Args:
-    returns: Return series (T,) or (T, F)
-    risk_free_rate: Annual risk-free rate (default 0.0)
-    periods_per_year: Number of periods per year (252 for daily, 12 for monthly)
-    min_periods: Minimum periods required
+### 函数层默认参数
 
-Returns:
-    Sharpe ratio, scalar or shape (F,)
+| 参数 | 默认值 |
+|---|---|
+| `risk_free_rate` | `0.0` |
+| `periods_per_year` | `252` |
+| `min_periods` | `20` |
 
-### 精确计算公式（实际实现）
-
-```python
-def compute_sharpe_ratio(
-    returns: np.ndarray,
-    risk_free_rate: float = 0.0,
-    periods_per_year: int = 252,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """
-    Compute annualized Sharpe ratio.
-
-    Args:
-        returns: Return series (T,) or (T, F)
-        risk_free_rate: Annual risk-free rate (default 0.0)
-        periods_per_year: Number of periods per year (252 for daily, 12 for monthly)
-        min_periods: Minimum periods required
-
-    Returns:
-        Sharpe ratio, scalar or shape (F,)
-    """
-    if returns.ndim == 1:
-        returns = returns[:, np.newaxis]
-        squeeze = True
-    else:
-        squeeze = False
-
-    T, F = returns.shape
-
-    if T == 0:
-        return float("nan") if squeeze else np.full(F, np.nan, dtype=np.float64)
-    sharpe = np.full(F, np.nan)
-
-    for f in range(F):
-        ret_f = returns[:, f]
-        valid = np.isfinite(ret_f)
-        n_valid = np.sum(valid)
-
-        if n_valid < min_periods:
-            continue
-
-        ret_valid = ret_f[valid]
-
-        # Compute excess returns
-        rf_per_period = risk_free_rate / periods_per_year
-        excess_ret = ret_valid - rf_per_period
-
-        mean_excess = np.mean(excess_ret)
-        std_excess = np.std(excess_ret, ddof=1)
-
-        if not np.isfinite(std_excess) or std_excess <= 1e-10:
-            continue
-
-        # Annualize
-        sharpe[f] = mean_excess / std_excess * np.sqrt(periods_per_year)
-
-    return sharpe[0] if squeeze else sharpe
-```
+实现核对：[函数定义](../metrics/portfolio_stats.py#L334)；`quant_evaluator.metrics.portfolio_stats.compute_sharpe_ratio`。
 
 <a id="metric-sidak_correction"></a>
 ## sidak_correction — Sidak Correction
@@ -5522,87 +3776,21 @@ Sidak multiple-testing correction: adjusted p = 1 - (1 - p)^n. Assumes independe
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.multiple_testing.sidak_correction`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.multiple_testing.sidak_correction(p_values: numpy.ndarray, alpha: float = 0.05) -> Tuple[numpy.ndarray, numpy.ndarray]
-```
+$$
+m=\#\{p_i\ finite\},\quad \alpha_S=1-(1-\alpha)^{1/m},\quad p_i'=\min\{1,1-(1-p_i)^m\},\quad reject_i=\mathbf1[p_i\le\alpha_S]
+$$
 
-Apply Šidák correction for multiple testing.
+ 默认 alpha=0.05；非有限 p 保持 NaN 且 reject=False，有限 p 必须在 [0,1]。
 
-Assumes independence, slightly less conservative than Bonferroni.
+### 函数层默认参数
 
-Args:
-    p_values: Array of p-values, any shape. Non-finite entries are
-        treated as missing tests (see module docstring); finite
-        entries must lie in [0, 1].
-    alpha: Family-wise error rate, strictly inside (0, 1)
+| 参数 | 默认值 |
+|---|---|
+| `alpha` | `0.05` |
 
-Returns:
-    (adjusted_p_values, reject_mask)
-    adjusted_p_values: Šidák-adjusted p-values
-    reject_mask: Boolean mask where null hypothesis is rejected
-
-Raises:
-    ValueError: If ``p_values`` is empty, contains finite values
-        outside [0, 1], or ``alpha`` is not strictly inside (0, 1)
-
-### 精确计算公式（实际实现）
-
-```python
-def sidak_correction(
-    p_values: np.ndarray,
-    alpha: float = 0.05,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Apply Šidák correction for multiple testing.
-
-    Assumes independence, slightly less conservative than Bonferroni.
-
-    Args:
-        p_values: Array of p-values, any shape. Non-finite entries are
-            treated as missing tests (see module docstring); finite
-            entries must lie in [0, 1].
-        alpha: Family-wise error rate, strictly inside (0, 1)
-
-    Returns:
-        (adjusted_p_values, reject_mask)
-        adjusted_p_values: Šidák-adjusted p-values
-        reject_mask: Boolean mask where null hypothesis is rejected
-
-    Raises:
-        ValueError: If ``p_values`` is empty, contains finite values
-            outside [0, 1], or ``alpha`` is not strictly inside (0, 1)
-    """
-    alpha = _validate_alpha(alpha)
-    p_values = _validate_p_values(p_values)
-
-    # Flatten for processing
-    original_shape = p_values.shape
-    p_flat = p_values.ravel()
-
-    # Count valid p-values
-    valid_mask = np.isfinite(p_flat)
-    n_tests = np.sum(valid_mask)
-
-    if n_tests == 0:
-        return np.full_like(p_values, np.nan), np.zeros_like(p_values, dtype=bool)
-
-    # Adjusted alpha for Šidák
-    alpha_sidak = -np.expm1(np.log1p(-alpha) / n_tests)
-
-    # Adjust p-values: 1 - (1 - p)^m
-    adjusted = np.full_like(p_flat, np.nan)
-    with np.errstate(divide="ignore"):
-        adjusted[valid_mask] = -np.expm1(n_tests * np.log1p(-p_flat[valid_mask]))
-    adjusted[valid_mask] = np.minimum(adjusted[valid_mask], 1.0)
-
-    # Rejection mask
-    reject = np.zeros_like(p_flat, dtype=bool)
-    reject[valid_mask] = p_flat[valid_mask] <= alpha_sidak
-
-    return adjusted.reshape(original_shape), reject.reshape(original_shape)
-```
+实现核对：[函数定义](../metrics/multiple_testing.py#L278)；`quant_evaluator.metrics.multiple_testing.sidak_correction`。
 
 <a id="metric-size_exposure"></a>
 ## size_exposure — Size Exposure
@@ -5616,21 +3804,23 @@ Signed mean size-style exposure of the factor (typed per-style field). NaN when 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.exposure_evidence.compute_size_exposure`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.exposure_evidence.compute_size_exposure(panel: 'FactorLoadingSeries', *, factor_values=None, min_obs=10, weights=None) -> 'float'
-```
+$$
+z_{t,size}=\beta_{t,size}{sd_w(X_{t,size})\over sd_w(f_t)},\qquad M={1\over |T^*|}\sum_{t\in T^*}z_{t,size}
+$$
 
-Signed mean size-style exposure of the factor (one typed field).
+ 实际先逐日以截距和全部 style 暴露对因子做加权最小二乘，再标准化 size 系数，最后取其有限时间均值；不是证券暴露的加权平均，也不是 raw OLS 系数。默认 min_obs=10、weights=None；已有 FactorLoadingSeries 已绑定因子和权重，缺少 size 字段返回 NaN。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_size_exposure(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
-    """Signed mean size-style exposure of the factor (one typed field)."""
-    return _select_style(panel, "size",factor_values=factor_values,min_obs=min_obs,weights=weights)
-```
+| 参数 | 默认值 |
+|---|---|
+| `factor_values` | `None` |
+| `min_obs` | `10` |
+| `weights` | `None` |
+
+实现核对：[函数定义](../metrics/exposure_evidence.py#L622)；`quant_evaluator.metrics.exposure_evidence.compute_size_exposure`。
 
 <a id="metric-skewness"></a>
 ## skewness — skewness
@@ -5643,6 +3833,15 @@ Skewness of the return distribution
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.distribution.compute_skewness`。
+
+### 数学公式与计算口径
+
+$$
+g_1={1\over n}\sum((x-\bar x)/\sigma_0)^3,\qquad M={\sqrt{n(n-1)}\over n-2}g_1
+$$
+
+ 实现为 scipy.stats.skew(nan_policy='omit', bias=False)，默认 axis=0、min_obs=10；注册项无 compute_fn，只能使用该上游 distribution 制品。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -5658,110 +3857,26 @@ Annualized Sortino ratio of a return series per factor: mean(excess return) / do
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.portfolio_stats.compute_sortino_ratio`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.portfolio_stats.compute_sortino_ratio(returns: numpy.ndarray, risk_free_rate: float = 0.0, periods_per_year: int = 252, min_periods: int = 20, downside_denominator: str = 'negative', mar: float | None = None, annualization: str = 'sqrt_frequency') -> numpy.ndarray
-```
+$$
+x_t=r_t-h,\quad d=\sqrt{{\sum_{x_t<0}x_t^2\over D}},\quad M={\bar x\over d}\times\begin{cases}\sqrt A,&annualization='sqrt_frequency'\\1,&'none'\end{cases}
+$$
 
-Compute Sortino with explicit target, downside denominator and annualization.
+ 默认 $A=252$、risk_free_rate=0、mar=None、min_periods=20、downside_denominator='negative'，故 $h=r_f/A$、$D$ 为负 excess 个数；若 denominator='all' 则 $D=n$。无下行或 $d\le10^{-12}$ 为 NaN。
 
-``mar`` is a periodic minimum acceptable return; ``risk_free_rate`` is
-annual and converted arithmetically when MAR is absent. ``negative``
-preserves the historical conditional RMS; ``all`` uses full-sample
-semideviation. No observed downside always returns NaN, never a large
-finite substitute. ``none`` returns periodic rather than annualized units.
+### 函数层默认参数
 
-Args:
-    returns: Return series (T,) or (T, F)
-    risk_free_rate: Annual risk-free rate
-    periods_per_year: Number of periods per year
-    min_periods: Minimum periods required
+| 参数 | 默认值 |
+|---|---|
+| `risk_free_rate` | `0.0` |
+| `periods_per_year` | `252` |
+| `min_periods` | `20` |
+| `downside_denominator` | `'negative'` |
+| `mar` | `None` |
+| `annualization` | `'sqrt_frequency'` |
 
-Returns:
-    Sortino ratio, scalar or shape (F,)
-
-### 精确计算公式（实际实现）
-
-```python
-def compute_sortino_ratio(
-    returns: np.ndarray,
-    risk_free_rate: float = 0.0,
-    periods_per_year: int = 252,
-    min_periods: int = 20,
-    downside_denominator: str = "negative",
-    mar: float | None = None,
-    annualization: str = "sqrt_frequency",
-) -> np.ndarray:
-    """
-    Compute Sortino with explicit target, downside denominator and annualization.
-
-    ``mar`` is a periodic minimum acceptable return; ``risk_free_rate`` is
-    annual and converted arithmetically when MAR is absent. ``negative``
-    preserves the historical conditional RMS; ``all`` uses full-sample
-    semideviation. No observed downside always returns NaN, never a large
-    finite substitute. ``none`` returns periodic rather than annualized units.
-
-    Args:
-        returns: Return series (T,) or (T, F)
-        risk_free_rate: Annual risk-free rate
-        periods_per_year: Number of periods per year
-        min_periods: Minimum periods required
-
-    Returns:
-        Sortino ratio, scalar or shape (F,)
-    """
-    if downside_denominator not in {"negative", "all"}:
-        raise ValueError("downside_denominator must be negative or all")
-    if annualization not in {"sqrt_frequency", "none"}:
-        raise ValueError("annualization must be sqrt_frequency or none")
-    if not np.isfinite(periods_per_year) or periods_per_year <= 0:
-        raise ValueError("periods_per_year must be positive finite")
-    if not np.isfinite(risk_free_rate) or (mar is not None and not np.isfinite(mar)):
-        raise ValueError("target return must be finite")
-    if mar is not None and risk_free_rate != 0:
-        raise ValueError("supply periodic mar or annual risk_free_rate, not both")
-    if returns.ndim == 1:
-        returns = returns[:, np.newaxis]
-        squeeze = True
-    else:
-        squeeze = False
-
-    T, F = returns.shape
-    sortino = np.full(F, np.nan)
-
-    rf_per_period = risk_free_rate / periods_per_year if mar is None else mar
-
-    for f in range(F):
-        ret_f = returns[:, f]
-        valid = np.isfinite(ret_f)
-        n_valid = np.sum(valid)
-
-        if n_valid < min_periods:
-            continue
-
-        ret_valid = ret_f[valid]
-        excess_ret = ret_valid - rf_per_period
-
-        mean_excess = np.mean(excess_ret)
-
-        # Downside deviation (only negative excess returns)
-        downside_ret = excess_ret[excess_ret < 0]
-        if len(downside_ret) == 0:
-            continue
-
-        denominator = len(downside_ret) if downside_denominator == "negative" else n_valid
-        downside_std = np.sqrt(np.sum(downside_ret ** 2) / denominator)
-
-        if not np.isfinite(downside_std) or downside_std <= 1e-12:
-            continue
-
-        # Annualize
-        scale = np.sqrt(periods_per_year) if annualization == "sqrt_frequency" else 1.0
-        sortino[f] = mean_excess / downside_std * scale
-
-    return sortino[0] if squeeze else sortino
-```
+实现核对：[函数定义](../metrics/portfolio_stats.py#L566)；`quant_evaluator.metrics.portfolio_stats.compute_sortino_ratio`。
 
 <a id="metric-spearman_ic"></a>
 ## spearman_ic — spearman_ic
@@ -5774,6 +3889,15 @@ Spearman rank correlation between factor values and forward returns
 - 缺失政策：`drop_pair`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.ic.compute_daily_ic`。
+
+### 数学公式与计算口径
+
+$$
+IC_t=\operatorname{corr}(\operatorname{rank}_{avg}f_{t,i},\operatorname{rank}_{avg}y_{t,i})
+$$
+
+ 注册项无 compute_fn，只声明 daily-IC 上游实现；逐日删除非有限配对并使用平均秩，不能独立执行或擅自再做时间均值。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -5789,36 +3913,16 @@ Mean fraction of assets whose value is unchanged from the prior day, per factor.
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.data_quality.compute_staleness`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.data_quality.compute_staleness(factor_batch: 'FactorBatch') -> 'np.ndarray'
-```
+$$
+M={\sum_{t=1}^{T-1}\sum_i\mathbf1[f_{t,i}=f_{t-1,i},\ f_{t,i},f_{t-1,i}\ finite]\over\sum_{t=1}^{T-1}\sum_i\mathbf1[f_{t,i},f_{t-1,i}\ finite]}
+$$
 
-Mean fraction of assets whose value is unchanged from the prior day, (F,).
+ 按因子对所有相邻日/资产共同有限配对汇总；$T<2$ 返回 NaN，共同有限数为 0 时实现分母钳到 1、结果为 0。
 
-A high staleness ratio indicates the factor is slow-moving / sticky.
 
-### 精确计算公式（实际实现）
-
-```python
-def compute_staleness(factor_batch: FactorBatch) -> np.ndarray:
-    """Mean fraction of assets whose value is unchanged from the prior day, (F,).
-
-    A high staleness ratio indicates the factor is slow-moving / sticky.
-    """
-    values = _factor_values(factor_batch)
-    T, N, F = values.shape
-    if T < 2:
-        return np.full(F, np.nan)
-    prev = values[:-1, :, :]
-    curr = values[1:, :, :]
-    both = np.isfinite(prev) & np.isfinite(curr)
-    unchanged = (prev == curr) & both
-    n = np.sum(both, axis=(0, 1))
-    same = np.sum(unchanged, axis=(0, 1))
-    return same / np.maximum(n, 1)
-```
+实现核对：[函数定义](../metrics/data_quality.py#L68)；`quant_evaluator.metrics.data_quality.compute_staleness`。
 
 <a id="metric-subsample_stability"></a>
 ## subsample_stability — Subsample IC Stability
@@ -5832,34 +3936,24 @@ Standard deviation of mean IC across bootstrap subsamples
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`subsample_stability`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_subsample_stability_value(ic_series: numpy.ndarray, min_periods: int = 40, num_subsamples: int = 100, subsample_fraction: float = 0.8, random_seed: int = 0) -> numpy.ndarray
-```
+$$
+m=\max(1,\lfloor0.8T\rfloor),\quad S_b\sim\operatorname{SampleWithoutReplacement}(\{1,\ldots,T\},m),\quad \bar I_b=\operatorname{nanmean}_{t\in S_b}IC_t,\quad M=\sqrt{{\sum_{b\in B^*}(\bar I_b-\bar{\bar I})^2\over |B^*|-1}}
+$$
 
-Return the std of mean IC across bootstrap subsamples per factor.
+ 实际返回 100 个无放回随机子样本均值之间的样本标准差（ddof=1），非 $1-std$、也不是有放回 bootstrap；默认 num_subsamples=100、subsample_fraction=0.8、random_seed=0。外层先要求原 IC 序列有限值数 min_periods=40；子样本均值忽略 NaN，最终标准差也忽略非有限子样本均值。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_subsample_stability_value(
-    ic_series: np.ndarray,
-    min_periods: int = 40,
-    num_subsamples: int = 100,
-    subsample_fraction: float = 0.8,
-    random_seed: int = 0,
-) -> np.ndarray:
-    """Return the std of mean IC across bootstrap subsamples per factor."""
-    valid_periods = np.sum(np.isfinite(ic_series), axis=0)
-    stability = compute_subsample_ic_std(
-        ic_series,
-        num_subsamples=num_subsamples,
-        subsample_fraction=subsample_fraction,
-        random_seed=random_seed,
-    )
-    return np.where(valid_periods >= min_periods, stability, np.nan)
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `40` |
+| `num_subsamples` | `100` |
+| `subsample_fraction` | `0.8` |
+| `random_seed` | `0` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L201)；`quant_evaluator.metrics.registry_adapters.compute_subsample_stability_value`。
 
 <a id="metric-tail_vs_middle_contrast"></a>
 ## tail_vs_middle_contrast — Tail vs Middle Contrast
@@ -5873,56 +3967,20 @@ Mean |tail returns - middle return| per factor (tails = outer quartiles of the q
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_tail_vs_middle_contrast`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_tail_vs_middle_contrast(qr: 'np.ndarray') -> 'np.ndarray'
-```
+令桶均值为 $g_0,\ldots,g_{Q-1}$，采用零基索引。设 $m=\lfloor Q/2\rfloor$，$\ell=\max(1,\min(m-1,\operatorname{round}(Q/4)))$，$h=\min(Q-1,\max(m+1,\operatorname{round}(3Q/4)))$，尾桶集合 $A=\{0,\ldots,\ell-1,h,\ldots,Q-1\}$。
 
-Tail-versus-middle contrast per factor, (F,).
 
-``mean(|tail returns - middle return|)`` where the middle return is the
-median quantile's return and tails are the top and bottom quartiles of
-the quantile range.  A U-shaped profile has HIGH contrast (tails away
-from the middle); a flat profile has LOW contrast.  Always >= 0; NaN
-when the middle/tail quantile returns are not all finite.
+$$
+C=\frac1{|A|}\sum_{q\in A}|g_q-g_m|
+$$
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_tail_vs_middle_contrast(qr: np.ndarray) -> np.ndarray:
-    """Tail-versus-middle contrast per factor, (F,).
+至少6桶，中央桶及所有尾桶必须有限，否则NaN。round 使用最接近整数、半整数到偶数规则；当边界不在中央两侧时改为 $\ell=m-1,h=m+1$。结果非负，U形与倒U形都可能高，不能据此判断方向。
 
-    ``mean(|tail returns - middle return|)`` where the middle return is the
-    median quantile's return and tails are the top and bottom quartiles of
-    the quantile range.  A U-shaped profile has HIGH contrast (tails away
-    from the middle); a flat profile has LOW contrast.  Always >= 0; NaN
-    when the middle/tail quantile returns are not all finite.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 6:
-        return out
-    mid = nq // 2
-    # Tails: quantile indices strictly BELOW lo and strictly ABOVE hi,
-    # defined so that a U (or inverted-U) puts its extremal mass at the
-    # edges.  ``mid`` is the interior reference point (median quantile).
-    lo = max(1, min(mid - 1, int(round(nq * 0.25))))
-    hi = min(nq - 1, max(mid + 1, int(round(nq * 0.75))))
-    # Guarantee non-empty tails on both sides of the middle.
-    if lo >= mid or hi <= mid:
-        lo = mid - 1
-        hi = mid + 1
-    for f in range(F):
-        col = m[:, f]
-        if not (np.isfinite(col[mid]) and np.all(np.isfinite(col[:lo]))
-                and np.all(np.isfinite(col[hi:]))):
-            continue
-        tail_vals = np.concatenate([col[:lo], col[hi:]])
-        out[f] = float(np.mean(np.abs(tail_vals - col[mid])))
-    return out
-```
+
+实现核对：[函数定义](../metrics/shape_evidence.py#L457)；`quant_evaluator.metrics.shape_evidence.compute_tail_vs_middle_contrast`。
 
 <a id="metric-tie_ratio"></a>
 ## tie_ratio — Tie Ratio
@@ -5936,28 +3994,20 @@ Mean fraction of finite factor values that are tied with another value, per fact
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.data_quality.compute_tie_ratio`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.data_quality.compute_tie_ratio(factor_batch: 'FactorBatch') -> 'np.ndarray'
-```
+令 $n_t$ 为当日有限因子值数、$u_t$ 为其中不同值数，$D=\{t:n_t>0\}$。
 
-Mean fraction of finite factor values that are tied with another value, (F,).
 
-Computed as ``1 - distinct_level_ratio`` (the complement of the distinct
-level ratio).
+$$
+Tie=1-\frac1{|D|}\sum_{t\in D}\frac{u_t}{n_t}
+$$
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_tie_ratio(factor_batch: FactorBatch) -> np.ndarray:
-    """Mean fraction of finite factor values that are tied with another value, (F,).
+先应用因子 validity；全空日期跳过，全部日期为空返回NaN。这是“1−不同取值占比”，不是“所有属于重复组的资产占比”：例如 $(1,1,2)$ 得 $1/3$，而不是 $2/3$。
 
-    Computed as ``1 - distinct_level_ratio`` (the complement of the distinct
-    level ratio).
-    """
-    return 1.0 - compute_distinct_level_ratio(factor_batch)
-```
+
+实现核对：[函数定义](../metrics/data_quality.py#L143)；`quant_evaluator.metrics.data_quality.compute_tie_ratio`。
 
 <a id="metric-time_to_recovery"></a>
 ## time_to_recovery — Time to Recovery
@@ -5971,48 +4021,26 @@ Mean time (periods) from an underwater episode's trough back to a new wealth hig
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.underwater.compute_time_to_recovery`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.underwater.compute_time_to_recovery(returns: 'np.ndarray', min_periods: 'int' = 10, max_recovery_lookback: 'Optional[int]' = None) -> 'float'
-```
+对财富曲线识别回撤事件。设事件 $e$ 的谷底位置为 $b_e$、首次恢复原峰值的位置为 $r_e$，$E$ 仅包括已恢复事件。
 
-Mean trough-to-recovery intervals of completed events only.
 
-Censored age is available separately in drawdown_events; it never becomes
-a measured recovery. The optional limit is applied per completed event.
+$$
+TTR=\frac1{|E|}\sum_{e\in E}(r_e-b_e)
+$$
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_time_to_recovery(
-    returns: np.ndarray,
-    min_periods: int = 10,
-    max_recovery_lookback: Optional[int] = None,
-) -> float:
-    """Mean trough-to-recovery intervals of completed events only.
+单位为输入轴上的期数，**从谷底起算**，不是从峰值起算。默认至少10个有限收益；未知估值导致不可确定路径时NaN。未恢复事件不伪造恢复时间；无已恢复事件也为NaN。可选 max_recovery_lookback 按事件过滤超过上限的已恢复间隔。
 
-    Censored age is available separately in drawdown_events; it never becomes
-    a measured recovery. The optional limit is applied per completed event.
-    """
-    if max_recovery_lookback is not None and (
-        isinstance(max_recovery_lookback, bool)
-        or not isinstance(max_recovery_lookback, (int, np.integer))
-        or max_recovery_lookback < 1
-    ):
-        raise ValueError("max_recovery_lookback must be a positive integer")
-    events = _path_events(returns, min_periods)
-    if events is None:
-        return np.nan
-    recovered = [
-        e["recovery_idx"] - e["trough_idx"] for e in events
-        if not e["censored"] and (
-            max_recovery_lookback is None
-            or e["recovery_idx"] - e["trough_idx"] <= max_recovery_lookback
-        )
-    ]
-    return float(np.mean(recovered)) if recovered else np.nan
-```
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `10` |
+| `max_recovery_lookback` | `None` |
+
+实现核对：[函数定义](../metrics/underwater.py#L102)；`quant_evaluator.metrics.underwater.compute_time_to_recovery`。
 
 <a id="metric-top_quantile_cliff"></a>
 ## top_quantile_cliff — Top Quantile Cliff
@@ -6026,30 +4054,20 @@ Top-quantile cliff: ret[top] - ret[top-1], per factor. The jump in return from t
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.quantile_shape.compute_top_quantile_cliff`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.quantile_shape.compute_top_quantile_cliff(qr: 'np.ndarray') -> 'np.ndarray'
-```
+桶序由低因子到高因子，$g_q$ 为第 $q$ 桶的平均收益。
 
-Top-quantile cliff: ret[top] - ret[top-1], (F,).
 
-### 精确计算公式（实际实现）
+$$
+C_{\rm top}=g_Q-g_{Q-1}
+$$
 
-```python
-def compute_top_quantile_cliff(qr: np.ndarray) -> np.ndarray:
-    """Top-quantile cliff: ret[top] - ret[top-1], (F,)."""
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 2:
-        return out
-    for f in range(F):
-        col = m[:, f]
-        if np.isfinite(col[-1]) and np.isfinite(col[-2]):
-            out[f] = col[-1] - col[-2]
-    return out
-```
+
+至少2桶，最高两桶都有限，否则NaN。正值表示最高桶相对次高桶跳升。
+
+
+实现核对：[函数定义](../metrics/quantile_shape.py#L179)；`quant_evaluator.metrics.quantile_shape.compute_top_quantile_cliff`。
 
 <a id="metric-top_quantile_cliff_robust"></a>
 ## top_quantile_cliff_robust — Top Quantile Cliff (Robust)
@@ -6063,45 +4081,17 @@ ROBUST top cliff per factor: Q_K - mean(Q_(K-3)..Q_(K-1)) (plan §14.4 - contras
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_top_quantile_cliff_robust`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_top_quantile_cliff_robust(qr: 'np.ndarray') -> 'np.ndarray'
-```
+$$
+C_{\rm top,robust}=g_Q-\frac{g_{Q-1}+g_{Q-2}+g_{Q-3}}3
+$$
 
-Robust top cliff: ``ret[top] - mean(ret[K-3:K-1])`` per factor, (F,).
 
-Plan §14.4: single-bin cliffs are noisy; the robust variant contrasts
-the top bucket against the mean of the three DIFFERENT prior buckets
-(not ``Q_K - Q_(K-1)``).  Direction ``higher_is_better`` (big positive
-jump into the top bucket).  NaN when the top 4 quantile returns are not
-all finite.
+$g_q$ 为按因子升序排列的桶平均收益；至少4桶，最高四桶都有限。这里对照的是三个不同的先前桶，不包含最高桶；缺失则NaN。
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_top_quantile_cliff_robust(qr: np.ndarray) -> np.ndarray:
-    """Robust top cliff: ``ret[top] - mean(ret[K-3:K-1])`` per factor, (F,).
-
-    Plan §14.4: single-bin cliffs are noisy; the robust variant contrasts
-    the top bucket against the mean of the three DIFFERENT prior buckets
-    (not ``Q_K - Q_(K-1)``).  Direction ``higher_is_better`` (big positive
-    jump into the top bucket).  NaN when the top 4 quantile returns are not
-    all finite.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 4:
-        return out
-    for f in range(F):
-        col = m[:, f]
-        seg = col[-4:]
-        if not np.all(np.isfinite(seg)):
-            continue
-        out[f] = seg[-1] - float(np.mean(seg[:-1]))
-    return out
-```
+实现核对：[函数定义](../metrics/shape_evidence.py#L724)；`quant_evaluator.metrics.shape_evidence.compute_top_quantile_cliff_robust`。
 
 <a id="metric-top_tail_slope"></a>
 ## top_tail_slope — Top Tail Slope
@@ -6115,45 +4105,17 @@ Mean adjacent return difference over the TOP segment of the quantile profile as 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_top_tail_slope`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_top_tail_slope(qr: 'np.ndarray') -> 'np.ndarray'
-```
+$$
+S_{\rm top}=\frac{(g_Q-g_{Q-1})+(g_{Q-1}-g_{Q-2})}{2}=\frac{g_Q-g_{Q-2}}2
+$$
 
-Top-tail slope per factor, (F,).
 
-Mean adjacent return difference over the TOP segment of the curve as
-drawn (quantile ``K-1-k .. K-1``).  For a positively inclined factor
-this is POSITIVE (returns keep rising into the top bucket); for a
-factor with a top-tail cliff it is LARGE.  Direction metadata is on the
-registry spec (``neutral`` — the metric measures the profile's top
-segment, sign is informative, not good/bad).  NaN when the top 3
-quantile returns are not all finite.
+$g_q$ 为第 $q$ 桶收益。至少3桶，最高三桶全有限，否则NaN。单位为每跨一个桶的收益变化，不是对时间回归的斜率。
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_top_tail_slope(qr: np.ndarray) -> np.ndarray:
-    """Top-tail slope per factor, (F,).
-
-    Mean adjacent return difference over the TOP segment of the curve as
-    drawn (quantile ``K-1-k .. K-1``).  For a positively inclined factor
-    this is POSITIVE (returns keep rising into the top bucket); for a
-    factor with a top-tail cliff it is LARGE.  Direction metadata is on the
-    registry spec (``neutral`` — the metric measures the profile's top
-    segment, sign is informative, not good/bad).  NaN when the top 3
-    quantile returns are not all finite.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 3:
-        return out
-    for f in range(F):
-        out[f] = _top_tail_slope_value(m[:, f], n_adj=2)
-    return out
-```
+实现核对：[函数定义](../metrics/shape_evidence.py#L418)；`quant_evaluator.metrics.shape_evidence.compute_top_tail_slope`。
 
 <a id="metric-tracking_error"></a>
 ## tracking_error — Tracking Error
@@ -6167,31 +4129,26 @@ Benchmark/invested-capital evidence from an explicitly bound execution trajector
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.long_only.compute_tracking_error`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.long_only.compute_tracking_error(returns, periods_per_year: 'int' = 252, min_periods: 'int' = 2)
-```
+对已绑定的净主动收益 $a_t$（策略净收益减基准）：
 
-Annualized sample standard deviation of net active returns.
 
-### 精确计算公式（实际实现）
+$$
+TE=\sqrt{A}\sqrt{\frac{\sum_{t\in V}(a_t-\bar a)^2}{|V|-1}}
+$$
 
-```python
-def compute_tracking_error(returns, periods_per_year: int = 252, min_periods: int = 2):
-    """Annualized sample standard deviation of net active returns."""
-    if isinstance(min_periods, bool) or not isinstance(min_periods, int) or min_periods < 2:
-        raise ValueError("min_periods must be an integer >= 2")
-    if not np.isfinite(periods_per_year) or periods_per_year <= 0:
-        raise ValueError("periods_per_year must be finite and positive")
-    x, squeeze = _matrix(returns)
-    out = np.full(x.shape[1], np.nan)
-    for f in range(x.shape[1]):
-        v = x[np.isfinite(x[:, f]), f]
-        if len(v) >= min_periods:
-            out[f] = np.std(v, ddof=1) * np.sqrt(periods_per_year)
-    return out[0] if squeeze else out
-```
+
+$V$ 是有限收益集合，$A$ 默认252；默认至少2期。函数自身不再减一次基准，必须由输入轨迹保证主动收益口径。常数序列的TE为0；样本不足为NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `periods_per_year` | `252` |
+| `min_periods` | `2` |
+
+实现核对：[函数定义](../metrics/long_only.py#L17)；`quant_evaluator.metrics.long_only.compute_tracking_error`。
 
 <a id="metric-tradable_coverage"></a>
 ## tradable_coverage — Tradable Coverage
@@ -6205,39 +4162,25 @@ Fraction of days with at least ``min_assets`` jointly valid cells, per factor. A
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.data_quality.compute_tradable_coverage`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.data_quality.compute_tradable_coverage(factor_batch: 'FactorBatch', label_bundle: 'LabelBundle', min_assets: 'int' = 10) -> 'np.ndarray'
-```
+设 $v_{tif}=1$ 当且仅当应用 validity 后因子和标签共同有限，$T$ 为全部日期数。
 
-Fraction of days with at least ``min_assets`` jointly valid cells, (F,).
 
-A tradable day is one where the factor and label are both available for
-at least ``min_assets`` assets.
+$$
+C_f=\frac1T\sum_{t=1}^T\mathbf1\left(\sum_i v_{tif}\ge m\right),\qquad m=10
+$$
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_tradable_coverage(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    min_assets: int = 10,
-) -> np.ndarray:
-    """Fraction of days with at least ``min_assets`` jointly valid cells, (F,).
+这是达到最低有效配对数的“日期比例”，不是资产单元覆盖率，也不自动证明这些股票能真实成交。
 
-    A tradable day is one where the factor and label are both available for
-    at least ``min_assets`` assets.
-    """
-    values = _factor_values(factor_batch)
-    labels = _labels(label_bundle, factor_batch.num_assets)
-    T, N, F = values.shape
-    label_finite = np.isfinite(labels)
-    factor_finite = np.isfinite(values)
-    valid = factor_finite & label_finite[:, :, None]  # (T, N, F)
-    per_day = np.sum(valid, axis=1)  # (T, F)
-    return np.sum(per_day >= min_assets, axis=0) / T
-```
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_assets` | `10` |
+
+实现核对：[函数定义](../metrics/data_quality.py#L188)；`quant_evaluator.metrics.data_quality.compute_tradable_coverage`。
 
 <a id="metric-train_predictive_dimension"></a>
 ## train_predictive_dimension — Train Predictive Dimension
@@ -6251,19 +4194,17 @@ Train-side predictive dimension of the authorized train-vs-validation comparison
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.generalization_evidence.train_predictive_dimension`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.registry.metrics.<lambda>(v)
-```
+$$
+D_f^{\mathrm{train}}=A.\mathrm{train_predictive_dimension}_f
+$$
 
-此函数没有独立说明；精确定义见下方源公式。
 
-### 精确计算公式（实际实现）
+这里 $A$ 为训练—验证证据制品，$D$ 是显式绑定的预测维度（例如该分区的平均RankIC），并非“有效因子个数”。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
-```python
-compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
-```
+
+实现核对：[函数定义](../registry/metrics.py#L3917)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-train_validation_icir_delta"></a>
 ## train_validation_icir_delta — Train-Validation ICIR Delta
@@ -6277,19 +4218,17 @@ Absolute ICIR delta (validation - train) per factor (plan §13.6). Delta, never 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.registry.metrics.<lambda>(v)
-```
+$$
+\Delta_f=ICIR_{\mathrm{validation},f}-ICIR_{\mathrm{train},f}
+$$
 
-此函数没有独立说明；精确定义见下方源公式。
 
-### 精确计算公式（实际实现）
+这是验证减训练的**有符号差值**，不是取绝对值，也不是比率。任一侧非有限则NaN；接近零的训练值并不阻止计算差值。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
-```python
-compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
-```
+
+实现核对：[函数定义](../registry/metrics.py#L4014)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-train_validation_rankic_delta"></a>
 ## train_validation_rankic_delta — Train-Validation RankIC Delta
@@ -6303,19 +4242,17 @@ Absolute rank-IC delta (validation - train) per factor (plan §13.6). A DELTA, n
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.registry.metrics.<lambda>(v)
-```
+$$
+\Delta_f=\overline{RankIC}_{\mathrm{validation},f}-\overline{RankIC}_{\mathrm{train},f}
+$$
 
-此函数没有独立说明；精确定义见下方源公式。
 
-### 精确计算公式（实际实现）
+这是验证减训练的**有符号差值**，不是取绝对值，也不是比率。任一侧非有限则NaN；接近零的训练值并不阻止计算差值。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
-```python
-compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
-```
+
+实现核对：[函数定义](../registry/metrics.py#L3991)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-train_validation_shape_delta"></a>
 ## train_validation_shape_delta — Train-Validation Shape Delta
@@ -6329,19 +4266,17 @@ Absolute shape-evidence delta (validation - train) per factor (plan §13.6). Del
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.registry.metrics.<lambda>(v)
-```
+$$
+\Delta_f=Shape_{\mathrm{validation},f}-Shape_{\mathrm{train},f}
+$$
 
-此函数没有独立说明；精确定义见下方源公式。
 
-### 精确计算公式（实际实现）
+这是验证减训练的**有符号差值**，不是取绝对值，也不是比率。任一侧非有限则NaN；接近零的训练值并不阻止计算差值。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
-```python
-compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
-```
+
+实现核对：[函数定义](../registry/metrics.py#L4060)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-train_validation_sharpe_delta"></a>
 ## train_validation_sharpe_delta — Train-Validation Sharpe Delta
@@ -6355,19 +4290,17 @@ Absolute long/short Sharpe delta (validation - train) per factor (plan §13.6). 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.generalization_evidence.compute_generalization_deltas`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.registry.metrics.<lambda>(v)
-```
+$$
+\Delta_f=Sharpe_{\mathrm{validation},f}-Sharpe_{\mathrm{train},f}
+$$
 
-此函数没有独立说明；精确定义见下方源公式。
 
-### 精确计算公式（实际实现）
+这是验证减训练的**有符号差值**，不是取绝对值，也不是比率。任一侧非有限则NaN；接近零的训练值并不阻止计算差值。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
-```python
-compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
-```
+
+实现核对：[函数定义](../registry/metrics.py#L4037)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-turnover"></a>
 ## turnover — Portfolio Turnover
@@ -6381,71 +4314,25 @@ Average turnover rate for factor-based portfolios
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`turnover`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.registry_adapters.compute_turnover_value(factor_batch: quant_evaluator.contracts.factor_batch.FactorBatch, min_periods: int = 2) -> numpy.ndarray
-```
+当日至少有2个有效因子值时，先将有效值转为平均并列秩 $R_{ti}$；无信号资产的代理权重明确设0：
 
-Return mean cross-sectional turnover per factor.
 
-Ranks are used as proxy weights so the value is well defined for a raw
-factor batch without a portfolio construction step. Weights are
-average-tie ranks (``scipy.stats.rankdata(method="average")``)
-normalized to sum 1 per row, so the value is universe-size invariant
-and conforms to the canonical turnover definition in
-``metrics/turnover.py``.
+$$
+w_{ti}=\frac{R_{ti}}{\sum_{j\in V_t}R_{tj}}\ (i\in V_t),\quad w_{ti}=0\ (i\notin V_t),\qquad \tau_t=\frac12\sum_i|w_{ti}-w_{t-1,i}|,\qquad TO=\frac1{|D|}\sum_{t\in D}\tau_t
+$$
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_turnover_value(
-    factor_batch: FactorBatch,
-    min_periods: int = 2,
-) -> np.ndarray:
-    """Return mean cross-sectional turnover per factor.
+$D$ 是两日权重均已知的相邻转换集合。人数不足的日期整行未知，涉及该日的换手为NaN。默认 min_periods=2，因此至少1个有效相邻转换。它是排名代理权重的半L1换手，**不是 $(1-\rho_S)/2$，也不是真实成交额**。
 
-    Ranks are used as proxy weights so the value is well defined for a raw
-    factor batch without a portfolio construction step. Weights are
-    average-tie ranks (``scipy.stats.rankdata(method="average")``)
-    normalized to sum 1 per row, so the value is universe-size invariant
-    and conforms to the canonical turnover definition in
-    ``metrics/turnover.py``.
-    """
-    values = np.asarray(factor_batch.values, dtype=np.float64)
-    if values.ndim != 3:
-        raise ValueError("factor_batch.values must be (T, N, F)")
-    if factor_batch.validity is not None:
-        values = np.where(factor_batch.validity, values, np.nan)
-    n_factors = values.shape[2]
-    result = np.full(n_factors, np.nan, dtype=np.float64)
-    for f in range(n_factors):
-        series = values[:, :, f]
-        # Cross-sectional average-tie rank weights (scipy rankdata,
-        # method="average"), normalized to sum 1 over the finite assets of
-        # each row: universe-size invariant and consistent with the canonical
-        # turnover definition (see metrics/turnover.py module docstring).
-        # Eligible dates use explicit zero weight for unselected/missing
-        # signals; insufficient dates remain unknown rather than cash.
-        from scipy.stats import rankdata
+### 函数层默认参数
 
-        ranks = np.full_like(series, np.nan)
-        for t in range(series.shape[0]):
-            row = series[t]
-            finite = np.isfinite(row)
-            if finite.sum() < 2:
-                continue
-            ranks_f = rankdata(row[finite], method="average")
-            ranks[t, :] = 0.0
-            ranks[t, finite] = ranks_f / np.sum(ranks_f)
-        if series.shape[0] < 2:
-            continue
-        turnover_series = compute_turnover_series(ranks)
-        valid = turnover_series[np.isfinite(turnover_series)]
-        if valid.size >= min_periods - 1:
-            result[f] = float(np.mean(valid))
-    return result
-```
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `2` |
+
+实现核对：[函数定义](../metrics/registry_adapters.py#L135)；`quant_evaluator.metrics.registry_adapters.compute_turnover_value`。
 
 <a id="metric-turnover_adjusted_ic"></a>
 ## turnover_adjusted_ic — turnover_adjusted_ic
@@ -6458,6 +4345,16 @@ IC adjusted for turnover-induced transaction costs
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.turnover.compute_turnover_contribution`。
+
+### 数学公式与计算口径
+
+$$
+M=\mathrm{UNAVAILABLE}
+$$
+
+
+该注册ID没有直接 compute_fn，不能输出实测“换手调整IC”。implementation_id 指向的低层函数实际计算逐资产换手贡献，并未落实IC调整公式；不能猜成 $IC/TO$。必须由显式上游合同补足定义后另行接线。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -6473,57 +4370,22 @@ Mean realized per-period declared execution cost drag in basis points
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.turnover_cost.compute_turnover_cost`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.turnover_cost.compute_turnover_cost(returns: 'np.ndarray', min_periods: 'int' = 1) -> 'float | np.ndarray'
-```
+$$
+Cost_{\rm bp}=10^4\frac1{|V|}\sum_{t\in V}c_t
+$$
 
-Return mean realized portfolio cost drag in basis points.
 
-``returns`` is deliberately named for QE's portfolio-panel runtime binder,
-but its values must be the positive cost-rate magnitudes from the typed
-``cost_drag`` trajectory leg.  It is not portfolio PnL, gross-minus-net,
-or factor-rank turnover.  NaN denotes an unobserved period; infinities and
-negative observed costs are invalid rather than silently reinterpreted.
+$c_t$ 必须来自带类型的 cost_drag 成本轨迹，是非负成本率，不能传收益、毛净收益差或因子排名换手。NaN视为未观测，负数和无穷报错；默认至少1个观测。结果单位为基点。
 
-### 精确计算公式（实际实现）
+### 函数层默认参数
 
-```python
-def compute_turnover_cost(
-    returns: np.ndarray,
-    min_periods: int = 1,
-) -> float | np.ndarray:
-    """Return mean realized portfolio cost drag in basis points.
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `1` |
 
-    ``returns`` is deliberately named for QE's portfolio-panel runtime binder,
-    but its values must be the positive cost-rate magnitudes from the typed
-    ``cost_drag`` trajectory leg.  It is not portfolio PnL, gross-minus-net,
-    or factor-rank turnover.  NaN denotes an unobserved period; infinities and
-    negative observed costs are invalid rather than silently reinterpreted.
-    """
-    if isinstance(min_periods, bool) or not isinstance(min_periods, (int, np.integer)):
-        raise TypeError("min_periods must be a positive integer")
-    if min_periods < 1:
-        raise ValueError("min_periods must be at least 1")
-
-    values = np.asarray(returns, dtype=np.float64)
-    if values.ndim not in (1, 2):
-        raise ValueError("returns must have shape (T,) or (T, F)")
-    observed = ~np.isnan(values)
-    if np.any(np.isinf(values)):
-        raise ValueError("cost_drag contains infinite values")
-    if np.any(values[observed] < 0.0):
-        raise ValueError("cost_drag must contain non-negative cost-rate magnitudes")
-
-    matrix = values[:, None] if values.ndim == 1 else values
-    counts = np.sum(~np.isnan(matrix), axis=0)
-    totals = np.nansum(matrix, axis=0)
-    result = np.full(matrix.shape[1], np.nan, dtype=np.float64)
-    enough = counts >= min_periods
-    result[enough] = totals[enough] / counts[enough] * 10_000.0
-    return float(result[0]) if values.ndim == 1 else result
-```
+实现核对：[函数定义](../metrics/turnover_cost.py#L8)；`quant_evaluator.metrics.turnover_cost.compute_turnover_cost`。
 
 <a id="metric-turnover_rate"></a>
 ## turnover_rate — turnover_rate
@@ -6536,6 +4398,16 @@ Average rate of change in factor ranking between periods
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.turnover.compute_turnover`。
+
+### 数学公式与计算口径
+
+$$
+\tau=\frac12\sum_i|w_i^{\rm new}-w_i^{\rm old}|
+$$
+
+
+这是该ID所定位的低层权重换手函数的实际公式，输入为同形一维权重，任一未知/无穷坐标使本次换手NaN。 当前注册项无直接 compute_fn，统一执行器不可独立计算此ID；低层公式说明不等于已接线。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -6551,6 +4423,16 @@ Variance of turnover rate across periods
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.turnover.compute_turnover`。
 
+### 数学公式与计算口径
+
+$$
+\tau=\frac12\sum_i|w_i^{\rm new}-w_i^{\rm old}|
+$$
+
+
+这是该ID所定位的低层权重换手函数的实际公式，输入为同形一维权重，任一未知/无穷坐标使本次换手NaN。但并未绑定跨期“稳定性”的归约公式；不能把上述单次换手称为标准差或稳定度。 当前注册项无直接 compute_fn，统一执行器不可独立计算此ID；低层公式说明不等于已接线。
+
+
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
 <a id="metric-u_shape_score"></a>
@@ -6565,91 +4447,20 @@ U-shape score in [0, 1] per factor (plan §14.3). NOT RankIC-about-0 detection: 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.shape_evidence.compute_u_shape_score`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.shape_evidence.compute_u_shape_score(qr: 'np.ndarray') -> 'np.ndarray'
-```
+将桶位置映射到 $x_q\in[0,1]$，分别对桶收益 $g_q$ 拟合带截距的一元回归：U模板 $(x_q-0.5)^2$ 与线性模板 $x_q$，得到 $R_U^2,R_L^2$。令 $c_+$ 为有效连续三桶的二阶差分严格为正的比例。
 
-U-shape score per factor, (F,).
 
-Plan §14.3 — NOT ``RankIC ≈ 0``.  Combines three ingredients into
-[0, 1]:
+$$
+U=\begin{cases}0,&R_U^2\le R_L^2\ \text{或}\ c_+<0.5,\\0.5\max(R_U^2,0)+0.3c_++0.2(\max(R_U^2,0)-R_L^2),&\text{其他情况}.\end{cases}
+$$
 
-1. *Middle-underperforms-tails* (U template fit): fit ``a + b*U(x)``
-   where ``U(x) = (x - c)^2`` (c = centre) to the quantile-return
-   profile and take positive-bounded R^2.
-2. *Curvature*: fraction of the interior second differences that are
-   positive (convex).  A U profile is convex; an inverted-U is concave.
-3. *U-template-beats-monotone-template*: the U R^2 must EXCEED the
-   monotone-linear R^2 (plan §14.3 ingredient "U template fit >
-   monotonic template fit").  A factor with strong monotone slope is
-   NOT a U even if its U-fit is high.
 
-NaN when the profile has fewer than 4 finite quantile returns.
+至少4个有限桶，且有连续三桶可计算曲率；否则NaN。全平曲线为0。各回归 $R^2=1-\sum(g-\hat g)^2/\sum(g-\bar g)^2$。此分数综合模板拟合和曲率，不是“RankIC接近0就算U形”。
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_u_shape_score(qr: np.ndarray) -> np.ndarray:
-    """U-shape score per factor, (F,).
-
-    Plan §14.3 — NOT ``RankIC ≈ 0``.  Combines three ingredients into
-    [0, 1]:
-
-    1. *Middle-underperforms-tails* (U template fit): fit ``a + b*U(x)``
-       where ``U(x) = (x - c)^2`` (c = centre) to the quantile-return
-       profile and take positive-bounded R^2.
-    2. *Curvature*: fraction of the interior second differences that are
-       positive (convex).  A U profile is convex; an inverted-U is concave.
-    3. *U-template-beats-monotone-template*: the U R^2 must EXCEED the
-       monotone-linear R^2 (plan §14.3 ingredient "U template fit >
-       monotonic template fit").  A factor with strong monotone slope is
-       NOT a U even if its U-fit is high.
-
-    NaN when the profile has fewer than 4 finite quantile returns.
-    """
-    m = _as_matrix(qr)
-    nq, F = m.shape
-    out = np.full(F, np.nan)
-    if nq < 4:
-        return out
-    x = _template_fit_x(nq)
-    ut = (x - 0.5) ** 2
-    for f in range(F):
-        col = m[:, f]
-        finite = np.isfinite(col)
-        if np.sum(finite) < 4:
-            continue
-        y = col[finite]
-        xu = ut[finite]
-        xm = x[finite]
-        if np.ptp(y) == 0.0:
-            out[f] = 0.0
-            continue
-        r2_u = _fit_variance_explained(y, xu)
-        r2_m = _fit_variance_explained(y, xm)
-        if not (np.isfinite(r2_u) and np.isfinite(r2_m)):
-            continue
-        # Convex curvature fraction over interior positions.
-        interior = finite[1:-1] & finite[:-2] & finite[2:]
-        if not np.any(interior):
-            continue
-        d2 = col[2:][interior] - 2.0 * col[1:-1][interior] + col[:-2][interior]
-        curv = float(np.mean(d2 > 0.0))
-        # Ingredient 3: U template must beat the monotone template.
-        if r2_u <= r2_m:
-            out[f] = 0.0
-            continue
-        # A hill profile is concave; without convex curvature the U label
-        # must not win even though the sign-flipped template fits.
-        if curv < 0.5:
-            out[f] = 0.0
-            continue
-        u_fit = max(r2_u, 0.0)
-        out[f] = float(0.5 * u_fit + 0.3 * curv + 0.2 * (u_fit - r2_m))
-    return out
-```
+实现核对：[函数定义](../metrics/shape_evidence.py#L125)；`quant_evaluator.metrics.shape_evidence.compute_u_shape_score`。
 
 <a id="metric-universe_churn"></a>
 ## universe_churn — Universe Churn
@@ -6663,42 +4474,20 @@ Mean fraction of the tradable universe that changes membership per day, per fact
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.data_quality.compute_universe_churn`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.data_quality.compute_universe_churn(factor_batch: 'FactorBatch', label_bundle: 'LabelBundle') -> 'np.ndarray'
-```
+令 $v_{tif}$ 表示因子与标签共同有效，原资产轴大小为 $N$：
 
-Mean fraction of the tradable universe that changes membership per day, (F,).
 
-Churn = fraction of assets that are tradable on exactly one of two
-adjacent days (entering or leaving the tradable set).
+$$
+Churn_f=\frac1{T-1}\sum_{t=2}^{T}\frac{\sum_i\mathbf1(v_{tif}\ne v_{t-1,i,f})}{N}
+$$
 
-### 精确计算公式（实际实现）
 
-```python
-def compute_universe_churn(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-) -> np.ndarray:
-    """Mean fraction of the tradable universe that changes membership per day, (F,).
+validity先应用，缺失代表不在该日共同有效集合。少于2期NaN；分母是完整资产轴 $N$，不是两日有效集合的并集。
 
-    Churn = fraction of assets that are tradable on exactly one of two
-    adjacent days (entering or leaving the tradable set).
-    """
-    values = _factor_values(factor_batch)
-    labels = _labels(label_bundle, factor_batch.num_assets)
-    T, N, F = values.shape
-    if T < 2:
-        return np.full(F, np.nan)
-    label_finite = np.isfinite(labels)
-    factor_finite = np.isfinite(values)
-    tradable = factor_finite & label_finite[:, :, None]  # (T, N, F)
-    prev = tradable[:-1, :, :]
-    curr = tradable[1:, :, :]
-    churn = np.sum(prev != curr, axis=1)  # (T-1, F)
-    return np.mean(churn / N, axis=0)
-```
+
+实现核对：[函数定义](../metrics/data_quality.py#L208)；`quant_evaluator.metrics.data_quality.compute_universe_churn`。
 
 <a id="metric-validation_predictive_dimension"></a>
 ## validation_predictive_dimension — Validation Predictive Dimension
@@ -6712,19 +4501,17 @@ Validation-side predictive dimension of the authorized train-vs-validation compa
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.generalization_evidence.validation_predictive_dimension`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.registry.metrics.<lambda>(v)
-```
+$$
+D_f^{\mathrm{validation}}=A.\mathrm{validation_predictive_dimension}_f
+$$
 
-此函数没有独立说明；精确定义见下方源公式。
 
-### 精确计算公式（实际实现）
+这里 $A$ 为训练—验证证据制品，$D$ 是显式绑定的预测维度（例如该分区的平均RankIC），并非“有效因子个数”。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
-```python
-compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
-```
+
+实现核对：[函数定义](../registry/metrics.py#L3940)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-validation_retention"></a>
 ## validation_retention — Validation Retention
@@ -6738,19 +4525,20 @@ Robust validation/train retention per factor (plan §13.6): validation/train whe
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.generalization_evidence.compute_validation_retention_array`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.registry.metrics.<lambda>(v)
-```
+设训练预测维度为 $a_f$、验证维度为 $b_f$。令不稳定条件 $U_f$ 为：两者异号且 $|a_f|<g\max(|a_f|,|b_f|,10^{-9})$。
 
-此函数没有独立说明；精确定义见下方源公式。
 
-### 精确计算公式（实际实现）
+$$
+R_f=\begin{cases}b_f/a_f,&a_f,b_f\ \text{有限},\ |a_f|\ge\epsilon,\ \neg U_f,\\\mathrm{NaN},&\text{其他情况}.\end{cases}
+$$
 
-```python
-compute_fn=lambda v: np.asarray(v, dtype=np.float64).reshape(-1),
-```
+
+默认版本化策略 $\epsilon=0.05,g=0.5$。该指标逐因子返回保留率，允许负值；不跨因子平均。记录分母接近零、符号保护或缺失原因；训练为零时不盲目相除。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
+
+
+实现核对：[函数定义](../registry/metrics.py#L3967)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-var_95"></a>
 ## var_95 — var_95
@@ -6763,6 +4551,16 @@ Value at Risk at 95% confidence level
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.risk.var_cvar.compute_var`。
+
+### 数学公式与计算口径
+
+$$
+VaR_c=\max(0,-Q_{1-c}(r)),\qquad c=0.95
+$$
+
+
+这是所定位低层函数在**显式给定该置信度、historical方法**下的公式；$Q$ 是有限收益样本的线性插值经验分位数，默认最低20期，输出正损失幅度。当前注册ID无直接 compute_fn，未落实独立调用；低层 compute_var 自身默认置信度0.95，不能仅凭 var_99 名称认为已自动传0.99。其他参数化方法不是此历史法公式。
+
 
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
@@ -6778,6 +4576,16 @@ Value at Risk at 99% confidence level
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.risk.var_cvar.compute_var`。
 
+### 数学公式与计算口径
+
+$$
+VaR_c=\max(0,-Q_{1-c}(r)),\qquad c=0.99
+$$
+
+
+这是所定位低层函数在**显式给定该置信度、historical方法**下的公式；$Q$ 是有限收益样本的线性插值经验分位数，默认最低20期，输出正损失幅度。当前注册ID无直接 compute_fn，未落实独立调用；低层 compute_var 自身默认置信度0.95，不能仅凭 var_99 名称认为已自动传0.99。其他参数化方法不是此历史法公式。
+
+
 没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。
 
 <a id="metric-volatility_exposure"></a>
@@ -6792,21 +4600,27 @@ Signed mean volatility-style exposure of the factor (typed per-style field). NaN
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.exposure_evidence.compute_volatility_exposure`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.exposure_evidence.compute_volatility_exposure(panel: 'FactorLoadingSeries', *, factor_values=None, min_obs=10, weights=None) -> 'float'
-```
+每日在因子与全部暴露共同有效且回归权重为正的支持上做含截距WLS。设原始斜率为 $b_{tk}$、归一化观测权重为 $\omega_{ti}$：
 
-Signed mean volatility-style exposure of the factor (one typed field).
 
-### 精确计算公式（实际实现）
+$$
+b_t=\arg\min_b\sum_i\omega_{ti}(x_{ti}-Z_{ti}b)^2,\quad s_{\omega}(z)=\sqrt{\sum_i\omega_i(z_i-\bar z_\omega)^2},\quad \beta_{tk}=b_{tk}\frac{s_\omega(Z_k)}{s_\omega(x)},\quad E_{\rm vol}=\frac1{|D|}\sum_{t\in D}\beta_{t,\rm volatility}
+$$
 
-```python
-def compute_volatility_exposure(panel: FactorLoadingSeries, *, factor_values=None, min_obs=10, weights=None) -> float:
-    """Signed mean volatility-style exposure of the factor (one typed field)."""
-    return _select_style(panel, "volatility",factor_values=factor_values,min_obs=min_obs,weights=weights)
-```
+
+$Z$ 包含截距列；标准化只用于非截距风格斜率。$D$ 是目标标准化载荷有限的日期；默认每期至少10个共同有效样本，并满足回归自由度/秩条件。返回 volatility 风格的**标准化有符号载荷**均值，不是原始回归系数或证券暴露均值。零方差、缺少字段或无有效载荷NaN；输入已绑定载荷制品时直接复用，不重复估计。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `factor_values` | `None` |
+| `min_obs` | `10` |
+| `weights` | `None` |
+
+实现核对：[函数定义](../metrics/exposure_evidence.py#L637)；`quant_evaluator.metrics.exposure_evidence.compute_volatility_exposure`。
 
 <a id="metric-win_rate"></a>
 ## win_rate — win_rate
@@ -6820,52 +4634,17 @@ Win rate of a return series per factor: fraction of finite returns that are stri
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.portfolio_stats.compute_win_rate`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.portfolio_stats.compute_win_rate(returns: numpy.ndarray) -> numpy.ndarray
-```
+$$
+WinRate=\frac{\sum_{t\in V}\mathbf1(r_t>0)}{|V|}
+$$
 
-Compute win rate (fraction of positive returns).
 
-Args:
-    returns: Return series (T,) or (T, F)
+$V$ 只含有限收益；等于0不算胜。至少一个有限值即可由低层函数计算，全无有效收益NaN。
 
-Returns:
-    Win rate in [0, 1], scalar or shape (F,)
 
-### 精确计算公式（实际实现）
-
-```python
-def compute_win_rate(
-    returns: np.ndarray,
-) -> np.ndarray:
-    """
-    Compute win rate (fraction of positive returns).
-
-    Args:
-        returns: Return series (T,) or (T, F)
-
-    Returns:
-        Win rate in [0, 1], scalar or shape (F,)
-    """
-    if returns.ndim == 1:
-        returns = returns[:, np.newaxis]
-        squeeze = True
-    else:
-        squeeze = False
-
-    valid = np.isfinite(returns)
-    n_valid = np.sum(valid, axis=0)
-
-    wins = np.sum((returns > 0) & valid, axis=0)
-    win_rate = wins / np.maximum(n_valid, 1)
-
-    # Set to NaN if no valid observations
-    win_rate = np.where(n_valid > 0, win_rate, np.nan)
-
-    return win_rate[0] if squeeze else win_rate
-```
+实现核对：[函数定义](../metrics/portfolio_stats.py#L645)；`quant_evaluator.metrics.portfolio_stats.compute_win_rate`。
 
 <a id="metric-worst_12m"></a>
 ## worst_12m — Worst Rolling 252 Periods (legacy ID)
@@ -6879,67 +4658,23 @@ Worst fixed 252-period (trading) block compounded return of the probe daily PnL 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.underwater.compute_worst_period_return`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.underwater.compute_worst_period_return(returns: 'np.ndarray', period: 'str' = 'month', min_periods: 'int' = 10) -> 'float'
-```
+$$
+R_{\rm worst}(L)=\min_{0\le s\le T-L}\left[\prod_{j=s}^{s+L-1}(1+r_j)-1\right]
+$$
 
-Calendar worst block return: the minimum compounded return over any
-fixed-length trading-period block (``month``=21 / ``quarter``=63 /
-``year``=252 periods).
 
-Returns NaN when fewer than ``min_periods`` finite periods exist, or when
-the series has fewer than one full block.
+这是固定长度交易期的滚动最差复利收益，不是自然12个月。底层 period='month'/'quarter'/'year' 对应 $L=21/63/252$，min_periods 默认10（实际检查输入轴长度），不足一个完整窗口NaN。**当前该ID直接绑定同一未预设参数的函数，默认仍是 period='month'（21期），不能按名称推断为252期。** 应显式传相应 period，或优先使用对应 worst_rolling_* 指标。 原时间轴不压缩，任一NaN污染窗口后最终普通min也可能返回NaN；不是忽略坏窗口的新版滚动接口。 公共注册层另有最短时间轴门槛252期；不要将函数层默认10与注册门槛混为一谈。
 
-Conventions mirror the existing codebase calendar: binary backtest /
-report cards fixed period lengths (21 / 63 / 252), no calendar-month
-index dependence — a pure mathematical "worst 21-period block" over the
-dot-frequency PnL series (kept calendar-window-agnostic because the probe
-PnL series carries only a dot index, not calendar dates).
+### 函数层默认参数
 
-### 精确计算公式（实际实现）
+| 参数 | 默认值 |
+|---|---|
+| `period` | `'month'` |
+| `min_periods` | `10` |
 
-```python
-def compute_worst_period_return(
-    returns: np.ndarray,
-    period: str = "month",
-    min_periods: int = 10,
-) -> float:
-    """Calendar worst block return: the minimum compounded return over any
-    fixed-length trading-period block (``month``=21 / ``quarter``=63 /
-    ``year``=252 periods).
-
-    Returns NaN when fewer than ``min_periods`` finite periods exist, or when
-    the series has fewer than one full block.
-
-    Conventions mirror the existing codebase calendar: binary backtest /
-    report cards fixed period lengths (21 / 63 / 252), no calendar-month
-    index dependence — a pure mathematical "worst 21-period block" over the
-    dot-frequency PnL series (kept calendar-window-agnostic because the probe
-    PnL series carries only a dot index, not calendar dates).
-    """
-    ret = _as_1d(returns)
-    if ret.size < min_periods:
-        return np.nan
-    if period == "month":
-        block = _PERIODS_PER_MONTH
-    elif period == "quarter":
-        block = _PERIODS_PER_QUARTER
-    elif period == "year":
-        block = _PERIODS_PER_YEAR
-    else:
-        raise ValueError(
-            f"period must be one of 'month'|'quarter'|'year', got {period!r}"
-        )
-    if ret.size < block:
-        return np.nan
-    # Compounded block returns: prod(1+r) over each length-block window.
-    blocks = np.full(ret.size - block + 1, np.nan)
-    for t in range(ret.size - block + 1):
-        blocks[t] = np.prod(1.0 + ret[t : t + block]) - 1.0
-    return float(np.min(blocks))
-```
+实现核对：[函数定义](../metrics/underwater.py#L131)；`quant_evaluator.metrics.underwater.compute_worst_period_return`。
 
 <a id="metric-worst_calendar_month"></a>
 ## worst_calendar_month — worst_calendar_month
@@ -6953,21 +4688,22 @@ Worst calendar-period compounded probe return; explicit DA calendar and partial-
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.calendar_returns.compute_worst_calendar_month`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.calendar_returns.compute_worst_calendar_month(returns, time_index, factor_ids, calendar_snapshot, partial_policy='exclude')
-```
+$$
+R_{\rm worst}=\min_{p\in P_{\rm eligible}}\left[\prod_{t\in S_p}(1+r_t)-1\right]
+$$
 
-此函数没有独立说明；精确定义见下方源公式。
 
-### 精确计算公式（实际实现）
+$S_p$ 是绑定 CalendarSnapshot 按本地时区划分的自然月交易日集合。默认 partial_policy='exclude'：日历快照需在该周期两端都有外侧交易日作边界证明，观测覆盖全部预期交易日且收益全部有限，才纳入 $P_{\rm eligible}$。显式 include 可以纳入部分周期，但所有实际观测仍须有限。无合格周期NaN；不以21/63/252期滚动窗口代替自然周期。
 
-```python
-def compute_worst_calendar_month(returns, time_index, factor_ids, calendar_snapshot, partial_policy="exclude"):
-    return _calendar_metric(returns, time_index, factor_ids, calendar_snapshot,
-                            frequency="month", partial_policy=partial_policy)
-```
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `partial_policy` | `'exclude'` |
+
+实现核对：[函数定义](../metrics/calendar_returns.py#L202)；`quant_evaluator.metrics.calendar_returns.compute_worst_calendar_month`。
 
 <a id="metric-worst_calendar_quarter"></a>
 ## worst_calendar_quarter — worst_calendar_quarter
@@ -6981,21 +4717,22 @@ Worst calendar-period compounded probe return; explicit DA calendar and partial-
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.calendar_returns.compute_worst_calendar_quarter`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.calendar_returns.compute_worst_calendar_quarter(returns, time_index, factor_ids, calendar_snapshot, partial_policy='exclude')
-```
+$$
+R_{\rm worst}=\min_{p\in P_{\rm eligible}}\left[\prod_{t\in S_p}(1+r_t)-1\right]
+$$
 
-此函数没有独立说明；精确定义见下方源公式。
 
-### 精确计算公式（实际实现）
+$S_p$ 是绑定 CalendarSnapshot 按本地时区划分的自然季度交易日集合。默认 partial_policy='exclude'：日历快照需在该周期两端都有外侧交易日作边界证明，观测覆盖全部预期交易日且收益全部有限，才纳入 $P_{\rm eligible}$。显式 include 可以纳入部分周期，但所有实际观测仍须有限。无合格周期NaN；不以21/63/252期滚动窗口代替自然周期。
 
-```python
-def compute_worst_calendar_quarter(returns, time_index, factor_ids, calendar_snapshot, partial_policy="exclude"):
-    return _calendar_metric(returns, time_index, factor_ids, calendar_snapshot,
-                            frequency="quarter", partial_policy=partial_policy)
-```
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `partial_policy` | `'exclude'` |
+
+实现核对：[函数定义](../metrics/calendar_returns.py#L207)；`quant_evaluator.metrics.calendar_returns.compute_worst_calendar_quarter`。
 
 <a id="metric-worst_calendar_year"></a>
 ## worst_calendar_year — worst_calendar_year
@@ -7009,21 +4746,22 @@ Worst calendar-period compounded probe return; explicit DA calendar and partial-
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.calendar_returns.compute_worst_calendar_year`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.calendar_returns.compute_worst_calendar_year(returns, time_index, factor_ids, calendar_snapshot, partial_policy='exclude')
-```
+$$
+R_{\rm worst}=\min_{p\in P_{\rm eligible}}\left[\prod_{t\in S_p}(1+r_t)-1\right]
+$$
 
-此函数没有独立说明；精确定义见下方源公式。
 
-### 精确计算公式（实际实现）
+$S_p$ 是绑定 CalendarSnapshot 按本地时区划分的自然年交易日集合。默认 partial_policy='exclude'：日历快照需在该周期两端都有外侧交易日作边界证明，观测覆盖全部预期交易日且收益全部有限，才纳入 $P_{\rm eligible}$。显式 include 可以纳入部分周期，但所有实际观测仍须有限。无合格周期NaN；不以21/63/252期滚动窗口代替自然周期。
 
-```python
-def compute_worst_calendar_year(returns, time_index, factor_ids, calendar_snapshot, partial_policy="exclude"):
-    return _calendar_metric(returns, time_index, factor_ids, calendar_snapshot,
-                            frequency="year", partial_policy=partial_policy)
-```
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `partial_policy` | `'exclude'` |
+
+实现核对：[函数定义](../metrics/calendar_returns.py#L212)；`quant_evaluator.metrics.calendar_returns.compute_worst_calendar_year`。
 
 <a id="metric-worst_month"></a>
 ## worst_month — Worst Rolling 21 Periods (legacy ID)
@@ -7037,67 +4775,23 @@ Worst fixed 21-period (trading) block compounded return of the probe daily PnL s
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.underwater.compute_worst_period_return`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.underwater.compute_worst_period_return(returns: 'np.ndarray', period: 'str' = 'month', min_periods: 'int' = 10) -> 'float'
-```
+$$
+R_{\rm worst}(L)=\min_{0\le s\le T-L}\left[\prod_{j=s}^{s+L-1}(1+r_j)-1\right]
+$$
 
-Calendar worst block return: the minimum compounded return over any
-fixed-length trading-period block (``month``=21 / ``quarter``=63 /
-``year``=252 periods).
 
-Returns NaN when fewer than ``min_periods`` finite periods exist, or when
-the series has fewer than one full block.
+这是固定长度交易期的滚动最差复利收益，不是自然月。底层 period='month'/'quarter'/'year' 对应 $L=21/63/252$，min_periods 默认10（实际检查输入轴长度），不足一个完整窗口NaN。该ID默认 period='month'，即21期。 原时间轴不压缩，任一NaN污染窗口后最终普通min也可能返回NaN；不是忽略坏窗口的新版滚动接口。 公共注册层另有最短时间轴门槛21期；不要将函数层默认10与注册门槛混为一谈。
 
-Conventions mirror the existing codebase calendar: binary backtest /
-report cards fixed period lengths (21 / 63 / 252), no calendar-month
-index dependence — a pure mathematical "worst 21-period block" over the
-dot-frequency PnL series (kept calendar-window-agnostic because the probe
-PnL series carries only a dot index, not calendar dates).
+### 函数层默认参数
 
-### 精确计算公式（实际实现）
+| 参数 | 默认值 |
+|---|---|
+| `period` | `'month'` |
+| `min_periods` | `10` |
 
-```python
-def compute_worst_period_return(
-    returns: np.ndarray,
-    period: str = "month",
-    min_periods: int = 10,
-) -> float:
-    """Calendar worst block return: the minimum compounded return over any
-    fixed-length trading-period block (``month``=21 / ``quarter``=63 /
-    ``year``=252 periods).
-
-    Returns NaN when fewer than ``min_periods`` finite periods exist, or when
-    the series has fewer than one full block.
-
-    Conventions mirror the existing codebase calendar: binary backtest /
-    report cards fixed period lengths (21 / 63 / 252), no calendar-month
-    index dependence — a pure mathematical "worst 21-period block" over the
-    dot-frequency PnL series (kept calendar-window-agnostic because the probe
-    PnL series carries only a dot index, not calendar dates).
-    """
-    ret = _as_1d(returns)
-    if ret.size < min_periods:
-        return np.nan
-    if period == "month":
-        block = _PERIODS_PER_MONTH
-    elif period == "quarter":
-        block = _PERIODS_PER_QUARTER
-    elif period == "year":
-        block = _PERIODS_PER_YEAR
-    else:
-        raise ValueError(
-            f"period must be one of 'month'|'quarter'|'year', got {period!r}"
-        )
-    if ret.size < block:
-        return np.nan
-    # Compounded block returns: prod(1+r) over each length-block window.
-    blocks = np.full(ret.size - block + 1, np.nan)
-    for t in range(ret.size - block + 1):
-        blocks[t] = np.prod(1.0 + ret[t : t + block]) - 1.0
-    return float(np.min(blocks))
-```
+实现核对：[函数定义](../metrics/underwater.py#L131)；`quant_evaluator.metrics.underwater.compute_worst_period_return`。
 
 <a id="metric-worst_quarter"></a>
 ## worst_quarter — Worst Rolling 63 Periods (legacy ID)
@@ -7111,67 +4805,23 @@ Worst fixed 63-period (trading) block compounded return of the probe daily PnL s
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.underwater.compute_worst_period_return`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.underwater.compute_worst_period_return(returns: 'np.ndarray', period: 'str' = 'month', min_periods: 'int' = 10) -> 'float'
-```
+$$
+R_{\rm worst}(L)=\min_{0\le s\le T-L}\left[\prod_{j=s}^{s+L-1}(1+r_j)-1\right]
+$$
 
-Calendar worst block return: the minimum compounded return over any
-fixed-length trading-period block (``month``=21 / ``quarter``=63 /
-``year``=252 periods).
 
-Returns NaN when fewer than ``min_periods`` finite periods exist, or when
-the series has fewer than one full block.
+这是固定长度交易期的滚动最差复利收益，不是自然季度。底层 period='month'/'quarter'/'year' 对应 $L=21/63/252$，min_periods 默认10（实际检查输入轴长度），不足一个完整窗口NaN。**当前该ID直接绑定同一未预设参数的函数，默认仍是 period='month'（21期），不能按名称推断为63期。** 应显式传相应 period，或优先使用对应 worst_rolling_* 指标。 原时间轴不压缩，任一NaN污染窗口后最终普通min也可能返回NaN；不是忽略坏窗口的新版滚动接口。 公共注册层另有最短时间轴门槛63期；不要将函数层默认10与注册门槛混为一谈。
 
-Conventions mirror the existing codebase calendar: binary backtest /
-report cards fixed period lengths (21 / 63 / 252), no calendar-month
-index dependence — a pure mathematical "worst 21-period block" over the
-dot-frequency PnL series (kept calendar-window-agnostic because the probe
-PnL series carries only a dot index, not calendar dates).
+### 函数层默认参数
 
-### 精确计算公式（实际实现）
+| 参数 | 默认值 |
+|---|---|
+| `period` | `'month'` |
+| `min_periods` | `10` |
 
-```python
-def compute_worst_period_return(
-    returns: np.ndarray,
-    period: str = "month",
-    min_periods: int = 10,
-) -> float:
-    """Calendar worst block return: the minimum compounded return over any
-    fixed-length trading-period block (``month``=21 / ``quarter``=63 /
-    ``year``=252 periods).
-
-    Returns NaN when fewer than ``min_periods`` finite periods exist, or when
-    the series has fewer than one full block.
-
-    Conventions mirror the existing codebase calendar: binary backtest /
-    report cards fixed period lengths (21 / 63 / 252), no calendar-month
-    index dependence — a pure mathematical "worst 21-period block" over the
-    dot-frequency PnL series (kept calendar-window-agnostic because the probe
-    PnL series carries only a dot index, not calendar dates).
-    """
-    ret = _as_1d(returns)
-    if ret.size < min_periods:
-        return np.nan
-    if period == "month":
-        block = _PERIODS_PER_MONTH
-    elif period == "quarter":
-        block = _PERIODS_PER_QUARTER
-    elif period == "year":
-        block = _PERIODS_PER_YEAR
-    else:
-        raise ValueError(
-            f"period must be one of 'month'|'quarter'|'year', got {period!r}"
-        )
-    if ret.size < block:
-        return np.nan
-    # Compounded block returns: prod(1+r) over each length-block window.
-    blocks = np.full(ret.size - block + 1, np.nan)
-    for t in range(ret.size - block + 1):
-        blocks[t] = np.prod(1.0 + ret[t : t + block]) - 1.0
-    return float(np.min(blocks))
-```
+实现核对：[函数定义](../metrics/underwater.py#L131)；`quant_evaluator.metrics.underwater.compute_worst_period_return`。
 
 <a id="metric-worst_quarter_rank_ic"></a>
 ## worst_quarter_rank_ic — Worst-Quarter Rank IC
@@ -7185,27 +4835,23 @@ Minimum per-quarter mean rank IC (the factor's worst quarter), per factor (spec 
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_worst_quarter_rank_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_worst_quarter_rank_ic(ic_series: 'np.ndarray', min_periods: 'int' = 20, time_index: 'Optional[Sequence]' = None) -> 'np.ndarray'
-```
+$$
+\mu_p=\frac1{|V_p|}\sum_{t\in V_p}RankIC_t,\qquad M=\min_{p:|V_p|>0}\mu_p
+$$
 
-Minimum per-quarter mean rank IC (worst quarter), (F,).
 
-### 精确计算公式（实际实现）
+$V_p$ 为季度组中的有效日集合，结果是最差组的平均RankIC，不是最差一天。有可解析且长度匹配的 time_index 时按自然周期分组，否则低层实现退回从起点划分的固定交易期块（季度63、年度252，末尾不足块保留）。每组只平均有限IC；总体至少20个有限IC，否则NaN。
 
-```python
-def compute_worst_quarter_rank_ic(
-    ic_series: np.ndarray,
-    min_periods: int = 20,
-    time_index: Optional[Sequence] = None,
-) -> np.ndarray:
-    """Minimum per-quarter mean rank IC (worst quarter), (F,)."""
-    s = _as_series(ic_series)
-    out = _worst_period(s, "quarter", time_index)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+| `time_index` | `None` |
+
+实现核对：[函数定义](../metrics/predictive.py#L259)；`quant_evaluator.metrics.predictive.compute_worst_quarter_rank_ic`。
 
 <a id="metric-worst_rolling_21d"></a>
 ## worst_rolling_21d — Worst 21 trading periods (rolling)
@@ -7219,50 +4865,25 @@ Worst fully matured fixed-length compounded return; never a calendar period
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return(returns: 'Any', *, window: 'int' = 21, min_periods: 'int' = 1) -> 'np.ndarray'
-```
+$$
+R_{\rm worst}=\min_{s\in D_L}\left[\prod_{j=s}^{s+L-1}(1+r_j)-1\right],\qquad L=21
+$$
 
-partial(func, *args, **keywords) - new function with partial application
-of the given arguments and keywords.
+
+$D_L$ 只含原时间轴上已经完整成熟、每期收益均有限的长度 $L$ 窗口。默认 min_periods=1，指至少一个**有效完整窗口**，不许可扩展前缀。未知窗口跳过但不压缩日历，等未知行移出后窗口可恢复有效；输入有限收益低于−100%报错。没有有效窗口NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `window` | `21` |
+| `min_periods` | `1` |
 
 绑定参数：`args=(), kwargs={'window': 21}`。
 
-### 精确计算公式（实际实现）
-
-```python
-def compute_worst_rolling_return(
-    returns: Any,
-    window: int = 21,
-    min_periods: int = 1,
-) -> np.ndarray:
-    """Per-factor worst compounded return across matured full windows.
-
-    ``min_periods`` is the required count of valid, fully matured windows; it
-    never authorizes an expanding prefix. Every row in a candidate window must
-    be finite for that factor. Invalid windows are skipped without compressing
-    the time grid, and become eligible again only after the unknown row exits.
-    """
-    if isinstance(window, bool) or not isinstance(window, (int, np.integer)) or window < 1:
-        raise ValueError("window must be a positive integer")
-    if (isinstance(min_periods, bool) or not isinstance(min_periods, (int, np.integer))
-            or min_periods < 1):
-        raise ValueError("min_periods must be a positive integer")
-    values = _validated_returns(returns)
-    rolling = np.full((max(0, values.shape[0] - int(window) + 1), values.shape[1]), np.nan)
-    for offset, stop in enumerate(range(int(window), values.shape[0] + 1)):
-        block = values[stop - int(window):stop]
-        valid = np.all(np.isfinite(block), axis=0)
-        rolling[offset, valid] = np.prod(1.0 + block[:, valid], axis=0) - 1.0
-    result = np.full(values.shape[1], np.nan, dtype=np.float64)
-    for factor in range(values.shape[1]):
-        candidates = rolling[np.isfinite(rolling[:, factor]), factor]
-        if candidates.size >= int(min_periods):
-            result[factor] = np.min(candidates)
-    return result
-```
+实现核对：[函数定义](../metrics/calendar_returns.py#L39)；`quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return`。
 
 <a id="metric-worst_rolling_252d"></a>
 ## worst_rolling_252d — Worst 252 trading periods (rolling)
@@ -7276,50 +4897,25 @@ Worst fully matured fixed-length compounded return; never a calendar period
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return(returns: 'Any', *, window: 'int' = 252, min_periods: 'int' = 1) -> 'np.ndarray'
-```
+$$
+R_{\rm worst}=\min_{s\in D_L}\left[\prod_{j=s}^{s+L-1}(1+r_j)-1\right],\qquad L=252
+$$
 
-partial(func, *args, **keywords) - new function with partial application
-of the given arguments and keywords.
+
+$D_L$ 只含原时间轴上已经完整成熟、每期收益均有限的长度 $L$ 窗口。默认 min_periods=1，指至少一个**有效完整窗口**，不许可扩展前缀。未知窗口跳过但不压缩日历，等未知行移出后窗口可恢复有效；输入有限收益低于−100%报错。没有有效窗口NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `window` | `252` |
+| `min_periods` | `1` |
 
 绑定参数：`args=(), kwargs={'window': 252}`。
 
-### 精确计算公式（实际实现）
-
-```python
-def compute_worst_rolling_return(
-    returns: Any,
-    window: int = 21,
-    min_periods: int = 1,
-) -> np.ndarray:
-    """Per-factor worst compounded return across matured full windows.
-
-    ``min_periods`` is the required count of valid, fully matured windows; it
-    never authorizes an expanding prefix. Every row in a candidate window must
-    be finite for that factor. Invalid windows are skipped without compressing
-    the time grid, and become eligible again only after the unknown row exits.
-    """
-    if isinstance(window, bool) or not isinstance(window, (int, np.integer)) or window < 1:
-        raise ValueError("window must be a positive integer")
-    if (isinstance(min_periods, bool) or not isinstance(min_periods, (int, np.integer))
-            or min_periods < 1):
-        raise ValueError("min_periods must be a positive integer")
-    values = _validated_returns(returns)
-    rolling = np.full((max(0, values.shape[0] - int(window) + 1), values.shape[1]), np.nan)
-    for offset, stop in enumerate(range(int(window), values.shape[0] + 1)):
-        block = values[stop - int(window):stop]
-        valid = np.all(np.isfinite(block), axis=0)
-        rolling[offset, valid] = np.prod(1.0 + block[:, valid], axis=0) - 1.0
-    result = np.full(values.shape[1], np.nan, dtype=np.float64)
-    for factor in range(values.shape[1]):
-        candidates = rolling[np.isfinite(rolling[:, factor]), factor]
-        if candidates.size >= int(min_periods):
-            result[factor] = np.min(candidates)
-    return result
-```
+实现核对：[函数定义](../metrics/calendar_returns.py#L39)；`quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return`。
 
 <a id="metric-worst_rolling_63d"></a>
 ## worst_rolling_63d — Worst 63 trading periods (rolling)
@@ -7333,50 +4929,25 @@ Worst fully matured fixed-length compounded return; never a calendar period
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return(returns: 'Any', *, window: 'int' = 63, min_periods: 'int' = 1) -> 'np.ndarray'
-```
+$$
+R_{\rm worst}=\min_{s\in D_L}\left[\prod_{j=s}^{s+L-1}(1+r_j)-1\right],\qquad L=63
+$$
 
-partial(func, *args, **keywords) - new function with partial application
-of the given arguments and keywords.
+
+$D_L$ 只含原时间轴上已经完整成熟、每期收益均有限的长度 $L$ 窗口。默认 min_periods=1，指至少一个**有效完整窗口**，不许可扩展前缀。未知窗口跳过但不压缩日历，等未知行移出后窗口可恢复有效；输入有限收益低于−100%报错。没有有效窗口NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `window` | `63` |
+| `min_periods` | `1` |
 
 绑定参数：`args=(), kwargs={'window': 63}`。
 
-### 精确计算公式（实际实现）
-
-```python
-def compute_worst_rolling_return(
-    returns: Any,
-    window: int = 21,
-    min_periods: int = 1,
-) -> np.ndarray:
-    """Per-factor worst compounded return across matured full windows.
-
-    ``min_periods`` is the required count of valid, fully matured windows; it
-    never authorizes an expanding prefix. Every row in a candidate window must
-    be finite for that factor. Invalid windows are skipped without compressing
-    the time grid, and become eligible again only after the unknown row exits.
-    """
-    if isinstance(window, bool) or not isinstance(window, (int, np.integer)) or window < 1:
-        raise ValueError("window must be a positive integer")
-    if (isinstance(min_periods, bool) or not isinstance(min_periods, (int, np.integer))
-            or min_periods < 1):
-        raise ValueError("min_periods must be a positive integer")
-    values = _validated_returns(returns)
-    rolling = np.full((max(0, values.shape[0] - int(window) + 1), values.shape[1]), np.nan)
-    for offset, stop in enumerate(range(int(window), values.shape[0] + 1)):
-        block = values[stop - int(window):stop]
-        valid = np.all(np.isfinite(block), axis=0)
-        rolling[offset, valid] = np.prod(1.0 + block[:, valid], axis=0) - 1.0
-    result = np.full(values.shape[1], np.nan, dtype=np.float64)
-    for factor in range(values.shape[1]):
-        candidates = rolling[np.isfinite(rolling[:, factor]), factor]
-        if candidates.size >= int(min_periods):
-            result[factor] = np.min(candidates)
-    return result
-```
+实现核对：[函数定义](../metrics/calendar_returns.py#L39)；`quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return`。
 
 <a id="metric-worst_year_rank_ic"></a>
 ## worst_year_rank_ic — Worst-Year Rank IC
@@ -7390,27 +4961,23 @@ Minimum per-year mean rank IC (the factor's worst year), per factor. A robustnes
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_worst_year_rank_ic`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.predictive.compute_worst_year_rank_ic(ic_series: 'np.ndarray', min_periods: 'int' = 20, time_index: 'Optional[Sequence]' = None) -> 'np.ndarray'
-```
+$$
+\mu_p=\frac1{|V_p|}\sum_{t\in V_p}RankIC_t,\qquad M=\min_{p:|V_p|>0}\mu_p
+$$
 
-Minimum per-year mean rank IC (worst year), (F,).
 
-### 精确计算公式（实际实现）
+$V_p$ 为年度组中的有效日集合，结果是最差组的平均RankIC，不是最差一天。有可解析且长度匹配的 time_index 时按自然周期分组，否则低层实现退回从起点划分的固定交易期块（季度63、年度252，末尾不足块保留）。每组只平均有限IC；总体至少20个有限IC，否则NaN。
 
-```python
-def compute_worst_year_rank_ic(
-    ic_series: np.ndarray,
-    min_periods: int = 20,
-    time_index: Optional[Sequence] = None,
-) -> np.ndarray:
-    """Minimum per-year mean rank IC (worst year), (F,)."""
-    s = _as_series(ic_series)
-    out = _worst_period(s, "year", time_index)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+| `time_index` | `None` |
+
+实现核对：[函数定义](../metrics/predictive.py#L248)；`quant_evaluator.metrics.predictive.compute_worst_year_rank_ic`。
 
 <a id="metric-year_consistency"></a>
 ## year_consistency — Year Consistency
@@ -7424,27 +4991,23 @@ Fraction of years whose mean IC matches the overall IC sign, per factor. A robus
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.stability_regime.compute_year_consistency`。
 
-### 计算定义与默认参数
+### 数学公式与计算口径
 
-```python
-quant_evaluator.metrics.stability_regime.compute_year_consistency(ic_series: 'np.ndarray', min_periods: 'int' = 20, time_index: 'Optional[Sequence]' = None) -> 'np.ndarray'
-```
+$$
+\mu_p=\operatorname{mean}_{t\in V_p}IC_t,\qquad C=\frac{\sum_{p\in P}\mathbf1(\operatorname{sign}\mu_p=\operatorname{sign}\bar{IC})}{|P|}
+$$
 
-Fraction of years whose mean IC matches the overall IC sign, (F,).
 
-### 精确计算公式（实际实现）
+$P$ 为有有限组均值的年度组；$\bar{IC}$ 为全体有效日的等权均值。零与零同号，零与正负不同号。有可解析且长度匹配的 time_index 时按自然周期分组，否则低层实现退回从起点划分的固定交易期块（季度63、年度252，末尾不足块保留）。每组只平均有限IC；总体至少20个有限IC，否则NaN。
 
-```python
-def compute_year_consistency(
-    ic_series: np.ndarray,
-    min_periods: int = 20,
-    time_index: Optional[Sequence] = None,
-) -> np.ndarray:
-    """Fraction of years whose mean IC matches the overall IC sign, (F,)."""
-    s = _as_series(ic_series)
-    out = _period_consistency(s, "year", time_index)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+| `time_index` | `None` |
+
+实现核对：[函数定义](../metrics/stability_regime.py#L88)；`quant_evaluator.metrics.stability_regime.compute_year_consistency`。
 
 <a id="metric-yearly_rank_ic"></a>
 ## yearly_rank_ic — Yearly Rank IC
@@ -7458,2635 +5021,121 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - 别名：无。
 - 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.predictive.compute_yearly_rank_ic`。
 
-### 计算定义与默认参数
-
-```python
-quant_evaluator.metrics.predictive.compute_yearly_rank_ic(ic_series: 'np.ndarray', min_periods: 'int' = 20, time_index: 'Optional[Sequence]' = None) -> 'np.ndarray'
-```
-
-Mean of the per-year mean rank IC, (F,).
-
-### 精确计算公式（实际实现）
-
-```python
-def compute_yearly_rank_ic(
-    ic_series: np.ndarray,
-    min_periods: int = 20,
-    time_index: Optional[Sequence] = None,
-) -> np.ndarray:
-    """Mean of the per-year mean rank IC, (F,)."""
-    s = _as_series(ic_series)
-    out = _mean_of_period_means(s, "year", time_index)
-    return np.where(_valid_counts(s) >= min_periods, out, np.nan)
-```
-
-## 共享公式与掩码依赖
-
-以下为上文适配器引用的共享计算函数，避免只展示一层转发却遗漏真实公式。外部NumPy/SciPy标准运算按其参数解释。
-输入合同、交易制品与GPU派发仍以相应模块及统一口径为准；本附录不复制数据或生产产物。
-
-### quant_evaluator.metrics.calendar_returns._calendar_metric
-
-```python
-def _calendar_metric(
-    returns: Any,
-    time_index: Sequence[Any],
-    factor_ids: Sequence[str],
-    calendar_snapshot: Any,
-    *,
-    frequency: str,
-    partial_policy: str,
-) -> ScalarMetricArtifact:
-    # Lazy import keeps the standalone quant_evaluator wheel importable when
-    # the optional data_access package is absent.
-    from data_access.r30.calendar_snapshot import CalendarSnapshot
-    if not isinstance(calendar_snapshot, CalendarSnapshot):
-        raise TypeError("calendar_snapshot must be a Data Access CalendarSnapshot")
-    if partial_policy not in {"exclude", "include"}:
-        raise ValueError("partial_policy must be 'exclude' or 'include'")
-    values = _validated_returns(returns, factor_ids)
-    if len(time_index) != values.shape[0]:
-        raise ValueError("time_index length must equal returns time dimension")
-    local_dates = _local_session_dates(time_index, calendar_snapshot.timezone)
-    try:
-        expected_dates = tuple(date.fromisoformat(str(day)[:10]) for day in calendar_snapshot.trading_days)
-    except ValueError as exc:
-        raise ValueError("calendar_snapshot trading_days must contain ISO dates") from exc
-    if not expected_dates or any(a >= b for a, b in zip(expected_dates, expected_dates[1:])):
-        raise ValueError("calendar_snapshot trading_days must be non-empty and strictly increasing")
-    expected_set = set(expected_dates)
-    unknown_sessions = [day.isoformat() for day in local_dates if day not in expected_set]
-    if unknown_sessions:
-        raise ValueError(f"time_index contains sessions absent from calendar snapshot: {unknown_sessions}")
-
-    observed_by_date = {day: row for day, row in zip(local_dates, values)}
-    expected_by_period: dict[tuple[int, ...], list[date]] = {}
-    for day in expected_dates:
-        expected_by_period.setdefault(_period_key(day, frequency), []).append(day)
-
-    period_rows: list[dict[str, Any]] = []
-    period_values: list[np.ndarray] = []
-    eligibility: list[np.ndarray] = []
-    for key, sessions in expected_by_period.items():
-        observed = [day for day in sessions if day in observed_by_date]
-        bracketed = expected_dates[0] < sessions[0] and expected_dates[-1] > sessions[-1]
-        sessions_complete = len(observed) == len(sessions)
-        finite_counts = np.zeros(values.shape[1], dtype=np.int64)
-        compounded = np.full(values.shape[1], np.nan, dtype=np.float64)
-        if observed:
-            block = np.stack([observed_by_date[day] for day in observed], axis=0)
-            finite = np.all(np.isfinite(block), axis=0)
-            finite_counts = np.sum(np.isfinite(block), axis=0)
-            compounded[finite] = np.prod(1.0 + block[:, finite], axis=0) - 1.0
-        complete_by_factor = sessions_complete & bracketed & (finite_counts == len(sessions))
-        eligible = (finite_counts == len(observed)) & (len(observed) > 0)
-        if partial_policy == "exclude":
-            eligible &= complete_by_factor
-        period_values.append(compounded)
-        eligibility.append(eligible)
-        period_rows.append({
-            "period_id": _period_id(key, frequency),
-            "expected_session_count": len(sessions),
-            "observed_session_count": len(observed),
-            "finite_return_counts": tuple(int(x) for x in finite_counts),
-            "calendar_coverage_bracketed": bool(bracketed),
-            "sessions_complete": bool(sessions_complete),
-            "complete_by_factor": tuple(bool(x) for x in complete_by_factor),
-            "partial": not bool(sessions_complete and bracketed),
-            "included_by_factor": tuple(bool(x) for x in eligible),
-            "compounded_returns": tuple(float(x) if np.isfinite(x) else None for x in compounded),
-        })
-
-    worst = np.full(values.shape[1], np.nan, dtype=np.float64)
-    if period_values:
-        matrix = np.stack(period_values)
-        mask = np.stack(eligibility)
-        for factor in range(values.shape[1]):
-            candidates = matrix[mask[:, factor], factor]
-            if candidates.size:
-                worst[factor] = np.min(candidates)
-    metric_id = f"worst_calendar_{frequency}"
-    observation_counts = tuple(
-        int(sum(bool(mask[factor]) for mask in eligibility))
-        for factor in range(values.shape[1])
-    )
-    return ScalarMetricArtifact(
-        metric_id=metric_id,
-        domain="risk",
-        values=worst,
-        factor_axis=FactorAxisRef(factor_ids=tuple(factor_ids)),
-        provenance={
-            "calendar_snapshot_id": calendar_snapshot.snapshot_id,
-            "calendar_market": calendar_snapshot.market,
-            "calendar_timezone": calendar_snapshot.timezone,
-            "calendar_source_version": calendar_snapshot.source_version,
-            "partial_policy": partial_policy,
-            "observation_counts": observation_counts,
-            "period_rows": tuple(period_rows),
-        },
-    )
-```
-
-### quant_evaluator.metrics.calendar_returns._local_session_dates
-
-```python
-def _local_session_dates(time_index: Sequence[Any], timezone_name: str) -> tuple[date, ...]:
-    try:
-        timezone = ZoneInfo(timezone_name)
-    except ZoneInfoNotFoundError as exc:
-        raise ValueError(f"calendar snapshot has unknown timezone {timezone_name!r}") from exc
-    dates: list[date] = []
-    for value in time_index:
-        if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("time_index entries must be timezone-aware datetime instants")
-        dates.append(value.astimezone(timezone).date())
-    if len(set(dates)) != len(dates):
-        raise ValueError("time_index must contain at most one return row per local trading session")
-    if any(left >= right for left, right in zip(dates, dates[1:])):
-        raise ValueError("time_index must be strictly increasing in calendar-local session dates")
-    return tuple(dates)
-```
-
-### quant_evaluator.metrics.calendar_returns._period_id
-
-```python
-def _period_id(key: tuple[int, ...], frequency: str) -> str:
-    if frequency == "month":
-        return f"{key[0]:04d}-{key[1]:02d}"
-    if frequency == "quarter":
-        return f"{key[0]:04d}-Q{key[1]}"
-    return f"{key[0]:04d}"
-```
-
-### quant_evaluator.metrics.calendar_returns._period_key
-
-```python
-def _period_key(day: date, frequency: str) -> tuple[int, ...]:
-    if frequency == "month":
-        return (day.year, day.month)
-    if frequency == "quarter":
-        return (day.year, (day.month - 1) // 3 + 1)
-    return (day.year,)
-```
-
-### quant_evaluator.metrics.calendar_returns._validated_returns
-
-```python
-def _validated_returns(returns: Any, factor_ids: Sequence[str] | None = None) -> np.ndarray:
-    values = np.asarray(returns, dtype=np.float64)
-    if values.ndim == 1:
-        values = values[:, None]
-    if values.ndim != 2:
-        raise ValueError("returns must have shape (T, F) or (T,)")
-    if factor_ids is not None and len(factor_ids) != values.shape[1]:
-        raise ValueError("factor_ids length must equal returns factor dimension")
-    if np.any(np.isfinite(values) & (values < -1.0)):
-        raise ValueError("finite capital returns must be >= -1")
-    return values
-```
-
-### quant_evaluator.metrics.data_quality._factor_values
-
-```python
-def _factor_values(factor_batch: FactorBatch) -> np.ndarray:
-    values = np.asarray(factor_batch.values, dtype=np.float64)
-    if factor_batch.validity is not None:
-        values = np.where(factor_batch.validity, values, np.nan)
-    return values
-```
-
-### quant_evaluator.metrics.data_quality._labels
-
-```python
-def _labels(label_bundle: LabelBundle, num_assets: int) -> np.ndarray:
-    labels, _ = normalize_label_panel(label_bundle, num_assets)
-    return labels
-```
-
-### quant_evaluator.metrics.exposure.compute_factor_loadings
-
-```python
-def compute_factor_loadings(
-    factor_values: np.ndarray,
-    risk_factors: np.ndarray,
-    intercept: bool = True,
-    min_obs: int = 10,
-    *, weights=None, return_diagnostics: bool = False,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Compute factor loadings via cross-sectional OLS regression.
-
-    For each time period, regress factor_values on risk_factors:
-    factor[t, i] = alpha[t] + sum_k(beta[t, k] * risk_factor[t, i, k]) + epsilon[t, i]
-
-    Args:
-        factor_values: Factor values (T, N)
-        risk_factors: Risk factor matrix (T, N, K) where K is number of risk factors
-        intercept: Include intercept in regression
-        min_obs: Minimum valid observations per period
-
-    Returns:
-        (loadings, r_squared, residuals)
-        loadings: shape (T, K) or (T, K+1) if intercept=True
-        r_squared: shape (T,)
-        residuals: shape (T, N)
-    """
-    factor_values=np.asarray(factor_values,dtype=float)
-    risk_factors=np.asarray(risk_factors,dtype=float)
-    if factor_values.ndim!=2 or risk_factors.ndim!=3 or risk_factors.shape[:2]!=factor_values.shape:
-        raise ValueError("factor/risk inputs must have aligned (T,N)/(T,N,K) axes")
-    if isinstance(min_obs,(bool,np.bool_)) or not isinstance(min_obs,(int,np.integer)) or min_obs<2:
-        raise ValueError("min_obs must be an integer >=2")
-    T, N = factor_values.shape
-    K = risk_factors.shape[2]
-
-    num_coefs = K + 1 if intercept else K
-    loadings = np.full((T, num_coefs), np.nan, dtype=np.float64)
-    r_squared = np.full(T, np.nan, dtype=np.float64)
-    residuals = np.full((T, N), np.nan, dtype=np.float64)
-    weights=np.ones((T,N)) if weights is None else np.asarray(weights,dtype=float)
-    if weights.shape!=(T,N) or np.any(np.isfinite(weights)&(weights<0)):
-        raise ValueError("weights must have shape (T,N) and be nonnegative")
-    diagnostics=[]
-
-    for t in range(T):
-        y = factor_values[t, :]  # (N,)
-        X = risk_factors[t, :, :]  # (N, K)
-
-        # Filter finite observations
-        valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1) & np.isfinite(weights[t]) & (weights[t]>0)
-        y_valid = y[valid_mask]
-        X_valid = X[valid_mask, :]
-
-        if len(y_valid) < min_obs:
-            diagnostics.append({"status":"INSUFFICIENT_OBSERVATIONS","n":len(y_valid),"rank":0,"effective_df":0})
-            continue
-        _,resid,diag=rank_aware_projection(X_valid,y_valid,add_intercept=intercept,weights=weights[t,valid_mask])
-        diagnostics.append(diag)
-        if diag["effective_df"]<2:
-            continue
-        if diag["rank"]==num_coefs:
-            loadings[t]=diag["coefficients"]
-        if diag["total_variance"]>0 and diag["rank"]>int(intercept):
-            r_squared[t]=1.-diag["residual_variance"]/diag["total_variance"]
-        residuals[t,valid_mask]=resid
-    result=(loadings,r_squared,residuals)
-    return (*result,tuple(diagnostics)) if return_diagnostics else result
-```
-
-### quant_evaluator.metrics.exposure.rank_aware_projection
-
-```python
-def rank_aware_projection(X, y, *, add_intercept=True, rcond=None, weights=None):
-    """Centered/scaled weighted least squares; one projection authority.
-
-    Inputs are already joint finite rows. Redundant controls define the same
-    subspace; diagnostics distinguish their non-identifiable coefficients from
-    well-defined fitted values. No in-sample projection certifies OOS utility.
-    """
-    X=np.asarray(X,dtype=np.float64); y=np.asarray(y,dtype=np.float64)
-    if X.ndim!=2 or y.ndim!=1 or X.shape[0]!=len(y) or not len(y):
-        raise ValueError("projection requires aligned nonempty (N,K) and (N,) arrays")
-    if not np.isfinite(X).all() or not np.isfinite(y).all():
-        raise ValueError("projection inputs must be finite joint observations")
-    if not isinstance(add_intercept,(bool,np.bool_)):
-        raise TypeError("add_intercept must be bool")
-    if rcond is not None and (isinstance(rcond,(bool,np.bool_)) or not np.isfinite(rcond) or rcond<0 or rcond>=1):
-        raise ValueError("rcond must be None or a finite relative threshold in [0,1)")
-    n,k=X.shape
-    w=np.ones(n) if weights is None else np.asarray(weights,dtype=np.float64)
-    if w.shape!=(n,) or not np.isfinite(w).all() or np.any(w<=0):
-        raise ValueError("projection weights must be finite strictly positive and aligned")
-    w=w/np.max(w); w=w/w.sum()
-    if add_intercept:
-        x_origin=X[0]+np.sum((X-X[0])*w[:,None],axis=0)
-        y_origin=y[0]+np.sum((y-y[0])*w)
-        xc=X-x_origin; yc=y-y_origin
-    else:
-        x_origin=np.zeros(k); y_origin=0.; xc=X; yc=y
-    xs=np.sqrt(np.sum(w[:,None]*xc*xc,axis=0)); xs=np.where(xs>0,xs,1.)
-    ys=float(np.sqrt(np.sum(w*yc*yc))); ys=ys if ys>0 else 1.
-    design=xc/xs
-    if add_intercept:
-        design=np.column_stack((np.ones(n),design))
-    rootw=np.sqrt(w)
-    u,singular,vh=np.linalg.svd(design*rootw[:,None],full_matrices=False)
-    cutoff=(np.finfo(float).eps*max(design.shape) if rcond is None else rcond)
-    rank=int(np.sum(singular>cutoff*singular[0])) if len(singular) else 0
-    projected_coordinates=u[:,:rank].T@(yc/ys*rootw)
-    beta=vh[:rank].T@(projected_coordinates/singular[:rank])
-    rank=int(rank); df=n-rank
-    condition=float(singular[0]/singular[rank-1]) if rank else np.inf
-    # Project through orthonormal left singular vectors: an ill-conditioned
-    # coefficient basis must not amplify error in the fitted subspace.
-    predicted_center=(u[:,:rank]@projected_coordinates)*ys/rootw
-    residual=yc-predicted_center
-    scale=float(np.linalg.norm(yc))
-    tolerance=64*np.finfo(np.float64).eps*max(n,k+int(add_intercept))*max(scale,float(np.linalg.norm(predicted_center)),np.finfo(float).tiny)
-    status="RANK_DEFICIENT" if rank<design.shape[1] else "OK"
-    if df<2:
-        status="INSUFFICIENT_DF"
-    elif np.linalg.norm(residual)<=tolerance:
-        status="NO_RESIDUAL_VARIANCE"
-        residual=np.zeros_like(residual)
-    slopes=beta[int(add_intercept):]*ys/xs
-    coefficients=np.r_[y_origin+beta[0]*ys-x_origin@slopes,slopes] if add_intercept else slopes
-    # The centered calculation avoids cancellation in residuals at large means.
-    fitted=y-residual
-    diagnostics={"coefficients":coefficients,"rank":rank,"effective_df":df,"n":n,
-        "condition":condition,"residual_tolerance":tolerance,"status":status,
-        "estimation_scope":"SAME_DATE_DESCRIPTIVE","method_version":"centered_wls_svd.v1",
-        "total_variance":float(np.sum(w*(y-(y[0]+np.sum(w*(y-y[0]))))**2)),
-        "residual_variance":float(np.sum(w*residual**2))}
-    return fitted,residual,diagnostics
-```
-
-### quant_evaluator.metrics.exposure_evidence._as_factor_loadings
-
-```python
-def _as_factor_loadings(panel,factor_values=None,min_obs=10,weights=None):
-    if isinstance(panel,FactorLoadingSeries):
-        if factor_values is not None or weights is not None:
-            raise ValueError("factor loading evidence already binds factor and weights")
-        return panel
-    if factor_values is None:
-        raise TypeError("SecurityExposurePanel is not factor evidence; factor_values are required")
-    return build_factor_loading_series(panel,factor_values,min_obs=min_obs,weights=weights)
-```
-
-### quant_evaluator.metrics.exposure_evidence._panel_arrays
-
-```python
-def _panel_arrays(panel: ExposurePanel) -> Tuple[np.ndarray, np.ndarray]:
-    """Validate a panel and return (values, finite-mask) — (T, N, K)."""
-    arr = np.asarray(panel.values, dtype=np.float64)
-    if arr.ndim != 3:
-        raise ValueError(
-            f"ExposurePanel.values must be (T, N, K), got {arr.ndim}D"
-        )
-    valid = np.isfinite(arr)
-    if panel.validity is not None:
-        valid &= panel.validity
-        arr = np.where(valid, arr, np.nan)
-    return arr, valid
-```
-
-### quant_evaluator.metrics.exposure_evidence._select_style
-
-```python
-def _select_style(panel: FactorLoadingSeries, style: str, **kwargs) -> float:
-    """Signed mean exposure of one style dimension (NaN when absent)."""
-    ev = compute_style_exposure_evidence(panel, absolute=False,**kwargs)
-    names = list(ev.style_names)
-    if style not in names:
-        return float("nan")
-    return float(ev.values[names.index(style)])
-```
-
-### quant_evaluator.metrics.exposure_evidence.build_factor_loading_series
-
-```python
-def build_factor_loading_series(panel, factor_values, *, factor_id="research:single-factor", min_obs=10, weights=None):
-    if not isinstance(panel,ExposurePanel):
-        raise TypeError("factor regression requires a SecurityExposurePanel")
-    values=np.asarray(factor_values,dtype=float)
-    arr,valid=_panel_arrays(panel)
-    if values.ndim!=2 or values.shape!=arr.shape[:2]:
-        raise ValueError("factor_values must match risk time/security axes (T,N)")
-    if weights is not None and panel.regression_weights is not None:
-        raise ValueError("regression weights already bound by ExposurePanel")
-    w=panel.regression_weights if weights is None else np.asarray(weights,dtype=float)
-    if w is None: w=np.ones(values.shape)
-    if w.shape!=values.shape or not np.isfinite(w).all() or np.any(w<0):
-        raise ValueError("weights must be finite nonnegative (T,N)")
-    raw,r2,_,diagnostics=compute_factor_loadings(values,arr,min_obs=min_obs,weights=w,return_diagnostics=True)
-    standardized=np.full_like(raw[:,1:],np.nan)
-    joint=np.isfinite(values)&valid.all(axis=2)&(w>0)
-    for t in range(len(values)):
-        mask=joint[t]
-        if not mask.any() or not np.isfinite(r2[t]): continue
-        ww=w[t,mask]/np.max(w[t,mask]); ww=ww/ww.sum(); y=values[t,mask]; z=arr[t,mask]
-        yc=y-(y[0]+np.sum(ww*(y-y[0]))); zc=z-(z[0]+np.sum(ww[:,None]*(z-z[0]),axis=0))
-        sy=np.sqrt(np.sum(ww*yc*yc)); sz=np.sqrt(np.sum(ww[:,None]*zc*zc,axis=0))
-        if sy>0: standardized[t]=np.where(sz>0,raw[t,1:]*sz/sy,np.nan)
-    safe_diagnostics=tuple({k:v for k,v in d.items() if k!="coefficients"} for d in diagnostics)
-    return FactorLoadingSeries(standardized,raw[:,1:],r2,joint.sum(axis=1),tuple(panel.style_names),
-        factor_id,panel.source_ref,panel.provider,panel.date_index or tuple(range(len(values))),
-        "support:"+sha256(joint.tobytes()+w.tobytes()).hexdigest(),safe_diagnostics,
-        "factor-values:"+sha256(np.ascontiguousarray(values).tobytes()).hexdigest(),
-        panel.weight_ref or ("explicit_weight_array" if weights is not None else "equal_weight"))
-```
-
-### quant_evaluator.metrics.exposure_evidence.compute_style_exposure_evidence
-
-```python
-def compute_style_exposure_evidence(
-    panel: FactorLoadingSeries,
-    absolute: bool = False,
-    *, factor_values=None, min_obs=10, weights=None,
-) -> StyleExposureEvidence:
-    """Time-averaged standardized loading from factor-specific WLS evidence.
-
-    ``absolute=False`` returns the signed mean exposure per style (a positive
-    value means the factor loads positively on that style dimension across
-    the sample); ``absolute=True`` returns the mean of the absolute exposures
-    (magnitude — how much of the factor's variance lives on the style).
-
-    A security risk panel requires explicit (T,N) factor_values. Never average
-    the security risk panel itself as a proxy for the factor's style exposure.
-    """
-    panel=_as_factor_loadings(panel,factor_values,min_obs,weights)
-    arr=panel.values
-    T,K=arr.shape
-    out = np.full(K, np.nan)
-    counts = np.zeros(K, dtype=np.int64)
-    for k in range(K):
-        vals = arr[:, k]
-        finite = vals[np.isfinite(vals)]
-        counts[k] = finite.size
-        if finite.size == 0:
-            continue
-        out[k] = float(np.mean(np.abs(finite))) if absolute else float(np.mean(finite))
-    return StyleExposureEvidence(
-        values=out,
-        style_names=tuple(panel.style_names),
-        source_ref=panel.source_ref,
-        provider=panel.provider,
-        counts=counts,
-    )
-```
-
-### quant_evaluator.metrics.ic._pairwise_finite_mask
-
-```python
-def _pairwise_finite_mask(x: np.ndarray, y: np.ndarray) -> np.ndarray:
-    """
-    Compute pairwise finite mask for two arrays.
-
-    Args:
-        x: First array
-        y: Second array (must be broadcastable with x)
-
-    Returns:
-        Boolean mask where both x and y are finite
-    """
-    return np.isfinite(x) & np.isfinite(y)
-```
-
-### quant_evaluator.metrics.ic._pearson_correlation
-
-```python
-def _pearson_correlation(
-    x: np.ndarray,
-    y: np.ndarray,
-    min_obs: int = 10,
-    winsorize: float | None = None,
-) -> float:
-    """
-    Pearson correlation with pairwise finite filtering.
-
-    Args:
-        x: Factor values (1D)
-        y: Label values (1D)
-        min_obs: Minimum observations required
-        winsorize: Optional float in (0, 0.5); if set, winsorize both tails of
-            x and y to the given fraction before correlating. None (default)
-            keeps historical behavior (no winsorization).
-
-    Returns:
-        Correlation coefficient, or NaN if insufficient data or constant
-    """
-    mask = _pairwise_finite_mask(x, y)
-    x_valid = x[mask]
-    y_valid = y[mask]
-
-    n = len(x_valid)
-    if n < min_obs:
-        return np.nan
-
-    # Check for constants (robust to all-NaN / inf edges)
-    if (np.nanmax(x_valid) - np.nanmin(x_valid) == 0) or (
-        np.nanmax(y_valid) - np.nanmin(y_valid) == 0
-    ):
-        return np.nan
-
-    if winsorize is not None:
-        if not 0 < winsorize < 0.5:
-            raise ValueError(
-                f"winsorize must be in (0, 0.5) or None, got {winsorize!r}"
-            )
-        lower = winsorize
-        upper = 1.0 - winsorize
-        for series, index in ((x_valid, 0), (y_valid, 1)):
-            q_lo, q_hi = np.nanquantile(series, [lower, upper])
-            series = np.clip(series, q_lo, q_hi)
-            if index == 0:
-                x_win = series
-            else:
-                y_win = series
-        x_valid, y_valid = x_win, y_win
-
-    # Compute Pearson correlation
-    corr = np.corrcoef(x_valid, y_valid)[0, 1]
-
-    return corr
-```
-
-### quant_evaluator.metrics.ic._reject_boolean_ic_series
-
-```python
-def _reject_boolean_ic_series(ic_series: np.ndarray) -> None:
-    """
-    Reject boolean IC series.
-
-    True/False silently coerces to 1.0/0.0 (e.g. a validity mask), which
-    would yield a plausible-looking mean IC that carries no information.
-
-    Raises:
-        ValueError: If ic_series has boolean dtype or contains Python bools.
-    """
-    if ic_series.dtype == bool:
-        raise ValueError(
-            "ic_series must be numeric, got boolean dtype "
-            "(True/False would silently coerce to 1.0/0.0)"
-        )
-    if ic_series.dtype == object:
-        if any(isinstance(v, (bool, np.bool_)) for v in ic_series.ravel()):
-            raise ValueError(
-                "ic_series must be numeric, got Python bools "
-                "(True/False would silently coerce to 1.0/0.0)"
-            )
-```
-
-### quant_evaluator.metrics.ic._spearman_rank_correlation
-
-```python
-def _spearman_rank_correlation(x: np.ndarray, y: np.ndarray, min_obs: int = 10) -> float:
-    """
-    Spearman rank correlation with pairwise finite filtering and average ties.
-
-    Args:
-        x: Factor values (1D)
-        y: Label values (1D)
-        min_obs: Minimum observations required
-
-    Returns:
-        Rank correlation coefficient, or NaN if insufficient data,
-        or constant. Statistical evidence strength is assessed separately;
-        a binary nonconstant signal has a mathematically defined Spearman IC.
-    """
-    mask = _pairwise_finite_mask(x, y)
-    x_valid = x[mask]
-    y_valid = y[mask]
-
-    n = len(x_valid)
-    if n < min_obs:
-        return np.nan
-
-    # Distinct levels (x_valid/y_valid are already finite, so np.unique is exact)
-    x_levels = np.unique(x_valid)
-    y_levels = np.unique(y_valid)
-
-    # Constants (all values same)
-    if x_levels.size == 1 or y_levels.size == 1:
-        return np.nan
-
-    # Use scipy's spearmanr with average tie handling
-    corr, _ = stats.spearmanr(x_valid, y_valid)
-
-    return corr
-```
-
-### quant_evaluator.metrics.ic.compute_daily_ic
-
-```python
-def compute_daily_ic(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    method: str = "pearson",
-    min_assets: int = 20,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Compute daily IC series for factor batch.
-
-    Args:
-        factor_batch: Input factor batch (T, N, F)
-        label_bundle: Input label bundle (T, N) or (T,)
-        method: "pearson" or "spearman"
-        min_assets: Minimum valid assets per day (default raised to 20 so that
-            small cross-sections with N<20 no longer produce spurious IC).
-
-    Returns:
-        (ic_series, valid_count_series)
-        ic_series: shape (T, F) with IC per day per factor
-        valid_count_series: shape (T, F) with count of valid obs
-
-    Raises:
-        InvalidContractError: If shapes incompatible
-        InsufficientObservations: If no valid periods found
-    """
-    if factor_batch.num_times != len(label_bundle.values):
-        raise InvalidContractError(
-            f"Factor time axis ({factor_batch.num_times}) "
-            f"does not match label length ({len(label_bundle.values)})"
-        )
-
-    if method not in ("pearson", "spearman"):
-        raise ValueError(f"Unknown method: {method}. Must be 'pearson' or 'spearman'")
-
-    corr_fn = _pearson_correlation if method == "pearson" else _spearman_rank_correlation
-
-    values = factor_batch.values  # (T, N, F)
-    labels, label_validity = normalize_label_panel(label_bundle, factor_batch.num_assets)
-
-    T, N, F = values.shape
-    ic_series = np.full((T, F), np.nan, dtype=np.float64)
-    valid_counts = np.zeros((T, F), dtype=np.int32)
-
-    # Compute IC per day per factor
-    for t in range(T):
-        for f in range(F):
-            factor_t = values[t, :, f]  # (N,)
-            label_t = labels[t, :]       # (N,)
-
-            # Apply validity masks if present
-            if factor_batch.validity is not None:
-                factor_valid = factor_batch.validity[t, :, f]
-                factor_t = np.where(factor_valid, factor_t, np.nan)
-
-            if label_validity is not None:
-                label_t = np.where(label_validity[t], label_t, np.nan)
-
-            # Compute correlation
-            ic = corr_fn(factor_t, label_t, min_obs=min_assets)
-            ic_series[t, f] = ic
-
-            # Count valid observations
-            mask = _pairwise_finite_mask(factor_t, label_t)
-            valid_counts[t, f] = int(np.sum(mask))
-
-    return ic_series, valid_counts
-```
-
-### quant_evaluator.metrics.ic.compute_mean_ic
-
-```python
-def compute_mean_ic(
-    ic_series: np.ndarray,
-    valid_counts: Optional[np.ndarray] = None,
-    min_periods: int = 20,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Compute mean IC and its standard deviation across time.
-
-    Args:
-        ic_series: Daily IC series (T, F)
-        valid_counts: Valid observation counts (T, F)
-        min_periods: Minimum periods required for mean
-
-    Returns:
-        (mean_ic, ic_std) arrays of shape (F,)
-
-    Raises:
-        ValueError: If ic_series is boolean (or contains Python bools)
-    """
-    _reject_boolean_ic_series(np.asarray(ic_series))
-
-    # Count non-NaN periods per factor
-    valid_periods = np.sum(~np.isnan(ic_series), axis=0)  # (F,)
-
-    # Compute mean and std with fully NaN-suppressed operations (all-NaN or
-    # singleton-period columns are expected and produce NaN via the mask below,
-    # not RuntimeWarnings).
-    with np.errstate(invalid="ignore", divide="ignore"):
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            mean_ic = np.nanmean(ic_series, axis=0)  # (F,)
-            ic_std = np.nanstd(ic_series, axis=0, ddof=1)  # (F,)
-
-    # Mask insufficient periods
-    insufficient = valid_periods < min_periods
-    mean_ic = np.where(insufficient, np.nan, mean_ic)
-    ic_std = np.where(insufficient, np.nan, ic_std)
-
-    # Mask non-finite results: inf in the series propagates through nanmean
-    # into an infinite (invalid) mean/std — report NaN instead.
-    mean_ic = np.where(np.isfinite(mean_ic), mean_ic, np.nan)
-    ic_std = np.where(np.isfinite(ic_std), ic_std, np.nan)
-
-    return mean_ic, ic_std
-```
-
-### quant_evaluator.metrics.ic_summary.compute_icir
-
-```python
-def compute_icir(
-    ic_series: np.ndarray,
-    min_periods: int = 20,
-) -> np.ndarray:
-    """
-    Compute Information Coefficient Information Ratio (ICIR).
-
-    ICIR = mean(IC) / std(IC), measures consistency of IC signal.
-
-    Args:
-        ic_series: Daily IC series (T, F)
-        min_periods: Minimum periods required
-
-    Returns:
-        ICIR array of shape (F,), NaN if insufficient periods or zero std
-    """
-    values = np.asarray(ic_series)
-    _reject_boolean_ic_series(values)
-    if values.ndim != 2:
-        raise ValueError("ic_series must have shape (T, F)")
-    if isinstance(min_periods, bool) or not isinstance(min_periods, (int, np.integer)):
-        raise TypeError("min_periods must be an integer")
-    if min_periods < 2:
-        raise ValueError("min_periods must be at least 2 for sample standard deviation")
-
-    values = values.astype(np.float64, copy=False)
-    result = np.full(values.shape[1], np.nan, dtype=np.float64)
-    for factor_index in range(values.shape[1]):
-        finite = values[np.isfinite(values[:, factor_index]), factor_index]
-        if finite.size < min_periods:
-            continue
-        # Raw ICIR is mean / sample std.  Only exact zero variance is
-        # undefined; a small but genuine dispersion must not be thresholded
-        # away because that changes the economic statistic by scale.
-        if np.all(finite == finite[0]):
-            continue
-        std_ic = float(np.std(finite, ddof=1))
-        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
-            value = float(np.mean(finite) / std_ic)
-        if np.isfinite(value):
-            result[factor_index] = value
-    return result
-```
-
-### quant_evaluator.metrics.label_panel.normalize_label_panel
-
-```python
-def normalize_label_panel(
-    label_bundle: LabelBundle,
-    num_assets: int,
-) -> Tuple[np.ndarray, Optional[np.ndarray]]:
-    """Return label values and validity with a shared ``(T, N)`` shape."""
-    values = np.asarray(label_bundle.values)
-    if values.ndim == 1:
-        values = np.broadcast_to(values[:, np.newaxis], (values.shape[0], num_assets))
-    elif values.ndim == 2:
-        if values.shape[1] != num_assets:
-            raise InvalidContractError(
-                f"Label asset axis ({values.shape[1]}) does not match "
-                f"factor asset axis ({num_assets})"
-            )
-    else:
-        raise InvalidContractError("Label values must be 1D or 2D")
-
-    validity = label_bundle.validity
-    if validity is None:
-        return values, None
-    validity = np.asarray(validity, dtype=bool)
-    if validity.ndim == 1:
-        validity = np.broadcast_to(validity[:, np.newaxis], (values.shape[0], num_assets))
-    elif validity.ndim == 2:
-        if validity.shape != values.shape:
-            raise InvalidContractError(
-                f"Label validity shape {validity.shape} does not match "
-                f"normalized label shape {values.shape}"
-            )
-    else:
-        raise InvalidContractError("Label validity must be 1D or 2D")
-    return values, validity
-```
-
-### quant_evaluator.metrics.long_only._matrix
-
-```python
-def _matrix(returns):
-    values = np.asarray(returns, dtype=np.float64)
-    if values.ndim == 1:
-        return values[:, None], True
-    if values.ndim != 2:
-        raise ValueError("returns must be (T,) or (T,F)")
-    return values, False
-```
-
-### quant_evaluator.metrics.multiple_testing._validate_alpha
-
-```python
-def _validate_alpha(alpha: float) -> float:
-    """QE-METRIC P0-14: fail-closed validation for the alpha level."""
-    try:
-        alpha_val = float(alpha)
-    except (TypeError, ValueError):
-        raise ValueError(f"alpha must be a finite float in (0, 1), got {alpha!r}")
-    if not np.isfinite(alpha_val) or not (0.0 < alpha_val < 1.0):
-        raise ValueError(
-            f"alpha must be strictly inside (0, 1), got {alpha_val!r}"
-        )
-    return alpha_val
-```
-
-### quant_evaluator.metrics.multiple_testing._validate_p_values
-
-```python
-def _validate_p_values(p_values: np.ndarray) -> np.ndarray:
-    """QE-METRIC P0-14: fail-closed validation for p-value inputs.
-
-    Rejects empty arrays and finite p-values outside [0, 1]. Non-finite
-    entries (NaN, +-inf) are allowed and treated as missing downstream.
-
-    Returns the flattened array (a read view) for processing.
-    """
-    p = np.asarray(p_values, dtype=np.float64)
-    if p.size == 0:
-        raise ValueError(
-            "p_values must be non-empty; got an empty array "
-            f"(shape {p.shape})"
-        )
-    finite = np.isfinite(p)
-    out_of_range = finite & ((p < 0.0) | (p > 1.0))
-    n_bad = int(np.sum(out_of_range))
-    if n_bad > 0:
-        first_idx = int(np.nonzero(out_of_range.ravel())[0][0])
-        raise ValueError(
-            f"p_values contains {n_bad} finite value(s) outside [0, 1] "
-            f"(first at flat index {first_idx}: "
-            f"{p.ravel()[first_idx]!r}); these are not valid p-values"
-        )
-    return p
-```
-
-### quant_evaluator.metrics.portfolio_stats._validate_missing_return_policy
-
-```python
-def _validate_missing_return_policy(policy: str) -> str:
-    if policy not in _MISSING_RETURN_POLICIES:
-        raise ValueError(
-            f"missing_return_policy must be one of "
-            f"{_MISSING_RETURN_POLICIES}, got {policy!r}"
-        )
-    return policy
-```
-
-### quant_evaluator.metrics.portfolio_stats.equal_gross_long_short_returns
-
-```python
-def equal_gross_long_short_returns(long_members, short_members, forward_returns, *, cost_rate=0.0,
-                                  missing_return_policy="drop"):
-    """100% gross target-weight portfolio; full-notional turnover including entry.
-
-    A missing selected return invalidates the day under 'drop', not membership.
-    'zero_fill' is an explicit flat-mark assumption, never a reweighting rule.
-    """
-    weights = equal_gross_weights(long_members, short_members)
-    returns = np.asarray(forward_returns, float)
-    if returns.shape != weights.shape or not np.isfinite(cost_rate) or cost_rate < 0:
-        raise ValueError("invalid returns shape or commission")
-    _validate_missing_return_policy(missing_return_policy)
-    missing = ((weights != 0) & ~np.isfinite(returns)).any(axis=1)
-    if missing_return_policy == "fail" and missing.any():
-        raise ValueError("missing return on a selected position")
-    pnl = (weights * np.where(np.isfinite(returns), returns, 0.)).sum(axis=1)
-    turnover = np.abs(np.diff(np.vstack([np.zeros((1, weights.shape[1])), weights]), axis=0)).sum(axis=1)
-    pnl -= cost_rate * turnover
-    if missing_return_policy == "drop":
-        pnl[missing] = np.nan
-    return pnl
-```
-
-### quant_evaluator.metrics.portfolio_stats.equal_gross_weights
-
-```python
-def equal_gross_weights(long_members, short_members):
-    """Equal absolute weight per selected stock; 100% gross including full short margin.
-
-    Masks must be signal-time decisions. No forward-return filter is used.
-    Both legs are required; otherwise the portfolio remains in cash.
-    """
-    long_members, short_members = np.asarray(long_members, bool), np.asarray(short_members, bool)
-    if long_members.shape != short_members.shape or long_members.ndim != 2:
-        raise ValueError("membership masks must have matching (time, asset) shapes")
-    if np.any(long_members & short_members):
-        raise ValueError("an asset cannot be both long and short")
-    total = (long_members.sum(axis=1) + short_members.sum(axis=1))[:, None]
-    active = (long_members.any(axis=1) & short_members.any(axis=1))[:, None]
-    return np.divide(long_members.astype(float)-short_members, total,
-                     out=np.zeros(long_members.shape, float), where=active & (total > 0))
-```
-
-### quant_evaluator.metrics.predictive._as_series
-
-```python
-def _as_series(ic_series: np.ndarray) -> np.ndarray:
-    """Coerce to a float64 (T, F) array."""
-    s = np.asarray(ic_series, dtype=np.float64)
-    if s.ndim == 1:
-        s = s[:, None]
-    return s
-```
-
-### quant_evaluator.metrics.predictive._autocorr_lag
-
-```python
-def _autocorr_lag(s: np.ndarray, lag: int) -> np.ndarray:
-    """Pairwise-finite autocorrelation at ``lag`` on the original axis, (F,)."""
-    T, F = s.shape
-    if lag >= T:
-        return np.full(F, np.nan)
-    finite = np.isfinite(s)
-    pair = finite[lag:, :] & finite[:-lag, :]
-    n = np.sum(pair, axis=0).astype(np.float64)
-    x_prev = np.where(pair, s[:-lag, :], 0.0)
-    x_curr = np.where(pair, s[lag:, :], 0.0)
-    s_prev = np.sum(x_prev, axis=0)
-    s_curr = np.sum(x_curr, axis=0)
-    s_pp = np.sum(x_prev * x_prev, axis=0)
-    s_cc = np.sum(x_curr * x_curr, axis=0)
-    s_pc = np.sum(x_prev * x_curr, axis=0)
-    num = n * s_pc - s_prev * s_curr
-    denom = np.sqrt((n * s_pp - s_prev * s_prev) * (n * s_cc - s_curr * s_curr))
-    with np.errstate(invalid="ignore", divide="ignore"):
-        corr = num / denom
-    corr = np.where((denom <= 0) | (~np.isfinite(denom)) | (n < 2), np.nan, corr)
-    return corr
-```
-
-### quant_evaluator.metrics.predictive._mean_of_period_means
-
-```python
-def _mean_of_period_means(s: np.ndarray, period: str, time_index=None) -> np.ndarray:
-    means = _period_means(s, period, time_index)
-    with np.errstate(invalid="ignore"):
-        return np.nanmean(means, axis=0)
-```
-
-### quant_evaluator.metrics.predictive._period_means
-
-```python
-def _period_means(
-    s: np.ndarray,
-    period: str,
-    time_index: Optional[Sequence] = None,
-) -> np.ndarray:
-    """Per-period mean IC, shape (n_periods, F).
-
-    Uses the calendar period when ``time_index`` is provided, otherwise
-    contiguous blocks of ``_BLOCK_DAYS[period]`` trading days.
-    """
-    if time_index is not None and len(time_index) == s.shape[0]:
-        try:
-            import pandas as pd
-
-            idx = pd.to_datetime(list(time_index))
-            df = pd.DataFrame(s, index=idx)
-            if period == "year":
-                grouped = df.groupby(df.index.year)
-            elif period == "month":
-                grouped = df.groupby([df.index.year, df.index.month])
-            else:  # quarter
-                grouped = df.groupby(df.index.to_period("Q"))
-            return grouped.mean().to_numpy(dtype=np.float64)  # (n_periods, F)
-        except Exception:  # noqa: BLE001 - fall back to block grouping
-            pass
-    block = _BLOCK_DAYS.get(period, 63)
-    T, F = s.shape
-    n_blocks = max(1, int(np.ceil(T / block)))
-    pad = n_blocks * block - T
-    if pad > 0:
-        s = np.vstack([s, np.full((pad, F), np.nan)])
-    blocks = s.reshape(n_blocks, block, F)
-    with np.errstate(invalid="ignore"):
-        return np.nanmean(blocks, axis=1)  # (n_blocks, F)
-```
-
-### quant_evaluator.metrics.predictive._recent_mean
-
-```python
-def _recent_mean(s: np.ndarray, n_days: int) -> np.ndarray:
-    tail = s[-n_days:, :]
-    with np.errstate(invalid="ignore"):
-        return np.nanmean(tail, axis=0)
-```
-
-### quant_evaluator.metrics.predictive._rolling_mean_ir
-
-```python
-def _rolling_mean_ir(s: np.ndarray, window: int, min_periods: int):
-    """Rolling mean and IR (mean/std) over a trailing window, (T, F) each."""
-    T, F = s.shape
-    finite = np.isfinite(s)
-    x = np.where(finite, s, 0.0)
-    pref = np.concatenate([np.zeros((1, F)), np.cumsum(x, axis=0)], axis=0)
-    fpref = np.concatenate([np.zeros((1, F)), np.cumsum(finite, axis=0)], axis=0)
-    pref_sq = np.concatenate([np.zeros((1, F)), np.cumsum(x * x, axis=0)], axis=0)
-    ends = np.arange(1, T + 1)
-    start = np.maximum(ends - window, 0)
-    cnt = fpref[ends] - fpref[start]
-    ssum = pref[ends] - pref[start]
-    ssq = pref_sq[ends] - pref_sq[start]
-    with np.errstate(invalid="ignore", divide="ignore"):
-        mean = ssum / np.maximum(cnt, 1.0)
-        var = ssq - cnt * mean * mean
-        std = np.sqrt(np.maximum(var, 0.0) / np.maximum(cnt - 1, 1.0))
-        ir = mean / std
-    mean = np.where(cnt >= min_periods, mean, np.nan)
-    ir = np.where((cnt >= max(2, min_periods)) & (std > 1e-12), ir, np.nan)
-    return mean, ir
-```
-
-### quant_evaluator.metrics.predictive._valid_counts
-
-```python
-def _valid_counts(s: np.ndarray) -> np.ndarray:
-    return np.sum(np.isfinite(s), axis=0)
-```
-
-### quant_evaluator.metrics.predictive._worst_period
-
-```python
-def _worst_period(s: np.ndarray, period: str, time_index=None) -> np.ndarray:
-    means = _period_means(s, period, time_index)
-    with np.errstate(invalid="ignore"):
-        return np.nanmin(means, axis=0)
-```
-
-### quant_evaluator.metrics.quality._valid_pair_mask
-
-```python
-def _valid_pair_mask(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-) -> np.ndarray:
-    """Return the pairwise-valid boolean mask of shape (T, N, F).
-
-    A (t, n, f) cell is valid when the factor value, the normalized label
-    value, the factor validity mask (if present), and the label validity
-    mask (if present) are all finite/true.
-    """
-    if factor_batch.num_times != len(label_bundle.values):
-        raise InvalidContractError(
-            f"Factor time axis ({factor_batch.num_times}) "
-            f"does not match label length ({len(label_bundle.values)})"
-        )
-
-    values = factor_batch.values  # shape: (T, N, F)
-    labels, label_validity = normalize_label_panel(label_bundle, factor_batch.num_assets)
-
-    factor_finite = np.isfinite(values)  # (T, N, F)
-    label_finite = np.isfinite(labels)   # (T, N)
-
-    label_finite_expanded = label_finite[:, :, np.newaxis]  # (T, N, 1)
-    valid_pairs = factor_finite & label_finite_expanded    # (T, N, F)
-
-    if factor_batch.validity is not None:
-        valid_pairs = valid_pairs & factor_batch.validity
-    if label_validity is not None:
-        valid_pairs = valid_pairs & label_validity[:, :, np.newaxis]
-
-    return valid_pairs
-```
-
-### quant_evaluator.metrics.quality.compute_coverage_per_factor
-
-```python
-def compute_coverage_per_factor(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    min_assets: int = 10,
-) -> Dict[str, Dict[str, float]]:
-    """
-    Compute a per-factor coverage report.
-
-    Unlike the deprecated :func:`compute_coverage`, this never averages
-    across factor columns and actually USES ``min_assets``: days on which
-    a factor has fewer than ``min_assets`` jointly valid (factor, label)
-    observations are counted in ``days_below_min_assets``.
-
-    Args:
-        factor_batch: Input factor batch (T, N, F)
-        label_bundle: Input label bundle
-        min_assets: Minimum valid assets per day for a day to count as
-            a "valid day" (enforced, not diagnostic)
-
-    Returns:
-        Dict keyed by factor_id with entries:
-            {"coverage": float, "num_valid": int, "num_total": int,
-             "valid_days": int, "days_below_min_assets": int}
-
-    Raises:
-        InvalidContractError: If shapes are incompatible
-    """
-    valid_pairs = _valid_pair_mask(factor_batch, label_bundle)
-    per_day_counts = np.sum(valid_pairs, axis=1)  # (T, F)
-    num_times = valid_pairs.shape[0]
-
-    report: Dict[str, Dict[str, float]] = {}
-    for index, factor_id in enumerate(factor_batch.factor_ids):
-        counts = per_day_counts[:, index]
-        num_valid = int(counts.sum())
-        num_total = int(valid_pairs[:, :, index].size)
-        valid_days = int(np.sum(counts >= min_assets))
-        report[factor_id] = {
-            "coverage": num_valid / num_total if num_total > 0 else 0.0,
-            "num_valid": num_valid,
-            "num_total": num_total,
-            "valid_days": valid_days,
-            "days_below_min_assets": int(num_times) - valid_days,
-        }
-    return report
-```
-
-### quant_evaluator.metrics.quantile._percentile_boundaries
-
-```python
-def _percentile_boundaries(
-    v_finite: np.ndarray,
-    n_quantiles: int,
-) -> np.ndarray:
-    """Internal boundary computation shared by every assign_quantiles* path.
-
-    QE-Q-P0-002: all quantile binning implementations (NumPy reference, fast,
-    Numba, Polars, CuPy) must derive bins from the same percentile boundaries,
-    so the boundary values themselves are computed in exactly one place.
-
-    Boundaries are interpolated on the sorted values with the formula
-    ``sv[lo] + frac * (sv[lo+1] - sv[lo])`` at position
-    ``pos = (b+1)/n_quantiles * (n-1)``.  Positions within 1e-9 of an integer
-    snap to the exact sorted value: np.percentile can land one ulp off the
-    data value there (its percentile/100 rounding), which would silently flip
-    the tie policy for the value sitting exactly on the boundary.  The snap
-    keeps every backend bit-identical at the only positions where exact ties
-    are possible.
-    """
-    sv = np.sort(v_finite)
-    n = sv.shape[0]
-    boundaries = np.empty(n_quantiles - 1, dtype=np.float64)
-    for b in range(n_quantiles - 1):
-        pos = (b + 1) / n_quantiles * (n - 1)
-        lo = int(pos)
-        frac = pos - lo
-        if lo >= n - 1:
-            boundaries[b] = sv[n - 1]
-        elif frac < 1e-9:
-            boundaries[b] = sv[lo]
-        elif frac > 1.0 - 1e-9:
-            boundaries[b] = sv[lo + 1]
-        else:
-            boundaries[b] = sv[lo] + frac * (sv[lo + 1] - sv[lo])
-    return boundaries
-```
-
-### quant_evaluator.metrics.quantile._searchsorted_bins
-
-```python
-def _searchsorted_bins(
-    boundaries: np.ndarray,
-    v_finite: np.ndarray,
-    n_quantiles: int,
-    policy: QuantileTiePolicy,
-) -> np.ndarray:
-    """Internal searchsorted binning honoring the tie policy.
-
-    MIN -> side='left' (value == boundary goes to the LOWER bin)
-    MAX -> side='right' (value == boundary goes to the HIGHER bin)
-    """
-    if policy == QuantileTiePolicy.MIN:
-        q_bins = np.searchsorted(boundaries, v_finite, side='left')
-    else:  # QuantileTiePolicy.MAX
-        q_bins = np.searchsorted(boundaries, v_finite, side='right')
-    return np.clip(q_bins, 0, n_quantiles - 1)
-```
-
-### quant_evaluator.metrics.quantile._validate_quantile_count
-
-```python
-def _validate_quantile_count(n_quantiles):
-    if isinstance(n_quantiles, (bool, np.bool_)) or not isinstance(n_quantiles, (int, np.integer)) or n_quantiles < 1:
-        raise ValueError("n_quantiles must be a positive integer")
-```
-
-### quant_evaluator.metrics.quantile.assign_quantiles_batch
-
-```python
-def assign_quantiles_batch(
-    values: np.ndarray,
-    n_quantiles: int = 5,
-    method: str = "max",
-) -> np.ndarray:
-    """
-    Ultra-fast batch quantile assignment with minimal Python loops.
-
-    QE-Q-P0-001: Enforces tie-breaking policy.
-
-    Processes entire time×asset×factor tensor with vectorized operations.
-    Best performance for large batches.
-
-    Args:
-        values: Input values shape (T, N, F)
-        n_quantiles: Number of quantiles
-        method: Tie-breaking policy ('min' or 'max'). Default 'max'.
-
-    Returns:
-        Quantile assignments shape (T, N, F), -1 for NaN
-    """
-    policy = validate_tie_policy(method)
-    _validate_quantile_count(n_quantiles)
-    original_ndim = values.ndim
-    if original_ndim not in (2, 3):
-        raise ValueError("quantile input must be T x N or T x N x F")
-    if values.ndim == 2:
-        values = values[:, :, np.newaxis]
-
-    T, N, F = values.shape
-    quantiles = np.full((T, N, F), -1, dtype=np.int32)
-
-    # Process all time-factor pairs efficiently
-    for t in range(T):
-        # Vectorize across all factors at once
-        v_t = values[t, :, :]  # (N, F)
-        finite_mask_t = np.isfinite(v_t)  # (N, F)
-
-        for f in range(F):
-            mask = finite_mask_t[:, f]
-            n_finite = np.sum(mask)
-
-            if n_finite < n_quantiles:
-                continue
-
-            v_finite = v_t[mask, f]
-
-            # QE-Q-P0-002: same percentile boundaries + tie policy as the
-            # reference implementation (shared helpers).
-            boundaries = _percentile_boundaries(v_finite, n_quantiles)
-            q_bins = _searchsorted_bins(boundaries, v_finite, n_quantiles, policy)
-
-            quantiles[t, mask, f] = q_bins
-
-    return quantiles[:, :, 0] if original_ndim == 2 else quantiles
-```
-
-### quant_evaluator.metrics.quantile.compute_quantile_returns
-
-```python
-def compute_quantile_returns(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    n_quantiles: int = 5,
-    min_assets: int = 10,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Compute average returns per quantile per period.
-
-    Optimized with vectorized quantile assignment and bincount aggregation.
-
-    Args:
-        factor_batch: Factor values (T, N, F)
-        label_bundle: Forward returns (T, N)
-        n_quantiles: Number of quantiles
-        min_assets: Minimum assets per quantile
-
-    Returns:
-        (quantile_returns, quantile_counts)
-        quantile_returns: shape (T, n_quantiles, F)
-        quantile_counts: shape (T, n_quantiles, F)
-    """
-    values = factor_batch.values  # (T, N, F)
-    if factor_batch.validity is not None:
-        values = np.where(factor_batch.validity, values, np.nan)
-    labels, label_validity = normalize_label_panel(
-        label_bundle, factor_batch.num_assets
-    )
-    if label_validity is not None:
-        labels = np.where(label_validity, labels, np.nan)
-
-    T, N, F = values.shape
-    quantile_returns = np.full((T, n_quantiles, F), np.nan, dtype=np.float64)
-    quantile_counts = np.zeros((T, n_quantiles, F), dtype=np.int32)
-
-    # Process each factor independently
-    for f in range(F):
-        # Assign quantiles for this factor across all time periods
-        q_assignments_f = assign_quantiles_batch(values[:, :, f], n_quantiles=n_quantiles)  # (T, N)
-
-        # Aggregate per time period
-        for t in range(T):
-            label_t = labels[t, :]
-            valid_labels = np.isfinite(label_t)
-            q_t_f = q_assignments_f[t, :]  # (N,)
-
-            # Combined mask: valid quantile assignment AND valid label
-            valid_mask = (q_t_f >= 0) & valid_labels
-
-            if not np.any(valid_mask):
-                continue
-
-            q_valid = q_t_f[valid_mask]
-            label_valid = label_t[valid_mask]
-
-            # Use bincount for fast aggregation - much faster than loop over quantiles
-            # bincount sums, so we sum labels and divide by counts
-            counts = np.bincount(q_valid, minlength=n_quantiles)
-            sums = np.bincount(q_valid, weights=label_valid, minlength=n_quantiles)
-
-            # Apply min_assets filter and compute means
-            sufficient_mask = counts >= min_assets
-            quantile_counts[t, :, f] = counts
-            quantile_returns[t, sufficient_mask, f] = sums[sufficient_mask] / counts[sufficient_mask]
-
-    return quantile_returns, quantile_counts
-```
-
-### quant_evaluator.metrics.quantile.compute_quantile_returns_fast
-
-```python
-def compute_quantile_returns_fast(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    n_quantiles: int = 5,
-    min_assets: int = 10,
-    use_numba: bool = True,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Compute quantile returns with automatic selection of fastest implementation.
-
-    Automatically uses Numba JIT if available (2-5x faster), otherwise falls back
-    to optimized numpy implementation.
-
-    Args:
-        factor_batch: Factor values (T, N, F)
-        label_bundle: Forward returns (T, N)
-        n_quantiles: Number of quantiles
-        min_assets: Minimum assets per quantile
-        use_numba: If True and numba available, use JIT version (default: True)
-
-    Returns:
-        (quantile_returns, quantile_counts)
-        quantile_returns: shape (T, n_quantiles, F)
-        quantile_counts: shape (T, n_quantiles, F)
-    """
-    if use_numba and _NUMBA_AVAILABLE:
-        return compute_quantile_returns_numba(
-            factor_batch, label_bundle, n_quantiles, min_assets
-        )
-    else:
-        return compute_quantile_returns(
-            factor_batch, label_bundle, n_quantiles, min_assets
-        )
-```
-
-### quant_evaluator.metrics.quantile_numba.compute_quantile_returns_numba
-
-```python
-def compute_quantile_returns_numba(
-    factor_batch: FactorBatch,
-    label_bundle: LabelBundle,
-    n_quantiles: int = 5,
-    min_assets: int = 10,
-    method: str = "max",
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    High-performance quantile return computation using Numba JIT.
-
-    QE-Q-P0-001: Enforces tie-breaking policy.
-    Achieves 5-10x speedup through JIT compilation and parallel processing.
-
-    Args:
-        factor_batch: Factor values (T, N, F)
-        label_bundle: Forward returns (T, N)
-        n_quantiles: Number of quantiles
-        min_assets: Minimum assets per quantile
-        method: Tie-breaking policy ('min' or 'max'). Default 'max'.
-
-    Returns:
-        (quantile_returns, quantile_counts)
-        quantile_returns: shape (T, n_quantiles, F)
-        quantile_counts: shape (T, n_quantiles, F)
-    """
-    # Numba is optional: when absent, the no-op ``jit`` decorator and
-    # ``prange``->``range`` alias above make the JIT kernels run as plain
-    # Python, so this still returns a correct result (just slower).
-    from quant_evaluator.contracts.quantile_policy import validate_tie_policy
-    policy = validate_tie_policy(method)
-
-    values = factor_batch.values
-    if factor_batch.validity is not None:
-        values = np.where(factor_batch.validity, values, np.nan)
-    labels, label_validity = normalize_label_panel(
-        label_bundle, factor_batch.num_assets
-    )
-    if label_validity is not None:
-        labels = np.where(label_validity, labels, np.nan)
-    labels = np.ascontiguousarray(labels)
-
-    # Assign quantiles with JIT
-    quantiles = _assign_quantiles_jit(values, n_quantiles, policy.value)
-
-    # Compute returns with JIT and parallelization
-    quantile_returns, quantile_counts = _compute_quantile_returns_jit(
-        values, labels, quantiles, n_quantiles, min_assets
-    )
-
-    return quantile_returns, quantile_counts
-```
-
-### quant_evaluator.metrics.quantile_shape._as_matrix
-
-```python
-def _as_matrix(qr: np.ndarray) -> np.ndarray:
-    """Coerce to a float64 (n_quantiles, F) matrix."""
-    m = np.asarray(qr, dtype=np.float64)
-    if m.ndim == 1:
-        m = m[:, None]
-    return m
-```
-
-### quant_evaluator.metrics.quantile_shape._finite_columns
-
-```python
-def _finite_columns(m: np.ndarray) -> np.ndarray:
-    """Boolean (F,) mask of columns with >= 2 finite quantile returns."""
-    return np.sum(np.isfinite(m), axis=0) >= 2
-```
-
-### quant_evaluator.metrics.risk.drawdown_analysis.compute_drawdown_series
-
-```python
-def compute_drawdown_series(
-    returns: np.ndarray,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Compute drawdown series from returns.
-
-    Args:
-        returns: Return series (T,) or (T, F)
-
-    Returns:
-        (drawdown_series, cumulative_returns, running_max)
-        drawdown_series: Drawdown at each time (negative values), shape (T,) or (T, F)
-        cumulative_returns: Cumulative wealth curve, shape (T,) or (T, F)
-        running_max: Running maximum wealth, shape (T,) or (T, F)
-    """
-    if returns.ndim == 1:
-        returns = returns[:, np.newaxis]
-        squeeze = True
-    else:
-        squeeze = False
-
-    if np.any(returns[np.isfinite(returns)] < -1.0):
-        raise ValueError("returns below -100% require an explicit negative-capital contract")
-    # Replace NaN with 0 for cumulative computation
-    returns_filled = np.where(np.isfinite(returns), returns, 0.0)
-
-    # Cumulative wealth curve
-    cum_returns = np.cumprod(1.0 + returns_filled, axis=0)
-
-    # Initial capital is a high-water mark too: a loss on the first
-    # observation must count even before an observed wealth peak exists.
-    running_max = np.maximum(1.0, np.maximum.accumulate(cum_returns, axis=0))
-
-    # Zero NAV is an absorbing default with an observed 100% loss, not missing
-    # evidence. Negative capital is rejected above before compounding.
-    drawdown_series = (cum_returns - running_max) / running_max
-
-    if squeeze:
-        return drawdown_series[:, 0], cum_returns[:, 0], running_max[:, 0]
-    else:
-        return drawdown_series, cum_returns, running_max
-```
-
-### quant_evaluator.metrics.risk.drawdown_analysis.drawdown_events
-
-```python
-def drawdown_events(returns: np.ndarray) -> List[Dict]:
-    """Single-pass, observation-aligned events (definition version 0.3).
-
-    A missing return makes subsequent NAV unknown, not a flat day. Such an
-    event is censored at the first valuation gap; no recovery is inferred
-    across it. Durations are grid intervals, never finite-observation counts.
-    """
-    values = np.asarray(returns, dtype=np.float64)
-    if values.ndim != 1:
-        raise ValueError("drawdown_events requires 1D returns")
-    if np.any(values[np.isfinite(values)] < -1):
-        raise ValueError("returns below -100% require an explicit negative-capital contract")
-    events = []
-    wealth = high = 1.0
-    peak = -1
-    event = None
-    for t, value in enumerate(values):
-        if not np.isfinite(value):
-            if event is None:
-                event = dict(peak_idx=peak, start_idx=t, trough_idx=-1,
-                             drawdown=np.nan)
-            event.update(recovery_idx=-1, end_idx=len(values) - 1,
-                         censored=True, status="INVALID_VALUATION",
-                         first_missing_idx=t, duration=len(values) - event["start_idx"],
-                         valid_observations=int(np.isfinite(values[event["start_idx"]:]).sum()))
-            events.append(event)
-            return events
-        wealth *= 1 + value
-        dd = max(0., 1 - wealth / high)
-        # Same exact highwater contract as maximum-drawdown peak indices.
-        # A measured underwater loss cannot be relabelled as a new peak.
-        if wealth >= high:
-            if event is not None:
-                event.update(recovery_idx=t, end_idx=t, censored=False,
-                             status="RECOVERED", duration=t - event["start_idx"],
-                             valid_observations=t - event["start_idx"] + 1)
-                events.append(event)
-                event = None
-            high, peak = max(high, wealth), t
-        else:
-            if event is None:
-                event = dict(peak_idx=peak, start_idx=t, trough_idx=t, drawdown=dd)
-            if dd > event["drawdown"]:
-                event.update(trough_idx=t, drawdown=dd)
-    if event is not None:
-        event.update(recovery_idx=-1, end_idx=len(values) - 1, censored=True,
-                     status="DEFAULTED" if wealth == 0 else "ACTIVE",
-                     duration=len(values) - event["start_idx"],
-                     valid_observations=len(values) - event["start_idx"])
-        events.append(event)
-    return events
-```
-
-### quant_evaluator.metrics.risk.var_cvar._validate_confidence_level
-
-```python
-def _validate_confidence_level(confidence_level: float) -> None:
-    """Fail closed: confidence_level must be strictly inside (0, 1).
-
-    confidence_level == 1.0 would divide by zero in parametric CVaR
-    (inf VaR), and <= 0 is meaningless. Raise ValueError otherwise.
-    """
-    if not (0.0 < confidence_level < 1.0):
-        raise ValueError(
-            f"confidence_level must be in (0, 1), got {confidence_level}"
-        )
-```
-
-### quant_evaluator.metrics.risk.var_cvar.compute_cvar
-
-```python
-def compute_cvar(
-    returns: np.ndarray,
-    confidence_level: float = 0.95,
-    method: str = "historical",
-    min_periods: int = 20,
-) -> np.ndarray:
-    """
-    Compute Conditional Value at Risk (CVaR / Expected Shortfall).
-
-    CVaR is the expected loss given that loss exceeds VaR threshold.
-
-    Args:
-        returns: Return series (T,) or (T, F)
-        confidence_level: Confidence level
-        method: "historical" or "parametric"
-        min_periods: Minimum periods required
-
-    Returns:
-        CVaR (positive loss value), scalar or shape (F,)
-    """
-    _validate_confidence_level(confidence_level)
-
-    if returns.ndim == 1:
-        returns = returns[:, np.newaxis]
-        squeeze = True
-    else:
-        squeeze = False
-
-    T, F = returns.shape
-    cvar = np.full(F, np.nan)
-
-    if method == "historical":
-        # Historical CVaR: mean of returns below VaR threshold
-        quantile = 1.0 - confidence_level
-
-        for f in range(F):
-            ret_f = returns[:, f]
-            valid = np.isfinite(ret_f)
-            n_valid = np.sum(valid)
-
-            if n_valid < min_periods:
-                continue
-
-            ret_valid = ret_f[valid]
-
-            cvar[f] = max(0.0, empirical_expected_shortfall(ret_valid, confidence_level))
-
-    elif method == "parametric":
-        # Parametric CVaR for normal distribution
-        z = stats.norm.ppf(1.0 - confidence_level)
-        pdf_at_z = stats.norm.pdf(z)
-
-        for f in range(F):
-            ret_f = returns[:, f]
-            valid = np.isfinite(ret_f)
-            n_valid = np.sum(valid)
-
-            if n_valid < min_periods:
-                continue
-
-            ret_valid = ret_f[valid]
-
-            mean_ret = np.mean(ret_valid)
-            std_ret = np.std(ret_valid, ddof=1)
-
-            if not np.isfinite(std_ret) or std_ret <= 0:
-                continue
-
-            # CVaR = mean + std * E[Z | Z < z] = mean - std * pdf(z) / (1 - CL)
-            cvar_value = mean_ret - std_ret * pdf_at_z / (1.0 - confidence_level)
-            cvar[f] = -cvar_value if cvar_value < 0 else 0.0
-
-    else:
-        raise ValueError(f"Unknown CVaR method: {method}")
-
-    return cvar[0] if squeeze else cvar
-```
-
-### quant_evaluator.metrics.risk.var_cvar.empirical_expected_shortfall
-
-```python
-def empirical_expected_shortfall(returns, confidence_level=0.95):
-    """Signed empirical loss ES v2: fixed tail mass, fractional boundary.
-
-    Equal observation weights; finite observations only. This is a descriptive
-    same-period estimate, not an inference/adequate-tail-sample certificate.
-    compute_cvar is the separately documented positive-loss-clamped display.
-    """
-    _validate_confidence_level(confidence_level)
-    values = np.asarray(returns, dtype=float)
-    if values.ndim != 1:
-        raise ValueError("empirical ES requires a one-dimensional return sample")
-    losses = np.sort(-values[np.isfinite(values)])[::-1]
-    if not len(losses):
-        return float("nan")
-    mass = (1.0 - confidence_level) * len(losses)
-    full = int(np.floor(mass))
-    fraction = mass - full
-    return float((losses[:full].sum() + (fraction * losses[full] if full < len(losses) else 0.)) / mass)
-```
-
-### quant_evaluator.metrics.robustness._contiguous_sample
-
-```python
-def _contiguous_sample(column):
-    positions = np.flatnonzero(np.isfinite(column))
-    if (np.isinf(column).any() or not len(positions)
-            or positions[-1] - positions[0] + 1 != len(positions)):
-        return np.empty(0, dtype=float)
-    return column[positions[0]:positions[-1] + 1]
-```
-
-### quant_evaluator.metrics.robustness._validate_bootstrap_policy
-
-```python
-def _validate_bootstrap_policy(t, block_length, num_bootstrap, confidence_level, random_seed):
-    for name, value in (("block_length", block_length), ("num_bootstrap", num_bootstrap)):
-        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or value < 1:
-            raise ValueError(f"{name} must be a positive integer")
-    if block_length > t:
-        raise ValueError("block_length exceeds time axis")
-    if num_bootstrap < 2:
-        raise ValueError("num_bootstrap must be at least two")
-    if (isinstance(confidence_level, (bool, np.bool_))
-            or not isinstance(confidence_level, (int, float, np.integer, np.floating))
-            or not np.isfinite(confidence_level) or not 0 < confidence_level < 1):
-        raise ValueError("confidence_level must be finite and in (0, 1)")
-    if random_seed is not None and (isinstance(random_seed, (bool, np.bool_))
-            or not isinstance(random_seed, (int, np.integer)) or random_seed < 0):
-        raise ValueError("random_seed must be a nonnegative integer or None")
-```
-
-### quant_evaluator.metrics.robustness._validate_hac_policy
-
-```python
-def _validate_hac_policy(max_lag, kernel):
-    if isinstance(max_lag, (bool, np.bool_)) or not isinstance(max_lag, (int, np.integer)) or max_lag < 0:
-        raise ValueError("max_lag must be a nonnegative integer")
-    if kernel not in ("bartlett", "uniform"):
-        raise ValueError("kernel must be bartlett or uniform")
-```
-
-### quant_evaluator.metrics.robustness.compute_block_bootstrap_ci
-
-```python
-def compute_block_bootstrap_ci(
-    ic_series: np.ndarray,
-    block_length: int = 10,
-    num_bootstrap: int = 1000,
-    confidence_level: float = 0.95,
-    random_seed: Optional[int] = None,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Compute confidence interval via block bootstrap.
-
-    Block bootstrap preserves temporal dependence structure by resampling
-    contiguous blocks of observations.
-    All factors share original-time-axis draws. A column with missing or
-    infinite observations is insufficient (NaN); no calendar compression occurs.
-
-    Args:
-        ic_series: Daily IC series (T, F)
-        block_length: Length of each bootstrap block
-        num_bootstrap: Number of bootstrap samples
-        confidence_level: Confidence level (e.g., 0.95 for 95% CI)
-        random_seed: Random seed
-
-    Returns:
-        (ci_lower, ci_upper)
-        ci_lower: shape (F,) - lower bound of CI for mean IC
-        ci_upper: shape (F,) - upper bound of CI for mean IC
-    """
-    ic_series = np.asarray(ic_series, dtype=float)
-    if ic_series.ndim == 1:
-        ic_series = ic_series[:, None]
-    if ic_series.ndim != 2:
-        raise ValueError("bootstrap requires a time series or T x F matrix")
-    T, F = ic_series.shape
-    _validate_bootstrap_policy(T, block_length, num_bootstrap, confidence_level, random_seed)
-
-    # Local Generator: never touch the global numpy RNG state.
-    rng = np.random.default_rng(random_seed)
-    # One original-time-axis draw matrix, independent of factor order/count.
-    # This direct multi-candidate producer requires a complete common calendar.
-    # Gapped columns remain NaN; callers must not compress them before entry.
-    num_blocks = (T + block_length - 1) // block_length
-    shared_starts = rng.integers(0, T - block_length + 1,
-                                size=(num_bootstrap, num_blocks))
-
-    alpha = 1.0 - confidence_level
-    lower_percentile = 100 * (alpha / 2)
-    upper_percentile = 100 * (1 - alpha / 2)
-
-    ci_lower = np.full(F, np.nan, dtype=np.float64)
-    ci_upper = np.full(F, np.nan, dtype=np.float64)
-
-    for f in range(F):
-        ic_f = ic_series[:, f]
-        if not np.isfinite(ic_f).all():
-            continue
-        valid_ic = ic_f
-
-        if len(valid_ic) < block_length * 2:
-            continue
-
-        n = len(valid_ic)
-        num_blocks = (n + block_length - 1) // block_length
-
-        bootstrap_means = np.full(num_bootstrap, np.nan, dtype=np.float64)
-
-        for b in range(num_bootstrap):
-            # Sample blocks with replacement (local Generator)
-            block_starts = shared_starts[b]
-
-            # Reconstruct bootstrap sample
-            bootstrap_sample = []
-            for start in block_starts:
-                bootstrap_sample.extend(valid_ic[start:start + block_length])
-
-            bootstrap_sample = np.array(bootstrap_sample[:n])  # Trim to original length
-            bootstrap_means[b] = np.mean(bootstrap_sample)
-
-        # Compute percentiles
-        ci_lower[f] = np.percentile(bootstrap_means, lower_percentile)
-        ci_upper[f] = np.percentile(bootstrap_means, upper_percentile)
-
-    return ci_lower, ci_upper
-```
-
-### quant_evaluator.metrics.robustness.compute_hac_tstat
-
-```python
-def compute_hac_tstat(
-    ic_series: np.ndarray,
-    max_lag: int = 5,
-    kernel: str = "bartlett",
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Compute HAC-robust t-statistic for IC series.
-
-    Tests H0: mean(IC) = 0 using HAC standard errors.
-    More conservative than standard t-test when IC is autocorrelated.
-
-    Args:
-        ic_series: Daily IC series (T, F)
-        max_lag: Maximum lag for HAC estimation
-        kernel: Kernel type
-
-    Returns:
-        (t_stat_hac, se_hac)
-        t_stat_hac: shape (F,) - HAC-robust t-statistics
-        se_hac: shape (F,) - HAC standard errors
-    """
-    _validate_hac_policy(max_lag, kernel)
-    ic_series = np.asarray(ic_series, dtype=float)
-    if ic_series.ndim == 1:
-        ic_series = ic_series[:, None]
-    if ic_series.ndim != 2:
-        raise ValueError("HAC requires a time series or T x F matrix")
-    T, F = ic_series.shape
-
-    t_stat_hac = np.full(F, np.nan, dtype=np.float64)
-    se_hac = np.full(F, np.nan, dtype=np.float64)
-
-    for f in range(F):
-        ic_f = ic_series[:, f]
-        valid_ic = _contiguous_sample(ic_f)
-
-        if len(valid_ic) < max_lag + 10:
-            continue
-
-        # Mean IC
-        mean_ic = np.mean(valid_ic)
-        n = len(valid_ic)
-
-        # HAC variance
-        hac_var = compute_hac_variance(
-            valid_ic.reshape(-1, 1), max_lag=max_lag, kernel=kernel
-        )[0]
-
-        if hac_var <= 0 or np.isnan(hac_var):
-            continue
-
-        # HAC standard error
-        se = np.sqrt(hac_var)
-        se_hac[f] = se
-
-        # HAC t-statistic
-        t_stat_hac[f] = mean_ic / se
-
-    return t_stat_hac, se_hac
-```
-
-### quant_evaluator.metrics.robustness.compute_hac_variance
-
-```python
-def compute_hac_variance(
-    series: np.ndarray,
-    max_lag: int = 5,
-    kernel: str = "bartlett",
-) -> np.ndarray:
-    """
-    Compute Heteroskedasticity and Autocorrelation Consistent (HAC) variance.
-
-    Newey-West HAC variance estimator for time series with autocorrelation.
-    Uses weighted sum of autocovariances with kernel weighting.
-    Empty endpoints are trimmed; internal missing dates or infinity return NaN.
-    All lag autocovariances use denominator n (Newey-West v2). The output
-    is variance_of_sample_mean, not long_run_variance. No df correction.
-
-    Args:
-        series: Time series (T,) or (T, F)
-        max_lag: Maximum lag for HAC estimation
-        kernel: Kernel type - "bartlett" (triangular) or "uniform"
-
-    Returns:
-        hac_var: shape (F,) - HAC variance estimate per factor
-    """
-    _validate_hac_policy(max_lag, kernel)
-    series = np.asarray(series, dtype=float)
-    if series.ndim == 1:
-        series = series.reshape(-1, 1)
-    if series.ndim != 2:
-        raise ValueError("HAC requires a time series or T x F matrix")
-
-    T, F = series.shape
-
-    if kernel not in ("bartlett", "uniform"):
-        raise ValueError(f"Unknown kernel: {kernel}, must be 'bartlett' or 'uniform'")
-
-    hac_var = np.full(F, np.nan, dtype=np.float64)
-
-    for f in range(F):
-        ts = series[:, f]
-        # Trim empty endpoints only. Internal gaps cannot acquire new lags.
-        valid_ts = _contiguous_sample(ts)
-
-        if len(valid_ts) < max_lag + 10:
-            continue
-
-        # Demean
-        ts_demean = valid_ts - np.mean(valid_ts)
-        n = len(ts_demean)
-
-        # Compute lag-0 autocovariance (variance)
-        gamma_0 = np.mean(ts_demean ** 2)
-
-        # HAC variance: gamma_0 + 2 * sum(weight(lag) * gamma(lag))
-        hac_est = gamma_0
-
-        for lag in range(1, max_lag + 1):
-            if lag >= n:
-                break
-
-            # Autocovariance at lag
-            gamma_lag = np.sum(ts_demean[:-lag] * ts_demean[lag:]) / n
-
-            # Kernel weight
-            if kernel == "bartlett":
-                weight = 1.0 - lag / (max_lag + 1)
-            else:  # uniform
-                weight = 1.0
-
-            hac_est += 2.0 * weight * gamma_lag
-
-        hac_var[f] = hac_est / n
-
-    return hac_var
-```
-
-### quant_evaluator.metrics.robustness.compute_subsample_ic
-
-```python
-def compute_subsample_ic(
-    ic_series: np.ndarray,
-    num_subsamples: int = 100,
-    subsample_fraction: float = 0.8,
-    random_seed: Optional[int] = None,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Compute IC stability via bootstrap subsampling.
-
-    Randomly samples subsample_fraction of time periods and computes mean IC.
-    Repeated num_subsamples times to build distribution.
-
-    Args:
-        ic_series: Daily IC series (T, F)
-        num_subsamples: Number of bootstrap samples
-        subsample_fraction: Fraction of periods to sample (0, 1)
-        random_seed: Random seed for reproducibility
-
-    Returns:
-        (subsample_means, subsample_stds)
-        subsample_means: shape (num_subsamples, F)
-        subsample_stds: shape (num_subsamples, F)
-    """
-    if subsample_fraction <= 0 or subsample_fraction >= 1:
-        raise ValueError(f"subsample_fraction must be in (0, 1), got {subsample_fraction}")
-
-    T, F = ic_series.shape
-    subsample_size = max(1, int(T * subsample_fraction))
-
-    # Local Generator: never touch the global numpy RNG state.
-    rng = np.random.default_rng(random_seed)
-
-    subsample_means = np.full((num_subsamples, F), np.nan, dtype=np.float64)
-    subsample_stds = np.full((num_subsamples, F), np.nan, dtype=np.float64)
-
-    for b in range(num_subsamples):
-        # Random sample of time indices (local Generator)
-        sampled_indices = rng.choice(T, size=subsample_size, replace=False)
-        ic_subsample = ic_series[sampled_indices, :]  # (subsample_size, F)
-
-        # Compute mean and std for this subsample
-        with np.errstate(invalid='ignore'):
-            subsample_means[b, :] = np.nanmean(ic_subsample, axis=0)
-            subsample_stds[b, :] = np.nanstd(ic_subsample, axis=0, ddof=1)
-
-    return subsample_means, subsample_stds
-```
-
-### quant_evaluator.metrics.robustness.compute_subsample_ic_std
-
-```python
-def compute_subsample_ic_std(
-    ic_series: np.ndarray,
-    num_subsamples: int = 100,
-    subsample_fraction: float = 0.8,
-    random_seed: Optional[int] = None,
-) -> np.ndarray:
-    """
-    Compute standard deviation of mean IC across subsamples.
-
-    Low std indicates robust IC estimate across different time periods.
-
-    Args:
-        ic_series: Daily IC series (T, F)
-        num_subsamples: Number of bootstrap samples
-        subsample_fraction: Fraction of periods to sample
-        random_seed: Random seed
-
-    Returns:
-        robustness_std: shape (F,) - std of subsample mean ICs
-    """
-    subsample_means, _ = compute_subsample_ic(
-        ic_series, num_subsamples, subsample_fraction, random_seed
-    )
-
-    with np.errstate(invalid='ignore'):
-        robustness_std = np.nanstd(subsample_means, axis=0, ddof=1)
-
-    return robustness_std
-```
-
-### quant_evaluator.metrics.shape_evidence._as_matrix
-
-```python
-def _as_matrix(qr: np.ndarray) -> np.ndarray:
-    """Coerce to a float64 (n_quantiles, F) matrix."""
-    m = np.asarray(qr, dtype=np.float64)
-    if m.ndim == 1:
-        m = m[:, None]
-    return m
-```
-
-### quant_evaluator.metrics.shape_evidence._bottom_tail_slope_value
-
-```python
-def _bottom_tail_slope_value(col: np.ndarray, n_adj: int = 2) -> float:
-    """Slope of the first ``n_adj+1`` finite quantile points."""
-    seg = col[: n_adj + 1]
-    if not np.all(np.isfinite(seg)):
-        return np.nan
-    diffs = np.diff(seg)
-    if diffs.size == 0:
-        return np.nan
-    return float(np.mean(diffs))
-```
-
-### quant_evaluator.metrics.shape_evidence._fit_variance_explained
-
-```python
-def _fit_variance_explained(y: np.ndarray, template: np.ndarray) -> float:
-    """R^2 of the scalar offset+scale OLS fit ``a + b*template`` against ``y``."""
-    y = np.asarray(y, dtype=np.float64)
-    t = np.asarray(template, dtype=np.float64)
-    n = y.shape[0]
-    if n < 3:
-        return np.nan
-    X = np.stack([np.ones(n), t], axis=1)
-    beta, *_ = np.linalg.lstsq(X, y, rcond=None)
-    resid = y - X @ beta
-    ss_res = float(np.dot(resid, resid))
-    ss_tot = float(np.dot(y - y.mean(), y - y.mean()))
-    if ss_tot <= 0.0:
-        return 1.0 if ss_res <= 0.0 else np.nan
-    return 1.0 - ss_res / ss_tot
-```
-
-### quant_evaluator.metrics.shape_evidence._per_window_profile
-
-```python
-def _per_window_profile(
-    windows: np.ndarray,
-) -> np.ndarray:
-    """Mean quantile-return across the window axis, (n_quantiles, F)."""
-    with np.errstate(invalid="ignore"):
-        return np.nanmean(windows, axis=0)
-```
-
-### quant_evaluator.metrics.shape_evidence._template_fit_x
-
-```python
-def _template_fit_x(nq: int) -> np.ndarray:
-    """Normalised quantile coordinate array for template regression, (nq,)."""
-    if nq <= 1:
-        return np.array([0.0])
-    return np.linspace(0.0, 1.0, nq)
-```
-
-### quant_evaluator.metrics.shape_evidence._top_tail_slope_value
-
-```python
-def _top_tail_slope_value(col: np.ndarray, n_adj: int = 2) -> float:
-    """Slope of the last ``n_adj+1`` finite quantile points, direction-agnostic.
-
-    Returns NaN when the top segment is not fully finite.  The slope is
-    ``mean(diff(segment))``.
-    """
-    seg = col[-n_adj - 1:]
-    if not np.all(np.isfinite(seg)):
-        return np.nan
-    diffs = np.diff(seg)
-    if diffs.size == 0:
-        return np.nan
-    return float(np.mean(diffs))
-```
-
-### quant_evaluator.metrics.shape_evidence._windows_or_single
-
-```python
-def _windows_or_single(m: np.ndarray):
-    """Return (windows, n_quantiles, F) view and whether multi-window."""
-    m = np.asarray(m, dtype=np.float64)
-    if m.ndim == 2:
-        return m.reshape(1, m.shape[0], m.shape[1]), False
-    if m.ndim == 3:
-        return m, True
-    raise ValueError(
-        f"shape-stability metrics expect (n_quantiles, F) or (W, n_quantiles, F), "
-        f"got shape {m.shape}"
-    )
-```
-
-### quant_evaluator.metrics.stability_regime._as_series
-
-```python
-def _as_series(ic_series: np.ndarray) -> np.ndarray:
-    s = np.asarray(ic_series, dtype=np.float64)
-    if s.ndim == 1:
-        s = s[:, None]
-    return s
-```
-
-### quant_evaluator.metrics.stability_regime._period_consistency
-
-```python
-def _period_consistency(s: np.ndarray, period: str, time_index=None) -> np.ndarray:
-    """Fraction of period means sharing the sign of the overall mean IC, (F,)."""
-    means = _period_means(s, period, time_index)
-    with np.errstate(invalid="ignore"):
-        overall = np.nanmean(s, axis=0)
-    sign = np.sign(overall)
-    finite = np.isfinite(means)
-    n = np.sum(finite, axis=0)
-    same = np.sum((np.sign(means) == sign[None, :]) & finite, axis=0)
-    ratio = same / np.maximum(n, 1)
-    return np.where(n >= 1, ratio, np.nan)
-```
-
-### quant_evaluator.metrics.stability_regime._period_means
-
-```python
-def _period_means(s: np.ndarray, period: str, time_index=None) -> np.ndarray:
-    if time_index is not None and len(time_index) == s.shape[0]:
-        try:
-            import pandas as pd
-
-            idx = pd.to_datetime(list(time_index))
-            df = pd.DataFrame(s, index=idx)
-            if period == "year":
-                grouped = df.groupby(df.index.year)
-            elif period == "month":
-                grouped = df.groupby([df.index.year, df.index.month])
-            else:
-                grouped = df.groupby(df.index.to_period("Q"))
-            return grouped.mean().to_numpy(dtype=np.float64)
-        except Exception:  # noqa: BLE001
-            pass
-    block = _BLOCK_DAYS.get(period, 63)
-    T, F = s.shape
-    n_blocks = max(1, int(np.ceil(T / block)))
-    pad = n_blocks * block - T
-    if pad > 0:
-        s = np.vstack([s, np.full((pad, F), np.nan)])
-    blocks = s.reshape(n_blocks, block, F)
-    with np.errstate(invalid="ignore"):
-        return np.nanmean(blocks, axis=1)
-```
-
-### quant_evaluator.metrics.stability_regime._regime_split
-
-```python
-def _regime_split(s: np.ndarray):
-    """Split the IC series into early/late halves, returning (early, late)."""
-    T, F = s.shape
-    mid = T // 2
-    return s[:mid, :], s[mid:, :]
-```
-
-### quant_evaluator.metrics.stability_regime._valid_counts
-
-```python
-def _valid_counts(s: np.ndarray) -> np.ndarray:
-    return np.sum(np.isfinite(s), axis=0)
-```
-
-### quant_evaluator.metrics.temporal.compute_autocorrelation
-
-```python
-def compute_autocorrelation(
-    series: np.ndarray,
-    max_lag: int = 20,
-    min_obs: int = 30,
-) -> np.ndarray:
-    """
-    Compute autocorrelation function (ACF) for time series.
-
-    True-time-axis semantics: for lag k, only pairs (t, t-k) where BOTH
-    original positions are finite contribute. Missing observations are never
-    compressed out before lagging — calendar gaps destroy real lag alignment
-    and this implementation keeps it intact.
-
-    The estimator is the standard correlation between the lag-k pair samples
-    (x_t, x_{t-k}), computed with pair-specific means, so it is unaffected by
-    where the NaNs sit.
-
-    Args:
-        series: Time series (T,) or (T, F) for multiple factors
-        max_lag: Maximum lag to compute
-        min_obs: Minimum observations required
-
-    Returns:
-        acf: shape (max_lag+1,) or (max_lag+1, F)
-        acf[0] is always 1.0 (correlation with self)
-    """
-    for name, value, lower in (("max_lag", max_lag, 0), ("min_obs", min_obs, 2)):
-        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or value < lower:
-            raise ValueError(f"{name} must be an integer >= {lower}")
-    series = np.asarray(series, dtype=float)
-    if series.ndim not in (1, 2):
-        raise ValueError("ACF requires T or T x F")
-    one_dimensional = series.ndim == 1
-    if one_dimensional:
-        series = series.reshape(-1, 1)
-
-    T, F = series.shape
-
-    if T < min_obs:
-        acf = np.full((max_lag + 1, F), np.nan, dtype=np.float64)
-        return acf[:, 0] if one_dimensional else acf
-
-    acf = np.full((max_lag + 1, F), np.nan, dtype=np.float64)
-
-    for f in range(F):
-        ts = series[:, f]
-        finite = np.isfinite(ts)
-        n_finite = int(np.sum(finite))
-
-        if n_finite < min_obs:
-            continue
-
-        # Lag 0: correlation of the finite values with themselves.
-        acf[0, f] = 1.0
-
-        for lag in range(1, min(max_lag + 1, T)):
-            # Pairs (t, t-lag) where BOTH original positions are finite.
-            pair_mask = finite[lag:] & finite[:-lag]  # length T - lag
-            n_pairs = int(np.sum(pair_mask))
-            if n_pairs < min_obs:
-                continue
-
-            x_prev = ts[:-lag][pair_mask]  # x_{t-lag}
-            x_curr = ts[lag:][pair_mask]   # x_t
-
-            # Correlation between the two aligned pair samples.
-            x_prev_c = x_prev - np.mean(x_prev)
-            x_curr_c = x_curr - np.mean(x_curr)
-
-            denom = np.sqrt(np.sum(x_prev_c ** 2) * np.sum(x_curr_c ** 2))
-            if denom <= 0 or not np.isfinite(denom):
-                # Constant pair sample(s): correlation undefined.
-                continue
-
-            acf[lag, f] = float(np.sum(x_prev_c * x_curr_c) / denom)
-
-    return acf[:, 0] if one_dimensional else acf
-```
-
-### quant_evaluator.metrics.temporal.compute_factor_turnover_rate
-
-```python
-def compute_factor_turnover_rate(
-    factor_values: np.ndarray,
-    quantile: float = 0.9,
-    *, measure: str = "universe_membership_change",
-) -> np.ndarray:
-    """
-    Compute turnover rate of top/bottom quantile membership.
-
-    Measures how frequently assets enter/exit extreme factor quantiles.
-    High turnover indicates unstable factor ordering.
-
-    Args:
-        factor_values: Factor values (T, N, F)
-        quantile: Quantile threshold (0.9 = top 10%, 0.1 = bottom 10%)
-
-    Returns:
-        turnover_rate: shape (T-1, F) - fraction of positions changed
-    """
-    if measure not in ("universe_membership_change", "top_exit_fraction", "top_entry_fraction", "jaccard_distance"):
-        raise ValueError("unknown membership diagnostic; actual turnover requires holdings")
-    T, N, F = factor_values.shape
-
-    if quantile <= 0 or quantile >= 1:
-        raise ValueError(f"quantile must be in (0, 1), got {quantile}")
-
-    turnover_rate = np.full((max(T - 1, 0), F), np.nan, dtype=np.float64)
-
-    for f in range(F):
-        for t in range(T - 1):
-            factor_t = factor_values[t, :, f]
-            factor_t1 = factor_values[t + 1, :, f]
-
-            valid_t = np.isfinite(factor_t)
-            valid_t1 = np.isfinite(factor_t1)
-            if min(np.sum(valid_t), np.sum(valid_t1)) < 10:
-                continue
-            factor_t_valid = factor_t[valid_t]
-            factor_t1_valid = factor_t1[valid_t1]
-
-            # Determine quantile membership
-            if quantile > 0.5:
-                threshold_t = np.nanquantile(factor_t_valid, quantile)
-                threshold_t1 = np.nanquantile(factor_t1_valid, quantile)
-                in_quantile_t = valid_t & (factor_t >= threshold_t)
-                in_quantile_t1 = valid_t1 & (factor_t1 >= threshold_t1)
-            else:
-                threshold_t = np.nanquantile(factor_t_valid, quantile)
-                threshold_t1 = np.nanquantile(factor_t1_valid, quantile)
-                in_quantile_t = valid_t & (factor_t <= threshold_t)
-                in_quantile_t1 = valid_t1 & (factor_t1 <= threshold_t1)
-
-            # Count changes
-            # A previously selected security with unknown next signal is not
-            # proof of a sale. Preserve uncertainty rather than erase it.
-            if np.any(in_quantile_t & ~valid_t1):
-                continue
-            changed = in_quantile_t != in_quantile_t1
-            if measure == "universe_membership_change":
-                turnover_rate[t, f] = changed.sum() / np.sum(valid_t | valid_t1)
-            elif measure == "top_exit_fraction":
-                turnover_rate[t, f] = np.sum(in_quantile_t & ~in_quantile_t1) / in_quantile_t.sum()
-            elif measure == "top_entry_fraction":
-                turnover_rate[t, f] = np.sum(in_quantile_t1 & ~in_quantile_t) / in_quantile_t1.sum()
-            else:
-                turnover_rate[t, f] = changed.sum() / np.sum(in_quantile_t | in_quantile_t1)
-
-    return turnover_rate
-```
-
-### quant_evaluator.metrics.temporal.compute_half_life
-
-```python
-def compute_half_life(
-    ic_series: np.ndarray,
-    min_periods: int = 60,
-    *, model: str = "centered_ar1",
-) -> np.ndarray:
-    """
-    Estimate IC half-life using AR(1) model.
-
-    Half-life = -log(2) / log(phi) where phi is AR(1) coefficient.
-    Measures IC temporal persistence, NOT predictive-horizon decay.
-    The default fits an intercept; zero_mean_ar1 is an explicit research model.
-
-    True-time-axis semantics: phi is estimated on (t, t-1) pairs where BOTH
-    original positions are finite. NaNs are never compressed out before
-    lagging, so calendar gaps do not fabricate adjacent pairs.
-
-    Args:
-        ic_series: Daily IC series (T, F)
-        min_periods: Minimum periods for AR estimation
-
-    Returns:
-        half_life: shape (F,) - half-life in periods (NaN if phi >= 1 or phi <= 0)
-    """
-    if model not in ("centered_ar1", "zero_mean_ar1"):
-        raise ValueError("unknown AR1 model")
-    T, F = ic_series.shape
-    half_life = np.full(F, np.nan, dtype=np.float64)
-
-    for f in range(F):
-        ic_f = ic_series[:, f]
-        finite = np.isfinite(ic_f)
-        n_finite = int(np.sum(finite))
-
-        if n_finite < min_periods:
-            continue
-
-        # AR(1): IC_t = phi * IC_{t-1} + epsilon, estimated on pairs
-        # (t, t-1) where BOTH original positions are finite. Missing
-        # observations are never compressed out before lagging — that would
-        # fabricate adjacent pairs across calendar gaps.
-        pair_mask = finite[1:] & finite[:-1]  # length T - 1
-        x = ic_f[:-1][pair_mask]  # IC_{t-1}
-        y = ic_f[1:][pair_mask]   # IC_t
-
-        if len(y) < min_periods - 1:
-            continue
-
-        if model == "centered_ar1":
-            x = x - np.mean(x)
-            y = y - np.mean(y)
-        # Pair-specific centering is equivalent to an intercept regression.
-        denom = np.sum(x * x)
-        if not np.isfinite(denom) or denom <= 0:
-            continue
-
-        phi = np.sum(x * y) / denom
-
-        # Half-life is only meaningful for 0 < phi < 1
-        if 0 < phi < 1:
-            half_life[f] = -np.log(2) / np.log(phi)
-
-    return half_life
-```
-
-### quant_evaluator.metrics.temporal.compute_ic_autocorrelation
-
-```python
-def compute_ic_autocorrelation(
-    ic_series: np.ndarray,
-    max_lag: int = 20,
-    min_obs: int = 30,
-) -> np.ndarray:
-    """
-    Compute autocorrelation of IC series.
-
-    High IC autocorrelation indicates persistent factor performance.
-
-    Args:
-        ic_series: Daily IC series (T, F)
-        max_lag: Maximum lag
-        min_obs: Minimum observations
-
-    Returns:
-        ic_acf: shape (max_lag+1, F)
-    """
-    return compute_autocorrelation(ic_series, max_lag=max_lag, min_obs=min_obs)
-```
-
-### quant_evaluator.metrics.temporal.compute_mean_rank_stability
-
-```python
-def compute_mean_rank_stability(
-    factor_values: np.ndarray,
-    lag: int = 1,
-    method: str = "spearman",
-    min_periods: int = 20,
-) -> np.ndarray:
-    """
-    Compute time-averaged rank stability.
-
-    Args:
-        factor_values: Factor values (T, N, F)
-        lag: Time lag
-        method: "spearman" or "pearson"
-        min_periods: Minimum valid periods
-
-    Returns:
-        mean_stability: shape (F,)
-    """
-    stability = compute_rank_stability(factor_values, lag=lag, method=method)
-
-    valid_periods = np.sum(~np.isnan(stability), axis=0)
-
-    with np.errstate(invalid='ignore'):
-        mean_stability = np.nanmean(stability, axis=0)
-
-    insufficient = valid_periods < min_periods
-    mean_stability = np.where(insufficient, np.nan, mean_stability)
-
-    return mean_stability
-```
-
-### quant_evaluator.metrics.temporal.compute_rank_stability
-
-```python
-def compute_rank_stability(
-    factor_values: np.ndarray,
-    lag: int = 1,
-    method: str = "spearman",
-) -> np.ndarray:
-    """
-    Compute rank stability across time.
-
-    Measures correlation of factor ranks between t and t+lag.
-    High rank stability indicates persistent factor ordering.
-
-    Args:
-        factor_values: Factor values (T, N, F)
-        lag: Time lag for stability measurement
-        method: "spearman" or "pearson"
-
-    Returns:
-        stability: shape (T-lag, F) - rank correlation at each time
-    """
-    T, N, F = factor_values.shape
-
-    if lag >= T:
-        raise ValueError(f"lag ({lag}) must be less than T ({T})")
-
-    stability = np.full((T - lag, F), np.nan, dtype=np.float64)
-
-    corr_fn = stats.spearmanr if method == "spearman" else stats.pearsonr
-
-    for f in range(F):
-        for t in range(T - lag):
-            factor_t = factor_values[t, :, f]
-            factor_t_lag = factor_values[t + lag, :, f]
-
-            # Valid observations in both periods
-            valid_mask = np.isfinite(factor_t) & np.isfinite(factor_t_lag)
-
-            if np.sum(valid_mask) < 10:
-                continue
-
-            factor_t_valid = factor_t[valid_mask]
-            factor_t_lag_valid = factor_t_lag[valid_mask]
-
-            # Check for constants
-            if len(np.unique(factor_t_valid)) == 1 or len(np.unique(factor_t_lag_valid)) == 1:
-                continue
-
-            if method == "spearman":
-                corr, _ = stats.spearmanr(factor_t_valid, factor_t_lag_valid)
-            else:
-                corr, _ = stats.pearsonr(factor_t_valid, factor_t_lag_valid)
-
-            stability[t, f] = corr
-
-    return stability
-```
-
-### quant_evaluator.metrics.turnover.compute_turnover_series
-
-```python
-def compute_turnover_series(
-    weights: np.ndarray,
-    method: str = "half_sum_abs",
-) -> np.ndarray:
-    """
-    Compute turnover time series from weight matrix (vectorized).
-
-    Optimized implementation using numba JIT compilation when available,
-    falling back to numpy broadcasting for compatibility.
-
-    Args:
-        weights: Weight matrix (T, N)
-        method: Turnover method
-
-    Returns:
-        Turnover series (T,), first observation is NaN
-    """
-    if method != "half_sum_abs":
-        raise ValueError(f"Unknown turnover method: {method}")
-
-    T, N = weights.shape
-
-    if T < 2:
-        return np.full(T, np.nan, dtype=np.float64)
-
-    # Use numba-optimized version if available (10-20x faster)
-    if HAS_NUMBA:
-        return _compute_turnover_series_numba(weights)
-
-    # Fallback: pure numpy vectorized implementation
-    turnover_series = np.empty(T, dtype=np.float64)
-    turnover_series[0] = np.nan
-
-    # Process differences in-place using slicing
-    w_diff = weights[1:] - weights[:-1]  # (T-1, N)
-
-    # Compute finite mask efficiently
-    finite_mask = np.isfinite(w_diff)  # (T-1, N)
-
-    # Fast path: if no NaNs, use simple sum
-    if np.all(finite_mask):
-        turnover_series[1:] = 0.5 * np.sum(np.abs(w_diff), axis=1)
-    else:
-        # Need to handle NaNs: set them to zero for summation
-        abs_diff = np.abs(w_diff)
-        abs_diff[~finite_mask] = 0.0
-
-        # Sum and check validity
-        turnover_values = 0.5 * np.sum(abs_diff, axis=1)  # (T-1,)
-        n_valid = np.sum(finite_mask, axis=1)  # (T-1,)
-
-        # Set to NaN where no valid observations
-        turnover_values[n_valid != N] = np.nan
-        turnover_series[1:] = turnover_values
-
-    return turnover_series
-```
-
-### quant_evaluator.metrics.underwater._as_1d
-
-```python
-def _as_1d(returns: object, name: str = "returns") -> np.ndarray:
-    """Coerce without deleting positions from the original observation grid."""
-    arr = np.asarray(returns, dtype=np.float64)
-    if arr.ndim != 1:
-        raise ValueError(f"{name} must be a one-dimensional series, got ndim={arr.ndim}")
-    return arr
-```
-
-### quant_evaluator.metrics.underwater._path_events
-
-```python
-def _path_events(returns, min_periods):
-    from .risk.drawdown_analysis import drawdown_events
-    ret = _as_1d(returns)
-    if np.isfinite(ret).sum() < min_periods:
-        return None
-    events = drawdown_events(ret)
-    # Scalar APIs cannot express an interval estimate or unknown NAV path.
-    # Fail closed, while drawdown_events retains aligned censoring evidence.
-    if any(e["status"] == "INVALID_VALUATION" for e in events):
-        return None
-    return events
-```
+### 数学公式与计算口径
+
+$$
+\mu_p=\operatorname{mean}_{t\in V_p}RankIC_t,\qquad Y=\frac1{|P|}\sum_{p\in P}\mu_p
+$$
+
+
+先求各年均值，再对有数据的年份等权；不同年份有效日数不同，结果不等于全体日期直接等权均值。有可解析且长度匹配的 time_index 时按自然周期分组，否则低层实现退回从起点划分的固定交易期块（季度63、年度252，末尾不足块保留）。每组只平均有限IC；总体至少20个有限IC，否则NaN。
+
+### 函数层默认参数
+
+| 参数 | 默认值 |
+|---|---|
+| `min_periods` | `20` |
+| `time_index` | `None` |
+
+实现核对：[函数定义](../metrics/predictive.py#L170)；`quant_evaluator.metrics.predictive.compute_yearly_rank_ic`。
+
+## 实现核对索引（可选）
+
+正文不要求阅读代码。下列链接仅用于核对共享计算函数及掩码细节。
+
+<details>
+<summary>展开共享实现链接</summary>
+
+- [quant_evaluator.metrics.calendar_returns._calendar_metric](../metrics/calendar_returns.py#L103)
+- [quant_evaluator.metrics.calendar_returns._local_session_dates](../metrics/calendar_returns.py#L70)
+- [quant_evaluator.metrics.calendar_returns._period_id](../metrics/calendar_returns.py#L95)
+- [quant_evaluator.metrics.calendar_returns._period_key](../metrics/calendar_returns.py#L87)
+- [quant_evaluator.metrics.calendar_returns._validated_returns](../metrics/calendar_returns.py#L26)
+- [quant_evaluator.metrics.data_quality._factor_values](../metrics/data_quality.py#L36)
+- [quant_evaluator.metrics.data_quality._labels](../metrics/data_quality.py#L43)
+- [quant_evaluator.metrics.exposure.compute_factor_loadings](../metrics/exposure.py#L75)
+- [quant_evaluator.metrics.exposure.rank_aware_projection](../metrics/exposure.py#L11)
+- [quant_evaluator.metrics.exposure_evidence._as_factor_loadings](../metrics/exposure_evidence.py#L407)
+- [quant_evaluator.metrics.exposure_evidence._panel_arrays](../metrics/exposure_evidence.py#L417)
+- [quant_evaluator.metrics.exposure_evidence._select_style](../metrics/exposure_evidence.py#L608)
+- [quant_evaluator.metrics.exposure_evidence.build_factor_loading_series](../metrics/exposure_evidence.py#L365)
+- [quant_evaluator.metrics.exposure_evidence.compute_style_exposure_evidence](../metrics/exposure_evidence.py#L431)
+- [quant_evaluator.metrics.ic._pairwise_finite_mask](../metrics/ic.py#L20)
+- [quant_evaluator.metrics.ic._pearson_correlation](../metrics/ic.py#L34)
+- [quant_evaluator.metrics.ic._reject_boolean_ic_series](../metrics/ic.py#L194)
+- [quant_evaluator.metrics.ic._spearman_rank_correlation](../metrics/ic.py#L90)
+- [quant_evaluator.metrics.ic.compute_daily_ic](../metrics/ic.py#L126)
+- [quant_evaluator.metrics.ic.compute_mean_ic](../metrics/ic.py#L217)
+- [quant_evaluator.metrics.ic_summary.compute_icir](../metrics/ic_summary.py#L17)
+- [quant_evaluator.metrics.label_panel.normalize_label_panel](../metrics/label_panel.py#L11)
+- [quant_evaluator.metrics.long_only._matrix](../metrics/long_only.py#L8)
+- [quant_evaluator.metrics.multiple_testing._validate_alpha](../metrics/multiple_testing.py#L54)
+- [quant_evaluator.metrics.multiple_testing._validate_p_values](../metrics/multiple_testing.py#L27)
+- [quant_evaluator.metrics.portfolio_stats._validate_missing_return_policy](../metrics/portfolio_stats.py#L162)
+- [quant_evaluator.metrics.portfolio_stats.equal_gross_long_short_returns](../metrics/portfolio_stats.py#L114)
+- [quant_evaluator.metrics.portfolio_stats.equal_gross_weights](../metrics/portfolio_stats.py#L97)
+- [quant_evaluator.metrics.predictive._as_series](../metrics/predictive.py#L43)
+- [quant_evaluator.metrics.predictive._autocorr_lag](../metrics/predictive.py#L132)
+- [quant_evaluator.metrics.predictive._mean_of_period_means](../metrics/predictive.py#L91)
+- [quant_evaluator.metrics.predictive._period_means](../metrics/predictive.py#L55)
+- [quant_evaluator.metrics.predictive._recent_mean](../metrics/predictive.py#L103)
+- [quant_evaluator.metrics.predictive._rolling_mean_ir](../metrics/predictive.py#L109)
+- [quant_evaluator.metrics.predictive._valid_counts](../metrics/predictive.py#L51)
+- [quant_evaluator.metrics.predictive._worst_period](../metrics/predictive.py#L97)
+- [quant_evaluator.metrics.quality._valid_pair_mask](../metrics/quality.py#L17)
+- [quant_evaluator.metrics.quality.compute_coverage_per_factor](../metrics/quality.py#L94)
+- [quant_evaluator.metrics.quantile._percentile_boundaries](../metrics/quantile.py#L197)
+- [quant_evaluator.metrics.quantile._searchsorted_bins](../metrics/quantile.py#L234)
+- [quant_evaluator.metrics.quantile._validate_quantile_count](../metrics/quantile.py#L76)
+- [quant_evaluator.metrics.quantile.assign_quantiles_batch](../metrics/quantile.py#L252)
+- [quant_evaluator.metrics.quantile.compute_quantile_returns](../metrics/quantile.py#L310)
+- [quant_evaluator.metrics.quantile.compute_quantile_returns_fast](../metrics/quantile.py#L41)
+- [quant_evaluator.metrics.quantile_numba.compute_quantile_returns_numba](../metrics/quantile_numba.py#L227)
+- [quant_evaluator.metrics.quantile_shape._as_matrix](../metrics/quantile_shape.py#L29)
+- [quant_evaluator.metrics.quantile_shape._finite_columns](../metrics/quantile_shape.py#L37)
+- [quant_evaluator.metrics.risk.drawdown_analysis.compute_drawdown_series](../metrics/risk/drawdown_analysis.py#L65)
+- [quant_evaluator.metrics.risk.drawdown_analysis.drawdown_events](../metrics/risk/drawdown_analysis.py#L12)
+- [quant_evaluator.metrics.risk.var_cvar._validate_confidence_level](../metrics/risk/var_cvar.py#L14)
+- [quant_evaluator.metrics.risk.var_cvar.compute_cvar](../metrics/risk/var_cvar.py#L221)
+- [quant_evaluator.metrics.risk.var_cvar.empirical_expected_shortfall](../metrics/risk/var_cvar.py#L327)
+- [quant_evaluator.metrics.robustness._contiguous_sample](../metrics/robustness.py#L115)
+- [quant_evaluator.metrics.robustness._validate_bootstrap_policy](../metrics/robustness.py#L98)
+- [quant_evaluator.metrics.robustness._validate_hac_policy](../metrics/robustness.py#L91)
+- [quant_evaluator.metrics.robustness.compute_block_bootstrap_ci](../metrics/robustness.py#L258)
+- [quant_evaluator.metrics.robustness.compute_hac_tstat](../metrics/robustness.py#L197)
+- [quant_evaluator.metrics.robustness.compute_hac_variance](../metrics/robustness.py#L123)
+- [quant_evaluator.metrics.robustness.compute_subsample_ic](../metrics/robustness.py#L13)
+- [quant_evaluator.metrics.robustness.compute_subsample_ic_std](../metrics/robustness.py#L61)
+- [quant_evaluator.metrics.shape_evidence._as_matrix](../metrics/shape_evidence.py#L75)
+- [quant_evaluator.metrics.shape_evidence._bottom_tail_slope_value](../metrics/shape_evidence.py#L407)
+- [quant_evaluator.metrics.shape_evidence._fit_variance_explained](../metrics/shape_evidence.py#L108)
+- [quant_evaluator.metrics.shape_evidence._per_window_profile](../metrics/shape_evidence.py#L568)
+- [quant_evaluator.metrics.shape_evidence._template_fit_x](../metrics/shape_evidence.py#L101)
+- [quant_evaluator.metrics.shape_evidence._top_tail_slope_value](../metrics/shape_evidence.py#L392)
+- [quant_evaluator.metrics.shape_evidence._windows_or_single](../metrics/shape_evidence.py#L555)
+- [quant_evaluator.metrics.stability_regime._as_series](../metrics/stability_regime.py#L37)
+- [quant_evaluator.metrics.stability_regime._period_consistency](../metrics/stability_regime.py#L75)
+- [quant_evaluator.metrics.stability_regime._period_means](../metrics/stability_regime.py#L48)
+- [quant_evaluator.metrics.stability_regime._regime_split](../metrics/stability_regime.py#L253)
+- [quant_evaluator.metrics.stability_regime._valid_counts](../metrics/stability_regime.py#L44)
+- [quant_evaluator.metrics.temporal.compute_autocorrelation](../metrics/temporal.py#L18)
+- [quant_evaluator.metrics.temporal.compute_factor_turnover_rate](../metrics/temporal.py#L225)
+- [quant_evaluator.metrics.temporal.compute_half_life](../metrics/temporal.py#L294)
+- [quant_evaluator.metrics.temporal.compute_ic_autocorrelation](../metrics/temporal.py#L117)
+- [quant_evaluator.metrics.temporal.compute_mean_rank_stability](../metrics/temporal.py#L194)
+- [quant_evaluator.metrics.temporal.compute_rank_stability](../metrics/temporal.py#L138)
+- [quant_evaluator.metrics.turnover.compute_turnover_series](../metrics/turnover.py#L125)
+- [quant_evaluator.metrics.underwater._as_1d](../metrics/underwater.py#L65)
+- [quant_evaluator.metrics.underwater._path_events](../metrics/underwater.py#L73)
+
+</details>
 
 ## 定义完整性指纹
 
-每项注册定义及上列实现源公式均参与本文内容；以下源摘要便于定位函数变化。
+生成器检查全部注册指标都有数学口径；实现指纹变化时仍须人工复核公式，指纹本身不证明数学说明正确。
+
+<details>
+<summary>展开实现指纹</summary>
 
 | 函数 | SHA-256（源公式） |
 |---|---|
@@ -10293,3 +5342,5 @@ def _path_events(returns, min_periods):
 | `quant_evaluator.metrics.underwater.compute_time_to_recovery` | `ed7c042e255922f755904cbf200c06df3796eb44f290df61eb9d92f6ffd1411f` |
 | `quant_evaluator.metrics.underwater.compute_worst_period_return` | `ea08291c31af370abca0a5646299598d96ad82d7b930c2106ed274cce224322b` |
 | `quant_evaluator.registry.metrics.<lambda>` | `dc185263c1d0e833a4280026b7ba4d72fc22224dc852299a582f75dee485f7b0` |
+
+</details>

@@ -6,6 +6,8 @@ import functools
 import hashlib
 import importlib
 import inspect
+import json
+import re
 from pathlib import Path
 import sys
 import textwrap
@@ -59,12 +61,29 @@ def dependencies(fn):
 
 def render():
     ids = sorted(list_metrics())
+    formulas = {}
+    for path in sorted(OUTPUT.parent.glob("formulas_*.json")):
+        entries = json.loads(path.read_text())
+        duplicates = set(formulas) & set(entries)
+        if duplicates:
+            raise ValueError(f"Duplicate formula definitions: {sorted(duplicates)}")
+        formulas.update(entries)
+    if set(formulas) != set(ids):
+        raise ValueError(f"Formula coverage mismatch: missing={sorted(set(ids)-set(formulas))}, extra={sorted(set(formulas)-set(ids))}")
+    for metric_id, definition in formulas.items():
+        if "$$" not in definition or "```" in definition:
+            raise ValueError(f"Expected readable mathematical formula, not code: {metric_id}")
     lines = ["# QuantEvaluator 全部注册指标计算手册", "",
-        "与 [统一口径与取舍](METRIC_CONVENTIONS.md) 配套。由实际注册表、函数说明与源公式生成；不得手工只改数字。",
+        "与 [统一口径与取舍](METRIC_CONVENTIONS.md) 配套。正文使用数学公式与中文解释，源码只作为核对链接。",
         "", f"注册 ID 共 **{len(ids)}** 个，别名不重复计数。下面逐项列出全部 ID，包括实验性或不能单独执行的项目。",
         "默认参数是函数层默认；公开入口额外构建策略见统一口径，尤其 IC 的每日20配对、分桶人数及观察期。",
-        "实现源码是精确定义的一部分：保留掩码、分母、边界分支，避免将自定义指标写成名称相近的标准公式。",
+        "公式按当前实际实现编写，非仅按指标名称套用教科书定义。输入合同与公开入口可能比低层函数施加更严格的限制。",
         "None/NaN/unsupported不代表0；状态stable也不代表生产可交易或GPU已验收。", "",
+        "## 公共符号与阅读规则", "",
+        "除逐项另有定义：$t$ 为时间，$i$ 为资产，$f$ 为因子，$x$ 为因子值，$y$ 为预测标签，$r$ 为单期收益，$w$ 为权重；$T,N,Q$ 分别为有效期数、资产数、桶数。", "",
+        "$$\\bar z=\\frac{1}{n}\\sum_{j=1}^{n}z_j,\\qquad s(z)=\\sqrt{\\frac{\\sum_{j=1}^{n}(z_j-\\bar z)^2}{n-1}}$$", "",
+        "$\\mathbf 1(\\cdot)$ 是条件成立取1、否则取0的指示函数；$\\operatorname{rank}$ 默认使用平均并列秩；$\\operatorname{Corr}$ 是相关系数。有限值集合及有效掩码按各项定义筛选；没有足够样本时为不可用，不自动补0。某些分布指标使用总体矩或其他分母，以该项公式为准。", "",
+        "GitHub 渲染数学公式；若使用本地 Markdown 阅读器，请开启 LaTeX/MathJax 数学显示。", "",
         "## 完整目录", "", "| ID | 名称 | 状态 | 输出 |", "|---|---|---|---|"]
     implementations = {}
     for metric_id in ids:
@@ -82,17 +101,28 @@ def render():
             f"- 别名：{', '.join(' `'+a+'` ' for a in aliases) or '无'}。",
             f"- 增量模式：`{spec.update_mode}`；注册实现定位：`{spec.implementation_id or '见下方实际函数'}`。"]
         fn = spec.compute_fn
+        # Keep display math on separate lines for GitHub/MathJax renderers.
+        definition = re.sub(r"\$\$(.*?)\$\$", lambda m: "\n\n$$\n" + m.group(1).strip() + "\n$$\n\n",
+                            formulas[metric_id], flags=re.DOTALL)
+        definition = re.sub(r"(?m)^[ \t]*,[ \t]*$", "", definition)
+        lines += ["", "### 数学公式与计算口径", "", definition.strip(), ""]
         if fn is None:
             lines += ["", "没有可直接调用的compute_fn；不得编造实测值。需满足显式证据/上游制品入口。"]
             continue
         base = function(fn)
         identity = key(base)
         implementations[identity] = base
-        lines += ["", "### 计算定义与默认参数", "", "```python", f"{identity}{inspect.signature(fn)}", "```", "",
-                  inspect.getdoc(fn) or inspect.getdoc(base) or "此函数没有独立说明；精确定义见下方源公式。"]
+        defaults = [(name, p.default) for name, p in inspect.signature(fn).parameters.items()
+                    if p.default is not inspect.Parameter.empty]
+        if defaults:
+            lines += ["### 函数层默认参数", "", "| 参数 | 默认值 |", "|---|---|"]
+            for name, value in defaults:
+                lines.append(f"| `{name}` | `{value!r}` |")
         if isinstance(fn, functools.partial):
             lines += ["", f"绑定参数：`args={fn.args!r}, kwargs={fn.keywords!r}`。"]
-        lines += ["", "### 精确计算公式（实际实现）", "", "```python", source(base), "```"]
+        path = Path(inspect.getsourcefile(base)).relative_to(OUTPUT.parent.parent)
+        line = inspect.getsourcelines(base)[1]
+        lines += ["", f"实现核对：[函数定义](../{path.as_posix()}#L{line})；`{identity}`。"]
     queue = list(implementations.values())
     seen = set(implementations)
     helpers = {}
@@ -105,17 +135,22 @@ def render():
             seen.add(identity)
             helpers[identity] = dep
             queue.append(dep)
-    lines += ["", "## 共享公式与掩码依赖", "",
-        "以下为上文适配器引用的共享计算函数，避免只展示一层转发却遗漏真实公式。外部NumPy/SciPy标准运算按其参数解释。",
-        "输入合同、交易制品与GPU派发仍以相应模块及统一口径为准；本附录不复制数据或生产产物。"]
+    lines += ["", "## 实现核对索引（可选）", "",
+        "正文不要求阅读代码。下列链接仅用于核对共享计算函数及掩码细节。", "",
+        "<details>", "<summary>展开共享实现链接</summary>", ""]
     for identity, fn in sorted(helpers.items()):
-        lines += ["", f"### {identity}", "", "```python", source(fn), "```"]
+        path = Path(inspect.getsourcefile(fn)).relative_to(OUTPUT.parent.parent)
+        line = inspect.getsourcelines(fn)[1]
+        lines.append(f"- [{identity}](../{path.as_posix()}#L{line})")
+    lines += ["", "</details>"]
     lines += ["", "## 定义完整性指纹", "",
-              "每项注册定义及上列实现源公式均参与本文内容；以下源摘要便于定位函数变化。", "",
+              "生成器检查全部注册指标都有数学口径；实现指纹变化时仍须人工复核公式，指纹本身不证明数学说明正确。", "",
+              "<details>", "<summary>展开实现指纹</summary>", "",
               "| 函数 | SHA-256（源公式） |", "|---|---|"]
     for identity, fn in sorted({**implementations, **helpers}.items()):
         lines.append(f"| `{identity}` | `{hashlib.sha256(source(fn).encode()).hexdigest()}` |")
-    return "\n".join(lines) + "\n"
+    lines += ["", "</details>"]
+    return "\n".join(line.rstrip() for line in "\n".join(lines).splitlines()) + "\n"
 
 
 def main():
