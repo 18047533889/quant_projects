@@ -132,6 +132,9 @@ class QueryBudget:
             raise ValidationError(
                 f"QueryBudget.tighten 未知字段 {sorted(unknown)}"
             )
+        # Validate original values before coercion/min/OR can conceal invalid
+        # requests (True -> 1, fractional rows -> int, NaN hidden by min).
+        replace(self, **clean)
         merged: dict[str, Any] = {}
         for key, val in clean.items():
             if key in self._INT_FIELDS:
@@ -177,9 +180,11 @@ def _positive_int(value: object, *, context: str) -> int:
         raise ValidationError(f"{context} 必须是正整数")
     try:
         out = int(value)
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, OverflowError) as exc:
         raise ValidationError(f"{context} 必须是正整数") from exc
-    if out <= 0 or (isinstance(value, float) and not value.is_integer()):
+    # Decimal/Fraction/NumPy real values must not truncate either. Text is
+    # intentionally supported for environment/YAML configuration parsing.
+    if out <= 0 or (not isinstance(value, (str, bytes)) and value != out):
         raise ValidationError(f"{context} 必须是正整数")
     return out
 
