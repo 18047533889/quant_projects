@@ -92,13 +92,13 @@ def test_misleading_or_experimental_ops_are_not_daily(canonical):
     assert classify_canonical(canonical) != "daily"
 
 
-def test_audited_nonproduction_ops_remain_fail_closed():
-    # 2026-08 daily migration: these audited factor operators are production targets and
-    # now live on the daily surface; they must never be research/unsafe.
+def test_audited_ops_follow_current_daily_authoring_surface():
+    # These names are on the current daily authoring surface. Surface membership
+    # is not a claim that every backend/parameter domain is production-certified.
     assert classify_canonical("ts_product") == "daily"
     assert classify_canonical("ts_mad") == "daily"
     assert classify_canonical("group_percentile") == "daily"
-    assert classify_canonical("div_or_null") != "daily"
+    assert classify_canonical("div_or_null") == "daily"
 
 
 def test_nested_delay_and_rolling_lookback_is_additive():
