@@ -701,6 +701,10 @@ def ts_poly2_resid_(y, x, d: int) -> np.ndarray:
         valid = np.isfinite(yw) & np.isfinite(xw)
         if int(valid.sum()) < 3:
             continue
+        # A quadratic needs three distinct predictor values; fail closed
+        # before rank-deficient LAPACK fits or arbitrary coefficients.
+        if np.unique(xw[valid]).size < 3:
+            continue
         try:
             coeffs = np.polyfit(xw[valid], yw[valid], 2)
         except (np.linalg.LinAlgError, ValueError, FloatingPointError):
@@ -710,7 +714,7 @@ def ts_poly2_resid_(y, x, d: int) -> np.ndarray:
             # window has no well-defined quadratic fit — skip it (residual stays
             # NaN), matching the finite-only statistical contract.
             continue
-        a, b, c = coeffs
+        c, b, a = coeffs
         fitted = a + b * xw + c * xw ** 2
         result[i] = yw[-1] - fitted[-1]
     return result

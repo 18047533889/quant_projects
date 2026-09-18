@@ -1,0 +1,6 @@
+{"backend": "pandas_numpy", "canonical": "ts_poly2_coeff", "finite": 57, "future_prefix_invariant_all_inputs": true, "shape": [72, 1], "source_sha256": "ada38f76bf21c6c1576a845175ba01eaf3e5993cc1006e3eae1b36c5d4e3e09b", "status": "EXECUTED_FINITE"}
+{"backend": "polars", "canonical": "ts_poly2_coeff", "finite": 57, "future_prefix_invariant_all_inputs": true, "shape": [72, 1], "source_sha256": "ada38f76bf21c6c1576a845175ba01eaf3e5993cc1006e3eae1b36c5d4e3e09b", "status": "EXECUTED_FINITE"}
+{"canonical": "ts_poly2_coeff", "pandas_polars_equal": true, "source_sha256": "ada38f76bf21c6c1576a845175ba01eaf3e5993cc1006e3eae1b36c5d4e3e09b", "status": "CANONICAL_PARITY"}
+{"backend": "pandas_numpy", "canonical": "ts_poly2_resid", "finite": 54, "future_prefix_invariant_all_inputs": true, "shape": [72, 1], "source_sha256": "ada38f76bf21c6c1576a845175ba01eaf3e5993cc1006e3eae1b36c5d4e3e09b", "status": "EXECUTED_FINITE"}
+{"backend": "polars", "canonical": "ts_poly2_resid", "finite": 55, "future_prefix_invariant_all_inputs": true, "shape": [72, 1], "source_sha256": "ada38f76bf21c6c1576a845175ba01eaf3e5993cc1006e3eae1b36c5d4e3e09b", "status": "EXECUTED_FINITE"}
+{"canonical": "ts_poly2_resid", "pandas_polars_equal": false, "source_sha256": "ada38f76bf21c6c1576a845175ba01eaf3e5993cc1006e3eae1b36c5d4e3e09b", "status": "CANONICAL_PARITY_FAILED"}

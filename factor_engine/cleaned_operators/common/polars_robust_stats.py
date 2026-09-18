@@ -18,8 +18,9 @@ import polars as pl
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.cleaned_operators.common._polars_bridge import SKIP as _PANEL_METADATA_COLUMNS
 
-_SKIP = frozenset({"date", "stock_code"})
+_SKIP = _PANEL_METADATA_COLUMNS
 
 
 def _pi(value, name: str, minimum: int = 1) -> int:
@@ -481,10 +482,17 @@ def ts_poly2_resid(y, x, d):
             valid = np.isfinite(yw) & np.isfinite(xw)
             if valid.sum() < 3:
                 continue
-            coeffs = np.polyfit(xw[valid], yw[valid], 2)
-            a, b, c = coeffs
-            fitted = a + b * xw[valid] + c * xw[valid] ** 2
-            out[t, i] = float(yw[-1] - fitted[-1])
+            # A quadratic needs three distinct predictor values; fail closed
+            # before rank-deficient LAPACK fits or arbitrary coefficients.
+            if np.unique(xw[valid]).size < 3:
+                continue
+            try:
+                coeffs = np.polyfit(xw[valid], yw[valid], 2)
+            except (np.linalg.LinAlgError, ValueError, FloatingPointError):
+                continue
+            c, b, a = coeffs
+            fitted_current = a + b * xw[-1] + c * xw[-1] ** 2
+            out[t, i] = float(yw[-1] - fitted_current)
     return _make(y, cols, out)
 
 
