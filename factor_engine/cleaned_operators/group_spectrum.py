@@ -138,6 +138,8 @@ def _metadata(
         category="group_structure",
         description=description,
         param_names=params,
+        panel_params=("f1", "f2", "f3", "group"),
+        scalar_params=tuple(name for name in params if name not in {"f1", "f2", "f3", "group"}),
         return_type="series",
         tags=tags,
         role=role,

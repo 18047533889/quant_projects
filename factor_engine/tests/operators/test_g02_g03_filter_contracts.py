@@ -99,7 +99,8 @@ def test_super_smoother_matches_independent_ehlers_recurrence(values: np.ndarray
 
 
 def test_super_smoother_semantic_version_bumped_for_new_transfer_function() -> None:
-    assert semantic_version("ts_super_smoother") == 2
+    # This regression introduced v2; later valid semantic bumps must not fail it.
+    assert semantic_version("ts_super_smoother") >= 2
 
 
 def test_legacy_polars_candidate_is_an_explicit_exact_delegate() -> None:

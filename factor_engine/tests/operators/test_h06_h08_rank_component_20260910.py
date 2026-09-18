@@ -7,6 +7,7 @@ import pytest
 
 from factor_engine.cleaned_operators.common.cross_sectional import RankPctPolars
 from factor_engine.cleaned_operators.fundamental.component_score import FinComponentScore
+from factor_engine.backend.operator_errors import OperatorParameterError
 
 
 @pytest.mark.parametrize(
@@ -69,7 +70,7 @@ def test_h07_gapped_named_components_preserve_declared_slots() -> None:
 
 @pytest.mark.parametrize("weights", [[1.0, np.nan], [1.0, np.inf], [1.0, -np.inf]])
 def test_h08_nonfinite_weights_are_invalid_parameters(weights) -> None:
-    with pytest.raises(ValueError, match="finite"):
+    with pytest.raises(OperatorParameterError, match="score_weights"):
         FinComponentScore().calculate(_panel(1), _panel(1), score_weights=weights)
 
 
@@ -77,7 +78,7 @@ def test_h08_weight_length_and_scalar_rejected_but_finite_negative_allowed() -> 
     op = FinComponentScore()
     with pytest.raises(ValueError, match="length"):
         op.calculate(_panel(1), _panel(1), score_weights=[1.0])
-    with pytest.raises(ValueError, match="sequence"):
+    with pytest.raises(OperatorParameterError, match="score_weights"):
         op.calculate(_panel(1), score_weights=1.0)
     result = op.calculate(_panel(1), _panel(1), score_weights=[1.0, -2.0])
     assert (result == -1.0).all().all()

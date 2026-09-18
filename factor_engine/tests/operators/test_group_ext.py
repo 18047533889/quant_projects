@@ -18,6 +18,7 @@ import pytest
 
 from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.operator_errors import OperatorParameterError
 
 ensure_cleaned_loaded()
 
@@ -856,7 +857,7 @@ def test_cross_sectional_residuals_remove_exact_linear_exposure(name: str) -> No
 )
 def test_group_ext_missing_required_companion_inputs_rejects(name: str) -> None:
     x = pd.DataFrame([[1.0, 2.0]], columns=["A", "B"])
-    with pytest.raises(TypeError):
+    with pytest.raises(OperatorParameterError, match="missing required"):
         _op(name).calculate(x)
 
 
