@@ -1,0 +1,3 @@
+{"schema":"r28-ts-vol-of-vol-post-fix-v1","recipes":[
+{"canonical":"ts_vol_of_vol","inputs":["ret"],"params":{"inner_window":5,"outer_window":12,"min_periods":4}}
+]}

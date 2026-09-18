@@ -1,0 +1,38 @@
+{
+  "scope": "Incremental small-sample canonical-kernel evidence, not full parameter/backend certification or 113893-factor materialization.",
+  "baseline": "R27_REVIEWED_EXECUTION_SUMMARY.json",
+  "manifest_canonicals": 1756,
+  "new_passed": 20,
+  "reviewed_passed": 352,
+  "remaining_unverified": 1404,
+  "overlap": [],
+  "ledgers": [
+    "r28_operator_campaign_extra/ledger_attempt01.jsonl",
+    "r28_operator_campaign_extra/ledger_attempt02.jsonl",
+    "r28_operator_campaign_extra/ledger_attempt03.jsonl",
+    "r28_operator_campaign_extra/ledger_attempt04.jsonl"
+  ],
+  "checks": "Latest per-backend records are finite-success with explicit future-prefix invariance. Latest paired equality binds exact backend fingerprints. Root independently verified 20 pairs. Attempt04 fixes missing paired fingerprint evidence in earlier triage protocol, preserves earlier records, and reexecutes four operators including repaired ts_vol_of_vol.",
+  "new_canonicals": [
+    "cs1_weekly_harmonic_power",
+    "ewm_corr",
+    "ewm_cov",
+    "hfl_variance_ratio",
+    "ts_lower_partial_moment",
+    "ts_mass_concentration",
+    "ts_realized_quarticity",
+    "ts_roll_effective_spread",
+    "ts_semivariance_balance",
+    "ts_tail_ratio",
+    "ts_turning_point_ratio",
+    "ts_upper_partial_moment",
+    "ts_vol_acceleration",
+    "ts_vol_clustering",
+    "ts_vol_of_vol",
+    "ts_vol_term_structure",
+    "ts_weighted_time_centroid",
+    "vr1_ewma_range_vol",
+    "vv1_downside_vol_share",
+    "vv1_vol_of_vol"
+  ]
+}

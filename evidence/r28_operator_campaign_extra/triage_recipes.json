@@ -1,0 +1,6 @@
+{"schema":"r28-triage4-v1","recipes":[
+{"canonical":"ts_mass_concentration","inputs":["weight"],"params":{"window":12,"min_periods":8}},
+{"canonical":"vv1_downside_vol_share","inputs":["ret"],"params":{"window":12,"min_periods":8}},
+{"canonical":"ts_roll_effective_spread","inputs":["bounce_price"],"params":{"window":12,"min_periods":8}},
+{"canonical":"ts_vol_of_vol","inputs":["ret"],"params":{"inner_window":5,"outer_window":12,"min_periods":4}}
+]}
