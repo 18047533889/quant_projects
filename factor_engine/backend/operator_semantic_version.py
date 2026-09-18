@@ -20,6 +20,8 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_h_infinity_level_filter": 2,
     # R44: genuine normal-distribution Lilliefors test, not swallowed AttributeError.
     "ts_expanding_lilliefors_pvalue": 2,
+    # R54: recursive McGinley state reseeds after a complete finite recovery window.
+    "ts_mcginley_dynamic": 2,
     # R52: replace holder placeholders with exact multi-panel contracts.
     "holder_shareholder_overlap_ratio": 2,
     "holder_float_concentration_gap": 2,

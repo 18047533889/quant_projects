@@ -6,6 +6,7 @@ from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.runtime.factor_identity import OperatorSemanticContractDigest
 
 @pytest.mark.parametrize("canonical,current", [
+    ("ts_mcginley_dynamic", 2),
     ("index_reconstitution_churn", 2),
     ("intra_max_drawdown", 2),
     ("intra_max_drawup", 2),

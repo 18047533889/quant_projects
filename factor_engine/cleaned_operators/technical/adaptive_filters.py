@@ -103,6 +103,18 @@ def _one(frame: pl.DataFrame, column: str, expr: pl.Expr) -> pl.Series:
 # ---------------------------------------------------------------------------
 # 1. ts_mcginley_dynamic
 # ---------------------------------------------------------------------------
+def _finite_scaled_mean(values) -> float:
+    """Finite mean without overflowing the accumulation for large values."""
+    arr = np.asarray(values, dtype=float)
+    if arr.size == 0 or not np.all(np.isfinite(arr)):
+        return np.nan
+    scale = float(np.max(np.abs(arr)))
+    if scale == 0.0:
+        return 0.0
+    result = float(np.mean(arr / scale) * scale)
+    return result if np.isfinite(result) else np.nan
+
+
 def _mcginley_dynamic_series(x: pd.Series, window: int, power: float) -> pd.Series:
     """McGinley Dynamic: MD_t = MD_{t-1} + (x_t - MD_{t-1}) / (c * (x_t/MD_{t-1})^power).
 
@@ -116,10 +128,10 @@ def _mcginley_dynamic_series(x: pd.Series, window: int, power: float) -> pd.Seri
     # warmup: SMA
     for i in range(w - 1, n):
         seg = x.iloc[i - w + 1 : i + 1]
-        if seg.isna().any():
-            continue
-        out[i] = seg.mean()
-        break
+        seed = _finite_scaled_mean(seg.to_numpy(dtype=float))
+        if np.isfinite(seed):
+            out[i] = seed
+            break
 
     if not np.isfinite(out).any():
         return pd.Series(out, index=x.index)
@@ -128,7 +140,13 @@ def _mcginley_dynamic_series(x: pd.Series, window: int, power: float) -> pd.Seri
     for t in range(start + 1, n):
         curr = x.iloc[t]
         prev_md = out[t - 1]
-        if not np.isfinite(curr) or not np.isfinite(prev_md):
+        if not np.isfinite(prev_md):
+            seg = x.iloc[t - w + 1 : t + 1]
+            seed = _finite_scaled_mean(seg.to_numpy(dtype=float))
+            if len(seg) == w and np.isfinite(seed):
+                out[t] = seed
+            continue
+        if not np.isfinite(curr):
             continue
         if abs(prev_md) < _EPS:
             out[t] = prev_md
@@ -540,8 +558,9 @@ def _mcginley_polars(x: pl.DataFrame, window: int, power: float):
         # warmup: SMA
         for i in range(w - 1, n):
             seg = arr[i - w + 1 : i + 1]
-            if np.all(np.isfinite(seg)):
-                out[i] = np.mean(seg)
+            seed = _finite_scaled_mean(seg)
+            if np.isfinite(seed):
+                out[i] = seed
                 break
 
         if not np.isfinite(out).any():
@@ -552,7 +571,13 @@ def _mcginley_polars(x: pl.DataFrame, window: int, power: float):
         for t in range(start + 1, n):
             curr = arr[t]
             prev_md = out[t - 1]
-            if not np.isfinite(curr) or not np.isfinite(prev_md):
+            if not np.isfinite(prev_md):
+                seg = arr[t - w + 1 : t + 1]
+                seed = _finite_scaled_mean(seg)
+                if len(seg) == w and np.isfinite(seed):
+                    out[t] = seed
+                continue
+            if not np.isfinite(curr):
                 continue
             if abs(prev_md) < _EPS:
                 out[t] = prev_md

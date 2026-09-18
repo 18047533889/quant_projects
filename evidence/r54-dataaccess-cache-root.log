@@ -1,0 +1,15 @@
+.....................................................                    [100%]
+=============================== warnings summary ===============================
+data_access/tests/unit/test_cache_single_flight.py::test_single_flight_exactly_one_fetch_real_cos
+data_access/tests/unit/test_cache_single_flight.py::test_single_flight_exactly_one_fetch_real_cos
+data_access/tests/unit/test_cache_single_flight.py::test_single_flight_exactly_one_fetch_real_cos
+data_access/tests/unit/test_cache_single_flight.py::test_single_flight_exactly_one_fetch_real_cos
+data_access/tests/unit/test_cache_single_flight.py::test_single_flight_exactly_one_fetch_local_object_store
+data_access/tests/unit/test_cache_single_flight.py::test_single_flight_exactly_one_fetch_local_object_store
+data_access/tests/unit/test_cache_single_flight.py::test_single_flight_exactly_one_fetch_local_object_store
+data_access/tests/unit/test_cache_single_flight.py::test_single_flight_exactly_one_fetch_local_object_store
+  /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=3356647) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    self.pid = os.fork()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+53 passed, 8 warnings in 1.08s
