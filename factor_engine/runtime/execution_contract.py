@@ -1415,22 +1415,46 @@ def _event_response_forward_extension(canonical: str, params: Mapping[str, Any])
 
 
 
-def _fin_surprise_zscore_extension(
+def _daily_prior_window_extension(
     canonical: str, params: Mapping[str, Any]
 ) -> int | object:
-    """Exact prior-row dependency of the shifted daily rolling baseline."""
+    """Exact prior-row dependency for a daily window over lag-derived values."""
     return _w0(params, _specs(canonical), "window_days", canonical=canonical)
 
 
 _HISTORY_TRANSFORMS["fin_surprise_zscore"] = _compound_transform(
-    _fin_surprise_zscore_extension
+    _daily_prior_window_extension
 )
+
+# Daily revision detection reads the immediately preceding observation.  A
+# W-row rolling revision statistic therefore reaches one row before its W-row
+# output window and requires exactly W prior rows.
+for _canon in (
+    "fin_revision_delta",
+    "fin_revision_pct",
+    "fin_revision_direction",
+    "fin_expectation_revision",
+    "fin_expectation_revision_pct",
+):
+    _HISTORY_TRANSFORMS[_canon] = HistoryTransform(kind="lag", fixed=1)
+
+for _canon in (
+    "fin_revision_count",
+    "fin_revision_magnitude",
+    "fin_restated_flag",
+    "fin_expectation_revision_speed",
+    "fin_expectation_revision_count",
+    "fin_expectation_revision_magnitude",
+):
+    _HISTORY_TRANSFORMS[_canon] = _compound_transform(
+        _daily_prior_window_extension
+    )
 
 
 _FORWARD_IMPACT_FNS: dict[str, Any] = {
     "event_historical_response_mean": _event_response_forward_extension,
     "event_historical_response_sign_balance": _event_response_forward_extension,
-    "fin_surprise_zscore": _fin_surprise_zscore_extension,
+    "fin_surprise_zscore": _daily_prior_window_extension,
 }
 
 
