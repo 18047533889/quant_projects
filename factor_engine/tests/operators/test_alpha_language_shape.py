@@ -239,7 +239,7 @@ def test_ts_path_efficiency_zero_displacement() -> None:
 def test_ts_path_roughness_smooth() -> None:
     """Smooth curve -> low roughness."""
     x = pd.DataFrame({"A": [1.0, 1.5, 2.0, 2.5, 3.0]})
-    result = _op("ts_path_roughness").calculate(x, window=5, min_periods=3)
+    result = _op("ts_roughness").calculate(x, window=5, min_periods=3)
 
     last_val = result.iloc[-1, 0]
     assert np.isfinite(last_val)
@@ -250,7 +250,7 @@ def test_ts_path_roughness_smooth() -> None:
 def test_ts_path_roughness_jagged() -> None:
     """Jagged path -> high roughness."""
     x = pd.DataFrame({"A": [1.0, 5.0, 2.0, 6.0, 3.0]})
-    result = _op("ts_path_roughness").calculate(x, window=5, min_periods=3)
+    result = _op("ts_roughness").calculate(x, window=5, min_periods=3)
 
     last_val = result.iloc[-1, 0]
     assert np.isfinite(last_val)
@@ -263,7 +263,7 @@ def test_ts_path_roughness_jagged() -> None:
 def test_ts_trend_break_constant_trend() -> None:
     """Constant trend -> 0 break."""
     x = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]})
-    result = _op("ts_trend_break").calculate(x, window=6, min_periods=4)
+    result = _op("ts_trend_break_score").calculate(x, window=6, min_periods=4)
 
     last_val = result.iloc[-1, 0]
     # Consistent slope -> near 0 break
@@ -274,12 +274,12 @@ def test_ts_trend_break_constant_trend() -> None:
 def test_ts_trend_break_reversal() -> None:
     """Trend reversal -> large break."""
     x = pd.DataFrame({"A": [1.0, 2.0, 3.0, 3.0, 2.0, 1.0]})
-    result = _op("ts_trend_break").calculate(x, window=6, min_periods=4)
+    result = _op("ts_trend_break_score").calculate(x, window=6, min_periods=4)
 
     last_val = result.iloc[-1, 0]
-    assert np.isfinite(last_val)
-    # Reversal -> negative break
-    assert last_val < -0.5
+    # Both halves are perfectly linear but have different slopes; the declared
+    # zero-residual-scale policy makes the normalized break undefined.
+    assert np.isnan(last_val)
 
 
 # ---------------------------------------------------------------------------
@@ -291,9 +291,11 @@ def test_ts_weighted_time_centroid_uniform() -> None:
     result = _op("ts_weighted_time_centroid").calculate(x, window=5, min_periods=3)
 
     last_val = result.iloc[-1, 0]
-    # Uniform -> centroid ~0.5
-    assert np.isfinite(last_val)
-    assert 0.4 <= last_val <= 0.6
+    # Uniform weights have mean position (n-1)/2, mapped to exactly 0 on [-1, 1].
+    positions = np.arange(len(x), dtype=float)
+    weights = x["A"].to_numpy()
+    expected = 2.0 * np.sum(positions * weights) / ((len(weights) - 1) * np.sum(weights)) - 1.0
+    assert last_val == pytest.approx(expected)
 
 
 def test_ts_weighted_time_centroid_back_loaded() -> None:
@@ -303,7 +305,11 @@ def test_ts_weighted_time_centroid_back_loaded() -> None:
 
     last_val = result.iloc[-1, 0]
     assert np.isfinite(last_val)
-    assert last_val > 0.7
+    positions = np.arange(len(x), dtype=float)
+    weights = x["A"].to_numpy()
+    expected = 2.0 * np.sum(positions * weights) / ((len(weights) - 1) * np.sum(weights)) - 1.0
+    assert last_val == pytest.approx(expected)
+    assert last_val > 0.0
 
 
 def test_ts_weighted_time_centroid_front_loaded() -> None:
@@ -325,9 +331,12 @@ def test_ts_mass_concentration_uniform() -> None:
     result = _op("ts_mass_concentration").calculate(x, window=10, min_periods=5)
 
     last_val = result.iloc[-1, 0]
-    # Uniform -> HHI = 1/n = 0.1
-    assert np.isfinite(last_val)
-    assert 0.09 <= last_val <= 0.11
+    # The operator normalizes HHI from [1/n, 1] to [0, 1].
+    weights = x["A"].to_numpy()
+    shares = weights / weights.sum()
+    hhi = float(np.sum(shares * shares))
+    expected = (hhi - 1.0 / len(weights)) / (1.0 - 1.0 / len(weights))
+    assert last_val == pytest.approx(expected)
 
 
 def test_ts_mass_concentration_concentrated() -> None:
@@ -362,8 +371,14 @@ def test_ts_endpoint_deviation_outlier() -> None:
 
     last_val = result.iloc[-1, 0]
     assert np.isfinite(last_val)
-    # Outlier -> large positive deviation
-    assert last_val > 2.0
+    # Independent OLS endpoint residual divided by population residual std.
+    values = x["A"].to_numpy()
+    positions = np.arange(len(values), dtype=float)
+    slope, intercept = np.polyfit(positions, values, 1)
+    residuals = values - (intercept + slope * positions)
+    expected = residuals[-1] / np.sqrt(np.mean(residuals * residuals))
+    assert last_val == pytest.approx(expected)
+    assert last_val > 0.0
 
 
 # ---------------------------------------------------------------------------

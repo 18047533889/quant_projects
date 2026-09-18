@@ -29,6 +29,17 @@ def _op(name: str, backend: str = "pandas_numpy"):
     return op
 
 
+def _single_group(x: pd.DataFrame) -> pd.DataFrame:
+    """Aligned concrete group labels for required group-panel contracts."""
+    return pd.DataFrame("G", index=x.index, columns=x.columns)
+
+
+def _positive_weights(x: pd.DataFrame) -> pd.DataFrame:
+    """Aligned non-uniform nonnegative node weights."""
+    row = np.arange(1, x.shape[1] + 1, dtype=float)
+    return pd.DataFrame(np.tile(row, (len(x), 1)), index=x.index, columns=x.columns)
+
+
 
 # ---------------------------------------------------------------------------
 # 1. cs_neighbor_gap
@@ -468,7 +479,7 @@ def test_group_ex_self_std_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -493,7 +504,7 @@ def test_group_ex_self_std_handles_nans() -> None:
     op = _op("group_ex_self_std")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -514,7 +525,7 @@ def test_group_ex_self_std_handles_inf() -> None:
     op = _op("group_ex_self_std")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -529,7 +540,7 @@ def test_group_ex_self_std_empty_input() -> None:
     op = _op("group_ex_self_std")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -547,7 +558,7 @@ def test_group_ex_self_std_single_column() -> None:
     op = _op("group_ex_self_std")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -573,7 +584,7 @@ def test_group_ex_self_mad_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -598,7 +609,7 @@ def test_group_ex_self_mad_handles_nans() -> None:
     op = _op("group_ex_self_mad")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -619,7 +630,7 @@ def test_group_ex_self_mad_handles_inf() -> None:
     op = _op("group_ex_self_mad")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -634,7 +645,7 @@ def test_group_ex_self_mad_empty_input() -> None:
     op = _op("group_ex_self_mad")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -652,7 +663,7 @@ def test_group_ex_self_mad_single_column() -> None:
     op = _op("group_ex_self_mad")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -678,7 +689,7 @@ def test_group_ex_self_quantile_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -703,7 +714,7 @@ def test_group_ex_self_quantile_handles_nans() -> None:
     op = _op("group_ex_self_quantile")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -724,7 +735,7 @@ def test_group_ex_self_quantile_handles_inf() -> None:
     op = _op("group_ex_self_quantile")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -739,7 +750,7 @@ def test_group_ex_self_quantile_empty_input() -> None:
     op = _op("group_ex_self_quantile")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -757,12 +768,36 @@ def test_group_ex_self_quantile_single_column() -> None:
     op = _op("group_ex_self_quantile")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _single_group(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
     except Exception as e:
         pytest.fail(f"{op} failed on single column: {e}")
+
+
+# Independent leave-one-out oracle for the three required-group operators.
+def test_group_ex_self_statistics_independent_oracle() -> None:
+    x = pd.DataFrame([[1.0, 2.0, 4.0, 8.0, 16.0]], columns=list("ABCDE"))
+    group = _single_group(x)
+    peers_for_a = np.array([2.0, 4.0, 8.0, 16.0])
+
+    std = _op("group_ex_self_std").calculate(x, group)
+    mad = _op("group_ex_self_mad").calculate(x, group)
+    quantile = _op("group_ex_self_quantile").calculate(x, group, q=0.5)
+
+    assert std.loc[0, "A"] == pytest.approx(float(np.std(peers_for_a, ddof=0)))
+    # median(peers)=6; median absolute deviation = median([4,2,2,10]) = 3.
+    assert mad.loc[0, "A"] == pytest.approx(3.0)
+    assert quantile.loc[0, "A"] == pytest.approx(6.0)
+
+    weights = pd.DataFrame([[1.0, 2.0, 3.0, 4.0, 5.0]], columns=x.columns)
+    weighted = _op("relation_weighted_std_ex_self").calculate(x, weights, group)
+    peer_weights = np.array([2.0, 3.0, 4.0, 5.0])
+    peer_weights = peer_weights / peer_weights.sum()
+    peer_mean = float(np.sum(peer_weights * peers_for_a))
+    expected = float(np.sqrt(np.sum(peer_weights * (peers_for_a - peer_mean) ** 2)))
+    assert weighted.loc[0, "A"] == pytest.approx(expected)
 
 
 # ---------------------------------------------------------------------------
@@ -783,7 +818,7 @@ def test_relation_weighted_std_ex_self_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _positive_weights(x), _single_group(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -808,7 +843,7 @@ def test_relation_weighted_std_ex_self_handles_nans() -> None:
     op = _op("relation_weighted_std_ex_self")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _positive_weights(x), _single_group(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -829,7 +864,7 @@ def test_relation_weighted_std_ex_self_handles_inf() -> None:
     op = _op("relation_weighted_std_ex_self")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _positive_weights(x), _single_group(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -844,7 +879,7 @@ def test_relation_weighted_std_ex_self_empty_input() -> None:
     op = _op("relation_weighted_std_ex_self")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _positive_weights(x), _single_group(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -862,7 +897,7 @@ def test_relation_weighted_std_ex_self_single_column() -> None:
     op = _op("relation_weighted_std_ex_self")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _positive_weights(x), _single_group(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1

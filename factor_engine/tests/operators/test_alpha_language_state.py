@@ -31,6 +31,20 @@ def _op(name: str, backend: str = "pandas_numpy"):
     return op
 
 
+def _state_panel(x: pd.DataFrame) -> pd.DataFrame:
+    """Aligned, non-identical run-state input derived without future rows."""
+    values = x.to_numpy(dtype=float)
+    state = np.where(np.isfinite(values), np.sign(values), np.nan)
+    return pd.DataFrame(state, index=x.index, columns=x.columns)
+
+
+def test_ts_run_strength_independent_oracle() -> None:
+    x = pd.DataFrame({"A": [1.0, 2.0, 3.0, 4.0]})
+    state = pd.DataFrame({"A": [1.0, 1.0, -1.0, -1.0]})
+    result = _op("ts_run_strength").calculate(x, state, max_run=4)
+    np.testing.assert_allclose(result["A"].to_numpy(), [1.0, 3.0, 3.0, 7.0])
+
+
 
 # ---------------------------------------------------------------------------
 # 1. ts_run_strength
@@ -50,7 +64,7 @@ def test_ts_run_strength_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -75,7 +89,7 @@ def test_ts_run_strength_handles_nans() -> None:
     op = _op("ts_run_strength")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -96,7 +110,7 @@ def test_ts_run_strength_handles_inf() -> None:
     op = _op("ts_run_strength")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -111,7 +125,7 @@ def test_ts_run_strength_empty_input() -> None:
     op = _op("ts_run_strength")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -129,7 +143,7 @@ def test_ts_run_strength_single_column() -> None:
     op = _op("ts_run_strength")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -155,7 +169,7 @@ def test_ts_run_efficiency_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -180,7 +194,7 @@ def test_ts_run_efficiency_handles_nans() -> None:
     op = _op("ts_run_efficiency")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -201,7 +215,7 @@ def test_ts_run_efficiency_handles_inf() -> None:
     op = _op("ts_run_efficiency")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -216,7 +230,7 @@ def test_ts_run_efficiency_empty_input() -> None:
     op = _op("ts_run_efficiency")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -234,7 +248,7 @@ def test_ts_run_efficiency_single_column() -> None:
     op = _op("ts_run_efficiency")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -260,7 +274,7 @@ def test_ts_run_concentration_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -285,7 +299,7 @@ def test_ts_run_concentration_handles_nans() -> None:
     op = _op("ts_run_concentration")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -306,7 +320,7 @@ def test_ts_run_concentration_handles_inf() -> None:
     op = _op("ts_run_concentration")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -321,7 +335,7 @@ def test_ts_run_concentration_empty_input() -> None:
     op = _op("ts_run_concentration")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -339,7 +353,7 @@ def test_ts_run_concentration_single_column() -> None:
     op = _op("ts_run_concentration")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
@@ -785,7 +799,7 @@ def test_ts_transition_intensity_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -810,7 +824,7 @@ def test_ts_transition_intensity_handles_nans() -> None:
     op = _op("ts_transition_intensity")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -831,7 +845,7 @@ def test_ts_transition_intensity_handles_inf() -> None:
     op = _op("ts_transition_intensity")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -846,7 +860,7 @@ def test_ts_transition_intensity_empty_input() -> None:
     op = _op("ts_transition_intensity")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -864,7 +878,7 @@ def test_ts_transition_intensity_single_column() -> None:
     op = _op("ts_transition_intensity")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _state_panel(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
