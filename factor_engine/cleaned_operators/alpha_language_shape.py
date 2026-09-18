@@ -503,7 +503,7 @@ class TsTrendBreakScore(SeriesOperator):
     canonical="ts_weighted_time_centroid",
     source="alpha_language_shape")
 class TsWeightedTimeCentroid(SeriesOperator):
-    """时间加权质心: TC = 2*sum(j*w_j)/((n-1)*sum(w_j) + eps) - 1, 范围 [-1,1]。
+    """时间加权质心: TC = 2*sum(j*w_j)/((n-1)*sum(w_j)) - 1, 范围 [-1,1]。
 
     +1 = 活动集中在窗口近期; -1 = 集中在窗口早期。weight 要求非负。
     """
@@ -527,15 +527,16 @@ class TsWeightedTimeCentroid(SeriesOperator):
                 return np.nan
             if np.any(v < 0.0):
                 return np.nan
-            total = float(v.sum())
-            if total <= 0.0:
+            scale = float(np.max(v))
+            if scale <= 0.0 or n <= 1:
                 return np.nan
+            # Relative weights are unit-free. Normalize before accumulating
+            # to avoid overflowing large weights or distorting tiny weights
+            # with a fixed absolute epsilon.
+            scaled = v / scale
+            shares = scaled / float(scaled.sum())
             pos = np.arange(n, dtype=float)
-            num = float(np.sum(pos * v))
-            if n <= 1:
-                return np.nan
-            tc = 2.0 * num / ((n - 1.0) * total + _EPS) - 1.0
-            return tc
+            return float(2.0 * np.dot(pos, shares) / (n - 1.0) - 1.0)
 
         return frame_like(weight, map_rolling(wv, w, _fn))
 
@@ -618,10 +619,11 @@ class TsMassConcentration(SeriesOperator):
                 return np.nan
             if np.any(v < 0.0):
                 return np.nan
-            total = float(v.sum())
-            if total <= 0.0:
+            scale = float(np.max(v))
+            if scale <= 0.0:
                 return np.nan
-            shares = v / total
+            scaled = v / scale
+            shares = scaled / float(scaled.sum())
             hhi = float(np.sum(shares * shares))
             if n <= 1:
                 return np.nan
