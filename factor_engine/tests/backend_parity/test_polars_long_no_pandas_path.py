@@ -188,9 +188,9 @@ NO_PANDAS_CASES = [
 
 @pytest.mark.parametrize("factory_name,expr_builder", NO_PANDAS_CASES)
 def test_polars_long_no_pandas_path(source, factory_name, expr_builder):
-    from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
+    from factor_engine.cleaned_operators.operator_surface import classify_canonical
     from factor_engine.cleaned_operators.registry import OperatorRegistry
-    if OperatorRegistry._aliases.get(factory_name, factory_name) not in DAILY_CANONICALS:
+    if classify_canonical(OperatorRegistry.resolve_canonical(factory_name)) != "daily":
         pytest.skip("not on the production daily surface")
     eng = FactorEngine(backend=build_backend("polars_long"), data_source=source)
     out = eng.run(Factor(name="t", expr=expr_builder()))

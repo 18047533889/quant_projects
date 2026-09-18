@@ -34,7 +34,6 @@ def test_ts_max_buildup_basic() -> None:
     idx = pd.date_range("2024-01-01", periods=20)
     cols = [f"S{i}" for i in range(10)]
     x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
-
     op = _op("ts_max_buildup")
     try:
         result = op.calculate(x)
@@ -48,7 +47,6 @@ def test_ts_max_buildup_handles_nans() -> None:
     """NaN handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
     x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
-
     op = _op("ts_max_buildup")
     try:
         result = op.calculate(x)
@@ -128,12 +126,14 @@ def test_ts_regression_slope_basic() -> None:
     idx = pd.date_range("2024-01-01", periods=20)
     cols = [f"S{i}" for i in range(10)]
     x = pd.DataFrame(np.random.randn(20, 10), index=idx, columns=cols)
+    y = 1.5 * x + 0.7
 
     op = _op("ts_regression_slope")
     try:
-        result = op.calculate(x)
+        result = op.calculate(y, x, 8, lag=0, retval="slope", min_periods=4)
         assert isinstance(result, pd.DataFrame)
         assert result.shape == x.shape
+        np.testing.assert_allclose(result.iloc[-1].to_numpy(), 1.5, atol=1e-12)
     except Exception as e:
         pytest.fail(f"{op} basic test failed: {e}")
 
@@ -141,12 +141,20 @@ def test_ts_regression_slope_basic() -> None:
 def test_ts_regression_slope_handles_nans() -> None:
     """NaN handling test."""
     idx = pd.date_range("2024-01-01", periods=10)
-    x = pd.DataFrame([[1.0, np.nan, 3.0]] * 10, index=idx, columns=["A", "B", "C"])
+    cols = ["A", "B", "C"]
+    trend = pd.DataFrame(
+        np.arange(10.0)[:, None] * np.ones((1, 3)), index=idx, columns=cols
+    )
+    x = trend.copy()
+    x["B"] = np.nan
+    y = 2.0 * trend + 1.0
 
     op = _op("ts_regression_slope")
     try:
-        result = op.calculate(x)
+        result = op.calculate(y, x, 5, lag=0, retval="slope", min_periods=3)
         assert isinstance(result, pd.DataFrame)
+        assert np.isclose(float(result["A"].iloc[-1]), 2.0)
+        assert result["B"].isna().all()
     except Exception as e:
         pytest.fail(f"NaN test failed: {e}")
 

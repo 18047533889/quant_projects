@@ -42,13 +42,13 @@ def _assert_parity(name, args, kwargs, rtol=1e-8, atol=1e-8):
     # instrument-code columns; the test's synthetic panels carry "A"/"B" columns,
     # so the pandas reference is told the price basis explicitly (the basis comes
     # from typed-IR metadata in real DSL calls, not from column names).  The
-    # native polars impl does not run the basis gate.
+    # native polars impl runs the same defense-in-depth basis gate.
     pandas_kwargs = dict(kwargs)
     if name in {"open_close_return", "open_to_vwap_return", "overnight_return",
                 "vwap_to_close_return"}:
-        pandas_kwargs.setdefault("price_basis", "RAW")
+        pandas_kwargs.setdefault("price_basis", "raw")
     pandas_out = pandas_op.calculate(*args, **pandas_kwargs)
-    polars_out = polars_op.calculate(*[_polars(arg) for arg in args], **kwargs)
+    polars_out = polars_op.calculate(*[_polars(arg) for arg in args], **pandas_kwargs)
     assert list(pandas_out.columns) == list(polars_out.columns)
     for column in pandas_out.columns:
         np.testing.assert_allclose(

@@ -162,9 +162,12 @@ def constant_scalar(c=0.0, **kwargs):
 # ---------------------------------------------------------------------------
 
 
-def ts_max_buildup(x, d):
+def ts_max_buildup(x, d=20):
     window = _pi(d, "d")
-    cols = _cols(x)
+    # ``timestamp`` is the standard Polars identity axis, not a value panel.
+    # Keep this local so unrelated state/event operators retain their existing
+    # axis policy, and preserve every identity column in the returned frame.
+    cols = [c for c in _cols(x) if c != "timestamp"]
     rows = x.height
     out = np.full((rows, len(cols)), np.nan, dtype=float)
     for i, c in enumerate(cols):
@@ -184,7 +187,7 @@ def ts_max_buildup(x, d):
                     count += 1
             if has_finite:
                 out[end, i] = float(count)
-    return _make(x, cols, out)
+    return x.with_columns([pl.Series(c, out[:, i]) for i, c in enumerate(cols)])
 
 
 # ---------------------------------------------------------------------------

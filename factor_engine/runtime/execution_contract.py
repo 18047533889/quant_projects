@@ -988,7 +988,7 @@ for _canon in (
     # transform only refines their ``rows`` warm-up estimate).
     "ADX", "ATR_WILDER", "RSI_WILDER", "KAMA",
     # rolling window kernels.
-    "coskewness_to_market", "digital_count", "group_decay_linear",
+    "coskewness_to_market", "group_decay_linear",
     "group_ts_decay_linear", "idio_skew", "idio_vol",
     "price_spread_deviation", "rank_corr", "residual_momentum_capm",
     "tail_beta", "ts_decay_exp_window", "ts_max_buildup", "ts_moment",
@@ -996,6 +996,9 @@ for _canon in (
 ):
     _HISTORY_TRANSFORMS[_canon] = _window_transform("window", "d")
 _HISTORY_TRANSFORMS["trade_when"] = HistoryTransform(kind="identity")
+# A capped run of d one-step returns reads d+1 prices, not d prices.
+# Chunked replay therefore needs d prior rows to preserve the boundary value.
+_HISTORY_TRANSFORMS["digital_count"] = _lag_transform("d", "window")
 
 # Lag / delay operators: a pure lag of ``d`` needs ``d`` prior bars, never d-1.
 for _canon in ("ts_delay", "delay", "ts_delta"):

@@ -323,20 +323,27 @@ def group_demean_panel_(x: np.ndarray, group: np.ndarray | None = None, fallback
     When a row has no usable group labels (``group is None`` or all-NA), the
     ``fallback`` policy decides: ``"nan"`` (default, PIT-correct — matches the
     SQL/Polars path, unknown membership never participates), ``"global"``
-    (demean over the full finite row, legacy behavior), ``"keep_original"``.
+    (demean over the full finite row, legacy behavior), ``"keep_original"``,
+    or ``"error"`` (reject missing group identity).
     """
+    if fallback not in {"nan", "global", "keep_original", "error"}:
+        raise ValueError("invalid fallback policy")
     xv = np.asarray(x, dtype=float)
     out = np.full(xv.shape, np.nan, dtype=float)
     if xv.ndim != 2:
         raise ValueError("group_demean_panel_ expects a 2D panel")
     if group is None:
+        if fallback == "error":
+            raise ValueError("group labels are missing and fallback_policy='error'")
         if fallback == "nan":
             return out
         if fallback == "keep_original":
             return np.where(np.isfinite(xv), xv, np.nan)
-        with np.errstate(all="ignore"):
-            means = np.nanmean(xv, axis=1, keepdims=True)
-        return xv - means
+        finite = np.isfinite(xv)
+        counts = finite.sum(axis=1, keepdims=True)
+        sums = np.where(finite, xv, 0.0).sum(axis=1, keepdims=True)
+        means = np.divide(sums, counts, out=np.zeros_like(sums), where=counts > 0)
+        return np.where(finite, xv - means, np.nan)
 
     gv = np.asarray(group)
     if gv.shape != xv.shape:
@@ -345,19 +352,24 @@ def group_demean_panel_(x: np.ndarray, group: np.ndarray | None = None, fallback
         row = xv[i]
         g = gv[i]
         finite = np.isfinite(row)
-        if not finite.any():
-            continue
         # pd.notna handles None/NaN for object and float groups
         g_ok = pd.notna(g)
-        valid = finite & g_ok
-        if not valid.any():
-            # no usable group labels → PIT-correct default: leave NaN.  Only the
-            # explicit ``fallback="global"`` policy demeans over the full row.
+        if not g_ok.any():
+            if fallback == "error":
+                raise ValueError("group labels are missing and fallback_policy='error'")
             if fallback == "global":
-                mu = float(np.nanmean(row))
-                out[i, finite] = row[finite] - mu
+                if finite.any():
+                    mu = float(row[finite].mean())
+                    out[i, finite] = row[finite] - mu
             elif fallback == "keep_original":
                 out[i, finite] = row[finite]
+            continue
+        if not finite.any():
+            continue
+        valid = finite & g_ok
+        if not valid.any():
+            # Labels exist, so fallback_policy does not apply. Their associated
+            # values are simply unusable and the row remains null.
             continue
         codes = pd.factorize(pd.Series(g[valid]), use_na_sentinel=True)[0]
         ok = codes >= 0
@@ -775,15 +787,17 @@ def digital_count_(x, d: int, threshold: float, run: int) -> np.ndarray:
     result = np.full_like(arr, 0, dtype=float)
     if d <= 0:
         return result
-    for i in range(1, min(d, len(arr))):
-        with np.errstate(divide="ignore", invalid="ignore"):
-            change = np.abs(arr[i] / arr[i - 1] - 1)
-            if not np.isnan(change) and change <= threshold:
-                result[i] = result[i - 1] + 1
-            else:
-                result[i] = 0
-    # 只保留 >= run 的连续计数
-    result[result < run] = 0
+    streak = 0
+    for i in range(1, len(arr)):
+        current = arr[i]
+        previous = arr[i - 1]
+        if not np.isfinite(current) or not np.isfinite(previous) or previous == 0:
+            streak = 0
+        else:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                change = np.abs(current / previous - 1.0)
+            streak = min(d, streak + 1) if np.isfinite(change) and change <= threshold else 0
+        result[i] = float(streak if streak >= run else 0)
     return result
 
 def ts_max_buildup_(x, d: int) -> np.ndarray:

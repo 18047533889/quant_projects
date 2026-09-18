@@ -10,6 +10,7 @@ Tests identical results for same inputs across all backends, covering:
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import numpy as np
 import pandas as pd
@@ -22,7 +23,7 @@ from factor_engine.api.columns import col
 from factor_engine.api.factor import Factor
 from factor_engine.backend.factory import build_backend
 from factor_engine.cleaned_operators import load_all
-from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.runtime.engine import FactorEngine
 from factor_engine.storage.factory import build_data_source
@@ -33,6 +34,11 @@ from tests.helpers import InMemorySeriesSource
 # ============================================================================
 # Test data fixtures
 # ============================================================================
+
+
+def _surface_canonical(case_name: str) -> str:
+    authored = re.sub(r"_(?:w|d)\d+$", "", case_name)
+    return OperatorRegistry.resolve_canonical(authored)
 
 
 def _create_comprehensive_panel():
@@ -307,8 +313,8 @@ TECHNICAL_OPS = [
 
 @pytest.mark.parametrize("name,builder", TS_OPERATORS)
 def test_ts_operators_pandas_polars_parity(mem_source, name, builder):
-    canonical = OperatorRegistry._aliases.get(name.split("_w")[0].split("_d")[0], name.split("_w")[0].split("_d")[0])
-    if canonical not in DAILY_CANONICALS:
+    canonical = _surface_canonical(name)
+    if classify_canonical(canonical) != "daily":
         pytest.skip(f"{canonical} not in daily surface")
 
     expr = builder(col("close"))
@@ -329,8 +335,8 @@ def test_ts_operators_pandas_polars_parity(mem_source, name, builder):
 
 @pytest.mark.parametrize("name,builder", CS_OPERATORS)
 def test_cs_operators_pandas_polars_parity(mem_source, name, builder):
-    canonical = OperatorRegistry._aliases.get(name, name)
-    if canonical not in DAILY_CANONICALS:
+    canonical = _surface_canonical(name)
+    if classify_canonical(canonical) != "daily":
         pytest.skip(f"{canonical} not in daily surface")
 
     expr = builder(col("close"))
@@ -350,8 +356,8 @@ def test_cs_operators_pandas_polars_parity(mem_source, name, builder):
 
 @pytest.mark.parametrize("name,builder", TS_BIVARIATE)
 def test_ts_bivariate_pandas_polars_parity(mem_source, name, builder):
-    canonical = OperatorRegistry._aliases.get(name.split("_w")[0], name.split("_w")[0])
-    if canonical not in DAILY_CANONICALS:
+    canonical = _surface_canonical(name)
+    if classify_canonical(canonical) != "daily":
         pytest.skip(f"{canonical} not in daily surface")
 
     expr = builder(col("close"), col("open"))
@@ -371,8 +377,8 @@ def test_ts_bivariate_pandas_polars_parity(mem_source, name, builder):
 
 @pytest.mark.parametrize("name,builder", GROUP_OPERATORS)
 def test_group_operators_pandas_polars_parity(mem_source, name, builder):
-    canonical = OperatorRegistry._aliases.get(name, name)
-    if canonical not in DAILY_CANONICALS:
+    canonical = _surface_canonical(name)
+    if classify_canonical(canonical) != "daily":
         pytest.skip(f"{canonical} not in daily surface")
 
     expr = builder(col("close"), col("group_id"))
@@ -392,8 +398,8 @@ def test_group_operators_pandas_polars_parity(mem_source, name, builder):
 
 @pytest.mark.parametrize("name,builder", PROTECTED_OPS)
 def test_protected_ops_pandas_polars_parity(mem_source, name, builder):
-    canonical = OperatorRegistry._aliases.get(name, name)
-    if canonical not in DAILY_CANONICALS:
+    canonical = _surface_canonical(name)
+    if classify_canonical(canonical) != "daily":
         pytest.skip(f"{canonical} not in daily surface")
 
     if name in ["protected_div", "safe_div_null"]:
@@ -441,8 +447,8 @@ DUCKDB_BIVARIATE = [
 
 @pytest.mark.parametrize("name,builder", DUCKDB_TS_OPS)
 def test_ts_operators_duckdb_parity(duckdb_source, name, builder):
-    canonical = OperatorRegistry._aliases.get(name, name)
-    if canonical not in DAILY_CANONICALS:
+    canonical = _surface_canonical(name)
+    if classify_canonical(canonical) != "daily":
         pytest.skip(f"{canonical} not in daily surface")
 
     expr = builder(_sql_col("close"))
@@ -457,8 +463,8 @@ def test_ts_operators_duckdb_parity(duckdb_source, name, builder):
 
 @pytest.mark.parametrize("name,builder", DUCKDB_CS_OPS)
 def test_cs_operators_duckdb_parity(duckdb_source, name, builder):
-    canonical = OperatorRegistry._aliases.get(name, name)
-    if canonical not in DAILY_CANONICALS:
+    canonical = _surface_canonical(name)
+    if classify_canonical(canonical) != "daily":
         pytest.skip(f"{canonical} not in daily surface")
 
     expr = builder(_sql_col("close"))
@@ -473,8 +479,8 @@ def test_cs_operators_duckdb_parity(duckdb_source, name, builder):
 
 @pytest.mark.parametrize("name,builder", DUCKDB_GROUP_OPS)
 def test_group_operators_duckdb_parity(duckdb_source, name, builder):
-    canonical = OperatorRegistry._aliases.get(name, name)
-    if canonical not in DAILY_CANONICALS:
+    canonical = _surface_canonical(name)
+    if classify_canonical(canonical) != "daily":
         pytest.skip(f"{canonical} not in daily surface")
 
     expr = builder(_sql_col("close"), _sql_col("group_id"))
@@ -489,8 +495,8 @@ def test_group_operators_duckdb_parity(duckdb_source, name, builder):
 
 @pytest.mark.parametrize("name,builder", DUCKDB_BIVARIATE)
 def test_bivariate_duckdb_parity(duckdb_source, name, builder):
-    canonical = OperatorRegistry._aliases.get(name, name)
-    if canonical not in DAILY_CANONICALS:
+    canonical = _surface_canonical(name)
+    if classify_canonical(canonical) != "daily":
         pytest.skip(f"{canonical} not in daily surface")
 
     expr = builder(_sql_col("close"), _sql_col("open"))
@@ -541,7 +547,7 @@ def test_constant_region_std_zero(mem_source):
     # Should be 0.0 (not NaN) for constant regions
     assert pd_a.iloc[8] == 0.0  # day 9, window includes 5 constants
     assert polars_a.iloc[8] == 0.0
-    pd.testing.assert_series_equal(pd_a, polars_a, check_names=False)
+    pd.testing.assert_series_equal(pd_a, polars_a, check_names=False, check_freq=False)
 
 
 def test_warmup_period_consistency(mem_source):
@@ -613,7 +619,7 @@ def test_infinity_handling_ts_operations(mem_source):
     polars_d = polars_out.xs("D", level="instrument")
 
     # Check that Inf handling matches
-    pd.testing.assert_series_equal(pd_d, polars_d, check_names=False)
+    pd.testing.assert_series_equal(pd_d, polars_d, check_names=False, check_freq=False)
 
 
 def test_min_periods_boundary_conditions(mem_source):
@@ -647,6 +653,224 @@ def test_rank_with_ties(mem_source):
     pd_out = _result_series(_run(mem_source, expr, "pandas"))
     polars_out = _result_series(_run(mem_source, expr, "polars_long"))
     _assert_parity(pd_out, polars_out)
+
+
+def test_group_long_finite_count_rank_and_null_label_contract():
+    """Long lowering excludes invalid values/labels without zero-filling rows."""
+    timestamp = pd.Timestamp("2024-01-02")
+    index = pd.MultiIndex.from_product(
+        [[timestamp], ["A", "B", "C", "D", "E", "F", "G"]],
+        names=["timestamp", "instrument"],
+    )
+    source = InMemorySeriesSource(data={
+        "x": pd.Series([1.0, 1.0, np.inf, 4.0, 8.0, 6.0, 7.0], index=index),
+        "group": pd.Series([1.0, 1.0, 1.0, np.nan, 2.0, np.inf, -np.inf], index=index),
+    })
+
+    expected = {
+        "group_count": pd.Series([2.0, 2.0, np.nan, np.nan, 1.0, np.nan, np.nan], index=index),
+        "group_rank": pd.Series([0.75, 0.75, np.nan, np.nan, 1.0, np.nan, np.nan], index=index),
+    }
+    for canonical in ("group_count", "group_rank"):
+        expr = make_cleaned_call_factory(canonical)(col("x"), col("group"))
+        pandas_run = _run(source, expr, "pandas")
+        polars_run = _run(source, expr, "polars_long")
+
+        assert polars_run.get("used_polars_long_path") is True
+        assert not polars_run.get("polars_long_fallback_reason")
+        pandas_out = _result_series(pandas_run)
+        polars_out = _result_series(polars_run)
+        pd.testing.assert_series_equal(
+            pandas_out,
+            expected[canonical],
+            check_names=False,
+            check_dtype=False,
+        )
+        pd.testing.assert_series_equal(
+            polars_out,
+            expected[canonical],
+            check_names=False,
+            check_dtype=False,
+        )
+
+
+def test_group_long_string_identity_is_exact():
+    """String labels resembling numbers stay identities; only ``""`` is missing."""
+    import polars as pl
+
+    class StringLongSource(InMemorySeriesSource):
+        def scan_polars_long(self, columns):
+            merged = None
+            for name in sorted(columns):
+                part = self.data[name].rename(name).reset_index()
+                merged = part if merged is None else merged.merge(
+                    part, on=["timestamp", "instrument"], how="outer"
+                )
+            return pl.from_pandas(
+                merged.rename(columns={"timestamp": "ts", "instrument": "inst"})
+            ).lazy()
+
+    timestamp = pd.Timestamp("2024-01-02")
+    index = pd.MultiIndex.from_product(
+        [[timestamp], ["A", "B", "C", "D", "E"]],
+        names=["timestamp", "instrument"],
+    )
+    source = StringLongSource(data={
+        "x": pd.Series([1.0, 2.0, 3.0, 4.0, 5.0], index=index),
+        "group": pd.Series(["NaN", "NaN", " ", " ", ""], index=index),
+    })
+    expected = {
+        "group_count": [2.0, 2.0, 2.0, 2.0, np.nan],
+        "group_rank": [0.5, 1.0, 0.5, 1.0, np.nan],
+    }
+    for canonical, values in expected.items():
+        expr = make_cleaned_call_factory(canonical)(col("x"), col("group"))
+        run = _run(source, expr, "polars_long")
+        assert run.get("used_polars_long_path") is True
+        assert not run.get("polars_long_fallback_reason")
+        pd.testing.assert_series_equal(
+            _result_series(run),
+            pd.Series(values, index=index),
+            check_names=False,
+            check_dtype=False,
+        )
+
+@pytest.mark.parametrize("canonical", [
+    "group_rank", "group_mean", "group_sum", "group_min", "group_max",
+    "group_count", "group_zscore", "group_neutralize", "group_std",
+    "group_normalize",
+])
+@pytest.mark.parametrize("group_case", ["omitted", "all_missing", "partial_missing"])
+@pytest.mark.parametrize("fallback_policy", ["nan", "global", "keep_original", "error"])
+def test_group_long_fallback_policy_parity(canonical, group_case, fallback_policy):
+    """Long group lowering must preserve the canonical row-wise fallback policy."""
+    timestamp = pd.Timestamp("2024-01-02")
+    index = pd.MultiIndex.from_product(
+        [[timestamp], ["A", "B", "C", "D"]],
+        names=["timestamp", "instrument"],
+    )
+    data = {
+        "x": pd.Series([1.0, 2.0, 4.0, 8.0], index=index),
+    }
+    if group_case == "all_missing":
+        data["group"] = pd.Series([np.nan] * 4, index=index)
+    elif group_case == "partial_missing":
+        data["group"] = pd.Series([1.0, 1.0, np.nan, np.nan], index=index)
+    source = InMemorySeriesSource(data=data)
+
+    factory = make_cleaned_call_factory(canonical)
+    if group_case == "omitted":
+        expr = factory(col("x"), fallback_policy=fallback_policy)
+    else:
+        expr = factory(col("x"), col("group"), fallback_policy=fallback_policy)
+
+    outcomes = {}
+    for backend in ("pandas", "polars_long"):
+        try:
+            outcomes[backend] = ("value", _result_series(_run(source, expr, backend)))
+        except ValueError as exc:
+            outcomes[backend] = ("error", str(exc))
+
+    pandas_kind, pandas_result = outcomes["pandas"]
+    polars_kind, polars_result = outcomes["polars_long"]
+    assert polars_kind == pandas_kind
+    if pandas_kind == "error":
+        assert fallback_policy == "error"
+        assert "group labels are missing" in pandas_result
+        assert "group labels are missing" in polars_result
+    else:
+        pd.testing.assert_series_equal(
+            polars_result,
+            pandas_result,
+            check_names=False,
+            check_dtype=False,
+        )
+
+
+@pytest.mark.parametrize("group_case", ["omitted", "all_missing"])
+@pytest.mark.parametrize("backend", ["pandas", "polars_long"])
+def test_group_neutralize_error_policy_rejects_missing_groups(group_case, backend):
+    """The error policy must reject an absent group identity, not silently fallback."""
+    timestamp = pd.Timestamp("2024-01-02")
+    index = pd.MultiIndex.from_product(
+        [[timestamp], ["A", "B", "C", "D"]],
+        names=["timestamp", "instrument"],
+    )
+    data = {"x": pd.Series([1.0, 2.0, 4.0, 8.0], index=index)}
+    factory = make_cleaned_call_factory("group_neutralize")
+    if group_case == "omitted":
+        expr = factory(col("x"), fallback_policy="error")
+    else:
+        data["group"] = pd.Series([np.nan] * 4, index=index)
+        expr = factory(col("x"), col("group"), fallback_policy="error")
+
+    source = InMemorySeriesSource(data=data)
+    with pytest.raises(
+        ValueError,
+        match="group labels are missing and fallback_policy='error'",
+    ):
+        _run(source, expr, backend)
+
+
+@pytest.mark.parametrize("backend", ["pandas", "polars_long"])
+@pytest.mark.parametrize("value_case", ["all_nonfinite", "valid_labels_have_no_finite_values"])
+@pytest.mark.parametrize("fallback_policy", ["nan", "global", "keep_original", "error"])
+def test_group_neutralize_fallback_depends_only_on_labels(backend, value_case, fallback_policy):
+    """Finite-value absence must not be reported as missing group identity."""
+    timestamp = pd.Timestamp("2024-01-02")
+    index = pd.MultiIndex.from_product(
+        [[timestamp], ["A", "B", "C", "D"]],
+        names=["timestamp", "instrument"],
+    )
+    if value_case == "all_nonfinite":
+        values = [np.nan, np.inf, -np.inf, np.nan]
+        groups = [1.0, 1.0, 2.0, 2.0]
+    else:
+        values = [np.nan, 3.0, np.inf, 4.0]
+        groups = [1.0, np.nan, 2.0, np.nan]
+    source = InMemorySeriesSource(data={
+        "x": pd.Series(values, index=index),
+        "group": pd.Series(groups, index=index),
+    })
+    expr = make_cleaned_call_factory("group_neutralize")(
+        col("x"), col("group"), fallback_policy=fallback_policy
+    )
+
+    result = _result_series(_run(source, expr, backend))
+    pd.testing.assert_series_equal(
+        result,
+        pd.Series(np.nan, index=index),
+        check_names=False,
+        check_dtype=False,
+    )
+
+
+@pytest.mark.parametrize("backend", ["pandas", "polars_long"])
+@pytest.mark.parametrize("group_case", ["omitted", "all_missing"])
+def test_group_neutralize_global_fallback_excludes_nonfinite_values(backend, group_case):
+    """Global fallback averages finite values only and preserves invalid rows as null."""
+    timestamp = pd.Timestamp("2024-01-02")
+    index = pd.MultiIndex.from_product(
+        [[timestamp], ["A", "B", "C", "D"]],
+        names=["timestamp", "instrument"],
+    )
+    data = {
+        "x": pd.Series([1.0, 3.0, np.inf, np.nan], index=index),
+    }
+    factory = make_cleaned_call_factory("group_neutralize")
+    if group_case == "omitted":
+        expr = factory(col("x"), fallback_policy="global")
+    else:
+        data["group"] = pd.Series([np.nan] * 4, index=index)
+        expr = factory(col("x"), col("group"), fallback_policy="global")
+
+    result = _result_series(_run(InMemorySeriesSource(data=data), expr, backend))
+    pd.testing.assert_series_equal(
+        result,
+        pd.Series([-1.0, 1.0, np.nan, np.nan], index=index),
+        check_names=False,
+        check_dtype=False,
+    )
 
 
 def test_empty_group_handling(mem_source):

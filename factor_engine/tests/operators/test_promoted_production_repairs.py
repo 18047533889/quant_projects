@@ -50,9 +50,10 @@ def test_ts_regression_slope_explicit_intercept_contract() -> None:
     x = _panel([1, 2, 3, 4, 5, 6, 7, 8])
     y = x * 2.0 + 5.0
 
-    # ts_regression_slope signature is (y, x, window, add_intercept)
-    with_intercept = op.calculate(y, x, 5, True)
-    through_origin = op.calculate(y, x, 5, False)
+    # The historical positional slot after window is ``lag``; policy knobs use
+    # explicit names so a bool can never be misbound as an integer lag.
+    with_intercept = op.calculate(y, x, 5, lag=0, retval="slope", add_intercept=True)
+    through_origin = op.calculate(y, x, 5, lag=0, retval="slope", add_intercept=False)
 
     assert np.isclose(float(with_intercept.iloc[-1, 0]), 2.0, atol=1e-12)
     # Through-origin fit is intentionally different because y contains +5 intercept.

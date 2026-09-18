@@ -182,6 +182,14 @@ def _compile_child(
 _GRP = "_grp"
 
 
+
+def _enforce_group_error_policy(mask: pl.Series) -> pl.Series:
+    """Raise the canonical data-dependent error for all-missing group rows."""
+    if mask.any():
+        raise ValueError("group labels are missing and fallback_policy='error'")
+    return mask
+
+
 @dataclass(frozen=True)
 class CompiledLongExpr:
     """Expr DAG 节点：单条 ``pl.Expr`` + 依赖列（避免中间 LazyFrame join）。
@@ -269,7 +277,7 @@ def _atr_wilder_expr(
     """构造 Wilder ATR 的 Polars 表达式（TR 的 EWM 均值）。"""
     prev_close = pl.col(close_col).shift(1)
     tr = (
-        pl.when(prev_close.is_null())
+        pl.when(prev_close.is_null() | pl.col(high_col).is_null() | pl.col(low_col).is_null())
         .then(None)
         .otherwise(
             pl.max_horizontal(
@@ -279,7 +287,13 @@ def _atr_wilder_expr(
             )
         )
     )
-    return tr.ewm_mean(alpha=alpha, adjust=False, min_periods=window)
+    # Canonical np.maximum propagates a missing OHLC component into TR;
+    # pandas EWM excludes nonfinite TR and carries the previous state over
+    # gaps, without pretending a missing input was an observed bar.
+    finite_tr = pl.when(tr.is_finite()).then(tr).otherwise(None)
+    return finite_tr.ewm_mean(
+        alpha=alpha, adjust=False, min_samples=window, ignore_nulls=False,
+    ).forward_fill()
 
 
 def _scale_to_value(node: PlanNode, default: float = 1.0) -> float:
@@ -3213,8 +3227,22 @@ def _compile_polars_impl(
         val = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if val is None:
             return None
-        if len(node.inputs) >= 2 and node.inputs[1].op not in {"literal"}:
-            grp = _compile_child(node, 1, base, parent_op=op, ctx=ctx, memo=memo)
+        core_group_op = op in {
+            "group_rank", "group_mean", "group_sum", "group_min",
+            "group_max", "group_count", "group_zscore",
+            "group_neutralize", "group_std", "group_normalize",
+        }
+        fallback_policy = str((node.attrs or {}).get("fallback_policy", "nan"))
+        if core_group_op and fallback_policy not in {
+            "nan", "global", "keep_original", "error"
+        }:
+            return None
+
+        has_explicit_group = len(node.inputs) >= 2 and node.inputs[1].op not in {"literal"}
+        if has_explicit_group:
+            # Group identities are not numeric compute inputs: preserve raw
+            # string/categorical labels and classify missingness by dtype below.
+            grp = _compile_polars(node.inputs[1], base, ctx=ctx, memo=memo)
             if grp is None:
                 return None
             joined = val.join(grp.rename({_VAL: _GRP}), on=[_TS, _INST], how="left")
@@ -3226,8 +3254,54 @@ def _compile_polars_impl(
                 # which raises instead of silently treating the whole cross
                 # section as one group.
                 return None
-            joined = val.with_columns(pl.lit(1.0).alias(_GRP))
+            # Missing group input is not an implicit global group. Core
+            # operators apply fallback_policy per timestamp below.
+            joined = val.with_columns(pl.lit(None).cast(pl.Float64).alias(_GRP))
             over_keys = (_TS, _GRP)
+        # Canonical core group operators exclude every non-finite value from
+        # membership statistics and row output. Other group transforms (for
+        # example winsorize) have separate Inf contracts and remain untouched.
+        all_groups_missing = None
+        if core_group_op:
+            group_dtype = joined.collect_schema()[_GRP]
+            if group_dtype in (pl.String, pl.Categorical, pl.Enum):
+                # String identity is exact: only the empty string is missing.
+                # Whitespace and spellings such as "NaN"/"Inf" are valid labels.
+                group_missing = pl.col(_GRP).is_null() | (pl.col(_GRP) == "")
+            elif group_dtype.is_numeric():
+                # Numeric identities must be finite; NaN and both infinities are missing.
+                group_missing = pl.col(_GRP).is_null() | ~pl.col(_GRP).is_finite()
+            else:
+                group_missing = pl.col(_GRP).is_null()
+            all_groups_missing = group_missing.all().over(_TS, order_by=_INST)
+            original_finite = (
+                pl.when(pl.col(_VAL).is_finite())
+                .then(pl.col(_VAL))
+                .otherwise(None)
+            )
+            policy_guard = pl.lit(False)
+            if fallback_policy == "error":
+                policy_guard = all_groups_missing.map_batches(
+                    _enforce_group_error_policy,
+                    return_dtype=pl.Boolean,
+                )
+            if fallback_policy == "global":
+                # Normalize an all-missing row to one NULL partition. Partial
+                # missing labels remain excluded rather than joining global.
+                joined = joined.with_columns(
+                    pl.when(all_groups_missing)
+                    .then(None)
+                    .otherwise(pl.col(_GRP))
+                    .alias(_GRP)
+                )
+                group_missing = group_missing & ~all_groups_missing
+            joined = joined.with_columns(
+                original_finite.alias("__group_original"),
+                pl.when(original_finite.is_not_null() & ~group_missing & ~policy_guard)
+                .then(pl.col(_VAL))
+                .otherwise(None)
+                .alias(_VAL)
+            )
         if op == "group_percentile":
             p = _float_attr(node, "p", default=0.5)
             pos_p = _literal_value(node, 1)
@@ -3268,8 +3342,7 @@ def _compile_polars_impl(
                 .otherwise(pl.col(_VAL) * rank / denom)
             )
         elif op == "group_mean":
-            # NaN/NULL members must stay NaN/NULL (audit #19).  Inf follows
-            # pandas ``notna`` (participates / may poison), not finite-mask.
+            # Only finite members participate; invalid rows remain null.
             expr = (
                 pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
                 .then(None)
@@ -3304,19 +3377,11 @@ def _compile_polars_impl(
         elif op == "group_std":
             from factor_engine.backend.numeric_semantics import std_ddof_value
 
-            # pandas GroupStd uses ``notna`` (Inf included); a group containing
-            # ±Inf has std NaN -> the reference fills 0 for the WHOLE group.
-            # Polars' std() drops non-finite (giving a finite std of the remaining
-            # members), so detect any non-finite member and force the 0 fill.
-            group_has_inf = (
-                pl.col(_VAL).is_infinite().max().over(*over_keys, order_by=_INST).cast(pl.Boolean)
-            )
+            # Core preprocessing already excludes every non-finite member.
             cnt = pl.col(_VAL).count().over(*over_keys, order_by=_INST)
             std_expr = pl.col(_VAL).std(ddof=std_ddof_value("group_std")).over(*over_keys, order_by=_INST)
             expr = (
-                pl.when(group_has_inf)
-                .then(0.0)
-                .when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+                pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
                 .then(None)
                 .when(cnt < 2)
                 .then(0.0)
@@ -3327,16 +3392,7 @@ def _compile_polars_impl(
         elif op in {"group_zscore", "group_neutralize"}:
             from factor_engine.backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
 
-            # PARITY-SWEEP-R56: pandas ``GroupZScore`` uses ``x_slice.notna()``
-            # (Inf INCLUDED) for the group mask, so a group containing ±Inf has
-            # mean=Inf and std=NaN -> the reference's ``std != 0 and not isna``
-            # branch is False and the WHOLE group is set to 0.  Replicate: if any
-            # group member is non-finite, output the zero_fill for every member
-            # (matching the pandas 0 output), instead of dropping Inf and
-            # computing a finite z-score.
-            group_has_inf = (
-                pl.col(_VAL).is_infinite().max().over(*over_keys, order_by=_INST).cast(pl.Boolean)
-            )
+            # Core preprocessing already excludes every non-finite member.
             mean = pl.col(_VAL).mean().over(*over_keys, order_by=_INST)
             if op == "group_neutralize":
                 # PARITY-SWEEP-R56: pandas ``GroupDemean`` (group_neutralize) uses
@@ -3360,9 +3416,7 @@ def _compile_polars_impl(
                 std = pl.col(_VAL).std(ddof=std_ddof_value("group_zscore")).over(*over_keys, order_by=_INST)
                 zero_fill = zscore_zero_std_fill("group_zscore")
                 expr = (
-                    pl.when(group_has_inf)
-                    .then(zero_fill)
-                    .when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
+                    pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
                     .then(None)
                     .when(std.is_null() | (std == 0) | std.is_infinite())
                     .then(zero_fill)
@@ -3381,6 +3435,10 @@ def _compile_polars_impl(
             from factor_engine.backend.rank_spec import polars_cs_rank_expr
 
             expr = polars_cs_rank_expr(_VAL, partition_cols=over_keys, order_by=_INST, canon="group_rank")
+        if core_group_op and fallback_policy == "keep_original":
+            expr = pl.when(all_groups_missing).then(
+                pl.col("__group_original")
+            ).otherwise(expr)
         return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     if op == "cs_shrink_to_group_mean":
@@ -4502,19 +4560,9 @@ def _compile_polars_impl(
             return None
         alpha, w = _wilder_alpha(node)
         joined = _join_triple(high, low, close)
-        prev_close = pl.col("_y").shift(1).over(_INST, order_by=_TS)
-        tr = (
-            pl.when(prev_close.is_null())
-            .then(None)
-            .otherwise(
-                pl.max_horizontal(
-                    pl.col(_VAL) - pl.col("_ym"),
-                    (pl.col(_VAL) - prev_close).abs(),
-                    (pl.col("_ym") - prev_close).abs(),
-                )
-            )
-        )
-        expr = tr.ewm_mean(alpha=alpha, adjust=False, min_periods=w).over(_INST, order_by=_TS)
+        expr = _atr_wilder_expr(
+            _VAL, "_ym", "_y", window=w, alpha=alpha,
+        ).over(_INST, order_by=_TS)
         return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
     # ------------------------------------------------------------------
@@ -4660,8 +4708,8 @@ def _compile_polars_impl(
         if joined is None:
             return None
         if op == "atr_short_long_ratio":
-            s = max(int(_literal_value(node, 2, default=5) or 5), 2)
-            l = max(int(_literal_value(node, 3, default=14) or 14), 2)
+            s = max(_int_attr(node, "short_window", input_index=2, default=5), 2)
+            l = max(_int_attr(node, "long_window", input_index=3, default=14), 2)
             if s >= l:
                 return None
             trs = _atr_wilder_expr(_VAL, "_ym", "_y", window=s, alpha=1.0 / s).over(_INST, order_by=_TS)
@@ -4673,7 +4721,7 @@ def _compile_polars_impl(
             expr = ratio_s / denom
             return joined.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
         # atr_pct / atr_acceleration
-        wl = max(int(_literal_value(node, 3, default=14) or 14), 2)
+        wl = max(_int_attr(node, "window", input_index=2, default=14), 2)
         tr = _atr_wilder_expr(_VAL, "_ym", "_y", window=wl, alpha=1.0 / wl).over(
             _INST, order_by=_TS
         )

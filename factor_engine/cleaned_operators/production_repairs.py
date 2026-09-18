@@ -67,7 +67,7 @@ class ProductionTSMaxBuildup(SeriesOperator):
         tags=["pit_safe", "causal", "rolling", "production_repair"],
     )
 
-    def _calculate_series(self, x: pd.DataFrame, d: int) -> pd.DataFrame:
+    def _calculate_series(self, x: pd.DataFrame, d: int = 20) -> pd.DataFrame:
         window = int(d)
         if window <= 0:
             raise ValueError("ts_max_buildup d must be a positive integer")
@@ -126,9 +126,9 @@ class ProductionDigitalCount(SeriesOperator):
     def _calculate_series(
         self,
         x: pd.DataFrame,
-        d: int,
-        threshold: float,
-        run: int,
+        d: int = 20,
+        threshold: float = 0.01,
+        run: int = 3,
     ) -> pd.DataFrame:
         lookback = int(d)
         minimum_run = int(run)
