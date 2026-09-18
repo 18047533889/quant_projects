@@ -181,3 +181,60 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 POLARS_MAX_THREADS=4 PYTHONPATH=. .venv
 ```sh
 PYTHONPATH=. .venv/bin/python /tmp/backend_readiness.py evidence/factor_catalog_20260916/r57_20260919_full
 ```
+
+---
+
+## 5. 追加：全量位置参数契约审计（113768 行）
+
+`engine.compile()` **不校验位置参数元数与算子注册契约的一致性** —— 这是"编译绿、执行炸"的机制性原因。
+为此写了一个只读静态审计（`audit_arity*.py`），遍历每一行的 AST 调用，把位置实参逐个对到
+算子的 `metadata.param_names` 上，检查：元数超限、把 series 表达式落进标量参数、未知关键字。
+
+### 5.1 三轮迭代（前两轮的结论是错的，记录以免重复）
+
+| 版本 | 缺陷 | 症状 |
+|---|---|---|
+| v1 | 未解析别名；未识别变参算子 | 18.8 万次假 `OPERATOR_NOT_REGISTERED`（`multiply`/`subtract` 等别名） |
+| v2 | 用 `calculate` 判定变参 | `calculate` 恒为 `(*args, **kwargs)` → **所有算子**被豁免，误报归零 |
+| v3 | 改用 `_calculate_series` 判定变参，并解析别名 | 结果可信 |
+
+v3 结果：**113768 行中 532 行（0.47%）命中 `SERIES_INTO_SCALAR_PARAM`**，无元数超限、无未知关键字。
+
+### 5.2 交叉验证成立
+
+审计独立命中了运行时实测失败的 `holder_concentration_change`（7 行）与
+`holder_count_change_rate`（7 行）—— 静态审计与动态实测互相印证，不是纯启发式噪声。
+
+### 5.3 真正的契约错配（约 287 行，需修）
+
+同一族问题：**OHLCV 类技术指标被按"多序列"调用，但算子契约是"单序列 + 标量参数"**。
+
+| 算子 | 命中行数 | 契约 | 目录实际调用 |
+|---|---|---|---|
+| `CoppockCurve` | 104 | `close, roc1, roc2, wma_window, roc_mode` | 4 个字段实参塞进 roc1/roc2/wma_window/roc_mode |
+| `FisherTransform` | 96 | `high, low, window, smooth, signal_smooth, output` | 已在运行时证实必失败 |
+| `QQE` | 28 | `x, length, smooth, factor, output` | 已在运行时证实必失败 |
+| `ElderRay` | 14 | `high, low, close, ema, output` | ema/output 收到字段 |
+| `holder_concentration_change` / `holder_count_change_rate` | 7 / 7 | `concentration, lag` | 与运行时失败一致 |
+| `signed_power` | 5 | `x, c` | c 收到字段 |
+| `intra_event_pre_post_contrast` / `intra_event_window_reduce` | 5 / 5 | pre/post/... 为标量 | 标量位收到字段 |
+| `state_l2_partial_adjustment` / `state_l1_turnover_prox` / `state_rank_deadband` / `state_adaptive_slew_limit` | 各 4 | — | 同上 |
+
+### 5.4 另一类独立缺陷：算子参数元数据本身写错（约 413 处调用）
+
+这些不是公式错，是**算子的 `param_specs` 把数据参数误标成标量参数**，会让任何基于
+参数域的校验/优化/搜索逻辑失真：
+
+| 算子 | 调用数 | 问题 |
+|---|---|---|
+| `trade_when` | 393 | `param_specs = ['signal','fallback']`，但 `signal` 显然是序列 |
+| `group_tail_lead_score` | 10 | `param_specs` 误含 `x`、`group_id`（两者都是序列） |
+| `group_tail_centrality` | 10 | 同上 |
+
+### 5.5 结论
+
+- "编译绿、执行必炸"的真实规模是 **约 287 行 / 113768 行（0.25%）**，集中在 4 个 OHLCV 指标
+  （CoppockCurve / FisherTransform / QQE / ElderRay，合计 242 行）与若干 state/intra 族算子。
+- 另加第 1.4 节的 `holder_top10_*` 716 行（算子未注册），是另一种独立的静默缺陷。
+- 两类合计约 **1000 行 / 113768 行（0.88%）**需要在执行前修掉，其余 99% 的编译结果在
+  "依赖的算子都真实存在且元数自洽"这一层是干净的。
