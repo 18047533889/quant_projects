@@ -480,7 +480,8 @@ def ts_poly2_resid(y, x, d):
             xw = xv[t - d_i + 1 : t + 1]
             # WINDOW-SEMANTICS PARITY (pandas reference): finite-only pairs.
             valid = np.isfinite(yw) & np.isfinite(xw)
-            if valid.sum() < 3:
+            # A residual requires an observed finite pair at the scored bar.
+            if not valid[-1] or valid.sum() < 3:
                 continue
             # A quadratic needs three distinct predictor values; fail closed
             # before rank-deficient LAPACK fits or arbitrary coefficients.

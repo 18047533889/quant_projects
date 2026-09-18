@@ -699,7 +699,8 @@ def ts_poly2_resid_(y, x, d: int) -> np.ndarray:
         yw = y_arr[i - d + 1:i + 1]
         xw = x_arr[i - d + 1:i + 1]
         valid = np.isfinite(yw) & np.isfinite(xw)
-        if int(valid.sum()) < 3:
+        # A residual requires an observed finite pair at the scored bar.
+        if not valid[-1] or int(valid.sum()) < 3:
             continue
         # A quadratic needs three distinct predictor values; fail closed
         # before rank-deficient LAPACK fits or arbitrary coefficients.
@@ -715,8 +716,8 @@ def ts_poly2_resid_(y, x, d: int) -> np.ndarray:
             # NaN), matching the finite-only statistical contract.
             continue
         c, b, a = coeffs
-        fitted = a + b * xw + c * xw ** 2
-        result[i] = yw[-1] - fitted[-1]
+        fitted_current = a + b * xw[-1] + c * xw[-1] ** 2
+        result[i] = yw[-1] - fitted_current
     return result
 
 # R22-058: causal (prior) siblings of the in-sample ts_poly2_coeff/resid.  The
