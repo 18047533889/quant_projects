@@ -334,30 +334,53 @@ class TSGeneralizedHurstSpreadQ1Q4PolarsNative(SeriesOperator):
 
 @register_operator(name="ts_gpd_shape_pwm", canonical="ts_gpd_shape_pwm", backend="polars", status="research_only")
 class TSGPDShapePWMPolarsNative(SeriesOperator):
-    """Generalized Pareto Distribution shape parameter via PWM"""
+    """Exact Polars column wrapper for the canonical PWM estimator."""
 
-    metadata = OperatorMetadata(
-        name="ts_gpd_shape_pwm",
-        category="time_series",
-        description="GPD shape parameter (tail index) via probability weighted moments",
-        param_names=["x","window","side","tail_fraction","min_tail_count"],
-        return_type="series",
-        tags=["time_series", "rolling", "extreme_tail", "pit_safe"],
+    from factor_engine.cleaned_operators.extreme_tail import (
+        TsGpdShapePwm as _reference,
+        _gpd_shape_pwm_series as _kernel,
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-        "side": ParamSpec(dtype=str, default="both", param_role=ParamRole.POLICY),
-        "tail_fraction": ParamSpec(dtype=float, default=0.1, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
-    def _calculate_series(self, x, window=120, side="both", tail_fraction=0.1,
+    from factor_engine.cleaned_operators.common._polars_bridge import SKIP as _metadata_columns
+
+    metadata = copy.deepcopy(_reference.metadata)
+    _kernel = staticmethod(_kernel)
+    _contract_callable = staticmethod(_reference._calculate_series)
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_gpd_shape_pwm",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
+        supports_lazy=False,
+        supports_streaming=False,
+        stateful=False,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=False,
+        implementation_source_hash="ts_advanced_batch5:ts_gpd_shape_pwm:shared_numpy:v1",
+        kernel_identity="extreme_tail._gpd_shape_pwm_series:v1",
+        parameter_domain_hash="window:int>=2,side:{upper,lower},tail_fraction:0<x<=0.5,min_tail_count:int>=3",
+        semantic_contract_hash="pwm-gpd-shape:strict-tail-threshold:finite-support:trailing-window:v1",
+        notes="Eager materialized Polars columns -> shared NumPy PWM kernel -> Polars; no lazy, streaming, pandas, or GPU path.",
+    )
+
+    def _calculate_series(self, x, window=120, side="upper", tail_fraction=0.2,
                           min_tail_count=10, **kwargs):
-        # R4-100 parity: canonical (x, window, side, tail_fraction,
-        # min_tail_count); ``feature/threshold_quantile`` are legacy aliases.
-        feature = x
-        threshold_quantile = 1.0 - float(tail_fraction)
-        # TODO: Implement proper GPD PWM estimator
-        # Placeholder: tail volatility
-        return feature.abs().rolling_quantile(threshold_quantile, window_size=window)
+        side_key = str(side).lower()
+        if side_key not in {"upper", "lower"}:
+            raise ValueError("ts_gpd_shape_pwm requires side in {'upper','lower'}")
+        columns = [c for c in x.columns if c not in self._metadata_columns]
+        return x.with_columns([
+            pl.Series(
+                name=column,
+                values=self._kernel(
+                    x[column].to_numpy().astype(float, copy=False),
+                    window, side_key, tail_fraction, min_tail_count,
+                ),
+                dtype=pl.Float64,
+            )
+            for column in columns
+        ])
 
 
 @register_operator(name="ts_h_infinity_level_filter", canonical="ts_h_infinity_level_filter", backend="polars", status="research_only", replace=True, expected_old_source="pandas_bridge", replacement_reason="Consolidating polars native operators into ts_advanced_batch5")
@@ -1053,9 +1076,34 @@ class TSDeviationFromMeanPolarsNative(SeriesOperator):
         "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
     }
 
+    from factor_engine.cleaned_operators.common._polars_bridge import SKIP as _metadata_columns
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_deviation_from_mean",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=False,
+        supports_streaming=False,
+        stateful=False,
+        materializes_full_panel=False,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=False,
+        implementation_source_hash="ts_advanced_batch5:ts_deviation_from_mean:polars_expr:v1",
+        kernel_identity="polars.Expr.rolling_mean:v1",
+        parameter_domain_hash="window:int>=20",
+        semantic_contract_hash="abs-current-minus-trailing-mean:min-samples-window:v1",
+        notes="Native eager Polars expressions over value columns; pandas input is outside this Polars-only operator contract.",
+    )
+
     def _calculate_series(self, feature, window, **kwargs):
-        # Absolute deviation from rolling mean
-        return (feature - feature.rolling_mean(window)).abs()
+        if not isinstance(feature, pl.DataFrame):
+            raise TypeError("ts_deviation_from_mean polars backend requires a polars.DataFrame")
+        columns = [c for c in feature.columns if c not in self._metadata_columns]
+        return feature.with_columns([
+            (pl.col(column) - pl.col(column).rolling_mean(window_size=window)).abs().alias(column)
+            for column in columns
+        ])
 
 
 @register_operator(name="ts_km_quasipotential_depth", canonical="ts_km_quasipotential_depth", backend="polars", status="research_only")
