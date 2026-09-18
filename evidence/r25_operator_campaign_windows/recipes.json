@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "recipes": [
+    {"canonical":"ts_chord_excursion_area","inputs":["base"],"params":{"window":20,"min_periods":2},"provenance":"canonical metadata; existing operator tests"},
+    {"canonical":"ts_cumulative_deviation_score","inputs":["base"],"params":{"window":20,"min_periods":5},"provenance":"canonical metadata; existing operator tests"},
+    {"canonical":"ts_current_drawdown_area","inputs":["base"],"params":{"window":20},"provenance":"canonical metadata; existing operator tests"},
+    {"canonical":"ts_current_drawdown_duration","inputs":["base"],"params":{"window":20},"provenance":"canonical metadata; existing operator tests"},
+    {"canonical":"ts_cusum_vol_break_score","inputs":["base"],"params":{"window":20,"min_periods":10},"provenance":"canonical metadata; existing operator tests"},
+    {"canonical":"ts_effective_turning_rate","inputs":["base"],"params":{"window":20,"epsilon":0.0,"min_periods":2},"provenance":"canonical bounded metadata; existing operator tests"},
+    {"canonical":"ts_endpoint_deviation","inputs":["base"],"params":{"window":20,"min_periods":3},"provenance":"canonical metadata; existing operator tests"},
+    {"canonical":"ts_max_chord_excursion","inputs":["base"],"params":{"window":20,"min_periods":2},"provenance":"canonical metadata; existing operator tests"},
+    {"canonical":"ts_max_drawdown","inputs":["base"],"params":{"window":20,"min_periods":2},"provenance":"canonical metadata; existing operator tests"},
+    {"canonical":"ts_recovery_fraction","inputs":["base"],"params":{"window":20},"provenance":"canonical metadata; existing operator tests"},
+    {"canonical":"ts_time_under_water","inputs":["base"],"params":{"window":20},"provenance":"canonical metadata; existing operator tests"},
+    {"canonical":"ts_lo_mackinlay_vr","inputs":["base"],"params":{"window":20,"q":5,"min_periods":10},"provenance":"canonical bounded metadata; existing operator tests"},
+    {"canonical":"ts_lo_mackinlay_z","inputs":["base"],"params":{"window":20,"q":5,"min_periods":10},"provenance":"canonical bounded metadata; existing operator tests"},
+    {"canonical":"ts_variance_ratio_proxy","inputs":["base"],"params":{"window":20,"q":5,"min_periods":10},"provenance":"canonical bounded metadata; existing operator tests"},
+    {"canonical":"ts_level_shift_score","inputs":["base"],"params":{"window":20,"min_periods":5},"provenance":"canonical metadata; existing operator tests"},
+    {"canonical":"ts_vol_shift_score","inputs":["base"],"params":{"window":20,"min_periods":5},"provenance":"canonical metadata; existing operator tests"},
+    {"canonical":"ts_rolling_median_causal","inputs":["base"],"params":{"window":5,"min_periods":3},"provenance":"canonical bounded metadata; existing operator tests"},
+    {"canonical":"ts_causal_local_linear_smoother","inputs":["base"],"params":{"window":20,"min_periods":10},"provenance":"canonical metadata; existing operator tests"},
+    {"canonical":"ts_tail_imbalance","inputs":["base"],"params":{"window":20,"k":1.0,"min_periods":8},"provenance":"canonical bounded metadata; existing operator tests"},
+    {"canonical":"ts_time_slope","inputs":["base"],"params":{"window":20,"min_periods":5},"provenance":"canonical metadata; existing operator tests"}
+  ],
+  "unmigrated": []
+}

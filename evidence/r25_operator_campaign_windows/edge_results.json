@@ -1,0 +1,547 @@
+{
+  "rows": 32,
+  "cut": 25,
+  "checks": [
+    {
+      "canonical": "ts_chord_excursion_area",
+      "params": {
+        "window": 2,
+        "min_periods": 2
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 62,
+          "finite_polars": 62
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 62,
+          "finite_polars": 62
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 48,
+          "finite_polars": 48
+        }
+      }
+    },
+    {
+      "canonical": "ts_cumulative_deviation_score",
+      "params": {
+        "window": 3,
+        "min_periods": 1
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 60,
+          "finite_polars": 60
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 0,
+          "finite_polars": 0
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 40,
+          "finite_polars": 40
+        }
+      }
+    },
+    {
+      "canonical": "ts_current_drawdown_area",
+      "params": {
+        "window": 2
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 33,
+          "finite_polars": 33
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 31,
+          "finite_polars": 31
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 26,
+          "finite_polars": 26
+        }
+      }
+    },
+    {
+      "canonical": "ts_current_drawdown_duration",
+      "params": {
+        "window": 2
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 64,
+          "finite_polars": 64
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 64,
+          "finite_polars": 64
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 56,
+          "finite_polars": 56
+        }
+      }
+    },
+    {
+      "canonical": "ts_cusum_vol_break_score",
+      "params": {
+        "window": 4,
+        "min_periods": 4
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 0,
+          "finite_polars": 0
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 0,
+          "finite_polars": 0
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 0,
+          "finite_polars": 0
+        }
+      }
+    },
+    {
+      "canonical": "ts_effective_turning_rate",
+      "params": {
+        "window": 3,
+        "epsilon": 0.0,
+        "min_periods": 3
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 0,
+          "finite_polars": 0
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 0,
+          "finite_polars": 0
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 0,
+          "finite_polars": 0
+        }
+      }
+    },
+    {
+      "canonical": "ts_endpoint_deviation",
+      "params": {
+        "window": 3,
+        "min_periods": 3
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 60,
+          "finite_polars": 60
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 60,
+          "finite_polars": 60
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 40,
+          "finite_polars": 40
+        }
+      }
+    },
+    {
+      "canonical": "ts_max_chord_excursion",
+      "params": {
+        "window": 2,
+        "min_periods": 2
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 62,
+          "finite_polars": 62
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 62,
+          "finite_polars": 62
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 48,
+          "finite_polars": 48
+        }
+      }
+    },
+    {
+      "canonical": "ts_max_drawdown",
+      "params": {
+        "window": 2,
+        "min_periods": 2
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 33,
+          "finite_polars": 33
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 31,
+          "finite_polars": 31
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 26,
+          "finite_polars": 26
+        }
+      }
+    },
+    {
+      "canonical": "ts_recovery_fraction",
+      "params": {
+        "window": 2
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 33,
+          "finite_polars": 33
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 31,
+          "finite_polars": 31
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 26,
+          "finite_polars": 26
+        }
+      }
+    },
+    {
+      "canonical": "ts_time_under_water",
+      "params": {
+        "window": 2
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 64,
+          "finite_polars": 64
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 64,
+          "finite_polars": 64
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 56,
+          "finite_polars": 56
+        }
+      }
+    },
+    {
+      "canonical": "ts_lo_mackinlay_vr",
+      "params": {
+        "window": 6,
+        "q": 2,
+        "min_periods": 1
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 54,
+          "finite_polars": 54
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 0,
+          "finite_polars": 0
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 21,
+          "finite_polars": 21
+        }
+      }
+    },
+    {
+      "canonical": "ts_lo_mackinlay_z",
+      "params": {
+        "window": 6,
+        "q": 2,
+        "min_periods": 1
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 54,
+          "finite_polars": 54
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 0,
+          "finite_polars": 0
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 21,
+          "finite_polars": 21
+        }
+      }
+    },
+    {
+      "canonical": "ts_variance_ratio_proxy",
+      "params": {
+        "window": 7,
+        "q": 2,
+        "min_periods": 1
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 52,
+          "finite_polars": 52
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 0,
+          "finite_polars": 0
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 15,
+          "finite_polars": 15
+        }
+      }
+    },
+    {
+      "canonical": "ts_level_shift_score",
+      "params": {
+        "window": 20,
+        "min_periods": 1
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 58,
+          "finite_polars": 58
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 0,
+          "finite_polars": 0
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 8,
+          "finite_polars": 8
+        }
+      }
+    },
+    {
+      "canonical": "ts_vol_shift_score",
+      "params": {
+        "window": 4,
+        "min_periods": 1
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 58,
+          "finite_polars": 58
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 0,
+          "finite_polars": 0
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 33,
+          "finite_polars": 33
+        }
+      }
+    },
+    {
+      "canonical": "ts_rolling_median_causal",
+      "params": {
+        "window": 2,
+        "min_periods": 1
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 64,
+          "finite_polars": 64
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 64,
+          "finite_polars": 64
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 62,
+          "finite_polars": 62
+        }
+      }
+    },
+    {
+      "canonical": "ts_causal_local_linear_smoother",
+      "params": {
+        "window": 2,
+        "min_periods": 2
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 62,
+          "finite_polars": 62
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 62,
+          "finite_polars": 62
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 48,
+          "finite_polars": 48
+        }
+      }
+    },
+    {
+      "canonical": "ts_tail_imbalance",
+      "params": {
+        "window": 8,
+        "k": 1.0,
+        "min_periods": 8
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 50,
+          "finite_polars": 50
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 0,
+          "finite_polars": 0
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 12,
+          "finite_polars": 12
+        }
+      }
+    },
+    {
+      "canonical": "ts_time_slope",
+      "params": {
+        "window": 2,
+        "min_periods": 1
+      },
+      "fixtures": {
+        "minimum_window": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 62,
+          "finite_polars": 62
+        },
+        "constant": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 62,
+          "finite_polars": 62
+        },
+        "nan_gap": {
+          "pandas_polars_equal": true,
+          "future_prefix_invariant": true,
+          "finite_pandas": 48,
+          "finite_polars": 48
+        }
+      }
+    }
+  ]
+}
