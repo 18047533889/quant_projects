@@ -29,7 +29,7 @@ from factor_engine.api.columns import col
 from factor_engine.api.factor import Factor
 from factor_engine.backend.factory import build_backend
 from factor_engine.cleaned_operators import load_all
-from factor_engine.cleaned_operators.operator_surface import DAILY_CANONICALS
+from factor_engine.cleaned_operators.operator_surface import classify_canonical
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.runtime.engine import FactorEngine
 from factor_engine.storage.factory import build_data_source
@@ -227,7 +227,7 @@ def _assert_parity(
 @pytest.mark.parametrize("window", [5, 10, 20, 30])
 def test_ts_corr_pandas_polars_parity(panel, window):
     """Test time-series correlation parity across backends."""
-    if "ts_corr" not in DAILY_CANONICALS:
+    if classify_canonical("ts_corr") != "daily":
         pytest.skip("ts_corr not in daily surface")
 
     expr = make_cleaned_call_factory("ts_corr")(col("close"), col("open"), window)
@@ -243,7 +243,7 @@ def test_ts_corr_pandas_polars_parity(panel, window):
 
 def test_ts_corr_different_windows_pandas_polars(panel):
     """Test ts_corr with various window sizes."""
-    if "ts_corr" not in DAILY_CANONICALS:
+    if classify_canonical("ts_corr") != "daily":
         pytest.skip("ts_corr not in daily surface")
 
     # Test multiple windows to ensure warmup behavior is consistent
@@ -267,7 +267,7 @@ def test_ts_corr_different_windows_pandas_polars(panel):
 
 def test_ts_corr_with_nan_gaps(panel):
     """Test ts_corr handles NaN gaps consistently."""
-    if "ts_corr" not in DAILY_CANONICALS:
+    if classify_canonical("ts_corr") != "daily":
         pytest.skip("ts_corr not in daily surface")
 
     expr = make_cleaned_call_factory("ts_corr")(col("close"), col("open"), 10)
@@ -292,7 +292,7 @@ def test_ts_corr_with_nan_gaps(panel):
 @pytest.mark.parametrize("window", [5, 10, 20, 30])
 def test_ts_cov_pandas_polars_parity(panel, window):
     """Test time-series covariance parity across backends."""
-    if "ts_cov" not in DAILY_CANONICALS:
+    if classify_canonical("ts_cov") != "daily":
         pytest.skip("ts_cov not in daily surface")
 
     expr = make_cleaned_call_factory("ts_cov")(col("close"), col("open"), window)
@@ -308,7 +308,7 @@ def test_ts_cov_pandas_polars_parity(panel, window):
 
 def test_ts_cov_different_windows_pandas_polars(panel):
     """Test ts_cov with various window sizes."""
-    if "ts_cov" not in DAILY_CANONICALS:
+    if classify_canonical("ts_cov") != "daily":
         pytest.skip("ts_cov not in daily surface")
 
     # Test multiple windows
@@ -323,7 +323,7 @@ def test_ts_cov_different_windows_pandas_polars(panel):
 
 def test_ts_cov_with_returns(panel):
     """Test ts_cov on returns (typical use case)."""
-    if "ts_cov" not in DAILY_CANONICALS:
+    if classify_canonical("ts_cov") != "daily":
         pytest.skip("ts_cov not in daily surface")
 
     expr = make_cleaned_call_factory("ts_cov")(col("ret"), col("ret"), 20)
@@ -343,7 +343,7 @@ def test_ts_cov_with_returns(panel):
 @pytest.mark.parametrize("window", [10, 20, 30])
 def test_ts_skew_pandas_polars_parity(panel, window):
     """Test time-series skewness parity across backends."""
-    if "ts_skew" not in DAILY_CANONICALS:
+    if classify_canonical("ts_skew") != "daily":
         pytest.skip("ts_skew not in daily surface")
 
     expr = make_cleaned_call_factory("ts_skew")(col("close"), window)
@@ -359,7 +359,7 @@ def test_ts_skew_pandas_polars_parity(panel, window):
 
 def test_ts_skew_distribution_properties(panel):
     """Test ts_skew captures expected distribution properties."""
-    if "ts_skew" not in DAILY_CANONICALS:
+    if classify_canonical("ts_skew") != "daily":
         pytest.skip("ts_skew not in daily surface")
 
     window = 30
@@ -383,7 +383,7 @@ def test_ts_skew_distribution_properties(panel):
 @pytest.mark.parametrize("window", [10, 20, 30])
 def test_ts_kurt_pandas_polars_parity(panel, window):
     """Test time-series kurtosis parity across backends."""
-    if "ts_kurt" not in DAILY_CANONICALS:
+    if classify_canonical("ts_kurt") != "daily":
         pytest.skip("ts_kurt not in daily surface")
 
     expr = make_cleaned_call_factory("ts_kurt")(col("close"), window)
@@ -399,7 +399,7 @@ def test_ts_kurt_pandas_polars_parity(panel, window):
 
 def test_ts_kurt_heavy_tails(panel):
     """Test ts_kurt detects heavy-tailed distributions."""
-    if "ts_kurt" not in DAILY_CANONICALS:
+    if classify_canonical("ts_kurt") != "daily":
         pytest.skip("ts_kurt not in daily surface")
 
     window = 30
@@ -429,7 +429,7 @@ def test_ts_kurt_heavy_tails(panel):
 ])
 def test_ts_quantile_pandas_polars_parity(panel, window, q):
     """Test time-series quantile parity across backends."""
-    if "ts_quantile" not in DAILY_CANONICALS:
+    if classify_canonical("ts_quantile") != "daily":
         pytest.skip("ts_quantile not in daily surface")
 
     expr = make_cleaned_call_factory("ts_quantile")(col("close"), window, q)
@@ -445,7 +445,7 @@ def test_ts_quantile_pandas_polars_parity(panel, window, q):
 
 def test_ts_quantile_median_vs_mean(panel):
     """Test ts_quantile(q=0.5) as robust median."""
-    if "ts_quantile" not in DAILY_CANONICALS:
+    if classify_canonical("ts_quantile") != "daily":
         pytest.skip("ts_quantile not in daily surface")
 
     window = 20
@@ -463,7 +463,7 @@ def test_ts_quantile_median_vs_mean(panel):
 
 def test_ts_quantile_boundary_values(panel):
     """Test ts_quantile at boundary quantiles (0, 1)."""
-    if "ts_quantile" not in DAILY_CANONICALS:
+    if classify_canonical("ts_quantile") != "daily":
         pytest.skip("ts_quantile not in daily surface")
 
     window = 20
@@ -489,7 +489,7 @@ def test_ts_quantile_boundary_values(panel):
 @pytest.mark.parametrize("window", [10, 20])
 def test_ts_corr_duckdb_parity(duckdb_source, window):
     """Test ts_corr DuckDB SQL parity."""
-    if "ts_corr" not in DAILY_CANONICALS:
+    if classify_canonical("ts_corr") != "daily":
         pytest.skip("ts_corr not in daily surface")
 
     expr = make_cleaned_call_factory("ts_corr")(_sql_col("close"), _sql_col("open"), window)
@@ -506,7 +506,7 @@ def test_ts_corr_duckdb_parity(duckdb_source, window):
 @pytest.mark.parametrize("window", [10, 20])
 def test_ts_cov_duckdb_parity(duckdb_source, window):
     """Test ts_cov DuckDB SQL parity."""
-    if "ts_cov" not in DAILY_CANONICALS:
+    if classify_canonical("ts_cov") != "daily":
         pytest.skip("ts_cov not in daily surface")
 
     expr = make_cleaned_call_factory("ts_cov")(_sql_col("close"), _sql_col("open"), window)
@@ -523,7 +523,7 @@ def test_ts_cov_duckdb_parity(duckdb_source, window):
 @pytest.mark.parametrize("window", [10, 20])
 def test_ts_skew_duckdb_parity(duckdb_source, window):
     """Test ts_skew DuckDB SQL parity."""
-    if "ts_skew" not in DAILY_CANONICALS:
+    if classify_canonical("ts_skew") != "daily":
         pytest.skip("ts_skew not in daily surface")
 
     expr = make_cleaned_call_factory("ts_skew")(_sql_col("close"), window)
@@ -540,7 +540,7 @@ def test_ts_skew_duckdb_parity(duckdb_source, window):
 @pytest.mark.parametrize("window", [10, 20])
 def test_ts_kurt_duckdb_parity(duckdb_source, window):
     """Test ts_kurt DuckDB SQL parity."""
-    if "ts_kurt" not in DAILY_CANONICALS:
+    if classify_canonical("ts_kurt") != "daily":
         pytest.skip("ts_kurt not in daily surface")
 
     expr = make_cleaned_call_factory("ts_kurt")(_sql_col("close"), window)
@@ -557,7 +557,7 @@ def test_ts_kurt_duckdb_parity(duckdb_source, window):
 @pytest.mark.parametrize("window,q", [(10, 0.5), (20, 0.75)])
 def test_ts_quantile_duckdb_parity(duckdb_source, window, q):
     """Test ts_quantile DuckDB SQL parity."""
-    if "ts_quantile" not in DAILY_CANONICALS:
+    if classify_canonical("ts_quantile") != "daily":
         pytest.skip("ts_quantile not in daily surface")
 
     expr = make_cleaned_call_factory("ts_quantile")(_sql_col("close"), window, q)
@@ -578,7 +578,7 @@ def test_ts_quantile_duckdb_parity(duckdb_source, window, q):
 
 def test_correlation_perfect_linear(panel):
     """Test ts_corr with perfectly correlated series."""
-    if "ts_corr" not in DAILY_CANONICALS:
+    if classify_canonical("ts_corr") != "daily":
         pytest.skip("ts_corr not in daily surface")
 
     # close vs close should give correlation = 1.0
@@ -596,7 +596,7 @@ def test_correlation_perfect_linear(panel):
 
 def test_covariance_constant_series(panel):
     """Test ts_cov with constant values (should be 0)."""
-    if "ts_cov" not in DAILY_CANONICALS:
+    if classify_canonical("ts_cov") != "daily":
         pytest.skip("ts_cov not in daily surface")
 
     # Create constant series
@@ -615,7 +615,7 @@ def test_covariance_constant_series(panel):
 
 def test_infinity_handling_correlation(panel):
     """Test ts_corr with Inf values."""
-    if "ts_corr" not in DAILY_CANONICALS:
+    if classify_canonical("ts_corr") != "daily":
         pytest.skip("ts_corr not in daily surface")
 
     expr = make_cleaned_call_factory("ts_corr")(col("close_with_inf"), col("open"), 10)
@@ -629,7 +629,7 @@ def test_infinity_handling_correlation(panel):
 
 def test_short_window_statistics(panel):
     """Test statistical operators with minimum valid window."""
-    if "ts_corr" not in DAILY_CANONICALS or "ts_cov" not in DAILY_CANONICALS:
+    if classify_canonical("ts_corr") != "daily" or classify_canonical("ts_cov") != "daily":
         pytest.skip("ts_corr/ts_cov not in daily surface")
 
     # Window = 2 (minimum for correlation/covariance)
@@ -647,7 +647,7 @@ def test_short_window_statistics(panel):
 
 def test_all_nan_window(panel):
     """Test statistical operators when window contains all NaN."""
-    if "ts_corr" not in DAILY_CANONICALS:
+    if classify_canonical("ts_corr") != "daily":
         pytest.skip("ts_corr not in daily surface")
 
     # GAPPED instrument has NaN gaps
@@ -669,11 +669,11 @@ def test_statistical_operators_coverage_summary():
     """Report coverage of statistical operator parity tests."""
 
     operators = [
-        ("ts_corr", "ts_corr" in DAILY_CANONICALS),
-        ("ts_cov", "ts_cov" in DAILY_CANONICALS),
-        ("ts_skew", "ts_skew" in DAILY_CANONICALS),
-        ("ts_kurt", "ts_kurt" in DAILY_CANONICALS),
-        ("ts_quantile", "ts_quantile" in DAILY_CANONICALS),
+        ("ts_corr", classify_canonical("ts_corr") == "daily"),
+        ("ts_cov", classify_canonical("ts_cov") == "daily"),
+        ("ts_skew", classify_canonical("ts_skew") == "daily"),
+        ("ts_kurt", classify_canonical("ts_kurt") == "daily"),
+        ("ts_quantile", classify_canonical("ts_quantile") == "daily"),
     ]
 
     pandas_polars_tests = 15  # Main parametrized + specialized tests

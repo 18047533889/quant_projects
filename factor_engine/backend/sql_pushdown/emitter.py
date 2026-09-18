@@ -3268,14 +3268,14 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         valid_list = f"list_filter({values}, v -> v IS NOT NULL AND NOT isnan(v) AND NOT isinf(v))"
         drawdowns = ["0.0"]
         for i, value_i in enumerate(lags):
-            earlier = f"list_max(list_value({', '.join(lags[i:])}))"
+            earlier = f"list_aggregate(list_value({', '.join(lags[i:])}), 'max')"
             drawdowns.append(
                 f"CASE WHEN {value_i} IS NULL OR {earlier} IS NULL THEN NULL "
                 f"ELSE {value_i} / {earlier} - 1.0 END"
             )
         return _Layer(
-            f"SELECT ts, inst, CASE WHEN list_count({valid_list}) < {min_periods} "
-            f"OR list_min({valid_list}) <= 0 THEN NULL "
+            f"SELECT ts, inst, CASE WHEN list_aggregate({valid_list}, 'count') < {min_periods} "
+            f"OR list_aggregate({valid_list}, 'min') <= 0 THEN NULL "
             f"ELSE LEAST({', '.join(drawdowns)}) END AS _v FROM ({segmented}) md",
             has_inst_window=True,
         )
@@ -3338,7 +3338,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         )
         required = max(min_periods, nth)
         return _Layer(
-            f"SELECT ts, inst, CASE WHEN list_count({values}) < {required} THEN NULL "
+            f"SELECT ts, inst, CASE WHEN list_aggregate({values}, 'count') < {required} THEN NULL "
             f"ELSE list_extract({sorted_values}, {nth}) END AS _v FROM ({inner.sql}) nth0",
             has_inst_window=True,
         )
@@ -3506,7 +3506,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         clean = f"SELECT ts, inst, CASE WHEN {_duckdb_valid('_v')} THEN _v END AS _v FROM ({inner.sql}) t"
         staged = f"SELECT ts, inst, _v, list(_v) FILTER (WHERE _v IS NOT NULL) OVER ({over}) AS _hist FROM ({clean}) t"
         return _Layer(
-            f"SELECT ts, inst, CASE WHEN _v IS NULL OR list_count(_hist) < {spec.min_periods} "
+            f"SELECT ts, inst, CASE WHEN _v IS NULL OR list_aggregate(_hist, 'count') < {spec.min_periods} "
             f"THEN NULL ELSE 1 + list_unique(list_filter(_hist, x -> x < _v)) END AS _v "
             f"FROM ({staged}) t",
             has_inst_window=True,
@@ -3523,10 +3523,10 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         clean = f"SELECT ts, inst, CASE WHEN {_duckdb_valid('_v')} THEN _v END AS _v FROM ({inner.sql}) t"
         staged = f"SELECT ts, inst, _v, list(_v) FILTER (WHERE _v IS NOT NULL) OVER ({over}) AS _hist FROM ({clean}) t"
         return _Layer(
-            f"SELECT ts, inst, CASE WHEN _v IS NULL OR list_count(_hist) < {spec.min_periods} THEN NULL "
-            f"WHEN list_count(_hist) = 1 THEN 0.0 ELSE "
-            f"CAST(list_count(list_filter(_hist, x -> x < _v)) AS DOUBLE) / "
-            f"(list_count(_hist) - 1) END AS _v FROM ({staged}) t",
+            f"SELECT ts, inst, CASE WHEN _v IS NULL OR list_aggregate(_hist, 'count') < {spec.min_periods} THEN NULL "
+            f"WHEN list_aggregate(_hist, 'count') = 1 THEN 0.0 ELSE "
+            f"CAST(list_aggregate(list_filter(_hist, x -> x < _v), 'count') AS DOUBLE) / "
+            f"(list_aggregate(_hist, 'count') - 1) END AS _v FROM ({staged}) t",
             has_inst_window=True,
         )
 
@@ -8107,8 +8107,8 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return _Layer(
                 f"SELECT ts, inst, "
                 f"CASE WHEN _inf_count > 0 OR length(_vals) < {mp} THEN NULL "
-                f"ELSE {scale} * list_median(list_transform("
-                f"_vals, x -> abs(x - list_median(_vals)))) END AS _v "
+                f"ELSE {scale} * list_aggregate(list_transform("
+                f"_vals, x -> abs(x - list_aggregate(_vals, 'median'))), 'median') END AS _v "
                 f"FROM (SELECT ts, inst, {vals} AS _vals, "
                 f"{inf_count} AS _inf_count FROM ({inner.sql}) t0) t",
                 has_inst_window=True,
@@ -10631,14 +10631,14 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         # Normalize offsets before powers; recover opposite-sign overflow by
         # scaling the original values first. Constants remain undefined.
         safe_offsets = (
-            f"SELECT ts, inst, _n, CASE WHEN isinf(LIST_MAX(LIST_TRANSFORM(_offsets, x -> ABS(x)))) "
-            f"THEN LIST_TRANSFORM(_hist, x -> x / NULLIF(LIST_MAX(LIST_TRANSFORM(_hist, y -> ABS(y))), 0) "
-            f"- _hist[1] / NULLIF(LIST_MAX(LIST_TRANSFORM(_hist, y -> ABS(y))), 0)) "
+            f"SELECT ts, inst, _n, CASE WHEN isinf(LIST_AGGREGATE(LIST_TRANSFORM(_offsets, x -> ABS(x)), 'max')) "
+            f"THEN LIST_TRANSFORM(_hist, x -> x / NULLIF(LIST_AGGREGATE(LIST_TRANSFORM(_hist, y -> ABS(y)), 'max'), 0) "
+            f"- _hist[1] / NULLIF(LIST_AGGREGATE(LIST_TRANSFORM(_hist, y -> ABS(y)), 'max'), 0)) "
             f"ELSE _offsets END AS _offsets FROM ({offsets}) o"
         )
         normalized = (
             f"SELECT ts, inst, _n, LIST_TRANSFORM(_offsets, x -> "
-            f"x / NULLIF(LIST_MAX(LIST_TRANSFORM(_offsets, y -> ABS(y))), 0)) AS _offsets "
+            f"x / NULLIF(LIST_AGGREGATE(LIST_TRANSFORM(_offsets, y -> ABS(y)), 'max'), 0)) AS _offsets "
             f"FROM ({safe_offsets}) s"
         )
         moments = (
@@ -10682,7 +10682,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             f"WITH h AS (SELECT ts, inst, {history} AS vals FROM ({inner.sql}) t), "
             f"s AS (SELECT *, len(vals) AS n, CAST(FLOOR(len(vals) * {trim}) AS BIGINT) AS cut FROM h) "
             f"SELECT ts, inst, CASE WHEN n < {mp} OR 2 * cut >= n THEN NULL "
-            f"ELSE list_avg(list_slice(vals, cut + 1, n - cut)) END AS _v FROM s",
+            f"ELSE list_aggregate(list_slice(vals, cut + 1, n - cut), 'avg') END AS _v FROM s",
             has_inst_window=True,
         )
 
@@ -10700,12 +10700,12 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         history = f"LIST_SORT(LIST_FILTER(LIST(_v) OVER ({over}), x -> x IS NOT NULL AND isfinite(x)))"
         selected = (f"list_slice(vals, n - {k} + 1, n)" if op.startswith("ts_topk")
                     else f"list_slice(vals, 1, {k})")
-        aggregate = {"sum": "list_sum", "mean": "list_avg", "std": "list_stddev_samp"}[stat]
+        aggregate = {"sum": "sum", "mean": "avg", "std": "stddev_samp"}[stat]
         return _Layer(
             f"WITH h AS (SELECT ts, inst, {history} AS vals FROM ({inner.sql}) t), "
             f"s AS (SELECT *, len(vals) AS n FROM h) "
             f"SELECT ts, inst, CASE WHEN n < {required} THEN NULL "
-            f"ELSE {aggregate}({selected}) END AS _v FROM s",
+            f"ELSE list_aggregate({selected}, '{aggregate}') END AS _v FROM s",
             has_inst_window=True,
         )
 
@@ -11062,7 +11062,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             return _Layer(
                 f"WITH h AS ({base}), thresholded AS (SELECT *, {threshold} AS threshold FROM h), "
                 f"tails AS (SELECT ts, inst, list_filter(vals, x -> x {comparator} threshold) AS tail FROM thresholded) "
-                f"SELECT ts, inst, CASE WHEN len(tail) < {mp} THEN NULL ELSE list_avg(tail) END AS _v FROM tails",
+                f"SELECT ts, inst, CASE WHEN len(tail) < {mp} THEN NULL ELSE list_aggregate(tail, 'avg') END AS _v FROM tails",
                 has_inst_window=True,
             )
         if op == "ts_quantile_range":
@@ -11074,7 +11074,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         else:
             floor = 8 if op == "ts_quantile_kurtosis" else 5
             mp = max(floor, _int_attr(node, "min_periods", default=floor))
-            guard = f"len(vals) < {mp} OR list_stddev_pop(vals) < 1e-12"
+            guard = f"len(vals) < {mp} OR list_aggregate(vals, 'stddev_pop') < 1e-12"
             if op == "ts_quantile_kurtosis":
                 outer = (node.attrs or {}).get("outer", (0.025,0.975))
                 inner_q = (node.attrs or {}).get("inner", (0.25,0.75))
@@ -12851,7 +12851,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 mp = _vv_int("min_periods", 1, 5)
                 lst = "t._lst"
                 n = f"len({lst})"
-                sum_ty = f"list_sum(list_transform({lst}, (y, i) -> (i - 1) * y))"
+                sum_ty = f"list_aggregate(list_transform({lst}, (y, i) -> (i - 1) * y), 'sum')"
                 mean_y = f"list_aggregate({lst}, 'avg')"
                 t_mean = f"(({n} - 1.0) / 2.0)"
                 den = f"({n} * ({n} * {n} - 1.0) / 12.0)"
@@ -13033,7 +13033,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 f"list_filter(list(_r) OVER ({over}), y -> y IS NOT NULL) AS _rl "
                 f"FROM ({base2}) t"
             )
-            log_prod = f"list_sum(list_transform(_rl, y -> LN(1.0 + y)))"
+            log_prod = f"list_aggregate(list_transform(_rl, y -> LN(1.0 + y)), 'sum')"
             prod = f"CASE WHEN {log_prod} IS NULL THEN NULL ELSE EXP({log_prod}) - 1.0 END"
             am = f"AVG(_a) OVER ({over})"
             return _Layer(
