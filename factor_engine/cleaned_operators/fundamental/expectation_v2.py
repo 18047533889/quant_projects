@@ -490,3 +490,13 @@ if _legacy is not None:
         "forward-filled realized report data"
     )
     _legacy["preferred_replacement"] = "fin_surprise_event_zscore"
+
+# max_days caps the reported age; it cannot reconstruct whether an observed
+# revision started the clock before a left-censored suffix.
+from factor_engine.runtime.execution_contract import declare_stateful
+
+declare_stateful(
+    "fin_days_since_expectation_revision",
+    state_model="recursive",
+    chunking="required_full_history",
+)

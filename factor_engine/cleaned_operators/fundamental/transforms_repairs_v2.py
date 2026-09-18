@@ -297,3 +297,12 @@ for _name,_params,_fn,_desc in [
 import factor_engine.cleaned_operators.operator_surface as _surface
 _surface._FUNDAMENTAL_V2_CANONICALS=frozenset(set(_surface._FUNDAMENTAL_V2_CANONICALS)|_EXTRA)
 _surface.extend_extended_only(set(_EXTRA))
+
+# Age is capped for presentation only; left-censor and retained pre-gap state
+# cannot be reconstructed from a max_days suffix without an explicit checkpoint.
+from factor_engine.runtime.execution_contract import declare_stateful
+
+for _canonical in ("fin_days_since_update", "fin_staleness"):
+    declare_stateful(
+        _canonical, state_model="recursive", chunking="required_full_history"
+    )
