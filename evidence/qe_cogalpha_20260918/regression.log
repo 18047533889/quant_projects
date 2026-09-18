@@ -1,0 +1,527 @@
+........................................................................ [  5%]
+........................................................................ [ 11%]
+........................................................................ [ 17%]
+........................................................................ [ 22%]
+........................FF.....................F........................ [ 28%]
+..................................................s.......s............. [ 34%]
+........................................................................ [ 39%]
+........................................................................ [ 45%]
+.....................F.................................................. [ 51%]
+........................................................................ [ 56%]
+........................................................................ [ 62%]
+........................................................................ [ 68%]
+.................................................................F...... [ 73%]
+........F............................F.................................. [ 79%]
+........................................................................ [ 85%]
+........................................................................ [ 91%]
+........................................................................ [ 96%]
+.......................................F.                                [100%]
+=================================== FAILURES ===================================
+______________________ test_gpu_weighted_turnover_parity _______________________
+
+data = (array([[[ 0.12573022, -0.13210486,  0.64042265,  0.10490012],
+        [-0.53566937,         nan,  1.30400005,  0.9470...
+       [-0.24340285,  0.60943606,  1.64278427, ..., -1.49740048,
+        -1.4468741 , -0.13616385]], shape=(20, 300)))
+
+    def test_gpu_weighted_turnover_parity(data):
+        x, _ = data
+        rng = np.random.default_rng(5)
+        w = rng.normal(size=(x.shape[0], x.shape[1]))
+        w[rng.random(w.shape) < 0.05] = np.nan
+        ps = np.abs(w) + 0.1
+        gpu = cp.asnumpy(batched_weighted_turnover(w, ps))
+        cpu = compute_weighted_turnover(w, ps)
+        mask = np.isfinite(cpu)
+>       assert np.nanmax(np.abs(gpu[mask] - cpu[mask])) < 1e-8
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+quant_evaluator/tests/test_gpu_interactions_parity.py:224: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+a = array([], dtype=float64), axis = None, out = None, keepdims = <no value>
+initial = <no value>, where = <no value>
+
+    @array_function_dispatch(_nanmax_dispatcher)
+    def nanmax(a, axis=None, out=None, keepdims=np._NoValue, initial=np._NoValue,
+               where=np._NoValue):
+        """
+        Return the maximum of an array or maximum along an axis, ignoring any
+        NaNs.  When all-NaN slices are encountered a ``RuntimeWarning`` is
+        raised and NaN is returned for that slice.
+    
+        Parameters
+        ----------
+        a : array_like
+            Array containing numbers whose maximum is desired. If `a` is not an
+            array, a conversion is attempted.
+        axis : {int, tuple of int, None}, optional
+            Axis or axes along which the maximum is computed. The default is to compute
+            the maximum of the flattened array.
+        out : ndarray, optional
+            Alternate output array in which to place the result.  The default
+            is ``None``; if provided, it must have the same shape as the
+            expected output, but the type will be cast if necessary. See
+            :ref:`ufuncs-output-type` for more details.
+        keepdims : bool, optional
+            If this is set to True, the axes which are reduced are left
+            in the result as dimensions with size one. With this option,
+            the result will broadcast correctly against the original `a`.
+            If the value is anything but the default, then
+            `keepdims` will be passed through to the `max` method
+            of sub-classes of `ndarray`.  If the sub-classes methods
+            does not implement `keepdims` any exceptions will be raised.
+        initial : scalar, optional
+            The minimum value of an output element. Must be present to allow
+            computation on empty slice. See `~numpy.ufunc.reduce` for details.
+    
+            .. versionadded:: 1.22.0
+        where : array_like of bool, optional
+            Elements to compare for the maximum. See `~numpy.ufunc.reduce`
+            for details.
+    
+            .. versionadded:: 1.22.0
+    
+        Returns
+        -------
+        nanmax : ndarray
+            An array with the same shape as `a`, with the specified axis removed.
+            If `a` is a 0-d array, or if axis is None, an ndarray scalar is
+            returned.  The same dtype as `a` is returned.
+    
+        See Also
+        --------
+        nanmin :
+            The minimum value of an array along a given axis, ignoring any NaNs.
+        amax :
+            The maximum value of an array along a given axis, propagating any NaNs.
+        fmax :
+            Element-wise maximum of two arrays, ignoring any NaNs.
+        maximum :
+            Element-wise maximum of two arrays, propagating any NaNs.
+        isnan :
+            Shows which elements are Not a Number (NaN).
+        isfinite:
+            Shows which elements are neither NaN nor infinity.
+    
+        amin, fmin, minimum
+    
+        Notes
+        -----
+        NumPy uses the IEEE Standard for Binary Floating-Point for Arithmetic
+        (IEEE 754). This means that Not a Number is not equivalent to infinity.
+        Positive infinity is treated as a very large number and negative
+        infinity is treated as a very small (i.e. negative) number.
+    
+        If the input has a integer type the function is equivalent to np.max.
+    
+        Examples
+        --------
+        >>> import numpy as np
+        >>> a = np.array([[1, 2], [3, np.nan]])
+        >>> np.nanmax(a)
+        3.0
+        >>> np.nanmax(a, axis=0)
+        array([3.,  2.])
+        >>> np.nanmax(a, axis=1)
+        array([2.,  3.])
+    
+        When positive infinity and negative infinity are present:
+    
+        >>> np.nanmax([1, 2, np.nan, -np.inf])
+        2.0
+        >>> np.nanmax([1, 2, np.nan, np.inf])
+        inf
+    
+        """
+        kwargs = {}
+        if keepdims is not np._NoValue:
+            kwargs['keepdims'] = keepdims
+        if initial is not np._NoValue:
+            kwargs['initial'] = initial
+        if where is not np._NoValue:
+            kwargs['where'] = where
+    
+        if type(a) is np.ndarray and a.dtype != np.object_:
+            # Fast, but not safe for subclasses of ndarray, or object arrays,
+            # which do not implement isnan (gh-9009), or fmax correctly (gh-8975)
+>           res = np.fmax.reduce(a, axis=axis, out=out, **kwargs)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           ValueError: zero-size array to reduction operation fmax which has no identity
+
+.venv/lib/python3.12/site-packages/numpy/lib/_nanfunctions_impl.py:486: ValueError
+____________________ test_gpu_turnover_contribution_parity _____________________
+
+data = (array([[[ 0.12573022, -0.13210486,  0.64042265,  0.10490012],
+        [-0.53566937,         nan,  1.30400005,  0.9470...
+       [-0.24340285,  0.60943606,  1.64278427, ..., -1.49740048,
+        -1.4468741 , -0.13616385]], shape=(20, 300)))
+
+    def test_gpu_turnover_contribution_parity(data):
+        x, _ = data
+        rng = np.random.default_rng(6)
+        w = rng.normal(size=(x.shape[0], x.shape[1]))
+        w[rng.random(w.shape) < 0.05] = np.nan
+        gpu = cp.asnumpy(batched_turnover_contribution(w))
+        cpu = compute_turnover_contribution(w)
+        mask = np.isfinite(cpu)
+>       assert np.nanmax(np.abs(gpu[mask] - cpu[mask])) < 1e-8
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+quant_evaluator/tests/test_gpu_interactions_parity.py:235: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+a = array([], dtype=float64), axis = None, out = None, keepdims = <no value>
+initial = <no value>, where = <no value>
+
+    @array_function_dispatch(_nanmax_dispatcher)
+    def nanmax(a, axis=None, out=None, keepdims=np._NoValue, initial=np._NoValue,
+               where=np._NoValue):
+        """
+        Return the maximum of an array or maximum along an axis, ignoring any
+        NaNs.  When all-NaN slices are encountered a ``RuntimeWarning`` is
+        raised and NaN is returned for that slice.
+    
+        Parameters
+        ----------
+        a : array_like
+            Array containing numbers whose maximum is desired. If `a` is not an
+            array, a conversion is attempted.
+        axis : {int, tuple of int, None}, optional
+            Axis or axes along which the maximum is computed. The default is to compute
+            the maximum of the flattened array.
+        out : ndarray, optional
+            Alternate output array in which to place the result.  The default
+            is ``None``; if provided, it must have the same shape as the
+            expected output, but the type will be cast if necessary. See
+            :ref:`ufuncs-output-type` for more details.
+        keepdims : bool, optional
+            If this is set to True, the axes which are reduced are left
+            in the result as dimensions with size one. With this option,
+            the result will broadcast correctly against the original `a`.
+            If the value is anything but the default, then
+            `keepdims` will be passed through to the `max` method
+            of sub-classes of `ndarray`.  If the sub-classes methods
+            does not implement `keepdims` any exceptions will be raised.
+        initial : scalar, optional
+            The minimum value of an output element. Must be present to allow
+            computation on empty slice. See `~numpy.ufunc.reduce` for details.
+    
+            .. versionadded:: 1.22.0
+        where : array_like of bool, optional
+            Elements to compare for the maximum. See `~numpy.ufunc.reduce`
+            for details.
+    
+            .. versionadded:: 1.22.0
+    
+        Returns
+        -------
+        nanmax : ndarray
+            An array with the same shape as `a`, with the specified axis removed.
+            If `a` is a 0-d array, or if axis is None, an ndarray scalar is
+            returned.  The same dtype as `a` is returned.
+    
+        See Also
+        --------
+        nanmin :
+            The minimum value of an array along a given axis, ignoring any NaNs.
+        amax :
+            The maximum value of an array along a given axis, propagating any NaNs.
+        fmax :
+            Element-wise maximum of two arrays, ignoring any NaNs.
+        maximum :
+            Element-wise maximum of two arrays, propagating any NaNs.
+        isnan :
+            Shows which elements are Not a Number (NaN).
+        isfinite:
+            Shows which elements are neither NaN nor infinity.
+    
+        amin, fmin, minimum
+    
+        Notes
+        -----
+        NumPy uses the IEEE Standard for Binary Floating-Point for Arithmetic
+        (IEEE 754). This means that Not a Number is not equivalent to infinity.
+        Positive infinity is treated as a very large number and negative
+        infinity is treated as a very small (i.e. negative) number.
+    
+        If the input has a integer type the function is equivalent to np.max.
+    
+        Examples
+        --------
+        >>> import numpy as np
+        >>> a = np.array([[1, 2], [3, np.nan]])
+        >>> np.nanmax(a)
+        3.0
+        >>> np.nanmax(a, axis=0)
+        array([3.,  2.])
+        >>> np.nanmax(a, axis=1)
+        array([2.,  3.])
+    
+        When positive infinity and negative infinity are present:
+    
+        >>> np.nanmax([1, 2, np.nan, -np.inf])
+        2.0
+        >>> np.nanmax([1, 2, np.nan, np.inf])
+        inf
+    
+        """
+        kwargs = {}
+        if keepdims is not np._NoValue:
+            kwargs['keepdims'] = keepdims
+        if initial is not np._NoValue:
+            kwargs['initial'] = initial
+        if where is not np._NoValue:
+            kwargs['where'] = where
+    
+        if type(a) is np.ndarray and a.dtype != np.object_:
+            # Fast, but not safe for subclasses of ndarray, or object arrays,
+            # which do not implement isnan (gh-9009), or fmax correctly (gh-8975)
+>           res = np.fmax.reduce(a, axis=axis, out=out, **kwargs)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           ValueError: zero-size array to reduction operation fmax which has no identity
+
+.venv/lib/python3.12/site-packages/numpy/lib/_nanfunctions_impl.py:486: ValueError
+___________________________ test_gpu_turnover_parity ___________________________
+
+data = (array([[[ 0.12573022, -0.13210486,  0.64042265,  0.10490012],
+        [-0.53566937,         nan,  1.30400005,  0.9470...
+       [-0.24340285,  0.60943606,  1.64278427, ..., -1.49740048,
+        -1.4468741 , -0.13616385]], shape=(20, 300)))
+
+    def test_gpu_turnover_parity(data):
+        x, _ = data
+        xt = np.transpose(x, (0, 2, 1))
+        w = cp.asnumpy(batched_rank_weights(xt))
+        turn_gpu = cp.asnumpy(batched_turnover(xt))
+        turn_cpu = []
+        for f in range(x.shape[2]):
+            vals = [compute_turnover(w[t - 1, f], w[t, f]) for t in range(1, x.shape[0])]
+            turn_cpu.append(np.nanmean(vals))
+        turn_cpu = np.array(turn_cpu)
+>       assert np.abs(turn_gpu - turn_cpu).max() < 1e-8
+E       AssertionError: assert np.float64(nan) < 1e-08
+E        +  where np.float64(nan) = <built-in method max of numpy.ndarray object at 0x771b14f27390>()
+E        +    where <built-in method max of numpy.ndarray object at 0x771b14f27390> = array([nan, nan, nan, nan]).max
+E        +      where array([nan, nan, nan, nan]) = <ufunc 'absolute'>((array([0.31328182, 0.31803556, 0.31067118, 0.31522261]) - array([nan, nan, nan, nan])))
+E        +        where <ufunc 'absolute'> = np.abs
+
+quant_evaluator/tests/test_gpu_parity.py:177: AssertionError
+__________________ test_all_metrics_have_source_derived_hash ___________________
+
+    def test_all_metrics_have_source_derived_hash():
+        """Every catalog metric's implementation_hash must be source-derived."""
+        from quant_evaluator.registry.metrics import _source_implementation_hash
+    
+        for metric_id in list_all_metric_ids():
+            spec = get_metric_spec(metric_id)
+            recomputed = _source_implementation_hash(spec.implementation_id)
+>           assert recomputed == spec.implementation_hash, metric_id
+E           AssertionError: bottom_quantile_cliff
+E           assert '98f59d8aae7799a4' == 'd3156da6d3084f20'
+E             
+E             - d3156da6d3084f20
+E             + 98f59d8aae7799a4
+
+quant_evaluator/tests/test_qe_p0_source_hash.py:63: AssertionError
+_____________ test_raw_rank_icir_aliases_share_registry_authority ______________
+
+    def test_raw_rank_icir_aliases_share_registry_authority():
+        from quant_evaluator.contracts.metric_instance import MetricInstance
+        from quant_evaluator.registry.metrics import get_metric
+        assert MetricInstance("rank_icir_raw").instance_id == MetricInstance("ic_ir").instance_id
+>       assert get_metric("rank_ic").metric_version == "3.0.0"
+E       AssertionError: assert '4.0.0' == '3.0.0'
+E         
+E         - 3.0.0
+E         ? ^
+E         + 4.0.0
+E         ? ^
+
+quant_evaluator/tests/test_v5_discrete_rank_semantics.py:83: AssertionError
+______ test_all_18_factor_label_metrics_execute_real_cpu_and_strict_cuda _______
+
+    def test_all_18_factor_label_metrics_execute_real_cpu_and_strict_cuda():
+        batch, labels = contracts()
+        cpu = evaluate(batch, labels, metrics=BASE)
+        gpu = evaluate(batch, labels, metrics=BASE, backend="cuda_strict")
+        assert len(BASE) == 18
+>       assert_public_parity(cpu, gpu, BASE)
+
+quant_evaluator/tests/test_v5_gpu_capability_matrix.py:71: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cpu = EvaluationBundle(request_id='5a54ef3d-c287-4b73-b85c-23d21f007d07', factor_ids=('f0', 'f1', 'f2'), label_id='h1', time... , 0.33071448, 0.329246  ]))}, factor_artifacts={'f0': {}, 'f1': {}, 'f2': {}}, instance_results={}, instance_specs={})
+gpu = EvaluationBundle(request_id='903f7442-b36c-4a3e-9689-ccc0104f9a31', factor_ids=('f0', 'f1', 'f2'), label_id='h1', time... , 0.33087678, 0.329246  ]))}, factor_artifacts={'f0': {}, 'f1': {}, 'f2': {}}, instance_results={}, instance_specs={})
+metrics = ('coverage', 'daily_quantile_monotonicity_rate', 'daily_quantile_monotonicity_series', 'factor_turnover_rate', 'ic_ir', 'ic_median', ...)
+
+    def assert_public_parity(cpu, gpu, metrics):
+        assert gpu.metadata["backend_used"] == "cuda"
+        assert gpu.metadata["gpu_device"] == 0
+        assert gpu.metadata["peak_vram"] > 0
+        for metric in metrics:
+>           np.testing.assert_allclose(gpu.artifacts[metric].values, cpu.artifacts[metric].values,
+                                       rtol=1e-9, atol=1e-10, equal_nan=True)
+E           AssertionError: 
+E           Not equal to tolerance rtol=1e-09, atol=1e-10
+E           
+E           Mismatched elements: 1 / 3 (33.3%)
+E           Max absolute difference among violations: 0.0001623
+E           Max relative difference among violations: 0.00049076
+E            ACTUAL: array([0.325804, 0.330877, 0.329246])
+E            DESIRED: array([0.325804, 0.330714, 0.329246])
+
+quant_evaluator/tests/test_v5_gpu_capability_matrix.py:52: AssertionError
+___ test_versions_invalidate_only_changed_evidence_not_materialized_factors ____
+
+    def test_versions_invalidate_only_changed_evidence_not_materialized_factors():
+        def ref(eid,metric,version):
+            return EvidenceRef(eid,"old-run",metric,version,"2026-09-01T00:00:00Z","factor-a")
+        refs=(ref("old-rank","rank_ic","1.0.0"),ref("current-rank","rank_ic","3.0.0"),
+              ref("pearson","pearson_ic","1.0.0"),ref("alias","rank_icir_raw","0.1.0"))
+        plan=plan_v5_impact(refs)
+>       assert set(plan["stale_evidence_ids"]) == {"old-rank","alias"}
+E       AssertionError: assert {'alias'} == {'alias', 'old-rank'}
+E         
+E         Extra items in the right set:
+E         'old-rank'
+E         Use -v to get more diff
+
+quant_evaluator/tests/test_v5_scoped_impact.py:11: AssertionError
+_________________________ test_qrp_p5_e2e1_real_chain __________________________
+
+    def test_qrp_p5_e2e1_real_chain():
+        """Run the full 8-step chain and assert the release gates.
+    
+        1. raw synthetic factor values (2 assets x T, vwap label column)
+        2. FP TreatmentRecipe (winsor -> rankpct, causal, no future function)
+        3. QE: recipe_to_factor_value_ref + request_for_recipe -> treated
+           factor-value ref + evaluation request refs
+        4. QE public evaluate -> computed EvaluationArtifact (computed=True)
+        5. FO: 2 candidates -> winner (select_winner)
+        6. FA: TreatmentSelectionArtifact consuming the treated eval content_hash
+           (winner library_snapshot_ref == FA snapshot_ref)
+        7. FA: FactorSetAssembler -> FactorSet members carry treatment_selection_ref
+           == artifact content_hash
+        8. assert TreatmentRecipe is executable (ordered steps apply cleanly)
+        """
+    
+        rng = np.random.default_rng(_SEED)
+        p_profit, p_growth = _raw_panel(rng)
+        panel = {"profit": p_profit, "growth": p_growth}
+        labels = _forward_labels(rng)
+    
+        recipe = make_recipe(factor_id="profit", rank_pct=True)
+    
+        # -- step 2: FP TreatmentRecipe is executable ---------------------------
+        from quant_evaluator.adapters.recipe_refs import factor_batch_for_recipe
+    
+        treated = factor_batch_for_recipe(recipe, panel, factor_ids=("profit",))
+        assert treated.values.shape == (_T, _N, 1)
+        assert np.isfinite(treated.values[1, :, 0]).all()
+    
+        # -- step 3: QE refs from the recipe via the public adapter ---------------
+        from quant_evaluator.adapters.recipe_refs import (
+            recipe_to_factor_value_ref,
+            request_for_recipe,
+        )
+    
+        fv_ref = recipe_to_factor_value_ref(recipe, ref_for="treated")
+        assert isinstance(fv_ref, FactorValueRef)
+        assert fv_ref.factor_value_id.startswith("factor_value:treated")
+    
+        # request_for_recipe also builds a serializable round-trip request — its
+        # raw payloads are runtime-only by the DLI8-QE-003 contract.
+        from quant_evaluator.api.requests import EvaluationRequest
+        from quant_evaluator.contracts.label_bundle import LabelBundle
+    
+        label_bundle = LabelBundle(
+            target_id="vwap_forward_return",
+            values=labels,
+            horizon=1,
+            decision_time=tuple(range(_T)),
+            label_start_time=tuple(range(_T)),
+            label_end_time=tuple(range(1, _T + 1)),
+            price_convention="vwap_to_vwap",
+        )
+        request = request_for_recipe(
+            recipe,
+            label_bundle=label_bundle,
+            factor_batch=factor_batch_for_recipe(recipe, panel, factor_ids=("profit",)),
+            factor_value_id="val:profit:raw",
+            metadata={"snapshot_ref": SNAPSHOT, "universe_ref": UNIVERSE,
+                      "split_ref": SPLIT},
+        )
+        assert isinstance(request, EvaluationRequest)
+        assert request.factor_value_ref is not None
+        rt = EvaluationRequest.from_dict(request.to_dict())
+        assert rt.factor_value_ref == request.factor_value_ref
+        assert rt.label_bundle_ref == request.label_bundle_ref
+    
+        # -- step 4: computed evaluation evidence --------------------------------
+        # Run the same treated batch through the QE public evaluate facade.  The
+        # adapter's convenience seam makes the raw->recipe->evaluate loop one call,
+        # then we materialize the canonical durable EvaluationArtifact.
+        from quant_evaluator.adapters.recipe_refs import recipe_evidence_evaluation
+    
+        bundle = recipe_evidence_evaluation(
+            recipe,
+            panel,
+            labels,
+            metrics=("rank_ic", "pearson_ic", "coverage"),
+            context={"snapshot": SNAPSHOT, "universe": UNIVERSE},
+        )
+        assert bundle.request_id
+        rank_ic = bundle.grouped_metrics["profit"]["rank_ic"]
+>       assert rank_ic.valid is True, "evaluation must be COMPUTED (valid=True)"
+E       AssertionError: evaluation must be COMPUTED (valid=True)
+E       assert False is True
+E        +  where False = MetricValue(metric_id='rank_ic', value=None, valid=False, observation_count=0, metric_version='4.0.0', warnings=('non-finite result',), sample_unit='daily_ic').valid
+
+quant_evaluator/adapters/tests/test_recipe_evidence_e2e.py:224: AssertionError
+=============================== warnings summary ===============================
+factor_assets/optimizer/__init__.py:34
+  /home/sunhaiwei/quant_projects/factor_assets/optimizer/__init__.py:34: DeprecationWarning: factor_assets.optimizer.frozen_candidate is deprecated: the sealed-test authority is FO TestAuthorityBroker. FA stores only test-evidence-ref + contamination-verdict-ref. This module is retained for compatibility and will be removed.
+    from factor_assets.optimizer.frozen_candidate import (
+
+factor_assets/optimizer/__init__.py:45
+  /home/sunhaiwei/quant_projects/factor_assets/optimizer/__init__.py:45: DeprecationWarning: factor_assets.optimizer.multifidelity is deprecated: FO owns multi-fidelity promotion. FA consumes evaluation-tier evidence. This module is retained for compatibility and will be removed.
+    from factor_assets.optimizer.multifidelity import (
+
+factor_assets/optimizer/__init__.py:51
+  /home/sunhaiwei/quant_projects/factor_assets/optimizer/__init__.py:51: DeprecationWarning: factor_assets.optimizer.plateau is deprecated: FO owns search-stopping plateau detection. FA does not run a search loop. This module is retained for compatibility and will be removed.
+    from factor_assets.optimizer.plateau import (
+
+tests/test_consistency.py::test_serial_equals_parallel
+tests/test_consistency.py::test_serial_equals_parallel
+tests/test_consistency.py::test_serial_equals_parallel_multi_batch
+tests/test_consistency.py::test_serial_equals_parallel_multi_batch
+  /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=1998899) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    self.pid = os.fork()
+
+tests/test_gpu_parity.py::test_gpu_turnover_parity
+  /home/sunhaiwei/quant_projects/quant_evaluator/tests/test_gpu_parity.py:175: RuntimeWarning: Mean of empty slice
+    turn_cpu.append(np.nanmean(vals))
+
+tests/test_v5_metric_instances.py::test_public_q10_q20_h10_h20_coexist_and_roundtrip[cpu]
+tests/test_v5_metric_instances.py::test_t01_t02_all_h_q_cost_variants_and_third_factor_remain_independent
+tests/test_v5_metric_instances.py::test_t01_t02_all_h_q_cost_variants_and_third_factor_remain_independent
+tests/test_v5_metric_instances.py::test_t01_t02_all_h_q_cost_variants_and_third_factor_remain_independent
+tests/test_v5_metric_instances.py::test_t01_t02_all_h_q_cost_variants_and_third_factor_remain_independent
+tests/test_v7_public_axes.py::test_four_factor_public_batch_equals_individual_and_metric_reordering[cpu]
+  /home/sunhaiwei/quant_projects/quant_evaluator/metrics/registry_adapters.py:229: RuntimeWarning: Mean of empty slice
+    means = np.nanmean(quantile_returns, axis=0)  # (n_quantiles, F)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] quant_evaluator/tests/test_metamorphic.py:470: no zscore/standardize kernel exists yet in build/lib; documented-contract test (nothing to check)
+SKIPPED [1] quant_evaluator/tests/test_metamorphic.py:686: no dropna/row-drop kernel exists in build/lib; documented-contract test (nothing to check)
+FAILED quant_evaluator/tests/test_gpu_interactions_parity.py::test_gpu_weighted_turnover_parity
+FAILED quant_evaluator/tests/test_gpu_interactions_parity.py::test_gpu_turnover_contribution_parity
+FAILED quant_evaluator/tests/test_gpu_parity.py::test_gpu_turnover_parity - A...
+FAILED quant_evaluator/tests/test_qe_p0_source_hash.py::test_all_metrics_have_source_derived_hash
+FAILED quant_evaluator/tests/test_v5_discrete_rank_semantics.py::test_raw_rank_icir_aliases_share_registry_authority
+FAILED quant_evaluator/tests/test_v5_gpu_capability_matrix.py::test_all_18_factor_label_metrics_execute_real_cpu_and_strict_cuda
+FAILED quant_evaluator/tests/test_v5_scoped_impact.py::test_versions_invalidate_only_changed_evidence_not_materialized_factors
+FAILED quant_evaluator/adapters/tests/test_recipe_evidence_e2e.py::test_qrp_p5_e2e1_real_chain
+8 failed, 1255 passed, 2 skipped, 14 warnings in 184.55s (0:03:04)

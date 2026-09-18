@@ -1,0 +1,64 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+____ test_sparse_mean_and_ir_share_sample[pearson_ic-pearson_ic_ir-pearson] ____
+
+mean_id = 'pearson_ic', ir_id = 'pearson_ic_ir', method = 'pearson'
+
+    @pytest.mark.parametrize("mean_id,ir_id,method", [("pearson_ic", "pearson_ic_ir", "pearson"), ("rank_ic", "ic_ir", "spearman")])
+    def test_sparse_mean_and_ir_share_sample(mean_id, ir_id, method):
+        rng = np.random.default_rng(724)
+        x = rng.normal(size=(40, 30))
+        y = x + rng.normal(scale=0.3, size=x.shape)
+        y[20:] = -0.5*x[20:] + rng.normal(size=x[20:].shape)
+        x[:20, 15:] = np.nan
+        batch = FactorBatch(("f",), AxisRef("time", "int", 40), AxisRef("asset", "int", 30), x[..., None])
+        label = LabelBundle("forward", y, 1, decision_time=tuple(range(40)), label_start_time=tuple(range(1,41)), label_end_time=tuple(range(2,42)))
+        out = evaluate(batch, label, metrics=[mean_id, ir_id], backend="cpu")
+        series, _ = compute_daily_ic(batch, label, method=method, min_assets=20)
+        mean = out.get_metric(mean_id, "f")
+        ir = out.get_metric(ir_id, "f")
+>       assert mean.observation_count == ir.observation_count == 20
+E       AssertionError: assert 40 == 20
+E        +  where 40 = MetricValue(metric_id='pearson_ic', value=0.2823078301374534, valid=True, observation_count=40, metric_version='1.0.0', warnings=(), sample_unit='daily_ic').observation_count
+E        +  and   20 = MetricValue(metric_id='pearson_ic_ir', value=-3.817822748732951, valid=True, observation_count=20, metric_version='3.0.0', warnings=(), sample_unit='daily_ic').observation_count
+
+quant_evaluator/tests/test_cogalpha_review_conventions.py:24: AssertionError
+_________ test_sparse_mean_and_ir_share_sample[rank_ic-ic_ir-spearman] _________
+
+mean_id = 'rank_ic', ir_id = 'ic_ir', method = 'spearman'
+
+    @pytest.mark.parametrize("mean_id,ir_id,method", [("pearson_ic", "pearson_ic_ir", "pearson"), ("rank_ic", "ic_ir", "spearman")])
+    def test_sparse_mean_and_ir_share_sample(mean_id, ir_id, method):
+        rng = np.random.default_rng(724)
+        x = rng.normal(size=(40, 30))
+        y = x + rng.normal(scale=0.3, size=x.shape)
+        y[20:] = -0.5*x[20:] + rng.normal(size=x[20:].shape)
+        x[:20, 15:] = np.nan
+        batch = FactorBatch(("f",), AxisRef("time", "int", 40), AxisRef("asset", "int", 30), x[..., None])
+        label = LabelBundle("forward", y, 1, decision_time=tuple(range(40)), label_start_time=tuple(range(1,41)), label_end_time=tuple(range(2,42)))
+        out = evaluate(batch, label, metrics=[mean_id, ir_id], backend="cpu")
+        series, _ = compute_daily_ic(batch, label, method=method, min_assets=20)
+        mean = out.get_metric(mean_id, "f")
+        ir = out.get_metric(ir_id, "f")
+>       assert mean.observation_count == ir.observation_count == 20
+E       AssertionError: assert 40 == 20
+E        +  where 40 = MetricValue(metric_id='rank_ic', value=0.28821200143016046, valid=True, observation_count=40, metric_version='3.0.0', warnings=(), sample_unit='daily_ic').observation_count
+E        +  and   20 = MetricValue(metric_id='ic_ir', value=-3.7464530521833774, valid=True, observation_count=20, metric_version='3.0.0', warnings=(), sample_unit='daily_ic').observation_count
+
+quant_evaluator/tests/test_cogalpha_review_conventions.py:24: AssertionError
+___________________ test_unknown_weight_is_not_zero_turnover ___________________
+
+    def test_unknown_weight_is_not_zero_turnover():
+        w = np.array([[0.5,0.5,np.nan], [0.5,np.nan,0.5]])
+>       assert np.isnan(compute_turnover(w[0], w[1]))
+E       AssertionError: assert np.False_
+E        +  where np.False_ = <ufunc 'isnan'>(0.0)
+E        +    where <ufunc 'isnan'> = np.isnan
+E        +    and   0.0 = compute_turnover(array([0.5, 0.5, nan]), array([0.5, nan, 0.5]))
+
+quant_evaluator/tests/test_cogalpha_review_conventions.py:31: AssertionError
+=========================== short test summary info ============================
+FAILED quant_evaluator/tests/test_cogalpha_review_conventions.py::test_sparse_mean_and_ir_share_sample[pearson_ic-pearson_ic_ir-pearson]
+FAILED quant_evaluator/tests/test_cogalpha_review_conventions.py::test_sparse_mean_and_ir_share_sample[rank_ic-ic_ir-spearman]
+FAILED quant_evaluator/tests/test_cogalpha_review_conventions.py::test_unknown_weight_is_not_zero_turnover
+3 failed in 0.11s

@@ -16,6 +16,7 @@ import numpy as np
 
 __all__ = [
     "compute_quantile_monotonicity",
+    "compute_quantile_rank_monotonicity",
     "compute_quantile_curvature",
     "compute_quantile_tail_asymmetry",
     "compute_quantile_adjacent_spread",
@@ -60,6 +61,26 @@ def compute_quantile_monotonicity(qr: np.ndarray) -> np.ndarray:
             continue
         inc = np.sum((col[1:][pairs] > col[:-1][pairs]))
         out[f] = inc / n_pairs
+    return out
+
+
+def compute_quantile_rank_monotonicity(qr: np.ndarray) -> np.ndarray:
+    """Signed Spearman correlation of bucket index and mean bucket return.
+
+    Requires every bucket to be finite and at least three buckets. Average
+    ranks handle ties; an exactly flat profile is undefined (NaN). Range
+    [-1, 1]. Unlike adjacent increase fraction this retains direction and
+    refuses to score a partially observed quantile profile.
+    """
+    from scipy.stats import spearmanr
+    m = _as_matrix(qr)
+    out = np.full(m.shape[1], np.nan)
+    if m.shape[0] < 3:
+        return out
+    for f in range(m.shape[1]):
+        col = m[:, f]
+        if np.isfinite(col).all() and np.any(col != col[0]):
+            out[f] = spearmanr(np.arange(len(col)), col).statistic
     return out
 
 

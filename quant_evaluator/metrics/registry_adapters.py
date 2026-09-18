@@ -158,8 +158,8 @@ def compute_turnover_value(
         # method="average"), normalized to sum 1 over the finite assets of
         # each row: universe-size invariant and consistent with the canonical
         # turnover definition (see metrics/turnover.py module docstring).
-        # NaN positions stay NaN so turnover is only measured over jointly
-        # finite neighbours.
+        # Eligible dates use explicit zero weight for unselected/missing
+        # signals; insufficient dates remain unknown rather than cash.
         from scipy.stats import rankdata
 
         ranks = np.full_like(series, np.nan)
@@ -169,6 +169,7 @@ def compute_turnover_value(
             if finite.sum() < 2:
                 continue
             ranks_f = rankdata(row[finite], method="average")
+            ranks[t, :] = 0.0
             ranks[t, finite] = ranks_f / np.sum(ranks_f)
         if series.shape[0] < 2:
             continue
@@ -344,7 +345,7 @@ def compute_pearson_ic_value(
     factor_batch: FactorBatch,
     label_bundle: LabelBundle,
     min_periods: int = 1,
-    min_assets: int = 10,
+    min_assets: int = 20,
 ) -> np.ndarray:
     """Return the time-mean daily Pearson IC per factor, shape (F,)."""
     ic_series, _ = compute_daily_ic(
@@ -358,7 +359,7 @@ def compute_rank_ic_value(
     factor_batch: FactorBatch,
     label_bundle: LabelBundle,
     min_periods: int = 1,
-    min_assets: int = 10,
+    min_assets: int = 20,
 ) -> np.ndarray:
     """Return the time-mean daily Spearman (rank) IC per factor, shape (F,).
 
@@ -375,7 +376,7 @@ def compute_rank_ic_value(
 def compute_pearson_ic_series_value(
     factor_batch: FactorBatch,
     label_bundle: LabelBundle,
-    min_assets: int = 10,
+    min_assets: int = 20,
 ) -> np.ndarray:
     """Return the daily Pearson IC series per factor, shape (T, F)."""
     ic_series, _ = compute_daily_ic(
@@ -387,7 +388,7 @@ def compute_pearson_ic_series_value(
 def compute_rank_ic_series_value(
     factor_batch: FactorBatch,
     label_bundle: LabelBundle,
-    min_assets: int = 10,
+    min_assets: int = 20,
 ) -> np.ndarray:
     """Return the daily Spearman (rank) IC series per factor, shape (T, F)."""
     ic_series, _ = compute_daily_ic(

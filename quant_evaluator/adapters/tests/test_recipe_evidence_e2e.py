@@ -67,9 +67,9 @@ from quant_evaluator.contracts.evaluation_artifact import (
 from quant_evaluator.contracts.domain_refs import ArtifactDomain, DomainArtifactRef
 from quant_evaluator.contracts.evaluation_refs import FactorValueRef
 
-# n_assets must exceed evaluate()'s default min_assets=10 for a finite daily IC.
+# n_assets must meet evaluate()'s shared IC/ICIR default min_assets=20.
 _T = 60
-_N = 10
+_N = 20
 _SEED = 20260827
 
 SNAPSHOT = "snapshot:synth-1"

@@ -1,0 +1,52 @@
+........................................................................ [  5%]
+........................................................................ [ 11%]
+........................................................................ [ 17%]
+........................................................................ [ 22%]
+........................................................................ [ 28%]
+....................................................s.......s........... [ 34%]
+........................................................................ [ 39%]
+........................................................................ [ 45%]
+........................................................................ [ 51%]
+........................................................................ [ 56%]
+........................................................................ [ 62%]
+........................................................................ [ 68%]
+........................................................................ [ 73%]
+........................................................................ [ 79%]
+........................................................................ [ 85%]
+........................................................................ [ 90%]
+........................................................................ [ 96%]
+............................................                             [100%]
+=============================== warnings summary ===============================
+factor_assets/optimizer/__init__.py:34
+  /home/sunhaiwei/quant_projects/factor_assets/optimizer/__init__.py:34: DeprecationWarning: factor_assets.optimizer.frozen_candidate is deprecated: the sealed-test authority is FO TestAuthorityBroker. FA stores only test-evidence-ref + contamination-verdict-ref. This module is retained for compatibility and will be removed.
+    from factor_assets.optimizer.frozen_candidate import (
+
+factor_assets/optimizer/__init__.py:45
+  /home/sunhaiwei/quant_projects/factor_assets/optimizer/__init__.py:45: DeprecationWarning: factor_assets.optimizer.multifidelity is deprecated: FO owns multi-fidelity promotion. FA consumes evaluation-tier evidence. This module is retained for compatibility and will be removed.
+    from factor_assets.optimizer.multifidelity import (
+
+factor_assets/optimizer/__init__.py:51
+  /home/sunhaiwei/quant_projects/factor_assets/optimizer/__init__.py:51: DeprecationWarning: factor_assets.optimizer.plateau is deprecated: FO owns search-stopping plateau detection. FA does not run a search loop. This module is retained for compatibility and will be removed.
+    from factor_assets.optimizer.plateau import (
+
+tests/test_consistency.py::test_serial_equals_parallel
+tests/test_consistency.py::test_serial_equals_parallel
+tests/test_consistency.py::test_serial_equals_parallel_multi_batch
+tests/test_consistency.py::test_serial_equals_parallel_multi_batch
+  /usr/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=2021785) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    self.pid = os.fork()
+
+tests/test_v5_metric_instances.py::test_public_q10_q20_h10_h20_coexist_and_roundtrip[cpu]
+tests/test_v5_metric_instances.py::test_t01_t02_all_h_q_cost_variants_and_third_factor_remain_independent
+tests/test_v5_metric_instances.py::test_t01_t02_all_h_q_cost_variants_and_third_factor_remain_independent
+tests/test_v5_metric_instances.py::test_t01_t02_all_h_q_cost_variants_and_third_factor_remain_independent
+tests/test_v5_metric_instances.py::test_t01_t02_all_h_q_cost_variants_and_third_factor_remain_independent
+tests/test_v7_public_axes.py::test_four_factor_public_batch_equals_individual_and_metric_reordering[cpu]
+  /home/sunhaiwei/quant_projects/quant_evaluator/metrics/registry_adapters.py:230: RuntimeWarning: Mean of empty slice
+    means = np.nanmean(quantile_returns, axis=0)  # (n_quantiles, F)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] quant_evaluator/tests/test_metamorphic.py:470: no zscore/standardize kernel exists yet in build/lib; documented-contract test (nothing to check)
+SKIPPED [1] quant_evaluator/tests/test_metamorphic.py:686: no dropna/row-drop kernel exists in build/lib; documented-contract test (nothing to check)
+1266 passed, 2 skipped, 13 warnings in 131.13s (0:02:11)

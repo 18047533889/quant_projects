@@ -1,4 +1,12 @@
-# quant_evaluator — 因子评估器（60 项证据指标）
+# quant_evaluator — 因子评估器
+
+## 指标计算口径（2026-09-18）
+
+- [统一计算口径与 CogAlpha 审查取舍](docs/METRIC_CONVENTIONS.md)：公式、样本、时钟、成本、缺失、阈值迁移。
+- [全部注册指标逐项计算手册](docs/METRIC_REFERENCE.md)：完整注册目录、默认参数、实现公式与源函数；以此目录为准，不以本页历史“51/60 项”计数为准。
+- 更新校验：`python quant_evaluator/scripts/build_metric_reference.py --check`。
+
+本次 IC/ICIR 默认统一至少 20 个有效配对/日；缺失权重不再按部分资产求和报告低换手。历史结果需要重算，不能只改版本标签。
 
 批量因子评估器：对显式 `LabelBundle`（严格时序 + 因果链）评估因子批次，返回类型化
 `EvaluationBundle` 证据包。评估因子 / 入库证据 / 模型 OOS 校验的唯一权威。

@@ -1086,7 +1086,7 @@ def _per_factor_observation_counts(
                 quantile=parameters.get("quantile", .9))
             return np.isfinite(membership).sum(axis=0)
         valid = (finite.sum(axis=1) >= 2)
-        return ((pairs.sum(axis=1) > 0) & valid[1:] & valid[:-1]).sum(axis=0)
+        return (valid[1:] & valid[:-1]).sum(axis=0)
     if registry_name == "daily_quantile_monotonicity_rate":
         from quant_evaluator.metrics.registry_adapters import compute_daily_quantile_monotonicity_series_value
         signature = inspect.signature(compute_daily_quantile_monotonicity_series_value)
@@ -1395,6 +1395,8 @@ def evaluate(
                      "factor_values", "forward_returns", "returns", "validity_mask",
                      "calendar_snapshot", "time_index", "factor_ids"}
         invalid = (set(overrides) - set(signature.parameters)) | (set(overrides) & forbidden)
+        if "ICSeriesArtifact" in (resolved_specs[canonical].requires or []):
+            invalid.discard("min_assets")
         if invalid:
             raise InvalidContractError(f"Invalid parameters for {requested_id}: {sorted(invalid)}")
         if "exposure_panel" in (resolved_specs[canonical].requires or ()):
@@ -1755,6 +1757,8 @@ def evaluate(
                 forbidden = {"factor_batch", "label_bundle", "computed_metrics", "metadata",
                              "factor_values", "forward_returns", "returns", "validity_mask"}
                 unknown = set(parameters) - set(signature.parameters)
+                if "ICSeriesArtifact" in (spec.requires or []):
+                    unknown.discard("min_assets")
                 if unknown or set(parameters) & forbidden:
                     raise InvalidContractError(f"Invalid parameters for {metric_id}: {sorted(unknown | (set(parameters) & forbidden))}")
             metric_specs.append({"metric_id": metric_id, "metric_kind": "custom",
@@ -1839,6 +1843,20 @@ def evaluate(
                     compute_fn, wrapper_ic_method
                 )
                 runtime.register_metric(metric_id, facade_ic_wrappers[metric_id])
+            if _resolve_alias(metric_id) in {"pearson_ic", "rank_ic", "pearson_ic_series", "rank_ic_series"}:
+                def _make_direct_ic_wrapper(method, series_output):
+                    def wrapper(factor_batch=None, label_bundle=None, **kwargs):
+                        from quant_evaluator.metrics.ic import compute_daily_ic, compute_mean_ic
+                        minimum = kwargs.get("min_assets", 20)
+                        key = (method, minimum)
+                        if key not in ic_series_cache:
+                            ic_series_cache[key], _ = compute_daily_ic(factor_batch, label_bundle, method=method, min_assets=minimum)
+                        series = ic_series_cache[key]
+                        return series if series_output else compute_mean_ic(series, min_periods=kwargs.get("min_periods", 1))[0]
+                    return wrapper
+                direct = _resolve_alias(metric_id)
+                runtime.register_metric(metric_id, _make_direct_ic_wrapper(
+                    "spearman" if direct.startswith("rank") else "pearson", direct.endswith("_series")))
             if "exposure_panel" in (spec.requires or []):
                 def _make_exposure_wrapper(cfn: Callable, canonical_id: str) -> Callable:
                     def _exposure_wrapper(factor_batch=None, label_bundle=None, **kwargs):
@@ -2191,6 +2209,15 @@ def evaluate(
                 "family_axis": "factor",
             }
         canonical = _resolve_alias(metric_id)
+        if "ICSeriesArtifact" in (spec.requires or []) or canonical in {"pearson_ic", "rank_ic", "pearson_ic_series", "rank_ic_series"}:
+            defaults = inspect.signature(spec.compute_fn).parameters
+            minimum = defaults["min_assets"].default if "min_assets" in defaults else 20
+            common["provenance"]["ic_sample_policy"] = {
+                "method": _ic_method_for_metric(canonical),
+                "min_assets": metric_parameters.get(metric_id, {}).get("min_assets", minimum),
+                "time_weighting": "equal_finite_days", "ir_ddof": 1,
+                "ir_annualized": False,
+            }
         if canonical == "shape_stability":
             common["provenance"]["reference_policy"] = "leave_one_window_out"
             common["provenance"]["aggregation_scale"] = "inverse_fisher_correlation"
@@ -2287,11 +2314,11 @@ def evaluate(
                     counts = np.isfinite(windows).all(axis=-1).sum(axis=0)
             elif _resolve_alias(metric_id) in _RETURNS_PANEL_METRIC_IDS and portfolio_returns is not None:
                 counts = np.isfinite(portfolio_returns.values).sum(axis=0)
-            elif canonical in {"quantile_spread", "quantile_monotonicity"}:
+            elif canonical in {"quantile_spread", "quantile_monotonicity", "quantile_rank_monotonicity"}:
                 from quant_evaluator.metrics.quantile import compute_quantile_returns_fast
-                q = (quantile_builder_parameters.get("n_quantiles",5) if canonical=="quantile_monotonicity"
+                q = (quantile_builder_parameters.get("n_quantiles",5) if canonical in {"quantile_monotonicity", "quantile_rank_monotonicity"}
                      else metric_parameters.get(metric_id,{}).get("n_quantiles",5))
-                minimum = quantile_builder_parameters.get("min_assets",10) if canonical=="quantile_monotonicity" else 10
+                minimum = quantile_builder_parameters.get("min_assets",10) if canonical in {"quantile_monotonicity", "quantile_rank_monotonicity"} else 10
                 daily_key=(q,minimum)
                 if daily_key not in quantile_daily_cache:
                     quantile_daily_cache[daily_key],_=compute_quantile_returns_fast(
@@ -2303,6 +2330,8 @@ def evaluate(
                     days=np.isfinite(daily).sum(axis=0)
                     profile=np.where(days >= (spec.min_periods or 20),np.nansum(daily,axis=0)/np.maximum(days,1),np.nan)
                     counts=(np.isfinite(profile[:-1]) & np.isfinite(profile[1:])).sum(axis=0)
+                    if canonical == "quantile_rank_monotonicity":
+                        counts = np.isfinite(profile).sum(axis=0)
             else:
                 counts = _per_factor_observation_counts(metric_id, factor_batch, label_bundle, values,
                                                         metric_parameters.get(metric_id), ic_series_cache)
@@ -2322,6 +2351,8 @@ def evaluate(
                 sample_unit = "valid_transition"
             elif canonical == "quantile_spread":
                 sample_unit = "daily_quantile_spread"
+            elif canonical == "quantile_rank_monotonicity":
+                sample_unit = "finite_quantile_bucket"
             elif canonical == "quantile_monotonicity":
                 sample_unit = "valid_adjacent_profile_pair"
             elif canonical == "daily_quantile_monotonicity_rate":

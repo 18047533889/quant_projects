@@ -43,6 +43,7 @@ from quant_evaluator.metrics.quantile_shape import (
     compute_quantile_curvature,
     compute_quantile_extreme_cliff,
     compute_quantile_monotonicity,
+    compute_quantile_rank_monotonicity,
     compute_quantile_tail_asymmetry,
     compute_top_quantile_cliff,
 )
@@ -702,7 +703,7 @@ _REGISTRY.register(MetricSpec(
     metric_id="rank_ic",
     required_inputs={"factor", "forward_returns"},
     implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
-    metric_version="3.0.0",
+    metric_version="4.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="drop_pair",
@@ -782,9 +783,8 @@ _REGISTRY.register(MetricSpec(
     description=(
         "Time-mean of daily Pearson IC between factor values and labels "
         "(canonical alias ic.pearson.mean; same kernel as mean_ic). "
-        "observation_count here is the number of finite daily IC days — "
-        "whereas the mean_ic alias reports jointly valid (factor, label) "
-        "panel cells; see the mean_ic spec note"
+        "observation_count is finite daily IC days. Default daily minimum "
+        "is 20 paired assets, shared with ICIR; mean needs 1 day, IR 20."
     ),
     status=MetricStatus.STABLE,
     tier=MetricTier.CORE,
@@ -797,7 +797,7 @@ _REGISTRY.register(MetricSpec(
     metric_id="pearson_ic",
     required_inputs={"factor", "forward_returns"},
     implementation_id="quant_evaluator.metrics.ic.compute_daily_ic",
-    metric_version="1.0.0",
+    metric_version="2.0.0",
     units="correlation",
     direction="higher_is_better",
     missing_policy="drop_pair",
@@ -806,6 +806,7 @@ _REGISTRY.register(MetricSpec(
 
 _REGISTRY.register(MetricSpec(
     name="pearson_ic_series",
+    metric_version="1.0.0",
     update_mode="APPEND_EXACT",
     label_maturation_required=True,
     state_schema_version="centered_moments.v2",
@@ -862,7 +863,7 @@ _REGISTRY.register(MetricSpec(
     label_maturation_required=True,
     state_schema_version="centered_moments.v2",
     merge_supported=True,
-    metric_version="3.0.0",
+    metric_version="4.0.0",
     display_name="Daily Rank IC Series",
     description=(
         "Daily Spearman rank IC per factor over time, shape (T, F) "
@@ -917,7 +918,7 @@ _REGISTRY.register(MetricSpec(
     compute_fn=compute_turnover_value,
     requires=["factor_batch"],
     min_periods=2,
-    metric_version="2.0.0",
+    metric_version="3.0.0",
 ))
 
 _REGISTRY.register(MetricSpec(
@@ -2115,11 +2116,12 @@ _REGISTRY.register(MetricSpec(
 # ---- Domain QUANTILE_SHAPE (spec §29) — consume a QuantileReturnArtifact ----
 _REGISTRY.register(MetricSpec(
     name="quantile_monotonicity",
-    display_name="Quantile Monotonicity",
+    display_name="Adjacent Quantile Increase Fraction",
     description=(
         "Fraction of adjacent quantile steps that are monotone increasing, "
         "per factor. 1.0 = perfectly monotone (higher factor value -> higher "
-        "return); 0.0 = fully inverted (spec §29)."
+        "return); 0.0 = no increasing adjacent pairs (flat OR decreasing). "
+        "Not signed Spearman monotonicity; a >=0 gate has no direction filter."
     ),
     status=MetricStatus.EXPERIMENTAL,
     tier=MetricTier.EXTENDED,
@@ -2136,6 +2138,18 @@ _REGISTRY.register(MetricSpec(
     direction="higher_is_better",
     missing_policy="nan",
     numeric_policy="finite",
+))
+_REGISTRY.register(MetricSpec(
+    name="quantile_rank_monotonicity",
+    display_name="Signed Quantile Rank Monotonicity",
+    description="Spearman(bucket index, mean bucket return), [-1,1]; requires all buckets finite and at least three. Flat profile is unavailable. Distinct from adjacent increase fraction.",
+    status=MetricStatus.EXPERIMENTAL, tier=MetricTier.EXTENDED,
+    compute_fn=compute_quantile_rank_monotonicity, requires=["QuantileReturnArtifact"],
+    min_periods=20, domain=Domain.QUANTILE_SHAPE,
+    metric_id="quantile_rank_monotonicity", required_inputs={"quantile_returns"},
+    implementation_id="quant_evaluator.metrics.quantile_shape.compute_quantile_rank_monotonicity",
+    metric_version="1.0.0", units="correlation", direction="higher_is_better",
+    missing_policy="complete_profile", numeric_policy="finite",
 ))
 _REGISTRY.register(MetricSpec(
     name="quantile_curvature",

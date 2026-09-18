@@ -80,5 +80,5 @@ def test_raw_rank_icir_aliases_share_registry_authority():
     from quant_evaluator.contracts.metric_instance import MetricInstance
     from quant_evaluator.registry.metrics import get_metric
     assert MetricInstance("rank_icir_raw").instance_id == MetricInstance("ic_ir").instance_id
-    assert get_metric("rank_ic").metric_version == "3.0.0"
+    assert get_metric("rank_ic").metric_version == "4.0.0"
     assert get_metric("ic_ir").metric_version == "3.0.0"

@@ -132,7 +132,7 @@ def batched_weighted_turnover(weights, position_sizes):
     denominator = cp.sum(cp.where(finite, avg_size, 0.0), axis=1)
     wt = 0.5 * numerator / cp.maximum(denominator, 1e-300)
     n_valid = cp.sum(finite, axis=1)
-    wt = cp.where(n_valid > 0, wt, cp.nan)
+    wt = cp.where((n_valid == N) & (N > 0) & (denominator != 0), wt, cp.nan)
     return cp.concatenate([cp.array([cp.nan]), wt]).get()
 
 
@@ -153,4 +153,5 @@ def batched_turnover_contribution(weights):
     finite = cp.isfinite(w_t0) & cp.isfinite(w_t1)
     delta = w_t1 - w_t0
     contribution[1:, :] = 0.5 * cp.where(finite, cp.abs(delta), 0.0)
+    contribution[1:, :] = cp.where(cp.all(finite, axis=1)[:, None], contribution[1:, :], cp.nan)
     return contribution.get()

@@ -218,10 +218,11 @@ def test_gpu_weighted_turnover_parity(data):
     w = rng.normal(size=(x.shape[0], x.shape[1]))
     w[rng.random(w.shape) < 0.05] = np.nan
     ps = np.abs(w) + 0.1
+    w[:2] = 0.5
+    ps[:2] = 0.6
     gpu = cp.asnumpy(batched_weighted_turnover(w, ps))
     cpu = compute_weighted_turnover(w, ps)
-    mask = np.isfinite(cpu)
-    assert np.nanmax(np.abs(gpu[mask] - cpu[mask])) < 1e-8
+    np.testing.assert_allclose(gpu, cpu, atol=1e-8, equal_nan=True)
 
 
 def test_gpu_turnover_contribution_parity(data):
@@ -229,10 +230,10 @@ def test_gpu_turnover_contribution_parity(data):
     rng = np.random.default_rng(6)
     w = rng.normal(size=(x.shape[0], x.shape[1]))
     w[rng.random(w.shape) < 0.05] = np.nan
+    w[:2] = 0.5
     gpu = cp.asnumpy(batched_turnover_contribution(w))
     cpu = compute_turnover_contribution(w)
-    mask = np.isfinite(cpu)
-    assert np.nanmax(np.abs(gpu[mask] - cpu[mask])) < 1e-8
+    np.testing.assert_allclose(gpu, cpu, atol=1e-8, equal_nan=True)
 
 
 # ---------------------------------------------------------------------------

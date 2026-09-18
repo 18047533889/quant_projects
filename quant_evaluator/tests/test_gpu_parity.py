@@ -168,6 +168,8 @@ def test_gpu_turnover_parity(data):
     x, _ = data
     xt = np.transpose(x, (0, 2, 1))
     w = cp.asnumpy(batched_rank_weights(xt))
+    eligible = np.isfinite(xt).sum(axis=2) >= 2
+    w = np.where(eligible[..., None], np.nan_to_num(w, nan=0.0), np.nan)
     turn_gpu = cp.asnumpy(batched_turnover(xt))
     turn_cpu = []
     for f in range(x.shape[2]):

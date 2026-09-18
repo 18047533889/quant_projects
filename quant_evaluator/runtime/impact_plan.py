@@ -17,7 +17,7 @@ def plan_v5_impact(evidence_refs, *, change_kind="METRIC_SEMANTICS", changed_met
         raise ValueError("Unknown scoped change kind")
     normalized = tuple(replace(ref,metric_name=resolve_alias(ref.metric_name)) for ref in evidence_refs)
     ids = tuple(resolve_alias(mid) for mid in changed_metrics) if changed_metrics is not None else tuple(
-        mid for mid in list_metrics() if get_metric(mid).metric_version == "3.0.0")
+        mid for mid in list_metrics() if mid in {ref.metric_name for ref in normalized})
     if change_kind == "METRIC_SEMANTICS":
         versions = {mid:get_metric(mid).metric_version for mid in ids}
         plan = plan_metric_version_invalidation(normalized, versions)

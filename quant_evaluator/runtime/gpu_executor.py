@@ -266,10 +266,12 @@ class GPUExecutor:
                 if p.default is not inspect.Parameter.empty
             }
             overrides = dict(self.metric_parameters.get(m, {}))
+            if "ICSeriesArtifact" in (spec.requires or []):
+                parameters.setdefault("min_assets", 20)
             if set(overrides) - set(parameters):
                 raise ValueError(f"Unsupported GPU parameters for {m}: {set(overrides) - set(parameters)}")
             parameters.update(overrides)
-            min_assets = parameters.get("min_assets", 20 if "ICSeriesArtifact" in (spec.requires or []) else 10)
+            min_assets = parameters.get("min_assets", 20 if "ICSeriesArtifact" in (spec.requires or []) or m in {"pearson_ic", "rank_ic", "pearson_ic_series", "rank_ic_series"} else 10)
             min_periods = parameters.get("min_periods", spec.min_periods or 1)
             if m in {"ic_ir", "pearson_ic_ir"}:
                 if isinstance(min_periods, (bool, np.bool_)) or not isinstance(

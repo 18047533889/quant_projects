@@ -27,10 +27,12 @@ def batched_turnover(factor_values, return_series: bool = False):
     cp = _import_cp()
     x = cp.asarray(factor_values)
     w = batched_rank_weights(x)  # (T, F, N), NaN→0
+    eligible = cp.isfinite(x).sum(axis=2) >= 2
+    w = cp.where(eligible[..., None], cp.where(cp.isfinite(w), w, 0.), cp.nan)
     # turnover_t = 0.5 * sum_i |w_t - w_{t-1}|
     joint = cp.isfinite(w[1:]) & cp.isfinite(w[:-1])
     diff = cp.where(joint, cp.abs(w[1:] - w[:-1]), 0.)
-    turnover = cp.where(joint.sum(axis=2) > 0, 0.5 * cp.sum(diff, axis=2), cp.nan)
+    turnover = cp.where(cp.all(joint, axis=2), 0.5 * cp.sum(diff, axis=2), cp.nan)
     turnover = cp.concatenate([cp.full((1, turnover.shape[1]), cp.nan), turnover], axis=0)
     if return_series:
         return turnover

@@ -74,7 +74,7 @@ def _compute_turnover_series_numba(weights: np.ndarray) -> np.ndarray:
                 sum_abs_delta += abs(w1 - w0)
                 n_valid += 1
 
-        if n_valid > 0:
+        if n_valid == N and N > 0:
             turnover[t] = 0.5 * sum_abs_delta
         else:
             turnover[t] = np.nan
@@ -103,10 +103,14 @@ def compute_turnover(
     if method != "half_sum_abs":
         raise ValueError(f"Unknown turnover method: {method}")
 
-    # Compute pairwise finite mask
+    # Unknown weights are not zero positions: a partial sum understates trades.
+    weights_t0 = np.asarray(weights_t0, dtype=np.float64)
+    weights_t1 = np.asarray(weights_t1, dtype=np.float64)
+    if weights_t0.ndim != 1 or weights_t0.shape != weights_t1.shape:
+        raise ValueError("weights must be matching one-dimensional vectors")
     mask = np.isfinite(weights_t0) & np.isfinite(weights_t1)
 
-    if np.sum(mask) == 0:
+    if mask.size == 0 or not np.all(mask):
         return np.nan
 
     w0 = weights_t0[mask]
@@ -170,7 +174,7 @@ def compute_turnover_series(
         n_valid = np.sum(finite_mask, axis=1)  # (T-1,)
 
         # Set to NaN where no valid observations
-        turnover_values[n_valid == 0] = np.nan
+        turnover_values[n_valid != N] = np.nan
         turnover_series[1:] = turnover_values
 
     return turnover_series
@@ -181,9 +185,9 @@ def _rank_weights_matrix(values: np.ndarray, min_obs: int = 10) -> np.ndarray:
 
     For each (t, f) cross-section, assets are ranked with average-tie ranks
     (``scipy.stats.rankdata(method="average")``) and the ranks are normalized
-    to sum 1 over the finite assets of that cross-section. Positions that are
-    NaN stay NaN so downstream turnover only measures jointly finite
-    neighbours.
+    to sum 1 over the finite assets of that cross-section.
+    Non-finite signals receive explicit zero proxy weight on an otherwise
+    eligible date. Insufficient dates remain unknown, not cash.
 
     Args:
         values: Factor values (T, N, F)
@@ -206,6 +210,7 @@ def _rank_weights_matrix(values: np.ndarray, min_obs: int = 10) -> np.ndarray:
             if n_finite < min_obs or n_finite < 2:
                 continue
             ranks = rankdata(row[finite], method="average")
+            weights[t, :, f] = 0.0
             # Sum-1 normalization: universe-size invariant proxy weights.
             weights[t, finite, f] = ranks / np.sum(ranks)
 
@@ -256,7 +261,7 @@ def estimate_turnover_from_ranks(
             w0 = weights[t - window, :, f]
             w1 = weights[t, :, f]
             mask = np.isfinite(w0) & np.isfinite(w1)
-            if np.sum(mask) < 2:
+            if np.sum(mask) < 2 or not np.all(mask):
                 continue
             turnover_est[t, f] = 0.5 * np.sum(np.abs(w1[mask] - w0[mask]))
 
@@ -322,7 +327,7 @@ def compute_turnover_matrix_batch(
 
         # Check validity per portfolio per period
         n_valid = np.sum(finite_mask, axis=1)  # (T-1, P)
-        turnover_values[n_valid == 0] = np.nan
+        turnover_values[n_valid != N] = np.nan
 
         turnover_series[1:, :] = turnover_values
 
@@ -404,7 +409,7 @@ def compute_weighted_turnover(
 
     # Mask periods with no valid observations
     n_valid = np.sum(finite_mask, axis=1)
-    weighted_turnover = np.where(n_valid > 0, weighted_turnover, np.nan)
+    weighted_turnover = np.where((n_valid == N) & (N > 0), weighted_turnover, np.nan)
 
     # Prepend NaN
     return np.concatenate([[np.nan], weighted_turnover])
@@ -447,6 +452,7 @@ def compute_turnover_contribution(
     # Per-asset contribution: 0.5 * |delta|
     delta = w_t1 - w_t0  # (T-1, N)
     contribution_values = 0.5 * np.where(finite_mask, np.abs(delta), 0.0)  # (T-1, N)
+    contribution_values[~np.all(finite_mask, axis=1), :] = np.nan
 
     # Store in output (first row remains NaN)
     contribution[1:, :] = contribution_values
