@@ -1015,7 +1015,8 @@ class TSJumpBipowerPolarsNative(SeriesOperator):
     """Bipower variation for jump detection
 
     NOTE: Previously named ts_jump_bipower_proxy, but this implements the correct
-    bipower variation formula: sum of products of consecutive absolute returns.
+    bipower variation formula: ``(pi/2)`` times the sum of products of
+    consecutive absolute returns in the trailing return window.
     This is the standard estimator from Barndorff-Nielsen & Shephard (2004).
     """
 
@@ -1031,11 +1032,48 @@ class TSJumpBipowerPolarsNative(SeriesOperator):
         "window": ParamSpec(dtype=int, min=5, param_role=ParamRole.HORIZON),
     }
 
+    from factor_engine.cleaned_operators.common._polars_bridge import SKIP as _metadata_columns
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_jump_bipower",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=False,
+        supports_streaming=False,
+        stateful=False,
+        materializes_full_panel=False,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=False,
+        implementation_source_hash="ts_advanced_batch5:ts_jump_bipower:polars_expr:v2",
+        kernel_identity="polars.Expr.rolling_sum:adjacent-absolute-return-product:v2",
+        parameter_domain_hash="window:int>=5",
+        semantic_contract_hash="pi-over-two:trailing-window-returns:strict-adjacency:full-support:v2",
+        notes="Native eager Polars expressions over return columns; no pandas conversion, lazy execution, streaming, or GPU path.",
+    )
+
     def _calculate_series(self, feature, window, **kwargs):
-        # Bipower variation: sum of products of consecutive absolute returns
-        abs_ret = feature.diff().abs()
-        bipower = (abs_ret * abs_ret.shift(1)).rolling_sum(window)
-        return bipower
+        if not isinstance(feature, pl.DataFrame):
+            raise TypeError("ts_jump_bipower polars backend requires a polars.DataFrame")
+        columns = [c for c in feature.columns if c not in self._metadata_columns]
+        products = {
+            column: pl.col(column).abs() * pl.col(column).shift(1).abs()
+            for column in columns
+        }
+        return feature.with_columns([
+            pl.when(
+                pl.col(column).is_finite().fill_null(False).cast(pl.UInt32).rolling_sum(
+                    window_size=window, min_samples=window,
+                ) == window
+            ).then(
+                (np.pi / 2.0)
+                * products[column].rolling_sum(
+                    window_size=window - 1,
+                    min_samples=window - 1,
+                )
+            ).otherwise(pl.lit(float("nan"))).alias(column)
+            for column in columns
+        ])
 
 
 @register_operator(name="ts_km_diffusion_gradient", canonical="ts_km_diffusion_gradient", backend="polars", status="research_only")
@@ -1599,6 +1637,37 @@ class TSMarkovMeanFirstPassageTimePolarsNative(SeriesOperator):
     def _calculate_series(self, *args, **kwargs):
         return self._delegate.calculate("ts_markov_mean_first_passage_time", *args, **kwargs)
 
+def _lag1_autocorr_physical_series(values, window):
+    """Lag-1 Pearson over ``window`` adjacent pairs (``window+1`` bars)."""
+    values = np.asarray(values, dtype=float)
+    out = np.full(values.shape, np.nan)
+    for row in range(len(values)):
+        if row < window:
+            continue
+        chunk = values[row - window:row + 1]
+        left, right = chunk[:-1], chunk[1:]
+        valid = np.isfinite(left) & np.isfinite(right)
+        if int(valid.sum()) != window:
+            continue
+        a, b = left[valid], right[valid]
+        scale_a = float(np.max(np.abs(a)))
+        scale_b = float(np.max(np.abs(b)))
+        if scale_a == 0.0 or scale_b == 0.0:
+            continue
+        da = a / scale_a
+        db = b / scale_b
+        da -= da.mean()
+        db -= db.mean()
+        ss_a = float(np.dot(da, da))
+        ss_b = float(np.dot(db, db))
+        if ss_a == 0.0 or ss_b == 0.0:
+            continue
+        corr = float(np.dot(da, db) / np.sqrt(ss_a * ss_b))
+        if np.isfinite(corr):
+            out[row] = float(np.clip(corr, -1.0, 1.0))
+    return out
+
+
 @register_operator(name="ts_lag1_autocorr", canonical="ts_lag1_autocorr", backend="polars")
 class TSLag1AutocorrPolarsNative(SeriesOperator):
     """Lag-1 autocorrelation (rolling correlation with previous period)
@@ -1619,12 +1688,46 @@ class TSLag1AutocorrPolarsNative(SeriesOperator):
     )
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-        "n_bins": ParamSpec(dtype=int, min=3, max=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
+        # Compatibility-only legacy argument. Lag-1 Pearson correlation does
+        # not discretize values, so n_bins must not enter parameter search.
+        "n_bins": ParamSpec(dtype=int, min=3, max=10, default=5, searchable=False),
     }
 
+    from factor_engine.cleaned_operators.common._polars_bridge import SKIP as _metadata_columns
+    _kernel = staticmethod(_lag1_autocorr_physical_series)
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_lag1_autocorr",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
+        supports_lazy=False,
+        supports_streaming=False,
+        stateful=False,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=False,
+        implementation_source_hash="ts_advanced_batch5:ts_lag1_autocorr:physical-adjacency:v3",
+        kernel_identity="ts_advanced_batch5._lag1_autocorr_physical_series:v3",
+        parameter_domain_hash="window:int>=20,n_bins:int[3,10]",
+        semantic_contract_hash="pearson-lag1:window-pairs:window-plus-one-bars:full-finite-support:no-gap-reconnection:v3",
+        notes="Eager materialized Polars columns -> scale-safe per-column NumPy lag-1 kernel; window counts adjacent pairs, missing bars fail the window, and n_bins is a compatibility-only no-op.",
+    )
+
     def _calculate_series(self, feature, window, n_bins=5, **kwargs):
-        # Lag-1 autocorrelation
-        return feature.rolling_corr(feature.shift(1), window_size=window)
+        if not isinstance(feature, pl.DataFrame):
+            raise TypeError("ts_lag1_autocorr polars backend requires a polars.DataFrame")
+        columns = [c for c in feature.columns if c not in self._metadata_columns]
+        return feature.with_columns([
+            pl.Series(
+                name=column,
+                values=self._kernel(
+                    feature[column].to_numpy().astype(float, copy=False), window,
+                ),
+                dtype=pl.Float64,
+            )
+            for column in columns
+        ])
 
 
 # ============================================================================

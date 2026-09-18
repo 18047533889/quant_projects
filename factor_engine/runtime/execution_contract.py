@@ -808,6 +808,11 @@ def _window_plus_lag_extension(canonical: str, params: Mapping[str, Any]) -> int
     return w + lag
 
 
+def _lag1_pair_window_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
+    """``window`` lag-1 pairs consume ``window + 1`` raw physical bars."""
+    return _w0(params, _specs(canonical), "window", canonical=canonical)
+
+
 def _prior_window_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
     """``window`` prior rows for a trailing fit whose cutoff is ``t - 1``."""
     specs = _specs(canonical)
@@ -1017,6 +1022,10 @@ _HISTORY_TRANSFORMS["cross_event"] = HistoryTransform(kind="lag", fixed=1)
 # Window + lag kernels.
 for _canon in ("volume_autocorr", "turnover_autocorr", "ts_autocorr"):
     _HISTORY_TRANSFORMS[_canon] = _compound_transform(_window_plus_lag_extension)
+_HISTORY_TRANSFORMS["ts_lag1_autocorr"] = _compound_transform(
+    _lag1_pair_window_extension
+)
+_HISTORY_TRANSFORMS["ts_jump_bipower"] = _window_transform("window")
 # This kernel fits ``window`` observations ending at t-1.  It is stateless and
 # bounded, but needs one more prior row than an in-sample trailing window.
 _HISTORY_TRANSFORMS["ts_huber_regression_coeff_prior"] = _compound_transform(

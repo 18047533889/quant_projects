@@ -96,6 +96,20 @@ def _pivot(df: pl.DataFrame, value: str) -> pl.DataFrame:
     return piv.fill_null(float("nan"))
 
 
+def _pivot_daily_like(df: pl.DataFrame, value: str, source: pl.DataFrame) -> pl.DataFrame:
+    """Retain observed session dates/instruments when no estimate is available."""
+    tc = _time_col(source)
+    columns = [name for name in source.columns if name != tc]
+    dates = source.select(_ts_expr(tc, source).dt.date().alias("date")).unique().sort("date")
+    grid = dates.join(pl.DataFrame({"instrument": columns}, schema={"instrument": pl.String}), how="cross")
+    aligned = grid.join(df.select("date", "instrument", value), on=["date", "instrument"], how="left")
+    wide = _pivot(aligned, value)
+    missing = [name for name in columns if name not in wide.columns]
+    if missing:
+        wide = wide.with_columns([pl.lit(float("nan"), dtype=pl.Float64).alias(name) for name in missing])
+    return wide.select("date", *columns).sort("date")
+
+
 def _mk(canonical: str, description: str, params: list[str], fn, extra_tags=None, available_at=None, same_session_usable=None, panel_params=None, scalar_params=None, param_specs=None):
     tags = ["polars", "intraday", "minute", "native", "typed_v2"]
     if extra_tags:
@@ -937,16 +951,18 @@ _mk("intra_same_slot_reversal", "同日段反向得分（Polars）。", ["close"
 def _profile_frame(values: pl.DataFrame) -> pl.DataFrame:
     """Raw values slotted by minute-of-day (no return transform)."""
     long = _with_mod(_with_date(_melt(values, "value"))).rename({"mod": "slot"})
-    return long.filter(pl.col("value").is_finite()).group_by(["date", "slot", "instrument"]).agg(
-        pl.col("value").mean().alias("value")
-    )
+    # Missing observations still consume their physical session/slot position.
+    # Filtering them before the historical rolling window reconnects old days.
+    return long.with_columns(
+        pl.when(pl.col("value").is_finite()).then(pl.col("value")).otherwise(None).alias("value")
+    ).group_by(["date", "slot", "instrument"]).agg(pl.col("value").mean().alias("value"))
 
 
 def _profile_cosine(values: pl.DataFrame, window: int) -> pl.DataFrame:
     slot = _profile_frame(values)
     hist = _hist_slot(slot, window, value_col="value")
     joined = slot.join(hist.select(["date", "slot", "instrument", "hist"]), on=["date", "slot", "instrument"], how="left")
-    joined = joined.filter(pl.col("hist").is_not_null())
+    joined = joined.filter(pl.col("hist").is_finite() & pl.col("value").is_finite())
     out = joined.group_by(["date", "instrument"]).agg(
         pl.col("value").count().alias("n"),
         (pl.col("value") * pl.col("hist")).sum().alias("dot"),
@@ -958,14 +974,14 @@ def _profile_cosine(values: pl.DataFrame, window: int) -> pl.DataFrame:
         .otherwise(None)
         .alias("v")
     )
-    return _pivot(out, "v")
+    return _pivot_daily_like(out, "v", values)
 
 
 def _profile_jsd(values: pl.DataFrame, window: int) -> pl.DataFrame:
     slot = _profile_frame(values)
     hist = _hist_slot(slot, window, value_col="value")
     joined = slot.join(hist.select(["date", "slot", "instrument", "hist"]), on=["date", "slot", "instrument"], how="left")
-    joined = joined.filter(pl.col("hist").is_not_null()).with_columns(
+    joined = joined.filter(pl.col("hist").is_finite() & pl.col("value").is_finite()).with_columns(
         (pl.col("value").clip(lower_bound=0.0) + 1e-12).alias("pa"),
         (pl.col("hist").clip(lower_bound=0.0) + 1e-12).alias("pb"),
     )
@@ -985,14 +1001,14 @@ def _profile_jsd(values: pl.DataFrame, window: int) -> pl.DataFrame:
     ).with_columns(
         pl.when(pl.col("n") >= 2).then(0.5 * (pl.col("kl_a") + pl.col("kl_b"))).otherwise(None).alias("v")
     )
-    return _pivot(out, "v")
+    return _pivot_daily_like(out, "v", values)
 
 
 def _profile_emd(values: pl.DataFrame, window: int) -> pl.DataFrame:
     slot = _profile_frame(values)
     hist = _hist_slot(slot, window, value_col="value")
     joined = slot.join(hist.select(["date", "slot", "instrument", "hist"]), on=["date", "slot", "instrument"], how="left")
-    joined = joined.filter(pl.col("hist").is_not_null()).with_columns(
+    joined = joined.filter(pl.col("hist").is_finite() & pl.col("value").is_finite()).with_columns(
         (pl.col("value").clip(lower_bound=0.0) + 1e-12).alias("pa"),
         (pl.col("hist").clip(lower_bound=0.0) + 1e-12).alias("pb"),
     )
@@ -1013,7 +1029,7 @@ def _profile_emd(values: pl.DataFrame, window: int) -> pl.DataFrame:
         pl.col("n").first().alias("n"),
         ((pl.col("cdf_a") - pl.col("cdf_b")).abs()).sum().alias("v"),
     ).with_columns(pl.when(pl.col("n") >= 2).then(pl.col("v")).otherwise(None))
-    return _pivot(out, "v")
+    return _pivot_daily_like(out, "v", values)
 
 
 for _name, _desc, _fn in (
@@ -1145,7 +1161,7 @@ def _jump_clustering(close: pl.DataFrame, threshold_scale: float) -> pl.DataFram
         .otherwise(None)
         .alias("v")
     )
-    return _pivot(out, "v")
+    return _pivot_daily_like(out, "v", close)
 
 
 _mk("intra_tripower_quarticity", "Tripower quarticity 估计（Polars）。", ["close"],
@@ -1228,7 +1244,7 @@ def _beta_stat(close: pl.DataFrame, free_market_cap: pl.DataFrame, kind: str) ->
         out = g.with_columns(
             pl.when(pl.col("den") > _EPS).then(pl.col("num") / pl.col("den")).otherwise(None).alias("v")
         )
-        return _pivot(out, "v")
+        return _pivot_daily_like(out, "v", close)
     if kind == "corr":
         g = long.filter(pl.col("r").is_finite()).group_by(["date", "instrument"]).agg(
             pl.len().alias("n"),
@@ -1237,7 +1253,7 @@ def _beta_stat(close: pl.DataFrame, free_market_cap: pl.DataFrame, kind: str) ->
         out = g.with_columns(
             pl.when((pl.col("n") >= 3) & pl.col("c").is_finite()).then(pl.col("c")).otherwise(None).alias("v")
         )
-        return _pivot(out, "v")
+        return _pivot_daily_like(out, "v", close)
     # realized_beta / idio family / r2
     g = long.filter(pl.col("r").is_finite() & pl.col("m").is_finite()).group_by(["date", "instrument"]).agg(
         pl.len().alias("n"),
@@ -1256,7 +1272,7 @@ def _beta_stat(close: pl.DataFrame, free_market_cap: pl.DataFrame, kind: str) ->
             .otherwise(None)
             .alias("v")
         )
-        return _pivot(out, "v")
+        return _pivot_daily_like(out, "v", close)
     # market model fit b — population moments (round-2 review: the pandas
     # reference now uses cov = mean((r-rbar)(m-mbar)) / var = mean((m-mbar)^2),
     # i.e. NO np.cov-ddof-1 / np.var-ddof-0 factor; the old nf/(nf-1) term is gone)
@@ -1277,7 +1293,7 @@ def _beta_stat(close: pl.DataFrame, free_market_cap: pl.DataFrame, kind: str) ->
     )
     if kind == "idio_variance":
         out = joined.group_by(["date", "instrument"]).agg((pl.col("e") * pl.col("e")).mean().alias("v"))
-        return _pivot(out, "v")
+        return _pivot_daily_like(out, "v", close)
     g2 = joined.group_by(["date", "instrument"]).agg(
         (pl.col("e")).sum().alias("se"),
         (pl.col("e") * pl.col("e")).sum().alias("se2"),
@@ -1294,7 +1310,7 @@ def _beta_stat(close: pl.DataFrame, free_market_cap: pl.DataFrame, kind: str) ->
         out = g2.with_columns(
             pl.when(var_e > _EPS).then(m3 / var_e.pow(1.5)).otherwise(None).alias("v")
         )
-        return _pivot(out, "v")
+        return _pivot_daily_like(out, "v", close)
     if kind == "idio_kurt":
         # E[((e-e_mean)/sd)^4]
         mean_e = pl.col("se") / pl.col("nf")
@@ -1303,7 +1319,7 @@ def _beta_stat(close: pl.DataFrame, free_market_cap: pl.DataFrame, kind: str) ->
         out = g2.with_columns(
             pl.when(var_e > _EPS).then(m4 / var_e.pow(2)).otherwise(None).alias("v")
         )
-        return _pivot(out, "v")
+        return _pivot_daily_like(out, "v", close)
     # r2 = max(0, 1 - ss_res/ss_tot); ss_tot from the raw return series.
     out = g2.with_columns(
         ((pl.col("sr2") - pl.col("sr").pow(2) / pl.col("nf"))).alias("ss_tot"),
@@ -1313,7 +1329,7 @@ def _beta_stat(close: pl.DataFrame, free_market_cap: pl.DataFrame, kind: str) ->
         .otherwise(None)
         .alias("v")
     )
-    return _pivot(out, "v")
+    return _pivot_daily_like(out, "v", close)
 
 
 def _beta_asymmetry(close: pl.DataFrame, free_market_cap: pl.DataFrame) -> pl.DataFrame:

@@ -20,6 +20,16 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_h_infinity_level_filter": 2,
     # R44: genuine normal-distribution Lilliefors test, not swallowed AttributeError.
     "ts_expanding_lilliefors_pvalue": 2,
+    # R47: correct return bipower and physical-pair autocorrelation estimators.
+    "ts_jump_bipower": 2,
+    "ts_lag1_autocorr": 2,
+    # R45: retain physical session gaps in historical profile windows.
+    "intra_return_profile_cosine": 2,
+    "intra_volume_profile_cosine": 2,
+    "intra_amount_profile_cosine": 2,
+    "intra_volume_profile_jsd": 2,
+    "intra_amount_profile_jsd": 2,
+    "intra_profile_earth_mover_distance": 2,
     # R40/R42: replace effective Polars placeholders with canonical estimators.
     "ts_extremal_index": 2,
     "ts_gpd_shape_pwm": 2,
