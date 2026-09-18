@@ -98,12 +98,31 @@ def _group_rowwise(x: pl.DataFrame, group: pl.DataFrame | None, fn, fallback_pol
     return result
 
 
+def _stable_mean(values: np.ndarray) -> float:
+    scale = float(np.max(np.abs(values)))
+    if scale == 0.0:
+        return 0.0
+    return float(np.mean(values / scale) * scale)
+
+
+def _stable_zscore(values: np.ndarray) -> np.ndarray:
+    if values.size <= 1:
+        return np.zeros_like(values)
+    scale = float(np.max(np.abs(values)))
+    if scale == 0.0:
+        return np.zeros_like(values)
+    scaled = values / scale
+    centered = scaled - float(np.mean(scaled))
+    std = float(np.sqrt(np.sum(centered * centered) / (values.size - 1)))
+    return centered / std if std > 0.0 and np.isfinite(std) else np.zeros_like(values)
+
+
 def _demean_row(row_x, row_g):
     mask = np.isfinite(row_x)
     if not np.any(mask):
         return np.full_like(row_x, np.nan, dtype=float)
     if row_g is None:
-        m = np.nanmean(row_x[mask])
+        m = _stable_mean(row_x[mask])
         out = np.full_like(row_x, np.nan, dtype=float)
         out[mask] = row_x[mask] - m
         return out
@@ -112,7 +131,7 @@ def _demean_row(row_x, row_g):
         m = row_g == g
         gm = m & mask
         if np.any(gm):
-            mu = np.nanmean(row_x[gm])
+            mu = _stable_mean(row_x[gm])
             out[gm] = row_x[gm] - mu
     return out
 
@@ -123,13 +142,13 @@ def _mean_row(row_x, row_g):
     if not np.any(mask):
         return out
     if row_g is None:
-        mu = np.nanmean(row_x[mask])
+        mu = _stable_mean(row_x[mask])
         out[mask] = mu
         return out
     for g in _group_labels(row_g):
         gm = (row_g == g) & mask
         if np.any(gm):
-            out[gm] = np.nanmean(row_x[gm])
+            out[gm] = _stable_mean(row_x[gm])
     return out
 
 
@@ -195,15 +214,7 @@ def _zscore_row(row_x, row_g):
         vals = row_x[indices]
         if len(vals) == 0:
             return
-        if len(vals) == 1:
-            out[indices] = 0.0
-            return
-        mean = np.nanmean(vals)
-        std = np.nanstd(vals, ddof=1)
-        if std != 0 and not np.isnan(std):
-            out[indices] = (vals - mean) / std
-        else:
-            out[indices] = 0.0
+        out[indices] = _stable_zscore(vals)
 
     if row_g is None:
         _apply(np.where(mask)[0])

@@ -6,12 +6,18 @@ wide panels.
 """
 from __future__ import annotations
 
+from datetime import date, datetime
 from typing import Any
 
+import numpy as np
 import polars as pl
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
-from factor_engine.cleaned_operators.common._polars_bridge import align_cols
+from factor_engine.cleaned_operators.common._polars_bridge import (
+    align_cols,
+    numeric_cols,
+    verify_frames_share_identity,
+)
 
 _EPS = 1e-12
 
@@ -145,7 +151,7 @@ _register("holder_pledged_holder_count", "质押股东数（Polars）。", ["s1"
 def _concentration_slope(conc, window):
     w = max(3, int(window))
     out = []
-    for c in _cols(conc):
+    for c in numeric_cols(conc):
         out.append(
             conc[c].rolling_map(lambda s: _np_slope(s), window_size=w, min_samples=3).alias(c)
         )
@@ -173,16 +179,136 @@ def _np_slope(vals):
 
 
 def _slope_no_snapshot(concentration, window=8, snapshot_date=None):
-    # R4-100: the pandas contract is ``(concentration, window, snapshot_date)``;
-    # the snapshot-aligned slope is not implemented in the polars backend, so
-    # fail closed instead of silently computing a trading-day slope.
     if snapshot_date is not None:
-        raise NotImplementedError(
-            "holder_concentration_slope: snapshot_date-aligned slope is not "
-            "implemented in the polars backend"
-        )
+        return _snapshot_aligned_slope(concentration, snapshot_date, int(window))
     return _concentration_slope(concentration, int(window))
+
+
+def _snapshot_aligned_slope(concentration, snapshot_date, window):
+    """Slope over distinct report dates, carried forward on the daily grid.
+
+    This is the Polars form of the pandas ``_snapshot_aligned_slope`` contract:
+    repeated daily rows for one report count once, the last revision wins, and
+    the OLS abscissa is the real calendar date rather than a daily-row ordinal.
+    """
+    w = max(3, int(window))
+    cols = _snapshot_cols(concentration, snapshot_date)
+    out = concentration
+    for c in cols:
+        dates = _strict_snapshot_dates(snapshot_date[c])
+        values = concentration[c].cast(pl.Float64, strict=True).to_list()
+        visible = {}
+        daily = []
+        current = float("nan")
+        for sdv, value in zip(dates, values):
+            if sdv is not None:
+                # ``Date`` materialises as ``datetime.date``.  Accept datetime
+                # too so this helper remains robust to future Polars changes.
+                if isinstance(sdv, datetime):
+                    sdv = sdv.date()
+                if not isinstance(sdv, date):
+                    raise TypeError("snapshot_date must contain date-like values")
+                visible[sdv] = float("nan") if value is None else float(value)
+                ordered = sorted(visible.items(), key=lambda item: item[0])[-w:]
+                x = np.asarray([item[0].toordinal() for item in ordered], dtype=float)
+                y = np.asarray([item[1] for item in ordered], dtype=float)
+                finite = np.isfinite(y)
+                if int(finite.sum()) < 3:
+                    current = float("nan")
+                else:
+                    xf = x[finite]
+                    yf = y[finite]
+                    xc = xf - xf.mean()
+                    denom = float(np.dot(xc, xc))
+                    current = (
+                        float(np.dot(xc, yf - yf.mean()) / denom)
+                        if denom > _EPS
+                        else float("nan")
+                    )
+            daily.append(current)
+        out = out.with_columns(pl.Series(c, daily, dtype=pl.Float64))
+    return out
+
+
+def _snapshot_aligned_acceleration(concentration, snapshot_date, window):
+    """Difference of adjacent distinct-snapshot slopes under as-of revisions."""
+    w = max(3, int(window))
+    out = concentration
+    for c in _snapshot_cols(concentration, snapshot_date):
+        dates = _strict_snapshot_dates(snapshot_date[c])
+        values = concentration[c].cast(pl.Float64, strict=True).to_list()
+        visible = {}
+        daily = []
+        current = float("nan")
+        for sdv, value in zip(dates, values):
+            if sdv is not None:
+                if isinstance(sdv, datetime):
+                    sdv = sdv.date()
+                if not isinstance(sdv, date):
+                    raise TypeError("snapshot_date must contain date-like values")
+                visible[sdv] = float("nan") if value is None else float(value)
+                ordered = sorted(visible.items(), key=lambda item: item[0])
+                slopes = []
+                for endpoint in (len(ordered) - 1, len(ordered)):
+                    segment = ordered[max(0, endpoint - w) : endpoint]
+                    x = np.asarray([item[0].toordinal() for item in segment], dtype=float)
+                    y = np.asarray([item[1] for item in segment], dtype=float)
+                    finite = np.isfinite(y)
+                    if int(finite.sum()) < 3:
+                        slopes.append(float("nan"))
+                        continue
+                    xf = x[finite]
+                    yf = y[finite]
+                    xc = xf - xf.mean()
+                    denom = float(np.dot(xc, xc))
+                    slopes.append(
+                        float(np.dot(xc, yf - yf.mean()) / denom)
+                        if denom > _EPS
+                        else float("nan")
+                    )
+                current = (
+                    slopes[-1] - slopes[-2]
+                    if len(slopes) >= 2
+                    and np.isfinite(slopes[-1])
+                    and np.isfinite(slopes[-2])
+                    else float("nan")
+                )
+            daily.append(current)
+        out = out.with_columns(pl.Series(c, daily, dtype=pl.Float64))
+    return out
+
+
+def _snapshot_cols(concentration, snapshot_date):
+    """Validate exact panel identity and return only instrument/value columns."""
+    verify_frames_share_identity(
+        "holder concentration snapshot clock", concentration, snapshot_date
+    )
+    value_cols = numeric_cols(concentration)
+    snapshot_cols = numeric_cols(snapshot_date)
+    if snapshot_cols != value_cols:
+        raise ValueError(
+            "holder concentration snapshot clock: snapshot_date instrument columns "
+            f"{snapshot_cols} != concentration columns {value_cols}"
+        )
+    return value_cols
+
+
+def _strict_snapshot_dates(series):
+    if series.dtype == pl.String:
+        return series.str.to_date(strict=True).to_list()
+    return series.cast(pl.Date, strict=True).to_list()
+
+
+def _acceleration(concentration, window=8, snapshot_date=None):
+    if snapshot_date is not None:
+        return _snapshot_aligned_acceleration(concentration, snapshot_date, int(window))
+    slope = _concentration_slope(concentration, int(window))
+    return slope.with_columns(
+        [(slope[c] - slope[c].shift(1)).alias(c) for c in numeric_cols(slope)]
+    )
 
 
 _register("holder_concentration_slope", "集中度趋势斜率（Polars）。",
           ["concentration", "window", "snapshot_date"], _slope_no_snapshot)
+_register("holder_concentration_acceleration", "集中度趋势加速度（Polars）。",
+          ["concentration", "window", "snapshot_date"], _acceleration)

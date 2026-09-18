@@ -53,6 +53,27 @@ def validate_fallback_policy(policy: str, *, operator: str = "") -> None:
         )
 
 
+def _stable_mean(values) -> float:
+    vals = np.asarray(values, dtype=float)
+    scale = float(np.max(np.abs(vals)))
+    if scale == 0.0:
+        return 0.0
+    return float(np.mean(vals / scale) * scale)
+
+
+def _stable_zscore(values) -> np.ndarray:
+    vals = np.asarray(values, dtype=float)
+    if vals.size <= 1:
+        return np.zeros_like(vals)
+    scale = float(np.max(np.abs(vals)))
+    if scale == 0.0:
+        return np.zeros_like(vals)
+    scaled = vals / scale
+    centered = scaled - float(np.mean(scaled))
+    std = float(np.sqrt(np.sum(centered * centered) / (vals.size - 1)))
+    return centered / std if std > 0.0 and np.isfinite(std) else np.zeros_like(vals)
+
+
 def _strict_positive_int(value, name: str) -> int:
     if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
         raise ValueError(f"{name} must be an integer >= 1")
@@ -414,13 +435,13 @@ class GroupMean(SeriesOperator):
                     raise ValueError("group labels are missing and fallback_policy='error'")
                 finite = _finite_series_mask(x_slice)
                 if finite.any():
-                    result.loc[date, finite] = x_slice[finite].mean()
+                    result.loc[date, finite] = _stable_mean(x_slice[finite])
                 continue
 
             for group_val in _valid_group_values(group_slice):
                 mask = (group_slice == group_val) & _finite_series_mask(x_slice)
                 if mask.sum() > 0:
-                    mean_val = x_slice[mask].mean()
+                    mean_val = _stable_mean(x_slice[mask])
                     result.loc[date, x_slice[mask].index] = mean_val
 
         return result
@@ -1015,12 +1036,7 @@ class GroupZScore(SeriesOperator):
                 valid_mask = _finite_series_mask(x_slice)
                 if valid_mask.sum() > 0:
                     data = x_slice[valid_mask]
-                    mean = data.mean()
-                    std = data.std()
-                    if std != 0 and not pd.isna(std):
-                        result.loc[date, valid_mask] = (data - mean) / std
-                    else:
-                        result.loc[date, valid_mask] = 0
+                    result.loc[date, valid_mask] = _stable_zscore(data)
                 continue
 
             # 按组标准化
@@ -1028,12 +1044,7 @@ class GroupZScore(SeriesOperator):
                 mask = (group_slice == group_val) & _finite_series_mask(x_slice)
                 if mask.sum() > 0:
                     group_data = x_slice[mask]
-                    mean = group_data.mean()
-                    std = group_data.std()
-                    if std != 0 and not pd.isna(std):
-                        result.loc[date, group_data.index] = (group_data - mean) / std
-                    else:
-                        result.loc[date, group_data.index] = 0
+                    result.loc[date, group_data.index] = _stable_zscore(group_data)
 
         return result
 

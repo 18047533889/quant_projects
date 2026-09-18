@@ -682,10 +682,20 @@ def test_balance_average_accepts_balance_only():
     from factor_engine.api.dsl_parser import parse_expr
     from factor_engine.ir.analyzer import Analyzer, FieldGrainContractError
 
-    Analyzer().lower(parse_expr("fin_average_balance(StockBalance.total_assets)", dialect="lqtp"))
+    Analyzer().lower(
+        parse_expr(
+            "fin_average_balance(StockBalance.total_assets, "
+            "StockBalance.report_period_end_date)",
+            dialect="lqtp",
+        )
+    )
     with pytest.raises(FieldGrainContractError):
         Analyzer().lower(
-            parse_expr("fin_average_balance(StockIncome.net_profit)", dialect="lqtp")
+            parse_expr(
+                "fin_average_balance(StockIncome.net_profit, "
+                "StockIncome.report_period_end_date)",
+                dialect="lqtp",
+            )
         )
 
 

@@ -181,12 +181,14 @@ def duckdb_source(tmp_path, monkeypatch, mem_source):
         str(_write_duckdb_registry(tmp_path, tmp_path / "data")),
     )
     _seed_duckdb_panel(tmp_path / "data", mem_source)
+    from data_access import reset_store
+    reset_store()
     try:
-        from data_access import reset_store
+        yield build_data_source({"type": "data_access", "dataset": "test_parity"})
+    finally:
+        # The temporary registry must not survive into field-catalog tests
+        # after monkeypatch restores the normal DATA_ACCESS_CONFIG.
         reset_store()
-    except ImportError:
-        pass
-    return build_data_source({"type": "data_access", "dataset": "test_parity"})
 
 
 # ============================================================================

@@ -316,6 +316,15 @@ def cs_resid_(y, x) -> np.ndarray:
     return result
 
 
+def _stable_finite_mean(values: np.ndarray) -> float:
+    """Mean of finite values without overflow or loss of subnormal scale."""
+    vals = np.asarray(values, dtype=float)
+    scale = float(np.max(np.abs(vals)))
+    if scale == 0.0:
+        return 0.0
+    return float(np.mean(vals / scale) * scale)
+
+
 def group_demean_panel_(x: np.ndarray, group: np.ndarray | None = None, fallback: str = "nan") -> np.ndarray:
     """Panel group demean: each row ``x - group_mean``.
 
@@ -340,9 +349,10 @@ def group_demean_panel_(x: np.ndarray, group: np.ndarray | None = None, fallback
         if fallback == "keep_original":
             return np.where(np.isfinite(xv), xv, np.nan)
         finite = np.isfinite(xv)
-        counts = finite.sum(axis=1, keepdims=True)
-        sums = np.where(finite, xv, 0.0).sum(axis=1, keepdims=True)
-        means = np.divide(sums, counts, out=np.zeros_like(sums), where=counts > 0)
+        means = np.array([
+            _stable_finite_mean(row[ok]) if ok.any() else 0.0
+            for row, ok in zip(xv, finite)
+        ])[:, None]
         return np.where(finite, xv - means, np.nan)
 
     gv = np.asarray(group)
@@ -359,7 +369,7 @@ def group_demean_panel_(x: np.ndarray, group: np.ndarray | None = None, fallback
                 raise ValueError("group labels are missing and fallback_policy='error'")
             if fallback == "global":
                 if finite.any():
-                    mu = float(row[finite].mean())
+                    mu = _stable_finite_mean(row[finite])
                     out[i, finite] = row[finite] - mu
             elif fallback == "keep_original":
                 out[i, finite] = row[finite]
@@ -380,10 +390,10 @@ def group_demean_panel_(x: np.ndarray, group: np.ndarray | None = None, fallback
         pos = np.flatnonzero(valid)[ok]
         c = codes[ok]
         vals = row[valid][ok]
-        sums = np.bincount(c, weights=vals)
-        cnts = np.bincount(c).astype(float)
-        means = sums / cnts
-        out[i, pos] = vals - means[c]
+        for code in np.unique(c):
+            members = c == code
+            member_vals = vals[members]
+            out[i, pos[members]] = member_vals - _stable_finite_mean(member_vals)
     return out
 
 

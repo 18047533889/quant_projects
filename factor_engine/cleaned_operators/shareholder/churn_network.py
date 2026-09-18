@@ -609,50 +609,26 @@ def _snapshot_aligned_slope(concentration, snapshot_date, window):
     equal row index 0,1,2,... — missing / irregularly spaced report periods are
     weighted by their real calendar distance (P1-136).
     """
+    _validate_snapshot_axes(concentration, snapshot_date)
     out = pd.DataFrame(np.nan, index=concentration.index, columns=concentration.columns)
     for col in concentration.columns:
-        frame = pd.concat(
-            [concentration[col], snapshot_date[col]], axis=1, keys=["value", "sd"]
-        )
-        snapshots = (
-            frame.dropna(subset=["sd"])
-            .sort_index()
-            .groupby("sd")["value"]
-            .last()  # one value per distinct snapshot (last revision wins)
-        )
-        if len(snapshots) < 3:
-            continue
-        # Snapshot dates as epoch DAYS (not ns) — ns ~1.7e18 loses float64
-        # precision in the centred dot product and collapses the slope to ~0.
-        sdates = snapshots.index.to_numpy(dtype="datetime64[ns]").astype("int64").astype(float) / 8.64e13
-        svalues = snapshots.to_numpy(dtype=float)
-        n = len(svalues)
-        slopes = np.full(n, np.nan, dtype=float)
-        for i in range(n):
-            lo = max(0, i - window + 1)
-            seg_v = svalues[lo : i + 1]
-            seg_x = sdates[lo : i + 1]
-            if np.isfinite(seg_v).sum() < 3:
-                continue
-            slopes[i] = _slope_of(seg_v, x=seg_x)
-        # Map each daily row's snapshot date to its computed slope, then carry
-        # forward onto the ffilled tail.  The old ``reindex(concentration.index)
-        # .ffill()`` only aligned when a report-end snapshot date happened to be
-        # a trading day (quarter ends often are not) — report dates must not be
-        # dropped for not appearing verbatim in the trading calendar.
-        slope_by_sd = {}
-        for k in range(n):
-            key = pd.Timestamp(snapshots.index[k]).normalize()
-            slope_by_sd[key] = slopes[k]
-        daily = pd.Series(np.nan, index=concentration.index, dtype=float)
-        sd_col = snapshot_date[col]
-        for i in range(len(sd_col)):
-            sdv = sd_col.iloc[i]
+        # Keep an as-of map.  A later revision of an old snapshot may change
+        # the result from that revision row onward, but must never rewrite the
+        # already-observed prefix (PIT prefix causality).
+        visible: dict[pd.Timestamp, float] = {}
+        current = np.nan
+        for i in range(len(concentration.index)):
+            sdv = snapshot_date[col].iloc[i]
             if pd.notna(sdv):
                 key = pd.Timestamp(sdv).normalize()
-                if key in slope_by_sd:
-                    daily.iloc[i] = slope_by_sd[key]
-        out[col] = daily.ffill()
+                visible[key] = float(concentration[col].iloc[i])
+                ordered = sorted(visible.items(), key=lambda item: item[0])[-window:]
+                seg_x = np.asarray(
+                    [date.value / 8.64e13 for date, _ in ordered], dtype=float
+                )
+                seg_v = np.asarray([value for _, value in ordered], dtype=float)
+                current = _slope_of(seg_v, x=seg_x)
+            out.iloc[i, out.columns.get_loc(col)] = current
     return out
 
 
@@ -680,48 +656,51 @@ def _snapshot_aligned_acceleration(concentration, snapshot_date, window):
     slope_k - slope_{k-1} between consecutive distinct snapshots instead, then
     as-of carry that value onto the daily grid.
     """
+    _validate_snapshot_axes(concentration, snapshot_date)
     out = pd.DataFrame(np.nan, index=concentration.index, columns=concentration.columns)
     for col in concentration.columns:
-        frame = pd.concat(
-            [concentration[col], snapshot_date[col]], axis=1, keys=["value", "sd"]
-        )
-        snapshots = (
-            frame.dropna(subset=["sd"])
-            .sort_index()
-            .groupby("sd")["value"]
-            .last()
-        )
-        if len(snapshots) < 3:
-            continue
-        sdates = snapshots.index.to_numpy(dtype="datetime64[ns]").astype("int64").astype(float) / 8.64e13
-        svalues = snapshots.to_numpy(dtype=float)
-        n = len(svalues)
-        slopes = np.full(n, np.nan, dtype=float)
-        for i in range(n):
-            lo = max(0, i - window + 1)
-            seg_v = svalues[lo : i + 1]
-            seg_x = sdates[lo : i + 1]
-            if np.isfinite(seg_v).sum() < 3:
-                continue
-            slopes[i] = _slope_of(seg_v, x=seg_x)
-        accel = np.full(n, np.nan, dtype=float)
-        accel[1:] = slopes[1:] - slopes[:-1]
-        # Same daily-grid mapping as the slope: carry each snapshot's second
-        # difference onto its ffilled daily rows (P1-137).
-        accel_by_sd = {}
-        for k in range(n):
-            key = pd.Timestamp(snapshots.index[k]).normalize()
-            accel_by_sd[key] = accel[k]
-        daily = pd.Series(np.nan, index=concentration.index, dtype=float)
-        sd_col = snapshot_date[col]
-        for i in range(len(sd_col)):
-            sdv = sd_col.iloc[i]
+        visible: dict[pd.Timestamp, float] = {}
+        current = np.nan
+        for row in range(len(concentration.index)):
+            sdv = snapshot_date[col].iloc[row]
             if pd.notna(sdv):
-                key = pd.Timestamp(sdv).normalize()
-                if key in accel_by_sd:
-                    daily.iloc[i] = accel_by_sd[key]
-        out[col] = daily.ffill()
+                visible[pd.Timestamp(sdv).normalize()] = float(
+                    concentration[col].iloc[row]
+                )
+                ordered = sorted(visible.items(), key=lambda item: item[0])
+                slopes = []
+                # Only the last two distinct-snapshot slopes are needed for
+                # acceleration; computing every historical endpoint on each
+                # daily row is quadratic in the number of visible reports.
+                for endpoint in (len(ordered) - 1, len(ordered)):
+                    segment = ordered[max(0, endpoint - window) : endpoint]
+                    seg_x = np.asarray(
+                        [date.value / 8.64e13 for date, _ in segment], dtype=float
+                    )
+                    seg_v = np.asarray([value for _, value in segment], dtype=float)
+                    slopes.append(_slope_of(seg_v, x=seg_x))
+                current = (
+                    slopes[-1] - slopes[-2]
+                    if len(slopes) >= 2
+                    and np.isfinite(slopes[-1])
+                    and np.isfinite(slopes[-2])
+                    else np.nan
+                )
+            out.iloc[row, out.columns.get_loc(col)] = current
     return out
+
+
+def _validate_snapshot_axes(concentration, snapshot_date):
+    if not concentration.index.equals(snapshot_date.index):
+        raise ValueError(
+            "holder concentration snapshot clock: snapshot_date index differs "
+            "from concentration index"
+        )
+    if not concentration.columns.equals(snapshot_date.columns):
+        raise ValueError(
+            "holder concentration snapshot clock: snapshot_date columns differ "
+            "from concentration columns"
+        )
 
 
 _mk(

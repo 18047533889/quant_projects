@@ -3302,6 +3302,19 @@ def _compile_polars_impl(
                 .otherwise(None)
                 .alias(_VAL)
             )
+            if op in {"group_mean", "group_zscore", "group_neutralize"}:
+                joined = joined.with_columns(
+                    pl.col(_VAL)
+                    .abs()
+                    .max()
+                    .over(*over_keys, order_by=_INST)
+                    .alias("__group_scale")
+                ).with_columns(
+                    pl.when(pl.col("__group_scale") == 0.0)
+                    .then(0.0)
+                    .otherwise(pl.col(_VAL) / pl.col("__group_scale"))
+                    .alias("__group_scaled")
+                )
         if op == "group_percentile":
             p = _float_attr(node, "p", default=0.5)
             pos_p = _literal_value(node, 1)
@@ -3343,10 +3356,14 @@ def _compile_polars_impl(
             )
         elif op == "group_mean":
             # Only finite members participate; invalid rows remain null.
+            stable_mean = (
+                pl.col("__group_scaled").mean().over(*over_keys, order_by=_INST)
+                * pl.col("__group_scale")
+            )
             expr = (
                 pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
                 .then(None)
-                .otherwise(pl.col(_VAL).mean().over(*over_keys, order_by=_INST))
+                .otherwise(stable_mean)
             )
         elif op == "group_sum":
             expr = (
@@ -3393,34 +3410,25 @@ def _compile_polars_impl(
             from factor_engine.backend.numeric_semantics import std_ddof_value, zscore_zero_std_fill
 
             # Core preprocessing already excludes every non-finite member.
-            mean = pl.col(_VAL).mean().over(*over_keys, order_by=_INST)
+            scaled_mean = pl.col("__group_scaled").mean().over(*over_keys, order_by=_INST)
+            centered = pl.col("__group_scaled") - scaled_mean
             if op == "group_neutralize":
-                # PARITY-SWEEP-R56: pandas ``GroupDemean`` (group_neutralize) uses
-                # an ``np.isfinite`` mask for group membership — a ±Inf member is
-                # EXCLUDED from the group mean (pandas nanmean over finite), the
-                # finite members are demeaned by the finite mean, and the Inf cell
-                # stays NaN.  Polars' ``mean()`` KEEPS Inf (mean=Inf), so mask Inf
-                # to NULL before the mean.
-                safe = (
-                    pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite())
-                    .then(None)
-                    .otherwise(pl.col(_VAL))
-                )
-                mean_f = safe.mean().over(*over_keys, order_by=_INST)
                 expr = (
-                    pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan() | pl.col(_VAL).is_infinite())
+                    pl.when(pl.col(_VAL).is_null())
                     .then(None)
-                    .otherwise(pl.col(_VAL) - mean_f)
+                    .otherwise(centered * pl.col("__group_scale"))
                 )
             else:
-                std = pl.col(_VAL).std(ddof=std_ddof_value("group_zscore")).over(*over_keys, order_by=_INST)
+                std = pl.col("__group_scaled").std(
+                    ddof=std_ddof_value("group_zscore")
+                ).over(*over_keys, order_by=_INST)
                 zero_fill = zscore_zero_std_fill("group_zscore")
                 expr = (
                     pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
                     .then(None)
                     .when(std.is_null() | (std == 0) | std.is_infinite())
                     .then(zero_fill)
-                    .otherwise((pl.col(_VAL) - mean) / std)
+                    .otherwise(centered / std)
                 )
         elif op == "group_normalize":
             expr = _group_normalize_on(_VAL, over_keys)
