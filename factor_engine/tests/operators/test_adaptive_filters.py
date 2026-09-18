@@ -329,21 +329,19 @@ def test_dual_backend_parity(name: str) -> None:
     # pandas backend
     pandas_result = OperatorRegistry.get(name, backend="pandas_numpy").calculate(panel, **kwargs)
 
-    # polars backend (skip if polars implementation has issues)
-    try:
-        polars_op = OperatorRegistry.get(name, backend="polars")
-        if polars_op is None:
-            pytest.skip(f"{name}: polars backend not available")
-        polars_result = polars_op.calculate(panel, **kwargs)
-
-        # compare
-        pd.testing.assert_frame_equal(
-            pandas_result, polars_result, check_exact=False, rtol=1e-9, atol=1e-10
-        )
-    except AttributeError as e:
-        if "with_columns" in str(e):
-            pytest.skip(f"{name}: polars backend has compatibility issues")
-        raise
+    # Each backend receives its actual physical input type.  Passing pandas to
+    # a Polars kernel and skipping AttributeError concealed unexecuted parity.
+    import polars as pl
+    polars_op = OperatorRegistry.get(name, backend="polars")
+    assert polars_op is not None, name
+    physical = pl.from_pandas(panel.reset_index(names="date"))
+    polars_result = polars_op.calculate(physical, **kwargs)
+    assert polars_result["date"].to_list() == physical["date"].to_list()
+    np.testing.assert_allclose(
+        pandas_result.to_numpy(),
+        polars_result.select(panel.columns.tolist()).to_numpy(),
+        rtol=1e-9, atol=1e-10, equal_nan=True,
+    )
 
 
 # ---------------------------------------------------------------------------
