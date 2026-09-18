@@ -10,7 +10,7 @@ import pandas as pd
 def session_key_from_index(index: pd.Index) -> pd.Series:
     """从时间索引提取 session 键（日频边界）。"""
     if isinstance(index, pd.DatetimeIndex):
-        return pd.Series(index.normalize(), index=index, dtype="datetime64[ns]")
+        return pd.Series(index.normalize(), index=index)
     return pd.Series(0, index=index)
 
 
@@ -27,8 +27,10 @@ def pct_change_by_session(series: pd.Series, periods: int = 1) -> pd.Series:
     session, s = _group_by_session(series)
     p = max(1, int(periods))
     if session is None:
-        return s.pct_change(p)
-    return s.groupby(session, group_keys=False).apply(lambda g: g.pct_change(p))
+        return s.pct_change(p, fill_method=None)
+    return s.groupby(session, group_keys=False).apply(
+        lambda g: g.pct_change(p, fill_method=None)
+    )
 
 
 def rolling_by_session(

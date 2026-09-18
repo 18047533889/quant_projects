@@ -81,13 +81,20 @@ class RecipeVpMacdSignal(SeriesOperator):
 # their exact, session-aware kernels under explicit factor-shaped names.
 def _panelized_micro_calculate(name):
     def calculate(self, *args, **kwargs):
-        first = next((x for x in args if hasattr(x, "columns")), None)
+        # Kernels must consume the same values for positional and keyword DSL
+        # arguments; previously window/min_periods keywords were discarded.
+        bound = dict(zip(self.metadata.param_names, args))
+        bound.update(kwargs)
+        bound.setdefault("window", 20)
+        bound.setdefault("min_periods", 2)
+        ordered = tuple(bound[p] for p in self.metadata.param_names)
+        first = next((x for x in ordered if hasattr(x, "columns")), None)
         if first is None:
             raise TypeError(f"{name} requires panel-shaped inputs")
         from factor_engine.cleaned_operators.microstructure.session import pct_change_by_session, rolling_by_session
         result = {}
         for column in first.columns:
-            column_args = tuple(x[column] if hasattr(x, "columns") else x for x in args)
+            column_args = tuple(x[column] if hasattr(x, "columns") else x for x in ordered)
             if name == "recipe_micro_spread":
                 high, low, close = column_args
                 result[column] = (high - low) / close.replace(0, np.nan)
