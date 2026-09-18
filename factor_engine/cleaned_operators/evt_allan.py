@@ -79,7 +79,7 @@ _EVT_SPEC = {
 # instead of being truncated by the n//2 cap), so the DECLARED contract must
 # express the same region — ``window >= 2*k_max + 2`` — or search would treat
 # window=30 / k_max=20 as "legal" while every runtime call is guaranteed
-# all-NaN.  ``k_min < k_max`` keeps more than one distinct threshold.
+# all-NaN.  Three distinct thresholds are required by the stability estimator.
 _EVT_RELATIONAL_SPECS = [
     RelationalParamSpec(
         "window >= 2 * k_max + 2",
@@ -87,8 +87,8 @@ _EVT_RELATIONAL_SPECS = [
         "(window={window}, k_max={k_max})",
     ),
     RelationalParamSpec(
-        "k_min < k_max",
-        "EVT threshold stability requires k_min < k_max "
+        "k_max >= k_min + 2",
+        "EVT threshold stability requires at least three thresholds: k_max >= k_min + 2 "
         "(k_min={k_min}, k_max={k_max})",
     ),
 ]
@@ -162,12 +162,13 @@ def _hill_xi(s: np.ndarray, k: int) -> float:
     if k < 1 or n - 1 - k < 0:
         return np.nan
     threshold = s[n - 1 - k]
-    if threshold <= _EPS:
+    if not np.isfinite(threshold) or threshold <= 0.0:
         return np.nan
     top = s[n - 1 - k + 1 : n]
-    if top.size != k or np.any(top <= _EPS):
+    if top.size != k or not np.all(np.isfinite(top)) or np.any(top <= 0.0):
         return np.nan
-    return float(np.mean(np.log(top / threshold)))
+    # Log differences preserve scale invariance without overflowing the ratio.
+    return float(np.mean(np.log(top) - np.log(threshold)))
 
 
 def _threshold_stability(v: np.ndarray, k_min: int, k_max: int, upper: bool) -> float:

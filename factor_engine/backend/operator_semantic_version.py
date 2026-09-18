@@ -22,6 +22,8 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_expanding_lilliefors_pvalue": 2,
     # R54: recursive McGinley state reseeds after a complete finite recovery window.
     "ts_mcginley_dynamic": 2,
+    # R56: feasible three-threshold Hill ladder and scale-safe positive tails.
+    "ts_evt_threshold_stability": 2,
     # R55: preserve every standard time/identity coordinate in chip kernels.
     "ts_cpt_value": 2,
     # R52: replace holder placeholders with exact multi-panel contracts.

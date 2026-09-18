@@ -20,6 +20,7 @@ from factor_engine.runtime.factor_identity import OperatorSemanticContractDigest
     ("ts_turnover_cost_entropy_vol_scaled", 3),
     ("ts_cpt_value", 2),
     ("ts_mcginley_dynamic", 2),
+    ("ts_evt_threshold_stability", 2),
     ("index_reconstitution_churn", 2),
     ("intra_max_drawdown", 2),
     ("intra_max_drawup", 2),
