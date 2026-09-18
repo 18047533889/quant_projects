@@ -55,16 +55,16 @@ def _pl(x, window, k=None, min_periods=None, *, top, stat, **_):
     return pl_base_with(x, {c: pl.Series(c, out[:, i]) for i, c in enumerate(cols)})
 
 
-def _spec(top, stat):
+def _spec(top, stat, *, default_k=5):
     # ts_topk_sum canonical params are ``["x","d","k"]`` (R19-050 aliases); the
     # DSL binder always passes the CANONICAL key (``d``), so the wrapped kernels
     # must accept that spelling instead of requiring positional ``window``.
-    def _pand(x, window=None, k=5, min_periods=1, *, d=None, n=None, **kw):
+    def _pand(x, window=None, k=default_k, min_periods=1, *, d=None, n=None, **kw):
         w = window if window is not None else (d if d is not None else 20)
         kk = k if k is not None else n
         return _pd(x, w, kk, min_periods, top=top, stat=stat, **kw)
 
-    def _pola(x, window=None, k=5, min_periods=1, *, d=None, n=None, **kw):
+    def _pola(x, window=None, k=default_k, min_periods=1, *, d=None, n=None, **kw):
         w = window if window is not None else (d if d is not None else 20)
         kk = k if k is not None else n
         return _pl(x, w, kk, min_periods, top=top, stat=stat, **kw)
@@ -82,7 +82,9 @@ def register():
         ("ts_bottomk_sum", False, "sum", "sum of smallest K values"),
         ("ts_bottomk_std", False, "std", "sample std (ddof=1) of smallest K values; k>=2"),
     ):
-        pandas_fn, polars_fn = _spec(top, stat)
+        # Sum's canonical default is all values in the window (k=None).
+        # The other five operators explicitly default to the top/bottom five.
+        pandas_fn, polars_fn = _spec(top, stat, default_k=None if name == "ts_topk_sum" else 5)
         # ts_topk_sum canonical params are ``["x","d","k"]`` (R19-050 aliases);
         # inherited ParamSpec keys must sit inside param_names (R6-157).
         params = ["x", "d", "k", "min_periods"] if name == "ts_topk_sum" else ["x", "window", "k", "min_periods"]
