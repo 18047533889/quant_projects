@@ -63,12 +63,16 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     source=_SRC,
     backend="polars")
 class TSARCoefficientNative(SeriesOperator):
-    """Rolling AR(p) coefficient estimation via OLS."""
+    """Rolling single-lag AR coefficient with an intercept.
+
+    ``lag`` is the economic lag being estimated, not the order of an AR(p)
+    model.  This mirrors the canonical pandas reference exactly.
+    """
 
     metadata = OperatorMetadata(
         name="ts_ar_coefficient",
         category="time_series",
-        description="AR(p) 系数估计",
+        description="AR(lag) 含截距回归斜率（单一滞后）",
         param_names=["x", "window", "lag", "min_periods", "warmup_policy"],
         return_type="series",
         tags=["time_series", "polars", "native", "causal"],
@@ -82,40 +86,46 @@ class TSARCoefficientNative(SeriesOperator):
 
     def _calculate_series(
         self, x: pl.DataFrame, window: int = 20, lag: int = 1,
-        min_periods: int = 1, warmup_policy: str = "exact", **kwargs
+        min_periods: int = 5, warmup_policy: str = "expanding", **kwargs
     ) -> pl.DataFrame:
-        w = strict_integer(window, "window", minimum=3)
-        p = strict_integer(lag, "lag", minimum=1)
-        coef_index = int(kwargs.get("coef_index", 0) or 0)
-        idx = strict_integer(coef_index, "coef_index", minimum=0)
-
-        if idx >= p:
-            from factor_engine.backend.operator_errors import OperatorParameterError
-            raise OperatorParameterError(f"coef_index {idx} must be < lag {p}")
-
+        w = strict_integer(window, "window", minimum=2)
+        lg = strict_integer(lag, "lag", minimum=1)
+        mp = max(3, strict_integer(min_periods, "min_periods", minimum=1))
+        if warmup_policy not in ("expanding", "full"):
+            raise ValueError(
+                "warmup_policy must be 'expanding' or 'full', "
+                f"got {warmup_policy!r}"
+            )
         cols = _numeric_cols(x)
-
-        def _ar_coef(vals):
-            arr = np.asarray(vals, dtype=float)
-            valid = ~np.isnan(arr)
-            if np.sum(valid) < p + 2:
-                return np.nan
-            arr = arr[valid]
-            if len(arr) < p + 2:
-                return np.nan
-            y = arr[p:]
-            X = np.column_stack([arr[p-i-1:-i-1] for i in range(p)])
-            try:
-                coef = np.linalg.lstsq(X, y, rcond=None)[0]
-                return float(coef[idx]) if idx < len(coef) else np.nan
-            except:
-                return np.nan
-
-        exprs = [
-            pl.col(c).fill_nan(None).rolling_map(_ar_coef, window_size=w, min_samples=p+2).alias(c)
-            for c in cols
-        ]
-        return x.with_columns(exprs)
+        values = x.select(cols).to_numpy().astype(float, copy=False)
+        rows, ncols = values.shape
+        out = np.full((rows, ncols), np.nan, dtype=float)
+        for col in range(ncols):
+            for row in range(rows):
+                if warmup_policy == "full" and row < w - 1:
+                    continue
+                start = max(0, row - w + 1)
+                if row - start < lg:
+                    continue
+                segment = values[start : row + 1, col]
+                current = segment[lg:]
+                lagged = segment[:-lg]
+                valid = np.isfinite(current) & np.isfinite(lagged)
+                if valid.sum() < mp or np.std(lagged[valid]) <= 0.0:
+                    continue
+                current_valid = current[valid]
+                lagged_valid = lagged[valid]
+                covariance = float(np.mean(
+                    (current_valid - np.mean(current_valid))
+                    * (lagged_valid - np.mean(lagged_valid))
+                ))
+                variance = float(np.var(lagged_valid))
+                if variance > 0.0:
+                    out[row, col] = covariance / variance
+        return x.with_columns([
+            pl.Series(name, out[:, index], dtype=pl.Float64)
+            for index, name in enumerate(cols)
+        ])
 
 
 @register_operator(
@@ -2631,5 +2641,4 @@ class TSMultiRegressionAdjustedR2PriorNative(SeriesOperator):
             for c in cols
         ]
         return x.with_columns(exprs)
-
 

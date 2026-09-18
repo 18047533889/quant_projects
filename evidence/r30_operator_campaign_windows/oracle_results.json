@@ -1,0 +1,175 @@
+{
+  "backend_checks": 28,
+  "cases": 14,
+  "results": [
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_count_if",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_count_if",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_sum_if",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_sum_if",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_mean_if",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_mean_if",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_std_if",
+      "max_abs_error": 2.220446049250313e-16,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_std_if",
+      "max_abs_error": 2.220446049250313e-16,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_last_if",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_last_if",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_max_if",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_max_if",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_min_if",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_min_if",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_tail_mean",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_tail_mean",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_downside_deviation",
+      "max_abs_error": 2.220446049250313e-16,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_downside_deviation",
+      "max_abs_error": 2.220446049250313e-16,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_abs_concentration",
+      "max_abs_error": 1.6653345369377348e-16,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_abs_concentration",
+      "max_abs_error": 1.6653345369377348e-16,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_abs_entropy",
+      "max_abs_error": 3.3306690738754696e-16,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_abs_entropy",
+      "max_abs_error": 3.3306690738754696e-16,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_abs_entropy_normalized",
+      "max_abs_error": 3.3306690738754696e-16,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_abs_entropy_normalized",
+      "max_abs_error": 3.3306690738754696e-16,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_abs_entropy_nats",
+      "max_abs_error": 2.220446049250313e-16,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_abs_entropy_nats",
+      "max_abs_error": 2.220446049250313e-16,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_ema",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_ema",
+      "max_abs_error": 0.0,
+      "passed": true
+    }
+  ],
+  "status": "PASS"
+}

@@ -1,0 +1,1 @@
+{"recipes":[{"canonical":"ts_ar_coefficient","inputs":["base"],"params":{"window":30,"lag":1,"min_periods":10,"warmup_policy":"expanding"},"provenance":"post-fix canonical single-lag intercept OLS"}]}

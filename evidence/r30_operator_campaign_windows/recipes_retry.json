@@ -1,0 +1,6 @@
+{
+  "recipes": [
+    {"canonical":"ts_distance_corr","inputs":["base","other"],"params":{"window":20,"min_periods":10},"provenance":"retry after formal minimum validation"},
+    {"canonical":"ts_distance_cov","inputs":["base","other"],"params":{"window":20,"min_periods":10},"provenance":"retry after formal minimum validation"}
+  ]
+}
