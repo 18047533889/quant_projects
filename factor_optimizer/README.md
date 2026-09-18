@@ -12,6 +12,10 @@
 
 ---
 
+> 中文文档：[功能与使用指南](docs/FUNCTIONAL_GUIDE.md) 解释真实能力、算法和实践工作流；[完整 API 参考](docs/API_REFERENCE.md) 列出公开模块、类、函数、方法、字段与默认值。
+
+文档交付时的测试结果与未通过项见 [验证记录](docs/VALIDATION.md)。
+
 ## 它是什么 / 不是什么
 
 **做什么：** 候选变异生成（6 种变异算子 × 语法校验）、SearchRunner 编排、
@@ -27,7 +31,7 @@ TreatmentDecisionPolicy 八步处理决策、TrialLedger 失败分类、预算�
 - `SearchRunner` / `SearchSession` / `SearchConfig`：
   - `require_evaluation_protocol=True` —— **fail-closed**：没有评估协议直接拒绝开跑
   - `max_concurrency=1` —— 默认串行，保证证据可复现
-  - `SearchBudget` —— 预算管控（默认 100 trials / 50 保存 / 1000 上限）
+  - `SearchBudget` —— 预算管控（默认 100 次提案 / 50 次完整评估 / 1000 成本单位）
 - `tiered_evaluation` —— 分层评估：便宜指标先筛，贵指标只留给幸存者
 - `multifidelity` —— 保真度档位（低频窗粗筛 → 全窗确认）
 - `plateau` —— 平台期检测（连续无改进提前收束）
@@ -42,7 +46,7 @@ TreatmentDecisionPolicy 八步处理决策、TrialLedger 失败分类、预算�
 
 ### 赢家选择（三套，可组合）
 1. **`select_winner`（RobustBalancedUtility）**：
-   `U = α·min(跨窗) + β·geomean + γ·robustness − λ·complexity`
+   `U = α·min(各维 desirability) + β·geomean + γ·robustness − λ·complexity`
    —— 稳健均衡效用，惩罚过拟合复杂度
 2. **`UncertaintyAwareWinnerSelector`**：bootstrap 置信区间**下界**排序 +
    等价区域（equivalence region）判定 —— 差异在噪声内的两个候选不乱选
@@ -91,13 +95,19 @@ python -m pip install -e ".[factor_engine,quant_evaluator]"
 ```
 
 ```python
-from factor_optimizer.search.runner import SearchRunner, SearchConfig, SearchSession
+# 接线示意：next_trial 和 evaluation_protocol 需由业务方实现并绑定。
+from factor_optimizer.contracts.objective import ObjectiveSpec
+from factor_optimizer.contracts.search_budget import SearchBudget
+from factor_optimizer.search.runner import SearchRunner, SearchConfig
 from factor_optimizer.search.winner_selector import select_winner
 from factor_optimizer.search.uncertainty_winner import UncertaintyAwareWinnerSelector
 
-session = SearchSession(SearchConfig(search_budget=...))
-runner = SearchRunner(session, fe_adapter=..., qe_adapter=...)
-# runner.run(...) -> trial ledger / selection / acceptance
+config = SearchConfig(
+    budget=SearchBudget(max_trials=30, max_evaluations=12, max_cost_units=120.0),
+    objective_spec=ObjectiveSpec("validation_rank_ic", "maximize"),
+)
+runner = SearchRunner(config, proposal_fn=next_trial, evaluation_fn=evaluation_protocol)
+session = runner.run()
 ```
 
 ## 核心流程

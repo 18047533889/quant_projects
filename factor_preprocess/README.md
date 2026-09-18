@@ -7,11 +7,13 @@
 模型训练之前的一环。
 
 **版本:** 0.1.0 ｜ **仓库:** https://github.com/HKUST-QUANT-SOCIETY/factor_preprocess (私有)
-**文档:** [`docs/README.md`](docs/README.md) · `docs/DLIB-FP-PHASE0.md` · schemas/feature_manifest.schema.json
+**文档:** [`中文功能与算法指南`](docs/FUNCTIONAL_GUIDE.md) · [`API 参考`](docs/API_REFERENCE.md) · [`变换目录`](docs/TRANSFORM_CATALOG.md) · `docs/DLIB-FP-PHASE0.md` · schemas/feature_manifest.schema.json
 
 ---
 
 ## 它是什么 / 不是什么
+
+文档交付时的测试结果与未通过项见 [验证记录](docs/VALIDATION.md)。
 
 **做什么：** 把 1 个（或多个）因子值的时序 × 截面网格，逐变换转换为模型输入：
 去极值 → 缺失填充 → 平滑 → 截面归一 → 行业/市值中性化 → 输出带内容哈希与因果契约的
@@ -44,14 +46,14 @@ from factor_preprocess.registry.policies import get_default_policy_registry
 from factor_preprocess.registry.transforms import get_default_registry
 
 policy = get_default_policy_registry().get("cs_only")   # PolicyPreset
-registry = get_default_registry()                        # TransformRegistry（36 个变换）
+registry = get_default_registry()                        # 当前环境 40 个；可选小波依赖可增至 43 个
 
 # 1) 校验策略在当前 registry 下可执行
 ok, errors = policy.validate(registry)
 
 # 2) 逐步骤执行变换链
 for step in policy.steps:
-    fn = registry.get_function(step.name)
+    fn = registry.get_execution(step.name)
     # out = fn(factor_values, **step.parameters)   → FeatureBundle
 ```
 
@@ -70,7 +72,7 @@ for step in policy.steps:
 | `minimal` | 最小链 |
 | `research_full` | 研究级完整链 |
 
-### 变换全清单 `transforms/`（36 个注册项，`TransformRegistry`）
+### 变换全清单 `transforms/`（当前环境 40 个注册项，`TransformRegistry`）
 
 - **截面族 CROSS_SECTIONAL**：`cs_rank`（横截面排名）、`cs_zscore`、`cs_demean`、
   `cs_winsor`（去极值/截尾）、`cs_scale`
@@ -87,8 +89,9 @@ for step in policy.steps:
 - **中性化族 NEUTRALIZATION**：`ols_neutralize`（内核）、`compute_exposures`；
   语义别名 `industry_neutral` / `size_neutral` / `dual_neutral`（全部绑定到 ols_neutralize 内核）
 - **分解族（OFFLINE_ONLY，全序列非因果，禁生产）**：`bandpass_filter`、`extract_cycle`、
-  `christiano_fitzgerald_filter`、`wavelet_decompose`/`wavelet_smooth`/`wavelet_denoise`、
-  `hp_filter`/`hp_decompose`（HP 滤波非前缀不变，禁生产）
+  `christiano_fitzgerald_filter`、`hp_filter`/`hp_decompose`（非前缀不变，禁生产）。
+  `wavelet_decompose`/`wavelet_smooth`/`wavelet_denoise` 依赖可选 PyWavelets；
+  当前 server-c 环境未注册，安装并成功导入时总数增至 43。全部仍是 OFFLINE_ONLY。
 
 每个变换带 `TransformMetadata`（深度不可变：`signature_hash` / `implementation_hash` /
 `numeric_policy_hash` 三哈希 + 语义元数据 semantic_id/stage/family_tags）。
