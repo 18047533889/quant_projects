@@ -2191,56 +2191,53 @@ class TSExtremalDependenceDecayPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_extremal_index", canonical="ts_extremal_index", backend="polars")
 class TSExtremalIndexPolarsNative(SeriesOperator):
-    """Extremal index: clustering measure for extreme events"""
+    """Exact Polars column wrapper for the canonical runs estimator."""
 
-    metadata = OperatorMetadata(
-        name="ts_extremal_index",
-        category="time_series",
-        description="Extremal index θ ∈ [0,1] (1=no clustering)",
-        param_names=["x","window","side","q","min_exceed","run_length"],
-        return_type="series",
-        tags=["time_series", "rolling", "extreme", "pit_safe"],
+    from factor_engine.cleaned_operators.extreme_tail import (
+        TsExtremalIndex as _reference,
+        _extremal_index_series as _kernel,
     )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "q": ParamSpec(dtype=float, min=0.0, max=1.0, default=0.95, param_role=ParamRole.STATE_THRESHOLD),
-    }
+    from factor_engine.cleaned_operators.common._polars_bridge import SKIP as _metadata_columns
 
-    def _calculate_series(self, x, window=20, side: str = "upper", q: float = 0.95,
-                          min_exceed: int = 10, run_length: int = 1, **kwargs):
-        feature = x
-        threshold = q
-        # Extremal index estimates clustering of extremes
-        # θ = (mean cluster size)^-1
-        result = pd.Series(index=feature.index, dtype=float)
-        
-        for i in range(len(feature)):
-            if i < window - 1:
-                result.iloc[i] = np.nan
-                continue
-            
-            window_data = feature.iloc[max(0, i - window + 1):i + 1].dropna()
-            if len(window_data) < 10:
-                result.iloc[i] = np.nan
-                continue
-            
-            # Define threshold as quantile
-            thresh_value = window_data.quantile(threshold)
-            extremes = (window_data > thresh_value).astype(int)
-            
-            if extremes.sum() == 0:
-                result.iloc[i] = np.nan
-                continue
-            
-            # Count clusters (runs of consecutive extremes)
-            clusters = (extremes.diff().fillna(0) != 0).cumsum() * extremes
-            n_clusters = clusters[clusters > 0].nunique()
-            n_extremes = extremes.sum()
-            
-            # Extremal index = n_clusters / n_extremes
-            result.iloc[i] = n_clusters / n_extremes if n_extremes > 0 else np.nan
-        
-        return result
+    metadata = copy.deepcopy(_reference.metadata)
+    _kernel = staticmethod(_kernel)
+    _contract_callable = staticmethod(_reference._calculate_series)
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_extremal_index",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
+        supports_lazy=False,
+        supports_streaming=False,
+        stateful=False,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=False,
+        implementation_source_hash="ts_advanced_batch1:ts_extremal_index:shared_numpy:v2",
+        kernel_identity="extreme_tail._extremal_index_series:v2",
+        parameter_domain_hash="window:int>=2,side:{upper,lower},q:0<q<1,min_exceed:int>=2,run_length:int>=1",
+        semantic_contract_hash="runs-estimator:nan-breaks-cluster:strict-trailing-window:v2",
+        notes="Eager materialized Polars columns -> shared NumPy runs kernel -> Polars; no lazy, streaming, pandas, or GPU path.",
+    )
+
+    def _calculate_series(self, x, window=120, side: str = "upper", q: float = 0.9,
+                          min_exceed: int = 3, run_length: int = 1, **kwargs):
+        side_key = str(side).lower()
+        if side_key not in {"upper", "lower"}:
+            raise ValueError("ts_extremal_index requires side in {'upper','lower'}")
+        columns = [c for c in x.columns if c not in self._metadata_columns]
+        return x.with_columns([
+            pl.Series(
+                name=column,
+                values=self._kernel(
+                    x[column].to_numpy().astype(float, copy=False),
+                    window, side_key, q, min_exceed, run_length,
+                ),
+                dtype=pl.Float64,
+            )
+            for column in columns
+        ])
 
 
 @register_operator(name="ts_extreme_cluster_ratio", canonical="ts_extreme_cluster_ratio", backend="polars", source="factor_dsl_polars_native", replace=True, expected_old_source="pandas_bridge", replacement_reason="Authoritative tail-cluster delegate replaces compatibility bridge")
