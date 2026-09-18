@@ -13,6 +13,7 @@ import pytest
 
 from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
 from factor_engine.cleaned_operators.registry import OperatorRegistry
+from factor_engine.backend.operator_errors import OperatorParameterError
 
 ensure_cleaned_loaded()
 
@@ -284,8 +285,33 @@ def test_modwt_band_corr_identical_series_is_one_on_interior_window() -> None:
 )
 def test_conditional_dependence_missing_required_inputs_rejects(name: str) -> None:
     x = pd.DataFrame({"A": np.arange(60, dtype=float)})
-    with pytest.raises(TypeError):
+    with pytest.raises(OperatorParameterError):
         _op(name).calculate(x)
+
+
+@pytest.mark.parametrize("name", ["ts_conditional_transfer_entropy", "ts_modwt_band_corr"])
+@pytest.mark.parametrize("backend", ["pandas_numpy", "polars"])
+def test_conditional_dependence_default_signature_contract(name: str, backend: str) -> None:
+    rows = 130
+    values = np.sin(np.arange(rows, dtype=float) / 5.0)
+    if backend == "polars":
+        pl = pytest.importorskip("polars")
+        target = pl.DataFrame({"A": values})
+        source = pl.DataFrame({"A": np.roll(values, 1)})
+        condition = pl.DataFrame({"A": (np.arange(rows) % 2).astype(float)})
+    else:
+        target = pd.DataFrame({"A": values})
+        source = pd.DataFrame({"A": np.roll(values, 1)})
+        condition = pd.DataFrame({"A": (np.arange(rows) % 2).astype(float)})
+    op = _op(name, backend)
+    with pytest.raises(OperatorParameterError):
+        op.calculate(target)
+    result = (
+        op.calculate(target, source, condition)
+        if name == "ts_conditional_transfer_entropy"
+        else op.calculate(target, source)
+    )
+    assert result.shape == target.shape
 
 
 # ---------------------------------------------------------------------------
@@ -304,3 +330,8 @@ def test_conditional_dependence_metadata() -> None:
         assert meta is not None, f"{op_name} missing metadata"
         assert hasattr(meta, "tags"), f"{op_name} missing tags"
         assert meta.name == op_name, f"{op_name} name mismatch"
+        if op_name == "ts_modwt_band_corr":
+            assert meta.panel_params == ("x", "y")
+            assert meta.param_specs["window"].default == 120
+            assert meta.param_specs["level"].default == 3
+            assert meta.param_specs["band"].default == 1

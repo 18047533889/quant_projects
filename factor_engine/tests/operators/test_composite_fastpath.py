@@ -26,11 +26,15 @@ def _frames(n: int = 120):
 
 
 def test_only_fused_composite_fastpaths_remain_active() -> None:
+    expected_polars_sources = {
+        "ATR_WILDER": "composite_fastpath_native_polars",
+        "RSI_WILDER": "factor_dsl_polars",
+    }
     for name in ("ATR_WILDER", "RSI_WILDER"):
         catalog = OperatorRegistry.catalog()[name]
         assert catalog["backend_meta"]["pandas_numpy"]["source"] == "composite_fastpath_primitives"
         if "polars" in OperatorRegistry.backends_for(name):
-            assert catalog["backend_meta"]["polars"]["source"] == "composite_fastpath_native_polars"
+            assert catalog["backend_meta"]["polars"]["source"] == expected_polars_sources[name]
 
     # KAMA is intentionally excluded: it has no factor_recipes replacement and
     # is registered as a real stateful operator via technical_indicators_v2

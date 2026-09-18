@@ -424,16 +424,21 @@ class TsModwtBandCorr(SeriesOperator):
         unit="corr",
         cost=6,
     )
+    metadata.panel_params = ("x", "y")
+    metadata.scalar_params = ("window", "level", "band")
     metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=8),
+        "window": ParamSpec(
+            dtype=int, min=8, default=120,
+            param_role=ParamRole.HORIZON, history_semantics="max_rows",
+        ),
         # R15-INC-163: ``level`` / ``band`` are estimator resolution, not freely
         # searched economic alphas — only a small reviewed grid is meaningful.
         "level": ParamSpec(
-            dtype=int, min=1,
+            dtype=int, min=1, default=3,
             param_role=ParamRole.ESTIMATOR_RESOLUTION,
         ),
         "band": ParamSpec(
-            dtype=int, min=1,
+            dtype=int, min=1, default=1,
             param_role=ParamRole.ESTIMATOR_RESOLUTION,
         ),
     }
