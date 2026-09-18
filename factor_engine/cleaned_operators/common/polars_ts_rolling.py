@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+from factor_engine.backend.evidence_provenance import semantic_hashes_for
 
 _PAIRWISE_CANONICALS = frozenset({
     "ts_corr",
@@ -74,6 +75,125 @@ def _with_meta(result: pl.DataFrame, source: pl.DataFrame) -> pl.DataFrame:
     if "date" in source.columns and "date" not in result.columns:
         result = result.with_columns(source["date"])
     return result
+
+
+def _pairwise_staged_moments(
+    x_series: pl.Series,
+    y_series: pl.Series,
+    *,
+    window: int,
+    min_periods: int,
+) -> pl.DataFrame:
+    """Materialize stable pairwise moments with an O(rows * min(window, rows)) workspace."""
+    frame = pl.DataFrame({"__x": x_series, "__y": y_series}).with_columns(
+        pl.when(
+            pl.col("__x").is_finite().fill_null(False)
+            & pl.col("__y").is_finite().fill_null(False)
+        ).then(pl.col("__x")).otherwise(None).alias("__xv"),
+        pl.when(
+            pl.col("__x").is_finite().fill_null(False)
+            & pl.col("__y").is_finite().fill_null(False)
+        ).then(pl.col("__y")).otherwise(None).alias("__yv"),
+    )
+    active_window = min(window, max(1, frame.height))
+    xw = [f"__xw{i}" for i in range(active_window)]
+    yw = [f"__yw{i}" for i in range(active_window)]
+    frame = frame.with_columns(
+        [pl.col("__xv").shift(i).alias(xw[i]) for i in range(active_window)]
+        + [pl.col("__yv").shift(i).alias(yw[i]) for i in range(active_window)]
+    ).with_columns(
+        pl.coalesce([pl.col(c) for c in xw]).alias("__xa"),
+        pl.coalesce([pl.col(c) for c in yw]).alias("__ya"),
+        pl.sum_horizontal(
+            [pl.col(c).is_not_null().cast(pl.Float64) for c in xw]
+        ).alias("__n"),
+    )
+    xc = [f"__xc{i}" for i in range(active_window)]
+    yc = [f"__yc{i}" for i in range(active_window)]
+    frame = frame.with_columns(
+        [(pl.col(xw[i]) - pl.col("__xa")).alias(xc[i]) for i in range(active_window)]
+        + [(pl.col(yw[i]) - pl.col("__ya")).alias(yc[i]) for i in range(active_window)]
+    ).with_columns(
+        pl.sum_horizontal([pl.col(c) for c in xc]).alias("__sx"),
+        pl.sum_horizontal([pl.col(c) for c in yc]).alias("__sy"),
+        pl.sum_horizontal([pl.col(c) * pl.col(c) for c in xc]).alias("__sxx"),
+        pl.sum_horizontal([pl.col(c) * pl.col(c) for c in yc]).alias("__syy"),
+        pl.sum_horizontal(
+            [pl.col(xc[i]) * pl.col(yc[i]) for i in range(active_window)]
+        ).alias("__sxy"),
+    ).with_columns(
+        (pl.col("__xa") + pl.col("__sx") / pl.col("__n")).alias("__mx"),
+        (pl.col("__ya") + pl.col("__sy") / pl.col("__n")).alias("__my"),
+        (
+            pl.col("__n") * pl.col("__xa") * pl.col("__xa")
+            + 2 * pl.col("__xa") * pl.col("__sx") + pl.col("__sxx")
+        ).alias("__raw_xx"),
+        (
+            pl.col("__n") * pl.col("__ya") * pl.col("__ya")
+            + 2 * pl.col("__ya") * pl.col("__sy") + pl.col("__syy")
+        ).alias("__raw_yy"),
+        (
+            pl.col("__n") * pl.col("__xa") * pl.col("__ya")
+            + pl.col("__xa") * pl.col("__sy")
+            + pl.col("__ya") * pl.col("__sx") + pl.col("__sxy")
+        ).alias("__raw_xy"),
+    ).select([
+        "__xv", "__yv", "__n", "__mx", "__my",
+        "__raw_xx", "__raw_xy", "__raw_yy", *xw, *yw,
+    ])
+    xr = [f"__xr{i}" for i in range(active_window)]
+    yr = [f"__yr{i}" for i in range(active_window)]
+    frame = frame.with_columns(
+        [(pl.col(xw[i]) - pl.col("__mx")).alias(xr[i]) for i in range(active_window)]
+        + [(pl.col(yw[i]) - pl.col("__my")).alias(yr[i]) for i in range(active_window)]
+    ).with_columns(
+        pl.sum_horizontal([pl.col(c) * pl.col(c) for c in xr]).alias("__ssx"),
+        pl.sum_horizontal([pl.col(c) * pl.col(c) for c in yr]).alias("__ssy"),
+        pl.sum_horizontal(
+            [pl.col(xr[i]) * pl.col(yr[i]) for i in range(active_window)]
+        ).alias("__cross"),
+    )
+    ready = pl.col("__n") >= min_periods
+    return frame.select(
+        "__xv", "__yv", "__n",
+        pl.when(ready).then(pl.col("__mx")).otherwise(None).alias("__mx"),
+        pl.when(ready).then(pl.col("__my")).otherwise(None).alias("__my"),
+        pl.when(ready).then(pl.col("__ssx")).otherwise(None).alias("__ssx"),
+        pl.when(ready).then(pl.col("__ssy")).otherwise(None).alias("__ssy"),
+        pl.when(ready).then(pl.col("__cross")).otherwise(None).alias("__cross"),
+        pl.when(ready).then(pl.col("__raw_xx")).otherwise(None).alias("__raw_xx"),
+        pl.when(ready).then(pl.col("__raw_xy")).otherwise(None).alias("__raw_xy"),
+        pl.when(ready).then(pl.col("__raw_yy")).otherwise(None).alias("__raw_yy"),
+    )
+
+
+def _pairwise_staged_stat(
+    x_series: pl.Series,
+    y_series: pl.Series,
+    *,
+    window: int,
+    min_periods: int,
+    statistic: str,
+    ddof: int = 1,
+) -> pl.Series:
+    frame = _pairwise_staged_moments(
+        x_series, y_series, window=window, min_periods=min_periods
+    )
+    if statistic == "corr":
+        value = pl.when(
+            (pl.col("__ssx") > 0) & (pl.col("__ssy") > 0)
+        ).then(
+            # Divide by each norm separately: multiplying squared moments
+            # first overflows/underflows even when correlation is representable.
+            pl.col("__cross") / pl.col("__ssx").sqrt() / pl.col("__ssy").sqrt()
+        ).otherwise(None)
+    elif statistic == "cov":
+        value = pl.when(pl.col("__n") > ddof).then(
+            pl.col("__cross") / (pl.col("__n") - ddof)
+        ).otherwise(None)
+    else:
+        raise ValueError(f"unsupported staged statistic: {statistic}")
+    return frame.select(value.alias("__result")).get_column("__result")
 
 
 def _pairwise_rolling_moments(
@@ -170,8 +290,8 @@ class TSCorrNative(SeriesOperator):
         execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
         supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
         supports_nulls=True, supports_nan=False, supports_inf=False,
-        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSCorrNative:v1",
-        emitter_identity="polars.rolling.pairwise_moments:v1",
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSCorrNative:v3",
+        emitter_identity="polars.rolling.pairwise_moments.staged:v2",
         parameter_domain_hash="ts_corr.x:dataframe,y:dataframe,window:int:min=2:default=20,min_periods:int:min=1:nullable:default=2",
         semantic_contract_hash="ts_corr:pairwise_finite:v1",
     )
@@ -195,18 +315,13 @@ class TSCorrNative(SeriesOperator):
             raise ValueError("min_periods must be <= window")
         cols = _require_pairwise_columns(x, y, operator="ts_corr")
 
-        exprs = []
-        for c in cols:
-            x_col = pl.col(c)
-            y_col = y[c]
-
-            moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=min_p)
-            corr = pl.when((moments["ss_x"] <= 0) | (moments["ss_y"] <= 0)).then(
-                None
-            ).otherwise(moments["cross"] / (moments["ss_x"] * moments["ss_y"]).sqrt())
-            exprs.append(corr.alias(c))
-
-        return x.lazy().with_columns(exprs).collect()
+        result = pl.DataFrame({
+            c: _pairwise_staged_stat(
+                x[c], y[c], window=w, min_periods=min_p, statistic="corr"
+            )
+            for c in cols
+        })
+        return x.with_columns([result.get_column(c).alias(c) for c in cols])
 
 
 @_register_rolling_operator(
@@ -225,8 +340,8 @@ class TSCovNative(SeriesOperator):
         execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
         supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
         supports_nulls=True, supports_nan=False, supports_inf=False,
-        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSCovNative:v1",
-        emitter_identity="polars.rolling.pairwise_moments:v1",
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSCovNative:v2",
+        emitter_identity="polars.rolling.pairwise_moments.staged:v2",
         parameter_domain_hash="ts_cov.x:dataframe,y:dataframe,window:int:min=2:default=20,ddof:int:min=0:default=1,min_periods:int:min=1:nullable:default=2",
         semantic_contract_hash="ts_cov:pairwise_finite:ddof:v1",
     )
@@ -258,21 +373,14 @@ class TSCovNative(SeriesOperator):
 
         cols = _require_pairwise_columns(x, y, operator="ts_cov")
 
-        exprs = []
-        for c in cols:
-            x_col = pl.col(c)
-            y_col = y[c]
-
-            moments = _pairwise_rolling_moments(
-                x_col, y_col, window=w, min_periods=min_p
+        result = pl.DataFrame({
+            c: _pairwise_staged_stat(
+                x[c], y[c], window=w, min_periods=min_p,
+                statistic="cov", ddof=ddof_val,
             )
-            cov = pl.when(moments["count"] > ddof_val).then(
-                moments["cross"] / (moments["count"] - ddof_val)
-            ).otherwise(None)
-
-            exprs.append(cov.alias(c))
-
-        return x.lazy().with_columns(exprs).collect()
+            for c in cols
+        })
+        return x.with_columns([result.get_column(c).alias(c) for c in cols])
 
 
 # ---------------------------------------------------------------------------
@@ -365,7 +473,7 @@ class TSEwmCorrNative(SeriesOperator):
         implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSEwmCorrNative:v2",
         emitter_identity="pandas.ewm.pairwise_corr:v1",
         parameter_domain_hash="ts_ewm_corr.x:dataframe,y:dataframe,window:int:min=2:default=20",
-        semantic_contract_hash="ts_ewm_corr:pandas_ewm_span_adjustfalse_pairwise_finite:v2",
+        semantic_contract_hash=semantic_hashes_for("ts_ewm_corr")["semantic_contract_hash"],
         notes="Per-column pandas ewm(span=window, adjust=False, ignore_na=False, "
               "min_periods=2) corr; Inf pre-masked to NaN (pairwise-finite).",
     )
@@ -421,7 +529,7 @@ class TSEwmCovNative(SeriesOperator):
         implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSEwmCovNative:v2",
         emitter_identity="pandas.ewm.pairwise_cov:v1",
         parameter_domain_hash="ts_ewm_cov.x:dataframe,y:dataframe,window:int:min=2:default=20",
-        semantic_contract_hash="ts_ewm_cov:pandas_ewm_span_adjustfalse_pairwise_finite:v2",
+        semantic_contract_hash=semantic_hashes_for("ts_ewm_cov")["semantic_contract_hash"],
         notes="Per-column pandas ewm(span=window, adjust=False, ignore_na=False, "
               "min_periods=2) cov (bias=False, unbiased); Inf pre-masked to NaN "
               "(pairwise-finite).",
@@ -451,6 +559,53 @@ class TSEwmCovNative(SeriesOperator):
         return x.with_columns([columns[c].alias(c) for c in _numeric_cols(x)])
 
 
+def _staged_regression_output(
+    x_series: pl.Series,
+    y_series: pl.Series,
+    *,
+    window: int,
+    min_periods: int,
+    output: str,
+    add_intercept: bool,
+) -> pl.Series:
+    moments = _pairwise_staged_moments(
+        x_series, y_series, window=window, min_periods=min_periods
+    )
+    if add_intercept:
+        slope = pl.when(pl.col("__ssx") > 0).then(
+            pl.col("__cross") / pl.col("__ssx")
+        ).otherwise(None)
+        intercept = pl.col("__my") - slope * pl.col("__mx")
+        resid = (pl.col("__yv") - pl.col("__my")) - slope * (
+            pl.col("__xv") - pl.col("__mx")
+        )
+        r2 = pl.when(
+            (pl.col("__ssx") > 0) & (pl.col("__ssy") > 0)
+        ).then(
+            (pl.col("__cross") / pl.col("__ssx").sqrt() / pl.col("__ssy").sqrt()) ** 2
+        ).otherwise(None)
+    else:
+        slope = pl.when(pl.col("__raw_xx") > 0).then(
+            pl.col("__raw_xy") / pl.col("__raw_xx")
+        ).otherwise(None)
+        intercept = pl.when(pl.col("__raw_xx") > 0).then(0.0).otherwise(None)
+        resid = pl.col("__yv") - slope * pl.col("__xv")
+        sse = (
+            pl.col("__raw_yy") - 2 * slope * pl.col("__raw_xy")
+            + slope * slope * pl.col("__raw_xx")
+        )
+        r2 = pl.when(pl.col("__raw_yy") > 0).then(
+            1 - sse / pl.col("__raw_yy")
+        ).otherwise(None)
+    selected = {
+        "slope": slope, "intercept": intercept, "resid": resid,
+        "residual": resid, "r2": r2, "r_squared": r2,
+    }.get(output)
+    if selected is None:
+        raise ValueError(f"unsupported regression retval: {output!r}")
+    return moments.select(selected.alias("__result")).get_column("__result")
+
+
 def _validate_regression_params(window: int, min_periods: int | None) -> tuple[int, int]:
     from factor_engine.cleaned_operators.parameter_validation import strict_integer
 
@@ -477,8 +632,8 @@ class TSRegressionSlopeNative(SeriesOperator):
         execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
         supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
         supports_nulls=True, supports_nan=False, supports_inf=False,
-        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSRegressionSlopeNative:v1",
-        emitter_identity="polars.rolling.pairwise_regression:v1",
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSRegressionSlopeNative:v3",
+        emitter_identity="polars.rolling.pairwise_regression.staged:v2",
         parameter_domain_hash="ts_regression_slope.y:dataframe,x:dataframe,window:int:min=2:default=20,lag:int:min=0:nullable,retval:enum:slope|beta|intercept|resid|residual|r2|r_squared:nullable,min_periods:int:min=1:nullable:default=3,add_intercept:bool:default=true",
         semantic_contract_hash="ts_regression_slope:pairwise_finite:intercept:v1",
     )
@@ -526,36 +681,14 @@ class TSRegressionSlopeNative(SeriesOperator):
         output = str(retval or "slope").lower()
         if output == "beta":
             output = "slope"
-        exprs = []
-        for c in cols:
-            y_col = pl.col(c)
-            x_col = x[c]
-            moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=mp)
-            if add_intercept:
-                slope = pl.when(moments["ss_x"] <= 0).then(None).otherwise(
-                    moments["cross"] / moments["ss_x"]
-                )
-                intercept = moments["mean_y"] - slope * moments["mean_x"]
-                resid = (moments["y_endpoint"] - moments["mean_y"]) - slope * (
-                    moments["x_endpoint"] - moments["mean_x"]
-                )
-                r2 = pl.when((moments["ss_x"] <= 0) | (moments["ss_y"] <= 0)).then(None).otherwise(
-                    (moments["cross"] ** 2) / (moments["ss_x"] * moments["ss_y"])
-                )
-            else:
-                slope = pl.when(moments["raw_xx"] <= 0).then(None).otherwise(
-                    moments["raw_xy"] / moments["raw_xx"]
-                )
-                intercept = pl.lit(0.0)
-                resid = moments["y_endpoint"] - slope * moments["x_endpoint"]
-                sse = moments["raw_yy"] - 2 * slope * moments["raw_xy"] + slope * slope * moments["raw_xx"]
-                r2 = pl.when(moments["raw_yy"] <= 0).then(None).otherwise(1 - sse / moments["raw_yy"])
-            selected = {"slope": slope, "intercept": intercept, "resid": resid, "residual": resid, "r2": r2, "r_squared": r2}.get(output)
-            if selected is None:
-                raise ValueError(f"unsupported regression retval: {retval!r}")
-            exprs.append(selected.alias(c))
-
-        return y.with_columns(exprs)
+        result = pl.DataFrame({
+            c: _staged_regression_output(
+                x[c], y[c], window=w, min_periods=mp,
+                output=output, add_intercept=bool(add_intercept),
+            )
+            for c in cols
+        })
+        return y.with_columns([result.get_column(c).alias(c) for c in cols])
 
 
 @_register_rolling_operator(
@@ -574,8 +707,8 @@ class TSRegressionInterceptNative(SeriesOperator):
         execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
         supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
         supports_nulls=True, supports_nan=False, supports_inf=False,
-        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSRegressionInterceptNative:v1",
-        emitter_identity="polars.rolling.pairwise_regression:v1",
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSRegressionInterceptNative:v2",
+        emitter_identity="polars.rolling.pairwise_regression.staged:v2",
         parameter_domain_hash="ts_regression_intercept.y:dataframe,x:dataframe,window:int:min=2:default=20,min_periods:int:min=1:nullable:default=3,add_intercept:bool:default=true",
         semantic_contract_hash="ts_regression_intercept:pairwise_finite:intercept:v1",
     )
@@ -598,23 +731,14 @@ class TSRegressionInterceptNative(SeriesOperator):
         cols = _require_pairwise_columns(y, x, operator="ts_regression_intercept")
 
 
-        exprs = []
-        for c in cols:
-            y_col = pl.col(c)
-            x_col = x[c]
-
-            moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=mp)
-            intercept = pl.when(
-                moments["raw_xx"].is_null() | (moments["raw_xx"] <= 0)
-            ).then(None).otherwise(0.0)
-            if add_intercept:
-                centered_slope = pl.when(moments["ss_x"] <= 0).then(None).otherwise(
-                    moments["cross"] / moments["ss_x"]
-                )
-                intercept = moments["mean_y"] - centered_slope * moments["mean_x"]
-            exprs.append(intercept.alias(c))
-
-        return y.with_columns(exprs)
+        result = pl.DataFrame({
+            c: _staged_regression_output(
+                x[c], y[c], window=w, min_periods=mp,
+                output="intercept", add_intercept=bool(add_intercept),
+            )
+            for c in cols
+        })
+        return y.with_columns([result.get_column(c).alias(c) for c in cols])
 
 
 @_register_rolling_operator(
@@ -633,8 +757,8 @@ class TSRegressionResidNative(SeriesOperator):
         execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
         supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
         supports_nulls=True, supports_nan=False, supports_inf=False,
-        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSRegressionResidNative:v1",
-        emitter_identity="polars.rolling.pairwise_regression:v1",
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSRegressionResidNative:v2",
+        emitter_identity="polars.rolling.pairwise_regression.staged:v2",
         parameter_domain_hash="ts_regression_resid.y:dataframe,x:dataframe,window:int:min=2:default=20,min_periods:int:min=1:nullable:default=3,add_intercept:bool:default=true",
         semantic_contract_hash="ts_regression_resid:pairwise_finite:intercept:v1",
     )
@@ -657,28 +781,14 @@ class TSRegressionResidNative(SeriesOperator):
         cols = _require_pairwise_columns(y, x, operator="ts_regression_resid")
 
 
-        exprs = []
-        for c in cols:
-            y_col = pl.col(c)
-            x_col = x[c]
-
-            moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=mp)
-            if add_intercept:
-                slope = pl.when(moments["ss_x"] <= 0).then(None).otherwise(
-                    moments["cross"] / moments["ss_x"]
-                )
-                resid = (moments["y_endpoint"] - moments["mean_y"]) - slope * (
-                    moments["x_endpoint"] - moments["mean_x"]
-                )
-            else:
-                slope = pl.when(moments["raw_xx"] <= 0).then(None).otherwise(
-                    moments["raw_xy"] / moments["raw_xx"]
-                )
-                resid = moments["y_endpoint"] - slope * moments["x_endpoint"]
-
-            exprs.append(resid.alias(c))
-
-        return y.with_columns(exprs)
+        result = pl.DataFrame({
+            c: _staged_regression_output(
+                x[c], y[c], window=w, min_periods=mp,
+                output="resid", add_intercept=bool(add_intercept),
+            )
+            for c in cols
+        })
+        return y.with_columns([result.get_column(c).alias(c) for c in cols])
 
 
 @_register_rolling_operator(
@@ -697,8 +807,8 @@ class TSRegressionR2Native(SeriesOperator):
         execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
         supports_lazy=False, materializes_full_panel=True, requires_sorted=True,
         supports_nulls=True, supports_nan=False, supports_inf=False,
-        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSRegressionR2Native:v1",
-        emitter_identity="polars.rolling.pairwise_regression:v1",
+        implementation_source_hash="cleaned_operators.common.polars_ts_rolling:TSRegressionR2Native:v3",
+        emitter_identity="polars.rolling.pairwise_regression.staged:v2",
         parameter_domain_hash="ts_regression_r2.y:dataframe,x:dataframe,window:int:min=2:default=20,min_periods:int:min=1:nullable:default=3,add_intercept:bool:default=true",
         semantic_contract_hash="ts_regression_r2:pairwise_finite:intercept:v1",
     )
@@ -721,25 +831,14 @@ class TSRegressionR2Native(SeriesOperator):
         cols = _require_pairwise_columns(y, x, operator="ts_regression_r2")
 
 
-        exprs = []
-        for c in cols:
-            y_col = pl.col(c)
-            x_col = x[c]
-
-            moments = _pairwise_rolling_moments(x_col, y_col, window=w, min_periods=mp)
-            if add_intercept:
-                r2 = pl.when((moments["ss_x"] <= 0) | (moments["ss_y"] <= 0)).then(None).otherwise(
-                    (moments["cross"] ** 2) / (moments["ss_x"] * moments["ss_y"])
-                )
-            else:
-                slope = pl.when(moments["raw_xx"] <= 0).then(None).otherwise(
-                    moments["raw_xy"] / moments["raw_xx"]
-                )
-                sse = moments["raw_yy"] - 2 * slope * moments["raw_xy"] + slope * slope * moments["raw_xx"]
-                r2 = pl.when(moments["raw_yy"] <= 0).then(None).otherwise(1 - sse / moments["raw_yy"])
-            exprs.append(r2.alias(c))
-
-        return y.with_columns(exprs)
+        result = pl.DataFrame({
+            c: _staged_regression_output(
+                x[c], y[c], window=w, min_periods=mp,
+                output="r2", add_intercept=bool(add_intercept),
+            )
+            for c in cols
+        })
+        return y.with_columns([result.get_column(c).alias(c) for c in cols])
 
 
 # ---------------------------------------------------------------------------

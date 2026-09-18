@@ -7,7 +7,9 @@ from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementatio
 def reference(name):
     from factor_engine.cleaned_operators import markov_dynamics as source
     return {c.metadata.name:c for c in (
-        source.TsKramersMoyalLocalStability,source.TsMarkovEntropyProduction)}[name]()
+        source.TsKramersMoyalLocalStability, source.TsMarkovEntropyProduction,
+        source.TsKmDiffusionGradient, source.TsKmQuasipotentialDepth,
+        source.TsMarkovMeanFirstPassageTime, source.TsActiveInformationStorage)}[name]()
 
 def metadata(name):
     m=reference(name).metadata

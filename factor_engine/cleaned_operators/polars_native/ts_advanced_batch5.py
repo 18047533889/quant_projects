@@ -208,22 +208,19 @@ class TSFirstPassageHitProbabilityPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_fisher_information_shift", canonical="ts_fisher_information_shift", backend="polars", status="research_only")
 class TSFisherInformationShiftPolarsNative(SeriesOperator):
-    """Change in Fisher information between windows"""
+    """Exact canonical calculation with explicit full-panel conversion."""
+    from factor_engine.cleaned_operators.common import topology_reference_delegate as _delegate
+    metadata = _delegate.metadata("ts_fisher_information_shift")
 
-    metadata = OperatorMetadata(
-        name="ts_fisher_information_shift",
-        category="time_series",
-        description="Shift in Fisher information (variance of score function)",
-        param_names=["x", "recent_window", "prior_window"],
-        return_type="series",
-        tags=["time_series", "rolling", "information", "pit_safe"],
-    )
-    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference("ts_fisher_information_shift")._calculate_series
 
-    def _calculate_series(self, feature, window, **kwargs):
-        # TODO: Implement proper Fisher information
-        # Placeholder: variance change
-        return feature.rolling_var(window).diff()
+    def physical_spec(self):
+        return self._delegate.physical_spec("ts_fisher_information_shift")
+
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("ts_fisher_information_shift", *args, **kwargs)
 
 
 @register_operator(name="ts_forbidden_ordinal_pattern_ratio", canonical="ts_forbidden_ordinal_pattern_ratio", backend="polars", status="research_only")
@@ -1020,32 +1017,19 @@ class TSJumpBipowerPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_km_diffusion_gradient", canonical="ts_km_diffusion_gradient", backend="polars", status="research_only")
 class TSKMDiffusionGradientPolarsNative(SeriesOperator):
-    """Gradient of Kramers-Moyal diffusion coefficient"""
+    """Exact canonical calculation with explicit full-panel conversion."""
+    from factor_engine.cleaned_operators.common import markov_reference_delegate as _delegate
+    metadata = _delegate.metadata("ts_km_diffusion_gradient")
 
-    metadata = OperatorMetadata(
-        name="ts_km_diffusion_gradient",
-        category="time_series",
-        description="Spatial gradient of diffusion coefficient D(x)",
-        param_names=["x","window","bins","lag","min_count","min_state_support","min_history"],
-        return_type="series",
-        tags=["time_series", "rolling", "stochastic", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-        # P0-B1-FINALIZE: canonical R4-100 contract 7-param; trailing scalar
-        # params (bins/lag/min_count/...) are accepted via **kwargs in the
-        # kernel below.  ``bins`` etc are NOT declared in param_names so leave
-        # param_specs to the canonical backfill (P0-23 divergence warn-only).
-    }
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference("ts_km_diffusion_gradient")._calculate_series
 
-    def _calculate_series(self, x, window, bins=10, lag=1, min_count=5, min_state_support=5, min_history=20, **kwargs):
-        # R4-100 parity: canonical (x, window, bins, lag, min_count,
-        # min_state_support, min_history); ``feature`` is legacy.
-        feature = x
-        # TODO: Implement proper Kramers-Moyal expansion
-        # Placeholder: volatility gradient
-        return feature.rolling_std(window).diff()
+    def physical_spec(self):
+        return self._delegate.physical_spec("ts_km_diffusion_gradient")
 
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("ts_km_diffusion_gradient", *args, **kwargs)
 
 @register_operator(name="ts_deviation_from_mean", canonical="ts_deviation_from_mean", backend="polars")
 class TSDeviationFromMeanPolarsNative(SeriesOperator):
@@ -1076,24 +1060,19 @@ class TSDeviationFromMeanPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_km_quasipotential_depth", canonical="ts_km_quasipotential_depth", backend="polars", status="research_only")
 class TSKMQuasipotentialDepthPolarsNative(SeriesOperator):
-    """Depth of quasipotential well (escape barrier)"""
+    """Exact canonical calculation with explicit full-panel conversion."""
+    from factor_engine.cleaned_operators.common import markov_reference_delegate as _delegate
+    metadata = _delegate.metadata("ts_km_quasipotential_depth")
 
-    metadata = OperatorMetadata(
-        name="ts_km_quasipotential_depth",
-        category="time_series",
-        description="Depth of potential well indicating stability",
-        param_names=["x", "window", "bins", "lag", "min_count", "min_state_support", "min_history"],
-        return_type="series",
-        tags=["time_series", "rolling", "stochastic", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference("ts_km_quasipotential_depth")._calculate_series
 
-    def _calculate_series(self, feature, window, **kwargs):
-        # Placeholder: local volatility barrier
-        return feature.rolling_std(window) * window ** 0.5
+    def physical_spec(self):
+        return self._delegate.physical_spec("ts_km_quasipotential_depth")
 
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("ts_km_quasipotential_depth", *args, **kwargs)
 
 @register_operator(name="ts_kramers_moyal_diffusion", canonical="ts_kramers_moyal_diffusion", backend="polars")
 class TSKramersMoyalDiffusionPolarsNative(SeriesOperator):
@@ -1558,38 +1537,19 @@ class TSMarkovEntropyProductionPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_markov_mean_first_passage_time", canonical="ts_markov_mean_first_passage_time", backend="polars")
 class TSMarkovMeanFirstPassageTimePolarsNative(SeriesOperator):
-    """Mean first passage time to threshold
+    """Exact canonical calculation with explicit full-panel conversion."""
+    from factor_engine.cleaned_operators.common import markov_reference_delegate as _delegate
+    metadata = _delegate.metadata("ts_markov_mean_first_passage_time")
 
-    NOTE: This operator is marked research_only. True MFPT requires:
-    1. State space discretization
-    2. Transition matrix estimation
-    3. Solving for expected hitting times
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference("ts_markov_mean_first_passage_time")._calculate_series
 
-    Current implementation is a placeholder: inverse threshold crossing rate.
-    """
+    def physical_spec(self):
+        return self._delegate.physical_spec("ts_markov_mean_first_passage_time")
 
-    metadata = OperatorMetadata(
-        name="ts_markov_mean_first_passage_time",
-        category="time_series",
-        description="[RESEARCH ONLY] Expected time to reach threshold (requires Markov chain estimation)",
-        param_names=["x","window","bins","lag","min_count","min_state_support","min_history","target"],
-        return_type="series",
-        tags=["time_series", "rolling", "markov", "pit_safe", "research_only"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-        "target": ParamSpec(dtype=str, default="upper", param_role=ParamRole.POLICY),
-    }
-
-    def _calculate_series(self, x, window, bins=10, lag=1, min_count=5, min_state_support=5, min_history=20, target="upper", **kwargs):
-        # R4-100 parity: canonical 8-param contract.
-        feature = x
-        threshold = 0.0
-        # Placeholder: inverse crossing rate (NOT true MFPT)
-        crossed = (feature > threshold).cast(pl.Int32).diff().abs()
-        crossing_rate = crossed.rolling_mean(window)
-        return 1.0 / (crossing_rate + 1e-8)
-
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("ts_markov_mean_first_passage_time", *args, **kwargs)
 
 @register_operator(name="ts_lag1_autocorr", canonical="ts_lag1_autocorr", backend="polars")
 class TSLag1AutocorrPolarsNative(SeriesOperator):
@@ -1652,3 +1612,12 @@ class TSLag1AutocorrPolarsNative(SeriesOperator):
 #
 # All operators are registered with backend="polars" and use lazy evaluation
 # for maximum performance.
+
+# These honest-renamed exploratory kernels have no reviewed pandas logical
+# owner. They remain directly callable when this legacy batch is loaded, but
+# never enter the daily/production authoring surface.
+from factor_engine.cleaned_operators import operator_surface as _operator_surface
+
+_operator_surface.extend_legacy_only({
+    "ts_deviation_from_mean", "ts_jump_bipower", "ts_lag1_autocorr",
+})

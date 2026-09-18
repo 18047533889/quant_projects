@@ -101,6 +101,34 @@ def _strict_group_panel(group: pd.DataFrame | None, x: pd.DataFrame) -> pd.DataF
     return _g
 
 
+def _finite_series_mask(values: pd.Series) -> pd.Series:
+    """Finite observations only; NaN and +/-inf never enter group statistics."""
+    return pd.Series(
+        np.isfinite(values.to_numpy(dtype=float, copy=False)),
+        index=values.index,
+    )
+
+
+def _valid_group_values(values: pd.Series) -> list:
+    """Stable concrete group identities; exclude null, empty and nonfinite keys."""
+    labels = []
+    for value in values.dropna().unique():
+        if isinstance(value, str):
+            valid = value != ""
+        else:
+            try:
+                valid = bool(np.isfinite(float(value)))
+            except (TypeError, ValueError):
+                valid = True
+        if valid:
+            labels.append(value)
+    return labels
+
+
+def _all_groups_missing(values: pd.Series | None) -> bool:
+    return values is None or not _valid_group_values(values)
+
+
 # canonical=deltas backend=pandas_numpy selected=deltas source=time_series/panel_ops.py
 @register_operator(name="deltas", category="time_series", business_category="group_neutralization", canonical="deltas", source="factor_dsl_np")
 class Deltas(SeriesOperator):
@@ -363,8 +391,8 @@ class GroupMean(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
-        
         validate_fallback_policy(fallback_policy, operator=type(self).__name__)
+        x, group = strict_group_align(x, group)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
 
         for date in x.index:
@@ -375,19 +403,22 @@ class GroupMean(SeriesOperator):
             else:
                 group_slice = None
 
-            if group_slice is None or group_slice.isna().all():
+            if _all_groups_missing(group_slice):
                 if fallback_policy == "nan":
                     continue
                 if fallback_policy == "keep_original":
-                    result.loc[date] = x_slice
+                    finite = _finite_series_mask(x_slice)
+                    result.loc[date, finite] = x_slice[finite]
                     continue
-
-                mean_val = x_slice.mean()
-                result.loc[date] = mean_val
+                if fallback_policy == "error":
+                    raise ValueError("group labels are missing and fallback_policy='error'")
+                finite = _finite_series_mask(x_slice)
+                if finite.any():
+                    result.loc[date, finite] = x_slice[finite].mean()
                 continue
 
-            for group_val in group_slice.dropna().unique():
-                mask = (group_slice == group_val) & x_slice.notna()
+            for group_val in _valid_group_values(group_slice):
+                mask = (group_slice == group_val) & _finite_series_mask(x_slice)
                 if mask.sum() > 0:
                     mean_val = x_slice[mask].mean()
                     result.loc[date, x_slice[mask].index] = mean_val
@@ -413,23 +444,27 @@ class GroupSum(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
-        
         validate_fallback_policy(fallback_policy, operator=type(self).__name__)
+        x, group = strict_group_align(x, group)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
             x_slice = x.loc[date]
             group_slice = group.loc[date] if group is not None and date in group.index else None
-            if group_slice is None or group_slice.isna().all():
+            if _all_groups_missing(group_slice):
                 if fallback_policy == "nan":
                     continue
                 if fallback_policy == "keep_original":
-                    result.loc[date] = x_slice
+                    finite = _finite_series_mask(x_slice)
+                    result.loc[date, finite] = x_slice[finite]
                     continue
-
-                result.loc[date] = x_slice.sum()
+                if fallback_policy == "error":
+                    raise ValueError("group labels are missing and fallback_policy='error'")
+                finite = _finite_series_mask(x_slice)
+                if finite.any():
+                    result.loc[date, finite] = x_slice[finite].sum()
                 continue
-            for group_val in group_slice.dropna().unique():
-                mask = (group_slice == group_val) & x_slice.notna()
+            for group_val in _valid_group_values(group_slice):
+                mask = (group_slice == group_val) & _finite_series_mask(x_slice)
                 if mask.sum() > 0:
                     result.loc[date, x_slice[mask].index] = x_slice[mask].sum()
         return result
@@ -453,23 +488,27 @@ class GroupMin(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
-        
         validate_fallback_policy(fallback_policy, operator=type(self).__name__)
+        x, group = strict_group_align(x, group)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
             x_slice = x.loc[date]
             group_slice = group.loc[date] if group is not None and date in group.index else None
-            if group_slice is None or group_slice.isna().all():
+            if _all_groups_missing(group_slice):
                 if fallback_policy == "nan":
                     continue
                 if fallback_policy == "keep_original":
-                    result.loc[date] = x_slice
+                    finite = _finite_series_mask(x_slice)
+                    result.loc[date, finite] = x_slice[finite]
                     continue
-
-                result.loc[date] = x_slice.min()
+                if fallback_policy == "error":
+                    raise ValueError("group labels are missing and fallback_policy='error'")
+                finite = _finite_series_mask(x_slice)
+                if finite.any():
+                    result.loc[date, finite] = x_slice[finite].min()
                 continue
-            for group_val in group_slice.dropna().unique():
-                mask = (group_slice == group_val) & x_slice.notna()
+            for group_val in _valid_group_values(group_slice):
+                mask = (group_slice == group_val) & _finite_series_mask(x_slice)
                 if mask.sum() > 0:
                     result.loc[date, x_slice[mask].index] = x_slice[mask].min()
         return result
@@ -493,23 +532,27 @@ class GroupMax(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
-        
         validate_fallback_policy(fallback_policy, operator=type(self).__name__)
+        x, group = strict_group_align(x, group)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
             x_slice = x.loc[date]
             group_slice = group.loc[date] if group is not None and date in group.index else None
-            if group_slice is None or group_slice.isna().all():
+            if _all_groups_missing(group_slice):
                 if fallback_policy == "nan":
                     continue
                 if fallback_policy == "keep_original":
-                    result.loc[date] = x_slice
+                    finite = _finite_series_mask(x_slice)
+                    result.loc[date, finite] = x_slice[finite]
                     continue
-
-                result.loc[date] = x_slice.max()
+                if fallback_policy == "error":
+                    raise ValueError("group labels are missing and fallback_policy='error'")
+                finite = _finite_series_mask(x_slice)
+                if finite.any():
+                    result.loc[date, finite] = x_slice[finite].max()
                 continue
-            for group_val in group_slice.dropna().unique():
-                mask = (group_slice == group_val) & x_slice.notna()
+            for group_val in _valid_group_values(group_slice):
+                mask = (group_slice == group_val) & _finite_series_mask(x_slice)
                 if mask.sum() > 0:
                     result.loc[date, x_slice[mask].index] = x_slice[mask].max()
         return result
@@ -533,22 +576,25 @@ class GroupCount(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
-        
         validate_fallback_policy(fallback_policy, operator=type(self).__name__)
+        x, group = strict_group_align(x, group)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
         for date in x.index:
             x_slice = x.loc[date]
             group_slice = group.loc[date] if group is not None and date in group.index else None
-            if group_slice is None or group_slice.isna().all():
+            if _all_groups_missing(group_slice):
                 if fallback_policy == "nan":
                     continue
                 if fallback_policy == "keep_original":
-                    result.loc[date] = x_slice
+                    finite = _finite_series_mask(x_slice)
+                    result.loc[date, finite] = x_slice[finite]
                     continue
-
-                result.loc[date] = np.isfinite(x_slice.to_numpy(dtype=float)).sum()
+                if fallback_policy == "error":
+                    raise ValueError("group labels are missing and fallback_policy='error'")
+                finite = _finite_series_mask(x_slice)
+                result.loc[date, finite] = float(finite.sum())
                 continue
-            for group_val in group_slice.dropna().unique():
+            for group_val in _valid_group_values(group_slice):
                 mask = (group_slice == group_val).to_numpy() & np.isfinite(x_slice.to_numpy(dtype=float))
                 result.loc[date, x_slice[mask].index] = float(mask.sum())
         return result
@@ -575,8 +621,8 @@ class GroupNormalize(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
-        
         validate_fallback_policy(fallback_policy, operator=type(self).__name__)
+        x, group = strict_group_align(x, group)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
 
         for date in x.index:
@@ -587,33 +633,45 @@ class GroupNormalize(SeriesOperator):
             else:
                 group_slice = None
 
-            if group_slice is None or group_slice.isna().all():
+            if _all_groups_missing(group_slice):
                 if fallback_policy == "nan":
                     continue
                 if fallback_policy == "keep_original":
-                    result.loc[date] = x_slice
+                    finite = _finite_series_mask(x_slice)
+                    result.loc[date, finite] = x_slice[finite]
                     continue
-
-                valid_mask = x_slice.notna()
+                if fallback_policy == "error":
+                    raise ValueError("group labels are missing and fallback_policy='error'")
+                valid_mask = _finite_series_mask(x_slice)
                 if valid_mask.sum() > 0:
                     data = x_slice[valid_mask]
                     min_val = data.min()
                     max_val = data.max()
                     rng = max_val - min_val
-                    if rng != 0 and not pd.isna(rng):
+                    if np.isinf(rng):
+                        half = data / 2.0
+                        result.loc[date, valid_mask] = (
+                            (half - min_val / 2.0) / (max_val / 2.0 - min_val / 2.0)
+                        )
+                    elif rng != 0 and not pd.isna(rng):
                         result.loc[date, valid_mask] = (data - min_val) / rng
                     else:
                         result.loc[date, valid_mask] = 0.5
                 continue
 
-            for group_val in group_slice.dropna().unique():
-                mask = (group_slice == group_val) & x_slice.notna()
+            for group_val in _valid_group_values(group_slice):
+                mask = (group_slice == group_val) & _finite_series_mask(x_slice)
                 if mask.sum() > 0:
                     group_data = x_slice[mask]
                     min_val = group_data.min()
                     max_val = group_data.max()
                     rng = max_val - min_val
-                    if rng != 0 and not pd.isna(rng):
+                    if np.isinf(rng):
+                        half = group_data / 2.0
+                        result.loc[date, group_data.index] = (
+                            (half - min_val / 2.0) / (max_val / 2.0 - min_val / 2.0)
+                        )
+                    elif rng != 0 and not pd.isna(rng):
                         result.loc[date, group_data.index] = (group_data - min_val) / rng
                     else:
                         result.loc[date, group_data.index] = 0.5
@@ -730,8 +788,8 @@ class GroupRank(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
-        
         validate_fallback_policy(fallback_policy, operator=type(self).__name__)
+        x, group = strict_group_align(x, group)
         """
         参数:
             x: 待排名的因子值DataFrame (dates x stocks)
@@ -750,22 +808,24 @@ class GroupRank(SeriesOperator):
             else:
                 group_slice = None
 
-            if group_slice is None or group_slice.isna().all():
+            if _all_groups_missing(group_slice):
                 if fallback_policy == "nan":
                     continue
                 if fallback_policy == "keep_original":
-                    result.loc[date] = x_slice
+                    finite = _finite_series_mask(x_slice)
+                    result.loc[date, finite] = x_slice[finite]
                     continue
-
+                if fallback_policy == "error":
+                    raise ValueError("group labels are missing and fallback_policy='error'")
                 # 如果没有分组信息，进行全截面排名
-                valid_mask = x_slice.notna()
+                valid_mask = _finite_series_mask(x_slice)
                 if valid_mask.sum() > 0:
                     result.loc[date, valid_mask] = x_slice[valid_mask].rank(pct=True)
                 continue
 
             # 按组进行排名
-            for group_val in group_slice.dropna().unique():
-                mask = (group_slice == group_val) & x_slice.notna()
+            for group_val in _valid_group_values(group_slice):
+                mask = (group_slice == group_val) & _finite_series_mask(x_slice)
                 if mask.sum() > 0:
                     group_data = x_slice[mask]
                     if len(group_data) > 0:
@@ -793,8 +853,8 @@ class GroupStd(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
-        
         validate_fallback_policy(fallback_policy, operator=type(self).__name__)
+        x, group = strict_group_align(x, group)
         result = pd.DataFrame(index=x.index, columns=x.columns, dtype=float)
 
         for date in x.index:
@@ -805,19 +865,23 @@ class GroupStd(SeriesOperator):
             else:
                 group_slice = None
 
-            if group_slice is None or group_slice.isna().all():
+            if _all_groups_missing(group_slice):
                 if fallback_policy == "nan":
                     continue
                 if fallback_policy == "keep_original":
-                    result.loc[date] = x_slice
+                    finite = _finite_series_mask(x_slice)
+                    result.loc[date, finite] = x_slice[finite]
                     continue
-
-                std_val = x_slice.std()
-                result.loc[date] = std_val if not pd.isna(std_val) else 0
+                if fallback_policy == "error":
+                    raise ValueError("group labels are missing and fallback_policy='error'")
+                finite = _finite_series_mask(x_slice)
+                if finite.any():
+                    std_val = x_slice[finite].std()
+                    result.loc[date, finite] = std_val if not pd.isna(std_val) else 0
                 continue
 
-            for group_val in group_slice.dropna().unique():
-                mask = (group_slice == group_val) & x_slice.notna()
+            for group_val in _valid_group_values(group_slice):
+                mask = (group_slice == group_val) & _finite_series_mask(x_slice)
                 if mask.sum() > 0:
                     std_val = x_slice[mask].std()
                     if pd.isna(std_val):
@@ -919,8 +983,8 @@ class GroupZScore(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, group: pd.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pd.DataFrame:
-        
         validate_fallback_policy(fallback_policy, operator=type(self).__name__)
+        x, group = strict_group_align(x, group)
         """
         参数:
             x: 待标准化的因子值DataFrame (dates x stocks)
@@ -938,15 +1002,17 @@ class GroupZScore(SeriesOperator):
             else:
                 group_slice = None
 
-            if group_slice is None or group_slice.isna().all():
+            if _all_groups_missing(group_slice):
                 if fallback_policy == "nan":
                     continue
                 if fallback_policy == "keep_original":
-                    result.loc[date] = x_slice
+                    finite = _finite_series_mask(x_slice)
+                    result.loc[date, finite] = x_slice[finite]
                     continue
-
+                if fallback_policy == "error":
+                    raise ValueError("group labels are missing and fallback_policy='error'")
                 # 全截面标准化
-                valid_mask = x_slice.notna()
+                valid_mask = _finite_series_mask(x_slice)
                 if valid_mask.sum() > 0:
                     data = x_slice[valid_mask]
                     mean = data.mean()
@@ -958,8 +1024,8 @@ class GroupZScore(SeriesOperator):
                 continue
 
             # 按组标准化
-            for group_val in group_slice.dropna().unique():
-                mask = (group_slice == group_val) & x_slice.notna()
+            for group_val in _valid_group_values(group_slice):
+                mask = (group_slice == group_val) & _finite_series_mask(x_slice)
                 if mask.sum() > 0:
                     group_data = x_slice[mask]
                     mean = group_data.mean()

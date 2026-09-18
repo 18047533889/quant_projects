@@ -44,6 +44,9 @@ def _build_source():
             "volume": volume,
             "ret": ret,
             "pre_close": pre_close,
+            # Synthetic raw prices: previous close must stay within instrument.
+            "raw_open": open_,
+            "raw_pre_close": close.groupby(level="instrument").shift(1),
             "group_id": grp,
             "flag": flag,
         }
@@ -196,9 +199,9 @@ POLARS_BULK_CASES = [
     ("avg2", lambda: F("avg2")(col("close"), col("open"))),
     ("ts_positive_streak", lambda: F("ts_positive_streak")(col("close"))),
     ("ts_sma_cn", lambda: F("ts_sma_cn")(col("close"), 3, 1)),
-    # Synthetic unadjusted prices share a declared basis; opaque column names
-    # alone cannot establish this contract.
-    ("overnight_return", lambda: F("overnight_return")(col("open"), col("pre_close"), price_basis="raw")),
+    # Typed raw inputs share a basis; an operator kwarg cannot override a
+    # continuous-price / official-reference-price mismatch in typed children.
+    ("overnight_return", lambda: F("overnight_return")(col("raw_open"), col("raw_pre_close"))),
     ("ffill", lambda: F("ffill")(col("close"))),
     ("is_finite", lambda: F("is_finite")(col("close"))),
     ("is_null", lambda: F("is_null")(col("close"))),

@@ -34,7 +34,7 @@ def test_daily_surface_keeps_factor_primitives() -> None:
         "causal_bfill", "ACF", "Mode", "autocorr", "pacf",
         "max_drawdown", "sharpe_ratio", "sem", "lasso", "ridge",
         "regress", "residual", "r_squared", "constant", "vwap",
-        "ttm", "quarter", "yoy", "avg2", "MOM", "ROC",
+        "ttm", "quarter", "yoy", "MOM", "ROC",
     ],
 )
 def test_removed_names_are_not_in_public_daily_dsl(name: str) -> None:
@@ -47,14 +47,17 @@ def test_research_tools_are_explicit_and_unsafe_is_separate() -> None:
     unsafe = build_unsafe_dsl_allowlist()
     for name in (
         "jarque_bera_test", "pca", "fft", "ACF", "max_drawdown",
-        "causal_linear_extrapolate", "dropna", "fillna", "expanding_mean",
+        "causal_linear_extrapolate", "dropna", "expanding_mean",
     ):
         assert name in research
         assert name in ResearchToolRegistry.list_canonical()
         assert name not in public
-    for deleted in ("ttm", "quarter", "yoy", "avg2"):
+    for deleted in ("ttm", "quarter", "yoy"):
         assert deleted not in research
         assert deleted not in public
+    for promoted in ("avg2", "fillna"):
+        assert promoted in public
+        assert promoted not in research
     for removed in ("next", "bfill", "causal_bfill", "rand_normal"):
         assert removed not in unsafe
         assert removed not in research
@@ -63,8 +66,9 @@ def test_research_tools_are_explicit_and_unsafe_is_separate() -> None:
 def test_production_all_runtime_excludes_research_tools() -> None:
     all_runtime = build_cleaned_dsl_allowlist(surface="all")
     assert "cube" in all_runtime
-    for research_name in ("fft", "pca", "fillna", "expanding_mean"):
+    for research_name in ("fft", "pca", "expanding_mean"):
         assert research_name not in all_runtime
+    assert "fillna" in all_runtime
     for removed in ("Lead", "next", "bfill", "causal_bfill", "shuffle", "rand_normal"):
         assert removed not in all_runtime
 
@@ -77,7 +81,6 @@ def test_duplicate_canonicals_are_merged_to_one_runtime() -> None:
         "fmax": "maximum",
         "fmin": "minimum",
         "sqr": "square",
-        "WMA": "ts_decay_linear",
         "log_returns": "ts_log_return",
     }
     canonicals = set(OperatorRegistry.list_canonical())
@@ -88,15 +91,20 @@ def test_duplicate_canonicals_are_merged_to_one_runtime() -> None:
     for expanding in ("expanding_max", "expanding_mean", "expanding_min"):
         assert expanding not in canonicals
         assert expanding in ResearchToolRegistry.list_canonical()
+    assert "WMA" in canonicals
+    assert OperatorRegistry._aliases.get("WMA") is None
+    assert OperatorRegistry._aliases.get("ts_wma") == "WMA"
+    assert OperatorRegistry._aliases.get("wma") == "WMA"
 
 
 def test_api_dynamic_import_cannot_bypass_public_surface() -> None:
-    import factor_engine.api
+    import factor_engine.api as api
 
-    for name in ("fft", "next", "causal_bfill", "constant", "fillna", "vwap"):
+    for name in ("fft", "next", "causal_bfill", "constant", "vwap"):
         with pytest.raises(AttributeError):
             getattr(api, name)
     assert callable(getattr(api, "ts_mean"))
+    assert callable(getattr(api, "fillna"))
 
 
 def test_surface_is_fail_closed() -> None:
@@ -106,7 +114,14 @@ def test_surface_is_fail_closed() -> None:
 
 def test_runtime_registry_has_no_unreviewed_canonicals() -> None:
     load_all()
-    assert unclassified_canonicals(OperatorRegistry.list_canonical()) == ()
+    actual = unclassified_canonicals(OperatorRegistry.list_canonical())
+    assert actual == (), f"unreviewed runtime canonicals: {actual!r}"
+    polars_only_legacy = {
+        "ts_deviation_from_mean", "ts_jump_bipower", "ts_lag1_autocorr",
+        "ts_returns",
+    }
+    assert all(classify_canonical(name) == "legacy" for name in polars_only_legacy)
+    assert polars_only_legacy.isdisjoint(build_dsl_allowlist())
 
 
 def test_retained_recursive_operators_are_stateful() -> None:
@@ -128,8 +143,9 @@ def test_retained_recursive_operators_are_stateful() -> None:
 
 def test_primitive_evidence_uses_final_canonical_names() -> None:
     old = {"cap", "delay", "safe_div", "ema", "ts_regression", "decay_linear"}
-    paths = sorted((Path(__file__).resolve().parents[1]).rglob("primitive_verified.json"))
-    assert paths
+    evidence_path = Path(__file__).resolve().parents[2] / "evidence" / "primitive_verified.json"
+    assert evidence_path.is_file()
+    paths = [evidence_path]
     for path in paths:
         payload = json.loads(path.read_text(encoding="utf-8"))
         for value in payload.values():

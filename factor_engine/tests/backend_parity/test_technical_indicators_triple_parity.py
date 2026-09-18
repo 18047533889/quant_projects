@@ -359,7 +359,10 @@ def test_sma_with_nan_gaps(panel):
     msft_polars = polars_out.xs("MSFT", level="instrument")
 
     assert msft_pd.isna().tolist() == msft_polars.isna().tolist()
-    pd.testing.assert_series_equal(msft_pd, msft_polars, check_names=False)
+    # Polars reconstructs timestamps without pandas' optional inferred freq.
+    # Compare the actual timestamp labels, null mask, dtype and values; an
+    # absent DatetimeIndex.freq is not a numerical or alignment difference.
+    pd.testing.assert_series_equal(msft_pd, msft_polars, check_names=False, check_freq=False)
 
 
 def test_ema_short_window(panel):

@@ -1497,11 +1497,31 @@ class Normalize(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        min_val = x.min(axis=1)
-        max_val = x.max(axis=1)
-        range_val = (max_val - min_val).replace(0, np.nan)
-        result = x.sub(min_val, axis=0).div(range_val, axis=0)
-        return result.replace([np.inf, -np.inf], np.nan)
+        finite = pd.DataFrame(
+            np.isfinite(x.to_numpy(dtype=float, copy=False)),
+            index=x.index, columns=x.columns,
+        )
+        masked = x.where(finite)
+        count = finite.sum(axis=1)
+        min_val = masked.min(axis=1)
+        max_val = masked.max(axis=1)
+        range_val = max_val - min_val
+        result = masked.sub(min_val, axis=0).div(range_val.replace(0, np.nan), axis=0)
+        overflow = np.isinf(range_val.to_numpy(dtype=float, copy=False))
+        if overflow.any():
+            # Algebraically identical min-max normalization, scaled before
+            # subtraction so opposite-sign finite extrema cannot overflow.
+            rows = range_val.index[overflow]
+            half = masked.loc[rows] / 2.0
+            half_min = min_val.loc[rows] / 2.0
+            half_max = max_val.loc[rows] / 2.0
+            result.loc[rows] = half.sub(half_min, axis=0).div(
+                half_max - half_min, axis=0
+            )
+        constant = (count > 1) & (range_val == 0)
+        if constant.any():
+            result.loc[constant] = masked.loc[constant].notna().astype(float) * 0.5
+        return result.where(finite, np.nan)
 
 
 

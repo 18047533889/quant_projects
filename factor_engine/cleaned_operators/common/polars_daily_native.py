@@ -50,7 +50,12 @@ def _cs_long_transform(
         .unpivot(index="_r", on=cols, variable_name="_c", value_name="_v")
         # pandas 截面统计（median/quantile/mad）跳过 NaN；polars 会把 NaN 当
         # 数值参与排序/中位数。unpivot 后统一 NaN→null，对齐 pandas 缺失语义。
-        .with_columns(pl.col("_v").fill_nan(None))
+        .with_columns(
+            pl.when(pl.col("_v").is_finite())
+            .then(pl.col("_v"))
+            .otherwise(None)
+            .alias("_v")
+        )
     )
     long = transform(long)
     wide = (
@@ -441,12 +446,23 @@ class NormalizeNative(SeriesOperator):
         def _xform(long: pl.DataFrame) -> pl.DataFrame:
             lo = pl.col("_v").min().over("_r")
             hi = pl.col("_v").max().over("_r")
+            span = hi - lo
+            count = pl.col("_v").count().over("_r")
             return long.with_columns(
-                pl.when(lo.is_null() | hi.is_null())
+                pl.when(pl.col("_v").is_null())
+                .then(None)
+                .when(lo.is_null() | hi.is_null())
+                .then(None)
+                .when(count <= 1)
                 .then(None)
                 .when(hi == lo)
                 .then(pl.lit(0.5))
-                .otherwise((pl.col("_v") - lo) / (hi - lo))
+                .when(span.is_infinite())
+                .then(
+                    (pl.col("_v") / 2.0 - lo / 2.0)
+                    / (hi / 2.0 - lo / 2.0)
+                )
+                .otherwise((pl.col("_v") - lo) / span)
                 .alias("_v")
             )
 
@@ -589,33 +605,62 @@ class IndustrySizeNeutralizeNative(SeriesOperator):
     backend="polars",
 )
 class GroupNormalizeNative(SeriesOperator):
+    """Exact eager delegate to the pandas canonical group contract.
+
+    The former unpivot implementation could not implement row-specific
+    ``fallback_policy`` semantics when membership was wholly unknown.  Keep the
+    registry entry usable and explicit about materialization until a genuinely
+    native kernel covers all four policies and mixed string/numeric group keys.
+    """
+
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="group_normalize",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,
+        supports_lazy=False,
+        supports_streaming=False,
+        materializes_full_panel=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        notes="Exact eager delegate to pandas_numpy group_normalize.",
+    )
+
     metadata = OperatorMetadata(
         name="group_normalize",
         category="cross_sectional",
-        description="组内 min-max",
+        description="组内 min-max（Polars eager 精确委托 pandas canonical）",
         param_names=["x", "group", "fallback_policy"],
+        param_specs={
+            "fallback_policy": ParamSpec(
+                dtype=str,
+                choices=("nan", "error", "global", "keep_original"),
+                default="nan",
+                searchable=False,
+                param_role=ParamRole.POLICY,
+            )
+        },
+        panel_params=("x", "group"),
+        scalar_params=("fallback_policy",),
         return_type="series",
-        tags=["group", "polars", "native"],
+        tags=["group", "polars", "pandas_delegate"],
     )
 
     def _calculate_series(
         self, x: pl.DataFrame, group: pl.DataFrame | None = None,
         fallback_policy: str = "nan", **kwargs
     ) -> pl.DataFrame:
-        def _xform(long: pl.DataFrame) -> pl.DataFrame:
-            key = ["_r", "_g"] if "_g" in long.columns else ["_r"]
-            lo = pl.col("_v").min().over(key)
-            hi = pl.col("_v").max().over(key)
-            return long.with_columns(
-                pl.when(lo.is_null() | hi.is_null())
-                .then(None)
-                .when(hi == lo)
-                .then(pl.lit(0.5))
-                .otherwise((pl.col("_v") - lo) / (hi - lo))
-                .alias("_v")
-            )
+        from factor_engine.cleaned_operators.common._polars_bridge import bridge_registry
 
-        return _group_long_transform(x, group, _xform)
+        if fallback_policy not in {"nan", "error", "global", "keep_original"}:
+            raise ValueError("invalid fallback_policy")
+        if group is None:
+            return bridge_registry(
+                "group_normalize", x, fallback_policy=fallback_policy
+            )
+        return bridge_registry(
+            "group_normalize", x, group, fallback_policy=fallback_policy
+        )
 
 
 @register_operator(

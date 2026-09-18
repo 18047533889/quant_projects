@@ -28,21 +28,70 @@ def _numeric_cols(df: pl.DataFrame) -> list[str]:
     return [c for c in df.columns if c not in _SKIP]
 
 
+def _missing_group_label(value) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return value == ""
+    try:
+        return not bool(np.isfinite(float(value)))
+    except (TypeError, ValueError):
+        return False
+
+
+def _valid_group_mask(row_g: np.ndarray) -> np.ndarray:
+    return np.fromiter(
+        (not _missing_group_label(value) for value in row_g),
+        dtype=bool,
+        count=len(row_g),
+    )
+
+
+def _group_labels(row_g: np.ndarray):
+    """Stable unique concrete labels; supports string and mixed object keys."""
+    labels = []
+    for value in row_g[_valid_group_mask(row_g)]:
+        if not any(value == existing for existing in labels):
+            labels.append(value)
+    return labels
+
+
 def _group_rowwise(x: pl.DataFrame, group: pl.DataFrame | None, fn, fallback_policy: str | None = None):
     """对每个交易日截面调用 ``fn(row_x, row_group) -> row_out``。"""
+    if fallback_policy is not None and fallback_policy not in {
+        "nan", "error", "global", "keep_original"
+    }:
+        raise ValueError("invalid fallback_policy")
     cols = _numeric_cols(x)
     x_arr = x.select(cols).to_numpy()
     if group is None:
         g_arr = None
     else:
+        if group.height != x.height or _numeric_cols(group) != cols:
+            raise ValueError("group panel axes/columns must exactly match x")
+        for metadata_column in _SKIP:
+            x_has = metadata_column in x.columns
+            group_has = metadata_column in group.columns
+            if x_has != group_has:
+                raise ValueError("group panel metadata axes must exactly match x")
+            if x_has and not x[metadata_column].equals(group[metadata_column]):
+                raise ValueError("group panel metadata axes must exactly match x")
         g_arr = group.select(cols).to_numpy()
     out = np.full_like(x_arr, np.nan, dtype=float)
     for i in range(len(x_arr)):
         row_g = g_arr[i] if g_arr is not None else None
-        if fallback_policy is None:
-            out[i] = fn(x_arr[i], row_g)
-        else:
-            out[i] = fn(x_arr[i], row_g, fallback_policy)
+        all_group_missing = row_g is None or not np.any(_valid_group_mask(row_g))
+        if fallback_policy is not None and all_group_missing:
+            if fallback_policy == "nan":
+                continue
+            if fallback_policy == "error":
+                raise ValueError("group labels are missing and fallback_policy='error'")
+            if fallback_policy == "keep_original":
+                finite = np.isfinite(x_arr[i])
+                out[i, finite] = x_arr[i, finite]
+                continue
+            row_g = None
+        out[i] = fn(x_arr[i], row_g)
     result = pl.DataFrame(out, schema=cols)
     if "date" in x.columns:
         result = result.with_columns(x["date"])
@@ -50,16 +99,16 @@ def _group_rowwise(x: pl.DataFrame, group: pl.DataFrame | None, fn, fallback_pol
 
 
 def _demean_row(row_x, row_g):
-    mask = ~np.isnan(row_x)
+    mask = np.isfinite(row_x)
     if not np.any(mask):
-        return row_x
-    if row_g is None or np.all(np.isnan(row_g)):
+        return np.full_like(row_x, np.nan, dtype=float)
+    if row_g is None:
         m = np.nanmean(row_x[mask])
-        out = row_x.copy()
+        out = np.full_like(row_x, np.nan, dtype=float)
         out[mask] = row_x[mask] - m
         return out
-    out = row_x.copy()
-    for g in np.unique(row_g[~np.isnan(row_g)]):
+    out = np.full_like(row_x, np.nan, dtype=float)
+    for g in _group_labels(row_g):
         m = row_g == g
         gm = m & mask
         if np.any(gm):
@@ -69,15 +118,15 @@ def _demean_row(row_x, row_g):
 
 
 def _mean_row(row_x, row_g):
-    out = np.full_like(row_x, np.nan)
-    mask = ~np.isnan(row_x)
+    out = np.full_like(row_x, np.nan, dtype=float)
+    mask = np.isfinite(row_x)
     if not np.any(mask):
         return out
-    if row_g is None or np.all(np.isnan(row_g)):
+    if row_g is None:
         mu = np.nanmean(row_x[mask])
         out[mask] = mu
         return out
-    for g in np.unique(row_g[~np.isnan(row_g)]):
+    for g in _group_labels(row_g):
         gm = (row_g == g) & mask
         if np.any(gm):
             out[gm] = np.nanmean(row_x[gm])
@@ -87,12 +136,12 @@ def _mean_row(row_x, row_g):
 def _aggregate_row(row_x, row_g, reducer):
     """Broadcast a group aggregate while preserving missing input positions."""
     out = np.full_like(row_x, np.nan, dtype=float)
-    mask = ~np.isnan(row_x)
-    if row_g is None or np.all(np.isnan(row_g)):
+    mask = np.isfinite(row_x)
+    if row_g is None:
         value = float(reducer(row_x[mask])) if np.any(mask) else float(reducer(row_x[mask]))
-        out[:] = value
+        out[mask] = value
         return out
-    for g in np.unique(row_g[~np.isnan(row_g)]):
+    for g in _group_labels(row_g):
         gm = (row_g == g) & mask
         if np.any(gm):
             out[gm] = float(reducer(row_x[gm]))
@@ -116,11 +165,15 @@ def _count_row(row_x, row_g):
 
 
 def _std_row(row_x, row_g):
-    out = np.full_like(row_x, np.nan)
-    mask = ~np.isnan(row_x)
-    if row_g is None or np.all(np.isnan(row_g)) or not np.any(mask):
+    out = np.full_like(row_x, np.nan, dtype=float)
+    mask = np.isfinite(row_x)
+    if not np.any(mask):
         return out
-    for g in np.unique(row_g[~np.isnan(row_g)]):
+    if row_g is None:
+        count = int(np.sum(mask))
+        out[mask] = 0.0 if count == 1 else float(np.std(row_x[mask], ddof=1))
+        return out
+    for g in _group_labels(row_g):
         gm = (row_g == g) & mask
         n = int(np.sum(gm))
         if n == 1:
@@ -133,8 +186,8 @@ def _std_row(row_x, row_g):
 
 def _zscore_row(row_x, row_g):
     """对齐 pandas ``group_zscore``：零/缺失标准差或单元素组 → 0。"""
-    out = np.full_like(row_x, np.nan)
-    mask = ~np.isnan(row_x)
+    out = np.full_like(row_x, np.nan, dtype=float)
+    mask = np.isfinite(row_x)
     if not np.any(mask):
         return out
 
@@ -152,11 +205,11 @@ def _zscore_row(row_x, row_g):
         else:
             out[indices] = 0.0
 
-    if row_g is None or np.all(np.isnan(row_g)):
+    if row_g is None:
         _apply(np.where(mask)[0])
         return out
 
-    for g in np.unique(row_g[~np.isnan(row_g)]):
+    for g in _group_labels(row_g):
         gm = (row_g == g) & mask
         if np.any(gm):
             _apply(np.where(gm)[0])
@@ -164,21 +217,27 @@ def _zscore_row(row_x, row_g):
 
 
 def _rank_row(row_x, row_g):
-    out = np.full_like(row_x, np.nan)
-    mask = ~np.isnan(row_x)
+    out = np.full_like(row_x, np.nan, dtype=float)
+    mask = np.isfinite(row_x)
 
     def _rank_vals(vals):
         order = np.argsort(vals, kind="mergesort")
         ranks = np.empty(len(vals), dtype=float)
-        ranks[order] = np.arange(1, len(vals) + 1, dtype=float)
+        start = 0
+        while start < len(vals):
+            end = start
+            while end + 1 < len(vals) and vals[order[end + 1]] == vals[order[start]]:
+                end += 1
+            ranks[order[start : end + 1]] = 0.5 * (start + end) + 1.0
+            start = end + 1
         return ranks / len(vals)
 
     if not np.any(mask):
         return out
-    if row_g is None or np.all(np.isnan(row_g)):
+    if row_g is None:
         out[mask] = _rank_vals(row_x[mask])
         return out
-    for g in np.unique(row_g[~np.isnan(row_g)]):
+    for g in _group_labels(row_g):
         gm = (row_g == g) & mask
         if np.any(gm):
             out[gm] = _rank_vals(row_x[gm])
@@ -194,7 +253,7 @@ class GroupMeanPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
-        return _group_rowwise(x, group, _mean_row)
+        return _group_rowwise(x, group, _mean_row, fallback_policy)
 
 
 @register_operator(name="group_sum", category="cross_sectional", business_category="group_neutralization", canonical="group_sum", source="factor_dsl_polars")
@@ -205,7 +264,7 @@ class GroupSumPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
-        return _group_rowwise(x, group, _sum_row)
+        return _group_rowwise(x, group, _sum_row, fallback_policy)
 
 
 @register_operator(name="group_min", category="cross_sectional", business_category="group_neutralization", canonical="group_min", source="factor_dsl_polars")
@@ -216,7 +275,7 @@ class GroupMinPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
-        return _group_rowwise(x, group, _min_row)
+        return _group_rowwise(x, group, _min_row, fallback_policy)
 
 
 @register_operator(name="group_max", category="cross_sectional", business_category="group_neutralization", canonical="group_max", source="factor_dsl_polars")
@@ -227,7 +286,7 @@ class GroupMaxPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
-        return _group_rowwise(x, group, _max_row)
+        return _group_rowwise(x, group, _max_row, fallback_policy)
 
 
 @register_operator(name="group_count", category="cross_sectional", business_category="group_neutralization", canonical="group_count", source="factor_dsl_polars")
@@ -238,7 +297,7 @@ class GroupCountPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
-        return _group_rowwise(x, group, _count_row)
+        return _group_rowwise(x, group, _count_row, fallback_policy)
 
 
 @register_operator(name="group_std", category="cross_sectional", business_category="group_neutralization", canonical="group_std", source="factor_dsl_polars")
@@ -250,7 +309,7 @@ class GroupStdPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
-        return _group_rowwise(x, group, _std_row)
+        return _group_rowwise(x, group, _std_row, fallback_policy)
 
 
 @register_operator(
@@ -269,7 +328,7 @@ class GroupZscorePolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
-        return _group_rowwise(x, group, _zscore_row)
+        return _group_rowwise(x, group, _zscore_row, fallback_policy)
 
 
 @register_operator(name="group_rank", category="cross_sectional", business_category="group_neutralization", canonical="group_rank", source="factor_dsl_polars")
@@ -281,7 +340,7 @@ class GroupRankPolars(SeriesOperator):
     )
 
     def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
-        return _group_rowwise(x, group, _rank_row)
+        return _group_rowwise(x, group, _rank_row, fallback_policy)
 
 
 @register_operator(name="group_normalize", category="cross_sectional", business_category="group_neutralization", canonical="group_normalize", source="factor_dsl_polars")
@@ -294,28 +353,31 @@ class GroupNormalizePolars(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, group: pl.DataFrame = None, fallback_policy: str = "nan", **kwargs) -> pl.DataFrame:
         def _norm(row_x, row_g):
-            out = np.full_like(row_x, np.nan)
-            mask = ~np.isnan(row_x)
+            out = np.full_like(row_x, np.nan, dtype=float)
+            mask = np.isfinite(row_x)
             if not np.any(mask):
                 return out
 
             def _scale(vals):
                 lo, hi = np.nanmin(vals), np.nanmax(vals)
-                rng = hi - lo
+                with np.errstate(over="ignore"):
+                    rng = hi - lo
                 if rng == 0 or np.isnan(rng):
                     return np.full_like(vals, 0.5)
+                if np.isinf(rng):
+                    return (vals / 2.0 - lo / 2.0) / (hi / 2.0 - lo / 2.0)
                 return (vals - lo) / rng
 
-            if row_g is None or np.all(np.isnan(row_g)):
+            if row_g is None:
                 out[mask] = _scale(row_x[mask])
                 return out
-            for g in np.unique(row_g[~np.isnan(row_g)]):
+            for g in _group_labels(row_g):
                 gm = (row_g == g) & mask
                 if np.any(gm):
                     out[gm] = _scale(row_x[gm])
             return out
 
-        return _group_rowwise(x, group, _norm)
+        return _group_rowwise(x, group, _norm, fallback_policy)
 
 
 @register_operator(name="group_winsorize", category="cross_sectional", business_category="group_neutralization", canonical="group_winsorize", source="factor_dsl_polars")

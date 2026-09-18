@@ -102,32 +102,19 @@ class TSAbsEntropyNormalizedPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_active_information_storage", canonical="ts_active_information_storage", backend="polars")
 class TSActiveInformationStoragePolarsNative(SeriesOperator):
-    """Active Information Storage: mutual information between past and present"""
+    """Exact canonical calculation with explicit full-panel conversion."""
+    from factor_engine.cleaned_operators.common import markov_reference_delegate as _delegate
+    metadata = _delegate.metadata("ts_active_information_storage")
 
-    metadata = OperatorMetadata(
-        name="ts_active_information_storage",
-        category="time_series",
-        description="AIS: MI between k-history and current state (binned approximation)",
-        param_names=["x", "window", "bins", "history_length", "min_history"],
-        return_type="series",
-        tags=["time_series", "rolling", "information_theory", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "history_length": ParamSpec(dtype=int, min=1, default=1, param_role=ParamRole.HORIZON),
-        "bins": ParamSpec(dtype=int, min=2, default=10, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference("ts_active_information_storage")._calculate_series
 
-    def _calculate_series(self, feature, window=None, history_length=1, bins=10,
-                          min_history=2, **kwargs):
-        # R4-100 parity: the pandas reference (markov_dynamics) declares the
-        # 5-param contract ``(x, window, bins, history_length, min_history)``.
-        # Keep the legacy body on the feature series.
-        x = feature
-        result = pd.Series(index=x.index, dtype=float)
-        result[:] = np.nan  # Placeholder
-        return result
+    def physical_spec(self):
+        return self._delegate.physical_spec("ts_active_information_storage")
 
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("ts_active_information_storage", *args, **kwargs)
 
 # ============================================================================
 # Activity Clock (Event-based timing)
@@ -395,62 +382,36 @@ class TSButterworthLowpassCausalPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_causal_local_linear_smoother", canonical="ts_causal_local_linear_smoother", backend="polars")
 class TSCausalLocalLinearSmootherPolarsNative(SeriesOperator):
-    """Causal local linear smoother (Nadaraya-Watson with linear fit)"""
+    """Exact canonical calculation with explicit full-panel conversion."""
+    from factor_engine.cleaned_operators.common import r22_reference_delegate as _delegate
+    metadata = _delegate.metadata("ts_causal_local_linear_smoother")
 
-    metadata = OperatorMetadata(
-        name="ts_causal_local_linear_smoother",
-        category="time_series",
-        description="Causal local linear smoother with kernel weighting",
-        param_names=["feature", "window", "bandwidth"],
-        return_type="series",
-        tags=["time_series", "filter", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
-        "bandwidth": ParamSpec(dtype=float, min=0.0, default=1.0, param_role=ParamRole.ESTIMATOR_RESOLUTION),
-    }
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference("ts_causal_local_linear_smoother")._calculate_series
 
-    def _calculate_series(self, feature, window, bandwidth=1.0, **kwargs):
-        # TODO: Implement proper local linear smoother
-        # Placeholder: weighted moving average with Gaussian kernel
-        return (
-            feature.to_frame()
-            .lazy()
-            .select([
-                pl.col(feature.name).rolling_mean(window).alias(feature.name)
-            ])
-            .collect()
-            .to_series()
-        )
+    def physical_spec(self):
+        return self._delegate.physical_spec("ts_causal_local_linear_smoother")
+
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("ts_causal_local_linear_smoother", *args, **kwargs)
 
 
 @register_operator(name="ts_causal_savgol_endpoint", canonical="ts_causal_savgol_endpoint", backend="polars", replace=True, expected_old_source="pandas_bridge", replacement_reason="Consolidating polars native operators into ts_advanced_batch1")
 class TSCausalSavgolEndpointPolarsNative(SeriesOperator):
-    """Causal Savitzky-Golay filter endpoint value"""
+    """Exact canonical calculation with explicit full-panel conversion."""
+    from factor_engine.cleaned_operators.common import r22_reference_delegate as _delegate
+    metadata = _delegate.metadata("ts_causal_savgol_endpoint")
 
-    metadata = OperatorMetadata(
-        name="ts_causal_savgol_endpoint",
-        category="time_series",
-        description="Savitzky-Golay filter using only past values (causal)",
-        param_names=["feature", "window", "polyorder"],
-        return_type="series",
-        tags=["time_series", "filter", "pit_safe"],
-    )
-    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference("ts_causal_savgol_endpoint")._calculate_series
 
-    def _calculate_series(self, feature, window, polyorder=2, **kwargs):
-        # TODO: Implement causal Savitzky-Golay using scipy.signal.savgol_filter
-        # with mode='interp' and only past values
-        # Placeholder: simple polynomial fit
-        return (
-            feature.to_frame()
-            .lazy()
-            .select([
-                pl.col(feature.name).rolling_mean(window).alias(feature.name)
-            ])
-            .collect()
-            .to_series()
-        )
+    def physical_spec(self):
+        return self._delegate.physical_spec("ts_causal_savgol_endpoint")
+
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("ts_causal_savgol_endpoint", *args, **kwargs)
 
 
 # ============================================================================
@@ -710,25 +671,19 @@ class TSBetaBreakScorePolarsNative(SeriesOperator):
 
 @register_operator(name="ts_betti_1_max_persistence", canonical="ts_betti_1_max_persistence", backend="polars")
 class TSBetti1MaxPersistencePolarsNative(SeriesOperator):
-    """Maximum persistence of 1-cycles in topological data analysis"""
+    """Exact canonical calculation with explicit full-panel conversion."""
+    from factor_engine.cleaned_operators.common import r22_reference_delegate as _delegate
+    metadata = _delegate.metadata("ts_betti_1_max_persistence")
 
-    metadata = OperatorMetadata(
-        name="ts_betti_1_max_persistence",
-        category="time_series",
-        description="TDA Betti-1 max persistence (TODO: needs ripser/gudhi)",
-        param_names=["x", "window", "tau", "embedding_dim"],
-        return_type="series",
-        tags=["time_series", "rolling", "topology", "pit_safe"],
-    )
-    # metadata.param_specs intentionally omitted - use canonical contract from pandas backend
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference("ts_betti_1_max_persistence")._calculate_series
 
-    def _calculate_series(self, x, window, tau=1, embedding_dim=3, **kwargs):
-        # R4-100 parity: canonical (x, window, tau, embedding_dim); feature is legacy.
-        feature = x
-        # TODO: Implement TDA using ripser or gudhi library
-        result = pd.Series(index=feature.index, dtype=float)
-        result[:] = np.nan
-        return result
+    def physical_spec(self):
+        return self._delegate.physical_spec("ts_betti_1_max_persistence")
+
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("ts_betti_1_max_persistence", *args, **kwargs)
 
 
 # ============================================================================

@@ -271,6 +271,58 @@ def test_normalization_triple_parity(panel, duckdb_source, name, builder):
     _assert_parity(pandas_out, sql_out["result"])
 
 
+def test_normalize_finite_support_golden_all_backends(tmp_path, monkeypatch):
+    """Independent golden values, not simply agreement between two wrong paths."""
+    values = np.array([
+        [3., 3., np.nan, np.inf],
+        [42., np.nan, -np.inf, np.nan],
+        [1., 3., np.inf, -np.inf],
+        [0., -5., np.nan, np.inf],
+        [np.nan, np.nan, np.inf, -np.inf],
+        [2., 2., 2., 2.],
+    ])
+    expected_values = np.array([
+        [.5, .5, np.nan, np.nan],
+        [np.nan, np.nan, np.nan, np.nan],
+        [0., 1., np.nan, np.nan],
+        [1., 0., np.nan, np.nan],
+        [np.nan, np.nan, np.nan, np.nan],
+        [.5, .5, .5, .5],
+    ])
+    index = pd.MultiIndex.from_product(
+        [pd.date_range("2024-01-02", periods=len(values)), list("ABCD")],
+        names=["timestamp", "instrument"],
+    )
+    x = pd.Series(values.ravel(), index=index)
+    source = InMemorySeriesSource(data={
+        "x": x, "y": x, "flag": pd.Series(1., index=index),
+        "constant": pd.Series(2., index=index),
+    })
+    root = tmp_path / "data"
+    _write_duckdb_registry(tmp_path / "datasets.yaml", root)
+    _seed_duckdb(root, source)
+    monkeypatch.setenv("DATA_ACCESS_SKIP_COS_MIRROR", "1")
+    monkeypatch.setenv("DATA_ACCESS_CONFIG", str(tmp_path / "datasets.yaml"))
+    from data_access import reset_store
+    reset_store()
+    sql_source = build_data_source({"type": "data_access", "dataset": "elem_test_daily"})
+    expected = pd.Series(expected_values.ravel(), index=index)
+    for backend in ("pandas", "polars_long", "duckdb_sql"):
+        output = _run(
+            sql_source if backend == "duckdb_sql" else source,
+            F("normalize")(col("X" if backend == "duckdb_sql" else "x")),
+            backend,
+        )
+        if backend == "duckdb_sql":
+            assert_duckdb_real_sql_execution(output)
+        elif backend == "polars_long":
+            assert output.get("used_polars_long_path") is True
+        pd.testing.assert_series_equal(
+            output["result"].sort_index(), expected.sort_index(),
+            check_names=False, check_dtype=False, check_freq=False,
+        )
+
+
 def test_division_by_zero_handling(panel):
     """Division by zero produces consistent results across backends."""
     dates = pd.date_range("2024-01-02", periods=2, freq="D")

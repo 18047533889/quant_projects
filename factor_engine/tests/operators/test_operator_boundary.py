@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import polars as pl
 import pytest
 
 from factor_engine.backend.cleaned_bridge import ensure_cleaned_loaded
@@ -53,3 +54,36 @@ def test_winsorize_single_observation():
     x = pd.DataFrame({"A": [1.0], "B": [2.0]}, index=pd.date_range("2020-01-01", periods=1))
     out = _op("winsorize").calculate(x)
     assert len(out) == 1
+
+def test_normalize_cross_section_contract_constant_single_and_inf():
+    x = pd.DataFrame(
+        [[3.0, 3.0, np.inf], [42.0, np.nan, -np.inf], [1.0, 3.0, np.inf]],
+        columns=list("ABC"),
+    )
+    expected = np.array(
+        [[0.5, 0.5, np.nan], [np.nan, np.nan, np.nan], [0.0, 1.0, np.nan]]
+    )
+    pandas_op = OperatorRegistry.get("normalize", "pandas_numpy")
+    polars_op = OperatorRegistry.get("normalize", "polars")
+    np.testing.assert_allclose(pandas_op.calculate(x).to_numpy(), expected, equal_nan=True)
+    polars_x = pl.DataFrame({column: x[column].to_list() for column in x.columns})
+    np.testing.assert_allclose(
+        polars_op.calculate(polars_x).to_numpy(), expected, equal_nan=True
+    )
+
+
+def test_rank_and_cs_rank_01_exclude_inf_from_cross_section():
+    x = pd.DataFrame(
+        [[1.0, 2.0, np.inf, -np.inf, np.nan, 3.0]],
+        columns=list("ABCDEF"),
+    )
+    expected = np.array([[0.0, 0.5, np.nan, np.nan, np.nan, 1.0]])
+    for name in ("rank", "cs_rank_01"):
+        out = _op(name).calculate(x)
+        np.testing.assert_allclose(out.to_numpy(), expected, equal_nan=True)
+
+
+def test_cs_std_excludes_inf_from_cross_section():
+    x = pd.DataFrame([[1.0, 3.0, np.inf, -np.inf]], columns=list("ABCD"))
+    out = _op("cs_std").calculate(x)
+    np.testing.assert_allclose(out.to_numpy(), np.full((1, 4), np.sqrt(2.0)))

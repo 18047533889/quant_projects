@@ -133,6 +133,12 @@ def extend_research_only(names: frozenset[str] | set[str] | list[str]) -> None:
     RESEARCH_ONLY_CANONICALS = RESEARCH_ONLY_CANONICALS | frozenset(names)
 
 
+def extend_legacy_only(names: frozenset[str] | set[str] | list[str]) -> None:
+    """Classify compatibility implementations only when their module is loaded."""
+    global LEGACY_ONLY_CANONICALS
+    LEGACY_ONLY_CANONICALS = LEGACY_ONLY_CANONICALS | frozenset(names)
+
+
 def retract_research_only(names: frozenset[str] | set[str] | list[str]) -> None:
     """Remove canonical names from the research-only surface (R9-P1-045).
 
@@ -869,6 +875,16 @@ def classify_canonical(canonical:str)->str:
         return "research"
     if canonical in UNSAFE_CANONICALS:return "unsafe"
     if canonical in LEGACY_ONLY_CANONICALS:return "legacy"
+    # Compatibility aliases inherit the existing canonical authoring tier,
+    # never a new certification. Explicit restricted names above retain their
+    # own policy; tombstoned names and alias cycles remain fail-closed.
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    try:
+        target = OperatorRegistry.resolve_canonical(canonical)
+    except (ValueError, LookupError):
+        return "unclassified"
+    if target != canonical:
+        return classify_canonical(target)
     return "unclassified"
 def is_dsl_name_allowed(name:str,canonical:str,*,surface:OperatorSurface="daily")->bool:
     if surface=="all":return True

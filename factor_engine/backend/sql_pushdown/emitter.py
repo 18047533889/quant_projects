@@ -1329,9 +1329,15 @@ def _group_minmax_expr(*, value_col: str, partition: str, dialect: SqlDialect) -
     lo = f"MIN({value_col}) OVER ({partition})"
     hi = f"MAX({value_col}) OVER ({partition})"
     span = f"{nf}({hi} - {lo}, 0)"
+    isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+    stable = (
+        f"(({value_col}) / 2.0 - ({lo}) / 2.0) / "
+        f"(({hi}) / 2.0 - ({lo}) / 2.0)"
+    )
     return (
         f"CASE WHEN {value_col} IS NULL THEN NULL "
         f"WHEN {span} IS NULL THEN 0.5 "
+        f"WHEN {isinf_fn}({span}) THEN {stable} "
         f"ELSE ({value_col} - {lo}) / {span} END"
     )
 
@@ -1388,16 +1394,24 @@ def _zscore_window_expr(
     return f"CASE WHEN {cnt} < {min_periods} THEN NULL ELSE {core} END"
 
 
-def _normalize_window_expr(*, value_col: str, partition: str) -> str:
+def _normalize_window_expr(
+    *, value_col: str, partition: str, dialect: SqlDialect
+) -> str:
     """normalize / group_normalize：常数截面 → 0.5；单有效值 → NULL。"""
     lo = f"MIN({value_col}) OVER ({partition})"
     hi = f"MAX({value_col}) OVER ({partition})"
     span = f"({hi} - {lo})"
     cnt = f"COUNT({value_col}) OVER ({partition})"
+    isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+    stable = (
+        f"(({value_col}) / 2.0 - ({lo}) / 2.0) / "
+        f"(({hi}) / 2.0 - ({lo}) / 2.0)"
+    )
     return (
         f"CASE WHEN {value_col} IS NULL THEN NULL "
         f"WHEN {cnt} <= 1 THEN NULL "
         f"WHEN {span} IS NULL OR {span} = 0 THEN 0.5 "
+        f"WHEN {isinf_fn}({span}) THEN {stable} "
         f"ELSE ({value_col} - {lo}) / {span} END"
     )
 
@@ -4222,23 +4236,13 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        # PARITY-SWEEP-R56: pandas ``Normalize`` computes min/max over the raw row
-        # (Inf included): with an Inf max the span is Inf so every finite cell is
-        # (x-min)/Inf = 0, and the Inf cell (Inf-min)/Inf = NaN; the final
-        # ``replace([inf,-inf], nan)`` keeps the Inf cell NaN.  Replicate by
-        # masking ±Inf cells to NULL in the output and letting the Inf-poisened
-        # span produce 0 for finite cells exactly like the pandas division.
+        # Finite-only cross-section contract: Inf must not poison extrema or
+        # count as support for the singleton/constant-row policies.
         isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
         isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
-        lo = f"MIN(_v) OVER (PARTITION BY ts)"
-        hi = f"MAX(_v) OVER (PARTITION BY ts)"
-        span = f"({hi} - {lo})"
-        cnt = f"COUNT(_v) OVER (PARTITION BY ts)"
-        expr = (
-            f"CASE WHEN _v IS NULL OR {isnan_fn}(_v) OR {isinf_fn}(_v) THEN NULL "
-            f"WHEN {cnt} <= 1 THEN NULL "
-            f"WHEN {span} IS NULL OR {span} = 0 THEN 0.5 "
-            f"ELSE (_v - {lo}) / {span} END"
+        safe = f"(CASE WHEN _v IS NOT NULL AND NOT {isnan_fn}(_v) AND NOT {isinf_fn}(_v) THEN _v END)"
+        expr = _normalize_window_expr(
+            value_col=safe, partition="PARTITION BY ts", dialect=dialect
         )
         return _Layer(
             f"SELECT ts, inst, {expr} AS _v FROM ({inner.sql}) t",
@@ -9467,7 +9471,9 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         inner = _compile_layer(node.inputs[0], dialect=dialect)
         if inner is None:
             return None
-        expr = _normalize_window_expr(value_col="_v", partition="PARTITION BY ts")
+        expr = _normalize_window_expr(
+            value_col="_v", partition="PARTITION BY ts", dialect=dialect
+        )
         return _Layer(
             f"SELECT ts, inst, {expr} AS _v FROM ({inner.sql}) t",
             has_inst_window=inner.has_inst_window,

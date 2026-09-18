@@ -1348,7 +1348,7 @@ class CrossSectionalRank(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in {"date", "stock_code"}]
         values = pl.concat_list([
-            pl.when(pl.col(c).is_nan()).then(None).otherwise(pl.col(c))
+            pl.when(pl.col(c).is_finite()).then(pl.col(c)).otherwise(None)
             for c in numeric_cols
         ])
         ranks = values.list.eval(pl.element().rank(method="average"))

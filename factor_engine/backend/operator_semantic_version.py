@@ -14,6 +14,11 @@ class OperatorSemanticVersion:
 
 # 已知语义变更历史（新因子应使用最新 version）
 OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
+    # R21: finite-only cross-sections across reference/Polars/SQL paths;
+    # normalize also enforces constant-support and singleton/null policies.
+    "normalize": 2,
+    "cs_rank_01": 2,
+    "cs_std": 2,
     # R16: Polars CCI now propagates null/nonfinite active windows like pandas.
     "CCI": 2,
     # R6: final finite/mixed/graph panel contracts; no certification promotion.
@@ -372,13 +377,13 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_markov_entropy_production": 2,
     "ts_kramers_moyal_local_stability": 2,
     "ts_markov_committor": 2,
-    "ts_markov_mean_first_passage_time": 2,
+    "ts_markov_mean_first_passage_time": 3,  # R21: replace incorrect Polars placeholder
     "ts_markov_spectral_gap": 2,
     "ts_markov_stationary_surprisal": 2,
     "ts_km_equilibrium_distance": 2,  # v2: corrected equilibrium state semantics
-    "ts_km_diffusion_gradient": 2,
-    "ts_km_quasipotential_depth": 2,  # v2: corrected quasipotential geometry
-    "ts_active_information_storage": 2,  # v2: corrected AIS state probabilities
+    "ts_km_diffusion_gradient": 3,  # R21: exact reference-backed Polars path
+    "ts_km_quasipotential_depth": 3,  # R21: replace Polars volatility placeholder
+    "ts_active_information_storage": 3,  # R21: replace all-NaN Polars placeholder
     # v2: stable true beta with a common-scale, dimensionless break ratio.
     "ts_beta_break_score": 2,
     # v2: scaled SVD/common mask and a joint window feasibility guard.
@@ -404,7 +409,8 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     # v2: corrected MODWT band conditional-dependence semantics.
     "ts_modwt_band_corr": 2,
     # v2: profile optimization requires certified BFGS convergence.
-    "ts_fisher_information_shift": 2,
+    "ts_fisher_information_shift": 3,  # R23: legacy Polars proxy replaced by canonical delegate.
+    "ts_persistence_diagram_shift": 2,  # R23: legacy null placeholder replaced by canonical delegate.
     # v9: actual convex first/second-difference L1 objectives and bounded solve.
     "ts_total_variation_filter_trailing": 2,
     "ts_l1_trend_filter_trailing": 2,
@@ -513,6 +519,16 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_har_rv_forecast_error_z": 2,
     "ts_har_from_return_next_vol": 2,
     "ts_har_from_return_forecast_error_z": 2,
+    # R23: finite support, string group identity and declared fallback policies.
+    "group_mean": 2,
+    "group_sum": 2,
+    "group_min": 2,
+    "group_max": 2,
+    "group_count": 2,
+    "group_std": 2,
+    "group_zscore": 2,
+    "group_rank": 2,
+    "group_normalize": 2,
     "group_percentile": 4,  # v3: backend emitters preserve current quantile/null semantics
     "signed_log": 1,  # sign(x)*log(abs(x)+1e-10)
     "compare": 2,  # v2: NULL/NaN propagate
@@ -520,7 +536,7 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "minimum": 2,
     "protected_log": 2,  # NULL preserved
     "protected_div": 3,
-    "rank": 1,
+    "rank": 2,  # R21: Polars direct rank excludes non-finite support.
     "rank_pct": 1,
     "ts_beta": 3,  # v3: paired finite cohort + explicit ddof semantics
     "ts_zscore": 2,  # v2: all declared window/numeric parameters affect execution
@@ -546,7 +562,13 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "open_close_return": 3,  # R6: supplied price panels, no extra shift/proxy, native basis/axis parity
     "open_to_vwap_return": 3,  # R6: supplied price panels, no extra shift/proxy, native basis/axis parity
     "vwap_to_close_return": 3,  # R6: supplied price panels, no extra shift/proxy, native basis/axis parity
-    "ts_corr": 2,
+    # R22: canonical Polars delegates replace broken legacy implementations.
+    "ts_causal_local_linear_smoother": 2,
+    "ts_causal_savgol_endpoint": 2,
+    "ts_betti_1_max_persistence": 2,
+    "ts_corr": 3,  # R23: avoid overflow/underflow in norm products.
+    "ts_regression_r2": 2,
+    "ts_regression_slope": 2,  # R23: includes retval=r2.
     "ts_cov": 2,
 }
 

@@ -1608,3 +1608,11 @@ class TSBottomkSumNative(SeriesOperator):
             pl.col(c).rolling_map(lambda s: s.bottom_k(bottomk).sum(), window_size=w, min_samples=max(mp, bottomk)).alias(c)
             for c in cols
         ]).collect()
+
+
+# Compatibility-only duplicate of the reviewed ``ts_pct`` family. It remains
+# available for explicit legacy lookup when this late module is loaded, but is
+# not a daily/production canonical.
+from factor_engine.cleaned_operators import operator_surface as _operator_surface
+
+_operator_surface.extend_legacy_only({"ts_returns"})

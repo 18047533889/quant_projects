@@ -1133,24 +1133,19 @@ class TSPersistenceBirthDispersionPolarsNative(SeriesOperator):
 
 @register_operator(name="ts_persistence_diagram_shift", canonical="ts_persistence_diagram_shift", backend="polars")
 class TSPersistenceDiagramShiftPolarsNative(SeriesOperator):
-    """Wasserstein distance between current and reference persistence diagrams"""
+    """Exact canonical calculation with explicit full-panel conversion."""
+    from factor_engine.cleaned_operators.common import topology_reference_delegate as _delegate
+    metadata = _delegate.metadata("ts_persistence_diagram_shift")
 
-    metadata = OperatorMetadata(
-        name="ts_persistence_diagram_shift",
-        category="time_series",
-        description="Change in topological structure",
-        param_names=["feature", "window", "reference_window"],
-        return_type="series",
-        tags=["time_series", "topology", "persistence", "pit_safe"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-        "reference_window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-    }
+    @property
+    def _contract_callable(self):
+        return self._delegate.reference("ts_persistence_diagram_shift")._calculate_series
 
-    def _calculate_series(self, feature, window, reference_window, **kwargs):
-        # TODO: Requires persistent homology and Wasserstein distance
-        return pl.lit(None).cast(pl.Float64)
+    def physical_spec(self):
+        return self._delegate.physical_spec("ts_persistence_diagram_shift")
+
+    def _calculate_series(self, *args, **kwargs):
+        return self._delegate.calculate("ts_persistence_diagram_shift", *args, **kwargs)
 
 
 @register_operator(name="ts_persistence_entropy_h0", canonical="ts_persistence_entropy_h0", backend="polars")
@@ -2359,4 +2354,3 @@ class TSRunEfficiencyPolarsNative(SeriesOperator):
 
 
 # End of batch 3 - operators 533-632
-

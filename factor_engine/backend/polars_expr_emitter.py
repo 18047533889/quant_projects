@@ -2266,18 +2266,21 @@ def _zscore_on(value_col: str, *, canon: str = "zscore") -> pl.Expr:
 
 def _normalize_on(value_col: str) -> pl.Expr:
     """截面 min-max normalize；单有效值 → NULL，常数截面 → 0.5。"""
-    lo = pl.col(value_col).min().over(_TS, order_by=_INST)
-    hi = pl.col(value_col).max().over(_TS, order_by=_INST)
+    value = pl.when(pl.col(value_col).is_finite()).then(pl.col(value_col)).otherwise(None)
+    lo = value.min().over(_TS, order_by=_INST)
+    hi = value.max().over(_TS, order_by=_INST)
     span = hi - lo
-    cnt = pl.col(value_col).count().over(_TS, order_by=_INST)
+    cnt = value.count().over(_TS, order_by=_INST)
     return (
-        pl.when(pl.col(value_col).is_null())
+        pl.when(value.is_null())
         .then(None)
         .when(cnt <= 1)
         .then(None)
         .when(span.is_null() | (span == 0))
         .then(0.5)
-        .otherwise((pl.col(value_col) - lo) / span)
+        .when(span.is_infinite())
+        .then((value / 2.0 - lo / 2.0) / (hi / 2.0 - lo / 2.0))
+        .otherwise((value - lo) / span)
     )
 
 
@@ -2291,6 +2294,11 @@ def _group_normalize_on(value_col: str, over_keys: tuple[str, ...]) -> pl.Expr:
         .then(None)
         .when(span.is_null() | (span == 0))
         .then(0.5)
+        .when(span.is_infinite())
+        .then(
+            (pl.col(value_col) / 2.0 - lo / 2.0)
+            / (hi / 2.0 - lo / 2.0)
+        )
         .otherwise((pl.col(value_col) - lo) / span)
     )
 
