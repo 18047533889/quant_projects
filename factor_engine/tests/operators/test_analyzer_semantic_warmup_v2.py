@@ -30,8 +30,15 @@ def test_fundamental_warmup_distinguishes_period_daily_and_elementwise():
     ttm = _analyze(
         "fin_ttm_cumulative(fundamental_x,period_id,fiscal_quarter,4)"
     )
-    assert ratio.lookback == 0
-    assert surprise_z.lookback >= 251
+    # fin_ratio is elementwise: its own semantic history is zero.  The analyzer
+    # result still carries the documented two-row factor-level allocation floor.
+    from factor_engine.runtime.execution_contract import own_history_requirement
+    from factor_engine.runtime.incremental_contract import IncrementalMode, classify_incremental_mode
+
+    assert own_history_requirement("fin_ratio", {}).rows == 0
+    assert classify_incremental_mode("fin_ratio") is IncrementalMode.STATELESS
+    assert ratio.lookback == 2
+    assert surprise_z.lookback == 252
     assert ttm.lookback >= 320
 
 

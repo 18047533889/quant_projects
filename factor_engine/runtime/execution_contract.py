@@ -1414,9 +1414,23 @@ def _event_response_forward_extension(canonical: str, params: Mapping[str, Any])
     return max(0, int(horizon or 0))
 
 
+
+def _fin_surprise_zscore_extension(
+    canonical: str, params: Mapping[str, Any]
+) -> int | object:
+    """Exact prior-row dependency of the shifted daily rolling baseline."""
+    return _w0(params, _specs(canonical), "window_days", canonical=canonical)
+
+
+_HISTORY_TRANSFORMS["fin_surprise_zscore"] = _compound_transform(
+    _fin_surprise_zscore_extension
+)
+
+
 _FORWARD_IMPACT_FNS: dict[str, Any] = {
     "event_historical_response_mean": _event_response_forward_extension,
     "event_historical_response_sign_balance": _event_response_forward_extension,
+    "fin_surprise_zscore": _fin_surprise_zscore_extension,
 }
 
 

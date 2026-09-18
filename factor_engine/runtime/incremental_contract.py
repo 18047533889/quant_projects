@@ -313,7 +313,9 @@ def classify_incremental_mode(
         from factor_engine.runtime.execution_contract import (
             execution_contract,
             forward_impact,
+            history_factory_for,
             history_requirement,
+            own_history_requirement,
         )
 
         contract = execution_contract(resolved)
@@ -325,13 +327,26 @@ def classify_incremental_mode(
         req = history_requirement(resolved, params or {})
         if req.is_event_clock:
             return IncrementalMode.EVENT_ASOF
+        if req.is_full_history:
+            return IncrementalMode.FULL_REPLAY
         fwd = forward_impact(resolved, params or {})
+        if fwd is None:
+            return IncrementalMode.FULL_REPLAY
+        # Single-operator history carries a conservative planner floor (currently
+        # two rows).  Incremental watermarks need the operator own dependency,
+        # otherwise pointwise transforms are falsely classified finite-window.
+        # An explicit history factory remains authoritative.
+        incremental_req = (
+            req if history_factory_for(resolved) is not None
+            else own_history_requirement(resolved, params or {})
+        )
         back = 0
-        if not req.is_full_history:
-            try:
-                back = max(0, int(req.rows))
-            except (TypeError, ValueError):
-                back = 0
+        if incremental_req.is_full_history:
+            return IncrementalMode.FULL_REPLAY
+        try:
+            back = max(0, int(incremental_req.rows))
+        except (TypeError, ValueError):
+            return IncrementalMode.FULL_REPLAY
         if back >= 1:
             return IncrementalMode.FINITE_WINDOW
         return IncrementalMode.STATELESS
@@ -416,19 +431,32 @@ def resolve_incremental_contract(
         from factor_engine.runtime.execution_contract import (
             execution_contract,
             forward_impact,
+            history_factory_for,
             history_requirement,
+            own_history_requirement,
         )
 
         contract = execution_contract(resolved, production=production)
         mode = classify_incremental_mode(resolved, params or {})
         req = history_requirement(resolved, params or {}, production=production)
         fwd = forward_impact(resolved, params or {}, production=production)
+        if req.is_full_history and mode is not IncrementalMode.CHECKPOINTED_STATE:
+            mode = IncrementalMode.FULL_REPLAY
+        elif fwd is None and mode not in {
+            IncrementalMode.CHECKPOINTED_STATE, IncrementalMode.FULL_REPLAY
+        }:
+            mode = IncrementalMode.FULL_REPLAY
 
+        incremental_req = (
+            req if history_factory_for(resolved) is not None or req.is_full_history
+            else own_history_requirement(resolved, params or {})
+        )
         backward_history = 0
-        if not req.is_full_history:
+        if not incremental_req.is_full_history:
             try:
-                backward_history = max(0, int(req.rows))
+                backward_history = max(0, int(incremental_req.rows))
             except (TypeError, ValueError):
+                mode = IncrementalMode.FULL_REPLAY
                 backward_history = 0
 
         spec = _checkpoint_spec(resolved)
