@@ -77,7 +77,6 @@ def test_governance_sets_disjoint_from_tombstones():
     from factor_engine.cleaned_operators import operator_spec as osp
     from factor_engine.cleaned_operators import production_hardening as ph
     from factor_engine.backend import production_fastpath_tiers as pft
-    from factor_engine.backend import polars_long_policy as plp
 
     sets = {
         "PIT_UNSAFE": op.PIT_UNSAFE_CANONICALS,
@@ -88,10 +87,27 @@ def test_governance_sets_disjoint_from_tombstones():
         "PIT_EXEMPT": osp._PIT_EXEMPT,
         "NON_FACTOR": ph.NON_FACTOR_PRODUCTION_CANONICALS,
         "P2_FILL": pft.P2_FILL_INTERPOLATE_CANONICALS,
-        "PLP_BLOCKED": plp.POLARS_LONG_BLOCKED_CAUSAL,
     }
     for name, s in sets.items():
         assert ALL_TOMBSTONED_NAMES.isdisjoint(s), f"{name} still carries tombstoned operator names"
+
+
+def test_tombstoned_bfill_plans_remain_explicitly_blocked():
+    from factor_engine.backend.polars_long_policy import (
+        UnsupportedCausalOperatorError,
+        assert_no_blocked_causal_plan,
+        classify_plan_op,
+        plan_contains_blocked_causal,
+    )
+    from factor_engine.planner.logical_plan import PlanNode
+
+    column = PlanNode(op="column", attrs={"name": "close"})
+    for name in ("bfill", "causal_bfill"):
+        plan = PlanNode(op=name, inputs=(column,))
+        assert classify_plan_op(name) == "blocked_causal"
+        assert plan_contains_blocked_causal(plan)
+        with pytest.raises(UnsupportedCausalOperatorError):
+            assert_no_blocked_causal_plan(plan, backend="polars_long")
 
 
 def test_random_set_matches_expected_names():

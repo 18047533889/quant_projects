@@ -80,18 +80,20 @@ def polars_scale_expr(
     partition_cols: tuple[str, ...],
     order_by: str,
 ) -> "pl.Expr":
-    """scale：当前行 NULL → NULL；sum(abs)=0 → fill；否则 x*to/sum(abs)。"""
+    """Finite-member L1 scaling, preserving NULLs and extreme magnitudes."""
     import polars as pl
 
-    v = pl.col(value_col).cast(pl.Float64, strict=False)
-    s = v.abs().sum().over(*partition_cols, order_by=order_by)
-    fill = scale_zero_sum_fill()
+    raw = pl.col(value_col).cast(pl.Float64, strict=False)
+    v = pl.when(raw.is_finite()).then(raw).otherwise(None)
+    scale = v.abs().max().over(*partition_cols, order_by=order_by)
+    scaled = pl.when(scale == 0.0).then(0.0).otherwise(v / scale)
+    denominator = scaled.abs().sum().over(*partition_cols, order_by=order_by)
     return (
-        pl.when(pl.col(value_col).is_null())
+        pl.when(v.is_null())
         .then(None)
-        .when(s.is_null() | (s == 0))
-        .then(fill)
-        .otherwise(v / s * to_val)
+        .when(denominator.is_null() | (denominator == 0.0))
+        .then(scale_zero_sum_fill())
+        .otherwise((scaled / denominator) * to_val)
     )
 
 

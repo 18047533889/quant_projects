@@ -2317,6 +2317,15 @@ def _group_normalize_on(value_col: str, over_keys: tuple[str, ...]) -> pl.Expr:
     )
 
 
+def _stable_scale_on(value_col: str, to_val: float) -> pl.Expr:
+    """Use the shared finite-member, overflow-safe scale contract."""
+    from factor_engine.backend.cross_section_spec import polars_scale_expr
+
+    return polars_scale_expr(
+        value_col, to_val, partition_cols=(_TS,), order_by=_INST
+    )
+
+
 _UNARY_FUSE_OVER_TS: frozenset[str] = frozenset(
     {"rank", "rank_pct", "cs_pct_rank", "zscore", "neg", "abs", "scale", "normalize"}
 )
@@ -2351,9 +2360,7 @@ def _try_fuse_unary_over_ts(node: PlanNode, base: pl.LazyFrame) -> pl.LazyFrame 
         out_expr = pl.col(tmp).abs()
     elif op == "scale":
         to_val = _scale_to_value(node)
-        from factor_engine.backend.cross_section_spec import polars_scale_expr
-
-        out_expr = polars_scale_expr(tmp, to_val, partition_cols=(_TS,), order_by=_INST)
+        out_expr = _stable_scale_on(tmp, to_val)
     elif op == "normalize":
         out_expr = _normalize_on(tmp)
     else:
@@ -3302,7 +3309,7 @@ def _compile_polars_impl(
                 .otherwise(None)
                 .alias(_VAL)
             )
-            if op in {"group_mean", "group_zscore", "group_neutralize"}:
+            if op in {"group_mean", "group_zscore", "group_neutralize", "group_std"}:
                 joined = joined.with_columns(
                     pl.col(_VAL)
                     .abs()
@@ -3396,14 +3403,19 @@ def _compile_polars_impl(
 
             # Core preprocessing already excludes every non-finite member.
             cnt = pl.col(_VAL).count().over(*over_keys, order_by=_INST)
-            std_expr = pl.col(_VAL).std(ddof=std_ddof_value("group_std")).over(*over_keys, order_by=_INST)
+            std_expr = (
+                pl.col("__group_scaled")
+                .std(ddof=std_ddof_value("group_std"))
+                .over(*over_keys, order_by=_INST)
+                * pl.col("__group_scale")
+            )
             expr = (
                 pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan())
                 .then(None)
                 .when(cnt < 2)
                 .then(0.0)
-                .when(std_expr.is_null() | std_expr.is_infinite())
-                .then(0.0)
+                .when(std_expr.is_null())
+                .then(None)
                 .otherwise(std_expr)
             )
         elif op in {"group_zscore", "group_neutralize"}:
@@ -3438,7 +3450,7 @@ def _compile_polars_impl(
             rank_e = pl.col(_VAL).rank(method="average").over(*over_keys, order_by=_INST)
             sum_r = rank_e.sum().over(*over_keys, order_by=_INST)
             expr = pl.when(pl.col(_VAL).is_null() | pl.col(_VAL).is_nan()).then(None).otherwise(
-                pl.when((sum_r.is_null()) | (sum_r == 0)).then(None).otherwise(pl.col(_VAL) * rank_e / sum_r))
+                pl.when((sum_r.is_null()) | (sum_r == 0)).then(None).otherwise(pl.col(_VAL) * (rank_e / sum_r)))
         else:
             from factor_engine.backend.rank_spec import polars_cs_rank_expr
 
@@ -3740,11 +3752,7 @@ def _compile_polars_impl(
         if inner is None:
             return None
         to_val = _scale_to_value(node)
-        from factor_engine.backend.cross_section_spec import polars_scale_expr
-
-        return inner.with_columns(
-            polars_scale_expr(_VAL, to_val, partition_cols=(_TS,), order_by=_INST).alias(_VAL)
-        )
+        return inner.with_columns(_stable_scale_on(_VAL, to_val).alias(_VAL))
 
     if op in {"log_returns", "ts_log_return"}:
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)

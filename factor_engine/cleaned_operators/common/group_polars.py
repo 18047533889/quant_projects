@@ -105,6 +105,19 @@ def _stable_mean(values: np.ndarray) -> float:
     return float(np.mean(values / scale) * scale)
 
 
+def _stable_std(values: np.ndarray) -> float:
+    if values.size <= 1:
+        return 0.0
+    scale = float(np.max(np.abs(values)))
+    if scale == 0.0:
+        return 0.0
+    scaled = values / scale
+    centered = scaled - float(np.mean(scaled))
+    std_scaled = float(np.sqrt(np.sum(centered * centered) / (values.size - 1)))
+    with np.errstate(over="ignore", invalid="ignore"):
+        return float(std_scaled * scale)
+
+
 def _stable_zscore(values: np.ndarray) -> np.ndarray:
     if values.size <= 1:
         return np.zeros_like(values)
@@ -189,17 +202,12 @@ def _std_row(row_x, row_g):
     if not np.any(mask):
         return out
     if row_g is None:
-        count = int(np.sum(mask))
-        out[mask] = 0.0 if count == 1 else float(np.std(row_x[mask], ddof=1))
+        out[mask] = _stable_std(row_x[mask])
         return out
     for g in _group_labels(row_g):
         gm = (row_g == g) & mask
-        n = int(np.sum(gm))
-        if n == 1:
-            out[gm] = 0.0
-        elif n > 1:
-            std = np.nanstd(row_x[gm], ddof=1)
-            out[gm] = 0.0 if std != std else std
+        if np.any(gm):
+            out[gm] = _stable_std(row_x[gm])
     return out
 
 

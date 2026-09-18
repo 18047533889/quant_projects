@@ -41,7 +41,7 @@ _FALLBACK_POLICY_SPEC = ParamSpec(
 _DEAD_WINDOW_SPEC = ParamSpec(dtype=int, min=1, default=5, searchable=False, param_role=ParamRole.POLICY)
 _TS_WINDOW_SPEC = ParamSpec(dtype=int, min=1, default=20, history_semantics="max_rows", param_role=ParamRole.HORIZON)
 _NORMALIZE_SPEC = ParamSpec(dtype=bool, default=False, searchable=False, param_role=ParamRole.POLICY)
-_WINSOR_TAIL_SPEC = ParamSpec(dtype=float, min=0.0, max=0.5, default=0.05)
+_WINSOR_TAIL_SPEC = ParamSpec(dtype=float, min=0.0, max=0.5, default=0.05, param_role=ParamRole.THRESHOLD)
 
 
 def validate_fallback_policy(policy: str, *, operator: str = "") -> None:
@@ -59,6 +59,20 @@ def _stable_mean(values) -> float:
     if scale == 0.0:
         return 0.0
     return float(np.mean(vals / scale) * scale)
+
+
+def _stable_std(values) -> float:
+    vals = np.asarray(values, dtype=float)
+    if vals.size <= 1:
+        return 0.0
+    scale = float(np.max(np.abs(vals)))
+    if scale == 0.0:
+        return 0.0
+    scaled = vals / scale
+    centered = scaled - float(np.mean(scaled))
+    std_scaled = float(np.sqrt(np.sum(centered * centered) / (vals.size - 1)))
+    with np.errstate(over="ignore", invalid="ignore"):
+        return float(std_scaled * scale)
 
 
 def _stable_zscore(values) -> np.ndarray:
@@ -897,17 +911,13 @@ class GroupStd(SeriesOperator):
                     raise ValueError("group labels are missing and fallback_policy='error'")
                 finite = _finite_series_mask(x_slice)
                 if finite.any():
-                    std_val = x_slice[finite].std()
-                    result.loc[date, finite] = std_val if not pd.isna(std_val) else 0
+                    result.loc[date, finite] = _stable_std(x_slice[finite])
                 continue
 
             for group_val in _valid_group_values(group_slice):
                 mask = (group_slice == group_val) & _finite_series_mask(x_slice)
                 if mask.sum() > 0:
-                    std_val = x_slice[mask].std()
-                    if pd.isna(std_val):
-                        std_val = 0
-                    result.loc[date, x_slice[mask].index] = std_val
+                    result.loc[date, x_slice[mask].index] = _stable_std(x_slice[mask])
 
         return result
 

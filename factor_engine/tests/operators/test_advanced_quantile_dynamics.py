@@ -27,6 +27,11 @@ def _op(name: str, backend: str = "pandas_numpy"):
     return op
 
 
+def _distinct_source(target: pd.DataFrame) -> pd.DataFrame:
+    """Aligned second series for genuinely cross-series operator tests."""
+    return target.mul(-0.75).shift(1).add(0.25)
+
+
 
 # ---------------------------------------------------------------------------
 # 1. ts_quantilogram
@@ -151,7 +156,7 @@ def test_ts_cross_quantilogram_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _distinct_source(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -176,7 +181,7 @@ def test_ts_cross_quantilogram_handles_nans() -> None:
     op = _op("ts_cross_quantilogram")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _distinct_source(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -197,7 +202,7 @@ def test_ts_cross_quantilogram_handles_inf() -> None:
     op = _op("ts_cross_quantilogram")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _distinct_source(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -212,7 +217,7 @@ def test_ts_cross_quantilogram_empty_input() -> None:
     op = _op("ts_cross_quantilogram")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _distinct_source(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -230,12 +235,32 @@ def test_ts_cross_quantilogram_single_column() -> None:
     op = _op("ts_cross_quantilogram")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _distinct_source(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
     except Exception as e:
         pytest.fail(f"{op} failed on single column: {e}")
+
+
+# Independent oracle: source lower-tail hits at t-1 exactly predict target hits at t.
+def test_cross_quantile_operators_independent_oracle() -> None:
+    idx = pd.date_range("2024-01-01", periods=8)
+    source = pd.DataFrame({"A": [0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0]}, index=idx)
+    target = pd.DataFrame({"A": [9.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0]}, index=idx)
+    assert not target.equals(source)
+
+    common = dict(
+        window=8, target_q=0.5, source_q=0.5, lag=1,
+        target_side="lower", source_side="lower",
+    )
+    quantilogram = _op("ts_cross_quantilogram").calculate(target, source, **common)
+    extremogram = _op("ts_cross_extremogram").calculate(target, source, **common)
+
+    # Seven lag-aligned hit pairs match exactly, so Corr(H_t, H_s,t-1) = 1.
+    assert quantilogram.iloc[-1, 0] == pytest.approx(1.0)
+    # Every source event predicts a target event: 1 - target base rate 4/8 = 0.5.
+    assert extremogram.iloc[-1, 0] == pytest.approx(0.5)
 
 
 # ---------------------------------------------------------------------------
@@ -466,7 +491,7 @@ def test_ts_cross_extremogram_basic() -> None:
 
     # Call with default parameters
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _distinct_source(x))
 
         # Basic shape check
         assert result.shape == x.shape, f"{result.shape} != {x.shape}"
@@ -491,7 +516,7 @@ def test_ts_cross_extremogram_handles_nans() -> None:
     op = _op("ts_cross_extremogram")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _distinct_source(x))
 
         # Should not raise, should return DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -512,7 +537,7 @@ def test_ts_cross_extremogram_handles_inf() -> None:
     op = _op("ts_cross_extremogram")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _distinct_source(x))
 
         # Should handle inf gracefully (typically return NaN)
         assert isinstance(result, pd.DataFrame)
@@ -527,7 +552,7 @@ def test_ts_cross_extremogram_empty_input() -> None:
     op = _op("ts_cross_extremogram")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _distinct_source(x))
 
         # Should return empty DataFrame
         assert isinstance(result, pd.DataFrame)
@@ -545,7 +570,7 @@ def test_ts_cross_extremogram_single_column() -> None:
     op = _op("ts_cross_extremogram")
 
     try:
-        result = op.calculate(x)
+        result = op.calculate(x, _distinct_source(x))
 
         assert isinstance(result, pd.DataFrame)
         assert result.shape[1] == 1
