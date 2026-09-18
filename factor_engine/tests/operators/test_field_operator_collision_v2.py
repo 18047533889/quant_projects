@@ -39,11 +39,14 @@ def test_collision_free_average_volume_operator_parses_and_executes():
     )
 
 
-def test_extended_cold_start_uses_collision_free_name():
-    from factor_cold_start.catalog import load_catalog
+def test_recipe_migration_preserves_field_and_renames_only_call_target():
+    from factor_engine.tools.catalog_recipe_migration import migrate_average_volume_calls
 
-    for market in ("ashare", "us"):
-        rows = load_catalog(market, "extended")
-        formulas = {row.formula for row in rows}
-        assert "ts_average_volume(volume,20)" in formulas
-        assert "average_volume(volume,20)" not in formulas
+    migrated = migrate_average_volume_calls(
+        "add(average_volume,average_volume(volume,20))"
+    )
+    assert migrated.formula == "add(average_volume,ts_average_volume(volume,20))"
+    assert bool(migrated.changes) is True
+    second = migrate_average_volume_calls(migrated.formula)
+    assert second.formula == migrated.formula
+    assert bool(second.changes) is False

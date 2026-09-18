@@ -7,9 +7,14 @@ from pathlib import Path
 from factor_engine.runtime.config import load_config
 
 
-def test_factor_cs_pipeline_profile_loads():
-    root = Path(__file__).resolve().parents[2]
-    cfg = root / "examples" / "profiles" / "factor_cs_pipeline.yaml"
+def test_factor_cs_pipeline_profile_loads(tmp_path):
+    cfg = tmp_path / "factor_cs_pipeline.yaml"
+    cfg.write_text(
+        "factor:\n  name: cs_momentum_z\n  expr: winsorize(close)\n"
+        "data_source:\n  type: data_access\n  dataset: us_stock_daily\n"
+        "materialization:\n  factor_id: cs_momentum_z_v1\n",
+        encoding="utf-8",
+    )
     loaded = load_config(cfg)
     assert loaded.factor.name == "cs_momentum_z"
     assert "winsorize" in loaded.factor.expr

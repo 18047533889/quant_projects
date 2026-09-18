@@ -588,6 +588,8 @@ class StateCostAwareDeadband(SeriesOperator):
         category="signal_filter",
         description="成本感知死区: band 与交易成本代理成比例, 直接面向真实交易成本。",
         param_names=["x", "cost_proxy", "cost_mult"],
+        panel_params=("x", "cost_proxy"),
+        scalar_params=("cost_mult",),
         return_type="series",
         tags=[
             "signal_filter", "daily", "pit_safe", "causal", "stateful",
@@ -692,6 +694,8 @@ class StateCostAwareSlew(SeriesOperator):
         category="signal_filter",
         description="成本感知slew: 流动性差时允许变化小, 流动性好时允许快速更新。",
         param_names=["x", "cost_proxy", "slew_mult"],
+        panel_params=("x", "cost_proxy"),
+        scalar_params=("slew_mult",),
         return_type="series",
         tags=[
             "signal_filter", "daily", "pit_safe", "causal", "stateful",
@@ -805,6 +809,8 @@ class StateConfidenceWeightedEma(SeriesOperator):
         category="signal_filter",
         description="置信度调节 EMA：alpha 随模型置信度动态调整，高置信快速更新。",
         param_names=["x", "confidence", "alpha_min", "alpha_max"],
+        panel_params=("x", "confidence"),
+        scalar_params=("alpha_min", "alpha_max"),
         return_type="series",
         tags=[
             "signal_filter", "daily", "pit_safe", "causal", "stateful",
@@ -918,6 +924,8 @@ class StateUncertaintyDeadband(SeriesOperator):
         category="signal_filter",
         description="不确定度阈值滤波器：变化未超过预测不确定度时不更新。",
         param_names=["x", "uncertainty", "k_sigma"],
+        panel_params=("x", "uncertainty"),
+        scalar_params=("k_sigma",),
         return_type="series",
         tags=[
             "signal_filter", "daily", "pit_safe", "causal", "stateful",
