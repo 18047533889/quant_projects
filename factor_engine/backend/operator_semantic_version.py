@@ -26,6 +26,11 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_evt_threshold_stability": 2,
     # R56: count bidirectional completed gaps among valid opening-gap trials.
     "ts_gap_fill_ratio": 2,
+    # R56: the Wilder true range needs only the *previous* close, so the polars
+    # ADX true-range guard no longer requires the current close to be present.
+    # The old guard injected a spurious missing true-range observation, which
+    # pushed the Wilder EWM ``min_samples`` gate one bar late.
+    "ADX": 2,
     # R55: preserve every standard time/identity coordinate in chip kernels.
     "ts_cpt_value": 2,
     # R52: replace holder placeholders with exact multi-panel contracts.

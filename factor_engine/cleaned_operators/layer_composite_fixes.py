@@ -41,21 +41,42 @@ def pl_adx_strict(high, low, close, window=14, **_):
     w = positive_int(window, "window")
     replacements = {}
     for col in [c for c in pl_cols(high) if c in low.columns and c in close.columns]:
-        temp = pl.DataFrame({"h": high[col], "l": low[col], "c": close[col]})
+        temp = pl.DataFrame({"h": high[col], "l": low[col], "c": close[col]}).with_columns(
+            [
+                pl.when(pl_finite(name))
+                .then(pl.col(name).cast(pl.Float64, strict=False))
+                .otherwise(None)
+                .alias(name)
+                for name in ("h", "l", "c")
+            ]
+        )
         previous_close = pl.col("c").shift(1)
         raw_plus = pl.col("h") - pl.col("h").shift(1)
         raw_minus = pl.col("l").shift(1) - pl.col("l")
-        true_range = pl.when(previous_close.is_null()).then(None).otherwise(
+        # ``tr[t] = max(h-l, |h-c[t-1]|, |l-c[t-1]|)`` needs only the
+        # *previous* close. Requiring the current close to be present nulled
+        # ``tr`` on every bar whose own close was missing, adding a spurious
+        # missing observation that pushed the Wilder EWM ``min_samples`` gate
+        # one bar late and corrupted the whole ADX series downstream.
+        true_range_valid = (
+            pl.col("h").is_not_null()
+            & pl.col("l").is_not_null()
+            & previous_close.is_not_null()
+        )
+        true_range = pl.when(true_range_valid).then(
             pl.max_horizontal(
                 pl.col("h") - pl.col("l"),
                 (pl.col("h") - previous_close).abs(),
                 (pl.col("l") - previous_close).abs(),
             )
-        )
+        ).otherwise(None)
         plus = pl.when((raw_plus > raw_minus) & (raw_plus > 0)).then(raw_plus).otherwise(0.0)
         minus = pl.when((raw_minus > raw_plus) & (raw_minus > 0)).then(raw_minus).otherwise(0.0)
         staged = temp.with_columns(
-            true_range.ewm_mean(alpha=1.0 / w, adjust=False, min_samples=w).alias("atr"),
+            true_range
+            .ewm_mean(alpha=1.0 / w, adjust=False, min_samples=w)
+            .fill_null(strategy="forward")
+            .alias("atr"),
             plus.ewm_mean(alpha=1.0 / w, adjust=False, min_samples=w).alias("pdm"),
             minus.ewm_mean(alpha=1.0 / w, adjust=False, min_samples=w).alias("mdm"),
         ).with_columns(
@@ -81,9 +102,46 @@ def pl_adx_strict(high, low, close, window=14, **_):
         replacements[col] = staged.select(
             pl.col("dx")
             .ewm_mean(alpha=1.0 / w, adjust=False, min_samples=w)
+            .fill_null(strategy="forward")
             .alias("value")
         )["value"]
     return pl_base_with(high, replacements)
+
+
+def _adx_polars_op():
+    from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
+
+    op = PolarsFunctionOperator(
+        "ADX",
+        "technical_signal",
+        ["high", "low", "close", "window"],
+        "Wilder ADX with strict pandas-compatible missing seed",
+        pl_adx_strict,
+    )
+    # Authoring identities are completed into current-tree evidence digests by
+    # complete_physical_specs() after all replacement registrations finish.
+    op._physical_spec = PhysicalImplementationSpec(
+        canonical="ADX",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=False,
+        supports_streaming=False,
+        stateful=True,
+        materializes_full_panel=True,
+        requires_sorted=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash="layer_composite_fixes.pl_adx_strict:v2",
+        kernel_identity="layer_composite_fixes.pl_adx_strict",
+        parameter_domain_hash="ADX:window:int>=1:v1",
+        semantic_contract_hash="ADX:wilder:finite-observation-ewm:strict-missing-seed:v2",
+        notes=(
+            "Eager CPU Polars expressions over a materialized, sorted panel; "
+            "non-finite observations are missing and recovery follows Wilder EWM."
+        ),
+    )
+    return op
 
 
 def _days_since_op(cls, fn):
@@ -174,13 +232,7 @@ OperatorRegistry.register(
 
 if pl is not None:
     OperatorRegistry.register(
-        PolarsFunctionOperator(
-            "ADX",
-            "technical_signal",
-            ["high", "low", "close", "window"],
-            "Wilder ADX with strict pandas-compatible missing seed",
-            pl_adx_strict,
-        ),
+        _adx_polars_op(),
         canonical="ADX",
         backend="polars",
         source="layer_governance_native_polars",
@@ -190,6 +242,28 @@ if pl is not None:
         replacement_reason="final layer fixes ADX polars parity (strict missing-seed)",
         expected_old_source="operator_overhaul_native_polars",
     )
+    # Keep the public capability row aligned with the explicit physical spec.
+    # Correctness evidence remains a separate authority, so these honest
+    # topology fields classify the implementation without admitting it as
+    # production-safe by themselves.
+    _adx_row = OperatorRegistry._catalog["ADX"]
+    _adx_backend_meta = dict(_adx_row.get("backend_meta") or {})
+    _adx_polars_meta = dict(_adx_backend_meta.get("polars") or {})
+    _adx_polars_meta.update({
+        "execution_kind": "polars_native_expr",
+        "supports_lazy": False,
+        "supports_streaming": False,
+        "materializes_full_panel": True,
+        "supports_nulls": True,
+        "supports_nan": True,
+        "supports_inf": True,
+        "supports_scalar_broadcast": False,
+        "supports_group": False,
+        "supports_window": True,
+        "supports_min_periods": False,
+    })
+    _adx_backend_meta["polars"] = _adx_polars_meta
+    _adx_row["backend_meta"] = _adx_backend_meta
     OperatorRegistry.register(
         _days_since_op(PolarsFunctionOperator, pl_days_since_inclusive),
         canonical="ts_days_since",
