@@ -474,6 +474,20 @@ def _build_bootstrap_module_specs() -> tuple[BootstrapModuleSpec, ...]:
 
 BOOTSTRAP_MODULE_SPECS: tuple[BootstrapModuleSpec, ...] = _build_bootstrap_module_specs()
 
+# R56: surface the 34 public operators that are missing from the normal
+# production surface because their source modules are not in the default load
+# list.  The dedicated module imports them during the building window and
+# reverts any collateral registry edits, so only the 34 public names are added
+# (no existing contract changes).  The 3 research_only names stay out of the
+# production registry by design (ResearchToolRegistry entry point).
+BOOTSTRAP_MODULE_SPECS = BOOTSTRAP_MODULE_SPECS + (
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators._missing_public_bootstrap",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
+    ),
+)
+
 
 def validate_bootstrap_module_specs(specs: tuple[BootstrapModuleSpec, ...]) -> list[str]:
     """R40 #154 post-init validation of the typed module-spec roles.
