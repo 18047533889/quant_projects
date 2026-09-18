@@ -523,18 +523,9 @@ class TSHiguchiFractalDimensionPolarsNative(SeriesOperator):
 class TSHillTailIndexPolarsNative(SeriesOperator):
     """Hill estimator of tail index (extreme value shape)"""
 
-    metadata = OperatorMetadata(
-        name="ts_hill_tail_index",
-        category="time_series",
-        description="Hill estimator of tail thickness parameter",
-        param_names=["x","window","side","tail_fraction","min_tail_count"],
-        return_type="series",
-        tags=["time_series", "rolling", "extreme_tail", "pit_safe", "polars", "cpu_udf"],
-    )
-    metadata.param_specs = {
-        "window": ParamSpec(dtype=int, min=20, param_role=ParamRole.HORIZON),
-        "tail_fraction": ParamSpec(dtype=float, min=0.01, max=0.5, param_role=ParamRole.STATE_THRESHOLD),
-    }
+    from factor_engine.cleaned_operators.extreme_tail import TsHillTailIndex as _Reference
+    metadata = copy.deepcopy(_Reference.metadata)
+    metadata.tags = list(metadata.tags or []) + ["polars", "cpu_udf"]
     _physical_spec = PhysicalImplementationSpec(
         canonical="ts_hill_tail_index",
         backend="polars",
@@ -549,7 +540,7 @@ class TSHillTailIndexPolarsNative(SeriesOperator):
         implementation_source_hash="polars_native.ts_advanced_batch5:hill_shared_numpy:v1",
         emitter_identity="polars.DataFrame.with_columns:python_numpy_udf",
         kernel_identity="extreme_tail._hill_series:classic_hill:v1",
-        parameter_domain_hash="window>=20;side=upper|lower;0.01<=tail_fraction<=0.5;min_tail_count>=3",
+        parameter_domain_hash="window>=2;side=upper|lower;0<tail_fraction<=0.5;min_tail_count>=3",
         semantic_contract_hash="classic_hill:positive_threshold:mirrored_lower:shared_cpu_kernel:v1",
         notes="Eager per-column Python/NumPy UDF; explicitly not a native Polars expression.",
     )
@@ -569,15 +560,17 @@ class TSHillTailIndexPolarsNative(SeriesOperator):
         side_k = str(side).lower()
         if side_k not in {"upper", "lower"}:
             raise ValueError("ts_hill_tail_index requires side in {'upper','lower'}")
-        if "stock_code" in feature.columns and feature["stock_code"].drop_nulls().n_unique() > 1:
-            raise ValueError(
-                "ts_hill_tail_index Polars CPU UDF requires a wide panel or a single-stock "
-                "long frame; multi-stock long input must be isolated by stock_code first"
-            )
+        from factor_engine.cleaned_operators.common._polars_bridge import SKIP
+        if not isinstance(feature, pl.DataFrame):
+            raise TypeError("ts_hill_tail_index polars backend requires a polars.DataFrame")
+        for identity in ("stock_code", "instrument", "symbol", "inst"):
+            if identity in feature.columns and feature[identity].drop_nulls().n_unique() > 1:
+                raise ValueError(
+                    "ts_hill_tail_index Polars CPU UDF requires a wide panel or a single-stock "
+                    "long frame; multi-stock long input must be isolated by instrument first"
+                )
 
-        value_columns = [
-            name for name in feature.columns if name not in {"date", "stock_code"}
-        ]
+        value_columns = [name for name in feature.columns if name not in SKIP]
         results = []
         for name in value_columns:
             values = feature.select(name).to_series().to_numpy().astype(np.float64)
