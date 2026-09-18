@@ -3044,16 +3044,18 @@ class DataAccessSource(DataSource):
         返回 ``ScanCost``；不可用时返回 ``None``（调用方回退静态估算）。
         """
         try:
-            from data_access.read.scan_cost import estimate_scan_cost
-
             store = _get_store()
             physical, _ = self._resolve_columns(list(fields or []))
-            return estimate_scan_cost(
-                store,
+            return store.estimate_scan_cost(
                 self.dataset,
                 columns=physical,
                 time_range=time_range or self._time_range(),
-                instrument_filter=_strict_instrument_filter(instruments),
+                instrument_filter=(
+                    _strict_instrument_filter(instruments)
+                    if instruments is not None
+                    else self.instrument_filter
+                ),
+                filters=self.semantic_filters or None,
                 prefer_polars=self._lazy_scan,
                 **self.params,
             )

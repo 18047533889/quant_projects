@@ -146,6 +146,9 @@ class SchedulerPlan:
     fusion_groups: list[Any] = field(default_factory=list)
     cost_by_task: dict[str, Any] = field(default_factory=dict)
     meta: dict[str, Any] = field(default_factory=dict)
+    # Runtime-only observer: runs after admitted scans, before any compute
+    # contract (including fusion/microbatch contracts) is reserved.
+    refresh_task_budgets: Callable[..., None] | None = field(default=None, repr=False, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -1603,6 +1606,9 @@ class AdaptiveBatchScheduler:
                 input_dq_thresholds=input_dq_thresholds,
                 defer_on_pressure=True,
             )
+            refresh = getattr(plan, "refresh_task_budgets", None)
+            if callable(refresh):
+                refresh(self, plan, committed, remaining - set(futures))
             # 0.5) barrier 规划视图自动提交（R33-P0-008，不占 lease）。
             virtual_done += self._admit_virtual(dag, remaining, committed, futures)
             # 1) fusion group admission：组内全部 root 就绪 → 一次 native query。
@@ -2187,6 +2193,9 @@ class AdaptiveBatchScheduler:
                 input_dq_thresholds=input_dq_thresholds,
                 defer_on_pressure=True,
             )
+            refresh = getattr(plan, "refresh_task_budgets", None)
+            if callable(refresh):
+                refresh(self, plan, committed, remaining)
             progressed = False
             for tid in dag.topological_order():
                 if tid in committed or tid not in remaining:

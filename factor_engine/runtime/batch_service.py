@@ -1572,11 +1572,20 @@ def _execute_run_many_scheduler(
     # batch_data`` 是 layer-loop 专属）。read wave 是唯一 prefetch 路径，input DQ
     # 按 wave 在 scan 后执行。
     input_report = None
+    # The composite source reads secondary scopes inside its anchor wave.
+    # Admit their raw scan cost together; keep per-column estimates separate.
+    composite_execution = len(batch_request.groups) > 1
+    execution_scan_costs = (
+        batch_request.execution_scan_cost_map()
+        if composite_execution else batch_request.scan_cost_map
+    )
     plan = scheduler.plan(
         dag,
         analyses,
         enable_cse=enable_cse,
-        scope_scan_cost_map=batch_request.scan_cost_map,
+        scan_cost_map=execution_scan_costs if composite_execution else None,
+        scope_scan_cost_map=execution_scan_costs,
+        fusion_backend_capability=None if perf.native_fusion else {},
         ctx=ctx,
     )
     # Some in-memory/reference sources lower directly to ROOT tasks and therefore
@@ -1599,6 +1608,12 @@ def _execute_run_many_scheduler(
     else:
         input_report = None
     batch_request_meta = batch_request.to_dict()
+    # Retain the pre-physical, calibrated logical floor for later observation
+    # refinement; never erase the raw SOURCE_SCAN/read-wave contracts.
+    original_task_contracts = {
+        task_id: task.resource_contract
+        for task_id, task in plan.physical_dag.tasks.items()
+    }
     if run_mode == "production":
         try:
             from factor_engine.planner.batch_global_optimizer import optimize_batch_global
@@ -1699,6 +1714,12 @@ def _execute_run_many_scheduler(
         physical_plan_meta = {}
         execution_backend = engine_to_use.backend
 
+    if physical_optimization is not None and composite_execution:
+        from factor_engine.runtime.observed_physical_budget import make_observed_budget_refresher
+
+        plan.refresh_task_budgets = make_observed_budget_refresher(
+            physical_optimization, original_task_contracts
+        )
     if run_mode == "production":
         batch_route_meta = {}
     else:
@@ -1869,6 +1890,7 @@ def _execute_run_many_scheduler(
         "batch_data_request": batch_request_meta,
         "batch_physical_route": batch_route_meta,
         "physical_plan": physical_plan_meta,
+        "observed_physical_budget": plan.meta.get("observed_physical_budget", {}),
     }
     if physical_preflight is not None:
         batch_out["physical_preflight_errors"] = physical_preflight_errors

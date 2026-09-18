@@ -271,6 +271,14 @@ def test_data_access_anchor_builds_only_registered_same_market_secondary():
     assert valuation.instrument_filter == source.instrument_filter
     assert valuation.run_mode == source.run_mode
     assert valuation.production == source.production
+    balance = resolver.resolve_source(
+        SourceScopeId(dataset="ashare_stock_balance", market="ashare")
+    )
+    assert isinstance(balance, DataAccessSource)
+    assert balance.read_mode == "event"
+    assert balance.start_date == source.start_date
+    assert balance.end_date == source.end_date
+    assert balance.instrument_filter == source.instrument_filter
     assert resolver.resolve_source(
         SourceScopeId(dataset="unknown_table", market="ashare")
     ) is None

@@ -107,6 +107,22 @@ class PerfConfig:
     #: R27-215/233：native multi-root fusion 开关。
     native_fusion: bool = True
 
+    def __post_init__(self) -> None:
+        # Reject malformed overrides before compilation or an exception-tolerant
+        # resource probe can turn an invalid worker limit into auto concurrency.
+        if self.max_workers is not None:
+            from operator import index
+
+            if isinstance(self.max_workers, bool):
+                raise ValueError("max_workers must be a positive integer or None")
+            try:
+                workers = index(self.max_workers)
+            except TypeError as exc:
+                raise ValueError("max_workers must be a positive integer or None") from exc
+            if workers <= 0:
+                raise ValueError("max_workers must be a positive integer or None")
+            object.__setattr__(self, "max_workers", workers)
+
     def build_resource_plan(self, config: dict | None = None) -> Any:
         """构造 Phase 5 ``ExecutionResourcePlan``（resources 配置 + 环境变量合并）。"""
         from factor_engine.runtime.resource_governor import (
@@ -120,6 +136,9 @@ class PerfConfig:
         cache_cfg = dict(cfg.get("cache") or {})
         results_cfg = dict(cfg.get("results") or {})
         spill_cfg = dict(cfg.get("spill") or {})
+        concurrency_cfg = dict(cfg.get("concurrency") or {})
+        if self.max_workers is not None:
+            concurrency_cfg["max_workers"] = self.max_workers
         if self.memory_limit_bytes is not None:
             mem_cfg["limit"] = self.memory_limit_bytes
         if self.process_fraction is not None:
@@ -140,6 +159,7 @@ class PerfConfig:
             results_cfg,
             spill_cfg,
         )
+        cfg["concurrency"] = concurrency_cfg
         if not cfg.get("mode"):
             cfg["mode"] = "auto"
         return ExecutionResourcePlan.from_dict(cfg)

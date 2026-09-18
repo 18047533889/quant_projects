@@ -108,6 +108,8 @@ def native_fusion_capability_map(ctx: Any | None) -> dict[str, bool]:
         "polars_long": False,
         "pandas_numpy": False,
     }
+    if getattr(getattr(ctx, "perf", None), "native_fusion", True) is False:
+        return out
     backend = getattr(ctx, "backend", None)
     if backend is None:
         return out
@@ -121,12 +123,13 @@ def native_fusion_capability_map(ctx: Any | None) -> dict[str, bool]:
 
         certified = bool(backend_certifies(backend, "execute_multi_roots"))
     except Exception:
-        # 无 certification 层时退化为「有 callable 实现」——但 caller 显式传
-        # capability map 时以 caller 为准。
-        certified = True
+        # A callable is not parity/admission evidence. Missing or broken
+        # certification must never enable every backend's fusion capability.
+        certified = False
     if certified:
-        for key in out:
-            out[key] = True
+        label = getattr(backend, "runtime_backend_label", None)
+        if label in out:
+            out[label] = True
     return out
 
 

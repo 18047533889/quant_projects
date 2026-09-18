@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import dataclass, field
+import operator
 from typing import Any, Iterable
 
 from factor_engine.planner.physical_factor_dag import SourceScopeId
@@ -58,6 +59,33 @@ class ScanCostUnavailable:
             "fallback_estimate": self.fallback_estimate,
             "confidence": self.confidence,
         }
+
+
+class CompositeExecutionScanCostUnavailable(ValueError):
+    """Raw execution scope cannot be admitted without every component cost."""
+
+
+@dataclass(frozen=True)
+class CompositeExecutionScanCost:
+    """Conservative raw-read cost for one composite logical-source wave.
+
+    Every byte/row field is the sum of independent physical source scopes.  In
+    particular, ``estimated_rows`` is *raw scan work* and is not the row count
+    of any as-of aligned logical output.
+    """
+
+    dataset: str
+    file_count: int
+    total_bytes: int
+    estimated_rows: int
+    projected_columns: int
+    total_columns: None
+    remote: bool
+    selected_files: int
+    selected_bytes: int
+    projection_bytes: int
+    cost_basis: str = "composite_execution_raw_scope_sum"
+    component_scope_keys: tuple[str, ...] = ()
 
 
 def _scan_cost_dict(cost: Any) -> dict[str, Any]:
@@ -142,6 +170,7 @@ class BatchDataRequest:
     """
 
     fields: tuple[str, ...] = ()
+    anchor_source_scope: SourceScopeId | None = None
     groups: list[SourceScanGroup] = field(default_factory=list)
     degraded_planning: list[ScanCostUnavailable] = field(default_factory=list)
     hard_gate_counters: dict[str, int] = field(default_factory=dict)
@@ -155,6 +184,148 @@ class BatchDataRequest:
             g.source_scope_key: g.scan_cost
             for g in self.groups
             if g.scan_cost is not None
+        }
+
+    @property
+    def anchor_source_scope_key(self) -> str:
+        return self.anchor_source_scope.key() if self.anchor_source_scope is not None else ""
+
+    def execution_scan_cost_map(self) -> dict[str, Any]:
+        """Return the cost map consumed by the current physical lowerer.
+
+        The lowerer creates one SOURCE_SCAN/read wave under the anchor scope,
+        while a composite logical source may synchronously read several typed
+        secondary scopes.  Bind the sum of those raw physical costs to that
+        exact anchor key.  This map is intentionally separate from
+        :attr:`scan_cost_map` and ``column_scan_costs``; neither per-scope CBO
+        facts nor logical-column attribution is mutated.
+
+        Missing/unknown component evidence fails closed.  A known empty scope
+        is accepted only when its rows, files, selected bytes and projection
+        bytes are all zero.
+        """
+        anchor_scope_key = self.anchor_source_scope_key
+        if not anchor_scope_key:
+            raise ValueError("anchor_scope_key must be non-empty")
+        if not self.groups:
+            raise CompositeExecutionScanCostUnavailable(
+                "composite execution scan cost has no typed source groups"
+            )
+        scope_keys = tuple(group.source_scope_key for group in self.groups)
+        if len(set(scope_keys)) != len(scope_keys):
+            raise CompositeExecutionScanCostUnavailable(
+                "composite execution scan cost contains duplicate typed source scopes"
+            )
+        anchor_groups = [
+            group for group in self.groups
+            if group.source_scope_key == anchor_scope_key
+        ]
+        if len(anchor_groups) != 1:
+            raise CompositeExecutionScanCostUnavailable(
+                "lowerer anchor scope is not represented exactly once in execution groups: "
+                f"{anchor_scope_key!r}"
+            )
+        if len(self.groups) == 1:
+            group = self.groups[0]
+            if group.source_scope_key != anchor_scope_key:
+                raise CompositeExecutionScanCostUnavailable(
+                    "single execution source scope does not match lowerer anchor: "
+                    f"{group.source_scope_key!r} != {anchor_scope_key!r}"
+                )
+            self._validated_raw_component(group)
+            # Preserve the established one-source contract exactly.
+            return {anchor_scope_key: group.scan_cost}
+
+        components = [self._validated_raw_component(group) for group in self.groups]
+        return {
+            anchor_scope_key: CompositeExecutionScanCost(
+                dataset=anchor_groups[0].dataset,
+                file_count=sum(item["file_count"] for item in components),
+                total_bytes=sum(item["total_bytes"] for item in components),
+                estimated_rows=sum(item["estimated_rows"] for item in components),
+                projected_columns=sum(item["projected_columns"] for item in components),
+                total_columns=None,
+                remote=any(item["remote"] for item in components),
+                selected_files=sum(item["selected_files"] for item in components),
+                selected_bytes=sum(item["selected_bytes"] for item in components),
+                projection_bytes=sum(item["projection_bytes"] for item in components),
+                component_scope_keys=scope_keys,
+            )
+        }
+
+    @staticmethod
+    def _validated_raw_component(group: SourceScanGroup) -> dict[str, Any]:
+        cost = group.scan_cost
+        scope = group.source_scope_key
+        if group.scan_cost_unavailable is not None or cost is None:
+            reason = (
+                group.scan_cost_unavailable.reason
+                if group.scan_cost_unavailable is not None
+                else "missing scan cost"
+            )
+            raise CompositeExecutionScanCostUnavailable(
+                f"raw execution cost unavailable for scope {scope!r}: {reason}"
+            )
+        basis = str(getattr(cost, "cost_basis", "") or "")
+        if basis in {"", "unknown", "cost_unknown_conservative"}:
+            raise CompositeExecutionScanCostUnavailable(
+                f"raw execution cost has non-exact basis for scope {scope!r}: {basis!r}"
+            )
+
+        def integer(name: str, *, nullable: bool = False) -> int:
+            value = getattr(cost, name, None)
+            if value is None and nullable:
+                raise CompositeExecutionScanCostUnavailable(
+                    f"raw execution cost lacks {name} for scope {scope!r}"
+                )
+            if isinstance(value, bool):
+                raise CompositeExecutionScanCostUnavailable(
+                    f"raw execution cost has invalid {name} for scope {scope!r}"
+                )
+            try:
+                result = operator.index(value)
+            except (TypeError, ValueError) as exc:
+                raise CompositeExecutionScanCostUnavailable(
+                    f"raw execution cost has invalid {name} for scope {scope!r}"
+                ) from exc
+            if result < 0:
+                raise CompositeExecutionScanCostUnavailable(
+                    f"raw execution cost has negative {name} for scope {scope!r}"
+                )
+            return result
+
+        rows = integer("estimated_rows")
+        files = integer("file_count")
+        selected_files = integer("selected_files")
+        selected = integer("selected_bytes", nullable=True)
+        projection = integer("projection_bytes", nullable=True)
+        projected_columns = integer("projected_columns")
+        total = integer("total_bytes", nullable=True)
+        known_empty = not any((rows, files, selected_files, selected, projection))
+        # A frozen physical scope may contain files while exact footer
+        # predicates prove that no row group can match the actual query.
+        # None is unknown evidence, not a zero-row-group proof.
+        if basis == "physical_scope" and getattr(cost, "selected_rowgroups", None) is not None:
+            selected_rowgroups = integer("selected_rowgroups")
+            known_empty = known_empty or (
+                selected_rowgroups == 0
+                and getattr(cost, "empty_result_proven", False) is True
+                and getattr(cost, "rowgroup_pruning_basis", "") == "parquet_footer_min_max_closed_predicates"
+                and not any((rows, selected_files, selected, projection))
+            )
+        if not known_empty and (projection <= 0 or selected <= 0):
+            raise CompositeExecutionScanCostUnavailable(
+                f"raw execution cost is non-empty but has no positive byte bound for scope {scope!r}"
+            )
+        return {
+            "estimated_rows": rows,
+            "file_count": files,
+            "selected_files": selected_files,
+            "selected_bytes": selected,
+            "projection_bytes": projection,
+            "projected_columns": projected_columns,
+            "total_bytes": total,
+            "remote": bool(getattr(cost, "remote", False)),
         }
 
     @property
@@ -304,6 +475,16 @@ class BatchSourceResolver:
                 and scope.market == self.market
                 and scope.dataset in registered[self.market]
             ):
+                from data_access.cos_contract import get_cos_contract
+
+                contract = get_cos_contract(scope.dataset)
+                temporal_model = str(
+                    getattr(contract, "temporal_model", "") or ""
+                ).upper()
+                secondary_read_mode = (
+                    "event" if temporal_model in {"E1", "E2"} else
+                    str(getattr(src, "read_mode", "panel") or "panel")
+                )
                 return DataAccessSource(
                     dataset=scope.dataset,
                     start_date=src.start_date,
@@ -315,7 +496,7 @@ class BatchSourceResolver:
                         **dict(getattr(src, "semantic_filters", None) or {}),
                         **dict(semantic_filters or {}),
                     },
-                    read_mode=str(getattr(src, "read_mode", "panel") or "panel"),
+                    read_mode=secondary_read_mode,
                     strict_unknown_fields=src.strict_unknown_fields,
                     run_mode=src.run_mode,
                     production=src.production,
@@ -631,6 +812,13 @@ def build_batch_data_request(
                     time_range=time_range.as_tuple() if time_range is not None else None,
                     instruments=instrument_scope,
                 )
+                if cost is None:
+                    unavail = ScanCostUnavailable(
+                        dataset=scope.dataset,
+                        reason="estimate_scan_cost returned None",
+                        fallback_estimate=0,
+                        confidence="none",
+                    )
             except Exception as exc:  # noqa: BLE001
                 unavail = ScanCostUnavailable(
                     dataset=scope.dataset,
@@ -679,6 +867,7 @@ def build_batch_data_request(
     column_scope_keys = dict(effective_scope_keys)
     return BatchDataRequest(
         fields=ordered,
+        anchor_source_scope=anchor_scope,
         groups=requests,
         degraded_planning=degraded,
         hard_gate_counters={

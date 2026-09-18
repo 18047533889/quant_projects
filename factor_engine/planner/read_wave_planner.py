@@ -129,6 +129,9 @@ class ReadWave:
     task_ids: tuple[str, ...] = ()
     estimated_scan_bytes: int = 0
     estimated_memory_bytes: int = 0
+    # Full raw projection bound for a composite logical-source scan. Unlike
+    # per-column footprints this is indivisible and must never be apportioned.
+    composite_scope_memory_bytes: int = 0
     reuse_density: float = 0.0
     locality_groups: tuple[tuple[str, ...], ...] = ()
     instrument_scope: tuple[str, ...] = ()
@@ -171,6 +174,7 @@ class ReadWave:
             "task_ids": list(self.task_ids),
             "estimated_scan_bytes": self.estimated_scan_bytes,
             "estimated_memory_bytes": self.estimated_memory_bytes,
+            "composite_scope_memory_bytes": self.composite_scope_memory_bytes,
             "reuse_density": round(self.reuse_density, 4),
             "locality_groups": [list(g) for g in self.locality_groups],
             "instrument_scope": list(self.instrument_scope),
@@ -365,6 +369,8 @@ class _ReadRequest:
     columns: frozenset[str]
     estimated_scan_bytes: int
     estimated_memory_bytes: int
+    composite_scope_memory_bytes: int = 0
+    composite_scope_cost_identity: int | None = None
     instrument_scope: tuple[str, ...] = ()
     universe_id: str = ""
     column_footprints: dict[str, ProjectedColumnFootprint] = field(default_factory=dict)
@@ -429,6 +435,8 @@ class ReadWavePlanner:
         columns: Iterable[str],
         estimated_scan_bytes: int | None = None,
         estimated_memory_bytes: int | None = None,
+        composite_scope_memory_bytes: int = 0,
+        composite_scope_cost_identity: int | None = None,
         instrument_scope: tuple[str, ...] | None = None,
         universe_id: str | None = None,
         column_footprints: Mapping[str, ProjectedColumnFootprint] | None = None,
@@ -454,6 +462,10 @@ class ReadWavePlanner:
                     if estimated_memory_bytes is not None
                     else self._request_mem_bytes(cols, footprints, axis_bytes)
                 ),
+                composite_scope_memory_bytes=max(
+                    0, int(composite_scope_memory_bytes or 0)
+                ),
+                composite_scope_cost_identity=composite_scope_cost_identity,
                 instrument_scope=tuple(instrument_scope or ()),
                 universe_id=universe_id or "",
                 column_footprints=footprints,
@@ -498,6 +510,7 @@ class ReadWavePlanner:
         decoded = union_footprint_bytes(
             footprints, cols, per_column_fallback_bytes=self.per_column_bytes
         )
+        decoded = max(decoded, self._composite_scope_memory_bytes(reqs))
         axis = self.axis_bytes
         for r in reqs:
             axis = max(axis, r.axis_bytes)
@@ -508,6 +521,27 @@ class ReadWavePlanner:
             + self.downstream_live_reserve
             + self.output_reserve
         )
+
+    @staticmethod
+    def _composite_scope_memory_bytes(reqs: list[_ReadRequest]) -> int:
+        """Sum independent scope bounds; reuse duplicate requests by max.
+
+        A composite bound describes a complete physical source scope, not a
+        column footprint. Requests for the same scope in one wave share the
+        materialization, while distinct scopes remain additive.
+        """
+        bounds: dict[tuple[str, object], int] = {}
+        for req in reqs:
+            bound = max(0, int(req.composite_scope_memory_bytes or 0))
+            if bound:
+                identity: object = (
+                    req.composite_scope_cost_identity
+                    if req.composite_scope_cost_identity is not None
+                    else ("unproven-request", req.task_id)
+                )
+                key = (req.source_scope, identity)
+                bounds[key] = max(bounds.get(key, 0), bound)
+        return sum(bounds.values())
 
     def _physical_union_scan_bytes(
         self,
@@ -656,6 +690,7 @@ class ReadWavePlanner:
             source_tasks=tuple(sorted(r.task_id for r in reqs)),
             estimated_scan_bytes=baseline,
             estimated_memory_bytes=union_mem,
+            composite_scope_memory_bytes=self._composite_scope_memory_bytes(reqs),
             reuse_density=round(reuse_density, 4),
             instrument_scope=inst,
             universe_id=univ,
@@ -691,17 +726,28 @@ class ReadWavePlanner:
         current_axis = max((r.axis_bytes for r in current_reqs), default=self.axis_bytes)
         current_axis = max(self.axis_bytes, current_axis)
         reserves = self.metadata_bytes + self.downstream_live_reserve + self.output_reserve
-        current_mem = (current_axis + union_footprint_bytes(
+        current_decoded = union_footprint_bytes(
             current_footprints, current_cols, per_column_fallback_bytes=self.per_column_bytes
-        ) + reserves) if current_reqs else 0
+        )
+        current_decoded = max(
+            current_decoded, self._composite_scope_memory_bytes(current_reqs)
+        )
+        current_mem = (
+            current_axis + current_decoded + reserves if current_reqs else 0
+        )
         for idx, req in enumerate(candidates):
             union_cols = current_cols | req.columns
             footprints = dict(current_footprints)
             for column, footprint in req.column_footprints.items():
                 footprints.setdefault(column, footprint)
-            union_mem = max(current_axis, req.axis_bytes) + union_footprint_bytes(
+            union_decoded = union_footprint_bytes(
                 footprints, union_cols, per_column_fallback_bytes=self.per_column_bytes
-            ) + reserves
+            )
+            union_decoded = max(
+                union_decoded,
+                self._composite_scope_memory_bytes(current_reqs + [req]),
+            )
+            union_mem = max(current_axis, req.axis_bytes) + union_decoded + reserves
             incremental_live_bytes = max(0, union_mem - current_mem)
             cost = (
                 incremental_live_bytes
@@ -1084,6 +1130,8 @@ def build_waves_from_dag(
         rows_estimate=rows_estimate,
         cost_model=cost_model,
     )
+    from factor_engine.planner.batch_data_request import CompositeExecutionScanCost
+
     scan_cost_map = scan_cost_map or {}
     scope_scan_cost_map = scope_scan_cost_map or {}
     consumer_candidates: list[_ConsumerCandidate] = []
@@ -1100,6 +1148,11 @@ def build_waves_from_dag(
             time_range = spec.time_range if spec is not None else task.time_range
             est_scan = cost.selected_bytes if cost is not None and cost.selected_bytes else None
             est_mem = cost.projection_bytes if cost is not None and cost.projection_bytes else None
+            composite_scope_mem = (
+                int(getattr(cost, "projection_bytes", 0) or 0)
+                if isinstance(cost, CompositeExecutionScanCost)
+                else 0
+            )
             footprints = _lookup_footprints(
                 footprint_source, dataset, task.source_snapshot_id or None, columns
             )
@@ -1115,6 +1168,10 @@ def build_waves_from_dag(
                 columns=columns,
                 estimated_scan_bytes=est_scan,
                 estimated_memory_bytes=est_mem,
+                composite_scope_memory_bytes=composite_scope_mem,
+                composite_scope_cost_identity=(
+                    id(cost) if isinstance(cost, CompositeExecutionScanCost) else None
+                ),
                 instrument_scope=(
                     spec.instrument_scope if spec is not None else task.instrument_scope
                 ),

@@ -4177,6 +4177,8 @@ class FactorEngine:
         result_policy: str = "return",
         sink: Any | None = None,
         warmup_clusters: bool = False,
+        wave_size: int | None = None,
+        sink_queue_bytes: int | None = None,
         _compiled: tuple[Any, dict[str, AnalysisResult]] | None = None,
     ) -> dict[str, Any]:
         """多因子求值：默认全批 DAG、CSE 与资源受控自适应调度。
@@ -4201,6 +4203,10 @@ class FactorEngine:
             sink: ``result_policy="sink"`` 时的回调 ``sink(factor_name, result)``。
             warmup_clusters: Phase 5 P1-4 按 lookback 成本聚类成 waves，各自独立
                 union 窗口，避免一个 full-history 因子拖累整批。
+            wave_size: sink 模式每个 DAG wave 的因子数；None 自动选择。
+                显式设置时即使小批次也走有界读算写；不能超过主机 DAG 宽度上限。
+            sink_queue_bytes: sink 写入队列字节上限；None 使用已有资源预算。
+                不是额外内存授权。跨 wave 复用受缓存预算和源身份约束。
 
         Returns:
             含 ``results``、``dag``、``analyses`` 及可选 ``batch_graph``、
@@ -4210,13 +4216,23 @@ class FactorEngine:
         from factor_engine.planner.physical_lowerer import _get_adaptive_dag_width_limit
 
         _assert_public_batch_authority(self, research_physical_consumer=True)
-        if result_policy == "sink" and len(factors) > _get_adaptive_dag_width_limit():
+        explicit_stream = wave_size is not None or sink_queue_bytes is not None
+        if explicit_stream and result_policy != "sink":
+            raise ValueError("wave_size/sink_queue_bytes require result_policy='sink'")
+        use_stream = result_policy == "sink" and (
+            explicit_stream or len(factors) > _get_adaptive_dag_width_limit()
+        )
+        if use_stream and _compiled is not None:
+            raise ValueError("streaming waves cannot consume a precompiled full-batch DAG")
+        if use_stream:
             from factor_engine.runtime.streaming_batch_service import execute_run_many_stream
 
             return execute_run_many_stream(
                 self,
                 factors,
                 sink=sink,
+                wave_size=wave_size,
+                sink_queue_bytes=sink_queue_bytes,
                 _wave_runner="run_many",
                 perf=perf,
                 enable_cse=enable_cse,
