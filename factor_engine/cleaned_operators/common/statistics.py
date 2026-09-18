@@ -1391,9 +1391,16 @@ class lilliefors_test(SeriesOperator):
         tags=["statistics", "hypothesis", "lilliefors", "normality"]
     )
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
+        try:
+            from statsmodels.stats.diagnostic import lilliefors as statsmodels_lilliefors
+        except ImportError as exc:
+            raise ImportError(
+                "ts_expanding_lilliefors_pvalue requires statsmodels; "
+                "install statsmodels>=0.14 to evaluate this operator"
+            ) from exc
         return expanding_univariate(
             x,
-            lambda v: stats.lilliefors(v)[1],
+            lambda v: statsmodels_lilliefors(v, dist="norm", pvalmethod="table")[1],
             min_periods=5,
         )
 

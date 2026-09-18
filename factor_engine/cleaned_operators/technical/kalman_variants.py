@@ -148,12 +148,19 @@ class TSAlphaBetaFilter(SeriesOperator):
 def _h_infinity_level_filter_1d(obs: np.ndarray, gamma: float, q: float, r: float) -> np.ndarray:
     """H-infinity robust level filter for 1D time series.
 
-    Robust to model uncertainty via game-theoretic approach (min-max).
-    gamma >= 1.0 controls robustness (larger = more robust to disturbances).
+    ``gamma`` is the disturbance-attenuation bound: a smaller feasible value
+    imposes the stronger min-max robustness constraint, while
+    ``gamma -> infinity`` recovers the scalar Kalman information update.
     """
-    gamma = max(1.0, gamma)
-    q = max(_EPS, q)
-    r = max(_EPS, r)
+    gamma = float(gamma)
+    q = float(q)
+    r = float(r)
+    if not np.isfinite(gamma) or gamma <= 0.0:
+        raise ValueError("ts_h_infinity_level_filter requires finite gamma > 0")
+    if not np.isfinite(q) or q <= 0.0:
+        raise ValueError("ts_h_infinity_level_filter requires finite q > 0")
+    if not np.isfinite(r) or r <= 0.0:
+        raise ValueError("ts_h_infinity_level_filter requires finite r > 0")
 
     n = len(obs)
     filtered = np.full(n, np.nan)
@@ -181,23 +188,27 @@ def _h_infinity_level_filter_1d(obs: np.ndarray, gamma: float, q: float, r: floa
 
         # Update (if observation is finite)
         if np.isfinite(obs[i]):
-            # H-infinity gain
-            denom = P_pred + r - (gamma**2) * P_pred**2 / (P_pred + r)
-            if abs(denom) < _EPS:
-                K = 0.0
-            else:
-                K = P_pred / denom
+            # Scalar H-infinity information-form Riccati update:
+            #   P_post^-1 = P_pred^-1 + r^-1 - gamma^-2.
+            # A non-positive information term violates the H-infinity
+            # feasibility constraint.  Fail closed rather than substituting a
+            # Kalman update or clipping an unstable gain.
+            with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+                inverse_gamma = np.float64(1.0) / np.float64(gamma)
+                information = 1.0 / P_pred + 1.0 / r - inverse_gamma * inverse_gamma
+            if not np.isfinite(information) or information <= 0.0:
+                filtered[i:] = np.nan
+                break
+            P = 1.0 / information
+            K = P / r
 
             residual = obs[i] - x_pred
             x_est = x_pred + K * residual
-            P = (1 - K) * P_pred
         else:
             # Gap: predict-only
             x_est = x_pred
             P = P_pred
 
-        # Clamp covariance
-        P = max(_EPS, P)
         filtered[i] = x_est
 
     return filtered
@@ -211,11 +222,14 @@ def _h_infinity_level_filter_1d(obs: np.ndarray, gamma: float, q: float, r: floa
     source="r47_kalman_batch",
 )
 class TSHInfinityLevelFilter(SeriesOperator):
-    """H-infinity robust level filter (min-max game-theoretic)."""
+    """H-infinity level filter with a scalar min-max attenuation bound."""
 
     metadata = _meta(
         name="ts_h_infinity_level_filter",
-        description="H-infinity robust level filter: game-theoretic min-max filter robust to model uncertainty",
+        description=(
+            "H-infinity scalar min-max level filter; smaller feasible gamma "
+            "imposes a stronger disturbance-attenuation constraint"
+        ),
         params=["x", "gamma", "q", "r"],
         output_unit="same_as_input",
         param_specs={

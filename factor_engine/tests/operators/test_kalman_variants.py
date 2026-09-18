@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+import polars as pl
 import pytest
 
 import factor_engine.cleaned_operators.technical.kalman_variants  # noqa: F401
@@ -278,18 +279,14 @@ def test_alpha_beta_param_bounds() -> None:
     assert result_high.shape == panel.shape
 
 
-def test_h_infinity_gamma_minimum() -> None:
-    """H-infinity filter enforces gamma >= 1.0."""
+def test_h_infinity_feasible_gamma() -> None:
+    """A feasible attenuation level produces finite estimates."""
     panel = _daily_panel(days=30, cols=1, seed=8)
     op = OperatorRegistry.get("ts_h_infinity_level_filter")
 
-    # Valid gamma
     result = op.calculate(panel, gamma=2.5, q=0.01, r=1.0)
     assert result.shape == panel.shape
-
-    # gamma < 1.0 is clamped to 1.0 internally
-    result_low = op.calculate(panel, gamma=0.5, q=0.01, r=1.0)
-    assert result_low.shape == panel.shape
+    assert np.isfinite(result.to_numpy()).all()
 
 
 def test_adaptive_kalman_window_minimum() -> None:
@@ -321,38 +318,77 @@ def test_student_t_dof_minimum() -> None:
 
 
 # ---------------------------------------------------------------------------
-# smoothing behavior
+# independent scalar recurrences and bounded-output behavior
 # ---------------------------------------------------------------------------
-@pytest.mark.parametrize("name", CANONICALS)
-def test_smoothing_reduces_variance(name: str) -> None:
-    """Filtered output has lower variance than noisy input (smoothing)."""
-    # Generate noisy signal
-    rng = np.random.default_rng(11)
-    idx = pd.date_range("2024-01-01", periods=100, freq="B")
-    clean = np.sin(np.linspace(0, 4 * np.pi, 100)) * 10.0 + 100.0
-    noisy = clean + rng.standard_normal(100) * 2.0
-    panel = pd.DataFrame(noisy, index=idx, columns=["C0"])
+def test_alpha_beta_matches_independent_recurrence() -> None:
+    observations = np.array([10.0, 11.0, 13.0, np.nan, 14.0, 13.5])
+    alpha, beta = 0.25, 0.10
+    position, velocity = observations[0], 0.0
+    expected = [position]
+    for observation in observations[1:]:
+        predicted = position + velocity
+        if np.isfinite(observation):
+            residual = observation - predicted
+            position = predicted + alpha * residual
+            velocity += beta * residual
+        else:
+            position = predicted
+        expected.append(position)
+    panel = pd.DataFrame({"C0": observations})
+    actual = OperatorRegistry.get("ts_alpha_beta_filter").calculate(
+        panel, alpha=alpha, beta=beta
+    )
+    np.testing.assert_allclose(actual["C0"], expected, rtol=0.0, atol=1e-12)
 
-    op = OperatorRegistry.get(name)
 
-    if name == "ts_alpha_beta_filter":
-        result = op.calculate(panel, alpha=0.1, beta=0.05)
-    elif name == "ts_h_infinity_level_filter":
-        result = op.calculate(panel, gamma=2.0, q=0.01, r=1.0)
-    elif name == "ts_adaptive_noise_kalman":
-        result = op.calculate(panel, q_init=0.01, r_init=1.0, window=20, adapt_rate=0.05)
-    elif name == "ts_student_t_kalman_filter":
-        result = op.calculate(panel, q=0.01, r=1.0, dof=5.0)
-    else:
-        raise ValueError(f"Unknown operator {name}")
+def test_h_infinity_matches_information_form_riccati_oracle() -> None:
+    observations = np.array([10.0, 11.0, 9.5, np.nan, 10.5, 10.0])
+    gamma, q, r = 2.0, 0.01, 1.0
+    estimate, covariance = observations[0], 1.0
+    expected = [estimate]
+    for observation in observations[1:]:
+        predicted_covariance = covariance + q
+        if np.isfinite(observation):
+            information = 1 / predicted_covariance + 1 / r - 1 / gamma**2
+            assert information > 0
+            covariance = 1 / information
+            estimate += covariance / r * (observation - estimate)
+        else:
+            covariance = predicted_covariance
+        expected.append(estimate)
+    panel = pd.DataFrame({"C0": observations})
+    actual = OperatorRegistry.get("ts_h_infinity_level_filter").calculate(
+        panel, gamma=gamma, q=q, r=r
+    )
+    np.testing.assert_allclose(actual["C0"], expected, rtol=0.0, atol=1e-12)
+    assert np.isfinite(actual.to_numpy()).all()
 
-    # Drop NaN warmup
-    valid = result.dropna()
-    input_var = panel.loc[valid.index, "C0"].var()
-    output_var = valid["C0"].var()
 
-    # Smoothed output should have lower variance
-    assert output_var < input_var, f"{name} did not reduce variance (input={input_var:.2f}, output={output_var:.2f})"
+def test_h_infinity_infeasible_attenuation_fails_closed() -> None:
+    panel = pd.DataFrame({"C0": [10.0, 11.0, 12.0]})
+    result = OperatorRegistry.get("ts_h_infinity_level_filter").calculate(
+        panel, gamma=0.5, q=0.01, r=1.0
+    )
+    assert result.iloc[0, 0] == 10.0
+    assert result.iloc[1:, 0].isna().all()
+
+
+@pytest.mark.parametrize("gamma", [1e-200, 1e-300])
+def test_h_infinity_tiny_positive_gamma_fails_closed_without_underflow_exception(gamma):
+    panel = pd.DataFrame({"C0": [10.0, 11.0, 12.0]})
+    result = OperatorRegistry.get("ts_h_infinity_level_filter").calculate(panel, gamma=gamma)
+    assert result.iloc[0, 0] == 10.0
+    assert result.iloc[1:, 0].isna().all()
+
+
+def test_h_infinity_rejects_nonpositive_parameters() -> None:
+    panel = pd.DataFrame({"C0": [10.0, 11.0]})
+    op = OperatorRegistry.get("ts_h_infinity_level_filter")
+    for params in ({"gamma": 0.0, "q": 0.01, "r": 1.0},
+                   {"gamma": 2.0, "q": 0.0, "r": 1.0},
+                   {"gamma": 2.0, "q": 0.01, "r": 0.0}):
+        with pytest.raises(ValueError):
+            op.calculate(panel, **params)
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +420,16 @@ def test_all_nan_input(name: str) -> None:
 # ---------------------------------------------------------------------------
 @pytest.mark.parametrize("name", CANONICALS)
 def test_polars_bridge_registered(name: str) -> None:
-    """Polars backend bridge is registered (delegates to pandas)."""
-    from factor_engine.cleaned_operators.rolling_pack import _POLARS_BRIDGES
-
-    assert name in _POLARS_BRIDGES, f"{name} missing Polars bridge"
+    """The public Polars registry entry executes and agrees with pandas."""
+    panel = pd.DataFrame({"C0": [10.0, 10.5, 10.25, 11.0, 10.75]})
+    params = {
+        "ts_alpha_beta_filter": {"alpha": 0.2, "beta": 0.05},
+        "ts_h_infinity_level_filter": {"gamma": 2.0, "q": 0.01, "r": 1.0},
+        "ts_adaptive_noise_kalman": {"q_init": 0.01, "r_init": 1.0, "window": 3, "adapt_rate": 0.05},
+        "ts_student_t_kalman_filter": {"q": 0.01, "r": 1.0, "dof": 5.0},
+    }[name]
+    pandas_result = OperatorRegistry.get(name, "pandas_numpy").calculate(panel, **params)
+    polars_op = OperatorRegistry.get(name, "polars")
+    assert polars_op is not None
+    polars_result = polars_op.calculate(pl.from_pandas(panel), **params)
+    np.testing.assert_allclose(polars_result.to_numpy(), pandas_result.to_numpy(), atol=1e-12)

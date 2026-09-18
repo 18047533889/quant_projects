@@ -16,6 +16,10 @@ class OperatorSemanticVersion:
 OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     # R39/R41: correct quadratic coefficient order and finite scored pairs.
     "ts_poly2_resid": 2,
+    # R44: feasible information-form H-infinity Riccati recurrence.
+    "ts_h_infinity_level_filter": 2,
+    # R44: genuine normal-distribution Lilliefors test, not swallowed AttributeError.
+    "ts_expanding_lilliefors_pvalue": 2,
     # R40/R42: replace effective Polars placeholders with canonical estimators.
     "ts_extremal_index": 2,
     "ts_gpd_shape_pwm": 2,

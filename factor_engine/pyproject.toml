@@ -16,6 +16,7 @@ dependencies = [
     "packaging>=23.0",
     "pyarrow>=14.0",
     "scipy>=1.10",
+    "statsmodels>=0.14",
     # R55 wheel-matrix smoke: polars is REQUIRED at import time — the
     # intraday/__init__ bind_whitelist chain (perf_vec_kernels -> smart_money)
     # imports polars unconditionally, so a wheel installed without the [polars]
