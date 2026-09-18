@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import enum
+from numbers import Integral
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
@@ -285,6 +286,13 @@ def _is_known_canonical(resolved: str) -> bool:
         return False
 
 
+def _validated_history_rows(value: Any) -> int:
+    """Do not truncate fractional/bool/negative history into a safe-looking lane."""
+    if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
+        raise ValueError("history rows must be a nonnegative integer")
+    return int(value)
+
+
 def classify_incremental_mode(
     canonical: str, params: Mapping[str, Any] | None = None
 ) -> IncrementalMode:
@@ -344,7 +352,7 @@ def classify_incremental_mode(
         if incremental_req.is_full_history:
             return IncrementalMode.FULL_REPLAY
         try:
-            back = max(0, int(incremental_req.rows))
+            back = _validated_history_rows(incremental_req.rows)
         except (TypeError, ValueError):
             return IncrementalMode.FULL_REPLAY
         if back >= 1:
@@ -454,7 +462,7 @@ def resolve_incremental_contract(
         backward_history = 0
         if not incremental_req.is_full_history:
             try:
-                backward_history = max(0, int(incremental_req.rows))
+                backward_history = _validated_history_rows(incremental_req.rows)
             except (TypeError, ValueError):
                 mode = IncrementalMode.FULL_REPLAY
                 backward_history = 0

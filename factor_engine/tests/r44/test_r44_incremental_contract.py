@@ -152,10 +152,11 @@ def test_production_unknown_fiscal_calendar_stays_full_replay(monkeypatch) -> No
     assert contract.forward_impact is None
 
 
-def test_malformed_own_history_fails_closed(monkeypatch) -> None:
+@pytest.mark.parametrize("rows", ["not-an-integer", -1, 0.5, 2.5, True, float("nan"), float("inf")])
+def test_malformed_own_history_fails_closed(monkeypatch, rows) -> None:
     import factor_engine.runtime.execution_contract as ec
 
-    malformed = ec.HistoryRequirement(kind="finite", rows="not-an-integer")
+    malformed = ec.HistoryRequirement(kind="finite", rows=rows)
     monkeypatch.setattr(ec, "own_history_requirement", lambda canonical, params=None: malformed)
     assert classify_incremental_mode("fin_ratio") is IncrementalMode.FULL_REPLAY
     assert resolve_incremental_contract("fin_ratio").incremental_mode is IncrementalMode.FULL_REPLAY
