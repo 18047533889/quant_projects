@@ -71,6 +71,9 @@ class CostDimension:
     MEMORY_PROJECTION = "memory_projection"
     ENGINE_STARTUP = "engine_startup"
     FILE_OVERHEAD = "file_overhead"
+    # Total projected bytes across the selected physical objects.  This is
+    # scan/decode work, not a simultaneous resident-memory peak.
+    SCAN_PROJECTION_BYTES = "scan_projection_bytes"
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,17 @@ class ScanCost:
     selected_bytes: int | None = None
     selected_rowgroups: int | None = None
     projection_bytes: int | None = None       # 选定列 × 行数的近似物化字节
+    # Explicit R23 dimensions.  ``projection_bytes`` remains for API
+    # compatibility, but physical-scope footer totals describe aggregate scan
+    # work.  They do not bound DuckDB scratch + Arrow/Pandas/index residency.
+    scan_projection_bytes: int | None = None
+    resident_memory_bytes: int | None = None
+    resident_memory_basis: str = "unavailable"
+    resident_memory_is_hard_bound: bool = False
+    # True only when exact physical-scope footer predicates prove zero matching
+    # row groups.  Unknown/failing estimates never set this flag.
+    empty_result_proven: bool = False
+    rowgroup_pruning_basis: str = "none"
     estimate_ms: float = 0.0                  # 成本估算本身的耗时（校准用）
     calibrated_factor: float = 1.0            # #27 estimate-vs-actual 在线校准乘子
     # R40 #53：cost basis —— "manifest" | "stats" | COST_UNKNOWN_CONSERVATIVE |
@@ -142,6 +156,12 @@ class ScanCost:
             "selected_bytes": self.selected_bytes,
             "selected_rowgroups": self.selected_rowgroups,
             "projection_bytes": self.projection_bytes,
+            "scan_projection_bytes": self.scan_projection_bytes,
+            "resident_memory_bytes": self.resident_memory_bytes,
+            "resident_memory_basis": self.resident_memory_basis,
+            "resident_memory_is_hard_bound": self.resident_memory_is_hard_bound,
+            "empty_result_proven": self.empty_result_proven,
+            "rowgroup_pruning_basis": self.rowgroup_pruning_basis,
             "estimate_ms": self.estimate_ms,
             "calibrated_factor": self.calibrated_factor,
             "calibrated_score": self.calibrated_score,
@@ -173,6 +193,7 @@ def estimate_scan_cost(
     time_range: tuple[Any, Any] | None = None,
     instrument_filter: Sequence[str] | None = None,
     physical_scope: Sequence[str] | None = None,
+    filters: Any = None,
     prefer_polars: bool = False,
     **params: Any,
 ) -> ScanCost:
@@ -198,7 +219,10 @@ def estimate_scan_cost(
         # prepare_read already froze the exact executor scope.  Cost discovery
         # must use the same objects rather than independently resolving the
         # dataset manifest again (which may describe the full dataset).
-        from data_access.read.stats import expand_parquet_paths, estimate_parquet_rows
+        from data_access.read.stats import (
+            expand_parquet_paths,
+            estimate_parquet_scope_cost_filtered,
+        )
 
         scoped_files = expand_parquet_paths([str(path) for path in physical_scope])
         requested = [str(path) for path in physical_scope]
@@ -212,7 +236,42 @@ def estimate_scan_cost(
             file_count = selected_files = len(scoped_files)
             selected_bytes = sum(path.stat().st_size for path in scoped_files)
             total_bytes = selected_bytes
-            estimated_rows = estimate_parquet_rows(scoped_files)
+            (
+                estimated_rows,
+                footer_projection_bytes,
+                footer_total_columns,
+                footer_projected_columns,
+                selected_rowgroups,
+                selected_files,
+                footer_selected_bytes,
+            ) = estimate_parquet_scope_cost_filtered(
+                scoped_files,
+                list(columns) if columns else None,
+                time_column=getattr(ds, "time_column", None),
+                time_range=time_range,
+                time_column_is_timestamp=(
+                    "timestamp" in str(
+                        (getattr(ds, "schema", None) or {}).get(
+                            getattr(ds, "time_column", None) or "", ""
+                        )
+                    ).lower()
+                    or "datetime" in str(
+                        (getattr(ds, "schema", None) or {}).get(
+                            getattr(ds, "time_column", None) or "", ""
+                        )
+                    ).lower()
+                ),
+                instrument_column=getattr(ds, "instrument_column", None),
+                instrument_filter=(
+                    tuple(instrument_filter) if instrument_filter is not None else None
+                ),
+                filters=filters,
+            )
+            if not requested and not scoped_files:
+                # The exact executor scope itself is empty.  No footer/schema
+                # is needed to prove zero rows and zero projected scan work.
+                footer_projection_bytes = 0
+            selected_bytes = footer_selected_bytes
     else:
         try:
             from data_access.read.manifest import load_manifest_for_dataset
@@ -272,7 +331,8 @@ def estimate_scan_cost(
     if manifest is None and stats_failed:
         basis = "unknown"
 
-    total_bytes = selected_bytes
+    if physical_scope is None:
+        total_bytes = selected_bytes
     if total_bytes is None:
         try:
             if manifest is not None:
@@ -284,7 +344,11 @@ def estimate_scan_cost(
     total_columns = len(schema) if schema else None
     projected = len(columns) if columns else 0
     projection_bytes = None
-    if estimated_rows and total_columns:
+    if physical_scope is not None and basis == "physical_scope":
+        total_columns = footer_total_columns
+        projected = footer_projected_columns
+        projection_bytes = footer_projection_bytes
+    elif estimated_rows and total_columns:
         width = _avg_row_width(ds, columns)
         projection_bytes = int(estimated_rows * width)
 
@@ -333,6 +397,7 @@ def estimate_scan_cost(
         CostDimension.IO_BYTES: float(selected_bytes or total_bytes or 0),
         CostDimension.CPU_ROWS: float(estimated_rows),
         CostDimension.MEMORY_PROJECTION: float(projection_bytes or 0),
+        CostDimension.SCAN_PROJECTION_BYTES: float(projection_bytes or 0),
         CostDimension.ENGINE_STARTUP: startup,
         CostDimension.FILE_OVERHEAD: file_factor * 100.0,  # 归一化
     }
@@ -366,6 +431,26 @@ def estimate_scan_cost(
         selected_bytes=selected_bytes,
         selected_rowgroups=selected_rowgroups,
         projection_bytes=projection_bytes,
+        scan_projection_bytes=projection_bytes,
+        # Footer projection is total work over the frozen object set.  It is
+        # deliberately not advertised as a resident or RSS hard bound.
+        resident_memory_bytes=None,
+        resident_memory_basis="unavailable_full_materialization_peak",
+        resident_memory_is_hard_bound=False,
+        empty_result_proven=bool(
+            physical_scope is not None
+            and basis == "physical_scope"
+            and selected_rowgroups == 0
+            and estimated_rows == 0
+            and selected_files == 0
+            and selected_bytes == 0
+            and projection_bytes == 0
+        ),
+        rowgroup_pruning_basis=(
+            "parquet_footer_min_max_closed_predicates"
+            if physical_scope is not None and basis == "physical_scope"
+            else "none"
+        ),
         estimate_ms=estimate_ms,
         calibrated_factor=calibrated,
         file_format=file_format,

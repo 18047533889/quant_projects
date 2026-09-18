@@ -2018,6 +2018,84 @@ class DataAccessStore:
             avg = total / len(cols)
         return max(int(avg * 1000), 1)
 
+    def estimate_scan_cost(
+        self,
+        dataset: str,
+        *,
+        columns: Sequence[str] | None = None,
+        time_range: tuple[Any, Any] | None = None,
+        instrument_filter: Sequence[str] | None = None,
+        filters: Any = None,
+        prefer_polars: bool = False,
+        **params: Any,
+    ) -> Any:
+        """Cost a read against the same exact scope resolver used by execution.
+
+        This is metadata-only and does not acquire a governor lease.  Raw scan
+        rows come from the resolved Parquet objects; semantic filters are carried
+        with the request but never converted into unproved row-count discounts.
+        """
+        ds = self._registry.get(dataset)
+        budget = self._resolve_read_budget(ds, None)
+        from data_access.runtime.prepared_read import (
+            DeadlineContext,
+            current_deadline,
+            reset_deadline_context,
+        )
+
+        deadline = DeadlineContext.start(budget, source="estimate_scan_cost")
+        parent_deadline = current_deadline()
+        if parent_deadline is not None:
+            deadlines = tuple(
+                value for value in (parent_deadline.deadline_at, deadline.deadline_at)
+                if value is not None
+            )
+            deadline = DeadlineContext(
+                deadline_at=min(deadlines) if deadlines else None,
+                source="estimate_scan_cost",
+            )
+        deadline_token = deadline.enter()
+        try:
+            self.authorize_dataset(dataset)
+            self._prepare_read_request(
+                dataset,
+                columns=columns,
+                time_range=time_range,
+                mode="auto",
+                allow_sparse=False,
+                allow_effective_time=False,
+                filters=filters,
+                params=params,
+            )
+            _assert_instrument_filter_supported(ds, instrument_filter)
+            deadline.check(context="estimate_scan_cost(scope resolution)")
+            paths = self._prepare_dataset_read(
+                ds,
+                time_range=time_range,
+                params=params,
+                instrument_filter=instrument_filter,
+            )
+            paths = self._expand_glob_paths(paths, dataset=dataset)
+            deadline.check(context="estimate_scan_cost(scope expansion)")
+            # Metadata-only cost discovery still obeys execution's object-count
+            # gate before opening any footer.
+            self._enforce_scan_files(budget, paths)
+            from data_access.read.scan_cost import estimate_scan_cost
+
+            return estimate_scan_cost(
+                self,
+                dataset,
+                columns=columns,
+                time_range=time_range,
+                instrument_filter=instrument_filter,
+                physical_scope=paths,
+                filters=filters,
+                prefer_polars=prefer_polars,
+                **params,
+            )
+        finally:
+            reset_deadline_context(deadline_token)
+
     def execute_prepared_read(
         self,
         prepared: PreparedRead,
