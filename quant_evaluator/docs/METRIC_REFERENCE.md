@@ -360,7 +360,7 @@ H=\frac{Q_{(1+c)/2}(\bar x^{\ast})-Q_{(1-c)/2}(\bar x^{\ast})}{2}
 
 
 
-默认 `min_periods=60,block_length=10,num_bootstrap=1000,confidence_level=0.95,random_seed=0`。同一请求各因子共享抽样起点；列中任何 NaN/Inf 使底层区间为 NaN，$`T<2L`$ 也为 NaN；注册层有限 IC 少于 60 期时强制 NaN。
+默认 `min_periods=60,block_length=10,num_bootstrap=1000,confidence_level=0.95,random_seed=0`。同一请求各因子共享抽样起点；列中任何 NaN/Inf 使底层区间为 NaN，$`T\lt 2L`$ 也为 NaN；注册层有限 IC 少于 60 期时强制 NaN。
 
 ### 函数层默认参数
 
@@ -835,7 +835,7 @@ Mean of valid per-date increasing-adjacent-pair fractions; missing pairs and dat
 
 
 ```math
-m_{t,f}=\frac{\sum_{q=1}^{Q-1}\mathbf1(r_{t,q+1,f}>r_{t,q,f})\mathbf1_{pair}}{\sum_{q=1}^{Q-1}\mathbf1_{pair}},\qquad Rate_f=\frac1{|D_f|}\sum_{t\in D_f}m_{t,f}
+m_{t,f}=\frac{\sum_{q=1}^{Q-1}\mathbf1(r_{t,q+1,f}\gt r_{t,q,f})\mathbf1_{pair}}{\sum_{q=1}^{Q-1}\mathbf1_{pair}},\qquad Rate_f=\frac1{|D_f|}\sum_{t\in D_f}m_{t,f}
 ```
 
 
@@ -873,7 +873,7 @@ Per-date fraction of increasing finite adjacent quantile-return pairs. This is d
 
 
 ```math
-m_{t,f}=\frac{\sum_{q=1}^{Q-1}\mathbf1(r_{t,q+1,f}>r_{t,q,f})\mathbf1\{r_{t,q,f},r_{t,q+1,f}\ finite\}}{\sum_{q=1}^{Q-1}\mathbf1\{r_{t,q,f},r_{t,q+1,f}\ finite\}}
+m_{t,f}=\frac{\sum_{q=1}^{Q-1}\mathbf1(r_{t,q+1,f}\gt r_{t,q,f})\mathbf1\{r_{t,q,f},r_{t,q+1,f}\ finite\}}{\sum_{q=1}^{Q-1}\mathbf1\{r_{t,q,f},r_{t,q+1,f}\ finite\}}
 ```
 
 
@@ -941,7 +941,7 @@ Annualized downside deviation (RMS of negative excess returns) of the probe dail
 
 
 ```math
-DD=\sqrt{P}\sqrt{\frac1{n_-}\sum_{r_t-r_f/P<0}(r_t-r_f/P)^2}
+DD=\sqrt{P}\sqrt{\frac1{n_-}\sum_{r_t-r_f/P\lt 0}(r_t-r_f/P)^2}
 ```
 
 
@@ -1503,7 +1503,7 @@ Fraction of finite daily IC values that are strictly positive, per factor. A val
 
 
 ```math
-P_f^+=\frac{\sum_t\mathbf1(IC_{t,f}>0)}{\sum_t\mathbf1(IC_{t,f}\ finite)}
+P_f^+=\frac{\sum_t\mathbf1(IC_{t,f}\gt 0)}{\sum_t\mathbf1(IC_{t,f}\ finite)}
 ```
 
 
@@ -1857,7 +1857,7 @@ Inverted-U (hill) score in [0, 1] per factor. Mirror of u_shape_score with conca
 
 ### 数学公式与计算口径
 
-令分位坐标 $`x_q\in[0,1]`$，倒 U 模板 $`z_q=-(x_q-0.5)^2`$。分别做带截距的一元 OLS 得 $`R_I^2`$ 与线性模板 $`R_L^2`$，并计算负二阶差分占比 $`c_-=mean[\Delta^2r_q<0]`$。实际得分为：
+令分位坐标 $`x_q\in[0,1]`$，倒 U 模板 $`z_q=-(x_q-0.5)^2`$。分别做带截距的一元 OLS 得 $`R_I^2`$ 与线性模板 $`R_L^2`$，并计算负二阶差分占比 $`c_-=mean[\Delta^2r_q\lt 0]`$。实际得分为：
 
 
 
@@ -1869,7 +1869,7 @@ Score=0.5\max(R_I^2,0)+0.3c_-+0.2(\max(R_I^2,0)-R_L^2)
 
 
 
-但若 $`c_-<0.5`$ 则返回 0；少于 4 个有限分位、无有限内部三点或回归不可定义则 NaN；常数曲线返回 0。实现以凹曲率区分倒 U，因为自由斜率使正负二次模板本身具有同样拟合能力。
+但若 $`c_-\lt 0.5`$ 则返回 0；少于 4 个有限分位、无有限内部三点或回归不可定义则 NaN；常数曲线返回 0。实现以凹曲率区分倒 U，因为自由斜率使正负二次模板本身具有同样拟合能力。
 
 
 实现核对：[函数定义](../metrics/shape_evidence.py#L185)；`quant_evaluator.metrics.shape_evidence.compute_inverted_u_score`。
@@ -2162,7 +2162,7 @@ Longest continuous stretch (periods) of the probe daily PnL series staying below
 
 
 ```math
-U_{max}=\max_e|e|,\quad e:\; W_t<\max_{u\le t}W_u\text{ 的连续区间}
+U_{max}=\max_e|e|,\quad e:\; W_t\lt \max_{u\le t}W_u\text{ 的连续区间}
 ```
 
 
@@ -2477,7 +2477,7 @@ Fraction of finite factor values that are z-score outliers (|z|>3), per factor (
 
 
 ```math
-O_f=|V_f|^{-1}\sum_{(t,i)\in V_f}\mathbf1[|z_{tif}|>c]
+O_f=|V_f|^{-1}\sum_{(t,i)\in V_f}\mathbf1[|z_{tif}|\gt c]
 ```
 
 
@@ -2783,7 +2783,7 @@ Fraction of adjacent quantile steps that are monotone increasing, per factor. 1.
 
 
 ```math
-M_f=|A_f|^{-1}\sum_{q\in A_f}\mathbf1[r_{q+1,f}>r_{q,f}]
+M_f=|A_f|^{-1}\sum_{q\in A_f}\mathbf1[r_{q+1,f}\gt r_{q,f}]
 ```
 
 
@@ -3185,7 +3185,7 @@ Fraction of finite daily rank-IC values that are strictly positive, per factor (
 
 
 ```math
-M={\sum_t\mathbf1(IC_t>0,\ IC_t\ finite)\over\sum_t\mathbf1(IC_t\ finite)}
+M={\sum_t\mathbf1(IC_t\gt 0,\ IC_t\ finite)\over\sum_t\mathbf1(IC_t\ finite)}
 ```
 
 
@@ -3453,7 +3453,7 @@ Absolute difference between early and late regime mean IC, per factor. Larger va
 
 
 ```math
-M=|e-l|,\quad e=\mathrm{mean}_{t<m}IC_t,\ l=\mathrm{mean}_{t\ge m}IC_t
+M=|e-l|,\quad e=\mathrm{mean}_{t\lt m}IC_t,\ l=\mathrm{mean}_{t\ge m}IC_t
 ```
 
 
@@ -3513,7 +3513,7 @@ Minimum of the early/late regime mean IC, per factor. The weaker of the two regi
 
 
 ```math
-e=\mathrm{mean}_{t<m}IC_t,\quad l=\mathrm{mean}_{t\ge m}IC_t,\quad M=\min(e,l)
+e=\mathrm{mean}_{t\lt m}IC_t,\quad l=\mathrm{mean}_{t\ge m}IC_t,\quad M=\min(e,l)
 ```
 
 
@@ -3632,7 +3632,7 @@ g_1={1\over n}\sum_t((r_t-\bar r)/\sigma_0)^3,\qquad M={\sqrt{n(n-1)}\over n-2}g
 ```
 
 
- 默认 bias=False、min_periods=20；$`n<\max(20,3)`$ 或总体标准差 $`\sigma_0\le10^{-12}`$ 为 NaN。
+ 默认 bias=False、min_periods=20；$`n\lt \max(20,3)`$ 或总体标准差 $`\sigma_0\le10^{-12}`$ 为 NaN。
 
 ### 函数层默认参数
 
@@ -3754,7 +3754,7 @@ Mean of the rolling-window IC drawdown (peak-to-trough), per factor. A more nega
 ```
 
 
- 默认 window=60、min_periods=20；$`n_t<20`$ 时 $`\mu_t`$ 为 NaN，累加时以 0 代替该 NaN；这是累计滚动均值的加法回撤，不是财富回撤。
+ 默认 window=60、min_periods=20；$`n_t\lt 20`$ 时 $`\mu_t`$ 为 NaN，累加时以 0 代替该 NaN；这是累计滚动均值的加法回撤，不是财富回撤。
 
 ### 函数层默认参数
 
@@ -3878,7 +3878,7 @@ Descriptive moving-block bootstrap RANK AGREEMENT, not U-shape probability, per 
 ```
 
 
- 两 ID 调同一实现；默认 block_length=2、resamples=100、seed=0、$`\tau=0.5`$；移动块采样窗口，$`W<3`$ 或可比有限分位少于 3 为 NaN。
+ 两 ID 调同一实现；默认 block_length=2、resamples=100、seed=0、$`\tau=0.5`$；移动块采样窗口，$`W\lt 3`$ 或可比有限分位少于 3 为 NaN。
 
 ### 函数层默认参数
 
@@ -3911,7 +3911,7 @@ Descriptive moving-block resampling agreement with the observed mean rank profil
 ```
 
 
- 两 ID 调同一实现；默认 block_length=2、resamples=100、seed=0、$`\tau=0.5`$；移动块采样窗口，$`W<3`$ 或可比有限分位少于 3 为 NaN。
+ 两 ID 调同一实现；默认 block_length=2、resamples=100、seed=0、$`\tau=0.5`$；移动块采样窗口，$`W\lt 3`$ 或可比有限分位少于 3 为 NaN。
 
 ### 函数层默认参数
 
@@ -4109,7 +4109,7 @@ Annualized Sortino ratio of a return series per factor: mean(excess return) / do
 
 
 ```math
-x_t=r_t-h,\quad d=\sqrt{{\sum_{x_t<0}x_t^2\over D}},\quad M={\bar x\over d}\times\begin{cases}\sqrt A,&annualization='sqrt_frequency'\\1,&'none'\end{cases}
+x_t=r_t-h,\quad d=\sqrt{{\sum_{x_t\lt 0}x_t^2\over D}},\quad M={\bar x\over d}\times\begin{cases}\sqrt A,&annualization='sqrt_frequency'\\1,&'none'\end{cases}
 ```
 
 
@@ -4173,7 +4173,7 @@ M={\sum_{t=1}^{T-1}\sum_i\mathbf1[f_{t,i}=f_{t-1,i},\ f_{t,i},f_{t-1,i}\ finite]
 ```
 
 
- 按因子对所有相邻日/资产共同有限配对汇总；$`T<2`$ 返回 NaN，共同有限数为 0 时实现分母钳到 1、结果为 0。
+ 按因子对所有相邻日/资产共同有限配对汇总；$`T\lt 2`$ 返回 NaN，共同有限数为 0 时实现分母钳到 1、结果为 0。
 
 
 实现核对：[函数定义](../metrics/data_quality.py#L68)；`quant_evaluator.metrics.data_quality.compute_staleness`。
@@ -4254,7 +4254,7 @@ Mean fraction of finite factor values that are tied with another value, per fact
 
 ### 数学公式与计算口径
 
-令 $`n_t`$ 为当日有限因子值数、$`u_t`$ 为其中不同值数，$`D=\{t:n_t>0\}`$。
+令 $`n_t`$ 为当日有限因子值数、$`u_t`$ 为其中不同值数，$`D=\{t:n_t\gt 0\}`$。
 
 
 
@@ -4470,7 +4470,7 @@ Train-side predictive dimension of the authorized train-vs-validation comparison
 
 
 ```math
-D_f^{\mathrm{train}}=A.\mathrm{train_predictive_dimension}_f
+D_f^{\mathrm{train}}=A.\mathrm{train\_predictive\_dimension}_f
 ```
 
 
@@ -4746,7 +4746,7 @@ U-shape score in [0, 1] per factor (plan §14.3). NOT RankIC-about-0 detection: 
 
 
 ```math
-U=\begin{cases}0,&R_U^2\le R_L^2\ \text{或}\ c_+<0.5,\\0.5\max(R_U^2,0)+0.3c_++0.2(\max(R_U^2,0)-R_L^2),&\text{其他情况}.\end{cases}
+U=\begin{cases}0,&R_U^2\le R_L^2\ \text{或}\ c_+\lt 0.5,\\0.5\max(R_U^2,0)+0.3c_++0.2(\max(R_U^2,0)-R_L^2),&\text{其他情况}.\end{cases}
 ```
 
 
@@ -4801,7 +4801,7 @@ Validation-side predictive dimension of the authorized train-vs-validation compa
 
 
 ```math
-D_f^{\mathrm{validation}}=A.\mathrm{validation_predictive_dimension}_f
+D_f^{\mathrm{validation}}=A.\mathrm{validation\_predictive\_dimension}_f
 ```
 
 
@@ -4825,7 +4825,7 @@ Robust validation/train retention per factor (plan §13.6): validation/train whe
 
 ### 数学公式与计算口径
 
-设训练预测维度为 $`a_f`$、验证维度为 $`b_f`$。令不稳定条件 $`U_f`$ 为：两者异号且 $`|a_f|<g\max(|a_f|,|b_f|,10^{-9})`$。
+设训练预测维度为 $`a_f`$、验证维度为 $`b_f`$。令不稳定条件 $`U_f`$ 为：两者异号且 $`|a_f|\lt g\max(|a_f|,|b_f|,10^{-9})`$。
 
 
 
@@ -4944,7 +4944,7 @@ Win rate of a return series per factor: fraction of finite returns that are stri
 
 
 ```math
-WinRate=\frac{\sum_{t\in V}\mathbf1(r_t>0)}{|V|}
+WinRate=\frac{\sum_{t\in V}\mathbf1(r_t\gt 0)}{|V|}
 ```
 
 
@@ -5159,7 +5159,7 @@ Minimum per-quarter mean rank IC (the factor's worst quarter), per factor (spec 
 
 
 ```math
-\mu_p=\frac1{|V_p|}\sum_{t\in V_p}RankIC_t,\qquad M=\min_{p:|V_p|>0}\mu_p
+\mu_p=\frac1{|V_p|}\sum_{t\in V_p}RankIC_t,\qquad M=\min_{p:|V_p|\gt 0}\mu_p
 ```
 
 
@@ -5293,7 +5293,7 @@ Minimum per-year mean rank IC (the factor's worst year), per factor. A robustnes
 
 
 ```math
-\mu_p=\frac1{|V_p|}\sum_{t\in V_p}RankIC_t,\qquad M=\min_{p:|V_p|>0}\mu_p
+\mu_p=\frac1{|V_p|}\sum_{t\in V_p}RankIC_t,\qquad M=\min_{p:|V_p|\gt 0}\mu_p
 ```
 
 

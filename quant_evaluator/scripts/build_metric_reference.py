@@ -31,6 +31,11 @@ def portable_math(markdown: str) -> str:
         if delimiter == "$" and body.startswith("`") and body.endswith("`"):
             body = body[1:-1]
         body = body.replace(r"\operatorname", r"\mathrm")
+        # Upright identifiers are labels, not nested subscripts.
+        body = re.sub(r"\\mathrm\{([^{}]*)\}",
+                      lambda m: r"\mathrm{" + re.sub(r"(?<!\\)_", r"\\_", m.group(1)) + "}", body)
+        # Avoid HTML-like tokens in GitHub's client-side math path.
+        body = body.replace("<", r"\lt ").replace(">", r"\gt ")
         body = body.replace("^*", r"^{\ast}").replace("*", r"\ast ")
         # Explicit inline delimiters avoid Markdown/CJK boundary ambiguity.
         return "$`" + body + "`$" if delimiter == "$" else "\n```math\n" + body.strip() + "\n```\n"

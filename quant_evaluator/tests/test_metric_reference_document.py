@@ -25,6 +25,18 @@ def test_generated_reference_is_current():
     assert OUTPUT.read_text() == render()
 
 
+def test_github_identifier_and_comparison_regressions():
+    from quant_evaluator.scripts.build_metric_reference import portable_math
+    for label in ("train_predictive_dimension", "validation_predictive_dimension"):
+        result = portable_math("$$D_f=A." + r"\mathrm{" + label + "}_f$$")
+        assert label not in result
+        assert label.replace("_", r"\_") in result
+    result = portable_math(r"$$e=\mathrm{mean}_{t<m}IC_t,\quad M=|e-l|$$")
+    assert r"_{t\lt m}" in result
+    assert "<" not in result
+    assert r"\gt " in portable_math(r"$a>b$")
+
+
 def test_portable_math_regressions_from_github_screenshots():
     from quant_evaluator.scripts.build_metric_reference import portable_math
     example = r"$$H=Q(\bar x^*)-Q(\bar x^*)+\operatorname{mean}(x)$$"
