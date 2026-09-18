@@ -323,3 +323,26 @@ def test_manifest_token_change_aborts_even_when_data_snapshot_id_is_unchanged(mo
         key.startswith("run-many-stream-cross-wave:")
         for key in engine.resource_broker._memory_leases
     )
+
+
+def test_257_factor_bounded_sink_reuses_shared_kernel_across_nine_waves(monkeypatch):
+    """Scale the shared-DAG regression without storing every output panel."""
+    from factor_engine.planner import physical_lowerer
+    engine, calls = _engine(monkeypatch)
+    monkeypatch.setattr(physical_lowerer, "_get_adaptive_dag_width_limit", lambda: 32)
+    monkeypatch.setattr(physical_lowerer, "_get_adaptive_chunk_size", lambda: 32)
+    expected = engine.data_source.values.rolling(2, min_periods=1).mean()
+    seen = set()
+
+    def sink(name, values):
+        assert name not in seen
+        pd.testing.assert_series_equal(values, expected + int(name[1:]), check_names=False)
+        seen.add(name)
+
+    result = _run(engine, sink, count=257, max_workers=2)
+    assert len(seen) == 257
+    assert result["completed_waves"] == 9
+    assert calls["ts_mean"] == 1
+    assert engine.cache is None
+    assert not any(key.startswith("run-many-stream-cross-wave:")
+                   for key in engine.resource_broker._memory_leases)
