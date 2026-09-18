@@ -24,6 +24,8 @@ OPERATOR_SEMANTIC_VERSIONS: dict[str, int] = {
     "ts_mcginley_dynamic": 2,
     # R56: feasible three-threshold Hill ladder and scale-safe positive tails.
     "ts_evt_threshold_stability": 2,
+    # R56: count bidirectional completed gaps among valid opening-gap trials.
+    "ts_gap_fill_ratio": 2,
     # R55: preserve every standard time/identity coordinate in chip kernels.
     "ts_cpt_value": 2,
     # R52: replace holder placeholders with exact multi-panel contracts.

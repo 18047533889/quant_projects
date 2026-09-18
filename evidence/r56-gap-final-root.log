@@ -1,0 +1,10 @@
+........................................................................ [ 74%]
+.........................                                                [100%]
+=============================== warnings summary ===============================
+factor_engine/tests/operators/test_r56_gap_fill_semantics.py::test_both_gap_directions_and_no_gap_denominator[pandas_numpy]
+factor_engine/tests/operators/test_r56_gap_fill_semantics.py::test_both_gap_directions_and_no_gap_denominator[pandas_numpy]
+  /home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+97 passed, 2 warnings in 53.64s

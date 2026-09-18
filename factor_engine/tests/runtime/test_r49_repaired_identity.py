@@ -21,6 +21,7 @@ from factor_engine.runtime.factor_identity import OperatorSemanticContractDigest
     ("ts_cpt_value", 2),
     ("ts_mcginley_dynamic", 2),
     ("ts_evt_threshold_stability", 2),
+    ("ts_gap_fill_ratio", 2),
     ("index_reconstitution_churn", 2),
     ("intra_max_drawdown", 2),
     ("intra_max_drawup", 2),

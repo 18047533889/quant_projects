@@ -191,17 +191,27 @@ _mk(
 
 
 def _ts_gap_fill_ratio(close, open_px, pre_close, window=60):
-    o, i = _decomp(close, open_px, pre_close)
-    # gap filled on day t when close crosses pre_close
-    up_gap = (o > 0).astype(float)
-    filled = ((close >= pre_close) & (o > 0) & (i >= 0)) | ((close <= pre_close) & (o < 0) & (i <= 0))
-    filled_f = filled.astype(float).fillna(0.0)
-    return filled_f.rolling(int(window)).mean() * up_gap.rolling(int(window)).mean().replace(0, np.nan)
+    """Share of opening gaps fully filled by the close, in either direction.
+
+    Non-gap days are not gap trials. Require a full window of finite positive
+    price triplets; missing observations cannot be treated as unfilled gaps.
+    An observed window without any gap is undefined.
+    """
+    valid = (
+        np.isfinite(close) & np.isfinite(open_px) & np.isfinite(pre_close)
+        & (close > 0.0) & (open_px > 0.0) & (pre_close > 0.0)
+    )
+    up = open_px > pre_close
+    down = open_px < pre_close
+    filled = (up & (close <= pre_close)) | (down & (close >= pre_close))
+    gap_count = (up | down).astype(float).where(valid).rolling(int(window)).sum()
+    fill_count = filled.astype(float).where(valid).rolling(int(window)).sum()
+    return fill_count / gap_count.replace(0.0, np.nan)
 
 
 _mk(
     "ts_gap_fill_ratio",
-    "窗口内跳空缺口被当日完全回补的比例。",
+    "窗口内双向跳空中收盘完全回补的比例；无缺口日不计分母，价格缺失窗口不估计。",
     ["close", "open", "pre_close", "window"],
     _ts_gap_fill_ratio,
     scalar_specs=_WINDOW_1,

@@ -37,10 +37,10 @@ def test_active_gap_fill_ratio_parity_covers_window_zero_gap_and_nan():
     )
 
     expected_w3 = np.array(
-        [np.nan, np.nan, 2 / 9, 2 / 9, 2 / 9, 1 / 9], dtype=float
+        [np.nan, np.nan, 0.0, np.nan, np.nan, np.nan], dtype=float
     )
     expected_w2 = np.array(
-        [np.nan, 0.25, 0.5, np.nan, 0.25, 0.25], dtype=float
+        [np.nan, 0.0, 0.0, np.nan, np.nan, 0.0], dtype=float
     )
     np.testing.assert_allclose(_values(pandas_w3), expected_w3, equal_nan=True)
     np.testing.assert_allclose(_values(polars_w3), expected_w3, equal_nan=True)
