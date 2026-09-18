@@ -5,7 +5,14 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.base import (
+    OperatorMetadata,
+    ParamRole,
+    ParamSpec,
+    RelationalParamSpec,
+    SeriesOperator,
+    register_operator,
+)
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 
 
@@ -217,14 +224,45 @@ class GTJATimeSlope(SeriesOperator):
 
 @register_operator(name="ts_product", category="time_series", business_category="time_series", canonical="ts_product", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="R19-043/044: ts_product signed + zero-safe (single shared kernel)")
 class GTJATSProduct(SeriesOperator):
-    metadata = OperatorMetadata(name="ts_product", category="time_series", description="保留零与负号的滚动乘积（signed + zero-safe）", examples=["ts_product(x, 5)"], param_names=["x", "window"], return_type="series", tags=["time_series", "gtja", "pit_safe"], param_specs={"window": ParamSpec(dtype=int, min=1, default=5, searchable=True, param_role=ParamRole.HORIZON)})
+    # This compatibility layer is the first registration and therefore owns
+    # the canonical contract even though semantic_hardening replaces its
+    # kernel later in bootstrap. Keep it identical to the audited public
+    # contract; the historical GTJA-only default of 5 was never the documented
+    # FactorEngine default and caused DSL/history/backend binding divergence.
+    metadata = OperatorMetadata(
+        name="ts_product",
+        category="time_series",
+        description="保留零与负号的滚动乘积（signed + zero-safe）",
+        examples=["ts_product(x, 20)"],
+        param_names=["x", "window", "min_periods", "skipna"],
+        panel_params=("x",),
+        scalar_params=("window", "min_periods", "skipna"),
+        window_semantics="exact_rows",
+        return_type="series",
+        tags=["time_series", "gtja", "pit_safe"],
+        param_specs={
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True, param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=None, searchable=False, param_role=ParamRole.SUPPORT_POLICY),
+            "skipna": ParamSpec(dtype=bool, default=True, searchable=False, param_role=ParamRole.MISSING_POLICY),
+        },
+        relational_specs=[RelationalParamSpec("min_periods is None or min_periods <= window")],
+    )
 
-    def _calculate_series(self, x: pd.DataFrame, window: int = 5, **kwargs) -> pd.DataFrame:
-        from factor_engine.cleaned_operators._rolling_fast import rolling_signed_product
-        from factor_engine.cleaned_operators.common.strict_params import strict_int
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        window: int = 20,
+        min_periods: int | None = None,
+        skipna: bool = True,
+        **kwargs,
+    ) -> pd.DataFrame:
+        # Calls made before the later hardening replacement must still have the
+        # same semantics instead of silently ignoring min_periods / skipna.
+        from factor_engine.cleaned_operators.semantic_hardening import TimeSeriesProductAudited
 
-        w = strict_int(window, "window", minimum=1)
-        return rolling_signed_product(x, w)
+        return TimeSeriesProductAudited()._calculate_series(
+            x, window=window, min_periods=min_periods, skipna=skipna
+        )
 
 
 @register_operator(name="protected_div", category="data_cleaning", business_category="data_cleaning", canonical="protected_div", source="gtja_compat", backend="pandas_numpy", replace=True, replacement_reason="GTJA-compatible semantic override")

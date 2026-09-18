@@ -47,6 +47,7 @@ from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
     ParamRole,
     ParamSpec,
+    RelationalParamSpec,
     SeriesOperator,
     ScalarOperator,
     TwoVarOperator,
@@ -1632,30 +1633,46 @@ class TSMin(SeriesOperator):
 # canonical=ts_product backend=pandas_numpy selected=ts_product source=time_series/ts_ops.py
 @register_operator(name="ts_product", category="time_series", business_category="time_series", canonical="ts_product", source="factor_dsl_np")
 class TSProduct(SeriesOperator):
-    """滚动乘积（对数域累加实现）。"""
+    """滚动乘积（与 audited public contract 一致）。"""
 
     metadata = OperatorMetadata(
         name="ts_product", category="time_series",
         description="滚动乘积（保留零与负号，signed + zero-safe）",
-        examples=["ts_product(volume + 1, 5)"],
-        param_names=["x", "window"], return_type="series",
+        examples=["ts_product(volume + 1, 20)"],
+        param_names=["x", "window", "min_periods", "skipna"],
+        panel_params=("x",),
+        scalar_params=("window", "min_periods", "skipna"),
+        window_semantics="exact_rows",
+        return_type="series",
         tags=["time_series", "ts_", "product"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=1, default=5, searchable=True,
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True,
                                 param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=None,
+                                     searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
+            "skipna": ParamSpec(dtype=bool, default=True, searchable=False,
+                                param_role=ParamRole.MISSING_POLICY),
         },
+        relational_specs=[
+            RelationalParamSpec("min_periods is None or min_periods <= window")
+        ],
     )
-    def _calculate_series(self, x: pd.DataFrame, window: int = 5, **kwargs) -> pd.DataFrame:
-        from factor_engine.cleaned_operators._rolling_fast import rolling_signed_product
-        from factor_engine.cleaned_operators.common.strict_params import strict_int
+    def _calculate_series(
+        self,
+        x: pd.DataFrame,
+        window: int = 20,
+        min_periods: int | None = None,
+        skipna: bool = True,
+        **kwargs,
+    ) -> pd.DataFrame:
+        # This class can be active before semantic_hardening replaces it; do
+        # not silently ignore the audited support/missing-data controls.
+        from factor_engine.cleaned_operators.semantic_hardening import TimeSeriesProductAudited
 
-        # R19-043/044: signed + zero-safe product.  The old log-domain
-        # implementation broke on ``0`` (``[2,0,3]`` -> NaN) and negatives
-        # (``[-2,-3]`` -> NaN).  ``rolling_signed_product`` maintains
-        # zero_count / sign_parity / sum_log_abs -> ``[2,0,3]``=0,
-        # ``[-2,-3]``=6, ``[-2,3]``=-6.
-        w = strict_int(window, "window", minimum=1)
-        return rolling_signed_product(x, w)
+        return TimeSeriesProductAudited()._calculate_series(
+            x, window=window, min_periods=min_periods, skipna=skipna
+        )
 
 
 
@@ -2648,25 +2665,38 @@ class TSProductPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="ts_product", category="time_series",
         description="滚动乘积（保留零与负号，signed + zero-safe）",
-        examples=["ts_product(volume + 1, 5)"],
-        param_names=["x", "window", "min_periods", "skipna"], return_type="series",
+        examples=["ts_product(volume + 1, 20)"],
+        param_names=["x", "window", "min_periods", "skipna"],
+        panel_params=("x",),
+        scalar_params=("window", "min_periods", "skipna"),
+        window_semantics="exact_rows",
+        return_type="series",
         tags=["time_series", "ts_", "product"],
         param_specs={
-            "window": ParamSpec(dtype=int, min=1, default=5, searchable=True,
+            "window": ParamSpec(dtype=int, min=1, default=20, searchable=True,
                                 param_role=ParamRole.HORIZON),
+            "min_periods": ParamSpec(dtype=int, min=1, default=None,
+                                     searchable=False,
+                                     param_role=ParamRole.SUPPORT_POLICY),
+            "skipna": ParamSpec(dtype=bool, default=True, searchable=False,
+                                param_role=ParamRole.MISSING_POLICY),
         },
+        relational_specs=[
+            RelationalParamSpec("min_periods is None or min_periods <= window")
+        ],
     )
-    def _calculate_series(self, x: pl.DataFrame, window: int = 5, min_periods: int | None = None, skipna: bool = True, **kwargs) -> pl.DataFrame:
-        from factor_engine.cleaned_operators.semantic_hardening import _rolling_numpy_panel, _stable_product, _validate_window
+    def _calculate_series(self, x: pl.DataFrame, window: int = 20, min_periods: int | None = None, skipna: bool = True, **kwargs) -> pl.DataFrame:
+        from factor_engine.cleaned_operators.semantic_hardening import _rolling_numpy_panel, _stable_product, _strict_skipna, _validate_window
         from factor_engine.cleaned_operators.base_polars import panel_pandas_bridge
 
         w, mp = _validate_window(window, min_periods)
+        skipna = _strict_skipna(skipna)
 
         def _fn(pdf):
             arr = pdf.to_numpy(dtype=float)
             out = _rolling_numpy_panel(
                 arr, window=w, min_periods=mp,
-                func=lambda values: _stable_product(values, skipna=bool(skipna)),
+                func=lambda values: _stable_product(values, skipna=skipna),
             )
             out[~np.isfinite(out)] = np.nan
             return pd.DataFrame(out, index=pdf.index, columns=pdf.columns)

@@ -1,0 +1,19 @@
+{
+  "canonical": "ts_product",
+  "params": {
+    "window": 12,
+    "min_periods": 3,
+    "skipna": true
+  },
+  "backends": {
+    "pandas_numpy": {
+      "oracle_equal": true,
+      "finite": 188
+    },
+    "polars": {
+      "oracle_equal": true,
+      "finite": 188
+    }
+  },
+  "pandas_polars_equal": true
+}

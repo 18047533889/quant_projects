@@ -1,0 +1,10 @@
+{
+  "recipes": [
+    {
+      "canonical": "ts_product",
+      "inputs": ["base"],
+      "params": {"window": 12, "min_periods": 3, "skipna": true},
+      "provenance": "R24 explicit recipe rerun after R26/R27 contract repair"
+    }
+  ]
+}
