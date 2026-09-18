@@ -14,7 +14,9 @@ getattr）解析成分，或直接接收 ``members``。不修改任何既有文�
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
 from typing import Any, Iterable, Mapping, Sequence
 
 from data_access.core.exceptions import DataAccessError, SourceResolutionError
@@ -53,6 +55,46 @@ def _market_of(store: Any, universe_id: str) -> str | None:
     return None
 
 
+_ISO_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_ISO_DATETIME_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$"
+)
+
+
+def _normalise_effective_bound(value: Any, name: str) -> str | None:
+    """Validate and canonicalise an inclusive snapshot effective bound."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, date):
+        return value.isoformat()
+    elif isinstance(value, str):
+        if _ISO_DATE_RE.fullmatch(value):
+            try:
+                return date.fromisoformat(value).isoformat()
+            except ValueError as exc:
+                raise ValueError(f"{name} must be a valid ISO date or timezone-aware datetime") from exc
+        if not _ISO_DATETIME_RE.fullmatch(value):
+            raise ValueError(f"{name} must be a valid ISO date or timezone-aware datetime")
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(f"{name} must be a valid ISO date or timezone-aware datetime") from exc
+    else:
+        raise TypeError(f"{name} must be an ISO string, date, datetime, or None")
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{name} datetime must include an explicit timezone")
+    return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _bound_instant(value: str) -> datetime:
+    """Map date and datetime forms onto one deterministic UTC timeline."""
+    if _ISO_DATE_RE.fullmatch(value):
+        return datetime.combine(date.fromisoformat(value), datetime.min.time(), timezone.utc)
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
+
+
 @dataclass(frozen=True)
 class UniverseSnapshot:
     """一个股票池（universe）的稳定身份快照。
@@ -69,6 +111,8 @@ class UniverseSnapshot:
     tradability_policy_version: str
     snapshot_id: str
     members: tuple[str, ...] = field(default=(), compare=False, repr=False)
+    effective_start: str | None = None
+    effective_end: str | None = None
 
     # ---- 构建 ----
 
@@ -81,6 +125,8 @@ class UniverseSnapshot:
         membership_policy_version: str,
         tradability_policy_version: str,
         source_snapshot: Any = None,
+        effective_start: Any = None,
+        effective_end: Any = None,
     ) -> "UniverseSnapshot":
         """从成分 + 两个 policy 版本 + 来源快照构建 UniverseSnapshot。
 
@@ -89,6 +135,12 @@ class UniverseSnapshot:
         """
         universe_id = str(universe_id)
         members_t = _norm_members(members)
+        start = _normalise_effective_bound(effective_start, "effective_start")
+        end = _normalise_effective_bound(effective_end, "effective_end")
+        if (start is None) != (end is None):
+            raise ValueError("effective_start and effective_end must be provided together")
+        if start is not None and _bound_instant(start) > _bound_instant(end):
+            raise ValueError("effective_start must be <= effective_end")
         snapshot_id = stable_digest_full(
             canonical(universe_id),
             canonical(market),
@@ -96,6 +148,10 @@ class UniverseSnapshot:
             canonical(membership_policy_version),
             canonical(tradability_policy_version),
             canonical(source_snapshot),
+        ) if start is None else stable_digest_full(
+            canonical(universe_id), canonical(market), canonical(members_t),
+            canonical(membership_policy_version), canonical(tradability_policy_version),
+            canonical(source_snapshot), canonical(start), canonical(end),
         )
         return cls(
             universe_id=universe_id,
@@ -105,6 +161,8 @@ class UniverseSnapshot:
             tradability_policy_version=str(tradability_policy_version),
             snapshot_id=snapshot_id,
             members=members_t,
+            effective_start=start,
+            effective_end=end,
         )
 
     @classmethod
@@ -120,12 +178,16 @@ class UniverseSnapshot:
         time_range: tuple[Any, Any] | None = None,
         instruments: Sequence[str] | None = None,
         source_snapshot: Any = None,
+        effective_start: Any = None,
+        effective_end: Any = None,
     ) -> "UniverseSnapshot":
         """从 store 解析成分（优先私有 ``_resolve_universe_instruments``）并构建。
 
         ``members`` 显式给出时直接用；否则调用
         ``store._resolve_universe_instruments(universe_id, time_range, instruments)``
         （私有但存在，防御性 getattr）。取不到 market 时尝试从 store 推断。
+        ``effective_start`` / ``effective_end`` 只能由调用方基于可信、已审计的
+        成分来源显式提供；本方法绝不从请求 ``time_range`` 推断历史有效区间。
         """
         resolved: Iterable[Any] | None = members
         if resolved is None:
@@ -151,6 +213,8 @@ class UniverseSnapshot:
             membership_policy_version=membership_policy_version,
             tradability_policy_version=tradability_policy_version,
             source_snapshot=source_snapshot,
+            effective_start=effective_start,
+            effective_end=effective_end,
         )
 
     # ---- 访问 ----
@@ -175,6 +239,8 @@ class UniverseSnapshot:
             "membership_digest": self.membership_digest(self.members),
             "member_count": self.member_count,
             "members": list(self.members),
+            "effective_start": self.effective_start,
+            "effective_end": self.effective_end,
         }
 
 

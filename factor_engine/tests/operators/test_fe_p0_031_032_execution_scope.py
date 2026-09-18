@@ -52,13 +52,27 @@ def _ts_plan():
 
 
 def _scoped_data_source():
-    """Mock scoped data_source with explicit universe scope."""
+    """Public set-valued snapshot without a historical effective interval."""
+    from data_access.r30.universe_snapshot import UniverseSnapshot
+
+    members = ("A", "B", "C")
+    snapshot = UniverseSnapshot.build(
+        "CSI500", None, members, "membership-v1", "tradability-v1", "source-v1"
+    )
 
     class _ScopedSource:
         universe = "CSI500"
+        universe_snapshot_identity = snapshot
+        instrument_filter = members
+        start_date = "2024-02-01"
+        end_date = "2024-11-30"
 
-        def get_universe_filter(self):
-            return {"universe": "CSI500"}
+    return _ScopedSource()
+
+def _string_only_scoped_data_source():
+    class _ScopedSource:
+        universe = "CSI500"
+        instrument_filter = ("A", "B", "C")
 
     return _ScopedSource()
 
@@ -143,7 +157,7 @@ def test_p0_031_production_cross_sectional_string_universe_raises(monkeypatch):
     assert "membership snapshot" in str(exc.value).lower()
 
 
-def test_p0_031_production_cross_sectional_scoped_source_allowed(monkeypatch):
+def test_p0_031_public_snapshot_without_effective_interval_rejected(monkeypatch):
     """Production + cross-sectional + scoped data_source → allowed (interim gate)."""
     _set_production_mode(monkeypatch)
 
@@ -158,9 +172,30 @@ def test_p0_031_production_cross_sectional_scoped_source_allowed(monkeypatch):
     scope = _scope_from_factor(_MinimalFactor())
 
     # With scoped data_source, currently allowed (documented interim solution)
-    assert_execution_scope_contract(
-        scope, _rank_plan(), factor_name="scoped_univ", data_source=_scoped_data_source()
-    )
+    with pytest.raises(ProductionPolicyViolation, match="membership snapshot"):
+        assert_execution_scope_contract(
+            scope, _rank_plan(), factor_name="scoped_univ",
+            data_source=_scoped_data_source(),
+        )
+
+
+def test_p0_031_string_only_scoped_source_still_rejected(monkeypatch):
+    _set_production_mode(monkeypatch)
+
+    class _MinimalFactor:
+        name = "string_only"
+        expr = Expr()
+        freq = "1d"
+        calendar_id = "ASHARE"
+        universe = "CSI500"
+        semantic_identity = None
+
+    scope = _scope_from_factor(_MinimalFactor())
+    with pytest.raises(ProductionPolicyViolation, match="mere universe string"):
+        assert_execution_scope_contract(
+            scope, _rank_plan(), factor_name="string_only",
+            data_source=_string_only_scoped_data_source(),
+        )
 
 
 def test_p0_031_research_cross_sectional_all_universe_allowed(monkeypatch):
@@ -385,7 +420,7 @@ def test_p0_031_032_production_cross_sectional_missing_frequency_and_universe_ra
     assert "freq" in str(exc.value).lower()
 
 
-def test_p0_031_032_production_complete_scope_with_scoped_source_allowed(monkeypatch):
+def test_p0_031_032_complete_scope_still_needs_effective_snapshot_interval(monkeypatch):
     """Production + explicit frequency/calendar + scoped data_source → allowed."""
     _set_production_mode(monkeypatch)
 
@@ -403,9 +438,11 @@ def test_p0_031_032_production_complete_scope_with_scoped_source_allowed(monkeyp
     assert scope.universe_id == "CSI500"
 
     # Cross-sectional with scoped data_source is allowed
-    assert_execution_scope_contract(
-        scope, _rank_plan(), factor_name="complete", data_source=_scoped_data_source()
-    )
+    with pytest.raises(ProductionPolicyViolation, match="membership snapshot"):
+        assert_execution_scope_contract(
+            scope, _rank_plan(), factor_name="complete",
+            data_source=_scoped_data_source(),
+        )
 
 
 def test_research_mode_preserves_convenience_defaults(monkeypatch):

@@ -1433,14 +1433,19 @@ def _validated_universe_snapshot(data_source: Any, scope: FactorExecutionScope) 
 
         if not isinstance(snapshot, UniverseSnapshot):
             return False
-        rebuilt = UniverseSnapshot.build(
-            snapshot.universe_id,
-            snapshot.market,
-            snapshot.members,
-            snapshot.membership_policy_version,
-            snapshot.tradability_policy_version,
-            snapshot.source_snapshot,
-        )
+        try:
+            rebuilt = UniverseSnapshot.build(
+                snapshot.universe_id,
+                snapshot.market,
+                snapshot.members,
+                snapshot.membership_policy_version,
+                snapshot.tradability_policy_version,
+                snapshot.source_snapshot,
+                effective_start=snapshot.effective_start,
+                effective_end=snapshot.effective_end,
+            )
+        except (TypeError, ValueError):
+            return False
         if rebuilt.snapshot_id != snapshot.snapshot_id:
             return False
         if snapshot.universe_id.upper() != str(scope.universe_id or "").upper():
@@ -1451,12 +1456,42 @@ def _validated_universe_snapshot(data_source: Any, scope: FactorExecutionScope) 
         end = getattr(snapshot, "effective_end", None)
         request_start = getattr(data_source, "start_date", None)
         request_end = getattr(data_source, "end_date", None)
-        # The current DA UniverseSnapshot is set-valued and has no membership
-        # interval. It cannot certify a historical request until the provider
-        # supplies explicit effective bounds.
+        # Legacy set-valued snapshots cannot certify a historical request. The
+        # provider must supply explicit, audited effective bounds.
         if start is None or end is None or request_start is None or request_end is None:
             return False
-        if pd.Timestamp(start) > pd.Timestamp(request_start) or pd.Timestamp(end) < pd.Timestamp(request_end):
+        def _as_utc(value: Any) -> pd.Timestamp:
+            from datetime import date, datetime
+
+            date_only = isinstance(value, date) and not isinstance(value, datetime)
+            if isinstance(value, str):
+                try:
+                    date.fromisoformat(value)
+                    date_only = len(value) == 10
+                except ValueError:
+                    date_only = False
+            stamp = pd.Timestamp(value)
+            if pd.isna(stamp):
+                raise ValueError("request bound cannot be NaT")
+            if stamp.tzinfo is None:
+                if not date_only:
+                    raise ValueError("request datetime must include an explicit timezone")
+                return stamp.tz_localize("UTC")
+            return stamp.tz_convert("UTC")
+
+        try:
+            snapshot_start = _as_utc(start)
+            snapshot_end = _as_utc(end)
+            requested_start = _as_utc(request_start)
+            requested_end = _as_utc(request_end)
+            covered = (
+                requested_start <= requested_end
+                and snapshot_start <= requested_start
+                and snapshot_end >= requested_end
+            )
+        except (TypeError, ValueError):
+            return False
+        if not covered:
             return False
         source_members = getattr(data_source, "instrument_filter", None)
         if source_members is None or set(map(str, source_members)) != set(snapshot.members):
