@@ -173,6 +173,7 @@ def _mk(canonical: str, description: str, params: list[str], fn):
         {
             "metadata": metadata,
             "_calculate_series": _calculate_series,
+            "_contract_callable": staticmethod(fn),
             "_physical_spec": physical_spec,
             "physical_spec": _physical_spec_method,
             "__module__": __name__,
