@@ -1,0 +1,163 @@
+{
+  "backend_checks": 26,
+  "cases": 13,
+  "results": [
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_mad",
+      "max_abs_error": 8.881784197001252e-16,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_mad",
+      "max_abs_error": 8.881784197001252e-16,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_quantile",
+      "max_abs_error": 2.220446049250313e-16,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_quantile",
+      "max_abs_error": 2.220446049250313e-16,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_quantile_range",
+      "max_abs_error": 1.7763568394002505e-15,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_quantile_range",
+      "max_abs_error": 1.7763568394002505e-15,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_upside_deviation",
+      "max_abs_error": 1.7763568394002505e-15,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_upside_deviation",
+      "max_abs_error": 1.7763568394002505e-15,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_zero_ratio",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_zero_ratio",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_positive_streak",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_positive_streak",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_transition_count",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_transition_count",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_nth_value",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_nth_value",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_ratio",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_ratio",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_median3_causal",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_median3_causal",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_regression_slope",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_regression_slope",
+      "max_abs_error": 3.1086244689504383e-15,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_regression_intercept",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_regression_intercept",
+      "max_abs_error": 6.494804694057166e-15,
+      "passed": true
+    },
+    {
+      "backend": "pandas_numpy",
+      "canonical": "ts_regression_r2",
+      "max_abs_error": 0.0,
+      "passed": true
+    },
+    {
+      "backend": "polars",
+      "canonical": "ts_regression_r2",
+      "max_abs_error": 5.551115123125783e-16,
+      "passed": true
+    }
+  ],
+  "status": "PASS"
+}
