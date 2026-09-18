@@ -6,6 +6,19 @@ from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.runtime.factor_identity import OperatorSemanticContractDigest
 
 @pytest.mark.parametrize("canonical,current", [
+    ("ts_turnover_reference_price", 3),
+    ("ts_turnover_cost_dispersion", 3),
+    ("ts_turnover_profit_share", 3),
+    ("ts_turnover_holding_age", 3),
+    ("ts_turnover_near_cost_mass", 3),
+    ("ts_turnover_cost_quantile_distance", 3),
+    ("ts_turnover_cost_entropy", 3),
+    ("ts_turnover_cost_mode_distance", 3),
+    ("ts_turnover_cost_skew", 3),
+    ("ts_turnover_age_dispersion", 3),
+    ("ts_turnover_old_mass", 3),
+    ("ts_turnover_cost_entropy_vol_scaled", 3),
+    ("ts_cpt_value", 2),
     ("ts_mcginley_dynamic", 2),
     ("index_reconstitution_churn", 2),
     ("intra_max_drawdown", 2),

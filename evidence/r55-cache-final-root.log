@@ -1,0 +1,13 @@
+........................................................................ [ 48%]
+........................................................................ [ 96%]
+......                                                                   [100%]
+=============================== warnings summary ===============================
+factor_engine/tests/runtime/test_r53_cache_semantic_invalidation.py: 16 warnings
+factor_engine/tests/runtime/test_run_many_cross_wave_cache.py: 32 warnings
+factor_engine/tests/runtime/test_run_many_dataaccess_wave_cache.py: 3 warnings
+factor_engine/tests/runtime/test_run_many_stream.py: 10 warnings
+  /home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+150 passed, 61 warnings in 64.60s (0:01:04)

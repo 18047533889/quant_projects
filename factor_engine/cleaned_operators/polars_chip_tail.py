@@ -19,6 +19,7 @@ import polars as pl
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator, PANEL_SKIP_COLUMNS
 from factor_engine.cleaned_operators.parameter_validation import strict_integer
+from factor_engine.cleaned_operators.common._polars_bridge import numeric_cols, verify_frames_share_identity
 from factor_engine.cleaned_operators.turnover_survival import (
     _column_stats,
     _default_min_periods,
@@ -43,7 +44,13 @@ def _tail_cols(frame):
 
 
 def _cols(fr: pl.DataFrame) -> list[str]:
-    return [c for c in fr.columns if c not in _SKIP_PANEL]
+    for identity in ("stock_code", "instrument", "symbol", "inst"):
+        if identity in fr.columns and fr[identity].drop_nulls().n_unique() > 1:
+            raise ValueError(
+                "chip/tail rolling kernels require a wide panel or single-stock long input; "
+                "multi-stock long input must be isolated by instrument first"
+            )
+    return numeric_cols(fr)
 
 
 def _col(fr: pl.DataFrame, name: str) -> np.ndarray:
@@ -65,6 +72,9 @@ def _mk(canonical: str, description: str, params: list[str], fn):
         return_type="series",
         tags=["polars", "daily", "native_udf", "typed_v2"],
     )
+
+    if canonical.startswith("ts_turnover_") or canonical == "ts_cpt_value":
+        metadata.tags.append("preserve_panel_time_coordinate")
 
     if canonical in _WEIGHTED_TARGETS:
         metadata.param_specs=_tail_specs(canonical)
@@ -106,7 +116,8 @@ def _mk(canonical: str, description: str, params: list[str], fn):
 # ---------------------------------------------------------------------------
 
 def _survival_family(price, turnover, window, band, q_high, q_low, key):
-    w = max(2, int(window))
+    verify_frames_share_identity("turnover survival", price, turnover)
+    w = strict_integer(window, "window", minimum=5)
     band = max(0.0, float(band))
     qh = float(q_high)
     ql = float(q_low)

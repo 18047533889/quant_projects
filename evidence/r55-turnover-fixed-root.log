@@ -1,0 +1,135 @@
+........................FFFFFFFFFFFF..............F..................... [ 57%]
+......................................................                   [100%]
+=================================== FAILURES ===================================
+_ test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_age_dispersion] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:35: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual.columns == [time_name, "B", "A"]
+E   AssertionError: assert ['B', 'A'] == ['__fe_time__', 'B', 'A']
+E     
+E     At index 0 diff: 'B' != '__fe_time__'
+E     Right contains one more item: 'A'
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_cost_dispersion] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:35: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual.columns == [time_name, "B", "A"]
+E   AssertionError: assert ['B', 'A'] == ['__fe_time__', 'B', 'A']
+E     
+E     At index 0 diff: 'B' != '__fe_time__'
+E     Right contains one more item: 'A'
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_cost_entropy] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:35: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual.columns == [time_name, "B", "A"]
+E   AssertionError: assert ['B', 'A'] == ['__fe_time__', 'B', 'A']
+E     
+E     At index 0 diff: 'B' != '__fe_time__'
+E     Right contains one more item: 'A'
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_cost_entropy_vol_scaled] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:35: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual.columns == [time_name, "B", "A"]
+E   AssertionError: assert ['B', 'A'] == ['__fe_time__', 'B', 'A']
+E     
+E     At index 0 diff: 'B' != '__fe_time__'
+E     Right contains one more item: 'A'
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_cost_mode_distance] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:35: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual.columns == [time_name, "B", "A"]
+E   AssertionError: assert ['B', 'A'] == ['__fe_time__', 'B', 'A']
+E     
+E     At index 0 diff: 'B' != '__fe_time__'
+E     Right contains one more item: 'A'
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_cost_quantile_distance] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:35: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual.columns == [time_name, "B", "A"]
+E   AssertionError: assert ['B', 'A'] == ['__fe_time__', 'B', 'A']
+E     
+E     At index 0 diff: 'B' != '__fe_time__'
+E     Right contains one more item: 'A'
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_cost_skew] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:35: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual.columns == [time_name, "B", "A"]
+E   AssertionError: assert ['B', 'A'] == ['__fe_time__', 'B', 'A']
+E     
+E     At index 0 diff: 'B' != '__fe_time__'
+E     Right contains one more item: 'A'
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_holding_age] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:35: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual.columns == [time_name, "B", "A"]
+E   AssertionError: assert ['B', 'A'] == ['__fe_time__', 'B', 'A']
+E     
+E     At index 0 diff: 'B' != '__fe_time__'
+E     Right contains one more item: 'A'
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_near_cost_mass] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:35: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual.columns == [time_name, "B", "A"]
+E   AssertionError: assert ['B', 'A'] == ['__fe_time__', 'B', 'A']
+E     
+E     At index 0 diff: 'B' != '__fe_time__'
+E     Right contains one more item: 'A'
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_profit_share] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:35: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual.columns == [time_name, "B", "A"]
+E   AssertionError: assert ['B', 'A'] == ['__fe_time__', 'B', 'A']
+E     
+E     At index 0 diff: 'B' != '__fe_time__'
+E     Right contains one more item: 'A'
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_reference_price] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:35: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual.columns == [time_name, "B", "A"]
+E   AssertionError: assert ['B', 'A'] == ['__fe_time__', 'B', 'A']
+E     
+E     At index 0 diff: 'B' != '__fe_time__'
+E     Right contains one more item: 'A'
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_old_mass] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:35: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual.columns == [time_name, "B", "A"]
+E   AssertionError: assert ['B', 'A'] == ['__fe_time__', 'B', 'A']
+E     
+E     At index 0 diff: 'B' != '__fe_time__'
+E     Right contains one more item: 'A'
+E     Use -v to get more diff
+____________ test_cpt_preserves_all_standard_time_axes[__fe_time__] ____________
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:59: in test_cpt_preserves_all_standard_time_axes
+    assert actual[time_name].to_list() == list(index.to_pydatetime())
+           ^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/polars/dataframe/frame.py:1443: in __getitem__
+    return get_df_item_by_key(self, key)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/polars/_utils/getitem.py:163: in get_df_item_by_key
+    return df.get_column(key)
+           ^^^^^^^^^^^^^^^^^^
+.venv/lib/python3.12/site-packages/polars/dataframe/frame.py:9309: in get_column
+    return wrap_s(self._df.get_column(name))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+E   polars.exceptions.ColumnNotFoundError: "__fe_time__" not found
+=============================== warnings summary ===============================
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[date-ts_turnover_age_dispersion]
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[date-ts_turnover_age_dispersion]
+  /home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_age_dispersion]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_cost_dispersion]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_cost_entropy]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_cost_entropy_vol_scaled]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_cost_mode_distance]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_cost_quantile_distance]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_cost_skew]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_holding_age]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_near_cost_mass]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_profit_share]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_reference_price]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[__fe_time__-ts_turnover_old_mass]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_cpt_preserves_all_standard_time_axes[__fe_time__]
+13 failed, 113 passed, 2 warnings in 47.37s

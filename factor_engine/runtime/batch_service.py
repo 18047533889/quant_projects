@@ -28,6 +28,73 @@ if TYPE_CHECKING:
     from factor_engine.runtime.engine import FactorEngine
 
 
+def _source_has_snapshot_proof(source: Any) -> bool:
+    """Return whether the source exposes an explicit immutable read epoch."""
+    missing = object()
+    token = getattr(source, "snapshot_token", missing)
+    if token is not missing:
+        return type(token) is str and bool(token.strip())
+    for name in (
+        "data_snapshot_id", "snapshot_id", "generation_id", "content_hash",
+    ):
+        value = getattr(source, name, None)
+        if (type(value) is str and bool(value.strip())) or type(value) is int:
+            return True
+    return False
+
+
+def _scope_engine_cache_for_source(engine: "FactorEngine") -> tuple["FactorEngine", str | None]:
+    """Return an engine/cache view bound to the source snapshot for this call.
+
+    ``CacheManager.with_scope`` shares the backing store while keeping scope on
+    the view, so concurrent engines cannot race by mutating a shared manager's
+    ``data_scope``. Unknown identity fails closed by disabling cache on a
+    shallow engine copy. The caller-owned engine and cache remain unchanged.
+    """
+    cache = getattr(engine, "cache", None)
+    if cache is None:
+        return engine, None
+    from copy import copy
+
+    bound_scope = getattr(engine, "_run_many_source_scope", None)
+    if bound_scope is not None:
+        from factor_engine.storage.data_scope import compute_data_scope
+
+        if compute_data_scope(engine.data_source) != bound_scope:
+            raise RuntimeError(
+                "source identity changed after run_many cache scope was bound"
+            )
+        return engine, bound_scope
+
+    refresh = getattr(engine.data_source, "refresh_snapshot", None)
+    if callable(refresh):
+        # Snapshot authorization/read failures are correctness failures, not
+        # cache-setup failures, and must remain visible to the caller.
+        refresh()
+    clone = copy(engine)
+    try:
+        if not _source_has_snapshot_proof(engine.data_source):
+            clone.cache = None
+            return clone, None
+        from factor_engine.storage.data_scope import compute_data_scope
+
+        source_scope = compute_data_scope(engine.data_source)
+        if source_scope.startswith("ephemeral:"):
+            clone.cache = None
+            return clone, None
+        with_scope = getattr(cache, "with_scope", None)
+        if not callable(with_scope):
+            clone.cache = None
+            return clone, None
+        cache_scope = repr(("run_many_source", getattr(cache, "data_scope", None), source_scope))
+        clone.cache = with_scope(cache_scope)
+        clone._run_many_source_scope = source_scope
+        return clone, source_scope
+    except Exception:
+        clone.cache = None
+        return clone, None
+
+
 def _replan_duckdb_threads(plan, gov) -> Any:
     """P0#9：worker 被共存配额 clamp 后，重算 DuckDB/Polars 线程数。
 
@@ -2010,6 +2077,12 @@ def execute_run_many(
     from factor_engine.runtime.production_policy import is_production_mode
 
     _validate_result_policy(result_policy, sink)
+
+    # A caller-owned cache may outlive one run_many invocation. Bind an
+    # immutable cache view to the snapshot observed by this call so entries
+    # cannot leak across source generations. The view shares the backing store
+    # and preserves the caller's namespace; it never mutates engine.cache.
+    engine, _ = _scope_engine_cache_for_source(engine)
 
     # P0#6: input canonicalization — dedupe structurally identical factors so
     # run_many compiles/executes each unique root exactly once (formula-level

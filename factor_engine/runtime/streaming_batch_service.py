@@ -66,19 +66,27 @@ def _bounded_stream_cache(engine: Any, run_kwargs: dict[str, Any]):
     attached to the caller-owned engine.
     """
     if getattr(engine, "cache", None) is not None:
-        return engine, None, None, "existing_engine_cache"
+        from factor_engine.runtime.batch_service import _scope_engine_cache_for_source
+
+        scoped_engine, source_scope = _scope_engine_cache_for_source(engine)
+        if source_scope is None:
+            return scoped_engine, None, None, "no_snapshot_identity"
+        return scoped_engine, None, None, "existing_engine_cache"
+    from factor_engine.runtime.engine import FactorEngine
+
+    if not isinstance(engine, FactorEngine):
+        return engine, None, None, "unsupported_engine"
+    refresh = getattr(engine.data_source, "refresh_snapshot", None)
+    if callable(refresh):
+        # Snapshot authorization/read failures are source correctness failures,
+        # not optional cache-setup failures. Never downgrade them to no-cache.
+        refresh()
     lease = None
     try:
         from factor_engine.runtime.auto_memory_budget import MemoryLeaseKind
-        from factor_engine.runtime.engine import FactorEngine
         from factor_engine.storage.cache import CacheManager
         from factor_engine.storage.data_scope import compute_data_scope
 
-        if not isinstance(engine, FactorEngine):
-            return engine, None, None, "unsupported_engine"
-        refresh = getattr(engine.data_source, "refresh_snapshot", None)
-        if callable(refresh):
-            refresh()
         if not _source_has_snapshot_proof(engine.data_source):
             return engine, None, None, "no_snapshot_identity"
         source_scope = compute_data_scope(engine.data_source)
@@ -109,6 +117,7 @@ def _bounded_stream_cache(engine: Any, run_kwargs: dict[str, Any]):
             production_fallback_policy=engine.production_fallback_policy,
             execution_scope=engine.execution_scope,
         )
+        clone._run_many_source_scope = source_scope
         for name in ("default_execution_policy", "resource_broker", "execution_purpose"):
             if hasattr(engine, name):
                 setattr(clone, name, getattr(engine, name))
@@ -261,6 +270,8 @@ def execute_run_many_stream(
             # Bind to the exact scope used at cache construction, not a later
             # unverified token read.
             initial_source_scope = cross_wave_cache.data_scope
+        elif cross_wave_cache_mode == "existing_engine_cache":
+            initial_source_scope = execution_engine._run_many_source_scope
         delivery.start()
         while True:
             wave = list(islice(pending, wave_size))
@@ -319,6 +330,17 @@ def execute_run_many_stream(
                 waves += 1
                 del wave, factor
                 continue
+            if initial_source_scope is not None and cross_wave_cache is None:
+                from factor_engine.storage.data_scope import compute_data_scope
+
+                refresh = getattr(execution_engine.data_source, "refresh_snapshot", None)
+                if callable(refresh):
+                    refresh()
+                if compute_data_scope(execution_engine.data_source) != initial_source_scope:
+                    raise RuntimeError(
+                        "streaming source identity changed between waves; refusing "
+                        "mixed-snapshot cross-wave reuse"
+                    )
             if cross_wave_cache is not None:
                 from factor_engine.storage.data_scope import compute_data_scope
                 from factor_engine.planner.source_dependencies import (

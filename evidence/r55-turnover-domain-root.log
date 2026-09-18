@@ -1,0 +1,99 @@
+...........FFFFFFFFFFF                                                   [100%]
+=================================== FAILURES ===================================
+_ test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_age_dispersion] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:36: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual[time_name].to_list() == list(index.to_pydatetime())
+E   assert [nan, nan, na...nan, 0.0, ...] == [datetime.dat...6, 0, 0), ...]
+E     
+E     At index 0 diff: nan != datetime.datetime(2024, 1, 1, 0, 0)
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_cost_dispersion] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:36: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual[time_name].to_list() == list(index.to_pydatetime())
+E   assert [nan, nan, na...nan, 0.0, ...] == [datetime.dat...6, 0, 0), ...]
+E     
+E     At index 0 diff: nan != datetime.datetime(2024, 1, 1, 0, 0)
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_cost_entropy] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:36: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual[time_name].to_list() == list(index.to_pydatetime())
+E   assert [nan, nan, na...an, -0.0, ...] == [datetime.dat...6, 0, 0), ...]
+E     
+E     At index 0 diff: nan != datetime.datetime(2024, 1, 1, 0, 0)
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_cost_entropy_vol_scaled] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:36: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual[time_name].to_list() == list(index.to_pydatetime())
+E   assert [nan, nan, na...nan, 0.0, ...] == [datetime.dat...6, 0, 0), ...]
+E     
+E     At index 0 diff: nan != datetime.datetime(2024, 1, 1, 0, 0)
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_cost_mode_distance] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:36: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual[time_name].to_list() == list(index.to_pydatetime())
+E   assert [nan, nan, na...0228e-05, ...] == [datetime.dat...6, 0, 0), ...]
+E     
+E     At index 0 diff: nan != datetime.datetime(2024, 1, 1, 0, 0)
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_cost_quantile_distance] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:36: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual[time_name].to_list() == list(index.to_pydatetime())
+E   assert [nan, nan, na...nan, nan, ...] == [datetime.dat...6, 0, 0), ...]
+E     
+E     At index 0 diff: nan != datetime.datetime(2024, 1, 1, 0, 0)
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_cost_skew] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:36: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual[time_name].to_list() == list(index.to_pydatetime())
+E   assert [nan, nan, na...nan, nan, ...] == [datetime.dat...6, 0, 0), ...]
+E     
+E     At index 0 diff: nan != datetime.datetime(2024, 1, 1, 0, 0)
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_holding_age] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:36: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual[time_name].to_list() == list(index.to_pydatetime())
+E   assert [nan, nan, na...nan, 1.0, ...] == [datetime.dat...6, 0, 0), ...]
+E     
+E     At index 0 diff: nan != datetime.datetime(2024, 1, 1, 0, 0)
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_near_cost_mass] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:36: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual[time_name].to_list() == list(index.to_pydatetime())
+E   assert [nan, nan, na...nan, 1.0, ...] == [datetime.dat...6, 0, 0), ...]
+E     
+E     At index 0 diff: nan != datetime.datetime(2024, 1, 1, 0, 0)
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_profit_share] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:36: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual[time_name].to_list() == list(index.to_pydatetime())
+E   assert [nan, nan, na...nan, 1.0, ...] == [datetime.dat...6, 0, 0), ...]
+E     
+E     At index 0 diff: nan != datetime.datetime(2024, 1, 1, 0, 0)
+E     Use -v to get more diff
+_ test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_reference_price] _
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py:36: in test_turnover_survival_public_backends_and_strict_past_identity
+    assert actual[time_name].to_list() == list(index.to_pydatetime())
+E   assert [nan, nan, na...4128e+18, ...] == [datetime.dat...6, 0, 0), ...]
+E     
+E     At index 0 diff: nan != datetime.datetime(2024, 1, 1, 0, 0)
+E     Use -v to get more diff
+=============================== warnings summary ===============================
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[date-ts_turnover_age_dispersion]
+factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[date-ts_turnover_age_dispersion]
+  /home/sunhaiwei/quant_projects/factor_engine/backend/polars_backend_kind.py:248: UserWarning: Production mode: Operator unknown (backend=polars) lacks explicit PhysicalImplementationSpec; classification=UNSUPPORTED. Add _physical_spec attribute or physical_spec() method for production eligibility.
+    return polars_backend_kind(op, source=source, production_mode=production_mode)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_age_dispersion]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_cost_dispersion]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_cost_entropy]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_cost_entropy_vol_scaled]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_cost_mode_distance]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_cost_quantile_distance]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_cost_skew]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_holding_age]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_near_cost_mass]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_profit_share]
+FAILED factor_engine/tests/operators/test_r55_turnover_survival_contract.py::test_turnover_survival_public_backends_and_strict_past_identity[timestamp-ts_turnover_reference_price]
+11 failed, 11 passed, 2 warnings in 52.50s
