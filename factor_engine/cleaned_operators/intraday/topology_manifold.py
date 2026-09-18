@@ -35,6 +35,10 @@ _CANONICALS: list[str] = []
 
 # Minimum bars for meaningful topology/manifold computation
 _MIN_BARS_TOPOLOGY = 30
+# Target for each transient statistics/distance tile.  This is not a hard cap
+# on total process memory: persistent O(n) support arrays, one O(window) query,
+# and an optional <= target/2 z-window cache coexist with one tile.
+_MATRIX_PROFILE_TILE_TARGET_BYTES = 8 * 1024 * 1024
 
 
 # ---------------------------------------------------------------------------
@@ -87,38 +91,76 @@ def _matrix_profile_features(close_v: np.ndarray, window: int = 20) -> tuple[flo
             return np.nan, np.nan, np.nan
         r_norm = (r - mu) / sigma
 
-    # Compute matrix profile (simplified: only distance to nearest neighbor)
-    profile = np.full(n - window + 1, np.inf)
+    # Precompute each window's z-normalisation once.  The former nested Python
+    # loop recomputed mean/std for the same window O(n) times, making the kernel
+    # O(n²*window) in Python.  Distances retain the exact ddof=1 and exclusion
+    # semantics, but are evaluated in bounded candidate tiles in NumPy.
+    windows = np.lib.stride_tricks.sliding_window_view(r_norm, window)
+    count = windows.shape[0]
+    # Compute window statistics in bounded copied blocks.  Reductions over a
+    # large strided view may otherwise materialise an implementation-dependent
+    # O(count*window) temporary before distance tiling even begins.
+    stat_rows = max(
+        1,
+        min(count, _MATRIX_PROFILE_TILE_TARGET_BYTES // max(8 * window, 1)),
+    )
+    means = np.empty(count, dtype=float)
+    stds = np.empty(count, dtype=float)
+    for start in range(0, count, stat_rows):
+        stop = min(count, start + stat_rows)
+        block = np.array(windows[start:stop], dtype=float, copy=True)
+        means[start:stop] = np.mean(block, axis=1)
+        stds[start:stop] = np.std(block, axis=1, ddof=1)
+    del block
+    valid_windows = np.isfinite(stds) & (stds > _EPS)
+    cache_bytes = count * window * np.dtype(float).itemsize
+    z_windows = None
+    if cache_bytes <= _MATRIX_PROFILE_TILE_TARGET_BYTES // 2:
+        z_windows = np.array(windows, dtype=float, copy=True)
+        with np_errstate():
+            z_windows -= means[:, None]
+            z_windows /= stds[:, None]
+        z_windows[~valid_windows] = np.nan
 
-    for i in range(n - window + 1):
-        subseq = r_norm[i:i+window]
-        subseq_mean = float(np.mean(subseq))
-        subseq_std = float(np.std(subseq, ddof=1))
-
-        if not np.isfinite(subseq_std) or subseq_std <= _EPS:
-            continue
-
-        subseq_z = (subseq - subseq_mean) / subseq_std
-
-        # Compare to all other subsequences (excluding trivial zone)
-        for j in range(n - window + 1):
-            if abs(i - j) < window // 2:  # exclude trivial matches
+    profile = np.full(count, np.inf)
+    exclusion = window // 2
+    # One mutable candidate/difference block targets at most 8 MiB.  When one
+    # window alone exceeds that target, the irreducible tile is one O(window)
+    # row; total auxiliary storage is O(n + window), not O(n*window).
+    tile_size = max(
+        1,
+        min(256, _MATRIX_PROFILE_TILE_TARGET_BYTES // max(8 * window, 1)),
+    )
+    for i in np.flatnonzero(valid_windows):
+        if z_windows is not None:
+            query = z_windows[i]
+        else:
+            query = np.array(windows[i], dtype=float, copy=True)
+            query -= means[i]
+            query /= stds[i]
+        best = np.inf
+        for start in range(0, count, tile_size):
+            stop = min(count, start + tile_size)
+            candidates = np.arange(start, stop)
+            eligible = valid_windows[start:stop] & (np.abs(candidates - i) >= exclusion)
+            if not np.any(eligible):
                 continue
-
-            other = r_norm[j:j+window]
-            other_mean = float(np.mean(other))
-            other_std = float(np.std(other, ddof=1))
-
-            if not np.isfinite(other_std) or other_std <= _EPS:
-                continue
-
-            other_z = (other - other_mean) / other_std
-
+            if z_windows is not None:
+                candidate_z = z_windows[start:stop][eligible]
+            else:
+                candidate_z = np.array(
+                    windows[start:stop][eligible], dtype=float, copy=True
+                )
+                candidate_z -= means[start:stop][eligible, None]
+                candidate_z /= stds[start:stop][eligible, None]
+            candidate_z -= query
+            np.square(candidate_z, out=candidate_z)
             with np_errstate():
-                dist = float(np.sqrt(np.sum((subseq_z - other_z) ** 2)))
-
-            if np.isfinite(dist):
-                profile[i] = min(profile[i], dist)
+                distances = np.sqrt(np.sum(candidate_z, axis=1))
+            finite = distances[np.isfinite(distances)]
+            if finite.size:
+                best = min(best, float(np.min(finite)))
+        profile[i] = best
 
     # Filter out inf values
     valid = profile[np.isfinite(profile)]
