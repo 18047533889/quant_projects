@@ -606,7 +606,15 @@
    "runtime_probe": {
     "probe": "error",
     "error": "TypeError: int() argument must be a string, a bytes-like object or a real number, not '_MissingDefaultType'"
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "PolarsLiquidityV2_price_impact",
+   "completed_source": "factor_engine/cleaned_operators/price_volume/polars_liquidity_v2.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "ts_zscore",
@@ -763,7 +771,15 @@
    "runtime_probe": {
     "probe": "error",
     "error": "TypeError: int() argument must be a string, a bytes-like object or a real number, not '_MissingDefaultType'"
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "PolarsTechMisc_efficiency_ratio",
+   "completed_source": "factor_engine/cleaned_operators/technical/polars_tech_misc.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "log",
@@ -866,7 +882,15 @@
    "runtime_probe": {
     "probe": "error",
     "error": "TypeError: int() argument must be a string, a bytes-like object or a real number, not '_MissingDefaultType'"
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "PolarsLiquidityV2_turnover_zscore",
+   "completed_source": "factor_engine/cleaned_operators/price_volume/polars_liquidity_v2.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "ts_corr",
@@ -951,7 +975,15 @@
     "n_frames": 3,
     "out_rows": 360,
     "finite_frac": 0.0
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "PolarsFundamental_fin_quarter_from_cumulative",
+   "completed_source": "factor_engine/cleaned_operators/fundamental/polars_fundamental.py",
+   "completed_verification": "evidence/_verify_batch3_fiscal.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "ts_delta",
@@ -1034,7 +1066,15 @@
    "runtime_probe": {
     "probe": "error",
     "error": "TypeError: int() argument must be a string, a bytes-like object or a real number, not '_MissingDefaultType'"
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "PolarsLiquidityV2_relative_volume",
+   "completed_source": "factor_engine/cleaned_operators/price_volume/polars_liquidity_v2.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "sign",
@@ -1163,7 +1203,15 @@
    "runtime_probe": {
     "probe": "error",
     "error": "ColumnNotFoundError: \"date\" not found"
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "IntradayPolars_intra_realized_skewness",
+   "completed_source": "factor_engine/cleaned_operators/intraday/polars_next_stage.py",
+   "completed_verification": "evidence/_verify_batch3_intraday.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "row_sum_skipna",
@@ -1304,7 +1352,15 @@
    "runtime_probe": {
     "probe": "error",
     "error": "TypeError: int() argument must be a string, a bytes-like object or a real number, not '_MissingDefaultType'"
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "PolarsLiquidityV2_amihud_illiquidity",
+   "completed_source": "factor_engine/cleaned_operators/price_volume/polars_liquidity_v2.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "intra_realized_variance",
@@ -1328,7 +1384,15 @@
    "runtime_probe": {
     "probe": "error",
     "error": "ColumnNotFoundError: \"date\" not found"
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "IntradayPolarsFull_intra_realized_variance",
+   "completed_source": "factor_engine/cleaned_operators/intraday/polars_intraday_full.py",
+   "completed_verification": "evidence/_verify_batch3_intraday.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "fiscal_pct_change",
@@ -1443,7 +1507,15 @@
     "n_frames": 1,
     "out_rows": 360,
     "finite_frac": 0.9972222222222222
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "TSPctPolars",
+   "completed_source": "factor_engine/cleaned_operators/common/polars_ops.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "zscore",
@@ -1501,7 +1573,15 @@
     "n_frames": 1,
     "out_rows": 360,
     "finite_frac": 1.0
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "SignedSqrtNative",
+   "completed_source": "factor_engine/cleaned_operators/common/polars_daily_native.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "sigmoid",
@@ -1530,7 +1610,15 @@
     "n_frames": 1,
     "out_rows": 360,
     "finite_frac": 1.0
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "SigmoidPolarsAuto",
+   "completed_source": "factor_engine/cleaned_operators/common/polars_auto.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "ts_min",
@@ -1583,7 +1671,15 @@
    "runtime_probe": {
     "probe": "error",
     "error": "ColumnNotFoundError: \"date\" not found"
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "IntradayPolars_intra_realized_kurtosis",
+   "completed_source": "factor_engine/cleaned_operators/intraday/polars_next_stage.py",
+   "completed_verification": "evidence/_verify_batch3_intraday.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "composition_normalized_entropy",
@@ -1784,7 +1880,15 @@
     "n_frames": 1,
     "out_rows": 360,
     "finite_frac": 1.0
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "LogAbsPolarsAuto",
+   "completed_source": "factor_engine/cleaned_operators/common/polars_auto.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "CMF",
@@ -28217,7 +28321,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "PolarsLiquidityV2_price_impact",
+   "completed_source": "factor_engine/cleaned_operators/price_volume/polars_liquidity_v2.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "ts_zscore",
@@ -28257,7 +28369,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "PolarsTechMisc_efficiency_ratio",
+   "completed_source": "factor_engine/cleaned_operators/technical/polars_tech_misc.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "lt",
@@ -28281,7 +28401,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "PolarsLiquidityV2_turnover_zscore",
+   "completed_source": "factor_engine/cleaned_operators/price_volume/polars_liquidity_v2.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "ashare_fiscal_quarter_from_period_end",
@@ -28297,7 +28425,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4; \u8fd0\u884c\u65f6\u63a2\u9488: \u6267\u884c\u96f6\u6b21 pl.to_pandas \u8c03\u7528 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4; \u8fd0\u884c\u65f6\u63a2\u9488: \u6267\u884c\u96f6\u6b21 pl.to_pandas \u8c03\u7528 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "PolarsFundamental_fin_quarter_from_cumulative",
+   "completed_source": "factor_engine/cleaned_operators/fundamental/polars_fundamental.py",
+   "completed_verification": "evidence/_verify_batch3_fiscal.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "ts_delta",
@@ -28313,7 +28449,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "PolarsLiquidityV2_relative_volume",
+   "completed_source": "factor_engine/cleaned_operators/price_volume/polars_liquidity_v2.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "ts_cusum_pressure",
@@ -28345,7 +28489,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "IntradayPolars_intra_realized_skewness",
+   "completed_source": "factor_engine/cleaned_operators/intraday/polars_next_stage.py",
+   "completed_verification": "evidence/_verify_batch3_intraday.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "ts_sharpe",
@@ -28377,7 +28529,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "PolarsLiquidityV2_amihud_illiquidity",
+   "completed_source": "factor_engine/cleaned_operators/price_volume/polars_liquidity_v2.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "intra_realized_variance",
@@ -28385,7 +28545,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "IntradayPolarsFull_intra_realized_variance",
+   "completed_source": "factor_engine/cleaned_operators/intraday/polars_intraday_full.py",
+   "completed_verification": "evidence/_verify_batch3_intraday.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "fiscal_pct_change",
@@ -28417,7 +28585,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4; \u8fd0\u884c\u65f6\u63a2\u9488: \u6267\u884c\u96f6\u6b21 pl.to_pandas \u8c03\u7528 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4; \u8fd0\u884c\u65f6\u63a2\u9488: \u6267\u884c\u96f6\u6b21 pl.to_pandas \u8c03\u7528 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "TSPctPolars",
+   "completed_source": "factor_engine/cleaned_operators/common/polars_ops.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "zscore",
@@ -28433,7 +28609,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4; \u8fd0\u884c\u65f6\u63a2\u9488: \u6267\u884c\u96f6\u6b21 pl.to_pandas \u8c03\u7528 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4; \u8fd0\u884c\u65f6\u63a2\u9488: \u6267\u884c\u96f6\u6b21 pl.to_pandas \u8c03\u7528 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "SignedSqrtNative",
+   "completed_source": "factor_engine/cleaned_operators/common/polars_daily_native.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "sigmoid",
@@ -28441,7 +28625,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4; \u8fd0\u884c\u65f6\u63a2\u9488: \u6267\u884c\u96f6\u6b21 pl.to_pandas \u8c03\u7528 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4; \u8fd0\u884c\u65f6\u63a2\u9488: \u6267\u884c\u96f6\u6b21 pl.to_pandas \u8c03\u7528 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "SigmoidPolarsAuto",
+   "completed_source": "factor_engine/cleaned_operators/common/polars_auto.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "ts_min",
@@ -28457,7 +28649,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "IntradayPolars_intra_realized_kurtosis",
+   "completed_source": "factor_engine/cleaned_operators/intraday/polars_next_stage.py",
+   "completed_verification": "evidence/_verify_batch3_intraday.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "composition_normalized_entropy",
@@ -28505,7 +28705,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4; \u8fd0\u884c\u65f6\u63a2\u9488: \u6267\u884c\u96f6\u6b21 pl.to_pandas \u8c03\u7528 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4; \u8fd0\u884c\u65f6\u63a2\u9488: \u6267\u884c\u96f6\u6b21 pl.to_pandas \u8c03\u7528 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch3",
+   "completed_at": "2026-09-20T02:35:00+08:00",
+   "completed_execution_kind": "polars_native_expr",
+   "completed_kernel": "LogAbsPolarsAuto",
+   "completed_source": "factor_engine/cleaned_operators/common/polars_auto.py",
+   "completed_verification": "evidence/_verify_batch3_specs.json",
+   "completed_by_commit": "ca3c2714"
   },
   {
    "operator": "CMF",
@@ -37971,5 +38179,123 @@
    "planned_way": "pandas_free_rewrite",
    "basis": "\u5f53\u524d polars \u69fd\u4e3a pl->pd->pl \u59d4\u6258 (source=ohlc_spread_polars); \u5df2\u5b9e\u6d4b\u59d4\u6258\u500d\u7387\u89c1\u62a5\u544a"
   }
- ]
+ ],
+ "batch_ledger": {
+  "batch1": {
+   "commit": "ac33a820",
+   "operators": [
+    "add",
+    "subtract",
+    "multiply",
+    "divide",
+    "abs",
+    "neg",
+    "log",
+    "exp",
+    "sign"
+   ],
+   "kind": "declare POLARS_NATIVE_EXPR spec only (kernels already native)"
+  },
+  "batch2": {
+   "commit": "5a4902a9",
+   "operators": [
+    "rank",
+    "cs_pct_rank",
+    "gt",
+    "ts_sum",
+    "ts_zscore",
+    "and_",
+    "tanh",
+    "lt",
+    "ts_delta",
+    "ts_sharpe",
+    "ts_delay",
+    "cs_mad_zscore",
+    "cs_mean",
+    "ts_max",
+    "ts_min"
+   ],
+   "kind": "declare POLARS_NATIVE_EXPR spec only (kernels already native)"
+  },
+  "batch3": {
+   "commit": "ca3c2714",
+   "operators": [
+    "amihud_illiquidity",
+    "efficiency_ratio",
+    "fin_quarter_from_cumulative",
+    "intra_realized_kurtosis",
+    "intra_realized_skewness",
+    "intra_realized_variance",
+    "log_abs",
+    "price_impact",
+    "relative_volume",
+    "sigmoid",
+    "signed_sqrt",
+    "ts_pct",
+    "turnover_zscore"
+   ],
+   "kind": "declare POLARS_NATIVE_EXPR spec only (kernels already native)",
+   "verification": [
+    "evidence/_verify_batch3_fiscal.json",
+    "evidence/_verify_batch3_intraday.json",
+    "evidence/_verify_batch3_specs.json"
+   ],
+   "notes": [
+    "All 13 kernels verified to make ZERO pl.DataFrame.to_pandas calls at runtime.",
+    "supports_lazy / supports_streaming deliberately left False (eager panel API).",
+    "No kernel body modified; declarations only.",
+    "Also fixed two defects in evidence/_verify_batch_specs.py: the absent-default sentinel test (type name is _MissingDefaultType, not 'MISSING') and the positional array comparison (now aligned by column name)."
+   ]
+  },
+  "cumulative_declared_operators": 37
+ },
+ "coverage_after_batch3": {
+  "measured": true,
+  "method": "re-ran the same row gate as _build_worklist_v2.py over the 113893 real catalog rows with covered = already_real UNION declared",
+  "baseline_rows_that_run": 1361,
+  "baseline_pct": 1.19,
+  "stages": [
+   {
+    "stage": "batch1",
+    "batch_size": 9,
+    "newly_coverable": 0,
+    "already_covered_before": [
+     "add",
+     "subtract",
+     "multiply",
+     "divide",
+     "abs",
+     "neg",
+     "log",
+     "exp",
+     "sign"
+    ],
+    "cumulative_declared": 9,
+    "rows_that_run": 1361,
+    "pct_of_catalog_rows": 1.19
+   },
+   {
+    "stage": "batch2",
+    "batch_size": 15,
+    "newly_coverable": 15,
+    "already_covered_before": [],
+    "cumulative_declared": 24,
+    "rows_that_run": 11373,
+    "pct_of_catalog_rows": 9.99
+   },
+   {
+    "stage": "batch3",
+    "batch_size": 13,
+    "newly_coverable": 13,
+    "already_covered_before": [],
+    "cumulative_declared": 37,
+    "rows_that_run": 19285,
+    "pct_of_catalog_rows": 16.93
+   }
+  ],
+  "final_rows_that_run": 19285,
+  "final_pct": 16.93,
+  "artifact": "evidence/_batch3_coverage.json",
+  "caveat": "Row-gated coverage is a MEASUREMENT over the 113893 real catalog rows with the exact gate used by _build_worklist_v2.py. It counts only the operators this stream declared plus those already real on the clean tree; it does NOT include any declaration that has not been verified numerically."
+ }
 }

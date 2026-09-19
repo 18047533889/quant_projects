@@ -542,3 +542,254 @@ python3 evidence/_step4_sql_verify.py
 **已知测量口径提醒**：
 - §1.2 的 `ashare_fiscal_quarter_from_period_end` / `fiscal_direction_consistency` / `intraday_volume_clock_path_efficiency` 三个算子的绑定是**退化**的（两路输出全 NaN），其倍率不可作为吞吐证据。
 - 早期一次 Step-1 运行（修正前）使用了**不带 `date` 列**的 polars 面板，委托路径少做了索引恢复与索引一致性校验；§1.2 的全部数字均为**修正后**（带 `date` 列、与生产一致）的结果。
+
+---
+
+## 9. batch 3（2026-09-20）：再补 13 个高频算子的真 polars 声明 + harness 两处缺陷修复
+
+### 9.1 本批范围（只做一批，按频次降序）
+
+优先级口径与 batch 2 完全相同：`r57c_operator_frequency.json` 的**行频次降序** →
+`backend_coverage_worklist.json` 的 `workqueue_by_frequency`。
+本批取「`convertible_to == declare_spec_only` 且频次最高的 13 个」，
+跳过 `not_in_catalog` 的 DSL 关键字（`field` / `safe_div` / `ts_return` / `source_col`），
+也跳过 `rewrite_needed`（需重写内核，属下一批的"其次"类别）。
+
+| # | 算子 | 频次(行) | polars 内核 | 声明位置 |
+| ---: | --- | ---: | --- | --- |
+| 1 | `price_impact` | 9888 | `PolarsLiquidityV2_price_impact` | `price_volume/polars_liquidity_v2.py` |
+| 2 | `efficiency_ratio` | 6070 | `PolarsTechMisc_efficiency_ratio` | `technical/polars_tech_misc.py` |
+| 3 | `turnover_zscore` | 4347 | `PolarsLiquidityV2_turnover_zscore` | `price_volume/polars_liquidity_v2.py` |
+| 4 | `fin_quarter_from_cumulative` | 3743 | `PolarsFundamental_fin_quarter_from_cumulative` | `fundamental/polars_fundamental.py` |
+| 5 | `relative_volume` | 2893 | `PolarsLiquidityV2_relative_volume` | `price_volume/polars_liquidity_v2.py` |
+| 6 | `intra_realized_skewness` | 2567 | `IntradayPolars_intra_realized_skewness` | `intraday/polars_next_stage.py` |
+| 7 | `amihud_illiquidity` | 1903 | `PolarsLiquidityV2_amihud_illiquidity` | `price_volume/polars_liquidity_v2.py` |
+| 8 | `intra_realized_variance` | 1871 | `IntradayPolarsFull_intra_realized_variance` | `intraday/polars_intraday_full.py` |
+| 9 | `ts_pct` | 1738 | `TSPctPolars` | `common/polars_ops.py` |
+| 10 | `signed_sqrt` | 1427 | `SignedSqrtNative` | `common/polars_daily_native.py` |
+| 11 | `sigmoid` | 1400 | `SigmoidPolarsAuto` | `common/polars_auto.py` |
+| 12 | `intra_realized_kurtosis` | 1308 | `IntradayPolars_intra_realized_kurtosis` | `intraday/polars_next_stage.py` |
+| 13 | `log_abs` | 1206 | `LogAbsPolarsAuto` | `common/polars_auto.py` |
+
+合计 **40361 次算子出现**。补丁脚本 `evidence/_patch_batch3.py`（AST 定位 + 输出 unified diff，
+经 `git apply --check` 后才 `git apply`）。**内核一行未改，只补声明。**
+
+注入方式按各模块既有风格分三类：
+
+* 工厂动态建类（`_register` / `_mk`）→ 在 `type(...)` 的类 dict 里按 canonical 注入 `_physical_spec`；
+* 普通类体 → 类体内加 `_physical_spec = _batch3_native_spec(...)`；
+* `polars_auto._register_unary`（一个工厂服务多个 canonical）→ 类体内按
+  `canonical in _NATIVE_UNARY_SPEC_CANONICALS` 条件声明。
+
+`polars_intraday_full.py` 另有一处**必要的顺序调整**：该模块 `_mk` 的**首次调用**（行 205）
+早于它原有的中途 `contracts` import（行 273），因此把 import 提到文件顶部、
+把 spec 表放到首次调用之前。第一版补丁没注意这点，`load_all()` 直接
+`NameError: _NATIVE_SPECS`——已修。
+
+### 9.2 分类翻转（13/13）
+
+脚本 `evidence/_batch3_flip_check.py` → `evidence/_batch3_classification_flip.json`。
+
+13/13 `canonical_polars_kind(production_mode=True)` 由 **unsupported → polars_native**；
+每条的 `execution_kind=polars_native_expr`、`supports_lazy=False`、`supports_streaming=False`、
+`materializes_full_panel=True`。
+
+### 9.3 数值等价验证（真实数据，独立验证，**三个面板**）
+
+本批含三类语义完全不同的算子，单一日线面板会让其中两类退化成**空验证**，故用三个面板：
+
+| 面板 | 数据 | 规模 | 算子数 |
+| --- | --- | --- | ---: |
+| 日线 | `~/cos_data/StockDailyBarAdj` | 25 标的 × 972 交易日（2019-01-02 ～ 2022-12-30） | 9 |
+| 分钟 | `~/cos_data/StockMinuteBarAdj` | 20 标的 × 5 个交易日 × 240 根分钟 bar（1200 bar） | 3 |
+| fiscal | 真实日期轴 + 真实标的 + 真实季度 `SUM(AdjAmount)` 的 YTD 累计 | 25 标的 × 972 交易日 | 1 |
+
+**先如实记录第一版的空验证**（这是本批返工的起点）：
+
+* 3 个日内算子在 25×972 的**日线**面板上输出**两侧全 NaN**（`n_finite=0`，
+  NaN 掩码比较平凡通过）→ 未验证；
+* `fin_quarter_from_cumulative` 被喂价格面板，`nan_mask_identical=false` 且两侧无共同有限格 → 未验证。
+
+因此另写两个专用 harness（`_verify_batch3_intraday.py` / `_verify_batch3_fiscal.py`），
+**这 4 个算子在第一版里没有算作"已验证"**。
+
+逐算子实测（NaN 掩码一致 / 最大绝对偏差 / 幂等 / marshal 调用 / 参与比较的有限格数 / polars ms / pandas ms / 倍率）：
+
+| 算子 | 面板 | NaN 掩码 | 最大绝对偏差 | 幂等 | marshal | 有限格 | polars(ms) | pandas(ms) | 倍率 |
+| --- | --- | :---: | ---: | :---: | ---: | ---: | ---: | ---: | ---: |
+| `price_impact` | daily | ✅ | 0 | ✅ | 0 | 23825 | 3.945 | 1.390 | 0.35x |
+| `efficiency_ratio` | daily | ✅ | 0 | ✅ | 0 | 23800 | 5.838 | 1.582 | 0.27x |
+| `turnover_zscore` | daily | ✅ | 1.00e-10 | ✅ | 0 | 23800 | 4.827 | 2.420 | 0.50x |
+| `relative_volume` | daily | ✅ | 0 | ✅ | 0 | 23800 | 5.242 | 1.584 | 0.30x |
+| `amihud_illiquidity` | daily | ✅ | 0 | ✅ | 0 | 23576 | 4.809 | 1.821 | 0.38x |
+| `ts_pct` | daily | ✅ | 0 | ✅ | 0 | 24275 | 1.558 | 1.012 | 0.65x |
+| `signed_sqrt` | daily | ✅ | 0 | ✅ | 0 | 24300 | 0.470 | 0.872 | 1.85x |
+| `sigmoid` | daily | ✅ | 0 | ✅ | 0 | 24300 | 0.752 | 1.046 | 1.39x |
+| `log_abs` | daily | ✅ | 8.88e-16 | ✅ | 0 | 24300 | 0.956 | 0.397 | 0.42x |
+| `fin_quarter_from_cumulative` | fiscal | ✅ | 0 | ✅ | 0 | 24300 | 280.134 | 224.354 | 0.80x |
+| `intra_realized_variance` | minute | ✅ | 7.29e-17 | ✅ | 0 | 100 | 5.021 | 266.275 | **53.03x** |
+| `intra_realized_skewness` | minute | ✅ | 4.44e-15 | ✅ | 0 | 100 | 2.628 | 2.489 | 0.95x |
+| `intra_realized_kurtosis` | minute | ✅ | 6.39e-14 | ✅ | 0 | 100 | 2.571 | 3.032 | 1.18x |
+
+* **NaN 掩码 13/13 完全一致**（最重要项）。
+* **最大绝对偏差**：8 个为 0，其余 5 个 ≤ 6.4e-14（浮点重排），远低于任何研究阈值。
+* **幂等 13/13**。
+* **marshal 13/13 = 0**：佐证不是 delegate。
+* 有限格数全为真实非零量级（23576 / 100 / 24300），**不存在空比较**。
+
+### 9.4 关于"加速倍率"：本表**不足以**支撑性能结论（诚实说明）
+
+上表 ms 是**单次测量**（polars 侧 = 第 1 次调用，pandas 侧 = 第 3 次调用），
+面板仅 24300 格、耗时落在 0.4～6 ms → **噪声主导**。
+9 个日线算子里 7 个"更慢"（0.27x–0.65x）、2 个更快（`signed_sqrt` 1.85x、`sigmoid` 1.39x），
+方向不一致，**不构成本批的性能结论**。
+
+唯一远超噪声的是 **`intra_realized_variance`：polars 5.0 ms vs pandas 266 ms ≈ 53x**
+（分钟面板）。原因是 pandas 参考实现逐 bar Python 循环，polars 走 `group_by + sum`。
+此一条可作结论，其余不可。
+
+**本批的真实价值仍是"能力元数据与事实对齐"**（与 §3.3 结论一致）：
+把 13 个真 polars 内核从"生产模式 fail-closed 判 UNSUPPORTED"变成 `polars_native`。
+性能收益要等 §6.1 的证据工件门修好、生产准入打开之后才兑现。
+
+### 9.5 本批修掉的两个 harness 缺陷（都是 batch 2 harness 引入的）
+
+| 缺陷 | 现象 | 修法 |
+| --- | --- | --- |
+| `_verify_batch_specs.fill_kwargs` 缺省值哨兵判定失效 | 判据写的是 `type(d).__name__ != "MISSING"`，而线上哨兵类型是 `_MissingDefaultType` → 守卫**从不触发**，`window` 等参数原样传哨兵，5 个算子直接 `OperatorParameterError` 中断验证 | 改为 `"missing" not in type(d).__name__.lower()` |
+| `_verify_batch_specs.as_array` 按**位置**比较数组 | pivot 类内核的输出列顺序是 pivot 发现顺序，未必等于输入面板列顺序 → 会拿**不同标的互相比较**。本批在分钟面板上实测到伪结果：`max_abs_dev=26.07`、`nan_mask_identical=false`（内核其实逐位一致） | 两侧都按列名排序后再比较 |
+
+第二处是**会得出错误结论**的缺陷。已复核 batch 2 的 15 个算子：它们全部是
+`x.with_columns(...)`，输出列顺序 = 输入列顺序，因此 **batch 2 已发布的结论不受影响**；
+但该缺陷必须修，否则任何 pivot 类算子的验证都不可信。
+
+另修掉 batch 2 注入器留在 `common/polars_auto.py` 里的**重复 import + 重复常量**
+（`DYN_NOTE__register_compare` 与 contracts import 各出现两次）。
+
+### 9.6 回归测试：本批**零新增失败**（严格前后对照）
+
+脚本 `evidence/_batch3_test_ab.sh`：只把本批改动的 9 个文件临时还原成 `HEAD` 版本跑一遍，
+再用本批版本跑一遍（`trap` 保证回滚，跑完已校验 9 个文件 sha256 与快照一致），
+按**失败节点 ID** 逐条 diff。范围与 batch 2 的 `/tmp/b2_test_ab.sh` **完全一致**
+（`factor_engine/tests/backend_parity` + `factor_engine/tests/operator_contracts`），
+因此两者可直接对比。
+
+| | baseline（HEAD 版本） | after（batch 3 版本） |
+| --- | ---: | ---: |
+| 结果 | 307 failed, 1384 passed, 269 skipped (470.22s) | 307 failed, 1384 passed, 269 skipped (456.48s) |
+| 唯一失败节点 | 307 | 307 |
+| **本批新引入的失败** | — | **0** |
+| 本批修好的失败 | — | 0 |
+
+```
+--- NEW failures introduced by batch-3 (in after, not in baseline) ---
+（空）
+--- failures FIXED by batch-3 (in baseline, not in after) ---
+（空）
+```
+
+baseline 的 307/1384/269 与 §3.4 batch 2 已发布的 307/1384/269 **完全一致**，
+说明两次用的口径相同、可比。那 307 个失败全部是既有失败（`backend_parity` +
+`operator_contracts`），本批**逐个节点集合完全相同**，不存在"数量相同但内容不同"的掩盖。
+跑完已校验 9 个改动文件 sha256 与快照一致（见 `_batch3_test_ab.sh` 输出尾部）。
+
+补充的目标化单测（本批触及的算子对应的测试模块，一次跑完）：
+
+```bash
+python3 -m pytest \
+  factor_engine/tests/operators/test_intraday_next_stage.py \
+  factor_engine/tests/operators/test_polars_next_stage_parity.py \
+  factor_engine/tests/backend/test_polars_fundamental.py \
+  factor_engine/tests/operators/test_fundamental_flow_semantics_v2.py \
+  factor_engine/tests/operators/test_catalog_field_recipes.py \
+  -q -p no:cacheprovider --tb=short
+```
+
+> **踩坑记录**：第一版 A/B 把范围放到整个 `factor_engine/tests/` 并带上
+> `ASHARE_PARQUET_ROOT` / `DATA_ACCESS_SKIP_COS_MIRROR`，结果会话在 75% 处
+> **停滞 10 分钟以上**（输出文件字节数完全不增长）。原因是有若干测试模块在真实数据根
+> 存在时会去扫整棵 parquet 树。**单测不要带真实数据环境变量**——只有算子级等价验证才需要。
+> 另外整个 `factor_engine/tests/` 目录在无 `--continue-on-collection-errors` 时会因
+> `tests/tools/` 等既有收集失败直接 `Interrupted` 中止，比较结果会变成空集。
+
+### 9.7 覆盖率：**实测**，不再是推断
+
+`evidence/_batch3_coverage.py` 用与 `_build_worklist_v2.py` **完全相同**的行门控
+（一行因子当且仅当其 `r57_formula` 里**全部**算子都被覆盖才算能跑），
+在 113893 行真实清单上重算，覆盖集 = `already_real` ∪ 本流已声明算子：
+→ 产物 `evidence/_batch3_coverage.json`。
+
+| 阶段 | 本批新增可覆盖 | 累计声明算子 | 行门控能跑的因子行 | 占比 |
+| --- | ---: | ---: | ---: | ---: |
+| 现状 | — | 0 | 1361 | **1.19%** |
+| batch 1 | +0 | 9 | 1361 | 1.19% |
+| batch 2 | +15 | 24 | 11373 | **9.99%** |
+| batch 3 | +13 | 37 | 19285 | **16.93%** |
+
+**基线复现校验**：重算出的现状 = 1361 行 / **1.19%**，与 §2.3 已发布数字**完全一致**
+→ 说明这套 gate 实现与当初一致，后面的数字可比。
+
+**为什么 batch 1 的 9 个"没让覆盖率动"**：worklist 的 `already_real`（91 个）
+**本来就把** `add / subtract / multiply / divide / abs / neg / log / exp / sign`
+记为"已有真 polars 槽"，所以行门控口径早就把它们算进去了。
+batch 1 改的是**生产准入**（`canonical_polars_kind(production_mode=True)`）——
+**这个口径的行门控曲线测不出来**。这也是本批同时报"分类翻转"和"行门控"两个口径的原因。
+
+对照 §2.3 已发布曲线（那是"假设把前 N 个全部改造"的**上界**，且未扣除 55 个永不注册的
+DSL 关键字）：本批 37 个算子做到 **16.93%**，落在 landmark N=10（10.62%）与
+N=20（17.92%）之间、略低于 N=20——差额正好由无法改造的非算子名字解释：
+`field`(19102 行)、`safe_div`(6960)、`ts_return`(5094)、`source_col`(1244)。
+
+### 9.8 本批未完成 / 卡点（需用户决策）
+
+1. **§6.1 的生产准入闸门仍然关着，本批一样打不开**：`_polars_status == "production_safe"`
+   仍是 **0 / 1823**。根因是证据工件失效（514 条错误），而其中
+   `implementation_hash_polars_emitter` 不匹配，正是因为
+   `factor_engine/backend/polars_expr_emitter.py` 属于**我无权改、也无权重跑认证**的文件。
+   → **需要用户决定**：何时允许重跑证据认证流程、由谁负责。
+2. `polars_liquidity_v2.py` 的 contracts import 是中途插入的（沿用该文件族既有风格；
+   `intraday_full.py` 原本也这样，本批顺手提到了顶部）。若要求所有模块 import 集中在
+   文件头，这是一次独立的整理任务。
+3. 频次 1102–2863 区间的 `rewrite_needed` 算子（`zscore` 1517、`ts_spectral_entropy` 2812、
+   `ts_cusum_pressure` 2863、`composition_normalized_entropy` 1304）**本批未动**——
+   它们要真正重写内核，属下一批的"其次"类别。
+4. `supports_lazy` / `supports_streaming` 仍一律 `False`，未做流式验证。
+5. batch 1 的 9 个算子声明了 `supports_lazy/supports_streaming=True`（§6.5 的疑似超报）
+   **本批未改**。
+6. 行门控覆盖率只算了"本流声明的算子 + 已 real"，**未把 `rewrite_needed` 的重写纳入**。
+
+### 9.9 本批复现命令
+
+```bash
+export ASHARE_PARQUET_ROOT=$HOME/cos_data DATA_ACCESS_SKIP_COS_MIRROR=1
+export PYTHONPATH=/home/sunhaiwei/quant_projects POLARS_MAX_THREADS=4 OMP_NUM_THREADS=4
+cd /home/sunhaiwei/quant_projects
+
+# 0) 候选内核解析（静态 token + 当前分类）
+python3 evidence/_resolve_batch3.py price_impact efficiency_ratio turnover_zscore \
+  fin_quarter_from_cumulative relative_volume intra_realized_skewness amihud_illiquidity \
+  intra_realized_variance ts_pct signed_sqrt sigmoid intra_realized_kurtosis log_abs
+#    → evidence/_resolve_batch3.json
+
+# 1) 生成 / 落盘补丁（本脚本只出 diff，落盘走 git apply）
+python3 evidence/_patch_batch3.py --emit /tmp/batch3.patch
+git apply --check /tmp/batch3.patch && git apply /tmp/batch3.patch
+
+# 2) 分类翻转
+python3 evidence/_batch3_flip_check.py          # → evidence/_batch3_classification_flip.json
+
+# 3) 数值等价（日线 25×972）
+VER_NSYM=25 VER_OUT=/home/sunhaiwei/quant_projects/evidence/_verify_batch3_specs.json \
+  python3 evidence/_verify_batch_specs.py price_impact efficiency_ratio turnover_zscore \
+  relative_volume amihud_illiquidity ts_pct signed_sqrt sigmoid log_abs
+# 3b) 分钟（20 标的 × 5 交易日 × 240 bar）
+python3 evidence/_verify_batch3_intraday.py      # → evidence/_verify_batch3_intraday.json
+# 3c) fiscal（真实日期轴 + 季度 SUM(AdjAmount) YTD）
+python3 evidence/_verify_batch3_fiscal.py        # → evidence/_verify_batch3_fiscal.json
+
+# 4) 回归前后对照（注意：不要带 ASHARE_PARQUET_ROOT）
+bash evidence/_batch3_test_ab.sh
+
+# 5) 覆盖率实测
+python3 evidence/_batch3_coverage.py             # → evidence/_batch3_coverage.json
+```
