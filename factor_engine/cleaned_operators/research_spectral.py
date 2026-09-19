@@ -698,20 +698,27 @@ def _ts_residualized_hsic(
     return frame_like(x, out)
 
 
+# R57 perf: element cap for the chunked embedding-pair broadcast, so a large
+# window never materialises an unbounded N_m x N_m x dim temporary.
+_BDS_PAIR_BLOCK_ELEMENTS = 4_000_000
+
 # ---------------------------------------------------------------------------
 # BDS statistic
 # ---------------------------------------------------------------------------
 def _bds_common_center_probability(v: np.ndarray, eps: float) -> float:
-    """Probability that two distinct points neighbor one common center."""
+    """Probability that two distinct points neighbor one common center.
+
+    R57 perf: the neighbour count is the row degree of the symmetric "closer
+    than eps" indicator matrix, so one O(n^2) NumPy broadcast replaces the
+    Python pair loop.  The counted pairs and the integer degree vector are
+    identical, so the returned float is unchanged.
+    """
     n = v.shape[0]
     if n < 3:
         return np.nan
-    degree = np.zeros(n, dtype=np.int64)
-    for i in range(n):
-        for j in range(i + 1, n):
-            if abs(v[i] - v[j]) < eps:
-                degree[i] += 1
-                degree[j] += 1
+    close = np.abs(v[:, None] - v[None, :]) < eps
+    np.fill_diagonal(close, False)
+    degree = close.sum(axis=1, dtype=np.int64)
     return float(np.sum(degree * (degree - 1))) / float(n * (n - 1) * (n - 2))
 
 
@@ -746,17 +753,25 @@ def _bds_statistic(v: np.ndarray, m: int, distance_multiplier: float) -> float:
             return np.nan
         count = 0
         if dim == 1:
-            for i in range(n):
-                vi = v[i]
-                for j in range(i + 1, n):
-                    if abs(vi - v[j]) < eps:
-                        count += 1
+            close = np.abs(v[:, None] - v[None, :]) < eps
+            np.fill_diagonal(close, False)
+            # Symmetric indicator: every unordered pair is stored twice.
+            count = int(close.sum()) // 2
         else:
-            for i in range(N_m):
-                seg_i = v[i : i + dim]
-                for j in range(i + 1, N_m):
-                    if np.max(np.abs(seg_i - v[j : j + dim])) < eps:
-                        count += 1
+            # R57 perf: embedding windows W[i] = v[i : i + dim]; the original
+            # loop counts pairs (i < j) with max|W[i] - W[j]| < eps.  Evaluate
+            # the same predicate as one broadcast reduction, chunked over the
+            # leading index so the N_m x N_m x dim temporary stays bounded.
+            windows = np.lib.stride_tricks.sliding_window_view(v, dim)[:N_m]
+            rows_per_chunk = max(1, _BDS_PAIR_BLOCK_ELEMENTS // max(1, dim * N_m))
+            for start in range(0, N_m, rows_per_chunk):
+                stop = min(N_m, start + rows_per_chunk)
+                block = windows[start:stop, None, :] - windows[None, :, :]
+                np.abs(block, out=block)
+                close = block.max(axis=2) < eps
+                # Keep only strictly-upper pairs in the full index space.
+                close &= np.arange(N_m)[None, :] > np.arange(start, stop)[:, None]
+                count += int(close.sum())
         return 2.0 * count / (N_m * (N_m - 1))
 
     # Standard conditioned BDS convention: the effect compares C_m on N_m
@@ -765,11 +780,9 @@ def _bds_statistic(v: np.ndarray, m: int, distance_multiplier: float) -> float:
     N_m = n - m + 1
     c1_variance = _c_integral(1)
     suffix = v[m - 1 :]
-    suffix_count = 0
-    for i in range(N_m):
-        for j in range(i + 1, N_m):
-            if abs(suffix[i] - suffix[j]) < eps:
-                suffix_count += 1
+    suffix_close = np.abs(suffix[:, None] - suffix[None, :]) < eps
+    np.fill_diagonal(suffix_close, False)
+    suffix_count = int(suffix_close.sum()) // 2
     c1_effect = 2.0 * suffix_count / (N_m * (N_m - 1))
     cm = _c_integral(m)
     if c1_variance <= _EPS or c1_effect <= _EPS or cm < 0.0:
