@@ -31,6 +31,10 @@ def _ohlcv(name):
         ("StochasticD", "ts_max"),
         ("TRIX", "ts_ema"),
         ("ADXR", "ADX"),
+        ("FisherTransform", "FisherTransform"),
+        ("CoppockCurve", "CoppockCurve"),
+        ("QQE", "QQE"),
+        ("ElderRay", "ElderRay"),
     ],
 )
 def test_reviewed_ohlcv_template_is_repaired_and_compiles(name, required):

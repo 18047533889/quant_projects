@@ -268,6 +268,10 @@ def migrate_formula(formula: str, logic: str = "") -> tuple[str, list[str]]:
                 ),
                 "AROON_up": _aroon(close, 25, "up"),
                 "AROON_down": _aroon(close, 25, "down"),
+                "FisherTransform": f"FisherTransform({high}, {low}, 9)",
+                "CoppockCurve": f"CoppockCurve({close}, 14, 11, 10)",
+                "QQE": f"QQE({close}, 14, 5, 4.236)",
+                "ElderRay": f"ElderRay({high}, {low}, {close}, 13)",
             }
             replacement = replacements.get(name)
             if name == "AROON":
