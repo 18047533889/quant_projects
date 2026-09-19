@@ -2467,6 +2467,14 @@ def _compile_polars_impl(
         return value_to_polars_long_lazy(sc[sid], ts_col=_TS, inst_col=_INST, value_col=_VAL)
 
     if op == "literal":
+        panel = _literal_panel_value(node)
+        if panel is not None:
+            # A literal may carry a transferred panel rather than a constant.
+            # Broadcasting it with pl.lit would collapse the whole panel into
+            # one scalar, so keep its per-(ts, inst) values instead.
+            return value_to_polars_long_lazy(
+                panel, ts_col=_TS, inst_col=_INST, value_col=_VAL
+            )
         val = node.attrs.get("value")
         return base.select(pl.col(_TS), pl.col(_INST), pl.lit(val).alias(_VAL))
 
@@ -6654,6 +6662,45 @@ def _first_series_spine_from_plan(plan: PlanNode, ctx: Any) -> pd.Series | None:
     return None
 
 
+def _literal_panel_value(node: PlanNode) -> Any | None:
+    """Return the materialised **panel** carried by a ``literal``, else ``None``.
+
+    A ``literal`` is not always a scalar constant.  When the physical executor
+    lowers a cross-region transfer it rebuilds the consumed input as
+    ``PlanNode(op="literal", attrs={"value": transferred})``
+    (see ``_execute_ready_single_region_plan``), so the transferred panel
+    arrives as a literal too.  Scalars must be broadcast; panels must keep
+    their own per-(timestamp, instrument) values.  Callers use this predicate
+    to tell the two apart.
+    """
+    if getattr(node, "op", None) != "literal":
+        return None
+    value = (getattr(node, "attrs", None) or {}).get("value")
+    if value is None or isinstance(value, (bool, int, float, complex, str, bytes)):
+        return None
+    if isinstance(value, pd.Series):
+        return value
+    try:
+        import polars as pl
+    except ImportError:  # pragma: no cover - polars is required on this path
+        return None
+    if isinstance(value, (pl.LazyFrame, pl.DataFrame)):
+        return value
+    return None
+
+
+def _first_literal_panel_from_plan(plan: PlanNode) -> Any | None:
+    """First materialised panel reachable through the plan's literals."""
+    found = _literal_panel_value(plan)
+    if found is not None:
+        return found
+    for child in (getattr(plan, "inputs", ()) or ()):
+        found = _first_literal_panel_from_plan(child)
+        if found is not None:
+            return found
+    return None
+
+
 def resolve_base_lazy_for_plan(
     plan: PlanNode,
     ctx: Any,
@@ -6672,6 +6719,14 @@ def resolve_base_lazy_for_plan(
     columns = collect_columns(plan)
     if columns:
         return scan_fn(sorted(columns))
+    # A region whose data arrives as a cross-region transfer has no ``column``
+    # leaf at all -- the panel is carried by a literal.  Without this the long
+    # path reports "no columns" for every multi-region plan.
+    panel = _first_literal_panel_from_plan(plan)
+    if panel is not None:
+        return value_to_polars_long_lazy(
+            panel, ts_col=_TS, inst_col=_INST, value_col=_VAL
+        )
     lazy_spine = _first_long_lazy_from_plan(plan, ctx)
     if lazy_spine is not None:
         return value_to_polars_long_lazy(lazy_spine, ts_col=_TS, inst_col=_INST, value_col=_VAL)

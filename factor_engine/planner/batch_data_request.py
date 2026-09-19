@@ -764,6 +764,15 @@ def build_batch_data_request(
         else:
             if _looks_like_source_ref(name):
                 unbound_sref += 1
+            else:
+                # A plain (unbound) column is read from the anchor source, so it
+                # carries the anchor group's evidenced ScanCost.  The bound
+                # branch above already records this; without the same mapping
+                # here the per-column cost map stays empty for every batch made
+                # only of bare columns, and the physical readiness gate then
+                # sees no row-count evidence and refuses the plan with
+                # "row-count estimate unavailable".
+                effective_scope_keys[name] = anchor_scope.key()
             anchor_cols.add(name)
     # 说明：``ordered`` 已覆盖计划内全部 column（``_walk_columns`` 与
     # ``discover_column_source_bindings`` 走同一批 plans），所以上面循环对

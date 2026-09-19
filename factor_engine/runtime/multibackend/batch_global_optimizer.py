@@ -513,6 +513,20 @@ class PhysicalBatchGlobalOptimizer:
         estimated_memory = self._known_positive_stat(
             ctx, ("memory_bytes_estimate", "estimated_memory_bytes", "peak_memory_bytes")
         )
+        # The batch data request hands us one evidenced ScanCost per source
+        # scope.  That is the physical counterpart of the ctx-level
+        # row/byte estimate looked for above, so it is the right evidence to
+        # fall back on: a ScanCost is produced by a real adapter against an
+        # explicit scope and time range, not fabricated here.  Batches whose
+        # columns are plain anchor columns carry no ctx estimate at all, so
+        # without this the readiness gate rejected them with "row-count
+        # estimate unavailable" even though the row count was already known.
+        scan_rows, scan_bytes, scan_memory = self._scan_cost_estimates(
+            column_scan_costs
+        )
+        rows = rows or scan_rows
+        estimated_bytes = estimated_bytes or scan_bytes
+        estimated_memory = estimated_memory or scan_memory
         if (estimated_bytes is None or estimated_memory is None) and getattr(
             ctx, "data_source", None
         ) is not None:
@@ -668,6 +682,79 @@ class PhysicalBatchGlobalOptimizer:
             if value > 0:
                 return value
         return None
+
+    @staticmethod
+    def _scan_cost_estimates(
+        column_scan_costs: Any,
+    ) -> tuple[int | None, int | None, int | None]:
+        """Row / byte / memory evidence carried by the batch's ScanCosts.
+
+        Returns ``(rows, bytes, memory)`` with ``None`` for any dimension the
+        estimators could not supply.  Rows are the widest scope in the batch
+        (scopes are row-aligned), bytes are the sum of the per-scope projected
+        materialisation, and memory prefers an explicit resident-memory bound
+        when the estimator published one.
+        """
+        if not isinstance(column_scan_costs, dict) or not column_scan_costs:
+            return None, None, None
+        rows = 0
+        total_bytes = 0
+        resident = 0
+        for cost in column_scan_costs.values():
+            if cost is None:
+                continue
+            try:
+                rows = max(rows, int(getattr(cost, "estimated_rows", 0) or 0))
+            except (TypeError, ValueError):
+                pass
+            for attr in (
+                "projection_bytes",
+                "scan_projection_bytes",
+                "selected_bytes",
+                "total_bytes",
+            ):
+                try:
+                    value = int(getattr(cost, attr, 0) or 0)
+                except (TypeError, ValueError):
+                    value = 0
+                if value > 0:
+                    total_bytes += value
+                    break
+            try:
+                bound = int(getattr(cost, "resident_memory_bytes", 0) or 0)
+            except (TypeError, ValueError):
+                bound = 0
+            if bound > 0 and getattr(cost, "resident_memory_is_hard_bound", False):
+                resident += bound
+        return (
+            rows or None,
+            total_bytes or None,
+            (resident or total_bytes) or None,
+        )
+
+    @staticmethod
+    def _is_embedded_scalar_literal(node: Any) -> bool:
+        """True for a ``literal`` node holding a bounded scalar constant.
+
+        Such a node is an operator parameter (a window, a threshold).  It has
+        no panel residency and no data dependency, so it must be embedded in a
+        consumer's region rather than becoming a region of its own.
+        """
+        if node is None or getattr(node, "op", "") != "literal":
+            return False
+        value = (getattr(node, "attrs", None) or {}).get("value")
+        if value is None or type(value) in (bool, float, complex):
+            return True
+        if type(value) is int:
+            return value.bit_length() <= 63
+        try:
+            import numbers
+
+            return isinstance(value, numbers.Number) and not hasattr(
+                value, "__len__"
+            )
+        except Exception:  # pragma: no cover - defensive
+            return False
 
     @classmethod
     def _known_rows(cls, ctx: Any) -> int | None:
@@ -2006,6 +2093,57 @@ class PhysicalBatchGlobalOptimizer:
                         unassigned.remove(neighbor)
                         stack.append(neighbor)
             region_components.append((*residency, component))
+
+        # A shape-neutral bounded scalar is an operator parameter, not a data
+        # source.  It must never own a region: the executor can only
+        # materialise a region *through a backend*, so a bare constant reaches
+        # the polars / SQL long-path with zero column leaves and fails with
+        # "scan_polars_long: no columns" (and it would otherwise need a
+        # spurious TransferEdge into its consumer).  Level-based adjacency
+        # cannot contract these nodes because a scalar sits one level below its
+        # consumer whenever the consumer changes residency, so fold every
+        # single-node scalar-literal component into the region of the node that
+        # consumes it.
+        _component_of = {
+            _nid: _cid
+            for _cid, (_b, _r, _ids) in enumerate(region_components)
+            for _nid in _ids
+        }
+        # ``node_graph`` does not always carry an operator's scalar parameter
+        # as an edge, so also index the real PlanNode inputs.
+        _input_consumers: dict[str, set[str]] = {}
+        for _nid, _node in all_nodes.items():
+            for _child in (getattr(_node, "inputs", ()) or ()):
+                _cid_key = str(getattr(_child, "node_id", "") or "")
+                if _cid_key:
+                    _input_consumers.setdefault(_cid_key, set()).add(_nid)
+        _scalar_owner: dict[int, int] = {}
+        for _cid, (_b, _r, _ids) in enumerate(region_components):
+            if len(_ids) != 1:
+                continue
+            _nid = _ids[0]
+            if not self._is_embedded_scalar_literal(all_nodes.get(_nid)):
+                continue
+            _consumers = set(consumers.get(_nid) or ())
+            _consumers |= _input_consumers.get(_nid, set())
+            _owners = {
+                _component_of[_c] for _c in _consumers
+                if _c in _component_of and _component_of[_c] != _cid
+            }
+            if len(_owners) == 1:
+                _scalar_owner[_cid] = next(iter(_owners))
+        if _scalar_owner:
+            _kept = [
+                _cid for _cid in range(len(region_components))
+                if _cid not in _scalar_owner
+            ]
+            _new_index = {_old: _new for _new, _old in enumerate(_kept)}
+            _merged = [region_components[_cid] for _cid in _kept]
+            for _cid, _owner in _scalar_owner.items():
+                _merged[_new_index[_owner]][2].extend(
+                    region_components[_cid][2]
+                )
+            region_components = _merged
 
         # Fan-out nodes deliberately remain separate even at the same level,
         # so level alone is not a complete component ordering. Topologically
