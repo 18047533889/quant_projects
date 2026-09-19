@@ -219,8 +219,38 @@ class SqlBackend(Backend):
         ctx = replace(ctx, materialized_series=mat_cache, materialized_long_lazy=mat_lazy)
         return self._eval_hybrid(physical.root, ctx)
 
+    def _fallback_backend_label(self) -> str:
+        """Operator-level backend key of the python fallback engine."""
+        return "pandas_numpy" if self._operator_backend == "pandas_numpy" else "polars"
+
+    def _fallback_ctx(self, ctx: ExecutionContext, to_backend: str) -> ExecutionContext:
+        """Re-label the context for the fallback engine's operator resolution.
+
+        R57-fallback-leak: the plan-level ``selected_backend`` stays at the SQL
+        label while individual nodes are handed to the polars/pandas engine for
+        evaluation.  ``cleaned_bridge._resolve_operator`` maps
+        ``{"duckdb_sql": "sql"}`` and therefore asks the registry for an operator
+        on the ``sql`` backend, which yields ``SqlCapableOperator`` -- a
+        compile-time capability placeholder that has neither ``validate_params``
+        nor ``calculate``.  Any node that is not served from the SQL
+        materialisation cache then dies with ``AttributeError``.
+
+        Presenting the fallback backend makes the engine resolve the real
+        executable implementation instead of the placeholder.  ``polars`` is the
+        operator-level key for both the panel and the long polars backends, and
+        ``pandas_numpy`` maps to itself.
+        """
+        if getattr(ctx, "selected_backend", None) != self.runtime_backend_label:
+            return ctx
+        try:
+            return replace(ctx, selected_backend=to_backend)
+        except Exception:  # noqa: BLE001 - relabelling must never break evaluation
+            return ctx
+
     def _eval_hybrid(self, plan: PlanNode, ctx: ExecutionContext) -> Any:
-        if self._operator_backend == "pandas_numpy":
+        to_backend = self._fallback_backend_label()
+        ctx = self._fallback_ctx(ctx, to_backend)
+        if to_backend == "pandas_numpy":
             return self._python.execute(plan, ctx)
         return self._polars.execute(plan, ctx)
 
@@ -239,10 +269,9 @@ class SqlBackend(Backend):
                 f"production blocks SQL->python fallback for {plan.op!r}: "
                 f"fail-closed reason {reason_class!r}"
             )
-        to_backend = (
-            "pandas_numpy" if self._operator_backend == "pandas_numpy" else "polars"
-        )
+        to_backend = self._fallback_backend_label()
         backend = self._python if to_backend == "pandas_numpy" else self._polars
+        ctx = self._fallback_ctx(ctx, to_backend)
         result = backend._eval(plan, ctx) if hasattr(backend, "_eval") else backend.execute(plan, ctx)
         runtime = dict(getattr(ctx, "runtime_stats", None) or {})
         events = list(runtime.get("sql_fallback_events") or [])
