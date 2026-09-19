@@ -1,0 +1,185 @@
+{
+ "total_catalog_rows": 113893,
+ "baseline_rows_that_run": 1361,
+ "baseline_pct": 1.19,
+ "stages": [
+  {
+   "stage": "batch1",
+   "batch_size": 9,
+   "newly_coverable": 0,
+   "already_covered_before": [
+    "add",
+    "subtract",
+    "multiply",
+    "divide",
+    "abs",
+    "neg",
+    "log",
+    "exp",
+    "sign"
+   ],
+   "cumulative_declared": 9,
+   "rows_that_run": 1361,
+   "pct_of_catalog_rows": 1.19
+  },
+  {
+   "stage": "batch2",
+   "batch_size": 15,
+   "newly_coverable": 15,
+   "already_covered_before": [],
+   "cumulative_declared": 24,
+   "rows_that_run": 11373,
+   "pct_of_catalog_rows": 9.99
+  },
+  {
+   "stage": "batch3",
+   "batch_size": 13,
+   "newly_coverable": 13,
+   "already_covered_before": [],
+   "cumulative_declared": 37,
+   "rows_that_run": 19285,
+   "pct_of_catalog_rows": 16.93
+  }
+ ],
+ "declared_operators": {
+  "batch1": [
+   "add",
+   "subtract",
+   "multiply",
+   "divide",
+   "abs",
+   "neg",
+   "log",
+   "exp",
+   "sign"
+  ],
+  "batch2": [
+   "rank",
+   "cs_pct_rank",
+   "gt",
+   "ts_sum",
+   "ts_zscore",
+   "and_",
+   "tanh",
+   "lt",
+   "ts_delta",
+   "ts_sharpe",
+   "ts_delay",
+   "cs_mad_zscore",
+   "cs_mean",
+   "ts_max",
+   "ts_min"
+  ],
+  "batch3": [
+   "price_impact",
+   "efficiency_ratio",
+   "turnover_zscore",
+   "fin_quarter_from_cumulative",
+   "relative_volume",
+   "intra_realized_skewness",
+   "amihud_illiquidity",
+   "intra_realized_variance",
+   "ts_pct",
+   "signed_sqrt",
+   "sigmoid",
+   "intra_realized_kurtosis",
+   "log_abs"
+  ],
+  "total": [
+   "abs",
+   "add",
+   "amihud_illiquidity",
+   "and_",
+   "cs_mad_zscore",
+   "cs_mean",
+   "cs_pct_rank",
+   "divide",
+   "efficiency_ratio",
+   "exp",
+   "fin_quarter_from_cumulative",
+   "gt",
+   "intra_realized_kurtosis",
+   "intra_realized_skewness",
+   "intra_realized_variance",
+   "log",
+   "log_abs",
+   "lt",
+   "multiply",
+   "neg",
+   "price_impact",
+   "rank",
+   "relative_volume",
+   "sigmoid",
+   "sign",
+   "signed_sqrt",
+   "subtract",
+   "tanh",
+   "ts_delay",
+   "ts_delta",
+   "ts_max",
+   "ts_min",
+   "ts_pct",
+   "ts_sharpe",
+   "ts_sum",
+   "ts_zscore",
+   "turnover_zscore"
+  ]
+ },
+ "workqueue_prefix_declared": {
+  "top1": {
+   "workqueue_entries": 1,
+   "declared": 1,
+   "not_in_catalog": 0
+  },
+  "top5": {
+   "workqueue_entries": 5,
+   "declared": 4,
+   "not_in_catalog": 1
+  },
+  "top10": {
+   "workqueue_entries": 10,
+   "declared": 8,
+   "not_in_catalog": 2
+  },
+  "top20": {
+   "workqueue_entries": 20,
+   "declared": 14,
+   "not_in_catalog": 3
+  },
+  "top30": {
+   "workqueue_entries": 30,
+   "declared": 22,
+   "not_in_catalog": 3
+  },
+  "top50": {
+   "workqueue_entries": 50,
+   "declared": 28,
+   "not_in_catalog": 4
+  },
+  "top75": {
+   "workqueue_entries": 75,
+   "declared": 28,
+   "not_in_catalog": 7
+  },
+  "top100": {
+   "workqueue_entries": 100,
+   "declared": 28,
+   "not_in_catalog": 7
+  },
+  "top300": {
+   "workqueue_entries": 300,
+   "declared": 28,
+   "not_in_catalog": 13
+  },
+  "top1000": {
+   "workqueue_entries": 1000,
+   "declared": 28,
+   "not_in_catalog": 27
+  }
+ },
+ "occurrence_weighted": {
+  "declared_operator_occurrences": 437753,
+  "pct_of_total_occurrences": null
+ },
+ "caveat": "Row-gated coverage is a MEASUREMENT over the 113893 real catalog rows with the exact gate used by _build_worklist_v2.py. It counts only the operators this stream declared plus those already real on the clean tree; it does NOT include any declaration that has not been verified numerically."
+}

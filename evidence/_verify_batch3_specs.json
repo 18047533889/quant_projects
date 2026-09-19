@@ -1,0 +1,600 @@
+[
+ {
+  "summary": {
+   "panel": {
+    "days": 972,
+    "symbols": 25,
+    "start": "2019-01-02",
+    "end": "2022-12-30"
+   },
+   "n_operators": 13,
+   "n_ok": 8,
+   "all_nan_mask_identical": false,
+   "max_abs_dev_over_all": 8.881784197001252e-16,
+   "all_idempotent": true,
+   "all_zero_marshal": true,
+   "all_flipped_to_polars_native": true,
+   "failures": [
+    "price_impact",
+    "efficiency_ratio",
+    "turnover_zscore",
+    "relative_volume",
+    "amihud_illiquidity"
+   ]
+  },
+  "results": [
+   {
+    "operator": "price_impact",
+    "inputs": [
+     "Return",
+     "AdjOpen"
+    ],
+    "kwargs": {
+     "window": "MISSING"
+    },
+    "polars_kind_after": "polars_native",
+    "ok": false,
+    "error": "OperatorParameterError: price_impact.window [runtime]: window must be an integer, not _MissingDefaultType (MISSING)"
+   },
+   {
+    "operator": "efficiency_ratio",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {
+     "window": "MISSING"
+    },
+    "polars_kind_after": "polars_native",
+    "ok": false,
+    "error": "OperatorParameterError: efficiency_ratio.window [runtime]: window must be an integer, not _MissingDefaultType (MISSING)"
+   },
+   {
+    "operator": "turnover_zscore",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {
+     "window": "MISSING"
+    },
+    "polars_kind_after": "polars_native",
+    "ok": false,
+    "error": "OperatorParameterError: turnover_zscore.window [runtime]: window must be an integer, not _MissingDefaultType (MISSING)"
+   },
+   {
+    "operator": "fin_quarter_from_cumulative",
+    "inputs": [
+     "AdjClose",
+     "AdjOpen",
+     "AdjHigh"
+    ],
+    "kwargs": {},
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.15057928604073822,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": false,
+    "n_finite": 0,
+    "finite_frac_ref": 0.0,
+    "max_abs_dev": null,
+    "_delegate_2nd_s": 0.1572152569424361,
+    "idempotent": true,
+    "_pandas_s": 1.6500652108807117,
+    "ok": true
+   },
+   {
+    "operator": "relative_volume",
+    "inputs": [
+     "Volume"
+    ],
+    "kwargs": {
+     "window": "MISSING"
+    },
+    "polars_kind_after": "polars_native",
+    "ok": false,
+    "error": "OperatorParameterError: relative_volume.window [runtime]: window must be an integer, not _MissingDefaultType (MISSING)"
+   },
+   {
+    "operator": "intra_realized_skewness",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {},
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.02774471207521856,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 0,
+    "finite_frac_ref": 0.0,
+    "max_abs_dev": null,
+    "_delegate_2nd_s": 0.024634934030473232,
+    "idempotent": true,
+    "_pandas_s": 0.021630884846672416,
+    "ok": true
+   },
+   {
+    "operator": "amihud_illiquidity",
+    "inputs": [
+     "Return",
+     "AdjClose",
+     "Volume"
+    ],
+    "kwargs": {
+     "window": "MISSING"
+    },
+    "polars_kind_after": "polars_native",
+    "ok": false,
+    "error": "OperatorParameterError: amihud_illiquidity.window [runtime]: window must be an integer, not _MissingDefaultType (MISSING)"
+   },
+   {
+    "operator": "intra_realized_variance",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {},
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.03446263214573264,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": false,
+    "n_finite": 0,
+    "finite_frac_ref": 0.0,
+    "max_abs_dev": null,
+    "_delegate_2nd_s": 0.033015865134075284,
+    "idempotent": true,
+    "_pandas_s": 50.74842949793674,
+    "ok": true
+   },
+   {
+    "operator": "ts_pct",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {
+     "d": 1
+    },
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.0018321650568395853,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 24275,
+    "finite_frac_ref": 0.998971,
+    "max_abs_dev": 0.0,
+    "_delegate_2nd_s": 0.001290022162720561,
+    "idempotent": true,
+    "_pandas_s": 0.0009068329818546772,
+    "ok": true
+   },
+   {
+    "operator": "signed_sqrt",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {},
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.00046488596126437187,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 24300,
+    "finite_frac_ref": 1.0,
+    "max_abs_dev": 0.0,
+    "_delegate_2nd_s": 0.00043705711141228676,
+    "idempotent": true,
+    "_pandas_s": 0.0007967960555106401,
+    "ok": true
+   },
+   {
+    "operator": "sigmoid",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {},
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.0006896289996802807,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 24300,
+    "finite_frac_ref": 1.0,
+    "max_abs_dev": 0.0,
+    "_delegate_2nd_s": 0.0006458710413426161,
+    "idempotent": true,
+    "_pandas_s": 0.0008863639086484909,
+    "ok": true
+   },
+   {
+    "operator": "intra_realized_kurtosis",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {},
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.024784659035503864,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 0,
+    "finite_frac_ref": 0.0,
+    "max_abs_dev": null,
+    "_delegate_2nd_s": 0.024156348081305623,
+    "idempotent": true,
+    "_pandas_s": 0.01179562695324421,
+    "ok": true
+   },
+   {
+    "operator": "log_abs",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {},
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.001212622970342636,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 24300,
+    "finite_frac_ref": 1.0,
+    "max_abs_dev": 8.881784197001252e-16,
+    "_delegate_2nd_s": 0.001078347908332944,
+    "idempotent": true,
+    "_pandas_s": 0.0004130769520998001,
+    "ok": true
+   }
+  ]
+ },
+ {
+  "summary": {
+   "panel": {
+    "days": 972,
+    "symbols": 25,
+    "start": "2019-01-02",
+    "end": "2022-12-30"
+   },
+   "n_operators": 10,
+   "n_ok": 10,
+   "all_nan_mask_identical": false,
+   "max_abs_dev_over_all": 1.0017231488745892e-10,
+   "all_idempotent": true,
+   "all_zero_marshal": true,
+   "all_flipped_to_polars_native": true,
+   "failures": []
+  },
+  "results": [
+   {
+    "operator": "price_impact",
+    "inputs": [
+     "Return",
+     "AdjOpen"
+    ],
+    "kwargs": {
+     "window": 20
+    },
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.003944692201912403,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 23825,
+    "finite_frac_ref": 0.980453,
+    "max_abs_dev": 0.0,
+    "_delegate_2nd_s": 0.003669050056487322,
+    "idempotent": true,
+    "_pandas_s": 0.0013900778722018003,
+    "ok": true
+   },
+   {
+    "operator": "efficiency_ratio",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {
+     "window": 20
+    },
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.005838314071297646,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 23800,
+    "finite_frac_ref": 0.979424,
+    "max_abs_dev": 0.0,
+    "_delegate_2nd_s": 0.004759456962347031,
+    "idempotent": true,
+    "_pandas_s": 0.0015816220548003912,
+    "ok": true
+   },
+   {
+    "operator": "turnover_zscore",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {
+     "window": 20
+    },
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.004826815100386739,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 23800,
+    "finite_frac_ref": 0.979424,
+    "max_abs_dev": 1.0017231488745892e-10,
+    "_delegate_2nd_s": 0.004673009039834142,
+    "idempotent": true,
+    "_pandas_s": 0.0024203569628298283,
+    "ok": true
+   },
+   {
+    "operator": "fin_quarter_from_cumulative",
+    "inputs": [
+     "AdjClose",
+     "AdjOpen",
+     "AdjHigh"
+    ],
+    "kwargs": {},
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.1943866228684783,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": false,
+    "n_finite": 0,
+    "finite_frac_ref": 0.0,
+    "max_abs_dev": null,
+    "_delegate_2nd_s": 0.17013058299198747,
+    "idempotent": true,
+    "_pandas_s": 1.864489602856338,
+    "ok": true
+   },
+   {
+    "operator": "relative_volume",
+    "inputs": [
+     "Volume"
+    ],
+    "kwargs": {
+     "window": 20
+    },
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.005241933045908809,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 23800,
+    "finite_frac_ref": 0.979424,
+    "max_abs_dev": 0.0,
+    "_delegate_2nd_s": 0.0042256328742951155,
+    "idempotent": true,
+    "_pandas_s": 0.0015840721316635609,
+    "ok": true
+   },
+   {
+    "operator": "amihud_illiquidity",
+    "inputs": [
+     "Return",
+     "AdjClose",
+     "Volume"
+    ],
+    "kwargs": {
+     "window": 20
+    },
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.004808635218068957,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 23576,
+    "finite_frac_ref": 0.970206,
+    "max_abs_dev": 0.0,
+    "_delegate_2nd_s": 0.004650651011615992,
+    "idempotent": true,
+    "_pandas_s": 0.0018206450622528791,
+    "ok": true
+   },
+   {
+    "operator": "ts_pct",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {
+     "d": 1
+    },
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.0015578530728816986,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 24275,
+    "finite_frac_ref": 0.998971,
+    "max_abs_dev": 0.0,
+    "_delegate_2nd_s": 0.0013728081248700619,
+    "idempotent": true,
+    "_pandas_s": 0.0010123290121555328,
+    "ok": true
+   },
+   {
+    "operator": "signed_sqrt",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {},
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.0004704059101641178,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 24300,
+    "finite_frac_ref": 1.0,
+    "max_abs_dev": 0.0,
+    "_delegate_2nd_s": 0.0004541059024631977,
+    "idempotent": true,
+    "_pandas_s": 0.0008722338825464249,
+    "ok": true
+   },
+   {
+    "operator": "sigmoid",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {},
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.0007524280808866024,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 24300,
+    "finite_frac_ref": 1.0,
+    "max_abs_dev": 0.0,
+    "_delegate_2nd_s": 0.0007444270886480808,
+    "idempotent": true,
+    "_pandas_s": 0.0010458689648658037,
+    "ok": true
+   },
+   {
+    "operator": "log_abs",
+    "inputs": [
+     "AdjClose"
+    ],
+    "kwargs": {},
+    "polars_kind_after": "polars_native",
+    "_delegate_s": 0.0009555520955473185,
+    "to_pandas_calls": 0,
+    "shape_ref": [
+     972,
+     25
+    ],
+    "shape_new": [
+     972,
+     25
+    ],
+    "nan_mask_identical": true,
+    "n_finite": 24300,
+    "finite_frac_ref": 1.0,
+    "max_abs_dev": 8.881784197001252e-16,
+    "_delegate_2nd_s": 0.0009771310724318027,
+    "idempotent": true,
+    "_pandas_s": 0.00039743795059621334,
+    "ok": true
+   }
+  ]
+ }
+]

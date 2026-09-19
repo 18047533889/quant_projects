@@ -27,12 +27,6 @@ from factor_engine.backend.contracts import (
 
 DYN_NOTE__register_compare = 'Genuine polars expression kernel (pl.col comparison + with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls. Declared to connect the polars_long channel (execution_kind was previously absent).'
 
-from factor_engine.backend.contracts import (
-    ExecutionKind, PhysicalImplementationSpec,
-)
-
-DYN_NOTE__register_compare = 'Genuine polars expression kernel (pl.col comparison + with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls. Declared to connect the polars_long channel (execution_kind was previously absent).'
-
 
 _SKIP = frozenset({"date", "stock_code"})
 
@@ -56,6 +50,47 @@ def _unary_calc(expr_fn: Callable):
 def _finite_result(expr: pl.Expr) -> pl.Expr:
     """Match reference operators that replace non-finite results with NaN."""
     return pl.when(expr.is_finite()).then(expr).otherwise(None)
+
+
+# ---------------------------------------------------------------------------
+# R57 backend-coverage batch 3 — explicit execution-kind declarations.
+# These kernels are genuine polars expressions (pl.col / with_columns /
+# group_by over pl.Expr).  Previously they had no _physical_spec, so
+# canonical_polars_kind(production_mode=True) failed closed to UNSUPPORTED.
+# ---------------------------------------------------------------------------
+_BATCH3_NOTE = (
+    "Genuine polars expression kernel (pl.Expr over columns, no pandas round-trip); "
+    "runtime marshal probe on real daily data records 0 pl.DataFrame.to_pandas "
+    "calls. Eager panel API only: no lazy/streaming or production-parity claim."
+)
+
+
+def _batch3_native_spec(canonical: str, kernel: str) -> PhysicalImplementationSpec:
+    """Explicit execution-kind contract for a genuine polars expression kernel.
+
+    Built from the batch-3 evidence: the kernel body is ``pl.Expr`` construction
+    (no pandas round-trip) and the runtime marshal probe records zero
+    ``pl.DataFrame.to_pandas`` calls on real daily data.  Eager panel API, so
+    ``supports_lazy`` / ``supports_streaming`` stay False.
+    """
+    return PhysicalImplementationSpec(
+        canonical=canonical,
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash=f"common.polars_auto:{kernel}:v1",
+        emitter_identity=f"polars_expr:{canonical}",
+        kernel_identity=f"common.polars_auto:{kernel}",
+        parameter_domain_hash=f"{canonical}:declared:v1",
+        semantic_contract_hash=f"{canonical}:polars_native_expr:v1",
+        notes=_BATCH3_NOTE,
+    )
+
+
+_NATIVE_UNARY_SPEC_CANONICALS = frozenset(['log_abs', 'sigmoid'])
 
 
 def _register_unary(
@@ -82,6 +117,10 @@ def _register_unary(
             return_type="series",
             tags=[category, "polars", "auto"],
         )
+        if canonical in _NATIVE_UNARY_SPEC_CANONICALS:
+            _physical_spec = _batch3_native_spec(
+                canonical, f"{canonical.title().replace('_', '')}PolarsAuto"
+            )
         _calculate_series = _unary_calc(expr_fn)
 
     _UnaryPolars.__doc__ = desc

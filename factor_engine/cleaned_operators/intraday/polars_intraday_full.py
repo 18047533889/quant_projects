@@ -25,6 +25,10 @@ import math
 import polars as pl
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.backend.contracts import (
+    ExecutionKind,
+    PhysicalImplementationSpec,
+)
 from factor_engine.cleaned_operators.base import ParamRole, ParamSpec
 from factor_engine.cleaned_operators.intraday._core import tripower_scale as _tripower_scale
 
@@ -135,7 +139,13 @@ def _mk(canonical: str, description: str, params: list[str], fn, extra_tags=None
     cls = type(
         f"IntradayPolarsFull_{canonical}",
         (SeriesOperator,),
-        {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
+        {
+            "metadata": metadata,
+            "_calculate_series": _calculate_series,
+            "__module__": __name__,
+            **({"_physical_spec": _NATIVE_SPECS[canonical]}
+               if canonical in _NATIVE_SPECS else {}),
+        },
     )
     register_operator(
         name=canonical,
@@ -194,6 +204,52 @@ def _seg_return(close: pl.DataFrame, segment: str) -> pl.DataFrame:
     out = seg.with_columns(((pl.col("last") / pl.col("open")) - 1.0).alias("v"))
     out = out.with_columns(pl.when(pl.col("last").is_not_null() & pl.col("open").is_not_null()).then(pl.col("v")).otherwise(None))
     return _pivot(out, "v")
+
+
+# ---------------------------------------------------------------------------
+# R57 backend-coverage batch 3 — explicit execution-kind declarations.
+# These kernels are genuine polars expressions (pl.col / with_columns /
+# group_by over pl.Expr).  Previously they had no _physical_spec, so
+# canonical_polars_kind(production_mode=True) failed closed to UNSUPPORTED.
+# ---------------------------------------------------------------------------
+_BATCH3_NOTE = (
+    "Genuine polars expression kernel (pl.Expr over columns, no pandas round-trip); "
+    "runtime marshal probe on real daily data records 0 pl.DataFrame.to_pandas "
+    "calls. Eager panel API only: no lazy/streaming or production-parity claim."
+)
+
+
+def _batch3_native_spec(canonical: str, kernel: str) -> PhysicalImplementationSpec:
+    """Explicit execution-kind contract for a genuine polars expression kernel.
+
+    Built from the batch-3 evidence: the kernel body is ``pl.Expr`` construction
+    (no pandas round-trip) and the runtime marshal probe records zero
+    ``pl.DataFrame.to_pandas`` calls on real daily data.  Eager panel API, so
+    ``supports_lazy`` / ``supports_streaming`` stay False.
+    """
+    return PhysicalImplementationSpec(
+        canonical=canonical,
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash=f"intraday.polars_intraday_full:{kernel}:v1",
+        emitter_identity=f"polars_expr:{canonical}",
+        kernel_identity=f"intraday.polars_intraday_full:{kernel}",
+        parameter_domain_hash=f"{canonical}:declared:v1",
+        semantic_contract_hash=f"{canonical}:polars_native_expr:v1",
+        notes=_BATCH3_NOTE,
+    )
+
+
+_NATIVE_SPECS: dict[str, PhysicalImplementationSpec] = {
+    _c: _batch3_native_spec(_c, _k)
+    for _c, _k in (
+        ("intra_realized_variance", "IntradayPolarsFull_intra_realized_variance"),
+    )
+}
 
 
 _mk("intra_segment_return", "指定时段（morning/afternoon）收盘/开盘收益 - 1（Polars）。", ["close", "segment", "session_tz", "endpoint_policy"],
@@ -270,7 +326,6 @@ _IntraSegmentRealizedVolPolars = _mk(
 _IntraSegmentRealizedVolPolars.metadata.tags = [
     tag for tag in _IntraSegmentRealizedVolPolars.metadata.tags if tag != "native"
 ]
-from factor_engine.backend.contracts import ExecutionKind, PhysicalImplementationSpec
 _IntraSegmentRealizedVolPolars._physical_spec = PhysicalImplementationSpec(
     canonical="intra_segment_realized_vol", backend="polars",
     execution_kind=ExecutionKind.POLARS_PANDAS_DELEGATE,

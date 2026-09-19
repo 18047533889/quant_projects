@@ -143,6 +143,44 @@ class SignedLogNative(SeriesOperator):
         ])
 
 
+# ---------------------------------------------------------------------------
+# R57 backend-coverage batch 3 — explicit execution-kind declarations.
+# These kernels are genuine polars expressions (pl.col / with_columns /
+# group_by over pl.Expr).  Previously they had no _physical_spec, so
+# canonical_polars_kind(production_mode=True) failed closed to UNSUPPORTED.
+# ---------------------------------------------------------------------------
+_BATCH3_NOTE = (
+    "Genuine polars expression kernel (pl.Expr over columns, no pandas round-trip); "
+    "runtime marshal probe on real daily data records 0 pl.DataFrame.to_pandas "
+    "calls. Eager panel API only: no lazy/streaming or production-parity claim."
+)
+
+
+def _batch3_native_spec(canonical: str, kernel: str) -> PhysicalImplementationSpec:
+    """Explicit execution-kind contract for a genuine polars expression kernel.
+
+    Built from the batch-3 evidence: the kernel body is ``pl.Expr`` construction
+    (no pandas round-trip) and the runtime marshal probe records zero
+    ``pl.DataFrame.to_pandas`` calls on real daily data.  Eager panel API, so
+    ``supports_lazy`` / ``supports_streaming`` stay False.
+    """
+    return PhysicalImplementationSpec(
+        canonical=canonical,
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash=f"common.polars_daily_native:{kernel}:v1",
+        emitter_identity=f"polars_expr:{canonical}",
+        kernel_identity=f"common.polars_daily_native:{kernel}",
+        parameter_domain_hash=f"{canonical}:declared:v1",
+        semantic_contract_hash=f"{canonical}:polars_native_expr:v1",
+        notes=_BATCH3_NOTE,
+    )
+
+
 @register_operator(
     name="signed_sqrt",
     category="math",
@@ -154,6 +192,7 @@ class SignedLogNative(SeriesOperator):
 class SignedSqrtNative(SeriesOperator):
     """sign(x) * sqrt(|x|) — expression native."""
 
+    _physical_spec = _batch3_native_spec("signed_sqrt", "SignedSqrtNative")
     metadata = OperatorMetadata(
         name="signed_sqrt",
         category="math",

@@ -1,0 +1,98 @@
+{
+ "summary": {
+  "panel": {
+   "days": 5,
+   "symbols": 20,
+   "minute_bars": 1200,
+   "sessions_from": "2024-01-02 09:31:00",
+   "sessions_to": "2024-01-08 15:00:00",
+   "source": "/home/sunhaiwei/cos_data/StockMinuteBarAdj"
+  },
+  "n_operators": 3,
+  "n_ok": 3,
+  "all_nan_mask_identical": true,
+  "all_idempotent": true,
+  "all_zero_marshal": true,
+  "all_flipped_to_polars_native": true,
+  "total_finite_cells_compared": 300,
+  "max_abs_dev_over_all": 6.394884621840902e-14,
+  "failures": []
+ },
+ "results": [
+  {
+   "operator": "intra_realized_variance",
+   "polars_kind": "polars_native",
+   "_polars_s": 0.0050214678049087524,
+   "to_pandas_calls": 0,
+   "_polars_2nd_s": 0.004590821918100119,
+   "_pandas_s": 0.26627514278516173,
+   "shape_ref_raw": [
+    5,
+    20
+   ],
+   "shape_new_raw": [
+    5,
+    20
+   ],
+   "cols_ref_sorted": true,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 100,
+   "finite_frac_ref": 1.0,
+   "max_abs_dev": 7.28583859910259e-17,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "intra_realized_skewness",
+   "polars_kind": "polars_native",
+   "_polars_s": 0.0026282009202986956,
+   "to_pandas_calls": 0,
+   "_polars_2nd_s": 0.0022322030272334814,
+   "_pandas_s": 0.0024887649342417717,
+   "shape_ref_raw": [
+    5,
+    20
+   ],
+   "shape_new_raw": [
+    5,
+    20
+   ],
+   "cols_ref_sorted": true,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 100,
+   "finite_frac_ref": 1.0,
+   "max_abs_dev": 4.440892098500626e-15,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "intra_realized_kurtosis",
+   "polars_kind": "polars_native",
+   "_polars_s": 0.002571011893451214,
+   "to_pandas_calls": 0,
+   "_polars_2nd_s": 0.0025430929381400347,
+   "_pandas_s": 0.0030318491626530886,
+   "shape_ref_raw": [
+    5,
+    20
+   ],
+   "shape_new_raw": [
+    5,
+    20
+   ],
+   "cols_ref_sorted": true,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 100,
+   "finite_frac_ref": 1.0,
+   "max_abs_dev": 6.394884621840902e-14,
+   "idempotent": true,
+   "ok": true
+  }
+ ]
+}

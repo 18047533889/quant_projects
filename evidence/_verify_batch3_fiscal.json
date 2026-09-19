@@ -1,0 +1,37 @@
+{
+ "summary": {
+  "days": 972,
+  "symbols": 25,
+  "files": 972,
+  "start": "2019-01-02",
+  "end": "2022-12-30",
+  "value_driver": "real quarterly SUM(AdjAmount), YTD cumulative",
+  "source": "/home/sunhaiwei/cos_data/StockDailyBarAdj"
+ },
+ "results": [
+  {
+   "operator": "fin_quarter_from_cumulative",
+   "polars_kind": "polars_native",
+   "_polars_s": 0.2801338881254196,
+   "to_pandas_calls": 0,
+   "_polars_2nd_s": 0.2788806960452348,
+   "_pandas_s": 0.224353987025097,
+   "shape_ref_raw": [
+    972,
+    25
+   ],
+   "shape_new_raw": [
+    972,
+    25
+   ],
+   "n_rows_aligned": 972,
+   "n_cols_aligned": 25,
+   "finite_frac_ref": 1.0,
+   "nan_mask_identical": true,
+   "n_finite": 24300,
+   "max_abs_dev": 0.0,
+   "idempotent": true,
+   "ok": true
+  }
+ ]
+}

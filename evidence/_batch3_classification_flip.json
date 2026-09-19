@@ -1,0 +1,198 @@
+{
+ "n": 13,
+ "flipped": 13,
+ "not_flipped": [],
+ "rows": [
+  {
+   "operator": "price_impact",
+   "polars_kind_production": "polars_native",
+   "spec_present": true,
+   "execution_kind": "polars_native_expr",
+   "supports_lazy": false,
+   "supports_streaming": false,
+   "materializes_full_panel": true,
+   "kernel_identity": "price_volume.polars_liquidity_v2:PolarsLiquidityV2_price_impact",
+   "backends": [
+    "pandas_numpy",
+    "polars",
+    "sql"
+   ]
+  },
+  {
+   "operator": "efficiency_ratio",
+   "polars_kind_production": "polars_native",
+   "spec_present": true,
+   "execution_kind": "polars_native_expr",
+   "supports_lazy": false,
+   "supports_streaming": false,
+   "materializes_full_panel": true,
+   "kernel_identity": "technical.polars_tech_misc:PolarsTechMisc_efficiency_ratio",
+   "backends": [
+    "pandas_numpy",
+    "polars",
+    "sql"
+   ]
+  },
+  {
+   "operator": "turnover_zscore",
+   "polars_kind_production": "polars_native",
+   "spec_present": true,
+   "execution_kind": "polars_native_expr",
+   "supports_lazy": false,
+   "supports_streaming": false,
+   "materializes_full_panel": true,
+   "kernel_identity": "price_volume.polars_liquidity_v2:PolarsLiquidityV2_turnover_zscore",
+   "backends": [
+    "pandas_numpy",
+    "polars",
+    "sql"
+   ]
+  },
+  {
+   "operator": "fin_quarter_from_cumulative",
+   "polars_kind_production": "polars_native",
+   "spec_present": true,
+   "execution_kind": "polars_native_expr",
+   "supports_lazy": false,
+   "supports_streaming": false,
+   "materializes_full_panel": true,
+   "kernel_identity": "fundamental.polars_fundamental:PolarsFundamental_fin_quarter_from_cumulative",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ]
+  },
+  {
+   "operator": "relative_volume",
+   "polars_kind_production": "polars_native",
+   "spec_present": true,
+   "execution_kind": "polars_native_expr",
+   "supports_lazy": false,
+   "supports_streaming": false,
+   "materializes_full_panel": true,
+   "kernel_identity": "price_volume.polars_liquidity_v2:PolarsLiquidityV2_relative_volume",
+   "backends": [
+    "pandas_numpy",
+    "polars",
+    "sql"
+   ]
+  },
+  {
+   "operator": "intra_realized_skewness",
+   "polars_kind_production": "polars_native",
+   "spec_present": true,
+   "execution_kind": "polars_native_expr",
+   "supports_lazy": false,
+   "supports_streaming": false,
+   "materializes_full_panel": true,
+   "kernel_identity": "intraday.polars_next_stage:IntradayPolars_intra_realized_skewness",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ]
+  },
+  {
+   "operator": "amihud_illiquidity",
+   "polars_kind_production": "polars_native",
+   "spec_present": true,
+   "execution_kind": "polars_native_expr",
+   "supports_lazy": false,
+   "supports_streaming": false,
+   "materializes_full_panel": true,
+   "kernel_identity": "price_volume.polars_liquidity_v2:PolarsLiquidityV2_amihud_illiquidity",
+   "backends": [
+    "pandas_numpy",
+    "polars",
+    "sql"
+   ]
+  },
+  {
+   "operator": "intra_realized_variance",
+   "polars_kind_production": "polars_native",
+   "spec_present": true,
+   "execution_kind": "polars_native_expr",
+   "supports_lazy": false,
+   "supports_streaming": false,
+   "materializes_full_panel": true,
+   "kernel_identity": "intraday.polars_intraday_full:IntradayPolarsFull_intra_realized_variance",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ]
+  },
+  {
+   "operator": "ts_pct",
+   "polars_kind_production": "polars_native",
+   "spec_present": true,
+   "execution_kind": "polars_native_expr",
+   "supports_lazy": false,
+   "supports_streaming": false,
+   "materializes_full_panel": true,
+   "kernel_identity": "common.polars_ops:TSPctPolars",
+   "backends": [
+    "pandas_numpy",
+    "polars",
+    "sql"
+   ]
+  },
+  {
+   "operator": "signed_sqrt",
+   "polars_kind_production": "polars_native",
+   "spec_present": true,
+   "execution_kind": "polars_native_expr",
+   "supports_lazy": false,
+   "supports_streaming": false,
+   "materializes_full_panel": true,
+   "kernel_identity": "common.polars_daily_native:SignedSqrtNative",
+   "backends": [
+    "pandas_numpy",
+    "polars",
+    "sql"
+   ]
+  },
+  {
+   "operator": "sigmoid",
+   "polars_kind_production": "polars_native",
+   "spec_present": true,
+   "execution_kind": "polars_native_expr",
+   "supports_lazy": false,
+   "supports_streaming": false,
+   "materializes_full_panel": true,
+   "kernel_identity": "common.polars_auto:SigmoidPolarsAuto",
+   "backends": [
+    "pandas_numpy",
+    "polars",
+    "sql"
+   ]
+  },
+  {
+   "operator": "intra_realized_kurtosis",
+   "polars_kind_production": "polars_native",
+   "spec_present": true,
+   "execution_kind": "polars_native_expr",
+   "supports_lazy": false,
+   "supports_streaming": false,
+   "materializes_full_panel": true,
+   "kernel_identity": "intraday.polars_next_stage:IntradayPolars_intra_realized_kurtosis",
+   "backends": [
+    "pandas_numpy",
+    "polars"
+   ]
+  },
+  {
+   "operator": "log_abs",
+   "polars_kind_production": "polars_native",
+   "spec_present": true,
+   "execution_kind": "polars_native_expr",
+   "supports_lazy": false,
+   "supports_streaming": false,
+   "materializes_full_panel": true,
+   "kernel_identity": "common.polars_auto:LogAbsPolarsAuto",
+   "backends": [
+    "pandas_numpy",
+    "polars",
+    "sql"
+   ]
+  }
+ ]
+}

@@ -125,7 +125,7 @@ def fill_kwargs(ps):
         if name in ov:
             kw[name] = ov[name]; continue
         d = getattr(spec, "default", None)
-        if d is not None and type(d).__name__ != "MISSING":
+        if d is not None and "missing" not in type(d).__name__.lower():
             kw[name] = d; continue
         dt, lo = getattr(spec, "dtype", None), (getattr(spec, "min", None) or 1)
         ch = getattr(spec, "choices", None)
@@ -141,10 +141,18 @@ def fill_kwargs(ps):
 
 
 def as_array(obj):
+    """Column-name aligned view of a wide result.
+
+    A pivoting kernel orders its output columns by pivot discovery order, which
+    need not equal the input panel's column order; comparing the raw numpy blocks
+    positionally would then compare different symbols against each other.  Sort
+    both sides by column name so the comparison is symbol-for-symbol.
+    """
     if isinstance(obj, pd.DataFrame):
-        return obj.to_numpy(dtype=float)
+        return obj.reindex(columns=sorted(map(str, obj.columns))).to_numpy(dtype=float)
     if isinstance(obj, pl.DataFrame):
-        return obj.select([c for c in obj.columns if c != "date"]).to_numpy().astype(float)
+        cols = sorted(c for c in obj.columns if c != "date")
+        return obj.select(cols).to_numpy().astype(float)
     raise TypeError(type(obj))
 
 
@@ -220,7 +228,7 @@ def main():
     }
     print("\n=== SUMMARY ===")
     print(json.dumps(summary, indent=1, default=str))
-    out = f"{REPO}/evidence/_verify_batch_specs.json"
+    out = os.environ.get("VER_OUT") or f"{REPO}/evidence/_verify_batch_specs.json"
     prev = []
     if os.path.exists(out):
         try:
