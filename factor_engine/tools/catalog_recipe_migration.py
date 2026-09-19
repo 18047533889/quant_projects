@@ -71,7 +71,48 @@ _OFFICIAL_LIMIT_PRICE_PARAMETERS = {
     "ashare_limit_up_touch": ("high", "upper_limit"),
     "ashare_limit_up_streak": ("close", "high_limit"),
     "ashare_limit_failed": ("high", "close", "upper_limit"),
+    "ashare_limit_distance": ("close", "high_limit"),
+    "ashare_limit_open_failed": ("open", "low", "high_limit"),
 }
+
+# Exchange-limit predicates must read the official, unadjusted daily quotes.
+# The later adjusted-price migration rewrites every ``field(..., table=
+# 'StockDailyBar')`` leaf to ``StockDailyBarAdj`` without operator context, so
+# the price leaves of a limit predicate have to be returned to the raw table
+# here.  Both leaf shapes occur in the catalog: the bare identifier and the
+# already-expanded ``field(...)`` call form.
+_RAW_PRICE_LEAVES = frozenset(
+    {"open", "high", "low", "close", "pre_close", "high_limit", "low_limit", "upper_limit", "lower_limit"}
+)
+_RAW_PRICE_TABLE = "StockDailyBar"
+_ADJUSTED_PRICE_TABLE = "StockDailyBarAdj"
+
+
+def _raw_price_leaf_name(leaf: ast.AST) -> str | None:
+    """Return the price leaf's field name when it can be pinned to the raw table.
+
+    ``None`` means "not a catalog price leaf" -- either an unrelated expression
+    or a leaf that already reads the raw table, so the caller must leave it
+    untouched (the rewrite has to stay idempotent).
+    """
+
+    if isinstance(leaf, ast.Name):
+        return leaf.id if leaf.id in _RAW_PRICE_LEAVES else None
+    if (
+        isinstance(leaf, ast.Call)
+        and isinstance(leaf.func, ast.Name)
+        and leaf.func.id == "field"
+        and len(leaf.args) == 1
+        and isinstance(leaf.args[0], ast.Constant)
+        and isinstance(leaf.args[0].value, str)
+        and leaf.args[0].value in _RAW_PRICE_LEAVES
+        and len(leaf.keywords) == 1
+        and leaf.keywords[0].arg == "table"
+        and isinstance(leaf.keywords[0].value, ast.Constant)
+        and leaf.keywords[0].value.value == _ADJUSTED_PRICE_TABLE
+    ):
+        return leaf.args[0].value
+    return None
 
 
 def _is_amount_amihud_recipe(node: ast.Call) -> bool:
@@ -345,15 +386,16 @@ def migrate_catalog_recipe_formula(formula: str) -> RecipeMigration:
                 *(kw.value for kw in node.keywords if kw.arg in price_parameters),
             ]
             for leaf in leaves:
-                if isinstance(leaf, ast.Name) and leaf.id in {
-                    "open", "high", "low", "close", "pre_close",
-                    "high_limit", "low_limit",
-                }:
-                    start = _character_offset(lines, leaf.lineno, leaf.col_offset)
-                    end = _character_offset(lines, leaf.end_lineno, leaf.end_col_offset)
-                    replacement = f'field("{leaf.id}", table="StockDailyBar")'
-                    edits.append((start, end, replacement))
-                    changes.append(f"{old_name}.{leaf.id} -> StockDailyBar official raw price")
+                raw_name = _raw_price_leaf_name(leaf)
+                if raw_name is None:
+                    continue
+                start = _character_offset(lines, leaf.lineno, leaf.col_offset)
+                end = _character_offset(lines, leaf.end_lineno, leaf.end_col_offset)
+                replacement = f'field("{raw_name}", table="{_RAW_PRICE_TABLE}")'
+                edits.append((start, end, replacement))
+                changes.append(
+                    f"{old_name}.{raw_name} -> StockDailyBar official raw price"
+                )
         if old_name == "ts_abdi_ranaldo_spread":
             malformed_ohlc = (
                 len(node.args) == 5
