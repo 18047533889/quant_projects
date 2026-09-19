@@ -396,10 +396,15 @@ def _data_source_kind(ctx: Any) -> str:
                 if "duckdb" in dl:
                     return "duckdb"
         # 回退：class-name 启发（保留现有逻辑）。
-        name = type(ds).__name__.lower()
+        # 归一化掉下划线再比对：运行时类名是 ``DataAccessSource``，规范化后为
+        # ``dataaccesssource``，而这里的模式写的是 ``data_access``，子串永远
+        # 匹配不上——于是真实数据源被判成 "memory"，plan_cost_router 的
+        # ``data_kind in {"duckdb", "clickhouse"}`` 硬门槛随之失守，所有带 SQL
+        # 槽位的算子都拿不到 SQL 候选。
+        name = type(ds).__name__.lower().replace("_", "")
         if "clickhouse" in name:
             return "clickhouse"
-        if "duckdb" in name or "data_access" in name or "parquet" in name:
+        if "duckdb" in name or "dataaccess" in name or "parquet" in name:
             return "duckdb"
         ds = getattr(ds, "inner", None) or getattr(ds, "_inner", None)
     return "memory"

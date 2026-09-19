@@ -35,6 +35,25 @@ class TemporalContract:
         return True
 
 
+@dataclass(frozen=True)
+class DataSourceCapabilities:
+    """审计 #355：数据源显式声明的执行能力。
+
+    引擎按 ``engine_kind`` / ``dialect`` 决定该数据源能不能承接 SQL 下推，而不是
+    从类名猜后端——类名启发会把 ``DataAccessSource`` 这类真实 DuckDB 数据集判成
+    ``memory``，使带 SQL 槽位的算子整体拿不到 SQL 后端。
+
+    ``supports_sql_pushdown`` 是能力位的唯一权威；未声明能力的实现类**不要**返回
+    一个"猜"的默认值，而应让属性缺失，由调用方按类名启发回退（``DataSource``
+    基类因此**刻意不提供**这个属性：包装类靠 ``__getattr__`` 委托给 inner，基类
+    的默认值会抢先命中并遮蔽委托）。
+    """
+
+    engine_kind: str = "memory"
+    dialect: str = ""
+    supports_sql_pushdown: bool = False
+
+
 def clean_execution_spec(payload: dict[str, Any]) -> dict[str, Any]:
     """剔除值为 ``None`` 的配置项（#收官轮 P0）。
 

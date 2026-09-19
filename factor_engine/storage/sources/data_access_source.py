@@ -19,7 +19,7 @@ import pandas as pd
 from factor_engine.util.logging_utils import get_logger
 from factor_engine.util.workspace_paths import quant_projects_root
 
-from .datasource import DataSource
+from .datasource import DataSource, DataSourceCapabilities
 from .data_access_source_helpers import (
     _prune_semantic_filters_for_dataset,
 )
@@ -995,6 +995,23 @@ class DataAccessSource(DataSource):
     @property
     def data_snapshot_id(self) -> str | None:
         return self._data_snapshot_id
+
+    @property
+    def capabilities(self) -> DataSourceCapabilities:
+        """审计 #355：显式声明本数据源的执行能力。
+
+        ``DataAccessSource`` 建在 data_access 的 DuckDB 数据集之上，所以它可以
+        承接 SQL 下推。在此之前没有任何生产数据源声明过 ``capabilities``，路由只能
+        靠类名猜；而类名启发用的模式是 ``"data_access"``，实际类名
+        ``DataAccessSource`` 规范化后是 ``dataaccesssource``，子串不匹配 → 被判成
+        ``memory`` → 所有带 SQL 槽位的算子都拿不到 SQL 后端。这里把答案写死成声明，
+        不依赖类名。
+        """
+        return DataSourceCapabilities(
+            engine_kind="duckdb",
+            dialect="duckdb",
+            supports_sql_pushdown=True,
+        )
 
     @property
     def snapshot_token(self) -> str | None:
