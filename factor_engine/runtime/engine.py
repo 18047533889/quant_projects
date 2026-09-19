@@ -620,6 +620,12 @@ def _execute_ready_single_region_plan(
         execution_index = build_physical_execution_index(physical_plan)
     regions = execution_index.regions
     node_regions = execution_index.node_regions
+    # The SQL plane is the only backend whose consumer cannot ingest a
+    # materialised panel literal; the fan-out shortcut below is gated on it.
+    from factor_engine.planner.backend_region import (
+        PhysicalBackend as _PhysicalBackend,
+    )
+    _SQL_PLANE = _PhysicalBackend.DUCKDB_SQL
     # The public batch root ID is authoritative even when PlanNode.node_id is a
     # debug-only identifier (the long-standing single-region contract).
     root_region_id = node_regions[logical_root_id]
@@ -817,6 +823,31 @@ def _execute_ready_single_region_plan(
             node = nodes[node_id]
             if node.op == "plan_ref":
                 sid = plan_ref_sids[node_id]
+                shared_region_id = node_regions[sid]
+                # A shared *source read* is not worth a TransferEdge.  The CSE
+                # pass hoists a bare column read (``column``) so several factors
+                # share one read, but when the consumer lives in another region
+                # the edge materialises the whole panel (8559273 rows x 8B per
+                # column) and hands it over as an opaque ``literal``.  The
+                # consumer gains nothing: it reads from the same dataset, and a
+                # SQL consumer cannot even compile the literal -- every SQL
+                # region went out as ``sql_full_execution_failed`` whenever a
+                # factor shared a column with another factor.
+                #
+                # When both sides are the SQL plane, let the consumer read the
+                # column itself and keep the plan compilable.  Restricted to
+                # SQL on both sides on purpose: the pandas and polars planes do
+                # benefit from the shared materialised panel.
+                _producer = nodes.get(sid)
+                if (
+                    shared_region_id != region_id
+                    and _producer is not None
+                    and _producer.op == "column"
+                    and regions[shared_region_id].backend
+                    == regions[region_id].backend
+                    == _SQL_PLANE
+                ):
+                    return lower(sid)
                 if sid not in resolved_shared:
                     store = getattr(ctx, "shared_buffers", None)
                     if store is None or not callable(getattr(store, "get_ref", None)):
@@ -829,7 +860,6 @@ def _execute_ready_single_region_plan(
                             f"governed shared value for plan_ref {sid!r} is missing"
                         )
                     resolved_shared[sid] = value
-                shared_region_id = node_regions[sid]
                 value = resolved_shared[sid]
                 if shared_region_id == region_id:
                     if sid in scalar_shared_sids:

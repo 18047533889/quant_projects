@@ -1253,7 +1253,10 @@ class PhysicalBatchGlobalOptimizer:
                 node_id: min(
                     (choice for choice in choices if (choice.backend, choice.representation)
                      == (backend, representation)),
-                    key=lambda choice: (choice.compute_cost_ms, choice.execution_kind.value),
+                    key=lambda choice: (
+                        choice.compute_cost_ms,
+                        getattr(choice.execution_kind, "value", choice.execution_kind),
+                    ),
                 )
                 for node_id, choices in candidates.items()
             }
