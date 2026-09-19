@@ -30,12 +30,12 @@ def compute_rolling_beta(
     w = max(2, int(window))
     mp = max(2, int(min_periods)) if min_periods is not None else max(2, w // 3)
     bench = align_benchmark_to_ret(ret, benchmark_ret)
-    out = pd.DataFrame(index=ret.index, columns=ret.columns, dtype=float)
-    for col in ret.columns:
-        out[col] = rolling_beta(
-            ret[[col]],
-            bench[[col]],
-            window=w,
-            min_periods=mp,
-        )[col]
-    return out
+    # The kernel is already column-wise vectorised: ``DataFrame.rolling().cov``
+    # and ``.var`` each run one C loop per column, and the paired stats are
+    # column-aligned by construction (``align_benchmark_to_ret`` guarantees
+    # ``bench.columns == ret.columns``).  The previous per-column loop therefore
+    # bought nothing but pandas object churn -- two single-column frames, a
+    # ``bench[[col]]`` copy and a column write per instrument.  Feeding the
+    # whole panel once is numerically identical and was measured ~10x faster on
+    # the 30 x 972 research panel (report section 1.6).
+    return rolling_beta(ret, bench, window=w, min_periods=mp)
