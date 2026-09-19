@@ -10,6 +10,7 @@ from factor_engine.planner.backend_region import (
     Representation,
     StateContract,
     TransferEdge,
+    infer_transfer_transform,
 )
 
 
@@ -36,6 +37,7 @@ def _edge(producer: BackendRegion, consumer: BackendRegion) -> TransferEdge:
         target_backend=consumer.backend,
         source_representation=producer.representation,
         target_representation=consumer.representation,
+        transform=infer_transfer_transform(producer.representation, consumer.representation),
         estimated_rows=1,
         estimated_bytes=8,
         estimated_transfer_ms=1.0,

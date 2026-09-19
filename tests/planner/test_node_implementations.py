@@ -24,6 +24,7 @@ from factor_engine.planner.backend_region import (
     Representation,
     StateContract,
     TransferEdge,
+    infer_transfer_transform,
 )
 
 
@@ -51,6 +52,7 @@ def _edge() -> TransferEdge:
         target_backend=PhysicalBackend.DUCKDB_SQL,
         source_representation=Representation.POLARS_LONG,
         target_representation=Representation.DUCKDB_RELATION,
+        transform=infer_transfer_transform(Representation.POLARS_LONG, Representation.DUCKDB_RELATION),
         estimated_rows=1000,
         estimated_bytes=16000,
         estimated_transfer_ms=5.0,
@@ -184,6 +186,9 @@ class TestNodeImplementationsPlanHash:
             edge_id="e1", producer_region="r1", consumer_region="r2",
             source_backend=PhysicalBackend.POLARS_PANEL, target_backend=PhysicalBackend.DUCKDB_SQL,
             source_representation=Representation.POLARS_LONG, target_representation=Representation.DUCKDB_RELATION,
+            transform=infer_transfer_transform(
+                Representation.POLARS_LONG, Representation.DUCKDB_RELATION
+            ),
             estimated_rows=1000, estimated_bytes=16000, estimated_transfer_ms=5.0,
         )
 
@@ -211,6 +216,9 @@ class TestNodeImplementationsPlanHash:
             edge_id="e1", producer_region="r1", consumer_region="r2",
             source_backend=PhysicalBackend.POLARS_PANEL, target_backend=PhysicalBackend.DUCKDB_SQL,
             source_representation=Representation.POLARS_LONG, target_representation=Representation.DUCKDB_RELATION,
+            transform=infer_transfer_transform(
+                Representation.POLARS_LONG, Representation.DUCKDB_RELATION
+            ),
             estimated_rows=1000, estimated_bytes=16000, estimated_transfer_ms=5.0,
         )
 

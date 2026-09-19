@@ -10,6 +10,7 @@ from factor_engine.planner.backend_region import (
     Representation,
     StateContract,
     TransferEdge,
+    infer_transfer_transform,
 )
 
 
@@ -36,6 +37,7 @@ def _edge(edge_id: str, producer: BackendRegion, consumer: BackendRegion) -> Tra
         target_backend=consumer.backend,
         source_representation=producer.representation,
         target_representation=consumer.representation,
+        transform=infer_transfer_transform(producer.representation, consumer.representation),
         estimated_rows=1,
         estimated_bytes=8,
         estimated_transfer_ms=1.0,
@@ -201,6 +203,7 @@ class TestEdgeRegionReferences:
             target_backend=consumer.backend,
             source_representation=Representation.PANDAS_LONG,
             target_representation=consumer.representation,
+            transform=infer_transfer_transform(Representation.PANDAS_LONG, consumer.representation),
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
@@ -219,6 +222,7 @@ class TestEdgeRegionReferences:
             target_backend=PhysicalBackend.POLARS_LONG,
             source_representation=producer.representation,
             target_representation=Representation.POLARS_LAZY_LONG,
+            transform=infer_transfer_transform(producer.representation, Representation.POLARS_LAZY_LONG),
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
@@ -237,6 +241,7 @@ class TestEdgeRegionReferences:
             target_backend=region.backend,
             source_representation=region.representation,
             target_representation=region.representation,
+            transform=infer_transfer_transform(region.representation, region.representation),
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
@@ -268,6 +273,7 @@ class TestEdgeResidencyMatch:
             target_backend=consumer.backend,
             source_representation=producer.representation,
             target_representation=consumer.representation,
+            transform=infer_transfer_transform(producer.representation, consumer.representation),
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
@@ -287,6 +293,7 @@ class TestEdgeResidencyMatch:
             target_backend=PhysicalBackend.DUCKDB_SQL,  # Wrong: should be POLARS_LONG
             source_representation=producer.representation,
             target_representation=consumer.representation,
+            transform=infer_transfer_transform(producer.representation, consumer.representation),
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
@@ -306,6 +313,7 @@ class TestEdgeResidencyMatch:
             target_backend=consumer.backend,
             source_representation=producer.representation,
             target_representation=Representation.POLARS_WIDE,  # Wrong
+            transform=infer_transfer_transform(producer.representation, Representation.POLARS_WIDE),
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
@@ -326,6 +334,7 @@ class TestEdgeResidencyMatch:
             target_backend=consumer.backend,
             source_representation=Representation.ARROW_TABLE,  # Boundary form
             target_representation=consumer.representation,
+            transform=infer_transfer_transform(Representation.ARROW_TABLE, consumer.representation),
             estimated_rows=1,
             estimated_bytes=8,
             estimated_transfer_ms=1.0,
