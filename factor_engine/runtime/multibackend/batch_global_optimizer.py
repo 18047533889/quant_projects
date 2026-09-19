@@ -858,6 +858,28 @@ class PhysicalBatchGlobalOptimizer:
         from factor_engine.backend.polars_backend_kind import canonical_polars_is_delegate
 
         op = getattr(node, "op", "")
+
+        # A reference node is a pure source read with no compute of its own, so
+        # every backend that can read the source natively is allowed to own it.
+        # ``column`` used to be restricted to pandas/polars residency, which
+        # forced the base read of EVERY factor into a non-SQL region; the SQL
+        # region that owned its consumer then had to pull the whole panel
+        # across a TransferEdge (8.6M rows x 8B per column) before it could
+        # run a single SQL aggregation.  That transfer, not the SQL itself, is
+        # what made the auto route lose to plain pandas.  Offer the SQL plane
+        # whenever it is actually usable so the optimizer can keep a column and
+        # its consumer in one residency.
+        ref_sql_ready = False
+        if op in {"column", "literal", "plan_ref"}:
+            try:
+                from factor_engine.backend.sql_pushdown.executor import (
+                    extract_pushdown_context as _epc,
+                )
+
+                ref_sql_ready = _epc(ctx) is not None
+            except Exception:
+                ref_sql_ready = False
+
         if op in {"column", "literal", "plan_ref"}:
             # R45: ``literal`` and ``plan_ref`` are zero-cost reference nodes and
             # stay production-certified.  ``column`` is a PhysicalSourceBinding
@@ -874,12 +896,15 @@ class PhysicalBatchGlobalOptimizer:
             if self._has_source_residency(node):
                 backends = (self._source_residency(node),)
             else:
+                ref_backends: list[PhysicalBackend] = [
+                    PhysicalBackend.PANDAS_NUMPY,
+                    PhysicalBackend.POLARS_PANEL,
+                ]
+                if ref_sql_ready:
+                    ref_backends.append(PhysicalBackend.DUCKDB_SQL)
                 backends = tuple(
                     (backend, infer_representation(backend))
-                    for backend in (
-                        PhysicalBackend.PANDAS_NUMPY,
-                        PhysicalBackend.POLARS_PANEL,
-                    )
+                    for backend in ref_backends
                 )
             return tuple(
                 NodeBackendChoice(

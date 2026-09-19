@@ -365,6 +365,21 @@ def _materialize_shared_subplan(
                     recompute_ms = 0.0
 
             logical_refcounts = getattr(ctx, "_cse_refcounts", None) or {}
+            # The buffer store must be able to prove it owns the resident bytes.
+            # A backend result that is a zero-copy view onto another runtime's
+            # buffer (SQL results arrive as pandas panels whose values block is
+            # a capsule-backed view of the Arrow buffer) makes the block
+            # ownership hand-off fail closed and kills the batch.  Materialise
+            # owned storage here so the accounting is exact.
+            from factor_engine.runtime.buffer_store import ensure_owned_residency
+
+            value, _copied = ensure_owned_residency(value)
+            if _copied:
+                runtime = dict(getattr(ctx, "runtime_stats", None) or {})
+                runtime["cse_ownership_materialised"] = (
+                    runtime.get("cse_ownership_materialised", 0) + 1
+                )
+                ctx.runtime_stats = runtime  # type: ignore[attr-defined]
             res = store.put(
                 sid,
                 value,

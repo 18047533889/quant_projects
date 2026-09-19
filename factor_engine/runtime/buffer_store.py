@@ -160,6 +160,72 @@ def _requires_process_lifetime_native_owner(value: Any) -> bool:
     return False
 
 
+def owns_physical_memory(value: Any) -> bool:
+    """Whether the store can act as this value's physical owner.
+
+    Mirrors ``BufferLeaseTarget.physical_ownership_supported``: a value is
+    provably owned when the ownership walk finds weakref-able NumPy/pandas
+    owners, when it is itself a complete immutable scalar, or when it is native
+    (polars/Arrow) shared storage that must be leased for process lifetime.
+    """
+    return (
+        bool(_physical_memory_owners(value))
+        or _logical_scalar_owner_supported(value)
+        or _requires_process_lifetime_native_owner(value)
+    )
+
+
+def ensure_owned_residency(value: Any) -> tuple[Any, bool]:
+    """Return ``(value, copied)`` with storage the store can provably own.
+
+    Data that arrives as a zero-copy view onto someone else's buffer is a real
+    case, not a theoretical one: a DuckDB/Arrow query result converted to
+    pandas yields a Series whose values block is a view whose ``ndarray.base``
+    is a ``PyCapsule``.  ``_physical_memory_owners`` deliberately refuses that
+    shape, so the CSE ownership hand-off fails closed and takes the whole batch
+    down with ``ResourceBudgetExceeded`` -- even though the data itself is
+    perfectly valid.
+
+    Copying is the fix that keeps the governance invariant intact rather than
+    weakening it: the residency becomes genuinely owned, so the byte accounting
+    is exact and eviction really does release the memory.  Native buffers
+    (polars, Arrow) are left alone; they are already covered by
+    ``_requires_process_lifetime_native_owner``.
+    """
+    if owns_physical_memory(value):
+        return value, False
+    module = type(value).__module__.split(".", 1)[0]
+    if module not in {"pandas", "numpy"}:
+        return value, False
+    try:
+        import numpy as np
+
+        if isinstance(value, np.ndarray):
+            copy = np.array(value, copy=True)
+        else:
+            import pandas as pd
+
+            values = np.array(value.to_numpy(copy=True), copy=True)
+            label = type(value).__name__
+            if label == "Series":
+                copy = pd.Series(
+                    values,
+                    index=value.index.copy(deep=True),
+                    name=getattr(value, "name", None),
+                )
+            else:
+                copy = pd.DataFrame(
+                    values,
+                    index=value.index.copy(deep=True),
+                    columns=value.columns.copy(deep=True),
+                )
+    except Exception:
+        return value, False
+    if not owns_physical_memory(copy):
+        return value, False
+    return copy, True
+
+
 def _physical_memory_owners(value: Any) -> tuple[Any, ...]:
     """Return every weakref-able Python owner of known NumPy/pandas storage.
 
