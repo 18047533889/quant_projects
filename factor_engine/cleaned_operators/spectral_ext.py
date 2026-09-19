@@ -38,7 +38,7 @@ import pandas as pd
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata as PolarsMetadata
 from factor_engine.cleaned_operators.base_polars import SeriesOperator as PolarsSeriesOperator
 from factor_engine.cleaned_operators.registry import OperatorRegistry
-from factor_engine.cleaned_operators.spectral import _periodogram
+from factor_engine.cleaned_operators.spectral import _periodogram, _periodogram_batch
 from factor_engine.cleaned_operators.base import ParamRole
 
 _EPS = 1e-12
@@ -97,30 +97,33 @@ def _spectral_entropy_series(x2d: np.ndarray, window: int) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
+    # Audit #58: NO partial warmup.  The front of a windowed spectrum is a
+    # 16-bar spectrum, then 17, ... up to ``w`` -- a different factor from the
+    # full ``w``-bar spectrum.  Production mining requires the FULL trailing
+    # window (NaN until it is available).  ``_periodogram_batch`` additionally
+    # requires the whole window to be finite.
+    if rows < w:
+        return out
+    i_max = w // 2
+    if i_max < 2:
+        return out
+    log_i = float(np.log(float(i_max)))
+    wins = np.lib.stride_tricks.sliding_window_view
     for c in range(cols):
-        col = x2d[:, c]
-        for r in range(rows):
-            # Audit #58: NO partial warmup.  The front of a windowed spectrum is
-            # a 16-bar spectrum, then 17, ... up to ``w`` — a different factor
-            # from the full ``w``-bar spectrum.  Production mining requires the
-            # FULL trailing window (NaN until it is available).  ``_periodogram``
-            # additionally requires the whole window to be finite.
-            if r < w - 1:
-                continue
-            chunk = col[r - w + 1 : r + 1]
-            pg = _periodogram(chunk)
-            if pg is None:
-                continue
-            p, i_max = pg
-            total = float(p.sum())
-            if total <= _EPS or not np.isfinite(total):
-                continue
-            pn = p / total
-            pn = pn[pn > 0.0]
-            if pn.size < 2 or i_max < 2:
-                continue
-            h = float(-np.sum(pn * np.log(pn)))
-            out[r, c] = float(h / np.log(float(i_max)))
+        pg = _periodogram_batch(wins(x2d[:, c], w))
+        if pg is None:
+            continue
+        p, _i_max = pg
+        total = p.sum(axis=1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            pn = p / total[:, None]
+        nz = pn > 0.0
+        with np.errstate(divide="ignore", invalid="ignore"):
+            terms = np.where(nz, pn * np.log(np.where(nz, pn, 1.0)), 0.0)
+        h = -terms.sum(axis=1)
+        ok = (np.isfinite(total) & (total > _EPS) & np.isfinite(p).all(axis=1)
+              & (nz.sum(axis=1) >= 2))
+        out[w - 1 :, c] = np.where(ok, h / log_i, np.nan)
     return out
 
 
@@ -135,29 +138,24 @@ def _dominant_cycle_period_series(
     gate = float(min_peak_share)
     if gate < 0.0 or gate > 1.0:
         raise ValueError("min_peak_share must be in [0, 1]")
+    # Audit #58: NO partial warmup (same contract as the entropy kernel).
+    if rows < w:
+        return out
+    wins = np.lib.stride_tricks.sliding_window_view
     for c in range(cols):
-        col = x2d[:, c]
-        for r in range(rows):
-            # Audit #58: NO partial warmup (same contract as the entropy kernel).
-            if r < w - 1:
-                continue
-            chunk = col[r - w + 1 : r + 1]
-            n = chunk.size
-            pg = _periodogram(chunk)
-            if pg is None:
-                continue
-            p, i_max = pg
-            total = float(p.sum())
-            if total <= _EPS or not np.isfinite(total):
-                continue
-            peak = float(p.max())
-            if peak / total < gate:
-                continue
-            j = int(np.argmax(p))
-            period = float(n) / float(j + 1)
-            if period < 2.0 or not np.isfinite(period):
-                continue
-            out[r, c] = period
+        pg = _periodogram_batch(wins(x2d[:, c], w))
+        if pg is None:
+            continue
+        p, _i_max = pg
+        total = p.sum(axis=1)
+        peak = p.max(axis=1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            share = peak / total
+        j = p.argmax(axis=1).astype(float)
+        period = float(w) / (j + 1.0)
+        ok = (np.isfinite(total) & (total > _EPS) & np.isfinite(p).all(axis=1)
+              & (share >= gate) & (period >= 2.0) & np.isfinite(period))
+        out[w - 1 :, c] = np.where(ok, period, np.nan)
     return out
 
 

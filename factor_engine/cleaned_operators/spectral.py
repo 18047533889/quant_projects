@@ -90,6 +90,51 @@ def _periodogram(chunk: np.ndarray) -> tuple[np.ndarray, int] | None:
     return p_pos, i_max
 
 
+def _periodogram_batch(windows: np.ndarray) -> tuple[np.ndarray, int] | None:
+    """Vectorized :func:`_periodogram` over a batch of equal-length windows.
+
+    ``windows`` has shape ``(m, n)``; every row is one trailing window of the
+    same length ``n``.  Returns ``(P, i_max)`` where ``P`` has shape
+    ``(m, i_max)`` and holds the positive-frequency periodogram of each row
+    (``P[k]`` corresponds to ``f = (k + 1) / n``), with ``i_max = n // 2``.
+    Rows that are not FULLY finite carry NaN, because a missing value must
+    never be zero-padded (P1-009) -- exactly the scalar kernel's rule.
+
+    Numerically equivalent to calling ``_periodogram`` once per row: the
+    degree-1 least-squares detrend has a closed form on the fixed grid
+    ``t = 0..n-1`` (same normal equations as ``np.polyfit``, no per-row
+    solve), and one batched ``rfft`` over axis 1 replaces the per-row FFT.
+    """
+    if windows.ndim != 2:
+        raise ValueError("windows must be a 2-D array of shape (m, n)")
+    _m, n = windows.shape
+    if n < _MIN_FINITE:
+        return None
+    v = np.ascontiguousarray(windows, dtype=float)
+    t = np.arange(n, dtype=float)
+    t_mean = float(t.mean())
+    tc = t - t_mean
+    sxx = float((tc * tc).sum())
+    if sxx <= 0.0:
+        return None
+    v_mean = v.mean(axis=1, keepdims=True)
+    slope = ((v - v_mean) * tc).sum(axis=1) / sxx
+    intercept = v_mean[:, 0] - slope * t_mean
+    resid = v - (slope[:, None] * t + intercept[:, None])
+    hann = 0.5 * (1.0 - np.cos(2.0 * np.pi * t / (n - 1.0))) if n > 1 else np.ones(n)
+    spectrum = np.fft.rfft(resid * hann, axis=1)
+    power = (np.abs(spectrum) ** 2) / float(n)
+    i_max = n // 2
+    p_pos = power[:, 1 : i_max + 1]  # drop DC, keep positive frequencies
+    if p_pos.size == 0:
+        return None
+    bad = ~np.isfinite(v).all(axis=1)
+    if bad.any():
+        p_pos = np.array(p_pos, dtype=float, copy=True)
+        p_pos[bad] = np.nan
+    return p_pos, i_max
+
+
 def _spectral_centroid_series(x2d: np.ndarray, window: int) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
