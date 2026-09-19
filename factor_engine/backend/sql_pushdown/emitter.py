@@ -879,6 +879,80 @@ def _ffill_over_inst(inner_sql: str, *, dialect: SqlDialect) -> str:
     )
 
 
+def _rank_window_partition(partition_keys: list[str], row_alias: str) -> str:
+    """``PARTITION BY`` list for the window form of the average-rank family."""
+    return ", ".join(f"{row_alias}.{k}" for k in partition_keys)
+
+
+def _average_rank_window(
+    *,
+    row_value_col: str,
+    partition_keys: list[str],
+    row_alias: str,
+    dialect: SqlDialect,
+    exclude_nan: bool = True,
+    descending: bool = False,
+    convention: str = "pct",
+) -> str:
+    """Window-function form of the average-rank family (DuckDB).
+
+    The correlated form re-aggregates the whole partition once per output row,
+    so its cost is O(rows x partition).  A ``rank`` node over the 8.5M-row panel
+    compiled to a 287 s query that way.  The mid-rank identity
+
+        mid = cnt_le - (cnt_eq - 1) / 2 = rank_start + (cnt_eq - 1) / 2
+
+    (``cnt_le`` = #valid ``p`` with ``p <= v``, ``cnt_eq`` = #valid ``p`` with
+    ``p == v``, ``rank_start`` = the rank where ties share the minimum) makes the
+    same number fall out of three window functions evaluated in a single pass,
+    turning the node into O(n log n).
+
+    ``convention`` selects the output rule of the three callers:
+      * ``"pct"``            -- pandas ``rank(pct=True)``       -> ``mid / cnt``
+      * ``"rank01"``         -- ``cs_rank_01`` 0-1 average rank -> ``(mid - 1) / (cnt - 1)``
+      * ``"rank_normalize"`` -- ``cs_rank_normalize``           -> ``mid / (cnt - 1)``
+    """
+    from factor_engine.backend.stat_valid import row_stat_invalid_sql, stat_valid_sql
+
+    part = _rank_window_partition(partition_keys, row_alias)
+    valid_row = stat_valid_sql(row_value_col, dialect=dialect, exclude_nan=exclude_nan)
+    invalid_row = row_stat_invalid_sql(
+        row_value_col, dialect=dialect, exclude_nan=exclude_nan
+    )
+    # ``RANK()`` is constant inside a tie group and ``PARTITION BY keys, v``
+    # counts exactly that group, so the two together give the mid-rank.
+    value = f"CASE WHEN {valid_row} THEN {row_value_col} END"
+    order = "DESC" if descending else "ASC"
+    cnt = f"COUNT({value}) OVER (PARTITION BY {part})"
+    mid = (
+        f"(RANK() OVER (PARTITION BY {part} ORDER BY {value} {order}) "
+        f"+ (COUNT(*) OVER (PARTITION BY {part}, {row_value_col}) - 1) / 2.0)"
+    )
+    if convention == "pct":
+        return (
+            f"CASE WHEN {invalid_row} THEN NULL "
+            f"WHEN {cnt} = 0 THEN NULL "
+            f"ELSE {mid} / {cnt} END"
+        )
+    if convention == "rank_normalize":
+        # ``cs_rank_normalize`` collapses every degenerate cross-section to 1.0
+        # (its own ``cnt <= 1 THEN 1.0`` precedes the ``cnt = 0`` branch, which
+        # is therefore dead) and divides by ``cnt - 1``.  Preserved verbatim.
+        return (
+            f"CASE WHEN {invalid_row} THEN NULL "
+            f"WHEN {cnt} <= 1 THEN 1.0 "
+            f"ELSE {mid} / NULLIF({cnt} - 1, 0) END"
+        )
+    if convention != "rank01":
+        raise ValueError(f"unknown average-rank convention {convention!r}")
+    return (
+        f"CASE WHEN {invalid_row} THEN NULL "
+        f"WHEN {cnt} = 0 THEN NULL "
+        f"WHEN {cnt} = 1 THEN 0.5 "
+        f"ELSE ({mid} - 1.0) / NULLIF({cnt} - 1, 0) END"
+    )
+
+
 def _average_rank_frac_correlated(
     *,
     row_value_col: str,
@@ -918,20 +992,14 @@ def _average_rank_frac_correlated(
             f")"
             f")"
         )
-    return (
-        f"CASE WHEN {invalid_row} THEN NULL "
-        f"WHEN {cnt_subq} = 0 THEN NULL "
-        f"ELSE ("
-        f"SELECT CASE WHEN s.cnt = 0 THEN NULL "
-        f"ELSE (s.cnt_le - (s.cnt_eq - 1) / 2.0) / s.cnt END "
-        f"FROM ("
-        f"SELECT "
-        f"COUNT(*) FILTER (WHERE {valid}) AS cnt, "
-        f"COUNT(*) FILTER (WHERE {valid} AND p._v {rank_cmp} {row_value_col}) AS cnt_le, "
-        f"COUNT(*) FILTER (WHERE {valid} AND p._v = {row_value_col}) AS cnt_eq "
-        f"FROM ({numbered_sql}) p WHERE {match}"
-        f") s"
-        f") END"
+    return _average_rank_window(
+        row_value_col=row_value_col,
+        partition_keys=partition_keys,
+        row_alias=row_alias,
+        dialect=dialect,
+        exclude_nan=exclude_nan,
+        descending=descending,
+        convention="pct",
     )
 
 
@@ -973,20 +1041,13 @@ def _average_rank_01_correlated(
             f")"
             f")"
         )
-    return (
-        f"CASE WHEN {invalid_row} THEN NULL "
-        f"WHEN {cnt_subq} = 0 THEN NULL "
-        f"WHEN {cnt_subq} = 1 THEN 0.5 "
-        f"ELSE ("
-        f"SELECT (s.cnt_le - (s.cnt_eq - 1) / 2.0 - 1.0) / NULLIF(s.cnt - 1, 0) "
-        f"FROM ("
-        f"SELECT "
-        f"COUNT(*) FILTER (WHERE {valid}) AS cnt, "
-        f"COUNT(*) FILTER (WHERE {valid} AND p._v <= {row_value_col}) AS cnt_le, "
-        f"COUNT(*) FILTER (WHERE {valid} AND p._v = {row_value_col}) AS cnt_eq "
-        f"FROM ({numbered_sql}) p WHERE {match}"
-        f") s"
-        f") END"
+    return _average_rank_window(
+        row_value_col=row_value_col,
+        partition_keys=partition_keys,
+        row_alias=row_alias,
+        dialect=dialect,
+        exclude_nan=exclude_nan,
+        convention="rank01",
     )
 
 

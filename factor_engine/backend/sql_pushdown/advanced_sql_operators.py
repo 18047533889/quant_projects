@@ -191,7 +191,28 @@ def cs_rank_normalize_sql(inner_sql: str, *, dialect: SqlDialect) -> str:
     返回：
         SQL 字符串 (ts, inst, _v)
     """
-    # 使用相关子查询计算 average rank
+    # 窗口形式（DuckDB）：mid-rank 恒等式
+    # ``mid = cnt_le - (cnt_eq - 1) / 2 = rank_start + (cnt_eq - 1) / 2``
+    # 让三个窗口函数一趟算出同一个值。相关子查询形态是 O(行数 x 截面宽度)，
+    # 在 8.5M 行面板上会把单条查询拖到数百秒并被 OOM 杀掉。
+    if dialect != SqlDialect.CLICKHOUSE:
+        from factor_engine.backend.sql_pushdown.emitter import _average_rank_window
+
+        rank_expr = _average_rank_window(
+            row_value_col="b._v",
+            partition_keys=["ts"],
+            row_alias="b",
+            dialect=dialect,
+            exclude_nan=False,
+            convention="rank_normalize",
+        )
+        return (
+            f"SELECT b.ts, b.inst, "
+            f"CASE WHEN b._v IS NULL THEN NULL ELSE {rank_expr} END AS _v "
+            f"FROM ({inner_sql}) b"
+        )
+
+    # ClickHouse 保持相关子查询形态（本仓库无 ClickHouse 验收数据，不擅改）。
     rank_expr = (
         f"(SELECT CASE "
         f"WHEN s.cnt <= 1 THEN 1.0 "

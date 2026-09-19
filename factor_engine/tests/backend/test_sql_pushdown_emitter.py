@@ -64,7 +64,13 @@ def test_rank_ts_mean_sql():
         instrument_column="inst",
     )
     assert compiled is not None
-    assert "cnt_le" in compiled.query or "countIf" in compiled.query
+    # rank 族（DuckDB）改用窗口自查询；ts_rank 仍走 ROW_NUMBER + cnt_le。
+    assert (
+        "cnt_le" in compiled.query
+        or "countIf" in compiled.query
+        or "RANK() OVER" in compiled.query
+    )
+    assert "RANK() OVER" in compiled.query
     assert "AVG" in compiled.query
 
 
@@ -85,7 +91,12 @@ def test_ts_rank_sql():
     )
     assert compiled is not None
     assert "ROW_NUMBER()" in compiled.query
-    assert "cnt_le" in compiled.query or "countIf" in compiled.query
+    # rank 族（DuckDB）改用窗口自查询；ts_rank 仍走 ROW_NUMBER + cnt_le。
+    assert (
+        "cnt_le" in compiled.query
+        or "countIf" in compiled.query
+        or "RANK() OVER" in compiled.query
+    )
 
 
 def test_ewm_mean_sql():
@@ -302,8 +313,11 @@ def test_rank_skips_null_in_sql():
         "WHEN b._v IS NULL THEN NULL" in compiled.query
         or "isNull(b._v)" in compiled.query
         or "(b._v IS NULL OR isnan(b._v))" in compiled.query
+        or "(b._v IS NULL OR isnan(b._v) OR isinf(b._v))" in compiled.query
     )
-    assert "cnt_le" in compiled.query or "countIf" in compiled.query
+    # DuckDB 上 rank 族走窗口自查询（相关子查询在 8.5M 行面板上是 287s）。
+    assert "RANK() OVER" in compiled.query
+    assert "cnt_le" not in compiled.query
 
 
 def test_group_rank_skips_null_in_sql():
@@ -674,7 +688,10 @@ def test_group_percentile_sql():
     )
     assert compiled is not None
     assert "WHEN b._oval IS NULL THEN NULL" in compiled.query
-    assert "cnt_le" in compiled.query or "COUNT(*) FILTER" in compiled.query
+    # DuckDB 上 group_percentile 走窗口自查询；窗口里的 tie 分组靠
+    # ``COUNT(*) OVER (PARTITION BY keys, v)`` 取 cnt_eq。
+    assert "RANK() OVER" in compiled.query
+    assert "cnt_le" not in compiled.query
 
 
 def test_group_decay_linear_sql():
