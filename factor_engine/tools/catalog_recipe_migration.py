@@ -276,14 +276,31 @@ def migrate_average_volume_calls(formula: str) -> RecipeMigration:
 
 
 def migrate_catalog_recipe_formula(formula: str) -> RecipeMigration:
-    """Apply the complete reviewed catalog-recipe migration set."""
+    """Apply the complete reviewed catalog-recipe migration set.
 
-    initial = migrate_average_volume_calls(formula)
+    Order matters: the R19 operator-recipe pass runs first because it is the
+    only pass that recognises the *legacy* generic OHLCV call shape
+    (``Indicator(open, high, low, close, volume)`` -- five positional bare
+    ``field(...)`` leaves).  Every indicator it rewrites is replaced by a
+    signature with a different arity, so the positional recipe specs below
+    (which match the short ``Indicator(price, window)`` spellings) cannot
+    re-fire on the R19 output and the composition stays idempotent.
+
+    Confining the repair to this chain is the point: while the R19 pass lived
+    in its own module and was never imported here, the R57 compile chain
+    silently shipped 72 catalog rows still carrying the un-runnable legacy
+    call, with an empty ``migration_changes`` audit trail.
+    """
+
+    from factor_engine.tools.catalog_r19_operator_recipes import migrate_formula as _migrate_r19
+
+    r19_formula, r19_changes = _migrate_r19(formula)
+    initial = migrate_average_volume_calls(r19_formula)
     source = initial.formula
     tree = ast.parse(source, mode="eval")
     lines = source.splitlines(keepends=True) or [""]
     edits: list[tuple[int, int, str]] = []
-    changes: list[str] = list(initial.changes)
+    changes: list[str] = [*r19_changes, *initial.changes]
 
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
