@@ -119,6 +119,16 @@ class AddPolars(SeriesOperator):
         name="add", category="elementwise_math", description="逐元素加法",
         param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
     )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="add", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True, supports_streaming=True, materializes_full_panel=False,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_ops:AddPolars:v1",
+        emitter_identity="polars_expr:add",
+        parameter_domain_hash="add:elementwise:v1",
+        semantic_contract_hash="add:colwise_native_expr:v1",
+    )
     _calculate_series = _binary_colwise(lambda a, b: a + b)
 
 
@@ -129,6 +139,16 @@ class SubtractPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="subtract", category="elementwise_math", description="逐元素减法",
         param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
+    )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="subtract", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True, supports_streaming=True, materializes_full_panel=False,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_ops:SubtractPolars:v1",
+        emitter_identity="polars_expr:subtract",
+        parameter_domain_hash="subtract:elementwise:v1",
+        semantic_contract_hash="subtract:colwise_native_expr:v1",
     )
     _calculate_series = _binary_colwise(lambda a, b: a - b)
 
@@ -141,6 +161,16 @@ class MultiplyPolars(SeriesOperator):
         name="multiply", category="elementwise_math", description="逐元素乘法",
         param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
     )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="multiply", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True, supports_streaming=True, materializes_full_panel=False,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_ops:MultiplyPolars:v1",
+        emitter_identity="polars_expr:multiply",
+        parameter_domain_hash="multiply:elementwise:v1",
+        semantic_contract_hash="multiply:colwise_native_expr:v1",
+    )
     _calculate_series = _binary_colwise(lambda a, b: a * b)
 
 
@@ -151,6 +181,16 @@ class DividePolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="divide", category="elementwise_math", description="逐元素除法",
         param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
+    )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="divide", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True, supports_streaming=True, materializes_full_panel=False,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_ops:DividePolars:v1",
+        emitter_identity="polars_expr:divide",
+        parameter_domain_hash="divide:elementwise:v1",
+        semantic_contract_hash="divide:colwise_native_expr:v1",
     )
     _calculate_series = _binary_colwise(lambda a, b: a / b)
 
@@ -179,6 +219,16 @@ class AbsPolars(SeriesOperator):
         name="abs", category="math", description="绝对值",
         examples=["abs(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
     )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="abs", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True, supports_streaming=True, materializes_full_panel=False,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_ops:AbsPolars:v1",
+        emitter_identity="polars_expr:abs",
+        parameter_domain_hash="abs:elementwise:v1",
+        semantic_contract_hash="abs:colwise_native_expr:v1",
+    )
     _calculate_series = _unary(lambda c: c.abs())
 
 
@@ -189,6 +239,16 @@ class NegPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="neg", category="math", description="取负",
         examples=["neg(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
+    )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="neg", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True, supports_streaming=True, materializes_full_panel=False,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_ops:NegPolars:v1",
+        emitter_identity="polars_expr:neg",
+        parameter_domain_hash="neg:elementwise:v1",
+        semantic_contract_hash="neg:colwise_native_expr:v1",
     )
     _calculate_series = _unary(lambda c: -c)
 
@@ -201,6 +261,16 @@ class LogPolars(SeriesOperator):
         name="log", category="math", description="自然对数",
         examples=["log(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
     )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="log", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True, supports_streaming=True, materializes_full_panel=False,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_ops:LogPolars:v1",
+        emitter_identity="polars_expr:log",
+        parameter_domain_hash="log:elementwise:v1",
+        semantic_contract_hash="log:colwise_native_expr:v1",
+    )
     _calculate_series = _unary(lambda c: c.log())
 
 
@@ -211,6 +281,16 @@ class ExpPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="exp", category="math", description="指数",
         examples=["exp(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
+    )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="exp", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True, supports_streaming=True, materializes_full_panel=False,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_ops:ExpPolars:v1",
+        emitter_identity="polars_expr:exp",
+        parameter_domain_hash="exp:elementwise:v1",
+        semantic_contract_hash="exp:colwise_native_expr:v1",
     )
     _calculate_series = _unary(lambda c: c.exp())
 
@@ -255,6 +335,16 @@ class SignPolars(SeriesOperator):
     metadata = OperatorMetadata(
         name="sign", category="math", description="符号函数",
         examples=["sign(x)"], param_names=["x"], return_type="series", tags=["math", "polars"],
+    )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="sign", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True, supports_streaming=True, materializes_full_panel=False,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_ops:SignPolars:v1",
+        emitter_identity="polars_expr:sign",
+        parameter_domain_hash="sign:elementwise:v1",
+        semantic_contract_hash="sign:colwise_native_expr:v1",
     )
     _calculate_series = _unary(lambda c: c.sign())
 
