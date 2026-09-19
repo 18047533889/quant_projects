@@ -1,0 +1,209 @@
+{
+ "data_source": {
+  "class": "DataAccessSource",
+  "mro": [
+   "DataAccessSource",
+   "DataSource",
+   "ABC",
+   "object"
+  ],
+  "has_capabilities_attr": false,
+  "capabilities_repr": null,
+  "inner_class": "NoneType"
+ },
+ "_data_source_kind": {
+  "plan_cost_router": "memory",
+  "cleaned_bridge": "memory"
+ },
+ "expected": "duckdb (DataAccessSource is a parquet/duckdb-capable source)",
+ "sql_slot_census": {
+  "operators_with_sql_slot": 549,
+  "with_explicit_sql_execution_kind": 0,
+  "sql_slot_without_sql_impl": 549,
+  "examples_without_impl": [
+   "ADX",
+   "ALMA",
+   "ATR_WILDER",
+   "CMF",
+   "CMO",
+   "ChaikinOscillator",
+   "CoppockCurve",
+   "DEMA",
+   "DMI_minus",
+   "DMI_plus",
+   "DX",
+   "EaseOfMovement",
+   "ForceIndex",
+   "HMA",
+   "KeltnerLower",
+   "KeltnerMid",
+   "KeltnerPosition",
+   "KeltnerUpper",
+   "MACD_hist",
+   "MACD_line",
+   "MACD_signal",
+   "MFI",
+   "NATR",
+   "PPO",
+   "PPO_hist"
+  ]
+ },
+ "runs": {
+  "pandas|ts_mean_20": {
+   "ok": true,
+   "rows": 585,
+   "nonnull": 585,
+   "flags": {},
+   "sql_runtime": {}
+  },
+  "pandas|arith": {
+   "ok": true,
+   "rows": 585,
+   "nonnull": 580,
+   "flags": {},
+   "sql_runtime": {}
+  },
+  "pandas|rank_tsmean": {
+   "ok": true,
+   "rows": 585,
+   "nonnull": 585,
+   "flags": {},
+   "sql_runtime": {}
+  },
+  "pandas|where_lt": {
+   "ok": true,
+   "rows": 585,
+   "nonnull": 585,
+   "flags": {},
+   "sql_runtime": {}
+  },
+  "polars_long|ts_mean_20": {
+   "ok": true,
+   "rows": 585,
+   "nonnull": 585,
+   "flags": {
+    "used_polars_long_path": true,
+    "used_polars_long_native": true
+   },
+   "sql_runtime": {}
+  },
+  "polars_long|arith": {
+   "ok": true,
+   "rows": 585,
+   "nonnull": 580,
+   "flags": {
+    "used_polars_long_path": true,
+    "used_polars_long_native": true
+   },
+   "sql_runtime": {}
+  },
+  "polars_long|rank_tsmean": {
+   "ok": true,
+   "rows": 585,
+   "nonnull": 585,
+   "flags": {
+    "used_polars_long_path": true,
+    "used_polars_long_native": true
+   },
+   "sql_runtime": {}
+  },
+  "polars_long|where_lt": {
+   "ok": true,
+   "rows": 585,
+   "nonnull": 585,
+   "flags": {
+    "used_polars_long_path": true,
+    "used_polars_long_native": true
+   },
+   "sql_runtime": {}
+  },
+  "duckdb_sql|ts_mean_20": {
+   "ok": true,
+   "rows": 585,
+   "nonnull": 585,
+   "flags": {},
+   "sql_runtime": {
+    "used_sql_pushdown": true,
+    "sql_fully_pushed": true,
+    "sql_partial_pushed": false,
+    "sql_full_execution_failed": false,
+    "sql_query_count": 1,
+    "sql_dialect": "duckdb",
+    "compile_fully_sql": true,
+    "sql_subtree_count": 0,
+    "sql_fallback_subtree_count": 0
+   }
+  },
+  "duckdb_sql|arith": {
+   "ok": true,
+   "rows": 585,
+   "nonnull": 580,
+   "flags": {},
+   "sql_runtime": {
+    "used_sql_pushdown": true,
+    "sql_fully_pushed": true,
+    "sql_partial_pushed": false,
+    "sql_full_execution_failed": false,
+    "sql_query_count": 1,
+    "sql_dialect": "duckdb",
+    "compile_fully_sql": true,
+    "sql_subtree_count": 0,
+    "sql_fallback_subtree_count": 0
+   }
+  },
+  "duckdb_sql|rank_tsmean": {
+   "ok": true,
+   "rows": 585,
+   "nonnull": 585,
+   "flags": {},
+   "sql_runtime": {
+    "used_sql_pushdown": true,
+    "sql_fully_pushed": true,
+    "sql_partial_pushed": false,
+    "sql_full_execution_failed": false,
+    "sql_query_count": 1,
+    "sql_dialect": "duckdb",
+    "compile_fully_sql": true,
+    "sql_subtree_count": 0,
+    "sql_fallback_subtree_count": 0
+   }
+  },
+  "duckdb_sql|where_lt": {
+   "ok": true,
+   "rows": 585,
+   "nonnull": 585,
+   "flags": {},
+   "sql_runtime": {
+    "used_sql_pushdown": true,
+    "sql_fully_pushed": true,
+    "sql_partial_pushed": false,
+    "sql_full_execution_failed": false,
+    "sql_query_count": 1,
+    "sql_dialect": "duckdb",
+    "compile_fully_sql": true,
+    "sql_subtree_count": 0,
+    "sql_fallback_subtree_count": 0
+   }
+  },
+  "auto|ts_mean_20": {
+   "ok": false,
+   "error": "PhysicalPlanRequiredError: HybridBackend execution requires a planner-admitted PhysicalRegionPlan; FactorEngine has no physical-plan consumer wired and refuses logical PlanNode runtime rerouting",
+   "sql_runtime": {}
+  },
+  "auto|arith": {
+   "ok": false,
+   "error": "PhysicalPlanRequiredError: HybridBackend execution requires a planner-admitted PhysicalRegionPlan; FactorEngine has no physical-plan consumer wired and refuses logical PlanNode runtime rerouting",
+   "sql_runtime": {}
+  },
+  "auto|rank_tsmean": {
+   "ok": false,
+   "error": "PhysicalPlanRequiredError: HybridBackend execution requires a planner-admitted PhysicalRegionPlan; FactorEngine has no physical-plan consumer wired and refuses logical PlanNode runtime rerouting",
+   "sql_runtime": {}
+  },
+  "auto|where_lt": {
+   "ok": false,
+   "error": "PhysicalPlanRequiredError: HybridBackend execution requires a planner-admitted PhysicalRegionPlan; FactorEngine has no physical-plan consumer wired and refuses logical PlanNode runtime rerouting",
+   "sql_runtime": {}
+  }
+ }
+}

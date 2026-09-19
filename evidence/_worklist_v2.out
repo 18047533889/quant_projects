@@ -1,0 +1,113 @@
+parsing catalog rows ...
+catalog rows=113893 distinct_ops_in_formula=1316 total_operator_occurrences=740063
+VALIDATION {"freelist_ops": 1314, "parsed_ops": 1316, "common": 1314, "identical_counts": 1314, "mismatch_examples": [], "mismatch_n": 0, "freq_sum": 719717, "parsed_sum": 740063, "parsed_in_freqlist_sum": 719717}
+loading probe panels ...
+COUNTERFACTUAL {"delegate_operators_in_catalog": 621, "delegate_occurrences": 69705, "factor_rows_containing_a_delegate_op": 53870, "pct_factor_rows_containing_a_delegate_op": 47.3, "factor_rows_that_would_become_unsupported_on_polars_long": 53870, "note": "\u8fd9\u4e9b\u884c\u672c\u8eab\u4e0d\u56e0\u5220\u9664\u800c\u9519\u8bef, \u4f46\u5728 polars_long \u4e0a\u4f1a UNSUPPORTED -> \u56de\u9000 pandas \u53c2\u8003\u8def\u5f84, \u4e22\u6389 polars_long \u7684\u6574\u4f53\u52a0\u901f"}
+{
+ "totals": {
+  "catalog_factor_rows": 113893,
+  "distinct_operators_in_formulas": 1316,
+  "total_operator_occurrences": 740063,
+  "operators_already_real": 91,
+  "operators_needing_work": 1225,
+  "occurrences_already_real": 318566,
+  "occurrences_needing_work": 421497,
+  "factor_rows_that_run_today": 1361,
+  "pct_factor_rows_that_run_today": 1.19
+ },
+ "category_counts": {
+  "no_explicit_physical_spec": 549,
+  "polars_native_expr": 31,
+  "not_in_catalog": 55,
+  "polars_pandas_delegate": 610,
+  "polars_numpy_kernel": 60,
+  "other:delegate_python": 11
+ },
+ "convertibility_counts": {
+  "declare_spec_only": 531,
+  "already_real": 91,
+  "needs_inspection": 55,
+  "rewrite_needed": 639
+ },
+ "row_gated_landmarks": {
+  "50": 28.61,
+  "100": 35.73,
+  "200": 47.13,
+  "300": 58.23,
+  "400": 67.13,
+  "500": 74.64,
+  "600": 81.6,
+  "700": 87.71,
+  "800": 92.49,
+  "1225": 99.97
+ }
+}
+ROWS THAT RUN TODAY (all ops real): 1361 / 113893 = 1.19 %
+
+OCCURRENCE-WEIGHTED coverage after converting top N:
+   top     1 ops ->  12.24% of occurrences
+   top     5 ops ->  20.87% of occurrences
+   top    10 ops ->  26.16% of occurrences
+   top    20 ops ->  31.65% of occurrences
+   top    30 ops ->  34.49% of occurrences
+   top    50 ops ->  37.71% of occurrences
+   top    75 ops ->  40.04% of occurrences
+   top   100 ops ->  41.80% of occurrences
+   top   150 ops ->  44.53% of occurrences
+   top   200 ops ->  46.53% of occurrences
+   top   300 ops ->  49.30% of occurrences
+   top   500 ops ->  52.72% of occurrences
+   top   750 ops ->  55.41% of occurrences
+   top  1000 ops ->  56.78% of occurrences
+   top  1225 ops ->  56.95% of occurrences
+
+ROW-GATED coverage (rows that fully run) after converting top N:
+   top     0 ops ->   1.19% of catalog rows (1361)
+   top     1 ops ->   5.96% of catalog rows (6793)
+   top     5 ops ->   8.13% of catalog rows (9262)
+   top    10 ops ->  10.62% of catalog rows (12100)
+   top    20 ops ->  17.92% of catalog rows (20413)
+   top    30 ops ->  23.06% of catalog rows (26266)
+   top    50 ops ->  28.61% of catalog rows (32584)
+   top    75 ops ->  32.57% of catalog rows (37092)
+   top   100 ops ->  35.73% of catalog rows (40690)
+   top   150 ops ->  41.45% of catalog rows (47208)
+   top   200 ops ->  47.13% of catalog rows (53677)
+   top   300 ops ->  58.23% of catalog rows (66317)
+   top   500 ops ->  74.64% of catalog rows (85006)
+   top   750 ops ->  90.18% of catalog rows (102706)
+   top  1000 ops ->  98.81% of catalog rows (112542)
+   top  1225 ops ->  99.97% of catalog rows (113863)
+
+TOP 30 WORK ITEMS:
+   rank                                         rows= 90565 no_explicit_physical_spec    declare_spec_only
+   field                                        rows= 19102 not_in_catalog               needs_inspection
+   cs_pct_rank                                  rows= 17401 no_explicit_physical_spec    declare_spec_only
+   gt                                           rows= 14929 no_explicit_physical_spec    declare_spec_only
+   ts_sum                                       rows= 12429 no_explicit_physical_spec    declare_spec_only
+   price_impact                                 rows=  9888 no_explicit_physical_spec    declare_spec_only
+   ts_zscore                                    rows=  9110 no_explicit_physical_spec    declare_spec_only
+   safe_div                                     rows=  6960 not_in_catalog               needs_inspection
+   and_                                         rows=  6762 no_explicit_physical_spec    declare_spec_only
+   tanh                                         rows=  6460 no_explicit_physical_spec    declare_spec_only
+   efficiency_ratio                             rows=  6070 no_explicit_physical_spec    declare_spec_only
+   lt                                           rows=  5270 no_explicit_physical_spec    declare_spec_only
+   ts_return                                    rows=  5094 not_in_catalog               needs_inspection
+   turnover_zscore                              rows=  4347 no_explicit_physical_spec    declare_spec_only
+   ashare_fiscal_quarter_from_period_end        rows=  4096 polars_pandas_delegate       rewrite_needed
+   fin_quarter_from_cumulative                  rows=  3743 no_explicit_physical_spec    declare_spec_only
+   ts_delta                                     rows=  3465 no_explicit_physical_spec    declare_spec_only
+   relative_volume                              rows=  2893 no_explicit_physical_spec    declare_spec_only
+   ts_cusum_pressure                            rows=  2863 polars_pandas_delegate       rewrite_needed
+   ts_spectral_entropy                          rows=  2812 no_explicit_physical_spec    rewrite_needed
+   log_positive_or_nan                          rows=  2779 no_explicit_physical_spec    declare_spec_only
+   intra_realized_skewness                      rows=  2567 no_explicit_physical_spec    declare_spec_only
+   ts_sharpe                                    rows=  2283 no_explicit_physical_spec    declare_spec_only
+   ts_delay                                     rows=  2164 no_explicit_physical_spec    declare_spec_only
+   cs_mad_zscore                                rows=  2059 no_explicit_physical_spec    declare_spec_only
+   amihud_illiquidity                           rows=  1903 no_explicit_physical_spec    declare_spec_only
+   intra_realized_variance                      rows=  1871 no_explicit_physical_spec    declare_spec_only
+   fiscal_pct_change                            rows=  1808 no_explicit_physical_spec    declare_spec_only
+   cs_mean                                      rows=  1800 no_explicit_physical_spec    declare_spec_only
+   ts_max                                       rows=  1766 no_explicit_physical_spec    declare_spec_only
+WROTE /home/sunhaiwei/quant_projects/evidence/factor_catalog_20260916/backend_coverage_worklist.json

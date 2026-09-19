@@ -1,0 +1,18 @@
+{
+ "pandas_reference_s": 0.007301940117031336,
+ "aligned_beta_pandas_s": 0.0029173169750720263,
+ "compute_rolling_beta_only_s": 0.07226004509720951,
+ "panel_pandas_bridge_only_s": 0.07535486703272909,
+ "rolling_beta_polars_s": 0.07884942600503564,
+ "delegate_end_to_end_s": 0.07749005709774792,
+ "to_pandas_panel_x2_s": 0.0018923028837889433,
+ "date_key_set_compare_s": 0.0012418275000527501,
+ "date_to_pandas_only_s": 2.940406557172537e-05,
+ "bridge_identity_only_s": 0.001898433081805706,
+ "bridge_select_to_pandas_s": 0.0005562586011365056,
+ "per_column_series_rebuild_s": 0.0007342930184677243,
+ "bulk_from_pandas_rebuild_s": 0.0011701044859364629,
+ "n_numeric_cols": 30,
+ "n_rows": 972,
+ "n_cols": 30
+}

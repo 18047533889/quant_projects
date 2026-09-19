@@ -1,0 +1,55 @@
+{
+ "panel": {
+  "rows": 972,
+  "cols": 30
+ },
+ "operators": {
+  "ts_beta": {
+   "n_frames": 2,
+   "pandas_compute_s": 0.007357517024502158,
+   "marshal_in_s": 0.0015284840483218431,
+   "marshal_in_per_frame_s": 0.0007642420241609216,
+   "rebuild_out_s": 0.0006774745415896177,
+   "framework_glue_s": 2.9669026844203472e-05,
+   "delegate_total_s": 0.08421455812640488,
+   "delegate_overhead_s": 0.07685704110190272,
+   "delegate_overhead_x": 11.446056848519927,
+   "residual_after_marshal_s": 0.07465108251199126,
+   "call_pandas_delegate_s": 0.012285287957638502,
+   "compute_share_of_delegate_pct": 8.74
+  },
+  "composition_normalized_entropy": {
+   "n_frames": 8,
+   "pandas_compute_s": 0.002216852968558669,
+   "marshal_in_s": 0.005165999056771398,
+   "marshal_in_per_frame_s": 0.0006457498820964247,
+   "rebuild_out_s": 0.0007146529387682676,
+   "framework_glue_s": 0.00011584698222577572,
+   "delegate_total_s": 0.009819791885092854,
+   "delegate_overhead_s": 0.007602938916534185,
+   "delegate_overhead_x": 4.429609010775932,
+   "residual_after_marshal_s": 0.0017222869209945202,
+   "call_pandas_delegate_s": 0.006024126894772053,
+   "compute_share_of_delegate_pct": 22.58,
+   "delegate_cpu_per_wall": 1.285
+  },
+  "ts_cusum_pressure": {
+   "n_frames": 1,
+   "pandas_compute_s": 0.686947314068675,
+   "marshal_in_s": 0.000644786050543189,
+   "marshal_in_per_frame_s": 0.000644786050543189,
+   "rebuild_out_s": 0.0006870540091767907,
+   "framework_glue_s": 3.820052370429039e-06,
+   "delegate_total_s": 0.7037595948204398,
+   "delegate_overhead_s": 0.016812280751764774,
+   "delegate_overhead_x": 1.0244739012839112,
+   "residual_after_marshal_s": 0.015480440692044795,
+   "call_pandas_delegate_s": 0.6928746839985251,
+   "compute_share_of_delegate_pct": 97.61,
+   "delegate_cpu_per_wall": 1.001
+  }
+ },
+ "cpu_per_wall": {
+  "native_30col_polars": 1.795
+ }
+}
