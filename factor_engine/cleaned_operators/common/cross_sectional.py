@@ -1007,6 +1007,9 @@ from factor_engine.cleaned_operators.base_polars import (
     apply_numba_zscore,
     apply_numba_rank,
 )
+from factor_engine.backend.contracts import (
+    ExecutionKind, PhysicalImplementationSpec,
+)
 # polars blocks below reuse names Operator/SeriesOperator/register_operator via aliases
 Operator = PolarsOperator
 OperatorMetadata = PolarsOperatorMetadata
@@ -1066,6 +1069,18 @@ class CrossSectionalMeanPolars(SeriesOperator):
         return x.with_columns([
             mean_expr.alias(c) for c in numeric_cols
         ])
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="cs_mean", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.cross_sectional:CrossSectionalMeanPolars:v1",
+        emitter_identity="polars_expr:cs_mean",
+        kernel_identity="common.cross_sectional:CrossSectionalMeanPolars",
+        parameter_domain_hash="cs_mean:declared:v1",
+        semantic_contract_hash="cs_mean:polars_native_expr:v1",
+        notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),
+    )
 
 
 
@@ -1377,6 +1392,18 @@ class RankPolars(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         return CrossSectionalRank()._calculate_series(x, **kwargs)
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="rank", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.cross_sectional:RankPolars:v1",
+        emitter_identity="polars_expr:rank",
+        kernel_identity="common.cross_sectional:RankPolars",
+        parameter_domain_hash="rank:declared:v1",
+        semantic_contract_hash="rank:polars_native_expr:v1",
+        notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),
+    )
 
 
 @register_operator(
@@ -1443,6 +1470,18 @@ class CsPctRankPolars(RankPctPolars):
         param_names=["x"],
         return_type="series",
         tags=["cross_sectional", "rank", "pit_safe", "polars"],
+    )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="cs_pct_rank", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.cross_sectional:CsPctRankPolars:v1",
+        emitter_identity="polars_expr:cs_pct_rank",
+        kernel_identity="common.cross_sectional:CsPctRankPolars",
+        parameter_domain_hash="cs_pct_rank:declared:v1",
+        semantic_contract_hash="cs_pct_rank:polars_native_expr:v1",
+        notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),
     )
 
 

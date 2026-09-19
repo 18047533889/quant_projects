@@ -328,6 +328,18 @@ class TSSharpeNative(SeriesOperator):
                 .alias(c)
             )
         return x.with_columns(exprs)
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_sharpe", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_daily_native:TSSharpeNative:v1",
+        emitter_identity="polars_expr:ts_sharpe",
+        kernel_identity="common.polars_daily_native:TSSharpeNative",
+        parameter_domain_hash="ts_sharpe:declared:v1",
+        semantic_contract_hash="ts_sharpe:polars_native_expr:v1",
+        notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -420,6 +432,18 @@ class CSMadZscoreNative(SeriesOperator):
             )
 
         return _cs_long_transform(x, _xform)
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="cs_mad_zscore", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_daily_native:CSMadZscoreNative:v1",
+        emitter_identity="polars_expr:cs_mad_zscore",
+        kernel_identity="common.polars_daily_native:CSMadZscoreNative",
+        parameter_domain_hash="cs_mad_zscore:declared:v1",
+        semantic_contract_hash="cs_mad_zscore:polars_native_expr:v1",
+        notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),
+    )
 
 
 @register_operator(

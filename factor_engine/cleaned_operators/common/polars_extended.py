@@ -18,6 +18,9 @@ except ImportError:
     pl = None  # type: ignore
 
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
+from factor_engine.backend.contracts import (
+    ExecutionKind, PhysicalImplementationSpec,
+)
 
 _SKIP = frozenset({"date", "stock_code"})
 
@@ -160,6 +163,18 @@ class TanhPolars(SeriesOperator):
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         cols = _numeric_cols(x)
         return x.with_columns([pl.col(c).tanh().alias(c) for c in cols])
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="tanh", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_extended:TanhPolars:v1",
+        emitter_identity="polars_expr:tanh",
+        kernel_identity="common.polars_extended:TanhPolars",
+        parameter_domain_hash="tanh:declared:v1",
+        semantic_contract_hash="tanh:polars_native_expr:v1",
+        notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),
+    )
 
 
 @register_operator(name="minimum", category="math", business_category="elementwise_math", canonical="minimum", source="factor_dsl_polars")

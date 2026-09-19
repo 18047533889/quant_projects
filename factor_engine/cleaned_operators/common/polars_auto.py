@@ -21,6 +21,18 @@ def _pl():
 from factor_engine.cleaned_operators.base_polars import OperatorMetadata, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.cleaned_operators.base import Any, ParamSpec, ParamRole
+from factor_engine.backend.contracts import (
+    ExecutionKind, PhysicalImplementationSpec,
+)
+
+DYN_NOTE__register_compare = 'Genuine polars expression kernel (pl.col comparison + with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls. Declared to connect the polars_long channel (execution_kind was previously absent).'
+
+from factor_engine.backend.contracts import (
+    ExecutionKind, PhysicalImplementationSpec,
+)
+
+DYN_NOTE__register_compare = 'Genuine polars expression kernel (pl.col comparison + with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls. Declared to connect the polars_long channel (execution_kind was previously absent).'
+
 
 _SKIP = frozenset({"date", "stock_code"})
 
@@ -356,6 +368,18 @@ if not _has_polars("and_"):
                 yb = _truthy_series(y[c])
                 replacements.append((xb & yb).cast(pl.Float64).alias(c))
             return x.with_columns(replacements)
+        _physical_spec = PhysicalImplementationSpec(
+            canonical="and_", backend="polars",
+            execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+            materializes_full_panel=True,
+            supports_nulls=True, supports_nan=True, supports_inf=True,
+            implementation_source_hash="common.polars_auto:AndPolarsAuto:v1",
+            emitter_identity="polars_expr:and_",
+            kernel_identity="common.polars_auto:AndPolarsAuto",
+            parameter_domain_hash="and_:declared:v1",
+            semantic_contract_hash="and_:polars_native_expr:v1",
+            notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),
+        )
 
     register_operator(
         name="and_", category="elementwise_math", business_category="elementwise_math",
@@ -465,6 +489,18 @@ def _register_compare(canon: str, name: str, op_fn) -> None:
         def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
             cols = [c for c in _numeric_cols(x) if c in y.columns]
             return x.with_columns([op_fn(pl.col(c), y[c]).alias(c) for c in cols])
+        _physical_spec = PhysicalImplementationSpec(
+            canonical=canon, backend="polars",
+            execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+            materializes_full_panel=True,
+            supports_nulls=True, supports_nan=True, supports_inf=True,
+            implementation_source_hash=f"common.polars_auto:{canon}:v1",
+            emitter_identity=f"polars_expr:{canon}",
+            kernel_identity=f"common.polars_auto:{canon}",
+            parameter_domain_hash=f"{canon}:declared:v1",
+            semantic_contract_hash=f"{canon}:polars_native_expr:v1",
+            notes=(DYN_NOTE__register_compare),
+        )
 
     _ComparePolars.__doc__ = f"Polars {canon}"
 

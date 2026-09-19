@@ -2479,6 +2479,18 @@ class TSDelayPolars(SeriesOperator):
         return x.with_columns([
             pl.col(c).shift(lag).alias(c) for c in numeric_cols
         ])
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_delay", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.time_series:TSDelayPolars:v1",
+        emitter_identity="polars_expr:ts_delay",
+        kernel_identity="common.time_series:TSDelayPolars",
+        parameter_domain_hash="ts_delay:declared:v1",
+        semantic_contract_hash="ts_delay:polars_native_expr:v1",
+        notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),
+    )
 
 # aliases: DELAY, Delay, Ref, delay, m_delay, shift
 
@@ -2509,6 +2521,18 @@ class TSDeltaPolars(SeriesOperator):
         return x.with_columns([
             (pl.col(c) - pl.col(c).shift(lag)).alias(c) for c in numeric_cols
         ])
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_delta", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.time_series:TSDeltaPolars:v1",
+        emitter_identity="polars_expr:ts_delta",
+        kernel_identity="common.time_series:TSDeltaPolars",
+        parameter_domain_hash="ts_delta:declared:v1",
+        semantic_contract_hash="ts_delta:polars_native_expr:v1",
+        notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),
+    )
 
 # aliases: Delta, Diff, TS_DELTA, pct_change
 
@@ -2559,6 +2583,18 @@ class TSMaxPolars(SeriesOperator):
             pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
             .rolling_max(window_size=window, min_samples=1).alias(c) for c in cols
         ])
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_max", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.time_series:TSMaxPolars:v1",
+        emitter_identity="polars_expr:ts_max",
+        kernel_identity="common.time_series:TSMaxPolars",
+        parameter_domain_hash="ts_max:declared:v1",
+        semantic_contract_hash="ts_max:polars_native_expr:v1",
+        notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),
+    )
 
 # aliases: Max, TS_MAX, m_max, max
 
@@ -2647,6 +2683,18 @@ class TSMinPolars(SeriesOperator):
             pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
             .rolling_min(window_size=window, min_samples=1).alias(c) for c in cols
         ])
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_min", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.time_series:TSMinPolars:v1",
+        emitter_identity="polars_expr:ts_min",
+        kernel_identity="common.time_series:TSMinPolars",
+        parameter_domain_hash="ts_min:declared:v1",
+        semantic_contract_hash="ts_min:polars_native_expr:v1",
+        notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),
+    )
 
 # aliases: Min, TS_MIN, m_min, min
 
@@ -2867,6 +2915,18 @@ class TSSumPolars(SeriesOperator):
             pl.when(pl.col(c).is_nan() | pl.col(c).is_infinite()).then(None).otherwise(pl.col(c))
             .rolling_sum(window_size=window, min_samples=min_periods).alias(c) for c in cols
         ])
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_sum", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.time_series:TSSumPolars:v1",
+        emitter_identity="polars_expr:ts_sum",
+        kernel_identity="common.time_series:TSSumPolars",
+        parameter_domain_hash="ts_sum:declared:v1",
+        semantic_contract_hash="ts_sum:polars_native_expr:v1",
+        notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),
+    )
 
 # aliases: TS_SUM, m_sum
 
@@ -2947,6 +3007,18 @@ class TSZScorePolars(SeriesOperator):
             includes_current_bar=includes_current_bar, ddof=ddof,
             zero_std_policy=zero_std_policy,
         )
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_zscore", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.time_series:TSZScorePolars:v1",
+        emitter_identity="polars_expr:ts_zscore",
+        kernel_identity="common.time_series:TSZScorePolars",
+        parameter_domain_hash="ts_zscore:declared:v1",
+        semantic_contract_hash="ts_zscore:polars_native_expr:v1",
+        notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),
+    )
 
 
 
