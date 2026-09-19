@@ -470,6 +470,102 @@ def _apply_overrides():
     # increments vary and the MAD is non-degenerate.
     audit._PANEL_SPECIAL[("ts_transition_intensity", "x")] = "returns"
 
+    # fin_* family: feed a signed fundamentals panel (built in _panels_for) to the
+    # canonical's data inputs so growth/divergence/persistence operators see real
+    # nonzero variation instead of the monotonic positive price level (close).
+    for canon in sorted(OperatorRegistry.list_canonical()):
+        if canon.startswith("fin_"):
+            for key in ("x", "a", "value", "rate", "v1", "earnings", "cashflow",
+                        "net_profit", "ocf", "avg_assets", "total_assets", "avg_equity",
+                        "capex_cash", "cash", "operating_revenue", "total_profit",
+                        "goods_sale_cash", "scale_base", "expected", "actual"):
+                audit._PANEL_SPECIAL[(canon, key)] = "fin_fundamentals"
+            for key in ("y", "b", "v2", "contract_assets", "contract_liability",
+                        "investment_income", "fair_value_income", "other_earnings",
+                        "borrowing_repayment", "short_term_debt", "operating_profit",
+                        "asset_deal_income", "interest_cost", "goodwill",
+                        "asset_impairment_loss", "credit_impairment_loss"):
+                audit._PANEL_SPECIAL[(canon, key)] = "fin_fundamentals_alt"
+    # fin_cash_earnings_gap: ``scale`` is a DATA panel (normalization denominator),
+    # not the "mad"/"std" scalar fallback — feed a positive fundamentals panel.
+    audit._PANEL_SPECIAL[("fin_cash_earnings_gap", "scale")] = "fin_fundamentals"
+    # fin_cash_burn_runway: both inputs are fundamentals; annualized_ocf must be
+    # signed (a burning block => negative) so a finite runway exists.
+    audit._PANEL_SPECIAL[("fin_cash_burn_runway", "cash_equivalents")] = "fin_fundamentals"
+    audit._PANEL_SPECIAL[("fin_cash_burn_runway", "annualized_ocf")] = "fin_ocf_signed"
+    # fin_surprise_*: ``expected`` must DIFFER from ``actual`` (both defaults map
+    # to fin_fundamentals) or the surprise is identically zero and the z-score is
+    # 0/0 -> NaN.  Feed a distinct fundamentals panel to expected.
+    audit._PANEL_SPECIAL[("fin_surprise_event_zscore", "expected")] = "fin_fundamentals_alt"
+    audit._PANEL_SPECIAL[("fin_surprise_zscore", "expected")] = "fin_fundamentals_alt"
+
+    # cs_ / group_ cross-sectional multi-feature operators need DISTINCT feature
+    # panels (identical features -> rank-1 / degenerate kernel -> all-NaN).
+    for canon in sorted(OperatorRegistry.list_canonical()):
+        if canon.startswith("cs_"):
+            for key in ("x", "y", "a", "f1", "target"):
+                audit._PANEL_SPECIAL[(canon, key)] = "wide_returns"
+            for key in ("x1", "x2", "b", "f2", "score"):
+                audit._PANEL_SPECIAL[(canon, key)] = "wide_volume"
+            for key in ("x3", "f3", "c"):
+                audit._PANEL_SPECIAL[(canon, key)] = "wide_amount"
+        if canon.startswith("group_"):
+            for key in ("x", "y", "a", "f1", "target", "score"):
+                audit._PANEL_SPECIAL[(canon, key)] = "wide_returns"
+            for key in ("f2", "b"):
+                audit._PANEL_SPECIAL[(canon, key)] = "wide_volume"
+            for key in ("f3", "c"):
+                audit._PANEL_SPECIAL[(canon, key)] = "wide_amount"
+    # cs_multi_resid / group_multi_resid: use INDEPENDENT exposures.  The generic
+    # wide_volume/wide_amount mapping is collinear (amount ~ volume*close) -> the
+    # OLS design is singular -> all-NaN residuals.  Map to the independent feats.
+    audit._PANEL_SPECIAL[("cs_multi_resid", "y")] = "wide_scaled_earnings"
+    audit._PANEL_SPECIAL[("cs_multi_resid", "x1")] = "feat0"
+    audit._PANEL_SPECIAL[("cs_multi_resid", "x2")] = "feat1"
+    audit._PANEL_SPECIAL[("group_multi_resid", "y")] = "wide_scaled_earnings"
+    for _i in range(1, 6):
+        audit._PANEL_SPECIAL[(f"group_multi_resid", f"x{_i}")] = f"feat{_i - 1}"
+    # holder_* share-ratio ops: feed a bounded sub-share panel and a total panel
+    # (sub < total) so bounded_share_ratio yields a valid (0, 1) ratio.
+    audit._PANEL_SPECIAL[("holder_pledge_ratio", "total_capital")] = "holder_total_capital"
+    audit._PANEL_SPECIAL[("holder_pledge_ratio", "pledge_shares")] = "holder_sub_shares"
+    audit._PANEL_SPECIAL[("holder_locked_share_ratio", "total_capital")] = "holder_total_capital"
+    audit._PANEL_SPECIAL[("holder_locked_share_ratio", "locked_shares")] = "holder_sub_shares"
+    audit._PANEL_SPECIAL[("holder_freeze_ratio", "total_capital")] = "holder_total_capital"
+    audit._PANEL_SPECIAL[("holder_freeze_ratio", "freeze_shares")] = "holder_sub_shares"
+    # cash_flow_lifecycle_stage: three DISTINCT signed cash-flow panels.
+    audit._PANEL_SPECIAL[("cash_flow_lifecycle_stage", "operating")] = "cf_operating"
+    audit._PANEL_SPECIAL[("cash_flow_lifecycle_stage", "investing")] = "cf_investing"
+    audit._PANEL_SPECIAL[("cash_flow_lifecycle_stage", "financing")] = "cf_financing"
+    # ashare_fiscal_quarter_from_period_end: parseable date panel for period_end.
+    audit._PANEL_SPECIAL[("ashare_fiscal_quarter_from_period_end", "period_end")] = "ashare_period_end"
+    # fiscal_regression_resid_std: distinct, non-collinear regressors (y on
+    # scaled_earnings; x1=returns, x2=volume are independent).
+    audit._PANEL_SPECIAL[("fiscal_regression_resid_std", "y")] = "scaled_earnings"
+    audit._PANEL_SPECIAL[("fiscal_regression_resid_std", "x1")] = "returns"
+    audit._PANEL_SPECIAL[("fiscal_regression_resid_std", "x2")] = "volume"
+    # industry_fiscal_resid: distinct exposures (y on scaled_earnings; x1..x5
+    # independent feats) so the per-period OLS design is full-rank.
+    audit._PANEL_SPECIAL[("industry_fiscal_resid", "y")] = "wide_scaled_earnings"
+    for _i in range(1, 6):
+        audit._PANEL_SPECIAL[(f"industry_fiscal_resid", f"x{_i}")] = f"feat{_i - 1}"
+    # event_* family: route the ``event`` param to the sparse EventBool panel
+    # built in _panels_for; benchmark_ret to a returns panel.
+    for canon in sorted(OperatorRegistry.list_canonical()):
+        if canon.startswith("event_"):
+            audit._PANEL_SPECIAL[(canon, "event")] = "event_sparse"
+            audit._PANEL_SPECIAL[(canon, "benchmark_ret")] = "returns"
+    # event_interval_mark_coupling: ``mark`` is an event INTENSITY (numeric),
+    # not a second EventBool — feed the varying-intensity panel.
+    audit._PANEL_SPECIAL[("event_interval_mark_coupling", "mark")] = "mark_sparse"
+    # event_fano_*: block-Fano needs >= min_valid_blocks(5) COMPLETE blocks of
+    # ``block`` rows inside ``window``; the generic window=20/block=5 yields only
+    # 4 complete blocks -> all-NaN.  Lengthen (sample-support fix; the
+    # min_valid_blocks gate is NOT relaxed) so window // block >= 5.
+    for canon in ("event_fano_factor", "event_fano_excess"):
+        audit._SPECIAL_SCALARS[(canon, "window")] = 120
+        audit._SPECIAL_SCALARS[(canon, "block")] = 20
+
 load_all()  # registry must be fully loaded before the override loop sees canonicals
 _apply_overrides()
 
@@ -491,6 +587,22 @@ def _wide_panels():
     out["wide_amount"] = base["amount"] / base["amount"].to_numpy().max()
     out["wide_scaled_earnings"] = 0.2 * returns + 0.03 * out["wide_amount"]
     out["wide_std_err"] = 0.02 + 0.01 * out["wide_volume"].abs()
+    # Independent cross-sectional feature panels for multi-regression operators
+    # (cs_multi_resid / group_multi_resid): the wide_volume/wide_amount pair is
+    # collinear (amount ~ volume * close), which makes the OLS design singular
+    # and emits all-NaN.  These five panels are mutually independent.
+    feat_rng = np.random.default_rng(20260919)
+    rows_n, cols_n = returns.shape
+    for i in range(5):
+        feat = (
+            50.0
+            + 12.0 * np.sin(np.arange(rows_n)[:, None] / (3.0 + i)
+                            + np.arange(cols_n)[None, :] / (2.0 + i))
+            + feat_rng.normal(0.0, 3.0, size=(rows_n, cols_n))
+        )
+        out[f"feat{i}"] = pd.DataFrame(
+            feat, index=returns.index, columns=returns.columns
+        )
     report_number = np.arange(len(returns)) // 10
     period_labels = np.array(
         [f"{2020 + int(n) // 4}Q{int(n) % 4 + 1}" for n in report_number],
@@ -512,22 +624,114 @@ _MODULE_INTRADAY = audit._panels(rows=48, columns=6)
 
 
 def _panels_for(canonical: str) -> dict:
+    # cs_hartigan_dip needs >=100 cross-sectional samples per row (its own
+    # feasibility contract); the 30-asset wide universe is too small.  Build a
+    # dedicated 120-asset panel set so the dip test has enough support.
+    if canonical == "cs_hartigan_dip":
+        hart = audit._panels(rows=220, columns=120)
+        panels = {k: v.copy() for k, v in hart.items()}
+        panels["wide_returns"] = hart["ret"]
+        panels["unit"] = panels["returns"].clip(-0.99, 0.99)
+        return panels
     # cross-sectional statistics (cs_knn AND the wider cs_* residual/lof/dip
     # family) need enough instruments for the per-row cross-section to be defined.
-    if canonical.startswith("cs_") or canonical in {"accounting_comparability_score", "laborforce_efficiency"}:
-        return {k: v.copy() for k, v in _MODULE_WIDE.items()}
+    # ``group_*`` are also cross-sectional group operators and need the same wide
+    # universe (the default 6-asset panel yields degenerate per-group cross-sections).
+    if canonical.startswith(("cs_", "group_", "industry_")) or canonical in {"accounting_comparability_score", "laborforce_efficiency"}:
+        panels = {k: v.copy() for k, v in _MODULE_WIDE.items()}
+        panels["unit"] = panels["returns"].clip(-0.99, 0.99)
+        # industry_fiscal_resid walks fiscal ordinals from period_id; the wide
+        # panel's default period_id is the generic integer sequence (unparseable
+        # in production fail-closed mode).  Supply parseable fiscal quarter labels.
+        if canonical == "industry_fiscal_resid":
+            _rn = np.arange(len(panels["returns"])) // 5
+            _fl = np.array(
+                [f"{2010 + int(n) // 4}Q{int(n) % 4 + 1}" for n in _rn], dtype=object
+            )
+            panels["period_id"] = pd.DataFrame(
+                np.repeat(_fl[:, None], panels["returns"].shape[1], axis=1),
+                index=panels["returns"].index, columns=panels["returns"].columns,
+            )
+        return panels
     if canonical.startswith(("intra_", "intraday_", "minute_", "micro_", "session_")):
         panels = {k: v.copy() for k, v in _MODULE_INTRADAY.items()}
         panels["unit"] = panels["returns"].clip(-0.99, 0.99)
         return panels
+    # event_* family: the shared audit ``event`` panel is near-all-True (it is
+    # the tradable-flag mask), so every row is its own "last event" and the
+    # since-last-event aggregators (event_return_since_last / *_return_sum /
+    # event_recency_z / event_fano_* / event_interval_* ...) skip EVERY row and
+    # emit all-NaN.  Supply a SPARSE EventBool (1 at ~every 5th row, else 0)
+    # so inter-event bars actually aggregate.  This is a legal strict EventBool
+    # ({0,1}, no out-of-domain values) and is exactly what the operators need.
+    if canonical.startswith("event_"):
+        panels = {k: v.copy() for k, v in _MODULE_PANELS.items()}
+        panels["unit"] = _MODULE_UNIT.copy()
+        rows, cols = panels["returns"].shape
+        idx, cols_ = panels["returns"].index, panels["returns"].columns
+        # Sparse, IRREGULARLY-spaced EventBool (~20% of bars are events).  The
+        # interval/gap statistics (event_recency_z needs std(gaps)>0; event_fano_*
+        # and event_interval_* need varying inter-event gaps) are degenerate
+        # under a perfectly periodic marker, so jitter the spacing deterministically.
+        _rng = np.random.default_rng(20260919)
+        ev = (_rng.random((rows, cols)) < 0.2).astype(float)
+        panels["event_sparse"] = pd.DataFrame(ev, index=idx, columns=cols_)
+        # mark intensity panel for event_interval_mark_coupling: same event
+        # positions but a VARYING positive intensity (else marks are all 1 ->
+        # Corr(tau_j, m_j) has zero mark variance -> NaN).  Zero off-event.
+        mk = np.where(
+            ev > 0,
+            1.0 + 0.5 * np.sin(np.arange(rows)[:, None] / 3.0 + np.arange(cols)[None, :] / 2.0),
+            0.0,
+        )
+        panels["mark_sparse"] = pd.DataFrame(mk, index=idx, columns=cols_)
+        panels["scaled_earnings"] = 0.2 * panels["returns"] + 0.001 * panels["volume"] / 1e6
+        return panels
     panels = {k: v.copy() for k, v in _MODULE_PANELS.items()}
     panels["unit"] = _MODULE_UNIT.copy()
+    # holder_* share-ratio operators (holder_pledge_ratio / holder_locked_share_ratio
+    # / holder_freeze_ratio) need BOUNDED share panels with sub_shares < total.
+    # The generic panels feed identical price levels -> ratio == 1 -> invalid.
+    if canonical.startswith("holder_"):
+        rows, cols = panels["returns"].shape
+        idx, cols_ = panels["returns"].index, panels["returns"].columns
+        total = pd.DataFrame(
+            1.0e8 + panels["returns"].to_numpy() * 1.0e6, index=idx, columns=cols_
+        )
+        sub = 0.3 * total
+        panels["holder_total_capital"] = total
+        panels["holder_sub_shares"] = sub
+    # cash_flow_lifecycle_stage: needs three DISTINCT signed cash-flow panels
+    # (operating positive, investing negative, financing mixed); feeding the
+    # generic close to all three collapses the sign pattern -> all-NaN.
+    if canonical == "cash_flow_lifecycle_stage":
+        rows, cols = panels["returns"].shape
+        idx, cols_ = panels["returns"].index, panels["returns"].columns
+        t = np.arange(rows)[:, None]
+        a = np.arange(cols)[None, :]
+        panels["cf_operating"] = pd.DataFrame(
+            50.0 + 8.0 * np.sin(t / 5.0 + a / 3.0), index=idx, columns=cols_
+        )
+        panels["cf_investing"] = pd.DataFrame(
+            -40.0 - 6.0 * np.cos(t / 7.0 + a / 2.0), index=idx, columns=cols_
+        )
+        panels["cf_financing"] = pd.DataFrame(
+            20.0 * np.sin(t / 9.0 + a / 4.0), index=idx, columns=cols_
+        )
+    # ashare_fiscal_quarter_from_period_end: needs a PARSEABLE date panel for
+    # period_end (the generic close is a price level, not a date).
+    if canonical == "ashare_fiscal_quarter_from_period_end":
+        rows, cols = panels["returns"].shape
+        panels["ashare_period_end"] = pd.DataFrame(
+            np.repeat(panels["returns"].index.to_numpy()[:, None], cols, axis=1),
+            index=panels["returns"].index, columns=panels["returns"].columns,
+        )
     if canonical in {"ts_expanding_chi_square_pvalue", "ts_expanding_durbin_watson_statistic", "ts_expanding_lilliefors_pvalue", "ts_multiscale_trend_consensus", "ts_multiscale_trend_curvature", "ts_multiscale_trend_dispersion"}:
         rows, cols = panels["returns"].shape
         grid = np.arange(rows, dtype=float)[:, None] + np.arange(cols, dtype=float)[None, :]
         panels["stat_clean"] = pd.DataFrame(2.0 + np.sin(grid / 7.0) ** 2, index=panels["returns"].index, columns=panels["returns"].columns)
     panels["scaled_earnings"] = 0.2 * panels["returns"] + 0.001 * panels["volume"] / 1e6
-    if canonical.startswith(("fiscal_", "period_", "report_", "revision_", "ttm_", "yoy_")) or canonical in {
+    if canonical.startswith(("fiscal_", "fin_", "period_", "report_", "revision_", "ttm_", "yoy_", "industry_")) or canonical in {
         "piotroski_f_score", "piotroski_f_score_tolerant"
     }:
         report_number = np.arange(len(panels["returns"])) // 5
@@ -539,6 +743,44 @@ def _panels_for(canonical: str) -> dict:
             np.repeat(fiscal_labels[:, None], panels["returns"].shape[1], axis=1),
             index=panels["returns"].index,
             columns=panels["returns"].columns,
+        )
+    # fin_* family: fundamentals series with NONZERO signed variation per period
+    # (not the price-level close).  The generic close is a strictly increasing
+    # positive level, which makes growth/divergence/persistence degenerate and
+    # can emit all-NaN for operators that need sign flips / ratio denominators.
+    if canonical.startswith("fin_"):
+        rows, cols = panels["returns"].shape
+        rng = np.random.default_rng(20260919)
+        # A fundamentals-like series: positive mean with oscillations that cross
+        # zero occasionally so sign-based operators see real variation.
+        base = 100.0 + 12.0 * np.sin(np.arange(rows)[:, None] / 6.0 + np.arange(cols)[None, :] / 2.0)
+        noise = rng.normal(0.0, 6.0, size=(rows, cols))
+        fin_val = base + noise
+        panels["fin_fundamentals"] = pd.DataFrame(
+            fin_val, index=panels["returns"].index, columns=panels["returns"].columns
+        )
+        panels["fin_fundamentals_alt"] = pd.DataFrame(
+            80.0 + 8.0 * np.cos(np.arange(rows)[:, None] / 9.0 + np.arange(cols)[None, :] / 3.0)
+            + rng.normal(0.0, 4.0, size=(rows, cols)),
+            index=panels["returns"].index, columns=panels["returns"].columns,
+        )
+        # A signed operating-cash-flow panel with a clear burning block (first
+        # half strictly negative) so cash-burn runway is finite for those rows.
+        ocfs = np.where(
+            np.arange(rows)[:, None] < rows // 2,
+            -(30.0 + 10.0 * np.sin(np.arange(rows)[:, None] / 7.0 + np.arange(cols)[None, :] / 3.0)),
+            30.0 + 10.0 * np.sin(np.arange(rows)[:, None] / 7.0 + np.arange(cols)[None, :] / 3.0),
+        )
+        panels["fin_ocf_signed"] = pd.DataFrame(
+            ocfs, index=panels["returns"].index, columns=panels["returns"].columns
+        )
+        # seasonality operators (fin_seasonal_*) walk fiscal ordinals from
+        # ``period_end``; it must be a parseable fiscal label, not the price level.
+        panels["period_end"] = panels["period_id"]
+        fq = panels["period_id"].iloc[:, 0].map(lambda s: int(str(s)[-1])).to_numpy()
+        panels["fiscal_quarter"] = pd.DataFrame(
+            np.repeat(fq[:, None], cols, axis=1),
+            index=panels["returns"].index, columns=panels["returns"].columns,
         )
     if canonical == "ts_multifractal_asymmetry":
         rows, cols = panels["returns"].shape
