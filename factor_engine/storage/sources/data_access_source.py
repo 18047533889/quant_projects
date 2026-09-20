@@ -1956,7 +1956,24 @@ class DataAccessSource(DataSource):
                 and plan is not None
                 and plan.source != "raw"
                 and plan.primary_physical
-                and not plan.is_derived
+                and (
+                    not plan.is_derived
+                    # LQTP 复权量例外（2026-09-20 修复）：
+                    # ``ashare_stock_daily_adj`` 上 catalog 把 ``volume`` 登记为
+                    # derived（``transform='Volume / Factor'``），其派生值由
+                    # ``_normalize_contract_columns`` 在同批读到物理 ``Factor``
+                    # 之后计算（见该方法内的 LQTP 平台口径分支）。
+                    # 因此这里**必须**把读取列解析到 ``primary_physical``
+                    # （``Volume``）并登记 ``output_names``：否则下游适配器
+                    # ``arrow_table_to_multiindex_columns`` 会拿到逻辑名
+                    # ``volume``，而 Arrow 表里只有物理 ``Volume`` → KeyError，
+                    # 所有含成交量的因子在 auto/materialize 路径直接跑不通。
+                    # 其它 derived 字段仍保持原本的 fail-closed（Round-7 P0）。
+                    or (
+                        getattr(plan, "logical_concept", None) == "volume"
+                        and str(self.dataset) == "ashare_stock_daily_adj"
+                    )
+                )
             ):
                 src = plan.primary_physical
             if plan is not None and plan.is_derived and src is None:
