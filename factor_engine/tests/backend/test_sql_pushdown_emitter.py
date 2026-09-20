@@ -91,12 +91,11 @@ def test_ts_rank_sql():
     )
     assert compiled is not None
     assert "ROW_NUMBER()" in compiled.query
-    # rank 族（DuckDB）改用窗口自查询；ts_rank 仍走 ROW_NUMBER + cnt_le。
-    assert (
-        "cnt_le" in compiled.query
-        or "countIf" in compiled.query
-        or "RANK() OVER" in compiled.query
-    )
+    # R58-TSRANK-WINDOW: ts_rank 用滑动帧 list 聚合（lambda 捕获当前行值），
+    # 逐值对齐 pandas rolling.rank(pct=True, method='average')。相关子查询
+    # 形态（O(行×窗口)，全窗口内存爆炸）必须保持禁止。
+    assert "list_transform(vals, x -> CASE WHEN x <= _v THEN 1 ELSE 0 END)" in compiled.query
+    assert "rn BETWEEN" not in compiled.query
 
 
 def test_ewm_mean_sql():

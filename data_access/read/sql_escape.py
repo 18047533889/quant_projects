@@ -703,8 +703,13 @@ def _check_sql_function_allowlist(query: str, *, strict: bool) -> None:
                     "若确为内建函数，请升级 DuckDB 或改用 registered dataset。"
                 )
             continue
-        # 注册表里只有 table 型 overload → 文件/网络/外部源入口
-        if types and not (types & {"scalar", "aggregate", "window"}):
+        # 注册表里只有 table 型 overload → 文件/网络/外部源入口。
+        # R58-MACRO-ALLOWLIST：macro（SQL 宏）不是 table function——宏体在建库
+        # 时已校验、标量表达式位置无法引入 read_* 表函数入口。DuckDB 1.5 把
+        # list_sum 注册为 macro，旧逻辑误判拒绝，导致 ts_rank 滑动帧聚合 SQL
+        # 无法下推（sql_full_execution_failed）。macro 与 scalar/aggregate/
+        # window 一并放行；table 型（或含 table 的混合 overload）仍拒绝。
+        if types and not (types & {"scalar", "aggregate", "window", "macro"}):
             raise ValidationError(
                 f"sql() 拒绝执行：{fn!r} 是 table function（{sorted(types)}）——"
                 "文件/网络/外部源入口默认禁用。读外部文件请先在 datasets.yaml 登记数据集。"

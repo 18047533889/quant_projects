@@ -1195,22 +1195,32 @@ def _ts_pct_rank_sql(
             f")"
         )
     else:
+        # R58-TSRANK-WINDOW：「按时间取窗、按值排名」没有纯窗口函数表达；旧的
+        # 相关子查询形态是 O(行×窗口)，850 万行全窗口预估 25.1GB 峰值内存，
+        # SQL 执行直接失败（sql_full_execution_failed → 降级 polars）。改为
+        # 滑动帧 list 聚合 + lambda 捕获当前行值：O(n·w) CPU，瞬态内存只与
+        # 窗口宽度成正比。逐值语义对齐 pandas rolling.rank(pct=True,
+        # method='average')：cnt = 窗口内 valid 值个数，ties 取平均秩。
+        valid_x = stat_valid_sql("x", dialect=dialect, exclude_nan=exclude_nan)
         rank_expr = (
             f"CASE WHEN {invalid_row} THEN NULL ELSE ("
-            f"SELECT CASE "
-            f"WHEN s.cnt < {mp} THEN NULL "
-            f"WHEN s.cnt = 0 THEN NULL "
-            f"WHEN s.cnt <= 1 THEN 1.0 "
-            f"ELSE (s.cnt_le - (s.cnt_eq - 1) / 2.0) / s.cnt END "
-            f"FROM ("
-            f"SELECT "
-            f"COUNT(*) FILTER (WHERE {valid}) AS cnt, "
-            f"COUNT(*) FILTER (WHERE {valid} AND p._v <= b._v) AS cnt_le, "
-            f"COUNT(*) FILTER (WHERE {valid} AND p._v = b._v) AS cnt_eq "
-            f"FROM ({numbered}) p "
-            f"WHERE p.inst = b.inst AND p.rn BETWEEN b.rn - {w - 1} AND b.rn"
-            f") s"
-            f") END"
+            f"CASE "
+            f"WHEN len(vals) < {mp} THEN NULL "
+            f"WHEN len(vals) = 0 THEN NULL "
+            f"WHEN len(vals) <= 1 THEN 1.0 "
+            f"ELSE (list_sum(list_transform(vals, x -> CASE WHEN x <= _v THEN 1 ELSE 0 END))"
+            f" - (list_sum(list_transform(vals, x -> CASE WHEN x = _v THEN 1 ELSE 0 END)) - 1) / 2.0)"
+            f" / len(vals) END) END"
+        )
+        frame = (
+            f"PARTITION BY inst ORDER BY ts "
+            f"ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        return (
+            f"SELECT b.ts, b.inst, {rank_expr} AS _v FROM ("
+            f"SELECT ts, inst, _v, "
+            f"list_filter(list(_v) OVER ({frame}), x -> {valid_x}) AS vals "
+            f"FROM ({numbered}) t1) b"
         )
     return f"SELECT b.ts, b.inst, {rank_expr} AS _v FROM ({numbered}) b"
 
