@@ -468,6 +468,73 @@ _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
 )
 
 
+# ---------------------------------------------------------------------------
+# R57 backend-coverage batch 4 — explicit execution-kind declarations.
+# These kernels are genuine polars expressions (pl.Expr / with_columns over
+# columns).  Previously they had no _physical_spec, so
+# canonical_polars_kind(production_mode=True) failed closed to UNSUPPORTED.
+# ---------------------------------------------------------------------------
+from factor_engine.backend.contracts import (
+    ExecutionKind,
+    PhysicalImplementationSpec,
+)
+
+_BATCH4_NOTE = (
+    "Genuine polars expression kernel (pl.Expr over columns, no pandas round-trip); "
+    "runtime marshal probe on real data records 0 pl.DataFrame.to_pandas "
+    "calls. Eager panel API only: no lazy/streaming or production-parity claim."
+)
+
+
+def _batch4_native_spec(canonical: str, kernel: str) -> PhysicalImplementationSpec:
+    """Explicit execution-kind contract for a genuine polars expression kernel.
+
+    Batch-4 evidence contract (same rules as batches 1-3): the kernel body
+    builds pl.Expr / pl.DataFrame columns with no pandas round-trip, and the
+    runtime marshal probe on real data records zero pl.DataFrame.to_pandas
+    calls.  Eager panel API, so supports_lazy / supports_streaming stay False.
+    """
+    return PhysicalImplementationSpec(
+        canonical=canonical,
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash=f"technical.polars_indicators_v2:{kernel}:v1",
+        emitter_identity=f"polars_expr:{canonical}",
+        kernel_identity=f"technical.polars_indicators_v2:{kernel}",
+        parameter_domain_hash=f"{canonical}:declared:v1",
+        semantic_contract_hash=f"{canonical}:polars_native_expr:v1",
+        notes=_BATCH4_NOTE,
+    )
+
+
+_BATCH4_SPECS: dict[str, PhysicalImplementationSpec] = {
+    _c: _batch4_native_spec(_c, _k)
+    for _c, _k in (
+        ("NATR", "PolarsIndicatorsV2_NATR"),
+        ("PVO", "PolarsIndicatorsV2_PVO"),
+        ("CMF", "PolarsIndicatorsV2_CMF"),
+        ("VortexMinus", "PolarsIndicatorsV2_VortexMinus"),
+        ("VortexPlus", "PolarsIndicatorsV2_VortexPlus"),
+        ("PVO_signal", "PolarsIndicatorsV2_PVO_signal"),
+        ("PVO_hist", "PolarsIndicatorsV2_PVO_hist"),
+        ("TSI_signal", "PolarsIndicatorsV2_TSI_signal"),
+        ("PPO_signal", "PolarsIndicatorsV2_PPO_signal"),
+        ("TSI", "PolarsIndicatorsV2_TSI"),
+        ("DMI_plus", "PolarsIndicatorsV2_DMI_plus"),
+        ("MFI", "PolarsIndicatorsV2_MFI"),
+        ("DX", "PolarsIndicatorsV2_DX"),
+        ("CMO", "PolarsIndicatorsV2_CMO"),
+        ("DMI_minus", "PolarsIndicatorsV2_DMI_minus"),
+        ("PPO", "PolarsIndicatorsV2_PPO"),
+        ("PPO_hist", "PolarsIndicatorsV2_PPO_hist"),
+    )
+}
+
+
 def _register(name: str, params: tuple[str, ...], function: Callable, description: str) -> None:
     panel_params = ("close",) if name in {"TSI", "TSI_signal"} else ()
     scalar_params = tuple(params[1:]) if panel_params else ()
@@ -488,7 +555,13 @@ def _register(name: str, params: tuple[str, ...], function: Callable, descriptio
     cls = type(
         f"PolarsIndicatorsV2_{name}",
         (SeriesOperator,),
-        {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
+        {
+            "metadata": metadata,
+            "_calculate_series": _calculate_series,
+            "__module__": __name__,
+            **({"_physical_spec": _BATCH4_SPECS[name]}
+               if name in _BATCH4_SPECS else {}),
+        },
     )
     register_operator(
         name=name,

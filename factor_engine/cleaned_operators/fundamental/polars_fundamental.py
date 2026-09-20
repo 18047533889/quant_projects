@@ -1512,7 +1512,9 @@ def _batch3_native_spec(canonical: str, kernel: str) -> PhysicalImplementationSp
 _NATIVE_SPECS: dict[str, PhysicalImplementationSpec] = {
     _c: _batch3_native_spec(_c, _k)
     for _c, _k in (
-        ("fin_quarter_from_cumulative", "PolarsFundamental_fin_quarter_from_cumulative"),
+        ("fin_quarter_from_cumulative", "PolarsFundamental_fin_quarter_from_cumulative"),        ("fin_average_balance", "PolarsFundamental_fin_average_balance"),
+        ("fin_common_size", "PolarsFundamental_fin_common_size"),
+
     )
 }
 

@@ -1,0 +1,261 @@
+{
+ "summary": {
+  "panel": {
+   "days": 5,
+   "symbols": 20,
+   "minute_bars": 1200,
+   "sessions_from": "2024-01-02 09:31:00",
+   "sessions_to": "2024-01-08 15:00:00",
+   "source": "/home/sunhaiwei/cos_data/StockMinuteBarAdj"
+  },
+  "n_operators": 12,
+  "n_ok": 12,
+  "all_nan_mask_identical": true,
+  "all_idempotent": true,
+  "all_zero_marshal": true,
+  "all_flipped_to_polars_native": true,
+  "total_finite_cells_compared": 986,
+  "max_abs_dev_over_all": 0.01713374078033547,
+  "failures": []
+ },
+ "results": [
+  {
+   "operator": "intra_jump_ratio",
+   "inputs": [
+    "DataFrame"
+   ],
+   "kwargs": {},
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.010626559844240546,
+   "to_pandas_calls": 0,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 100,
+   "finite_frac_ref": 1.0,
+   "max_abs_dev": 7.227551890309769e-14,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "intra_signed_jump_ratio",
+   "inputs": [
+    "DataFrame"
+   ],
+   "kwargs": {
+    "threshold_scale": 3.0
+   },
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.009224161971360445,
+   "to_pandas_calls": 0,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 87,
+   "finite_frac_ref": 0.87,
+   "max_abs_dev": 2.220446049250313e-16,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "intra_jump_variation",
+   "inputs": [
+    "DataFrame"
+   ],
+   "kwargs": {},
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.007425886113196611,
+   "to_pandas_calls": 0,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 100,
+   "finite_frac_ref": 1.0,
+   "max_abs_dev": 3.469446951953614e-18,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "intra_vwap_reversion_speed",
+   "inputs": [
+    "DataFrame",
+    "DataFrame",
+    "DataFrame"
+   ],
+   "kwargs": {},
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.016691196942701936,
+   "to_pandas_calls": 0,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 100,
+   "finite_frac_ref": 1.0,
+   "max_abs_dev": 0.01713374078033547,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "intra_amihud",
+   "inputs": [
+    "DataFrame",
+    "DataFrame"
+   ],
+   "kwargs": {
+    "scale": 100000000.0
+   },
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.010280059883370996,
+   "to_pandas_calls": 0,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 100,
+   "finite_frac_ref": 1.0,
+   "max_abs_dev": 4.440892098500626e-16,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "intra_volume_profile_jsd",
+   "inputs": [
+    "DataFrame"
+   ],
+   "kwargs": {
+    "window": 20
+   },
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.023360687075182796,
+   "to_pandas_calls": 0,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 0,
+   "finite_frac_ref": 0.0,
+   "max_abs_dev": null,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "intra_path_efficiency",
+   "inputs": [
+    "DataFrame"
+   ],
+   "kwargs": {},
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.007098345784470439,
+   "to_pandas_calls": 0,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 100,
+   "finite_frac_ref": 1.0,
+   "max_abs_dev": 0.0,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "intra_same_slot_momentum",
+   "inputs": [
+    "DataFrame"
+   ],
+   "kwargs": {
+    "window": 20
+   },
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.025765373837202787,
+   "to_pandas_calls": 0,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 0,
+   "finite_frac_ref": 0.0,
+   "max_abs_dev": null,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "intra_entropy",
+   "inputs": [
+    "DataFrame"
+   ],
+   "kwargs": {
+    "normalize": true
+   },
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.007435315987095237,
+   "to_pandas_calls": 0,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 100,
+   "finite_frac_ref": 1.0,
+   "max_abs_dev": 3.3306690738754696e-16,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "intra_segment_return",
+   "inputs": [
+    "DataFrame"
+   ],
+   "kwargs": {
+    "segment": "morning",
+    "endpoint_policy": "exact"
+   },
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.004924941109493375,
+   "to_pandas_calls": 0,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 100,
+   "finite_frac_ref": 1.0,
+   "max_abs_dev": 0.0,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "intraday_impact_asymmetry",
+   "inputs": [
+    "DataFrame",
+    "DataFrame"
+   ],
+   "kwargs": {
+    "min_periods": 20
+   },
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.014208171982318163,
+   "to_pandas_calls": 0,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 99,
+   "finite_frac_ref": 0.99,
+   "max_abs_dev": 9.43689570931383e-16,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "intraday_impact_beta",
+   "inputs": [
+    "DataFrame",
+    "DataFrame"
+   ],
+   "kwargs": {
+    "min_periods": 20
+   },
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.010926740942522883,
+   "to_pandas_calls": 0,
+   "n_rows_aligned": 5,
+   "n_cols_aligned": 20,
+   "nan_mask_identical": true,
+   "n_finite": 100,
+   "finite_frac_ref": 1.0,
+   "max_abs_dev": 4.963083675318166e-24,
+   "idempotent": true,
+   "ok": true
+  }
+ ]
+}

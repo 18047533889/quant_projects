@@ -364,6 +364,16 @@ class SquarePolars(SeriesOperator):
 class ClipPolars(SeriesOperator):
     """Polars 区间裁剪一元算子。"""
 
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="clip", backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        supports_lazy=True, supports_streaming=True, materializes_full_panel=False,
+        supports_nulls=True, supports_nan=True, supports_inf=True,
+        implementation_source_hash="common.polars_ops:ClipPolars:v1",
+        emitter_identity="polars_expr:clip",
+        parameter_domain_hash="clip:elementwise:v1",
+        semantic_contract_hash="clip:colwise_native_expr:v1",
+    )
     metadata = OperatorMetadata(
         name="clip", category="math", description="裁剪到 [lo, hi]",
         examples=["clip(x, -3, 3)"], param_names=["x", "lo", "hi"], return_type="series", tags=["math", "polars"],

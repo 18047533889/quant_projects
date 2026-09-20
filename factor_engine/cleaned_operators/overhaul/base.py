@@ -164,6 +164,54 @@ class PandasFunctionOperator(PandasOperator):
         return self._fn(*processed_args, **processed_kwargs)
 
 
+# ---------------------------------------------------------------------------
+# R57 backend-coverage batch 4 — explicit execution-kind declarations.
+# These kernels are genuine polars expressions (pl.Expr / with_columns over
+# columns).  Previously they had no _physical_spec, so
+# canonical_polars_kind(production_mode=True) failed closed to UNSUPPORTED.
+# ---------------------------------------------------------------------------
+from factor_engine.backend.contracts import (
+    ExecutionKind,
+    PhysicalImplementationSpec,
+)
+
+_BATCH4_NOTE = (
+    "Genuine polars expression kernel (pl.Expr over columns, no pandas round-trip); "
+    "runtime marshal probe on real data records 0 pl.DataFrame.to_pandas "
+    "calls. Eager panel API only: no lazy/streaming or production-parity claim."
+)
+
+
+def _batch4_native_spec(canonical: str, kernel: str) -> PhysicalImplementationSpec:
+    """Explicit execution-kind contract for a genuine polars expression kernel.
+
+    Batch-4 evidence contract (same rules as batches 1-3): the kernel body
+    builds pl.Expr / pl.DataFrame columns with no pandas round-trip, and the
+    runtime marshal probe on real data records zero pl.DataFrame.to_pandas
+    calls.  Eager panel API, so supports_lazy / supports_streaming stay False.
+    """
+    return PhysicalImplementationSpec(
+        canonical=canonical,
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash=f"overhaul.base:{kernel}:v1",
+        emitter_identity=f"polars_expr:{canonical}",
+        kernel_identity=f"overhaul.base:{kernel}",
+        parameter_domain_hash=f"{canonical}:declared:v1",
+        semantic_contract_hash=f"{canonical}:polars_native_expr:v1",
+        notes=_BATCH4_NOTE,
+    )
+
+
+_BATCH4_OVERHAUL_NATIVE = frozenset({
+    "log_positive_or_nan", "ATR_WILDER", "ts_topk_mean", "ttm_from_cumulative",
+})
+
+
 class PolarsFunctionOperator(PolarsOperator):
     # R5-02: direct ``calculate`` that routes through ``_prepare_call``.
     _HANDLES_CALL_CONTRACT = True
@@ -199,6 +247,11 @@ class PolarsFunctionOperator(PolarsOperator):
             nullable_mixed_params=nullable_mixed_params,
             tags=["daily", "panel", "polars_native", category],
         )
+
+        if name in _BATCH4_OVERHAUL_NATIVE:
+            self._physical_spec = _batch4_native_spec(
+                name, f"PolarsFunctionOperator[{name}]"
+            )
 
     def calculate(self, *args: Any, **kwargs: Any) -> "pl.DataFrame":
         if pl is None:

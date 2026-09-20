@@ -1,0 +1,178 @@
+{
+ "summary": {
+  "panel": {
+   "days": 972,
+   "symbols": 25,
+   "start": "2019-01-02",
+   "end": "2022-12-30"
+  },
+  "n_operators": 3,
+  "n_ok": 3,
+  "all_nan_mask_identical": true,
+  "all_idempotent": true,
+  "all_zero_marshal": true,
+  "all_flipped_to_polars_native": true,
+  "total_finite_cells_compared": 54700,
+  "max_abs_dev_over_all": 0.0625,
+  "failures": []
+ },
+ "results": [
+  {
+   "operator": "fiscal_standardized_surprise",
+   "frames": [
+    "DataFrame",
+    "DataFrame"
+   ],
+   "kwargs": {
+    "seasonal_lag": 4,
+    "lookback_periods": 8,
+    "min_history": 4,
+    "require_consecutive": true,
+    "revision_policy": "latest_available"
+   },
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.3807581798173487,
+   "to_pandas_calls": 0,
+   "ref_shape": [
+    972,
+    25
+   ],
+   "ref_cols": [
+    "600795.SH",
+    "600653.SH",
+    "000002.SZ",
+    "600602.SH"
+   ],
+   "ref_idx": [
+    "2019-01-02 00:00:00",
+    "2019-01-03 00:00:00",
+    "2019-01-04 00:00:00"
+   ],
+   "new_shape": [
+    972,
+    25
+   ],
+   "new_cols": [
+    "600795.SH",
+    "600653.SH",
+    "000002.SZ",
+    "600602.SH"
+   ],
+   "new_idx": [
+    "1970-01-01 00:00:00",
+    "1970-01-01 00:00:00",
+    "1970-01-01 00:00:00"
+   ],
+   "align_mode": "positional",
+   "nan_mask_identical": true,
+   "n_finite": 12125,
+   "finite_frac_ref": 0.498971,
+   "max_abs_dev": 0.0,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "fin_average_balance",
+   "frames": [
+    "DataFrame",
+    "DataFrame"
+   ],
+   "kwargs": {
+    "periods": 2
+   },
+   "polars_kind_after": "polars_native",
+   "_polars_s": 0.4625922648701817,
+   "to_pandas_calls": 0,
+   "ref_shape": [
+    972,
+    25
+   ],
+   "ref_cols": [
+    "600795.SH",
+    "600653.SH",
+    "000002.SZ",
+    "600602.SH"
+   ],
+   "ref_idx": [
+    "2019-01-02 00:00:00",
+    "2019-01-03 00:00:00",
+    "2019-01-04 00:00:00"
+   ],
+   "new_shape": [
+    972,
+    25
+   ],
+   "new_cols": [
+    "600795.SH",
+    "600653.SH",
+    "000002.SZ",
+    "600602.SH"
+   ],
+   "new_idx": [
+    "1970-01-01 00:00:00",
+    "1970-01-01 00:00:00",
+    "1970-01-01 00:00:00"
+   ],
+   "align_mode": "positional",
+   "nan_mask_identical": true,
+   "n_finite": 22850,
+   "finite_frac_ref": 0.940329,
+   "max_abs_dev": 0.0,
+   "idempotent": true,
+   "ok": true
+  },
+  {
+   "operator": "ttm_from_cumulative",
+   "frames": [
+    "DataFrame",
+    "DataFrame",
+    "DataFrame"
+   ],
+   "kwargs": {
+    "revision_policy": "latest_available"
+   },
+   "polars_kind_after": "polars_native",
+   "_polars_s": 1.1743512339890003,
+   "to_pandas_calls": 0,
+   "ref_shape": [
+    972,
+    25
+   ],
+   "ref_cols": [
+    "600795.SH",
+    "600653.SH",
+    "000002.SZ",
+    "600602.SH"
+   ],
+   "ref_idx": [
+    "2019-01-02 00:00:00",
+    "2019-01-03 00:00:00",
+    "2019-01-04 00:00:00"
+   ],
+   "new_shape": [
+    972,
+    25
+   ],
+   "new_cols": [
+    "600795.SH",
+    "600653.SH",
+    "000002.SZ",
+    "600602.SH"
+   ],
+   "new_idx": [
+    "2019-01-02 00:00:00",
+    "2019-01-03 00:00:00",
+    "2019-01-04 00:00:00"
+   ],
+   "n_rows_aligned": 972,
+   "n_cols_aligned": 25,
+   "align_mode": "label",
+   "nan_mask_identical": true,
+   "n_finite": 19725,
+   "finite_frac_ref": 0.811728,
+   "max_abs_dev": 0.0625,
+   "idempotent": true,
+   "ok": true
+  }
+ ]
+}

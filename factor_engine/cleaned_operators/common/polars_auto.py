@@ -434,6 +434,8 @@ if not _has_polars("or_"):
             param_names=["x", "y"], return_type="series", tags=["elementwise", "polars"],
         )
 
+        _physical_spec = _batch3_native_spec("or_", "OrPolarsAuto")
+
         def _calculate_series(self, x: pl.DataFrame, y: pl.DataFrame, **kwargs) -> pl.DataFrame:
             cols = [c for c in _numeric_cols(x) if c in y.columns]
             replacements = []

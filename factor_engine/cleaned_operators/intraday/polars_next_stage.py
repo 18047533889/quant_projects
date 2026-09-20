@@ -118,7 +118,9 @@ _NATIVE_SPECS: dict[str, PhysicalImplementationSpec] = {
     _c: _batch3_native_spec(_c, _k)
     for _c, _k in (
         ("intra_realized_skewness", "IntradayPolars_intra_realized_skewness"),
-        ("intra_realized_kurtosis", "IntradayPolars_intra_realized_kurtosis"),
+        ("intra_realized_kurtosis", "IntradayPolars_intra_realized_kurtosis"),        ("intra_signed_jump_ratio", "IntradayPolars_intra_signed_jump_ratio"),
+        ("intra_jump_variation", "IntradayPolars_intra_jump_variation"),
+
     )
 }
 

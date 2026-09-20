@@ -585,7 +585,9 @@ def _batch3_native_spec(canonical: str, kernel: str) -> PhysicalImplementationSp
 _NATIVE_SPECS: dict[str, PhysicalImplementationSpec] = {
     _c: _batch3_native_spec(_c, _k)
     for _c, _k in (
-        ("efficiency_ratio", "PolarsTechMisc_efficiency_ratio"),
+        ("efficiency_ratio", "PolarsTechMisc_efficiency_ratio"),        ("KeltnerPosition", "PolarsTechMisc_KeltnerPosition"),
+        ("bollinger_pct_b", "PolarsTechMisc_bollinger_pct_b"),
+
     )
 }
 

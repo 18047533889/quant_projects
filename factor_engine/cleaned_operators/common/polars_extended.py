@@ -177,9 +177,57 @@ class TanhPolars(SeriesOperator):
     )
 
 
+# ---------------------------------------------------------------------------
+# R57 backend-coverage batch 4 — explicit execution-kind declarations.
+# These kernels are genuine polars expressions (pl.Expr / with_columns over
+# columns).  Previously they had no _physical_spec, so
+# canonical_polars_kind(production_mode=True) failed closed to UNSUPPORTED.
+# ---------------------------------------------------------------------------
+_BATCH4_NOTE = (
+    "Genuine polars expression kernel (pl.Expr over columns, no pandas round-trip); "
+    "runtime marshal probe on real data records 0 pl.DataFrame.to_pandas "
+    "calls. Eager panel API only: no lazy/streaming or production-parity claim."
+)
+
+
+def _batch4_native_spec(canonical: str, kernel: str) -> PhysicalImplementationSpec:
+    """Explicit execution-kind contract for a genuine polars expression kernel.
+
+    Batch-4 evidence contract (same rules as batches 1-3): the kernel body
+    builds pl.Expr / pl.DataFrame columns with no pandas round-trip, and the
+    runtime marshal probe on real data records zero pl.DataFrame.to_pandas
+    calls.  Eager panel API, so supports_lazy / supports_streaming stay False.
+    """
+    return PhysicalImplementationSpec(
+        canonical=canonical,
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash=f"common.polars_extended:{kernel}:v1",
+        emitter_identity=f"polars_expr:{canonical}",
+        kernel_identity=f"common.polars_extended:{kernel}",
+        parameter_domain_hash=f"{canonical}:declared:v1",
+        semantic_contract_hash=f"{canonical}:polars_native_expr:v1",
+        notes=_BATCH4_NOTE,
+    )
+
+
+_BATCH4_NATIVE_SPECS: dict[str, PhysicalImplementationSpec] = {
+    _c: _batch4_native_spec(_c, _k)
+    for _c, _k in (
+        ("minimum", "MinimumPolars"),
+        ("maximum", "MaximumPolars"),
+    )
+}
+
+
 @register_operator(name="minimum", category="math", business_category="elementwise_math", canonical="minimum", source="factor_dsl_polars")
 class MinimumPolars(SeriesOperator):
     """Polars 逐元素 min(x,y)"""
+    _physical_spec = _BATCH4_NATIVE_SPECS["minimum"]
     metadata = OperatorMetadata(
         name="minimum", category="math", description="逐元素 min(x,y)",
         param_names=["x", "y"], return_type="series", tags=["math", "polars"],
@@ -197,6 +245,7 @@ class MinimumPolars(SeriesOperator):
 @register_operator(name="maximum", category="math", business_category="elementwise_math", canonical="maximum", source="factor_dsl_polars")
 class MaximumPolars(SeriesOperator):
     """Polars 逐元素 max(x,y)"""
+    _physical_spec = _BATCH4_NATIVE_SPECS["maximum"]
     metadata = OperatorMetadata(
         name="maximum", category="math", description="逐元素 max(x,y)",
         param_names=["x", "y"], return_type="series", tags=["math", "polars"],

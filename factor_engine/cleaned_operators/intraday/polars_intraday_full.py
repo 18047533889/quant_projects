@@ -247,7 +247,14 @@ def _batch3_native_spec(canonical: str, kernel: str) -> PhysicalImplementationSp
 _NATIVE_SPECS: dict[str, PhysicalImplementationSpec] = {
     _c: _batch3_native_spec(_c, _k)
     for _c, _k in (
-        ("intra_realized_variance", "IntradayPolarsFull_intra_realized_variance"),
+        ("intra_realized_variance", "IntradayPolarsFull_intra_realized_variance"),        ("intra_jump_ratio", "IntradayPolarsFull_intra_jump_ratio"),
+        ("intra_amihud", "IntradayPolarsFull_intra_amihud"),
+        ("intra_volume_profile_jsd", "IntradayPolarsFull_intra_volume_profile_jsd"),
+        ("intra_path_efficiency", "IntradayPolarsFull_intra_path_efficiency"),
+        ("intra_same_slot_momentum", "IntradayPolarsFull_intra_same_slot_momentum"),
+        ("intra_entropy", "IntradayPolarsFull_intra_entropy"),
+        ("intra_segment_return", "IntradayPolarsFull_intra_segment_return"),
+
     )
 }
 

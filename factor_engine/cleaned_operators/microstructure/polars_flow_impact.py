@@ -55,6 +55,58 @@ def _pivot(df: pl.DataFrame, value: str) -> pl.DataFrame:
     return piv.fill_null(float("nan"))
 
 
+# ---------------------------------------------------------------------------
+# R57 backend-coverage batch 4 — explicit execution-kind declarations.
+# These kernels are genuine polars expressions (pl.Expr / with_columns over
+# columns).  Previously they had no _physical_spec, so
+# canonical_polars_kind(production_mode=True) failed closed to UNSUPPORTED.
+# ---------------------------------------------------------------------------
+from factor_engine.backend.contracts import (
+    ExecutionKind,
+    PhysicalImplementationSpec,
+)
+
+_BATCH4_NOTE = (
+    "Genuine polars expression kernel (pl.Expr over columns, no pandas round-trip); "
+    "runtime marshal probe on real data records 0 pl.DataFrame.to_pandas "
+    "calls. Eager panel API only: no lazy/streaming or production-parity claim."
+)
+
+
+def _batch4_native_spec(canonical: str, kernel: str) -> PhysicalImplementationSpec:
+    """Explicit execution-kind contract for a genuine polars expression kernel.
+
+    Batch-4 evidence contract (same rules as batches 1-3): the kernel body
+    builds pl.Expr / pl.DataFrame columns with no pandas round-trip, and the
+    runtime marshal probe on real data records zero pl.DataFrame.to_pandas
+    calls.  Eager panel API, so supports_lazy / supports_streaming stay False.
+    """
+    return PhysicalImplementationSpec(
+        canonical=canonical,
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash=f"microstructure.polars_flow_impact:{kernel}:v1",
+        emitter_identity=f"polars_expr:{canonical}",
+        kernel_identity=f"microstructure.polars_flow_impact:{kernel}",
+        parameter_domain_hash=f"{canonical}:declared:v1",
+        semantic_contract_hash=f"{canonical}:polars_native_expr:v1",
+        notes=_BATCH4_NOTE,
+    )
+
+
+_BATCH4_SPECS: dict[str, PhysicalImplementationSpec] = {
+    _c: _batch4_native_spec(_c, _k)
+    for _c, _k in (
+        ("intraday_impact_asymmetry", "PolarsFlowImpact_intraday_impact_asymmetry"),
+        ("intraday_impact_beta", "PolarsFlowImpact_intraday_impact_beta"),
+    )
+}
+
+
 def _mk(canonical: str, description: str, params: list[str], fn):
     from factor_engine.cleaned_operators.registry import OperatorRegistry
     metadata = copy.deepcopy(OperatorRegistry.get(canonical, "pandas_numpy", mode="any").metadata)
@@ -67,7 +119,13 @@ def _mk(canonical: str, description: str, params: list[str], fn):
     cls = type(
         f"PolarsFlowImpact_{canonical}",
         (SeriesOperator,),
-        {"metadata": metadata, "_calculate_series": _calculate_series, "__module__": __name__},
+        {
+            "metadata": metadata,
+            "_calculate_series": _calculate_series,
+            "__module__": __name__,
+            **({"_physical_spec": _BATCH4_SPECS[canonical]}
+               if canonical in _BATCH4_SPECS else {}),
+        },
     )
     register_operator(
         name=canonical,

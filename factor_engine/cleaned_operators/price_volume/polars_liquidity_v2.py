@@ -870,7 +870,21 @@ _NATIVE_SPECS: dict[str, PhysicalImplementationSpec] = {
         ("price_impact", "PolarsLiquidityV2_price_impact"),
         ("turnover_zscore", "PolarsLiquidityV2_turnover_zscore"),
         ("relative_volume", "PolarsLiquidityV2_relative_volume"),
-        ("amihud_illiquidity", "PolarsLiquidityV2_amihud_illiquidity"),
+        ("amihud_illiquidity", "PolarsLiquidityV2_amihud_illiquidity"),        ("true_turnover_rate", "PolarsLiquidityV2_true_turnover_rate"),
+        ("roll_spread_proxy", "PolarsLiquidityV2_roll_spread_proxy"),
+        ("zero_return_ratio", "PolarsLiquidityV2_zero_return_ratio"),
+        ("volume_zscore", "PolarsLiquidityV2_volume_zscore"),
+        ("turnover_shock", "PolarsLiquidityV2_turnover_shock"),
+        ("volume_momentum", "PolarsLiquidityV2_volume_momentum"),
+        ("corwin_schultz_spread", "PolarsLiquidityV2_corwin_schultz_spread"),
+        ("turnover_acceleration", "PolarsLiquidityV2_turnover_acceleration"),
+        ("volume_shock", "PolarsLiquidityV2_volume_shock"),
+        ("high_low_spread_proxy", "PolarsLiquidityV2_high_low_spread_proxy"),
+        ("EaseOfMovement", "PolarsLiquidityV2_EaseOfMovement"),
+        ("volume_acceleration", "PolarsLiquidityV2_volume_acceleration"),
+        ("abnormal_volume", "PolarsLiquidityV2_abnormal_volume"),
+        ("ts_impulse_strength", "PolarsLiquidityV2_ts_impulse_strength"),
+
     )
 }
 
