@@ -1179,7 +1179,15 @@
    "runtime_probe": {
     "probe": "error",
     "error": "AttributeError: 'PolarsFunctionOperator' object has no attribute '_calculate_series'"
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFunctionOperator[log_positive_or_nan]",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_realized_skewness",
@@ -1801,7 +1809,15 @@
    "runtime_probe": {
     "probe": "error",
     "error": "TypeError: float() argument must be a string or a real number, not 'DataFrame'"
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLimitMisc_ashare_limit_up_touch",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "NATR",
@@ -1826,7 +1842,15 @@
    "runtime_probe": {
     "probe": "error",
     "error": "TypeError: int() argument must be a string, a bytes-like object or a real number, not '_MissingDefaultType'"
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_NATR",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "PVO",
@@ -1851,7 +1875,15 @@
    "runtime_probe": {
     "probe": "error",
     "error": "TypeError: int() argument must be a string, a bytes-like object or a real number, not '_MissingDefaultType'"
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_PVO",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "log_abs",
@@ -1913,7 +1945,15 @@
    "runtime_probe": {
     "probe": "error",
     "error": "TypeError: int() argument must be a string, a bytes-like object or a real number, not '_MissingDefaultType'"
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_CMF",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "true_turnover_rate",
@@ -1942,7 +1982,15 @@
     "n_frames": 2,
     "out_rows": 360,
     "finite_frac": 1.0
-   }
+   },
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_true_turnover_rate",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "or_",
@@ -1964,7 +2012,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "OrPolarsAuto",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ne",
@@ -2029,7 +2085,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_jump_ratio",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_kurt",
@@ -2095,7 +2159,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_roll_spread_proxy",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_markov_persistence",
@@ -2182,7 +2254,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsCandle_candle_close_location",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "cs_quantile_resid",
@@ -2246,7 +2326,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsTechMisc_KeltnerPosition",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "zero_return_ratio",
@@ -2268,7 +2356,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_zero_return_ratio",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_edge_effective_spread",
@@ -2367,7 +2463,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_volume_zscore",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "book_to_price",
@@ -2424,7 +2528,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_VortexMinus",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "fiscal_direction_consistency",
@@ -2467,7 +2579,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_VortexPlus",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "turnover_shock",
@@ -2489,7 +2609,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_turnover_shock",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "cs_multi_robust_resid",
@@ -2523,7 +2651,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFlowImpact_intraday_impact_asymmetry",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "PVO_signal",
@@ -2545,7 +2681,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_PVO_signal",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "PVO_hist",
@@ -2567,7 +2711,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_PVO_hist",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "fiscal_standardized_surprise",
@@ -2588,7 +2740,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFiscalV2_fiscal_standardized_surprise",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_spectral_flatness",
@@ -2631,7 +2791,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_TSI_signal",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_wasserstein_shift",
@@ -2696,7 +2864,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_PPO_signal",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "TSI",
@@ -2718,7 +2894,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_TSI",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "volume_momentum",
@@ -2740,7 +2924,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_volume_momentum",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "cs_spline_resid",
@@ -2783,7 +2975,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_corwin_schultz_spread",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "vwap_to_close_return",
@@ -2848,7 +3048,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "MaximumPolars",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "report_filing_delay_surprise",
@@ -2891,7 +3099,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLimitMisc_ashare_limit_down_touch",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "fin_average_balance",
@@ -2912,7 +3128,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFundamental_fin_average_balance",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_vol_of_vol",
@@ -2999,7 +3223,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_DMI_plus",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "MFI",
@@ -3021,7 +3253,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_MFI",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ATR_WILDER",
@@ -3043,7 +3283,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFunctionOperator[ATR_WILDER]",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_hysteresis_state",
@@ -3086,7 +3334,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_DX",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_signed_jump_ratio",
@@ -3107,7 +3363,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolars_intra_signed_jump_ratio",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "turnover_acceleration",
@@ -3129,7 +3393,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_turnover_acceleration",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intraday_activity_duration_curvature",
@@ -3171,7 +3443,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "_IndexListingPolars",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_mean_reversion_half_life",
@@ -3257,7 +3537,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_volume_shock",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "high_low_spread_proxy",
@@ -3279,7 +3567,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_high_low_spread_proxy",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_quantile_transport_curvature",
@@ -3426,7 +3722,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_amihud",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "parkinson_vol",
@@ -3448,7 +3752,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsMiscV2_parkinson_vol",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_quantile_transport_slope",
@@ -3555,7 +3867,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsCandle_candle_body_ratio",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "EaseOfMovement",
@@ -3577,7 +3897,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_EaseOfMovement",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_volume_profile_jsd",
@@ -3598,7 +3926,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_volume_profile_jsd",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "volume_to_range",
@@ -3653,7 +3989,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_path_efficiency",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_ar_coeff_stability",
@@ -3753,7 +4097,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_CMO",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "lerp",
@@ -3775,7 +4127,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "LerpPolars",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "category_age",
@@ -3818,7 +4178,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_volume_acceleration",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_abdi_ranaldo_spread",
@@ -3882,7 +4250,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_abnormal_volume",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "fin_common_size",
@@ -3904,7 +4280,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFundamental_fin_common_size",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "trade_when",
@@ -3968,7 +4352,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_DMI_minus",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "rogers_satchell_vol",
@@ -3990,7 +4382,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsMiscV2_rogers_satchell_vol",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "PPO",
@@ -4012,7 +4412,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_PPO",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_volume_price_alignment",
@@ -4055,7 +4463,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFunctionOperator[ts_topk_mean]",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_transfer_entropy_peak_strength",
@@ -4289,7 +4705,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFlowImpact_intraday_impact_beta",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_channel_position",
@@ -4311,7 +4735,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsMiscV2_ts_channel_position",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_jump_variation",
@@ -4332,7 +4764,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolars_intra_jump_variation",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_market_liquidity_beta",
@@ -4376,7 +4816,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_ts_impulse_strength",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ttm_from_cumulative",
@@ -4398,7 +4846,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFunctionOperator[ttm_from_cumulative]",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_same_slot_momentum",
@@ -4419,7 +4875,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_same_slot_momentum",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "PPO_hist",
@@ -4441,7 +4905,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_PPO_hist",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "cs_multi_ridge_resid",
@@ -4483,7 +4955,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_entropy",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "clip",
@@ -4505,7 +4985,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "ClipPolars",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_breakout_high",
@@ -4527,7 +5015,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsMiscV2_ts_breakout_high",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "cs_knn_peer_mean_ex_self",
@@ -4570,7 +5066,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsMiscV2_ichimoku_tenkan",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_vol_term_structure",
@@ -4613,7 +5117,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsChipTail_ts_turnover_cost_entropy",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_segment_return",
@@ -4634,7 +5146,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_segment_return",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "bollinger_pct_b",
@@ -4656,7 +5176,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsTechMisc_bollinger_pct_b",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "minimum",
@@ -4678,7 +5206,15 @@
     "module_marker_is_delegate": false,
     "declared_execution_kind": null
    },
-   "runtime_probe": null
+   "runtime_probe": null,
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "MinimumPolars",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ashare_limit_failed",
@@ -28481,7 +29017,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFunctionOperator[log_positive_or_nan]",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_realized_skewness",
@@ -28681,7 +29225,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLimitMisc_ashare_limit_up_touch",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "NATR",
@@ -28689,7 +29241,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_NATR",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "PVO",
@@ -28697,7 +29257,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_PVO",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "log_abs",
@@ -28721,7 +29289,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_CMF",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "true_turnover_rate",
@@ -28729,7 +29305,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4; \u8fd0\u884c\u65f6\u63a2\u9488: \u6267\u884c\u96f6\u6b21 pl.to_pandas \u8c03\u7528 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4; \u8fd0\u884c\u65f6\u63a2\u9488: \u6267\u884c\u96f6\u6b21 pl.to_pandas \u8c03\u7528 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_true_turnover_rate",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "or_",
@@ -28737,7 +29321,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "OrPolarsAuto",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ne",
@@ -28753,7 +29345,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_jump_ratio",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_decay_linear",
@@ -28769,7 +29369,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_roll_spread_proxy",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_markov_persistence",
@@ -28793,7 +29401,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsCandle_candle_close_location",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "cs_quantile_resid",
@@ -28817,7 +29433,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsTechMisc_KeltnerPosition",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "zero_return_ratio",
@@ -28825,7 +29449,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_zero_return_ratio",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_edge_effective_spread",
@@ -28857,7 +29489,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_volume_zscore",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "book_to_price",
@@ -28881,7 +29521,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_VortexMinus",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "fiscal_direction_consistency",
@@ -28897,7 +29545,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_VortexPlus",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "turnover_shock",
@@ -28905,7 +29561,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_turnover_shock",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "cs_multi_robust_resid",
@@ -28921,7 +29585,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFlowImpact_intraday_impact_asymmetry",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "PVO_signal",
@@ -28929,7 +29601,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_PVO_signal",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "PVO_hist",
@@ -28937,7 +29617,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_PVO_hist",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "fiscal_standardized_surprise",
@@ -28945,7 +29633,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFiscalV2_fiscal_standardized_surprise",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_spectral_flatness",
@@ -28961,7 +29657,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_TSI_signal",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_wasserstein_shift",
@@ -28985,7 +29689,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_PPO_signal",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "TSI",
@@ -28993,7 +29705,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_TSI",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "volume_momentum",
@@ -29001,7 +29721,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_volume_momentum",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "cs_spline_resid",
@@ -29017,7 +29745,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_corwin_schultz_spread",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "directional_change_state",
@@ -29033,7 +29769,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "MaximumPolars",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "report_filing_delay_surprise",
@@ -29049,7 +29793,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLimitMisc_ashare_limit_down_touch",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "fin_average_balance",
@@ -29057,7 +29809,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFundamental_fin_average_balance",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_vol_of_vol",
@@ -29089,7 +29849,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_DMI_plus",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "MFI",
@@ -29097,7 +29865,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_MFI",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ATR_WILDER",
@@ -29105,7 +29881,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFunctionOperator[ATR_WILDER]",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_hysteresis_state",
@@ -29121,7 +29905,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_DX",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_signed_jump_ratio",
@@ -29129,7 +29921,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolars_intra_signed_jump_ratio",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "turnover_acceleration",
@@ -29137,7 +29937,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_turnover_acceleration",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intraday_activity_duration_curvature",
@@ -29153,7 +29961,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "_IndexListingPolars",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_mean_reversion_half_life",
@@ -29185,7 +30001,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_volume_shock",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "high_low_spread_proxy",
@@ -29193,7 +30017,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_high_low_spread_proxy",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_quantile_transport_curvature",
@@ -29249,7 +30081,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_amihud",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "parkinson_vol",
@@ -29257,7 +30097,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsMiscV2_parkinson_vol",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_quantile_transport_slope",
@@ -29297,7 +30145,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsCandle_candle_body_ratio",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "EaseOfMovement",
@@ -29305,7 +30161,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_EaseOfMovement",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_volume_profile_jsd",
@@ -29313,7 +30177,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_volume_profile_jsd",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "volume_to_range",
@@ -29337,7 +30209,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_path_efficiency",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_ar_coeff_stability",
@@ -29369,7 +30249,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_CMO",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "lerp",
@@ -29377,7 +30265,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "LerpPolars",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "category_age",
@@ -29393,7 +30289,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_volume_acceleration",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_abdi_ranaldo_spread",
@@ -29417,7 +30321,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_abnormal_volume",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "fin_common_size",
@@ -29425,7 +30337,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFundamental_fin_common_size",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "trade_when",
@@ -29449,7 +30369,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_DMI_minus",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "rogers_satchell_vol",
@@ -29457,7 +30385,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsMiscV2_rogers_satchell_vol",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "PPO",
@@ -29465,7 +30401,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_PPO",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_volume_price_alignment",
@@ -29481,7 +30425,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFunctionOperator[ts_topk_mean]",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_transfer_entropy_peak_strength",
@@ -29569,7 +30521,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFlowImpact_intraday_impact_beta",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_channel_position",
@@ -29577,7 +30537,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsMiscV2_ts_channel_position",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_jump_variation",
@@ -29585,7 +30553,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolars_intra_jump_variation",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_impulse_strength",
@@ -29593,7 +30569,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsLiquidityV2_ts_impulse_strength",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ttm_from_cumulative",
@@ -29601,7 +30585,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsFunctionOperator[ttm_from_cumulative]",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_same_slot_momentum",
@@ -29609,7 +30601,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_same_slot_momentum",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "PPO_hist",
@@ -29617,7 +30617,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsIndicatorsV2_PPO_hist",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "cs_multi_ridge_resid",
@@ -29633,7 +30641,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_entropy",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "clip",
@@ -29641,7 +30657,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "ClipPolars",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_breakout_high",
@@ -29649,7 +30673,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsMiscV2_ts_breakout_high",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "cs_knn_peer_mean_ex_self",
@@ -29665,7 +30697,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsMiscV2_ichimoku_tenkan",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ts_vol_term_structure",
@@ -29681,7 +30721,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsChipTail_ts_turnover_cost_entropy",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "intra_segment_return",
@@ -29689,7 +30737,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "IntradayPolarsFull_intra_segment_return",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "bollinger_pct_b",
@@ -29697,7 +30753,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "PolarsTechMisc_bollinger_pct_b",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "minimum",
@@ -29705,7 +30769,15 @@
    "category": "no_explicit_physical_spec",
    "convertible_to": "declare_spec_only",
    "planned_way": "native_expr_or_numpy_kernel",
-   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long"
+   "basis": "\u9759\u6001\u68c0\u67e5: \u5185\u6838\u65e0 to_pandas()/_pl_to_pd \u5f80\u8fd4 -> \u53ea\u9700\u8865 _physical_spec \u58f0\u660e\u5373\u53ef\u63a5\u5165\u751f\u4ea7 polars_long",
+   "completed": true,
+   "completed_batch": "batch4",
+   "completed_at": "2026-09-20",
+   "completed_execution_kind": "POLARS_NATIVE_EXPR",
+   "completed_kernel": "MinimumPolars",
+   "completed_source": "batch4 declarations",
+   "completed_verification": "runtime marshal probe 0 pl.DataFrame.to_pandas; NaN mask identical vs pandas_numpy on real data (daily 25x972 / minute 20x30 sessions / fiscal real-calendar); max_abs_dev recorded in evidence/_verify_batch4_*.json. Known benign notes: MFI dev up to 6.5 only where typical-price delta is a <1e-12 float tie whose sign flips between pandas/polars arithmetic; intra_volume_profile_jsd / intra_same_slot_momentum second-run bitwise idempotency fails at <=1e-16 (thread summation order), values match reference at 1e-16.",
+   "completed_by_commit": "d5024d14"
   },
   {
    "operator": "ashare_limit_failed",
@@ -38247,7 +39319,95 @@
     "Also fixed two defects in evidence/_verify_batch_specs.py: the absent-default sentinel test (type name is _MissingDefaultType, not 'MISSING') and the positional array comparison (now aligned by column name)."
    ]
   },
-  "cumulative_declared_operators": 37
+  "cumulative_declared_operators": 37,
+  "batch4": {
+   "operators": [
+    "ATR_WILDER",
+    "CMF",
+    "CMO",
+    "DMI_minus",
+    "DMI_plus",
+    "DX",
+    "EaseOfMovement",
+    "KeltnerPosition",
+    "MFI",
+    "NATR",
+    "PPO",
+    "PPO_hist",
+    "PPO_signal",
+    "PVO",
+    "PVO_hist",
+    "PVO_signal",
+    "TSI",
+    "TSI_signal",
+    "VortexMinus",
+    "VortexPlus",
+    "abnormal_volume",
+    "ashare_limit_down_touch",
+    "ashare_limit_up_touch",
+    "bollinger_pct_b",
+    "candle_body_ratio",
+    "candle_close_location",
+    "clip",
+    "corwin_schultz_spread",
+    "fin_average_balance",
+    "fin_common_size",
+    "fiscal_standardized_surprise",
+    "high_low_spread_proxy",
+    "ichimoku_tenkan",
+    "intra_amihud",
+    "intra_entropy",
+    "intra_jump_ratio",
+    "intra_jump_variation",
+    "intra_path_efficiency",
+    "intra_same_slot_momentum",
+    "intra_segment_return",
+    "intra_signed_jump_ratio",
+    "intra_volume_profile_jsd",
+    "intraday_impact_asymmetry",
+    "intraday_impact_beta",
+    "lerp",
+    "log_positive_or_nan",
+    "maximum",
+    "minimum",
+    "or_",
+    "parkinson_vol",
+    "rogers_satchell_vol",
+    "roll_spread_proxy",
+    "suspension_frequency",
+    "true_turnover_rate",
+    "ts_breakout_high",
+    "ts_channel_position",
+    "ts_impulse_strength",
+    "ts_topk_mean",
+    "ts_turnover_cost_entropy",
+    "ttm_from_cumulative",
+    "turnover_acceleration",
+    "turnover_shock",
+    "volume_acceleration",
+    "volume_momentum",
+    "volume_shock",
+    "volume_zscore",
+    "zero_return_ratio"
+   ],
+   "completed_at": "2026-09-20",
+   "execution_kind": "POLARS_NATIVE_EXPR",
+   "by_commit": "d5024d14",
+   "pruned": {
+    "intra_vwap_reversion_speed": "declared then pruned before commit: real-minute-panel numeric check shows a systematic ~0.2% relative divergence (beta_ref vs beta_pl, all 600 finite cells > 1e-6, max 0.037) between the pandas reference estimator and the polars port of the AR(1) vwap-deviation coefficient; kept fail-closed pending kernel alignment (batch5).",
+    "fiscal_pct_change": "worklist classified declare_spec_only, but the registered polars slot delegates to pd_fiscal_pct_change (pandas kernel) - not declarable; reclassify as rewrite_needed.",
+    "ts_markov_persistence/report_filing_delay_surprise/ts_transfer_entropy_peak_strength": "polars_dynamics builds per-family specs (POLARS_NUMPY_KERNEL with source hashes); these three canonicals fall outside every existing family branch and need bespoke family spec entries - deferred to batch5.",
+    "ts_decay_linear/ts_skew/ts_rank/power/ts_median": "polars slot kernels round-trip via to_numpy; correct kind is POLARS_NUMPY_KERNEL, not POLARS_NATIVE_EXPR - deferred to batch5."
+   },
+   "coverage_after_batch4": {
+    "measured": true,
+    "baseline_rows_that_run": 1361,
+    "baseline_pct": 1.19,
+    "after_batch4_rows_that_run": 25142,
+    "after_batch4_pct": 22.08,
+    "method": "evidence/_batch4_coverage.py, same row gate as _build_worklist_v2.py"
+   }
+  }
  },
  "coverage_after_batch3": {
   "measured": true,

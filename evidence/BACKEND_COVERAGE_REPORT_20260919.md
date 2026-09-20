@@ -793,3 +793,56 @@ bash evidence/_batch3_test_ab.sh
 # 5) 覆盖率实测
 python3 evidence/_batch3_coverage.py             # → evidence/_batch3_coverage.json
 ```
+
+## 12. Batch 4 — 2026-09-20（67 算子声明 + 1 项剔除发现）
+
+### 12.1 范围与结果
+
+TOP-80 频次队列逐算子解析真实内核后：68 个声明 POLARS_NATIVE_EXPR，
+其中 1 个（intra_vwap_reversion_speed）在数值验证中发现与 pandas 参考存在
+系统性偏差，**提交前剔除**、保留 fail-closed。最终提交 67 个算子。
+
+| 验证面 | 算子数 | 结果 |
+| --- | ---: | --- |
+| 日线（25 标的 × 972 日） | 53 | 53/53 NaN 掩码一致、0 次 to_pandas、幂等 |
+| 分钟（20 标的 × 30 交易段） | 12 | 12/12 掩码一致、0 次 to_pandas |
+| 财政（真实日历 + 季度 YTD 流） | 3 | 3/3 掩码一致、0 次 to_pandas |
+| 翻转自检 unsupported → polars_native | 67 | 67/67 |
+
+行门控覆盖率（`_batch4_coverage.py`，与 `_build_worklist_v2.py` 同口径，
+113,893 行）：**1361/1.19%（基线）→ 11,373/9.99%（b2）→ 19,285/16.93%（b3）
+→ 25,142/22.08%（b4）**，本批净增 5,857 行。
+
+### 12.2 验证中的三个发现（全部如实记录）
+
+1. **intra_vwap_reversion_speed：polars 移植与参考存在 ~0.2% 系统性偏差**
+   （真分钟面板 600/600 格 >1e-6，最大 0.037；beta 均 O(1)，非病态消去）。
+   两侧公式代数等价（cov_samp/var_pop），疑为累计 VWAP 或配对构造的实现差异，
+   未定位到根因前不声明。**候选真 bug，留 batch5。**
+2. **MFI 偏差 6.5 的根因是 float 平局翻转**：600621.SH 相邻两日典型价差
+   <1e-12，delta 符号在两侧算术下翻转，整天资金流在正/负间翻转。
+   NaN 掩码一致，其余格 1e-12 级。属退化输入的固有敏感性，非内核 bug。
+3. **jsd / same_slot_momentum 二次运行位级幂等在 ≤1e-16 失败**
+   （线程求和序），对参考值偏差同为 1e-16， benign。
+
+### 12.3 worklist 校正（旧探针误判）
+
+- `fiscal_pct_change`（1808 次）：polars 槽实际委托 `pd_fiscal_pct_change`
+  （pandas 内核）→ 重分类 **rewrite_needed**，非 declare_spec_only。
+- `ts_markov_persistence` / `report_filing_delay_surprise` /
+  `ts_transfer_entropy_peak_strength`：polars_dynamics 按族建 spec
+  （POLARS_NUMPY_KERNEL + 源哈希），三者落在所有族分支之外，需按族补 spec。
+- `ts_decay_linear` / `ts_skew` / `ts_rank` / `power` / `ts_median`：
+  polars 槽内核经 to_numpy 回环，正确声明类型是 **POLARS_NUMPY_KERNEL**。
+
+以上 9 个 + vwap_reversion_speed 构成 batch5 的首批（约 3.2 万次出现）。
+
+### 12.4 性能 DAG 组件接线审计（multibackend/ 27 模块）
+
+实际接入 auto 执行路径的只有 4 个：batch_global_optimizer、cse_cache_optimizer、
+spill_strategy、batch_transfer_optimizer。其余 23 个
+（parallel_region_scheduler、streaming_executor、memory_budget_manager、
+polars_lazy_fusion、region_operator_fusion、fine_grained_memory_model 等）
+在 factor_engine 内**零引用**——是未接线的先行实现，不是在用的瓶颈。
+当前 auto 链路的性能改进杠杆仍在"声明覆盖 + SQL 下推算子面"上。
+
