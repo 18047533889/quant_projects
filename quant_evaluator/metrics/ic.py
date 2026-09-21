@@ -109,18 +109,14 @@ def _spearman_rank_correlation(x: np.ndarray, y: np.ndarray, min_obs: int = 10) 
     if n < min_obs:
         return np.nan
 
-    # Distinct levels (x_valid/y_valid are already finite, so np.unique is exact)
-    x_levels = np.unique(x_valid)
-    y_levels = np.unique(y_valid)
-
-    # Constants (all values same)
-    if x_levels.size == 1 or y_levels.size == 1:
+    # Only constancy is needed; do not sort each vector before ranking it.
+    if n == 0 or np.all(x_valid == x_valid[0]) or np.all(y_valid == y_valid[0]):
         return np.nan
 
-    # Use scipy's spearmanr with average tie handling
-    corr, _ = stats.spearmanr(x_valid, y_valid)
-
-    return corr
+    # The coefficient path of scipy.spearmanr, without its unused p-value.
+    # Keep its column layout and [1, 0] extraction (including rounding order).
+    ranks = stats.rankdata(np.column_stack((x_valid, y_valid)), axis=0, method="average")
+    return np.corrcoef(ranks, rowvar=False)[1, 0]
 
 
 def compute_daily_ic(

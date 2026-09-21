@@ -1,5 +1,8 @@
 # QuantEvaluator 指标计算口径与 CogAlpha 差异决策
 
+RankIC 系数路径的等值提速说明见
+[性能核验](RANK_IC_COEFFICIENT_PERFORMANCE.md)；指标公式和显著性准入不变。
+
 版本：2026-09-18。适用 server-c 正式主干 quant_evaluator；历史结果不自动变更。
 完整逐指标目录见 [METRIC_REFERENCE.md](METRIC_REFERENCE.md)。目录列出每个注册 ID、别名、状态、输入、单位、方向、默认参数、公式说明及实际计算函数，不把未实现指标当可用指标。
 

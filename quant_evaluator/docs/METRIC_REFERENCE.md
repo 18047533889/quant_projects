@@ -1733,7 +1733,7 @@ s_f=\sqrt{\frac1{n_f-1}\sum_t(IC_{t,f}-\bar{IC}_f)^2}
 | `valid_counts` | `None` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/ic.py#L277)；`quant_evaluator.metrics.ic.compute_ic_std`。
+实现核对：[函数定义](../metrics/ic.py#L273)；`quant_evaluator.metrics.ic.compute_ic_std`。
 
 <a id="metric-ic_summary"></a>
 ## ic_summary — ic_summary
@@ -2209,7 +2209,7 @@ Time-averaged Pearson information coefficient: the time-mean of daily Pearson IC
 | `valid_counts` | `None` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/ic.py#L263)；`quant_evaluator.metrics.ic.compute_mean_ic_value`。
+实现核对：[函数定义](../metrics/ic.py#L259)；`quant_evaluator.metrics.ic.compute_mean_ic_value`。
 
 <a id="metric-mean_investment_fraction"></a>
 ## mean_investment_fraction — Mean Investment Fraction
@@ -2649,7 +2649,7 @@ s_f=\sqrt{(n_f-1)^{-1}\sum_{t\in V_f}(IC^P_{tf}-\bar{IC}^P_f)^2}
 | `valid_counts` | `None` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/ic.py#L277)；`quant_evaluator.metrics.ic.compute_ic_std`。
+实现核对：[函数定义](../metrics/ic.py#L273)；`quant_evaluator.metrics.ic.compute_ic_std`。
 
 <a id="metric-purity_ratio"></a>
 ## purity_ratio — Purity Ratio
@@ -5396,10 +5396,10 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.exposure_evidence.compute_style_exposure_evidence](../metrics/exposure_evidence.py#L431)
 - [quant_evaluator.metrics.ic._pairwise_finite_mask](../metrics/ic.py#L20)
 - [quant_evaluator.metrics.ic._pearson_correlation](../metrics/ic.py#L34)
-- [quant_evaluator.metrics.ic._reject_boolean_ic_series](../metrics/ic.py#L194)
+- [quant_evaluator.metrics.ic._reject_boolean_ic_series](../metrics/ic.py#L190)
 - [quant_evaluator.metrics.ic._spearman_rank_correlation](../metrics/ic.py#L90)
-- [quant_evaluator.metrics.ic.compute_daily_ic](../metrics/ic.py#L126)
-- [quant_evaluator.metrics.ic.compute_mean_ic](../metrics/ic.py#L217)
+- [quant_evaluator.metrics.ic.compute_daily_ic](../metrics/ic.py#L122)
+- [quant_evaluator.metrics.ic.compute_mean_ic](../metrics/ic.py#L213)
 - [quant_evaluator.metrics.ic_summary.compute_icir](../metrics/ic_summary.py#L17)
 - [quant_evaluator.metrics.label_panel.normalize_label_panel](../metrics/label_panel.py#L11)
 - [quant_evaluator.metrics.long_only._matrix](../metrics/long_only.py#L8)
@@ -5516,7 +5516,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.ic._pairwise_finite_mask` | `f9943a8e1f717199085d02df95c5f4b86ed466fc0c1b28bc381e83daec72a4b5` |
 | `quant_evaluator.metrics.ic._pearson_correlation` | `1e4fc5004d3a36274e67073bfab0e098445bb585147e920fbc66109912ad7762` |
 | `quant_evaluator.metrics.ic._reject_boolean_ic_series` | `906995c840d5cdbe79ea225fbc3f6fe61253d993e24ddc92643accdbea08b3ec` |
-| `quant_evaluator.metrics.ic._spearman_rank_correlation` | `42c2f94d2c8331977c870459ee5a91096fba3c608ffbfdc05f5ed2a0148e0619` |
+| `quant_evaluator.metrics.ic._spearman_rank_correlation` | `4e9ef965007cf5bbd49a0f7b4cba971ef6d41f351b3f57ac49c7bb7817dcb532` |
 | `quant_evaluator.metrics.ic.compute_daily_ic` | `d612b8eb06284ccf0709e21394a312bbe5e6c8f9f8cda5a4952fd21f349c1009` |
 | `quant_evaluator.metrics.ic.compute_ic_std` | `d61c306ec97b6b117ccf93933512552e29fc881140f1cfe8dbfcd8b7c1013f37` |
 | `quant_evaluator.metrics.ic.compute_mean_ic` | `eaf6b80b8bfe3b7dae1838c5fece7d7f12d7057c102102b5286d0cadbd4e5c85` |

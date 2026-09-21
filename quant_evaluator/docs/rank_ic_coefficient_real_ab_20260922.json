@@ -1,0 +1,29 @@
+{
+  "factor": "weekly_db5616cd85a477b3",
+  "sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+  "days": 500,
+  "assets": 256,
+  "candidates": 94,
+  "bootstrap_draws": 99,
+  "warmup_per_variant": 1,
+  "alternating_pairs": 3,
+  "seconds": {
+    "old": [
+      16.42774512899996,
+      16.61941697599832,
+      16.855566189002275
+    ],
+    "new": [
+      14.03963176400066,
+      13.588061991998984,
+      13.684276468000462
+    ]
+  },
+  "median_seconds": {
+    "old": 16.61941697599832,
+    "new": 13.684276468000462
+  },
+  "exact_outputs_and_all_factor_records": true,
+  "test_evaluated": false,
+  "limits": "warmed optimization; unchanged masks, average ties and coefficient; no TEST evaluation or omitted candidates"
+}
