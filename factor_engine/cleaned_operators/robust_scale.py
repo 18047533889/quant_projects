@@ -146,6 +146,119 @@ def _ts_qn_scale(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.
     return frame_like(x, out)
 
 
+def _hl_run_bounds(col: np.ndarray, w: int):
+    """Per-row trailing contiguous finite run [s, lf] (must end at the current
+    row) plus run length k, mirroring trailing_contiguous_finite semantics."""
+    n = col.size
+    finite = np.isfinite(col)
+    idx = np.where(finite, np.arange(n), -1)
+    last_fin = np.maximum.accumulate(idx)
+    nan_idx = np.where(~finite, np.arange(n), -1)
+    last_nan = np.maximum.accumulate(nan_idx)
+    t = np.arange(n)
+    lo = np.maximum(t - w + 1, 0)
+    lf = np.maximum(last_fin, -1)
+    s = np.maximum(last_nan[np.maximum(lf, 0)] + 1, lo)
+    s = np.where(lf >= 0, s, lo)
+    # trailing_contiguous_finite returns EMPTY when the last row is NaN
+    k = np.where((lf >= s) & (lf == t), lf - s + 1, 0)
+    return s, k, lf
+
+
+def _vec_hodges_lehmann(col: np.ndarray, w: int, mp: int) -> np.ndarray:
+    """Column-wise Hodges-Lehmann location over trailing windows (vectorized).
+
+    The authority takes the median of the compact upper-triangular (i <= j)
+    pairwise midpoints of the trailing contiguous finite run.  A power-of-two
+    column scaling (loss-free) keeps the arithmetic identical on 1e+-300 data.
+    """
+    n = col.size
+    out = np.full(n, np.nan)
+    if w > 400:
+        # defensive: fall back to the scalar kernel for absurd windows
+        for r in range(n):
+            lo = max(0, r - w + 1)
+            v = trailing_contiguous_finite(col[lo : r + 1])
+            if v.size >= mp:
+                out[r] = _hodges_lehmann(v)
+        return out
+
+    fin = col[np.isfinite(col)]
+    scale = 1.0
+    if fin.size:
+        m = float(np.max(np.abs(fin)))
+        if np.isfinite(m) and m > 0.0:
+            scale = 2.0 ** (-int(np.frexp(m)[1]))
+    vals = col * scale
+
+    s, k, lf = _hl_run_bounds(vals, w)
+    t = np.arange(n)
+    ok = k >= max(mp, 2)
+    if not ok.any():
+        return out
+
+    # padded window matrix: S[t, j] = vals[t-w+1+j] (NaN outside [s_t, t])
+    src_idx = t[:, None] - (w - 1) + np.arange(w)[None, :]
+    valid = (src_idx >= 0) & (src_idx >= s[:, None]) & np.isfinite(vals)[np.clip(src_idx, 0, n - 1)]
+    S = vals[np.clip(src_idx, 0, n - 1)]
+    S = np.where(valid, S, np.nan)
+
+    ii, jj = np.triu_indices(w)          # pairs i <= j (order is irrelevant to the median)
+    a = S[:, ii]
+    b = S[:, jj]
+    with np.errstate(invalid="ignore", over="ignore"):
+        same_sign = np.signbit(a) != np.signbit(b)
+        half_safe = (np.abs(a) <= np.finfo(float).max / 2) & (np.abs(b) <= np.finfo(float).max / 2)
+        mids = np.where(same_sign | half_safe, (a + b) / 2, a / 2 + b / 2)
+    # run-length aware valid counts: pairs within the run = k(k+1)/2
+    c = (k * (k + 1) // 2).astype(np.int64)
+
+    full = ok & (k == w)
+    part = ok & (k < w)
+    if full.any():
+        Mc = mids[full]
+        kc = w
+        cc = kc * (kc + 1) // 2
+        mid_r = cc // 2
+        if cc % 2:
+            out[np.where(full)[0]] = np.partition(Mc, mid_r, axis=1)[:, mid_r]
+        else:
+            P = np.partition(Mc, (mid_r - 1, mid_r), axis=1)
+            lo_v = P[:, mid_r - 1]
+            hi_v = P[:, mid_r]
+            same = np.signbit(lo_v) != np.signbit(hi_v)
+            half = (np.abs(lo_v) <= np.finfo(float).max / 2) & (np.abs(hi_v) <= np.finfo(float).max / 2)
+            out[np.where(full)[0]] = np.where(same | half, (lo_v + hi_v) / 2, lo_v / 2 + hi_v / 2)
+    if part.any():
+        Mv = mids[part]
+        kv = k[part]
+        rows_p = np.where(part)[0]
+        for r_i in range(Mv.shape[0]):
+            cc = int(kv[r_i]) * (int(kv[r_i]) + 1) // 2
+            if cc < 1:
+                continue
+            flat = Mv[r_i]
+            flat = flat[np.isfinite(flat)]
+            if flat.size < cc:       # NaN midpoints inside the run cannot happen
+                continue
+            mid_r = cc // 2
+            if cc % 2:
+                out[rows_p[r_i]] = np.partition(flat, mid_r)[mid_r]
+            else:
+                P = np.partition(flat, (mid_r - 1, mid_r))
+                lo_v, hi_v = P[mid_r - 1], P[mid_r]
+                same = np.signbit(lo_v) != np.signbit(hi_v)
+                half = (np.abs(lo_v) <= np.finfo(float).max / 2) & (np.abs(hi_v) <= np.finfo(float).max / 2)
+                out[rows_p[r_i]] = (lo_v + hi_v) / 2 if (same or half) else lo_v / 2 + hi_v / 2
+    # power-of-two scaling is a pure exponent shift: the location estimate is
+    # scale-equivariant, so unscale value-dimension output.
+    if scale != 1.0:
+        inv = 1.0 / scale
+        e = int(np.frexp(inv)[1])
+        out = out * (2.0 ** (e // 2)) * (inv / 2.0 ** (e // 2))
+    return out
+
+
 def _ts_hodges_lehmann_location(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.DataFrame:
     if int(window) < 2:
         raise ValueError("ts_hodges_lehmann_location requires window >= 2")
@@ -155,15 +268,7 @@ def _ts_hodges_lehmann_location(x: pd.DataFrame, window: int = 60, min_periods: 
     arr = x.to_numpy(dtype=float)
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
-        col = arr[:, c]
-        for r in range(rows):
-            lo = max(0, r - w + 1)
-            v = trailing_contiguous_finite(col[lo : r + 1])
-            if v.size < mp:
-                continue
-            val = _hodges_lehmann(v)
-            if np.isfinite(val):
-                out[r, c] = float(val)
+        out[:, c] = _vec_hodges_lehmann(arr[:, c], w, mp)
     return frame_like(x, out)
 
 

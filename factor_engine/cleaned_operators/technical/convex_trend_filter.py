@@ -88,7 +88,9 @@ def difference_l1_filter(
 
     # Scaling rho with the penalty avoids very slow dual progress for strongly
     # regularized signals while keeping the same objective and solution.
-    rho = max(1.0, min(float(penalty) * np.sqrt(size), 1e8))
+    # R61: sweep-tuned heuristic shared with the batch solver in
+    # technical/denoise_filter.py so both trajectories agree closely.
+    rho = min(max(0.5 * float(penalty) * np.sqrt(size), 0.3), 1e8)
     bands = _system_bands(size, order, rho)
     factor = cholesky_banded(bands, lower=False, check_finite=False)
     y = values.copy()

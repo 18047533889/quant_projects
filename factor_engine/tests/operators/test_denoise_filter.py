@@ -352,7 +352,12 @@ def test_l1_trend_smoothness():
     active = np.abs(d @ fitted) > 3e-6
     np.testing.assert_allclose(dual[active], .2 * np.sign((d @ fitted)[active]), atol=3e-6)
     assert np.abs(d @ fitted).sum() <= np.abs(d @ x).sum() + 1e-6
-    assert result.iloc[-1, 0] == pytest.approx(fitted[-1], abs=1e-10)
+    # R61: the batch solver now uses a sweep-tuned rho and precomputed-inverse
+    # matmul, so batch and scalar stop within the same certificate but on
+    # slightly different trajectories; both are certified solutions of the same
+    # convex problem (unique minimizer). 1e-8 is ~100x tighter than the
+    # certificate bound while allowing trajectory-level FP differences.
+    assert result.iloc[-1, 0] == pytest.approx(fitted[-1], abs=1e-8)
 
 
 # ---------------------------------------------------------------------------

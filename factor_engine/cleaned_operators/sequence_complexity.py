@@ -224,7 +224,8 @@ class TsPermutationEntropy(SeriesOperator):
                 counts[c] = counts.get(c, 0) + 1
             return _entropy_from_counts(list(counts.values()), len(coded), math.factorial(ord_) if norm else None)
 
-        return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
+        return frame_like(x, _vec_column_permutation_entropy(
+            x.to_numpy(dtype=float), w, ord_, dl, norm, min_p))
 
 
 def _embedding_variance(values: np.ndarray) -> float:
@@ -317,7 +318,8 @@ class TsWeightedPermutationEntropy(SeriesOperator):
                 value /= math.log(math.factorial(ord_))
             return float(value)
 
-        return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
+        return frame_like(x, _vec_column_weighted_permutation_entropy(
+            x.to_numpy(dtype=float), w, ord_, dl, weight_kind, norm))
 
 
 @register_operator(
@@ -394,7 +396,8 @@ class TsPermutationTransitionEntropy(SeriesOperator):
                 cond /= math.log(len(states))
             return float(cond)
 
-        return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
+        return frame_like(x, _vec_column_permutation_transition_entropy(
+            x.to_numpy(dtype=float), w, ord_, dl, norm))
 
 
 def _sample_entropy(run: np.ndarray, m: int, r: float) -> float:
@@ -476,7 +479,8 @@ class TsSampleEntropy(SeriesOperator):
                 return np.nan
             return _sample_entropy(run, m, tol * std)
 
-        return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
+        return frame_like(x, _vec_column_sample_entropy(
+            x.to_numpy(dtype=float), w, m, tol))
 
 
 def _dfa_hurst(run: np.ndarray, min_scale: int, max_scale: int, n_scales: int) -> float:
@@ -615,7 +619,8 @@ class TsHiguchiFractalDimension(SeriesOperator):
                 return np.nan
             return _higuchi_fd(run, km)
 
-        return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
+        return frame_like(x, _vec_column_higuchi_fd(
+            x.to_numpy(dtype=float), w, km))
 
 
 def _variogram_slope(chunk: np.ndarray, max_lag: int, min_valid_lags: int) -> float:
@@ -670,10 +675,8 @@ class TsVariogramSlope(SeriesOperator):
         ml = strict_int(max_lag, "max_lag", lower=1, upper=30)
         mvl = strict_int(min_valid_lags, "min_valid_lags", lower=2)
 
-        def _fn(chunk: np.ndarray) -> float:
-            return _variogram_slope(chunk, ml, mvl)
-
-        return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
+        return frame_like(x, _vec_column_variogram_slope(
+            x.to_numpy(dtype=float), w, ml, mvl))
 
 
 def _autocorr_half_life(chunk: np.ndarray, max_lag: int, use_abs: bool, min_periods: int) -> float:
@@ -737,10 +740,459 @@ class TsAutocorrDecayHalfLife(SeriesOperator):
         mp = strict_int(min_periods, "min_periods", lower=2)
         abs_ = bool(use_abs)
 
-        def _fn(chunk: np.ndarray) -> float:
-            return _autocorr_half_life(chunk, ml, abs_, mp)
+        return frame_like(x, _vec_column_autocorr_half_life(
+            x.to_numpy(dtype=float), w, ml, abs_, mp))
 
-        return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
+
+
+
+# ---------------------------------------------------------------------------
+# R61 vectorized columns (no per-window Python loop)
+# ---------------------------------------------------------------------------
+
+def _finite_run_bounds(vals: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """For each row t: (start, end] of the trailing contiguous finite run that
+    ``_trailing_finite_suffix`` would return for the window ending at t,
+    assuming the window starts at 0 (callers clip the start to the window)."""
+    n = vals.size
+    finite = np.isfinite(vals)
+    idx = np.where(finite, np.arange(n), -1)
+    last_fin = np.maximum.accumulate(idx)
+    nan_idx = np.where(~finite, np.arange(n), -1)
+    last_nan = np.maximum.accumulate(nan_idx)
+    start = np.maximum(last_nan + 1, 0)
+    return start, last_fin
+
+
+def _win_run_lo_hi(vals: np.ndarray, w: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Per row t: (s, k, lf) — trailing finite run of window
+    [max(0, t-w+1), t] occupies absolute indices [s, lf] with length k.
+    Mirrors _trailing_finite_suffix (trailing NaNs are trimmed)."""
+    n = vals.size
+    finite = np.isfinite(vals)
+    idx = np.where(finite, np.arange(n), -1)
+    last_fin = np.maximum.accumulate(idx)
+    nan_idx = np.where(~finite, np.arange(n), -1)
+    last_nan = np.maximum.accumulate(nan_idx)
+    t = np.arange(n)
+    lo = np.maximum(t - w + 1, 0)
+    lf = np.maximum(last_fin, -1)
+    s = np.maximum(last_nan[np.maximum(lf, 0)] + 1, lo)
+    s = np.where(lf >= 0, s, lo)
+    k = np.where(lf >= s, lf - s + 1, 0)
+    return s, k, lf
+
+
+def _cumsum_safe(x: np.ndarray) -> np.ndarray:
+    return np.concatenate(([0.0], np.cumsum(np.where(np.isfinite(x), x, 0.0))))
+
+
+def _masked_slope(x: np.ndarray, y: np.ndarray, valid: np.ndarray, min_pts: int) -> np.ndarray:
+    """Row-wise least-squares slope of y on x over valid entries; NaN when a
+    row has fewer than ``min_pts`` valid entries or a zero x-dispersion."""
+    vd = valid.astype(np.float64)
+    cnt = vd.sum(axis=1)
+    xc = np.where(valid, x, 0.0)
+    yc = np.where(valid, y, 0.0)
+    sx = (xc * vd[:, None] if x.ndim == 2 else xc).sum(axis=1)
+    # xc already zeroed on invalid; re-zero y too
+    yc = np.where(valid, y, 0.0)
+    sx = xc.sum(axis=1)
+    sy = yc.sum(axis=1)
+    sxx = (xc * xc).sum(axis=1)
+    syy = (yc * yc).sum(axis=1)
+    sxy = (xc * yc).sum(axis=1)
+    cnt_safe = np.maximum(cnt, 1.0)
+    cov = sxy - sx * sy / cnt_safe
+    var = sxx - sx * sx / cnt_safe
+    ok = cnt >= min_pts
+    with np.errstate(divide="ignore", invalid="ignore"):
+        slope = np.where(ok & (var > 0), cov / np.where(var > 0, var, 1.0), np.nan)
+    return slope
+
+
+def _vec_permutation_core(vals: np.ndarray, w: int, order: int, delay: int):
+    """Shared ordinal-embedding machinery.
+
+    Returns (s_hi, s_lo, total, n_total, n_tied, uniq, Hc, code_good, good)
+    where for window end t: embedding starts i in [lo(t), hi(t)] with
+    hi(t) = t - e + 1, lo(t) = max(0, t - w + 1);
+    total = good-embedding count, n_total/n_tied = finite/tied counts;
+    Hc[:, g] = cumsum one-hot of pattern codes over embedding starts
+    (Hc[:, g+1] - Hc[:, lo] = per-window pattern counts).
+    """
+    from numpy.lib.stride_tricks import sliding_window_view
+    e = (order - 1) * delay + 1
+    n = vals.size
+    n_emb = max(n - e + 1, 0)
+    n_pat = math.factorial(order)
+    if n_emb <= 0:
+        return None
+    E = sliding_window_view(vals, e)[:, ::delay]          # (n_emb, order)
+    valid = np.isfinite(E).all(axis=1)
+    srt = np.sort(E, axis=1)
+    tied = valid & (np.diff(srt, axis=1) == 0).any(axis=1)
+    good = valid & ~tied
+    # stable rank pattern for good rows (no ties -> any argsort = rank perm)
+    pat = np.argsort(np.argsort(np.where(good[:, None], E, 0.0), axis=1, kind="stable"), axis=1, kind="stable")
+    powers = (order ** np.arange(order)).astype(np.int64)
+    code_all = pat @ powers
+    code_good = np.where(good, code_all, -1)
+    uniq, inv = np.unique(code_good[good], return_inverse=True) if good.any() else (np.empty(0, np.int64), np.empty(0, np.int64))
+    n_u = uniq.size
+    T_rows = n  # windows indexed by end t in [0, n)
+    # embedding-index -> window-end coverage handled by caller via ranges
+    Hc = np.zeros((n_u, n_emb + 1))
+    if n_u:
+        Hc[inv, np.arange(n_emb)[good] + 1] = 1.0
+    Hc = np.cumsum(Hc, axis=1)
+    Gc = np.concatenate(([0.0], np.cumsum(good.astype(np.float64))))
+    Vc = np.concatenate(([0.0], np.cumsum(valid.astype(np.float64))))
+    Tc = np.concatenate(([0.0], np.cumsum(tied.astype(np.float64))))
+    return dict(e=e, n_emb=n_emb, n_u=n_u, Hc=Hc, Gc=Gc, Vc=Vc, Tc=Tc,
+                good=good, inv=inv, uniq=uniq, n_pat=n_pat)
+
+
+def _vec_win_ranges(core, vals: np.ndarray, w: int):
+    e = core["e"]; n = vals.size
+    t = np.arange(n)
+    hi = t - e + 1                     # last embedding start (inclusive)
+    lo = np.maximum(t - w + 1, 0)
+    okw = hi >= lo                     # window contains >= 1 embedding
+    hi_c = np.clip(hi + 1, 0, core["n_emb"])   # cumsum index (exclusive)
+    lo_c = np.clip(lo, 0, core["n_emb"])
+    return lo_c, hi_c, okw
+
+
+def _vec_column_permutation_entropy(panel: np.ndarray, w: int, order: int, delay: int,
+                                    normalize: bool, min_p: int) -> np.ndarray:
+    rows, cols = panel.shape
+    out = np.full((rows, cols), np.nan)
+    norm = math.log(math.factorial(order)) if normalize else None
+    for c in range(cols):
+        vals = panel[:, c]
+        core = _vec_permutation_core(vals, w, order, delay)
+        if core is None or core["n_u"] == 0:
+            continue
+        lo_c, hi_c, okw = _vec_win_ranges(core, vals, w)
+        counts = core["Hc"][:, hi_c] - core["Hc"][:, lo_c]        # (n_u, rows)
+        total = core["Gc"][hi_c] - core["Gc"][lo_c]
+        n_total = core["Vc"][hi_c] - core["Vc"][lo_c]
+        n_tied = core["Tc"][hi_c] - core["Tc"][lo_c]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            tie_frac = np.where(n_total > 0, n_tied / np.maximum(n_total, 1.0), 1.0)
+            p = np.where(counts > 0, counts / np.maximum(total, 1.0), 0.0)
+            ent = -np.sum(np.where(counts > 0, p * np.log(np.maximum(p, 1e-300)), 0.0), axis=0)
+        ok = okw & (total >= min_p) & (tie_frac <= _TIE_RATIO_FAIL_CLOSED) & (total >= 2)
+        if norm is not None:
+            ent = ent / norm
+        out[:, c] = np.where(ok, ent, np.nan)
+    return out
+
+
+def _vec_column_weighted_permutation_entropy(panel: np.ndarray, w: int, order: int, delay: int,
+                                             weight_kind: str, normalize: bool) -> np.ndarray:
+    rows, cols = panel.shape
+    out = np.full((rows, cols), np.nan)
+    norm = math.log(math.factorial(order)) if normalize else None
+    for c in range(cols):
+        vals = panel[:, c]
+        core = _vec_permutation_core(vals, w, order, delay)
+        if core is None or core["n_u"] == 0:
+            continue
+        e = core["e"]
+        n_emb = core["n_emb"]
+        E = np.lib.stride_tricks.sliding_window_view(vals, e)[:, ::delay]
+        # The authority weights each embedding by var/range of E_i/scale_t
+        # (window max|finite|).  That factor is constant within a window and
+        # cancels in p = w/sum(w), so a single COLUMN-level scale C gives the
+        # identical entropy while avoiding var(1e300-scale data) overflow
+        # (contract test: scale stability at 1e300).
+        fin_abs = np.abs(vals[np.isfinite(vals)])
+        col_scale = float(fin_abs.max()) if fin_abs.size else 0.0
+        if col_scale > 0 and np.isfinite(col_scale):
+            En = E / col_scale
+        else:
+            En = E
+        with np.errstate(all="ignore"):
+            if weight_kind == "variance":
+                wt = En.var(axis=1, ddof=0)
+            else:
+                wt = En.max(axis=1) - En.min(axis=1)
+        wt = np.where(core["good"], wt, 0.0)
+        # per-pattern weighted sums via one-hot cumsum over embedding starts
+        Wc = np.zeros((core["n_u"], n_emb + 1))
+        np.add.at(Wc, (core["inv"], np.arange(n_emb)[core["good"]] + 1), wt[core["good"]])
+        Wc = np.cumsum(Wc, axis=1)
+        lo_c, hi_c, okw = _vec_win_ranges(core, vals, w)
+        wcnt = Wc[:, hi_c] - Wc[:, lo_c]                          # (n_u, rows)
+        total = core["Gc"][hi_c] - core["Gc"][lo_c]
+        n_total = core["Vc"][hi_c] - core["Vc"][lo_c]
+        n_tied = core["Tc"][hi_c] - core["Tc"][lo_c]
+        W = wcnt.sum(axis=0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            tie_frac = np.where(n_total > 0, n_tied / np.maximum(n_total, 1.0), 1.0)
+            p = np.where(wcnt > 0, wcnt / np.maximum(W, 1e-300), 0.0)
+            ent = -np.sum(np.where(wcnt > 0, p * np.log(np.maximum(p, 1e-300)), 0.0), axis=0)
+        ok = okw & (total >= 2) & (tie_frac <= _TIE_RATIO_FAIL_CLOSED) & (W > 0)
+        if norm is not None:
+            ent = ent / norm
+        out[:, c] = np.where(ok, ent, np.nan)
+    return out
+
+
+def _vec_column_permutation_transition_entropy(panel: np.ndarray, w: int, order: int,
+                                               delay: int, normalize: bool) -> np.ndarray:
+    rows, cols = panel.shape
+    out = np.full((rows, cols), np.nan)
+    for c in range(cols):
+        vals = panel[:, c]
+        core = _vec_permutation_core(vals, w, order, delay)
+        if core is None or core["n_u"] == 0:
+            continue
+        e = core["e"]; n_emb = core["n_emb"]; n_u = core["n_u"]
+        good = core["good"]; inv = core["inv"]
+        lo_c, hi_c, okw = _vec_win_ranges(core, vals, w)
+        total = core["Gc"][hi_c] - core["Gc"][lo_c]
+        n_total = core["Vc"][hi_c] - core["Vc"][lo_c]
+        n_tied = core["Tc"][hi_c] - core["Tc"][lo_c]
+        # states present per window (patterns among good embeddings)
+        counts = core["Hc"][:, hi_c] - core["Hc"][:, lo_c]        # (n_u, rows)
+        n_states = (counts > 0).sum(axis=0).astype(np.float64)
+        # transitions between adjacent good embeddings
+        adj = good[:-1] & good[1:]                                 # pair start i (n_emb-1)
+        inv_full = np.full(n_emb, -1, dtype=np.int64)
+        inv_full[good] = inv
+        pc = inv_full[:-1] * n_u + inv_full[1:]
+        # per-pair cumsum one-hot + per-prev-state cumsum
+        pair_ids, pair_inv = np.unique(pc[adj], return_inverse=True) if adj.any() else (np.empty(0, np.int64), np.empty(0, np.int64))
+        P = np.zeros((pair_ids.size, max(n_emb, 1)))
+        if pair_ids.size:
+            P[pair_inv, np.arange(n_emb - 1)[adj]] = 1.0
+            Pc = np.concatenate((np.zeros((pair_ids.size, 1)), np.cumsum(P, axis=1)), axis=1)
+        else:
+            Pc = np.zeros((0, n_emb + 1))
+        Rc = np.zeros((n_u, n_emb + 1))
+        np.add.at(Rc, (inv_full[:-1][adj], np.arange(n_emb - 1)[adj] + 1), 1.0)
+        Rc = np.cumsum(Rc, axis=1)
+        # window t covers pair starts i in [lo, hi-1]  (need i+1 <= t-e+1)
+        t = np.arange(vals.size)
+        hi_pair = np.clip(t - e, 0, max(n_emb - 1, 0)) + 1
+        lo_pair = np.clip(np.maximum(t - w + 1, 0), 0, max(n_emb - 1, 0))
+        n_trans = Rc.sum(axis=0)[hi_pair] - Rc.sum(axis=0)[lo_pair] if n_u else np.zeros(vals.size)
+        pair_cnt = Pc[:, hi_pair] - Pc[:, lo_pair] if pair_ids.size else np.zeros((0, vals.size))
+        prev_id = (pair_ids // n_u).astype(np.int64)
+        cnt_pc = np.where(pair_cnt > 0, pair_cnt, 0.0)
+        sum_cnt_log = np.sum(np.where(pair_cnt > 0, cnt_pc * np.log(np.maximum(cnt_pc, 1e-300)), 0.0), axis=0)
+        rowsum = np.zeros((n_u, vals.size))
+        if pair_ids.size:
+            np.add.at(rowsum, prev_id, np.maximum(pair_cnt, 0.0))
+        sum_row_log = np.sum(np.where(rowsum > 0, rowsum * np.log(np.maximum(rowsum, 1e-300)), 0.0), axis=0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            tie_frac = np.where(n_total > 0, n_tied / np.maximum(n_total, 1.0), 1.0)
+            cond = -(sum_cnt_log - sum_row_log) / np.maximum(n_trans, 1.0)
+            normv = np.where(n_states > 0, np.log(np.maximum(n_states, 1.0)), np.nan)
+            cond = cond / normv if normalize else cond
+        ok = okw & (total >= 3) & (tie_frac <= _TIE_RATIO_FAIL_CLOSED) & (n_states >= 2) & (n_trans >= 2)
+        out[:, c] = np.where(ok, cond, np.nan)
+    return out
+
+
+def _vec_column_sample_entropy(panel: np.ndarray, w: int, m: int, tol_scale: float) -> np.ndarray:
+    from numpy.lib.stride_tricks import sliding_window_view
+    rows, cols = panel.shape
+    out = np.full((rows, cols), np.nan)
+    for c in range(cols):
+        vals = panel[:, c]
+        n = vals.size
+        s, k, lf = _win_run_lo_hi(vals, w)
+        # per-window mean/std of the run (variable start s, end lf)
+        C1 = _cumsum_safe(vals)
+        C2 = _cumsum_safe(vals * vals)
+        lo = s
+        hi1 = np.clip(lf + 1, 0, n)
+        cnt = k.astype(np.float64)
+        s1 = C1[hi1] - C1[lo]
+        s2 = C2[hi1] - C2[lo]
+        with np.errstate(divide="ignore", invalid="ignore"):
+            mean = s1 / np.maximum(cnt, 1.0)
+            var = s2 / np.maximum(cnt, 1.0) - mean * mean
+            var = np.maximum(var, 0.0)
+            std = np.sqrt(var)
+            r = tol_scale * std
+        ok_win = (cnt >= m + 2) & (std > 1e-12)
+        if not ok_win.any():
+            continue
+        E1 = sliding_window_view(vals, m + 1)          # starts 0..n-m-1
+        E0 = sliding_window_view(vals, m)              # starts 0..n-m
+        t_ok = np.where(ok_win)[0]
+        matches_a = np.zeros(n)
+        matches_b = np.zeros(n)
+        CH = 128
+        for a0 in range(0, t_ok.size, CH):
+            ts = t_ok[a0:a0 + CH]
+            st = s[ts]
+            kt = cnt[ts]
+            rt = r[ts]
+            # local template slots p in [0, w-m-2]; absolute start = st+p
+            L = w - m                                   # max local starts for (m+1)
+            ploc = np.arange(L)
+            ia = st[:, None] + ploc[None, :]            # (B, L)
+            valid_slot = (ploc[None, :] <= (kt[:, None] - m - 2)) & (ia < n - m)
+            ia_c = np.clip(ia, 0, n - m - 1)
+            A1 = E1[ia_c]                               # (B, L, m+1)
+            A0 = E0[np.clip(ia, 0, n - m)]              # (B, L, m)
+            # distances between all slot pairs
+            dA = np.abs(A1[:, :, None, :] - A1[:, None, :, :]).max(axis=3)   # (B, L, L)
+            dB = np.abs(A0[:, :, None, :] - A0[:, None, :, :]).max(axis=3)
+            pi = ploc[None, :, None]
+            pj = ploc[None, None, :]
+            fit_i = pi <= (kt[:, None, None] - m - 2)
+            fit_j = pj <= (kt[:, None, None] - m - 1)
+            pair_ok = fit_i & fit_j & (pj > pi) & (ia[:, :, None] < n) & (ia[:, None, :] < n)
+            ma = (pair_ok & (dA <= rt[:, None, None])).sum(axis=(1, 2))
+            mb = (pair_ok & (dB <= rt[:, None, None])).sum(axis=(1, 2))
+            matches_a[ts] = ma
+            matches_b[ts] = mb
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ent = -np.log(matches_a / matches_b)
+        ent = np.where((matches_a > 0) & (matches_b > 0), ent, np.nan)
+        out[:, c] = np.where(ok_win, ent, np.nan)
+    return out
+
+
+def _vec_column_autocorr_half_life(panel: np.ndarray, w: int, max_lag: int, use_abs: bool,
+                                   min_periods: int) -> np.ndarray:
+    rows, cols = panel.shape
+    out = np.full((rows, cols), np.nan)
+    lags = np.arange(1, max_lag + 1, dtype=np.float64)
+    for c in range(cols):
+        vals = panel[:, c]
+        n = vals.size
+        # ac is shift-invariant; centering once removes the catastrophic
+        # cancellation in E[x*y]-E[x]E[y] for large-mean series.
+        fin = vals[np.isfinite(vals)]
+        vals = vals - (float(np.mean(fin)) if fin.size else 0.0)
+        s, k, lf = _win_run_lo_hi(vals, w)
+        ac_mat = np.full((n, max_lag), np.nan)
+        cnt_mat = np.zeros((n, max_lag))
+        for qi, q in enumerate(range(1, max_lag + 1)):
+            if q >= w:
+                continue
+            D = vals[q:] * vals[:-q]           # x[i]*x[i+q], index i
+            Dl = vals[:-q]
+            Dr = vals[q:]
+            Dll = Dl * Dl
+            Drr = Drr_ = Dr * Dr
+            CD = _cumsum_safe(D); CDl = _cumsum_safe(Dl); CDr = _cumsum_safe(Dr)
+            CDll = _cumsum_safe(Dll); CDrr = _cumsum_safe(Dll if False else Drr)
+            # sums over i in [s, lf-q]; cumsum has n-q+1 entries
+            hi = np.clip(lf - q + 1, 0, n - q)
+            lo = np.clip(s, 0, n - q)
+            cnt = np.clip(k - q, 0, None).astype(np.float64)
+            sD = CD[hi] - CD[lo]
+            sL = CDl[hi] - CDl[lo]
+            sR = CDr[hi] - CDr[lo]
+            sLL = CDll[hi] - CDll[lo]
+            sRR = CDrr[hi] - CDrr[lo]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                csafe = np.maximum(cnt, 1.0)
+                va = sLL / csafe - (sL / csafe) ** 2
+                va = np.maximum(va, 0.0)
+                cov = sD / csafe - (sL / csafe) * (sR / csafe)
+                ac = np.where(va > 1e-12, cov / np.where(va > 1e-12, va, 1.0), np.nan)
+            if use_abs:
+                ac = np.abs(ac)
+            # authority: `if ac <= 1e-12: continue` — SIGNED comparison, so
+            # negative autocorrelations are skipped unless use_abs.
+            valid = (cnt >= max(2, min_periods)) & (cnt >= 2) & np.isfinite(ac) & (ac > 1e-12) & (va > 1e-12)
+            ac_mat[:, qi] = np.where(valid, ac, np.nan)
+            cnt_mat[:, qi] = np.where(valid, 1.0, 0.0)
+        # regression log(ac) ~ lag per row
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ly = np.log(np.maximum(ac_mat, 1e-300))
+        slope = _masked_slope(np.broadcast_to(lags, ac_mat.shape), ly, np.isfinite(ac_mat), 2)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            hl = np.where(slope < 0, -math.log(2.0) / np.where(slope < 0, slope, -1.0), np.nan)
+        out[:, c] = hl
+    return out
+
+
+def _vec_column_variogram_slope(panel: np.ndarray, w: int, max_lag: int, min_valid_lags: int) -> np.ndarray:
+    rows, cols = panel.shape
+    out = np.full((rows, cols), np.nan)
+    lags = np.arange(1, max_lag + 1, dtype=np.float64)
+    for c in range(cols):
+        vals = panel[:, c]
+        n = vals.size
+        s, k, lf = _win_run_lo_hi(vals, w)
+        lv_mat = np.full((n, max_lag), np.nan)
+        for q in range(1, max_lag + 1):
+            if q >= w:
+                continue
+            D2 = (vals[q:] - vals[:-q]) ** 2
+            CD2 = _cumsum_safe(D2)
+            hi = np.clip(lf - q + 1, 0, n - q)
+            lo = np.clip(s, 0, n - q)
+            cnt = np.clip(k - q, 0, None).astype(np.float64)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                v = (CD2[hi] - CD2[lo]) / np.maximum(cnt, 1.0)
+            valid = (cnt >= 1) & (v > 1e-12) & np.isfinite(v)
+            lv_mat[:, q - 1] = np.where(valid, np.log(np.maximum(v, 1e-300)), np.nan)
+        # authority regresses log(var) on log(lag)
+        slope = _masked_slope(np.broadcast_to(np.log(lags), lv_mat.shape), lv_mat, np.isfinite(lv_mat), max(2, min_valid_lags))
+        out[:, c] = slope
+    return out
+
+
+def _vec_column_higuchi_fd(panel: np.ndarray, w: int, km: int) -> np.ndarray:
+    rows, cols = panel.shape
+    out = np.full((rows, cols), np.nan)
+    for c in range(cols):
+        vals = panel[:, c]
+        n = vals.size
+        s, k, lf = _win_run_lo_hi(vals, w)
+        logk_list = []
+        lk_mat = []
+        valid_k = []
+        for kp in range(1, km + 1):
+            if kp >= w:
+                continue
+            D = np.abs(vals[kp:] - vals[:-kp])   # position i: |x[i+kp]-x[i]|
+            # residue-cumsum table: R[rr, g] = sum of finite D[i] for i%kp==rr, i<g
+            R = np.zeros((kp, n + 1))
+            for rr in range(kp):
+                mask = (np.arange(n - kp) % kp) == rr
+                R[rr, 1:n - kp + 1] = np.cumsum(np.where(mask, np.where(np.isfinite(D), D, 0.0), 0.0))
+            hi = np.clip(lf - kp + 1, 0, n)      # exclusive end over i in [s, lf-kp]
+            lo = np.clip(s, 0, n)
+            mgrid = np.arange(kp)[None, :]
+            # len(idx) = #{i_loc = m, m+kp, ... < k_t} = ceil((k_t-m)/kp)
+            with np.errstate(invalid="ignore"):
+                L = np.ceil(np.maximum(k[:, None] - mgrid, 0) / kp)
+            m_ok = L >= 2                        # need >= 2 subsample points
+            npts = np.maximum(L - 1.0, 1.0)      # path segments = len(idx)-1
+            path = np.zeros((n, kp))
+            for m in range(kp):
+                rr = (s + m) % kp
+                path[:, m] = R[rr, hi] - R[rr, lo]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                norm = (k[:, None] - 1) / (npts * kp)
+                Lm = path * norm / kp
+            lk = np.sum(np.where(m_ok, Lm, 0.0), axis=1) / np.maximum(m_ok.sum(axis=1), 1.0)
+            n_m = m_ok.sum(axis=1)
+            okk = (k >= 2 * km + 2) & (n_m >= 1) & (lk > 1e-12)
+            logk_list.append(math.log(1.0 / kp))
+            lk_mat.append(np.where(okk, np.log(np.maximum(lk, 1e-300)), np.nan))
+            valid_k.append(okk)
+        if not lk_mat:
+            continue
+        X = np.stack([np.full(n, v) for v in logk_list], axis=1)
+        Y = np.stack(lk_mat, axis=1)
+        V = np.stack(valid_k, axis=1)
+        slope = _masked_slope(X, Y, V, 2)
+        out[:, c] = slope
+    return out
 
 
 def _register_surface() -> None:
