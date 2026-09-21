@@ -1,0 +1,45 @@
+{
+  "inputs": {
+    "sources": [
+      {
+        "factor": "alphasage_20260909062020_09e3f39d",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/alphasage_20260909062020_09e3f39d.parquet",
+        "etag": "827388f64f3269ab2ac4f2b3a0a3c6c2",
+        "sha256": "2c65a6650c4ff082b820ada904649520352491ca9630cba0b95dc12cc9e127f3",
+        "downloaded_bytes": 4127982
+      }
+    ],
+    "days": 500,
+    "assets": 256,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "selection": "first bounded object keys; assets selected on TRAIN coverage only",
+    "limitations": "research replay; no upstream PIT or investability certification; recipe lineage not loaded"
+  },
+  "warmup": "one complete run per path, excluded",
+  "repetitions_per_path": 3,
+  "times": {
+    "legacy": [
+      38.266855032999956,
+      38.36379486199985,
+      38.55496203199982
+    ],
+    "cached": [
+      32.74882876799893,
+      32.96172333300092,
+      33.91068916200129
+    ]
+  },
+  "median_seconds": {
+    "legacy": 38.36379486199985,
+    "cached": 32.96172333300092
+  },
+  "speedup": 1.1638892321989256,
+  "exact_values_and_factor_records": true,
+  "test_evaluated": false,
+  "candidates": 95,
+  "baseline_commit": "de07c3184",
+  "scope": "single-process full optimizer, default families, 99 bootstrap draws; excludes data loading and cold FE initialization"
+}

@@ -88,3 +88,38 @@ def test_default_batch_uses_joint_metrics_and_test_labels_do_not_select():
     b = optimize_factor_batch(batch, replace(labels, values=poisoned), config=conf, allow_research=True)
     assert b.factors['reverse'].joint_diagnostics == selected.joint_diagnostics
     assert b.factors['reverse'].plan_identity == selected.plan_identity
+
+
+def test_raw_series_cache_is_exact_across_masks_costs_and_mutated_returns():
+    from factor_optimizer import research_fitness as fitness
+    from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
+    from quant_evaluator.contracts.label_bundle import LabelBundle
+    from dataclasses import replace
+    assert hasattr(fitness, "RawSeriesCache"), "bounded RAW metric reuse is missing"
+    rng = np.random.default_rng(881)
+    raw = rng.normal(size=(60, 40))
+    candidate = -raw.copy()
+    ta = AxisRef("time", "int", 60, np.arange(60))
+    aa = AxisRef("asset", "str", 40, np.array([str(i) for i in range(40)]))
+    batch = FactorBatch(("x",), ta, aa, raw[:, :, None])
+    labels = LabelBundle("y", rng.normal(0, .01, raw.shape), 1,
+        decision_time=tuple(range(60)), label_start_time=tuple(range(60)),
+        label_end_time=tuple(range(1,61)), asset_axis=aa)
+    cache = fitness.RawSeriesCache()
+    cases = [(candidate, labels, .001), (candidate*2, labels, .001)]
+    missing = candidate.copy()
+    missing[10:15, :5] = np.nan
+    cases += [(missing, labels, .001), (candidate, labels, .002)]
+    y = labels.values.copy()
+    y[20] *= -2
+    cases += [(candidate, replace(labels, values=y), .002)]
+    for c, target, cost in cases:
+        expected = fitness.paired_series(raw, c, batch, target, tuple(range(60)), cost_rate=cost)
+        actual = fitness.paired_series(raw, c, batch, target, tuple(range(60)),
+                                       cost_rate=cost, raw_cache=cache)
+        for a, b in zip(actual, expected):
+            np.testing.assert_array_equal(a, b)
+        actual[0][:] = 999  # Caller mutation must not poison a reused baseline.
+        again = fitness.paired_series(raw, c, batch, target, tuple(range(60)),
+                                      cost_rate=cost, raw_cache=cache)
+        np.testing.assert_array_equal(again[0], expected[0])

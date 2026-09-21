@@ -290,7 +290,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
         compile_baseline, assess_baseline_training, BaselineRepairPlan,
     )
     from factor_optimizer.research_fitness import (
-        paired_series, summarize, joint_utility, passes_floors, compare_joint,
+        paired_series, summarize, joint_utility, passes_floors, compare_joint, RawSeriesCache,
     )
     from factor_optimizer.adapters.repair_execution import compile_value_repair
     from factor_optimizer.adapters.preprocessing import compile_admissible_smoothing_grid
@@ -299,6 +299,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
 
     outputs, results = [], {}
     for k, factor_id in enumerate(batch.factor_ids):
+        train_raw_cache = RawSeriesCache()
         raw = np.array(batch.values[:, :, k], dtype=float, copy=True)
         if batch.validity is not None:
             raw[~batch.validity[:, :, k]] = np.nan
@@ -409,7 +410,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                     if joint:
                         try:
                             ar, ac = paired_series(prefix, baseline_values, batch, labels, split.train_indices,
-                                minimum_assets=config.minimum_assets, cost_rate=config.research_cost_rate)
+                                minimum_assets=config.minimum_assets, cost_rate=config.research_cost_rate,
+                                raw_cache=train_raw_cache)
                             mr, mc = summarize(ar), summarize(ac)
                             baseline_gain = joint_utility(mc)-joint_utility(mr)
                             best = ((baseline_gain, frozen_baseline.identity, frozen_baseline, baseline_values)
@@ -449,7 +451,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                         gain = float(fold_gains.mean() - fold_gains.std())
                         if joint:
                             ar, ac = paired_series(prefix, values, batch, labels, split.train_indices,
-                                minimum_assets=config.minimum_assets, cost_rate=config.research_cost_rate)
+                                minimum_assets=config.minimum_assets, cost_rate=config.research_cost_rate,
+                                raw_cache=train_raw_cache)
                             mr, mc = summarize(ar), summarize(ac)
                             record.update(train_raw_metrics=mr, train_candidate_metrics=mc,
                                           raw_rank_ic_fold_gain=gain)

@@ -79,7 +79,22 @@ def passes_floors(raw, candidate):
             and candidate['turnover'] <= raw['turnover']+.25)
 
 
-def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, cost_rate=.001):
+class RawSeriesCache:
+    """One-entry RAW evidence cache; returned arrays never alias stored state."""
+
+    def __init__(self):
+        self._key = None
+        self._series = None
+
+    def get(self, key):
+        return self._series.copy() if key == self._key and self._series is not None else None
+
+    def put(self, key, series):
+        self._key, self._series = key, series.copy()
+
+
+def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, cost_rate=.001,
+                  raw_cache=None):
     """QE metric inputs share signal availability, never ex-post label membership."""
     from dataclasses import replace
     from factor_optimizer.research_batch import _subset_labels
@@ -97,12 +112,27 @@ def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, 
     pair = FactorBatch(('RAW', 'CANDIDATE'),
         AxisRef('time', batch.time_axis.dtype, len(idx), batch.time_axis.values[idx]),
         batch.asset_axis, np.stack((a, b), axis=-1))
-    ic, _ = compute_daily_ic(pair, target, method='spearman', min_assets=minimum_assets)
     y = target.values if target.validity is None else np.where(target.validity, target.values, np.nan)
-    out = []
-    for k, values in enumerate((a, b)):
+    cached, key = None, None
+    if raw_cache is not None:
+        if not isinstance(raw_cache, RawSeriesCache):
+            raise TypeError('raw_cache must be RawSeriesCache')
+        digest = hashlib.sha256()
+        digest.update(repr((a.shape, minimum_assets, cost_rate)).encode())
+        digest.update(np.ascontiguousarray(a, dtype=float).tobytes())
+        digest.update(np.ascontiguousarray(y, dtype=float).tobytes())
+        key = digest.digest()
+        cached = raw_cache.get(key)
+    start = 0 if cached is None else 1
+    if start:
+        pair = replace(pair, factor_ids=('CANDIDATE',), values=pair.values[:, :, 1:])
+    ic, _ = compute_daily_ic(pair, target, method='spearman', min_assets=minimum_assets)
+    out = [] if cached is None else [cached]
+    for k, values in enumerate((a, b)[start:]):
         pnl, turnover = portfolio_series(values, y, cost_rate=cost_rate)
         out.append(np.column_stack((ic[:, k], pnl, turnover)))
+    if raw_cache is not None and cached is None:
+        raw_cache.put(key, out[0])
     return tuple(out)
 
 
