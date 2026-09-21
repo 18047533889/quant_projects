@@ -72,7 +72,9 @@ def test_partial_rank_evidence_suppresses_rank_search_without_inventing_baseline
             families=('REPRESENTATION_RANK',), bootstrap_draws=99),
         lineages={'good': signature})
     item = result.factors['good']
-    assert item.candidates == ()
+    # Existing CS rank suppresses duplicate CS ranking, not causal TS ranking.
+    assert len(item.candidates) == 6
+    assert all(c['parameters']['rank_axis'] == 'ts' for c in item.candidates)
     assert item.selected_family == 'NO_OP_RAW'
     assert item.baseline_diagnostics['operations'] == ()
     assert 'lineage_unknown' in item.baseline_diagnostics['omissions']

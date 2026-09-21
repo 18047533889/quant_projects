@@ -1,7 +1,7 @@
 # 自动优化完成度与剩余真实接线
 
 本清单区分代码能力、合成验收和真实运行证据，不是“全部完成”声明。
-工作树核验基点 b7f3ec234，正式路径 /home/sunhaiwei/quant_projects。
+正式路径 /home/sunhaiwei/quant_projects；下文已更新时序表示分支的真实复验结果。
 
 ## 已有真实证据
 
@@ -10,28 +10,30 @@
 - 基础缩尾和排名、重复 CS-rank 抑制、TRAIN 单指标及联合退化保护。
 - TRAIN 诊断与成本后组合口径一致；训练后只验证一个冻结赢家，失败保留 RAW。
 - 20 层形状、分层衰减、27 个准入平滑参数及其他数值方法已有逐案例回放。
-- 当前完整逐方法记录为 65 案例：54 执行、11 需要额外输入或属于控制操作。
+- 当前每因子 65 案例：57 执行、8 需要额外输入或属于控制操作。
+  两个清单绑定 COS 因子合计 114 执行、16 未执行、0 执行失败，
+  见 temporal_real_20260922.json。
   “执行”不等于通过验证，更不等于未来收益保证。
 - FP/FE 结果对齐和 RankIC 系数路径已有完整优化 A/B，输出和候选记录逐项等值。
 
 证据分别见 COS_DIAGNOSTICS_20260922.md、method_family_recheck_20260922.json、
 BASELINE_PIPELINE.md、DIAGNOSIS_AND_SELECTION.md，以及 FP/QE 的性能核验文档。
 
-## 11 个未执行案例必须拆开解释
+## 原 11 个未执行案例的处理状态
 
 | 分支 | 案例数 | 实际缺口 | 下一步验收要求 |
 |---|---:|---|---|
 | INDUSTRY/SIZE/STYLE_NEUTRALIZATION | 3 | 声明的外部暴露与可信历史可用时间 | 暴露对齐、可用时间、真实中性化及收益退化对照 |
 | WINDOW_REFINEMENT/OPERATOR_SWAP/LOW_DOF_INTERACTION | 3 | 需要 FE DSL 重编译，不是单列值变换 | 绑定原 DSL、语义约束、因果重算、候选去重及验证 |
-| REPRESENTATION_RANK 的 ts（average/min） | 2 | **缺少已声明并绑定的窗口**，不是缺少外部数据 | 补齐窗口与时间语义；验证历史、并列值、缺失与自动搜索 |
-| REPRESENTATION_ZSCORE 的 ts | 1 | **缺少已声明并绑定的窗口**，不是缺少外部数据 | 明确当前值／滞后统计、窗口、零方差、极值与自动搜索 |
+| REPRESENTATION_RANK 的 ts（average/min） | 2 | 已补齐窗口并执行真实回放 | 过去窗口、并列值、缺失、自动搜索与 CS 去重均有测试 |
+| REPRESENTATION_ZSCORE 的 ts | 1 | 已补齐窗口并执行真实回放 | 历史样本标准差、零方差缺失、截断与极值处理有测试 |
 | ABANDON | 1 | 停止／放弃控制，不是数值变换 | 验证控制流程，不伪装成产生新因子 |
 | MISSINGNESS_FRESHNESS 的 drop | 1 | 行选择，不符合保持行对齐的 Series 接口 | 保留行选择和覆盖约束契约，不静默删行以美化评分 |
 
-上述 ts 分支已在修复注册表中声明选项，但 research adapter 目前主动拒绝：
-“time-series rank/zscore lacks a registry window parameter”。
-不能把它们算成已经完成，或将随意窗口藏入实现。
-后续需要同步检查参数域、因果类别、计划身份、CS-rank 去重规则和自动候选枚举。
+上述 ts 分支现在要求显式窗口，默认自动搜索 5、10、20。
+窗口进入计划身份，已有 CS-rank 不再误排除 TS-rank。
+公式、兼容性和限制见 [时序表示说明](TEMPORAL_REPRESENTATION.md)。
+真实回放能执行不等于候选能过经济准入：低覆盖、缺失指标及退化仍会被拒绝。
 
 ## 历史暴露边界
 

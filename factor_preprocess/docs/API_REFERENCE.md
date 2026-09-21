@@ -1,7 +1,7 @@
 # factor_preprocess 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**74 个 Python 模块、427 个公开函数/类/方法定义**。
+扫描实际包目录：**75 个 Python 模块、429 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -82,6 +82,7 @@
 | [factor_preprocess/transforms/repair_shapes.py](../factor_preprocess/transforms/repair_shapes.py) | 6 | Stateless value-repair primitives used by research repair plans. |
 | [factor_preprocess/transforms/rolling.py](../factor_preprocess/transforms/rolling.py) | 4 | Rolling (time-series) transforms with explicit causality. |
 | [factor_preprocess/transforms/smoothing.py](../factor_preprocess/transforms/smoothing.py) | 6 | Causal one-sided signal smoothers. |
+| [factor_preprocess/transforms/temporal_representation.py](../factor_preprocess/transforms/temporal_representation.py) | 2 | Current observations represented against strictly preceding asset history. |
 | [factor_preprocess/transforms/treatment_variants.py](../factor_preprocess/transforms/treatment_variants.py) | 1 | Treatment variant transforms that the eligibility engine may propose. |
 | [factor_preprocess/transforms/volatility.py](../factor_preprocess/transforms/volatility.py) | 5 | Volatility scaling transforms with explicit causality. |
 
@@ -5086,6 +5087,26 @@ One-sided Kalman local-level smoother.
 
 返回类型：`pd.Series`。
 
+## factor_preprocess/transforms/temporal_representation.py
+
+Current observations represented against strictly preceding asset history.
+
+### time_series_rank
+
+[实际实现](../factor_preprocess/transforms/temporal_representation.py#L55)。
+
+Rank current value against w previous observations; full finite history.
+
+参数：`(values, *, window, method='average')`。
+
+### capped_time_series_zscore
+
+[实际实现](../factor_preprocess/transforms/temporal_representation.py#L67)。
+
+Normalize current value with the previous w mean/sample std, then cap.
+
+参数：`(values, *, window, cap=3.0)`。
+
 ## factor_preprocess/transforms/treatment_variants.py
 
 Treatment variant transforms that the eligibility engine may propose.
@@ -5233,6 +5254,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/transforms/repair_shapes.py` | `dccea81e1c00e68e144f530eb103e7c217677cc1ae82c5bd5b3ee12695cacea5` |
 | `factor_preprocess/transforms/rolling.py` | `e7b9cc19a0e32c62b2f2d1d216e998ed49c72a3579404efd735f25f1c04e288b` |
 | `factor_preprocess/transforms/smoothing.py` | `5a8acbd7530a05945c00a21ab306e3ff1c1bb3c5e10babf051a9ed36f374697f` |
+| `factor_preprocess/transforms/temporal_representation.py` | `bde5f0f504b38e4b8721786a217bf395dd31ac10cf8b31434a94807ce16c72c5` |
 | `factor_preprocess/transforms/treatment_variants.py` | `5d3a3dd9c7c0e014be750edcf9e37c628113acd17d8ec3dc09076e13aa3b2b4b` |
 | `factor_preprocess/transforms/volatility.py` | `5361592b9fc419a82fb6201b9bf0ce68ff81c48adc4f34762af411bd6e4b5d12` |
 

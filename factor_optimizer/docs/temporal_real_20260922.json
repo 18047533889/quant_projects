@@ -1,0 +1,1095 @@
+{
+  "inputs": {
+    "sources": [
+      {
+        "factor": "weekly_4cbd7ca6dccc61dc",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59/weekly_4cbd7ca6dccc61dc.parquet",
+        "etag": "91da3ad8a2d54f3f35911e231bfcffa8",
+        "sha256": "35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59",
+        "downloaded_bytes": 5400494,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "ts_delta(col('valuation.free_cap'), 20)"
+      },
+      {
+        "factor": "weekly_db5616cd85a477b3",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d/weekly_db5616cd85a477b3.parquet",
+        "etag": "5efb1f8070196661daabeb563740dff0",
+        "sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+        "downloaded_bytes": 3828456,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "ts_delta(col('valuation.a_cap'), 20)"
+      }
+    ],
+    "days": 500,
+    "assets": 256,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "selection": "first eligible bound manifest factor IDs; assets selected on TRAIN coverage only",
+    "limitations": "source-declared lineage; no upstream PIT or investability certification"
+  },
+  "test_evaluated": false,
+  "diagnostics": {
+    "weekly_4cbd7ca6dccc61dc": {
+      "selection_portfolio": {
+        "status": "available",
+        "metrics": {
+          "rank_ic": -0.0036978994219487417,
+          "rank_icir": -0.05617737834536126,
+          "sharpe": 1.80241977526469,
+          "max_drawdown": 0.1638542245618701,
+          "turnover": 0.056956044411153275,
+          "worst_block_sharpe": 0.6636481299873691
+        },
+        "reason": null,
+        "periods_per_year": 252,
+        "cost_rate": 0.001,
+        "empty_leg_policy": "signal_cash",
+        "semantics": "costed gross-one stock-equal top/bottom quintiles"
+      },
+      "issues": [
+        {
+          "code": "negative_rank_ic",
+          "families": [
+            "SIGN_ORIENTATION"
+          ],
+          "value": -0.0036978994219487387,
+          "threshold": 0.0
+        }
+      ],
+      "layer_decay": {
+        "partition": "TRAIN",
+        "status": "unavailable",
+        "lags": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          15,
+          20
+        ],
+        "layers": [],
+        "proposed_half_lives": [],
+        "full_notional_turnover": 0.056956044411153275,
+        "high_turnover": false,
+        "common_days": 0,
+        "coverage": 0.0,
+        "turnover_policy": "signal_cash",
+        "turnover_unavailable_reason": null,
+        "reason": "insufficient complete twenty-layer history"
+      },
+      "partition": "TRAIN",
+      "train_days": 267,
+      "periods_per_year": 252,
+      "rank_ic": -0.0036978994219487387,
+      "rank_icir": -0.05617737834536126,
+      "rank_ic_valid_days": 267,
+      "fold_rank_ic": [
+        -0.004940304421864427,
+        -0.004966356447106068,
+        -0.0011870373968757267
+      ],
+      "complete_quantile_days": 0,
+      "quantile_coverage": 0.0,
+      "minimum_bin_count": 0,
+      "quantile_mean_returns": null,
+      "u_contrast": null,
+      "proposed_shape_family": null,
+      "proposed_center": null,
+      "long_short_sharpe": null,
+      "long_short_max_drawdown": null,
+      "portfolio_semantics": "gross-one top/bottom 5% diagnostic spread; no costs or tradability",
+      "portfolio_unavailable_reason": "insufficient complete 20-bin days"
+    },
+    "weekly_db5616cd85a477b3": {
+      "selection_portfolio": {
+        "status": "available",
+        "metrics": {
+          "rank_ic": -0.0060321893386178355,
+          "rank_icir": -0.08557145352186224,
+          "sharpe": 2.2236579510039816,
+          "max_drawdown": 0.1725316435068342,
+          "turnover": 0.014805711610486891,
+          "worst_block_sharpe": 1.1582010526532172
+        },
+        "reason": null,
+        "periods_per_year": 252,
+        "cost_rate": 0.001,
+        "empty_leg_policy": "signal_cash",
+        "semantics": "costed gross-one stock-equal top/bottom quintiles"
+      },
+      "issues": [
+        {
+          "code": "negative_rank_ic",
+          "families": [
+            "SIGN_ORIENTATION"
+          ],
+          "value": -0.006032189338617837,
+          "threshold": 0.0
+        },
+        {
+          "code": "unstable_ic_direction",
+          "families": [],
+          "value": [
+            -0.012207608414639186,
+            -0.007321061951913471,
+            0.0014321023506991511
+          ]
+        }
+      ],
+      "layer_decay": {
+        "partition": "TRAIN",
+        "status": "unavailable",
+        "lags": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          15,
+          20
+        ],
+        "layers": [],
+        "proposed_half_lives": [],
+        "full_notional_turnover": 0.014805711610486891,
+        "high_turnover": false,
+        "common_days": 0,
+        "coverage": 0.0,
+        "turnover_policy": "signal_cash",
+        "turnover_unavailable_reason": null,
+        "reason": "insufficient complete twenty-layer history"
+      },
+      "partition": "TRAIN",
+      "train_days": 267,
+      "periods_per_year": 252,
+      "rank_ic": -0.006032189338617837,
+      "rank_icir": -0.08557145352186224,
+      "rank_ic_valid_days": 267,
+      "fold_rank_ic": [
+        -0.012207608414639186,
+        -0.007321061951913471,
+        0.0014321023506991511
+      ],
+      "complete_quantile_days": 0,
+      "quantile_coverage": 0.0,
+      "minimum_bin_count": 0,
+      "quantile_mean_returns": null,
+      "u_contrast": null,
+      "proposed_shape_family": null,
+      "proposed_center": null,
+      "long_short_sharpe": null,
+      "long_short_max_drawdown": null,
+      "portfolio_semantics": "gross-one top/bottom 5% diagnostic spread; no costs or tradability",
+      "portfolio_unavailable_reason": "insufficient complete 20-bin days"
+    }
+  },
+  "automatic": {
+    "weekly_4cbd7ca6dccc61dc": {
+      "status": "improved",
+      "selected_family": "INVERTED_U_REPAIR",
+      "train_gain": 0.1969564892146704,
+      "validation_lower_bound": 0.11790883480968672,
+      "reason": "TRAIN winner passed held-out paired block bound",
+      "plan_identity": "66c4b482beca199150cf47772cf79ab8f83ac544833e2809a9dd4df4ad13eef4",
+      "baseline_diagnostics": {
+        "operations": [
+          "winsor",
+          "cs_rank"
+        ],
+        "omissions": [
+          "neutralization_missing_exposures"
+        ],
+        "accepted": true,
+        "reason": "no_substantial_training_degradation",
+        "coverage": 1.0,
+        "valid_days": 267,
+        "upper_bound": 6.316358793998631e-06,
+        "maximum_loss": 0.01,
+        "joint_policy": "joint.v1",
+        "joint_raw": {
+          "rank_ic": -0.0036978994219487417,
+          "rank_icir": -0.05617737834536126,
+          "sharpe": 1.80241977526469,
+          "max_drawdown": 0.1638542245618701,
+          "turnover": 0.056956044411153275,
+          "worst_block_sharpe": 0.6636481299873691
+        },
+        "joint_candidate": {
+          "rank_ic": -0.003706877545630786,
+          "rank_icir": -0.05631919210281105,
+          "sharpe": 1.80241977526469,
+          "max_drawdown": 0.1638542245618701,
+          "turnover": 0.056956044411153275,
+          "worst_block_sharpe": 0.6636481299873691
+        }
+      },
+      "joint_diagnostics": {
+        "objective": "joint",
+        "empty_leg_policy": "signal_cash",
+        "cost_rate": 0.001,
+        "policy": "joint.v1",
+        "baseline_train_raw": {
+          "rank_ic": -0.0036978994219487417,
+          "rank_icir": -0.05617737834536126,
+          "sharpe": 1.80241977526469,
+          "max_drawdown": 0.1638542245618701,
+          "turnover": 0.056956044411153275,
+          "worst_block_sharpe": 0.6636481299873691
+        },
+        "baseline_train_candidate": {
+          "rank_ic": -0.003706877545630786,
+          "rank_icir": -0.05631919210281105,
+          "sharpe": 1.80241977526469,
+          "max_drawdown": 0.1638542245618701,
+          "turnover": 0.056956044411153275,
+          "worst_block_sharpe": 0.6636481299873691
+        },
+        "validation_raw": {
+          "rank_ic": -0.021545540791352992,
+          "rank_icir": -0.3356850168329666,
+          "sharpe": -0.17736527725074852,
+          "max_drawdown": 0.0955056093392171,
+          "turnover": 0.04116319287839191,
+          "worst_block_sharpe": -3.3452684724986037
+        },
+        "validation_candidate": {
+          "rank_ic": 0.01376289742578335,
+          "rank_icir": 0.21218692132737874,
+          "sharpe": 0.8770727917970135,
+          "max_drawdown": 0.0771727589461275,
+          "turnover": 0.036342644495083065,
+          "worst_block_sharpe": -1.1699518574783303
+        },
+        "comparison_status": "SUPERIOR"
+      },
+      "candidates": [
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "average",
+            "window": 5
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "6e78450fc10e8f93074b76288e6f37874c16da32370e5a82049997a514696622",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0009705289402057907,
+            "rank_icir": 0.013969930943849981,
+            "sharpe": 2.120185912756197,
+            "max_drawdown": 0.10160325811133651,
+            "turnover": 0.38569151328146933,
+            "worst_block_sharpe": 1.7878807413960414
+          },
+          "raw_rank_ic_fold_gain": -0.004524005353524904,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "average",
+            "window": 10
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "1808974b3d7061fce53a5d06e06b4fa232b0497fab46ea5a631cb204f7bfd2f1",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.001773366364502074,
+            "rank_icir": 0.025880364404900286,
+            "sharpe": 1.5367101060349717,
+            "max_drawdown": 0.12204349075473873,
+            "turnover": 0.33535820229191976,
+            "worst_block_sharpe": 1.0946743543051325
+          },
+          "raw_rank_ic_fold_gain": -0.003082980678438512,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "average",
+            "window": 20
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "6a1307737b731fd29c87a3577166c66e5fbc7a827e788ec274352cc506152532",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.003515428643658705,
+            "rank_icir": 0.05377453655597026,
+            "sharpe": 1.4539130388977761,
+            "max_drawdown": 0.12865886555315045,
+            "turnover": 0.31619260031158997,
+            "worst_block_sharpe": 0.8457558412787907
+          },
+          "raw_rank_ic_fold_gain": 0.0015651714446776304,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "min",
+            "window": 5
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "4c662aa0d25cff95af966a23c4bc7ae43479a3cf4d7575732f1fbe75fa8db8ab",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0026181202644467985,
+            "rank_icir": 0.037703547180542876,
+            "sharpe": 2.1087475479266726,
+            "max_drawdown": 0.07171720225521845,
+            "turnover": 0.3658482579130275,
+            "worst_block_sharpe": 1.7382076031596512
+          },
+          "raw_rank_ic_fold_gain": -0.004398869209873477,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "min",
+            "window": 10
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "a4dc01d01289eb48473e7755413ba8ccd7ff76e4d103fa6163117b8f0091f596",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0045813170133539955,
+            "rank_icir": 0.0664959711589516,
+            "sharpe": 1.7623017755728765,
+            "max_drawdown": 0.08839091461568413,
+            "turnover": 0.35195695476099265,
+            "worst_block_sharpe": 1.1076740576229647
+          },
+          "raw_rank_ic_fold_gain": -0.0009586433257352013,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "min",
+            "window": 20
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "f55ca5f2ff385506c5803bd1fb80bb853d1632a5f5c209e7262add4c398f78c1",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.003607839078758713,
+            "rank_icir": 0.05503087122445959,
+            "sharpe": 1.6259787253527371,
+            "max_drawdown": 0.07749342244691773,
+            "turnover": 0.3038675243074623,
+            "worst_block_sharpe": 0.4773766525369908
+          },
+          "raw_rank_ic_fold_gain": 0.0030959479377874223,
+          "status": "train_evaluated",
+          "train_gain": 0.04179193306824508
+        },
+        {
+          "family": "REPRESENTATION_ZSCORE",
+          "parameters": {
+            "zscore_axis": "ts",
+            "cap": 3.0,
+            "window": 5
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_zscore_history",
+          "plan_identity": "1a0022281627a340921679024f8f7f8591b3c6c8ee8299f9ceda00bef78a639f",
+          "coverage": 0.976781952247191,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.004194388002323616,
+            "rank_icir": -0.06533515987229295,
+            "sharpe": 1.865377828968322,
+            "max_drawdown": 0.1650058738743974,
+            "turnover": 0.08308615857050858,
+            "worst_block_sharpe": 0.8696919040762985
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0002254348058586046,
+            "rank_icir": -0.003422456564867183,
+            "sharpe": 1.531217194224925,
+            "max_drawdown": 0.16036721288075484,
+            "turnover": 0.37630094053213686,
+            "worst_block_sharpe": 0.8206465897064578
+          },
+          "raw_rank_ic_fold_gain": -0.007817661312030558,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_ZSCORE",
+          "parameters": {
+            "zscore_axis": "ts",
+            "cap": 3.0,
+            "window": 10
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_zscore_history",
+          "plan_identity": "7698732e3fbbf25f568091d7fba37d55152ab394d48614c6f9b4880760962d62",
+          "coverage": 0.9903587312734082,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0038134847788995666,
+            "rank_icir": -0.05856554647122214,
+            "sharpe": 1.7986946509485195,
+            "max_drawdown": 0.16423729713205934,
+            "turnover": 0.06187840291350944,
+            "worst_block_sharpe": 0.7037733821127802
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 4.982227011111443e-05,
+            "rank_icir": 0.0007036427256036516,
+            "sharpe": 1.0812306417102149,
+            "max_drawdown": 0.18076148310402843,
+            "turnover": 0.36902837394443405,
+            "worst_block_sharpe": 0.2750485770784173
+          },
+          "raw_rank_ic_fold_gain": -0.004748355716723144,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_ZSCORE",
+          "parameters": {
+            "zscore_axis": "ts",
+            "cap": 3.0,
+            "window": 20
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_zscore_history",
+          "plan_identity": "2febcfe91798aa91d001a659d4d49111ada4e53949110d59d309fba1f6b07f2d",
+          "coverage": 0.9981566011235955,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.003321394897815552,
+            "rank_icir": -0.050594017455793165,
+            "sharpe": 1.8127825593870641,
+            "max_drawdown": 0.16271618526370543,
+            "turnover": 0.058445584095722376,
+            "worst_block_sharpe": 0.6745946926797111
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.004959395937678248,
+            "rank_icir": 0.07186285066667462,
+            "sharpe": 1.0772140068442766,
+            "max_drawdown": 0.12491917750853129,
+            "turnover": 0.3700938690546882,
+            "worst_block_sharpe": 0.7644256432892667
+          },
+          "raw_rank_ic_fold_gain": 0.0029180601228745813,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        }
+      ],
+      "candidate_count": 103
+    },
+    "weekly_db5616cd85a477b3": {
+      "status": "raw_retained",
+      "selected_family": "NO_OP_RAW",
+      "train_gain": 0.11165439682022438,
+      "validation_lower_bound": null,
+      "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+      "plan_identity": "e4662b575f6957fc2ab5bce820e6c65f33442fb9d64a42c6098c4d6aeb806c0a",
+      "baseline_diagnostics": {
+        "operations": [
+          "winsor",
+          "cs_rank"
+        ],
+        "omissions": [
+          "neutralization_missing_exposures"
+        ],
+        "accepted": true,
+        "reason": "no_substantial_training_degradation",
+        "coverage": 1.0,
+        "valid_days": 267,
+        "upper_bound": 0.002102299675478112,
+        "maximum_loss": 0.01,
+        "joint_policy": "joint.v1",
+        "joint_raw": {
+          "rank_ic": -0.0060321893386178355,
+          "rank_icir": -0.08557145352186224,
+          "sharpe": 2.2236579510039816,
+          "max_drawdown": 0.1725316435068342,
+          "turnover": 0.014805711610486891,
+          "worst_block_sharpe": 1.1582010526532172
+        },
+        "joint_candidate": {
+          "rank_ic": -0.00530337070465075,
+          "rank_icir": -0.0746147672270233,
+          "sharpe": 2.088692041506368,
+          "max_drawdown": 0.18584596181065458,
+          "turnover": 0.029435861423220973,
+          "worst_block_sharpe": 0.9343152797254322
+        }
+      },
+      "joint_diagnostics": {
+        "objective": "joint",
+        "empty_leg_policy": "signal_cash",
+        "cost_rate": 0.001,
+        "policy": "joint.v1",
+        "baseline_train_raw": {
+          "rank_ic": -0.0060321893386178355,
+          "rank_icir": -0.08557145352186224,
+          "sharpe": 2.2236579510039816,
+          "max_drawdown": 0.1725316435068342,
+          "turnover": 0.014805711610486891,
+          "worst_block_sharpe": 1.1582010526532172
+        },
+        "baseline_train_candidate": {
+          "rank_ic": -0.00530337070465075,
+          "rank_icir": -0.0746147672270233,
+          "sharpe": 2.088692041506368,
+          "max_drawdown": 0.18584596181065458,
+          "turnover": 0.029435861423220973,
+          "worst_block_sharpe": 0.9343152797254322
+        },
+        "validation_raw": {
+          "rank_ic": 0.010351676742059794,
+          "rank_icir": 0.157879772138836,
+          "sharpe": 0.8388943507252635,
+          "max_drawdown": 0.09621648916795206,
+          "turnover": 0.01401417525773196,
+          "worst_block_sharpe": -1.0526736890682997
+        },
+        "validation_candidate": {
+          "rank_ic": -0.00858422943998815,
+          "rank_icir": -0.12046867092360558,
+          "sharpe": 0.5371519747892766,
+          "max_drawdown": 0.09387314729994731,
+          "turnover": 0.10454252577319588,
+          "worst_block_sharpe": -1.2025961987622718
+        },
+        "comparison_status": "DEGRADATION_FLOOR_FAILED"
+      },
+      "candidates": [
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "average",
+            "window": 5
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "382be46ec3e2b42aa197085dec561ade3df20f203ca912c5846b5836b5734ab0",
+          "coverage": 0.9887640449438202,
+          "valid_train_days": 264,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "average",
+            "window": 10
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "79501893afd86a0aace1f13b82bcc80f7a39e719c73cc9f97c790f7bd216dcda",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0060321893386178355,
+            "rank_icir": -0.08557145352186224,
+            "sharpe": 2.2236579510039816,
+            "max_drawdown": 0.1725316435068342,
+            "turnover": 0.014805711610486891,
+            "worst_block_sharpe": 1.1582010526532172
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.002159318004317185,
+            "rank_icir": 0.030159660752143234,
+            "sharpe": 1.9449103365914,
+            "max_drawdown": 0.14201796423853552,
+            "turnover": 0.1633309925093633,
+            "worst_block_sharpe": 1.8615801645362837
+          },
+          "raw_rank_ic_fold_gain": 0.0036833405797277894,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "average",
+            "window": 20
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "f107a34508b8353878b2766dea4265f66f7210d16520c74248a68873d2ad6be7",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0060321893386178355,
+            "rank_icir": -0.08557145352186224,
+            "sharpe": 2.2236579510039816,
+            "max_drawdown": 0.1725316435068342,
+            "turnover": 0.014805711610486891,
+            "worst_block_sharpe": 1.1582010526532172
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0044041124152310865,
+            "rank_icir": -0.05797287060805414,
+            "sharpe": 1.9820844028594664,
+            "max_drawdown": 0.14040376352118109,
+            "turnover": 0.14387289325842698,
+            "worst_block_sharpe": 1.7213767322397024
+          },
+          "raw_rank_ic_fold_gain": -0.0007389367621682798,
+          "status": "train_evaluated",
+          "train_gain": 0.014329036175427579
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "min",
+            "window": 5
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "e769c360b37c885afe30efcbbad6b9c8226b4d578d3a52b73bc33461afeb2b21",
+          "coverage": 0.9887640449438202,
+          "valid_train_days": 264,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "min",
+            "window": 10
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "8323a312d955905d3c574f820f253e298366ba85d0227e1e9c74959319bbc6d3",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0060321893386178355,
+            "rank_icir": -0.08557145352186224,
+            "sharpe": 2.2236579510039816,
+            "max_drawdown": 0.1725316435068342,
+            "turnover": 0.014805711610486891,
+            "worst_block_sharpe": 1.1582010526532172
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.003667650027869915,
+            "rank_icir": 0.05237005285585217,
+            "sharpe": 1.5849299178916059,
+            "max_drawdown": 0.12230275551255013,
+            "turnover": 0.17898525280898878,
+            "worst_block_sharpe": 1.5548832608728989
+          },
+          "raw_rank_ic_fold_gain": 0.005157845796950915,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "min",
+            "window": 20
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "69844d2d813cbd9a28f30697f12a5d36fbecdd02a8b7d57e5e0e8e2c0403cf37",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0060321893386178355,
+            "rank_icir": -0.08557145352186224,
+            "sharpe": 2.2236579510039816,
+            "max_drawdown": 0.1725316435068342,
+            "turnover": 0.014805711610486891,
+            "worst_block_sharpe": 1.1582010526532172
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0018759593229015431,
+            "rank_icir": -0.025345900990505228,
+            "sharpe": 1.7348819455144215,
+            "max_drawdown": 0.11855766617730563,
+            "turnover": 0.14132724719101122,
+            "worst_block_sharpe": 1.6904991250066053
+          },
+          "raw_rank_ic_fold_gain": 0.0003195714552408995,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_ZSCORE",
+          "parameters": {
+            "zscore_axis": "ts",
+            "cap": 3.0,
+            "window": 5
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_zscore_history",
+          "plan_identity": "7e74c2d1fc7bdfdb3d1ca77d42eba28b12e273a32ff0923f6e0ed8dfaf6de754",
+          "coverage": 0.9135650749063671,
+          "valid_train_days": 249,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "REPRESENTATION_ZSCORE",
+          "parameters": {
+            "zscore_axis": "ts",
+            "cap": 3.0,
+            "window": 10
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_zscore_history",
+          "plan_identity": "968e943b6cec0786845ff45746e733776d217e30094eeb2229e57c364e231b91",
+          "coverage": 0.9898174157303371,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.006637903458936151,
+            "rank_icir": -0.09349413699015836,
+            "sharpe": 2.338060748438621,
+            "max_drawdown": 0.1614439263944785,
+            "turnover": 0.025434493199698427,
+            "worst_block_sharpe": 1.5495033671432656
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.00024856462818959567,
+            "rank_icir": -0.0034089374503381304,
+            "sharpe": 2.466457062498324,
+            "max_drawdown": 0.14040744863131038,
+            "turnover": 0.14450343406188682,
+            "worst_block_sharpe": 2.337984090651024
+          },
+          "raw_rank_ic_fold_gain": 0.005298046231455016,
+          "status": "train_evaluated",
+          "train_gain": 0.07903036760660803
+        },
+        {
+          "family": "REPRESENTATION_ZSCORE",
+          "parameters": {
+            "zscore_axis": "ts",
+            "cap": 3.0,
+            "window": 20
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_zscore_history",
+          "plan_identity": "af47a1f4f6a178aa201df1c2245ad9f62dd1dbad725f62aecf509e3a628ac7bf",
+          "coverage": 0.9981712312734082,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.005580252154548718,
+            "rank_icir": -0.08011919670761315,
+            "sharpe": 2.2199553624830557,
+            "max_drawdown": 0.17264114350531562,
+            "turnover": 0.016655995263273847,
+            "worst_block_sharpe": 1.1514739999521875
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.002460192603862238,
+            "rank_icir": -0.031889195786262904,
+            "sharpe": 2.6545770795543393,
+            "max_drawdown": 0.14636426645781242,
+            "turnover": 0.0816563165528383,
+            "worst_block_sharpe": 2.519282875202507
+          },
+          "raw_rank_ic_fold_gain": -0.004940958393200618,
+          "status": "train_evaluated",
+          "train_gain": 0.0882901561129773
+        }
+      ],
+      "candidate_count": 103
+    }
+  },
+  "selection_objective": "joint.v1: Sharpe, RankICIR, RankIC, drawdown, worst-block Sharpe, turnover",
+  "method_status_counts": {
+    "requires_additional_inputs_or_control": 16,
+    "executed": 114
+  },
+  "temporal_methods": [
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "average",
+        "window": 20
+      },
+      "transform": "ts_rank_history",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9333333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1.0,
+      "train_mean_ic_delta": 0.002674824849289501,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "train_raw_metrics": {
+        "rank_ic": -0.0036978994219487417,
+        "rank_icir": -0.05617737834536126,
+        "sharpe": 1.80241977526469,
+        "max_drawdown": 0.1638542245618701,
+        "turnover": 0.056956044411153275,
+        "worst_block_sharpe": 0.6636481299873691
+      },
+      "train_candidate_metrics": {
+        "rank_ic": -0.0010230745726592396,
+        "rank_icir": -0.016546426604669515,
+        "sharpe": 0.400029800419178,
+        "max_drawdown": 0.13783349409819484,
+        "turnover": 0.11099668022824563,
+        "worst_block_sharpe": -1.1527265103504565
+      },
+      "joint_utility_delta": -0.26679983787681716,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "min",
+        "window": 20
+      },
+      "transform": "ts_rank_history",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9333333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1.0,
+      "train_mean_ic_delta": -0.002535080647244447,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "joint metrics unavailable, including zero-variance ratios"
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "REPRESENTATION_ZSCORE",
+      "parameters": {
+        "zscore_axis": "ts",
+        "cap": 3.0,
+        "window": 20
+      },
+      "transform": "ts_zscore_history",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.33654947916666667,
+      "valid_ic_days": 267,
+      "paired_retention": 0.3516502808988764,
+      "train_mean_ic_delta": 0.006417763531339382,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "train_raw_metrics": {
+        "rank_ic": -0.007485965179067608,
+        "rank_icir": -0.058830874125648754,
+        "sharpe": -0.7836182384762179,
+        "max_drawdown": 0.14315259215815368,
+        "turnover": 0.23465807972886235,
+        "worst_block_sharpe": -2.058965902362518
+      },
+      "train_candidate_metrics": {
+        "rank_ic": -0.0010682016477282258,
+        "rank_icir": -0.010156431546444297,
+        "sharpe": -1.6762635484761854,
+        "max_drawdown": 0.11487757313436799,
+        "turnover": 0.3383780055762063,
+        "worst_block_sharpe": -3.639490747619916
+      },
+      "joint_utility_delta": -0.10358668950116695,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "average",
+        "window": 20
+      },
+      "transform": "ts_rank_history",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9333333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1.0,
+      "train_mean_ic_delta": -0.0022260415891840668,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "train_raw_metrics": {
+        "rank_ic": -0.0060321893386178355,
+        "rank_icir": -0.08557145352186224,
+        "sharpe": 2.2236579510039816,
+        "max_drawdown": 0.1725316435068342,
+        "turnover": 0.014805711610486891,
+        "worst_block_sharpe": 1.1582010526532172
+      },
+      "train_candidate_metrics": {
+        "rank_ic": -0.008258230927801901,
+        "rank_icir": -0.1276198749872884,
+        "sharpe": 2.049494953231213,
+        "max_drawdown": 0.17788896324624057,
+        "turnover": 0.013254915730337078,
+        "worst_block_sharpe": 1.065068178535262
+      },
+      "joint_utility_delta": -0.03974429067508828,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "min",
+        "window": 20
+      },
+      "transform": "ts_rank_history",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9333333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1.0,
+      "train_mean_ic_delta": 0.0008206479124885256,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "joint metrics unavailable, including zero-variance ratios"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "REPRESENTATION_ZSCORE",
+      "parameters": {
+        "zscore_axis": "ts",
+        "cap": 3.0,
+        "window": 20
+      },
+      "transform": "ts_zscore_history",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.0856640625,
+      "valid_ic_days": 209,
+      "paired_retention": 0.09268199906367042,
+      "train_mean_ic_delta": 0.00798025008555474,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "missing or nonfinite joint metrics cannot be imputed"
+    }
+  ]
+}

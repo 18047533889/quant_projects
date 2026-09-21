@@ -66,6 +66,12 @@ class ValueRepairPlan:
         if self.transform == "cs_rank":
             from factor_preprocess.transforms.repair_shapes import cross_sectional_rank
             return cross_sectional_rank(frame, **kwargs)
+        if self.transform in {"ts_rank_history", "ts_zscore_history"}:
+            from factor_preprocess.transforms.temporal_representation import (
+                time_series_rank, capped_time_series_zscore,
+            )
+            function = time_series_rank if self.transform == "ts_rank_history" else capped_time_series_zscore
+            return function(frame, **kwargs)
         if self.transform == "capped_zscore":
             from factor_preprocess.transforms.repair_shapes import capped_zscore
             return capped_zscore(frame, **kwargs)
@@ -101,6 +107,13 @@ def compile_value_repair(family: str, parameters: Mapping[str, object], *,
         if isinstance(value, numbers.Real) and not isinstance(value, bool) and not math.isfinite(value):
             raise ValueError(f"{name} must be finite")
     tree = build_conditional_tree([family])[0]
+    if family in {"REPRESENTATION_RANK", "REPRESENTATION_ZSCORE"} and "window" not in params:
+        axis = params.get("rank_axis", params.get("zscore_axis"))
+        if axis == "ts":
+            raise IneligibleValueRepair("time-series representation requires an explicit window")
+        # Preserve existing CS calls: this field is inactive and not included
+        # in the resolved stateless plan identity.
+        params["window"] = int(next(p.prior for p in tree.parameters if p.name == "window"))
     tree.validate_params(params)
 
     if family == "NO_OP_RAW":
@@ -145,13 +158,17 @@ def compile_value_repair(family: str, parameters: Mapping[str, object], *,
             return _plan(family, "missing_indicator", {}, natural_time_scale, training_context_ref)
         raise IneligibleValueRepair("drop mode is row-selection, not a value Series primitive")
     if family == "REPRESENTATION_RANK":
-        if params["rank_axis"] != "cross_sectional":
-            raise IneligibleValueRepair("time-series rank lacks a registry window parameter")
+        if params["rank_axis"] == "ts":
+            return _plan(family, "ts_rank_history",
+                         {"method": params["tie_method"], "window": int(params["window"])},
+                         natural_time_scale, training_context_ref)
         return _plan(family, "cs_rank", {"method": params["tie_method"]},
                      natural_time_scale, training_context_ref)
     if family == "REPRESENTATION_ZSCORE":
-        if params["zscore_axis"] != "cross_sectional":
-            raise IneligibleValueRepair("time-series zscore lacks a registry window parameter")
+        if params["zscore_axis"] == "ts":
+            return _plan(family, "ts_zscore_history",
+                         {"cap": float(params["cap"]), "window": int(params["window"])},
+                         natural_time_scale, training_context_ref)
         return _plan(family, "capped_zscore", {"cap": float(params["cap"])},
                      natural_time_scale, training_context_ref)
     if family == "TAIL_SATURATION":

@@ -679,7 +679,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### compile_value_repair
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L89)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L95)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -5730,13 +5730,13 @@ True when this family may repair *diagnosis*.
 
 ### RepairFamilyRegistry
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L650)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L652)。
 
 Versioned registry of repair-family declarations (plan §20 E3).
 
 ### RepairFamilyRegistry.__init__
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L660)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L662)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -5746,7 +5746,7 @@ Versioned registry of repair-family declarations (plan §20 E3).
 
 ### RepairFamilyRegistry.default
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L689)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L691)。
 
 The canonical 20-family registry (plan §20 E3).
 
@@ -5756,7 +5756,7 @@ The canonical 20-family registry (plan §20 E3).
 
 ### RepairFamilyRegistry.policy_id
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L694)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L696)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -5766,7 +5766,7 @@ The canonical 20-family registry (plan §20 E3).
 
 ### RepairFamilyRegistry.policy_version
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L698)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L700)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -5776,7 +5776,7 @@ The canonical 20-family registry (plan §20 E3).
 
 ### RepairFamilyRegistry.family_names
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L702)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L704)。
 
 Upper-snake names of every declared family, sorted.
 
@@ -5786,7 +5786,7 @@ Upper-snake names of every declared family, sorted.
 
 ### RepairFamilyRegistry.declarations
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L707)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L709)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -5796,7 +5796,7 @@ Upper-snake names of every declared family, sorted.
 
 ### RepairFamilyRegistry.get
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L710)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L712)。
 
 Resolve a family declaration (by member or upper-snake name).
 
@@ -5806,7 +5806,7 @@ Resolve a family declaration (by member or upper-snake name).
 
 ### RepairFamilyRegistry.eligible_families_for
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L728)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L730)。
 
 Declarations eligible for a diagnosis, in registry order.
 
@@ -5816,7 +5816,7 @@ Declarations eligible for a diagnosis, in registry order.
 
 ### RepairFamilyRegistry.to_dict
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L747)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L749)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -5826,7 +5826,7 @@ Declarations eligible for a diagnosis, in registry order.
 
 ### DomainToken
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L774)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L776)。
 
 Taxonomy/evidence tokens a repair rule may condition on.
 
@@ -5845,7 +5845,7 @@ Taxonomy/evidence tokens a repair rule may condition on.
 
 ### classify_evidence_context
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L792)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L794)。
 
 Deterministic, conservative tokenization of a repair evidence context.
 
@@ -5855,7 +5855,7 @@ Deterministic, conservative tokenization of a repair evidence context.
 
 ### RepairRule
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L845)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L847)。
 
 One diagnosis→repair-family rule (plan §20 E4).
 
@@ -5871,7 +5871,7 @@ One diagnosis→repair-family rule (plan §20 E4).
 
 ### DiagnosisRepairPolicy
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L881)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L883)。
 
 Versioned diagnosis→repair-family rule table (plan §20 E4).
 
@@ -5885,7 +5885,7 @@ Versioned diagnosis→repair-family rule table (plan §20 E4).
 
 ### DiagnosisRepairPolicy.families_for
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L906)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L908)。
 
 Ordered repair-family names allowed for a diagnosis.
 
@@ -5895,7 +5895,7 @@ Ordered repair-family names allowed for a diagnosis.
 
 ### default_diagnosis_repair_policy
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L1243)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L1245)。
 
 The canonical diagnosis-repair policy (plan §20 E4).
 
@@ -5905,7 +5905,7 @@ The canonical diagnosis-repair policy (plan §20 E4).
 
 ### RepairBudgetConfig
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L1254)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L1256)。
 
 Configurable search-budget bounds (plan §20 E5).
 
@@ -5922,7 +5922,7 @@ Configurable search-budget bounds (plan §20 E5).
 
 ### RepairBudgetConfig.candidates_per_family_range
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L1308)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L1310)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -5932,7 +5932,7 @@ Configurable search-budget bounds (plan §20 E5).
 
 ### RepairCandidateSlot
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L1313)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L1315)。
 
 One planned candidate slot in a diagnosis-directed search budget.
 
@@ -5946,7 +5946,7 @@ One planned candidate slot in a diagnosis-directed search budget.
 
 ### DiagnosisSearchBudget
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L1342)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L1344)。
 
 A concrete, bounded candidate plan for one factor (plan §20 E5).
 
@@ -5963,7 +5963,7 @@ A concrete, bounded candidate plan for one factor (plan §20 E5).
 
 ### DiagnosisSearchBudget.total_candidates_ceiling
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L1364)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L1366)。
 
 Sum of every slot's candidate allowance.
 
@@ -5973,7 +5973,7 @@ Sum of every slot's candidate allowance.
 
 ### DiagnosisSearchBudget.within_soft_budget
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L1368)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L1370)。
 
 True when the plan respects the soft 6-12 total candidate budget.
 
@@ -5983,7 +5983,7 @@ True when the plan respects the soft 6-12 total candidate budget.
 
 ### DiagnosisSearchBudget.to_dict
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L1378)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L1380)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -5993,7 +5993,7 @@ True when the plan respects the soft 6-12 total candidate budget.
 
 ### diagnosis_search_budget
 
-[实际实现](../factor_optimizer/policy/repair_registry.py#L1396)。
+[实际实现](../factor_optimizer/policy/repair_registry.py#L1398)。
 
 Generate a concrete candidate plan from diagnoses (plan §20 E5).
 
@@ -6658,7 +6658,7 @@ At most two IC references, private to one factor's TRAIN search.
 
 ### optimize_factor_batch
 
-[实际实现](../factor_optimizer/research_batch.py#L346)。
+[实际实现](../factor_optimizer/research_batch.py#L351)。
 
 Optimize aligned QE contracts automatically, preserving every input ID.
 
@@ -10609,7 +10609,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/adapters/layered_decay.py` | `86ac91175c82eef473abef116a7a67802872a0da96ce0fa7a6022bf783bb3e26` |
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
-| `factor_optimizer/adapters/repair_execution.py` | `260fad479637ff715f6cbd93e552aab338670727b9600746ec0e1aa7e1481466` |
+| `factor_optimizer/adapters/repair_execution.py` | `bdcc809bcef98f2dc1107b4430c7078ddf943d2a65b5513460627cd56e90e4d5` |
 | `factor_optimizer/capabilities.py` | `efb1fbf1b54b1b14f128ffe63c74f54f7a22f99a409a0761aac67fc1b6e3ed28` |
 | `factor_optimizer/complexity/__init__.py` | `79c8daf01ef8071b77eb7cbb8df4ae45fc9e2d4a4349f35d402a12f79936e696` |
 | `factor_optimizer/complexity/budget.py` | `d797ada6f52d0ccab3820450fb12e8f84f3f3dbb4e9f1e53f64eb5bb21a3469d` |
@@ -10646,11 +10646,11 @@ Import seen records from dictionaries.
 | `factor_optimizer/policy/__init__.py` | `ddba38b9e34581d134c45902fd04db8e8fc540fd5b2438e4a3a46e3753888caf` |
 | `factor_optimizer/policy/decisions.py` | `832c06ae174ab078f518a9ee8237efe89cd88849c2f42e48e250dc6b676d16d3` |
 | `factor_optimizer/policy/repair.py` | `193d142a9cd970b4e9a055fe60642d09514145868107cb25e039f956a9501570` |
-| `factor_optimizer/policy/repair_registry.py` | `1f337900eec0750622901a2f26f0bb19ad5bae248399c62546b3ede85b998545` |
+| `factor_optimizer/policy/repair_registry.py` | `5d8102d9f897c93db9c920f81e622eddef9bd91403dbba27ab250d236bd3246f` |
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
-| `factor_optimizer/research_batch.py` | `bf900afa4092d42b7e453e9465893267d1b163be0a75e94e884ada50bf917936` |
+| `factor_optimizer/research_batch.py` | `ff4f2ab4eee757ddd372125ec7a61025805ea6c1755138aca919feabe01a5bfb` |
 | `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
 | `factor_optimizer/research_diagnostics.py` | `26c82a50b2edcaa4eff8911da11a4fcd52fbad2f5235148202a300d396ced23d` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |

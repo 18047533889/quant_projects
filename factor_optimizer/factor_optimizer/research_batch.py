@@ -317,6 +317,11 @@ def _specs(config):
             choices = [dict(prior, hinge=side) for side in ("top", "bottom")]
         elif family == "TAIL_SATURATION":
             choices = [dict(prior, saturate=side) for side in ("top", "bottom", "both")]
+        elif family == "REPRESENTATION_RANK":
+            choices = [prior] + [dict(prior, rank_axis="ts", tie_method=tie, window=window)
+                                for tie in ("average", "min") for window in (5, 10, 20)]
+        elif family == "REPRESENTATION_ZSCORE":
+            choices = [prior] + [dict(prior, zscore_axis="ts", window=window) for window in (5, 10, 20)]
         else:
             choices = [prior]
         specs.extend((family, p) for p in choices)
@@ -454,7 +459,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
         factor_specs = list(specs)
         if ('cs_rank_already_present' in baseline_plan.omissions
                 or (baseline_active and 'cs_rank' in baseline_plan.operations)):
-            factor_specs = [(f, p) for f, p in factor_specs if f != 'REPRESENTATION_RANK']
+            factor_specs = [(f, p) for f, p in factor_specs
+                            if not (f == 'REPRESENTATION_RANK' and p['rank_axis'] == 'cross_sectional')]
         shape = diagnosis["proposed_shape_family"]
         if shape and (not config.families or shape in config.families):
             # Up to two TRAIN-fitted proposals supplement the prespecified grid.
