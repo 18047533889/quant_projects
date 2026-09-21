@@ -1,0 +1,178 @@
+{
+  "factor": "weekly_db5616cd85a477b3",
+  "source_sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+  "days": 500,
+  "assets": 256,
+  "partition": "TRAIN only",
+  "test_evaluated": false,
+  "status_counts": {
+    "requires_additional_inputs_or_control": 11,
+    "executed": 54
+  },
+  "families": {
+    "ABANDON": {
+      "cases": 1,
+      "statuses": {
+        "requires_additional_inputs_or_control": 1
+      },
+      "joint_available": 0,
+      "floor_passes": 0
+    },
+    "CAUSAL_SMOOTHING": {
+      "cases": 27,
+      "statuses": {
+        "executed": 27
+      },
+      "joint_available": 27,
+      "floor_passes": 24
+    },
+    "DECAY_REFINEMENT": {
+      "cases": 3,
+      "statuses": {
+        "executed": 3
+      },
+      "joint_available": 3,
+      "floor_passes": 3
+    },
+    "INDUSTRY_NEUTRALIZATION": {
+      "cases": 1,
+      "statuses": {
+        "requires_additional_inputs_or_control": 1
+      },
+      "joint_available": 0,
+      "floor_passes": 0
+    },
+    "INVERTED_U_REPAIR": {
+      "cases": 2,
+      "statuses": {
+        "executed": 2
+      },
+      "joint_available": 2,
+      "floor_passes": 2
+    },
+    "LOW_DOF_INTERACTION": {
+      "cases": 1,
+      "statuses": {
+        "requires_additional_inputs_or_control": 1
+      },
+      "joint_available": 0,
+      "floor_passes": 0
+    },
+    "MISSINGNESS_FRESHNESS": {
+      "cases": 3,
+      "statuses": {
+        "executed": 2,
+        "requires_additional_inputs_or_control": 1
+      },
+      "joint_available": 1,
+      "floor_passes": 1
+    },
+    "NO_OP_RAW": {
+      "cases": 1,
+      "statuses": {
+        "executed": 1
+      },
+      "joint_available": 1,
+      "floor_passes": 1
+    },
+    "OPERATOR_SWAP": {
+      "cases": 1,
+      "statuses": {
+        "requires_additional_inputs_or_control": 1
+      },
+      "joint_available": 0,
+      "floor_passes": 0
+    },
+    "REPRESENTATION_RANK": {
+      "cases": 4,
+      "statuses": {
+        "executed": 2,
+        "requires_additional_inputs_or_control": 2
+      },
+      "joint_available": 2,
+      "floor_passes": 2
+    },
+    "REPRESENTATION_ZSCORE": {
+      "cases": 2,
+      "statuses": {
+        "executed": 1,
+        "requires_additional_inputs_or_control": 1
+      },
+      "joint_available": 1,
+      "floor_passes": 1
+    },
+    "ROBUST_OUTLIER": {
+      "cases": 1,
+      "statuses": {
+        "executed": 1
+      },
+      "joint_available": 1,
+      "floor_passes": 1
+    },
+    "ROBUST_SCALE": {
+      "cases": 6,
+      "statuses": {
+        "executed": 6
+      },
+      "joint_available": 6,
+      "floor_passes": 6
+    },
+    "SIGN_ORIENTATION": {
+      "cases": 2,
+      "statuses": {
+        "executed": 2
+      },
+      "joint_available": 2,
+      "floor_passes": 2
+    },
+    "SIZE_NEUTRALIZATION": {
+      "cases": 1,
+      "statuses": {
+        "requires_additional_inputs_or_control": 1
+      },
+      "joint_available": 0,
+      "floor_passes": 0
+    },
+    "STYLE_NEUTRALIZATION": {
+      "cases": 1,
+      "statuses": {
+        "requires_additional_inputs_or_control": 1
+      },
+      "joint_available": 0,
+      "floor_passes": 0
+    },
+    "TAIL_HINGE": {
+      "cases": 2,
+      "statuses": {
+        "executed": 2
+      },
+      "joint_available": 0,
+      "floor_passes": 0
+    },
+    "TAIL_SATURATION": {
+      "cases": 3,
+      "statuses": {
+        "executed": 3
+      },
+      "joint_available": 2,
+      "floor_passes": 1
+    },
+    "U_SHAPE_REPAIR": {
+      "cases": 2,
+      "statuses": {
+        "executed": 2
+      },
+      "joint_available": 0,
+      "floor_passes": 0
+    },
+    "WINDOW_REFINEMENT": {
+      "cases": 1,
+      "statuses": {
+        "requires_additional_inputs_or_control": 1
+      },
+      "joint_available": 0,
+      "floor_passes": 0
+    }
+  },
+  "limits": "TRAIN execution audit, not method acceptance or held-out improvement"
+}

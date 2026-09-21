@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
+import re
 from pathlib import Path
 
 import numpy as np
@@ -11,15 +11,44 @@ import pandas as pd
 
 from data_access.core.engine import DuckDBEngine
 from data_access.core.storage import StorageSpec
-from data_access.registry.loader import DatasetRegistry, ParametricDataset
+from data_access.registry.loader import DatasetRegistry, StaticDataset
+from data_access.read.formats import FormatSpec
 from data_access.store import DataAccessStore
-from data_access.cos.remote import cos_cli_ls
 from data_access.cos.research import read_declared_cos_object
 from factor_optimizer.research_diagnostics import diagnose_training_batch
+from factor_optimizer.research_manifest import read_bound_factor
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 
 POOL = "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values"
+MANIFEST = ("cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/metadata/"
+            "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66")
+
+
+def select_manifest_records(rows, n_factors):
+    """Deterministic bounded sample; source quality gates precede downloads."""
+    if type(n_factors) is not int or not 1 <= n_factors <= 16:
+        raise ValueError("n_factors must be a positive integer <= 16")
+    if len(rows) != 1 or not isinstance(rows[0].get("factors"), dict):
+        raise ValueError("one manifest with a factors mapping is required")
+    eligible = []
+    for name, record in sorted(rows[0]["factors"].items()):
+        if not isinstance(record, dict) or record.get("verified") is not True:
+            continue
+        if record.get("status") not in {"materialized_not_evaluated", "evaluated_optimization_pending"}:
+            continue
+        size = record.get("bytes")
+        if type(size) is not int or not 0 < size <= 8*1024**2:
+            continue
+        sha = record.get("sha256")
+        if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", name)
+                or not isinstance(sha, str) or not re.fullmatch(r"[0-9a-f]{64}", sha)
+                or record.get("uri") != f"{POOL}/{sha}/{name}.parquet"):
+            raise ValueError("manifest factor URI must match the authorized hash directory")
+        eligible.append((name, record))
+    if len(eligible) < n_factors:
+        raise ValueError(f"requested {n_factors} factors but only {len(eligible)} eligible bounded records")
+    return eligible[:n_factors]
 
 
 def choose_assets(panels, train_dates, n_assets=512):
@@ -36,30 +65,29 @@ def choose_assets(panels, train_dates, n_assets=512):
     return sorted(common[i] for i in ranked[:n_assets])
 
 
-def load_cos_sample(n_factors=3, n_assets=512):
+def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False):
     from real_batch_audit import _load_vwap, DAILY_ADJ
-    cli = os.environ.get("DATA_ACCESS_COS_CLI", "clean-cos-ro")
-    objects = cos_cli_ls(POOL + "/", cli=cli, timeout_s=20)
-    # Prespecified metadata-only sampling: never select on future performance.
-    selected = sorted((r for r in objects if r["key"].endswith(".parquet")
-                       and 0 < r["size"] <= 8*1024**2), key=lambda r: r["key"])[:n_factors]
-    if len(selected) != n_factors:
-        raise ValueError("insufficient bounded COS sample objects")
-    factor_ids = tuple(Path(r["key"]).stem for r in selected)
     root = Path("/home/sunhaiwei/quant_projects/workspace_data/research_factor_panel")
-    ds = ParametricDataset(
-        name="lqtp_research_panel", access_mode="published", layout="plain",
-        time_column=None, instrument_column=None, hive_partitioning=False, union_by_name=True,
-        root_template=str(root), glob_template="{factor_id}.parquet",
-        params_schema={"factor_id": "str"}, static_root=root,
-        storage=StorageSpec(type="cos", uri=POOL, layout="plain"))
+    def dataset(name, uri, filename, fmt):
+        return StaticDataset(name=name, access_mode="published", layout="plain",
+            time_column=None, instrument_column=None, hive_partitioning=False, union_by_name=True,
+            root=root/name, glob=filename, format_spec=FormatSpec.from_yaml(fmt),
+            storage=StorageSpec(type="cos", uri=uri, layout="plain"))
+    manifest_ds = dataset("source_manifest", MANIFEST, "landing_manifest.json", "json")
     engine = DuckDBEngine(threads=2)
-    panels, sources = [], []
+    panels, sources, lineages = [], [], {}
     try:
-        store = DataAccessStore(DatasetRegistry({ds.name: ds}), engine)
-        for factor_id in factor_ids:
-            result = read_declared_cos_object(store, ds.name,
-                params={"factor_id": factor_id}, allow_research=True)
+        store = DataAccessStore(DatasetRegistry({manifest_ds.name: manifest_ds}), engine)
+        manifest = read_declared_cos_object(store, manifest_ds.name, allow_research=True)
+        selected = select_manifest_records(manifest.table.to_pylist(), n_factors)
+        factor_ids = tuple(name for name, _ in selected)
+        for factor_id, record in selected:
+            ds = dataset("factor_panel", record["uri"].rsplit("/", 1)[0],
+                         factor_id+".parquet", "parquet")
+            store = DataAccessStore(DatasetRegistry({manifest_ds.name: manifest_ds, ds.name: ds}), engine)
+            bound = read_bound_factor(store, manifest_ds.name, ds.name, factor_id, allow_research=True)
+            result = bound.factor
+            lineages[factor_id] = bound.treatment_signature
             table = result.table.to_pandas()
             if "timestamp" in table.columns:
                 table = table.set_index("timestamp")
@@ -72,7 +100,9 @@ def load_cos_sample(n_factors=3, n_assets=512):
             panels.append(table)
             sources.append({"factor": factor_id, "uri": result.source_uri,
                             "etag": result.source_etag, "sha256": result.content_sha256,
-                            "downloaded_bytes": result.downloaded_bytes})
+                            "downloaded_bytes": result.downloaded_bytes,
+                            "manifest_sha256": bound.manifest_sha256,
+                            "source_status": bound.source_status, "expression": bound.expression})
     finally:
         engine.close()
     dates = panels[0].index
@@ -103,10 +133,11 @@ def load_cos_sample(n_factors=3, n_assets=512):
         label_start_time=tuple(calendar[pos+1].to_numpy()), label_end_time=tuple(calendar[pos+2].to_numpy()),
         validity=np.isfinite(y), asset_axis=aa, source_ref="data_access:ashare_stock_daily_adj:AdjVwap",
         calendar_ref=str(DAILY_ADJ))
-    return batch, labels, {"sources": sources, "days": len(times), "assets": len(assets),
+    provenance = {"sources": sources, "days": len(times), "assets": len(assets),
         "date_span": [str(dates.min().date()), str(dates.max().date())],
-        "selection": "first bounded object keys; assets selected on TRAIN coverage only",
-        "limitations": "research replay; no upstream PIT or investability certification; recipe lineage not loaded"}
+        "selection": "first eligible bound manifest factor IDs; assets selected on TRAIN coverage only",
+        "limitations": "source-declared lineage; no upstream PIT or investability certification"}
+    return (batch, labels, provenance, lineages) if include_lineages else (batch, labels, provenance)
 
 
 def main():
@@ -114,12 +145,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--optimize", action="store_true", help="also run frozen TRAIN/VALIDATION selection")
     args = parser.parse_args()
-    batch, labels, provenance = load_cos_sample()
+    batch, labels, provenance, lineages = load_cos_sample(include_lineages=True)
     report = {"inputs": provenance, "test_evaluated": False,
               "diagnostics": diagnose_training_batch(batch, labels)}
     if args.optimize:
         from factor_optimizer.research_batch import optimize_factor_batch
-        result = optimize_factor_batch(batch, labels, allow_research=True)
+        result = optimize_factor_batch(batch, labels, allow_research=True, lineages=lineages)
         report["automatic"] = {name: {
             "status": r.status, "selected_family": r.selected_family,
             "train_gain": r.train_gain, "validation_lower_bound": r.validation_lower_bound,
