@@ -148,9 +148,12 @@ def compile_baseline(lineage, *, training_context_ref, exposure_columns=(), mini
 
 
 def assess_baseline_training(raw, candidate, batch, labels, split, config, *, maximum_loss=.01):
-    """Reject material TRAIN RankIC loss with a paired moving-block upper bound.
+    """Reject material TRAIN loss before making a baseline the search input.
 
-    This is a baseline loss guard, not evidence of superiority. Unknown or
+    RankIC uses a paired moving-block upper bound. Joint mode additionally
+    applies the same costed metric floors as candidate selection. Legacy
+    rank_ic mode retains its historical guard. This is not evidence of
+    superiority. Unknown or
     inadequate coverage fails closed. VALIDATION/TEST labels are not scored.
     """
     from factor_optimizer.research_batch import _pair_ic, _lower_bound
@@ -171,4 +174,21 @@ def assess_baseline_training(raw, candidate, batch, labels, split, config, *, ma
     record.update(accepted=accepted, upper_bound=upper,
                   reason='no_substantial_training_degradation' if accepted
                   else 'substantial_training_degradation')
+    if accepted and config.selection_objective == 'joint':
+        from factor_optimizer.research_fitness import paired_series, summarize, passes_floors
+        record['joint_policy'] = 'joint.v1'
+        try:
+            raw_series, candidate_series = paired_series(
+                raw, candidate, batch, labels, split.train_indices,
+                minimum_assets=config.minimum_assets,
+                cost_rate=config.research_cost_rate,
+                empty_leg_policy=config.research_empty_leg_policy)
+            record['joint_raw'] = summarize(raw_series)
+            record['joint_candidate'] = summarize(candidate_series)
+        except ValueError as exc:
+            record.update(accepted=False, reason='joint_training_metrics_unavailable',
+                          joint_unavailable_reason=str(exc))
+            return record
+        if not passes_floors(record['joint_raw'], record['joint_candidate']):
+            record.update(accepted=False, reason='substantial_joint_training_degradation')
     return record

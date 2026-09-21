@@ -51,6 +51,25 @@ $$d_t=IC_t^{\rm baseline}-IC_t^{\rm RAW}.$$
 覆盖率或有效日期不足同样回退，不把缺失指标填成零。
 “没有检出明显退化”不等于“证明有效改善”。
 
+默认 joint 模式还要求 TRAIN 的成本后组合通过与最终候选相同的六维
+RAW 相对底线。记处理后指标减 RAW 指标为 Δ，则：
+
+$$\Delta RankIC\ge -0.01,\quad \Delta ICIR\ge -0.10,\quad
+\Delta Sharpe\ge -0.25,$$
+$$\Delta MDD\le 0.03,\quad \Delta WorstBlockSharpe\ge -0.50,\quad
+\Delta Turnover\le 0.25.$$
+
+MDD 使用正的损失幅度，Turnover 使用全名义换手；组合、成本、空腿策略
+均复用 [joint.v1](JOINT_SELECTION.md)。底线是预先声明的研究容忍度，
+不是通过当前因子或验证集调出来的最优参数。全部满足才允许把基础处理
+输出作为后续搜索输入，并不要求基础处理本身一定提高联合效用。
+指标缺失、重叠标签或不可定义的比率会拒绝，不退回 RankIC 偷偷放行。
+显式 rank_ic 模式保留旧规则，便于历史复现。
+
+baseline_diagnostics 的 joint_raw、joint_candidate 保存 TRAIN 指标，
+joint_policy 记录规则；拒绝原因分别为 substantial_joint_training_degradation
+或 joint_training_metrics_unavailable，后者另外记录 joint_unavailable_reason。
+
 若含中性化的整个基础流水线在 TRAIN 不可用、覆盖不足或明显退化，
 仅在 TRAIN 再检验一次去掉中性化的缩尾/排名流水线。
 该回退同样需要通过原有退化和覆盖检查，不是无条件接受；
@@ -97,12 +116,28 @@ result = optimize_factor_batch(
 
 ## 尚未闭合的范围
 
-基础预处理 TRAIN 退化保护仍使用 RankIC；后续默认选择与验证已改为
-[joint.v1](JOINT_SELECTION.md)，包含 Sharpe、RankICIR、回撤、换手与稳定性。
+基础预处理 TRAIN 退化保护现已接入 [joint.v1](JOINT_SELECTION.md)，
+同时保留 RankIC bootstrap 检查，包含 Sharpe、RankICIR、回撤、换手与稳定性。
 已提供真实 COS 配方与因子文件的哈希绑定及有限语法的谱系识别；
 任意配方的完整谱系、具有可信历史可用时间的真实暴露自动加载，
 以及真实冻结 TEST 和全样本分开的最终评估仍未全部完成。
 下文早期回放数字来自当时的 RankIC 模式，不代表 joint.v1 的回放结果。
+
+## 2026-09-22 补充：基础搜索入口的联合退化保护
+
+反例使用 400 股票、240 日，仅移动少数尾部股票，RankIC bootstrap 原先
+未检出明显下降，但成本后多空 Sharpe 大幅损伤。旧版接受该基础处理，
+新版 joint 入口拒绝。另两个反例验证持仓收益缺失与重叠标签不可默认放行。
+三个测试均先观察到失败再修复；基础专项 19 passed，
+优化库＋预处理库完整回归 1788 passed、1 xfailed、16 warnings（136.78 秒）。
+HP 非因果滤波仍隔离为 OFFLINE_ONLY。平台根测试仍有 14 项收集错误，
+具体模块见 [方法审查](METHOD_AUDIT_20260922.md)，不能声称全平台通过。
+
+通过 DataAccess 复验真实因子 weekly_db5616cd85a477b3（500 日、256 股票）。
+缩尾＋排名的 TRAIN Sharpe 为 2.0887，相比 RAW 2.2237 下降 0.1350；
+回撤由 0.1725 变为 0.1858，仍在既定容忍度内，故基础处理未被拒绝。
+这不是宣称基础处理更好。94 个候选的最终训练赢家仍未通过验证，
+输出保留 RAW；TEST 未评分。[完整指标记录](baseline_joint_guard_real_20260922.json)。
 
 ## 2026-09-22 验证证据
 

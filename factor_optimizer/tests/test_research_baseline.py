@@ -117,6 +117,57 @@ def test_baseline_training_guard_rejects_large_loss_and_ignores_future_labels():
     assert assess_baseline_training(raw, raw, batch, labels, split, config)['accepted']
 
 
+def test_joint_baseline_rejects_tail_portfolio_damage_hidden_by_small_ic_change():
+    from dataclasses import replace
+    from factor_optimizer.research_baseline import assess_baseline_training
+    from factor_optimizer.research_batch import BatchOptimizationConfig, automatic_time_split
+    from quant_evaluator.contracts.factor_batch import AxisRef
+    batch, labels = fixture()
+    raw = np.tile(np.arange(400, dtype=float), (240, 1))
+    candidate = raw.copy()
+    candidate[:, [319, 399]] = candidate[:, [399, 319]]
+    rng = np.random.default_rng(993)
+    y = rng.normal(0, .01, raw.shape)
+    y[:, 399] += .3
+    assets = AxisRef('asset', 'str', 400, np.array([f'a{i}' for i in range(400)]))
+    batch = replace(batch, asset_axis=assets, values=raw[:, :, None])
+    labels = replace(labels, asset_axis=assets, values=y)
+    config = BatchOptimizationConfig(bootstrap_draws=99)
+    split = automatic_time_split(labels, config)
+    legacy = assess_baseline_training(raw, candidate, batch, labels, split,
+                                     replace(config, selection_objective='rank_ic'))
+    assert legacy['accepted']
+    verdict = assess_baseline_training(raw, candidate, batch, labels, split, config)
+    assert not verdict['accepted']
+    assert verdict['reason'] == 'substantial_joint_training_degradation'
+    assert verdict['joint_candidate']['sharpe'] < verdict['joint_raw']['sharpe'] - .25
+    assert assess_baseline_training(raw, raw, batch, labels, split, config)['accepted']
+    y[split.validation_start:] = np.nan
+    assert assess_baseline_training(raw, candidate, batch, replace(labels, values=y),
+                                    split, config) == verdict
+
+
+@pytest.mark.parametrize("failure", ["held_return", "overlap"])
+def test_joint_baseline_does_not_accept_unavailable_portfolio_evidence(failure):
+    from dataclasses import replace
+    from factor_optimizer.research_baseline import assess_baseline_training
+    from factor_optimizer.research_batch import BatchOptimizationConfig, automatic_time_split
+    batch, labels = fixture()
+    raw = batch.values[:, :, 0]
+    y = .01*raw.copy()
+    if failure == "held_return":
+        y[70, np.argmax(raw[70])] = np.nan
+    labels = replace(labels, values=y)
+    if failure == "overlap":
+        labels = replace(labels, label_end_time=tuple(range(3, 243)))
+    config = BatchOptimizationConfig(bootstrap_draws=99)
+    verdict = assess_baseline_training(raw, raw, batch, labels,
+                                      automatic_time_split(labels, config), config)
+    assert not verdict['accepted']
+    assert verdict['reason'] == 'joint_training_metrics_unavailable'
+    assert verdict['joint_unavailable_reason']
+
+
 def test_batch_applies_baseline_before_search_and_freezes_composed_plan():
     from factor_optimizer.research_batch import optimize_factor_batch, BatchOptimizationConfig
     from dataclasses import replace
