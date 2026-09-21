@@ -180,7 +180,7 @@ def _subset_labels(labels, indices):
 
 
 class PairICCache:
-    """At most two RAW IC references, private to one factor's TRAIN search.
+    """At most two IC references, private to one factor's TRAIN search.
 
     Effective value/mask/label contents and minimum assets define reuse.
     No mutable input or returned array aliases cached evidence.
@@ -203,7 +203,25 @@ class PairICCache:
             self._entries.popitem(last=False)
 
 
-def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=None):
+def _candidate_ic_key(values, target, minimum_assets):
+    """Exact effective Spearman inputs; shared by coverage and joint scoring."""
+    valid = np.isfinite(values) & np.isfinite(target.values)
+    if target.validity is not None:
+        valid &= target.validity
+    effective = np.where(valid, values, np.nan)
+    digest = hashlib.sha256(b'candidate-ic.v1')
+    digest.update(repr((effective.shape, minimum_assets)).encode())
+    for panel in (effective, target.values):
+        panel = np.ascontiguousarray(panel)
+        digest.update(panel.dtype.str.encode())
+        digest.update(panel.tobytes())
+    digest.update(b'none' if target.validity is None
+                  else np.ascontiguousarray(target.validity).tobytes())
+    return digest.digest()
+
+
+def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=None,
+             candidate_cache=None):
     from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
     from quant_evaluator.runtime.evaluator import evaluate
 
@@ -261,6 +279,11 @@ def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=
         for column, key in keys.items():
             if key in pending:
                 ic[:, column] = ic[:, pending[key]]
+    if candidate_cache is not None:
+        if not isinstance(candidate_cache, PairICCache):
+            raise TypeError('candidate_cache must be PairICCache')
+        key = _candidate_ic_key(np.where(common, b, np.nan), target, config.minimum_assets)
+        candidate_cache.put(key, ic[:, 1])
     good = np.isfinite(ic[:, :2]).all(axis=1)
     day_retention = float(good.sum() / max(1, np.isfinite(ic[:, 2]).sum()))
     retention = min(retention, day_retention)
@@ -366,6 +389,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     for k, factor_id in enumerate(batch.factor_ids):
         train_raw_cache = RawSeriesCache()
         train_ic_cache = PairICCache()
+        train_candidate_ic_cache = PairICCache()
         raw = np.array(batch.values[:, :, k], dtype=float, copy=True)
         if batch.validity is not None:
             raw[~batch.validity[:, :, k]] = np.nan
@@ -513,7 +537,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                 best = None
                 if baseline_active:
                     delta, _, _ = _pair_ic(prefix, baseline_values, batch, labels, split.train_indices, config,
-                                           reference_cache=train_ic_cache)
+                                           reference_cache=train_ic_cache, candidate_cache=train_candidate_ic_cache)
                     folds = [np.nanmean(x) for x in np.array_split(delta, 3)]
                     baseline_gain = float(np.mean(folds) - np.std(folds))
                     frozen_baseline = BaselineRepairPlan(baseline_plan, raw_plan)
@@ -523,6 +547,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                             ar, ac = paired_series(prefix, baseline_values, batch, labels, split.train_indices,
                                 minimum_assets=config.minimum_assets, cost_rate=config.research_cost_rate,
                                 empty_leg_policy=config.research_empty_leg_policy,
+                                candidate_ic_cache=train_candidate_ic_cache,
                                 raw_cache=train_raw_cache)
                             mr, mc = summarize(ar), summarize(ac)
                             baseline_gain = joint_utility(mc)-joint_utility(mr)
@@ -553,7 +578,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                             plan = BaselineRepairPlan(baseline_plan, plan)
                         record["plan_identity"] = plan.identity
                         delta, good, coverage = _pair_ic(prefix, values, batch, labels, split.train_indices, config,
-                                                       reference_cache=train_ic_cache)
+                                                       reference_cache=train_ic_cache, candidate_cache=train_candidate_ic_cache)
                         record.update(coverage=coverage, valid_train_days=int(good.sum()))
                         if coverage < config.minimum_coverage or good.sum() < config.minimum_train_days:
                             raise ValueError("insufficient common coverage or training IC")
@@ -566,6 +591,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                             ar, ac = paired_series(prefix, values, batch, labels, split.train_indices,
                                 minimum_assets=config.minimum_assets, cost_rate=config.research_cost_rate,
                                 empty_leg_policy=config.research_empty_leg_policy,
+                                candidate_ic_cache=train_candidate_ic_cache,
                                 raw_cache=train_raw_cache)
                             mr, mc = summarize(ar), summarize(ac)
                             record.update(train_raw_metrics=mr, train_candidate_metrics=mc,

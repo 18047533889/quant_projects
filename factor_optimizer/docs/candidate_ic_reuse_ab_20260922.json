@@ -1,0 +1,30 @@
+{
+  "factor": "weekly_db5616cd85a477b3",
+  "factor_sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+  "days": 500,
+  "assets": 256,
+  "candidate_count": 94,
+  "bootstrap_draws": 99,
+  "warmup_each": 1,
+  "alternating_pairs": 3,
+  "seconds": {
+    "old": [
+      23.63491525900099,
+      23.805371900001774,
+      23.781573218999256
+    ],
+    "new": [
+      18.99410383400027,
+      19.027949581999565,
+      19.076945082000748
+    ]
+  },
+  "median_old": 23.781573218999256,
+  "median_new": 19.027949581999565,
+  "speedup": 1.2498232201275443,
+  "exact_arrays_and_all_factor_records": true,
+  "test_evaluated": false,
+  "limits": "same real sample and fixed search; data load excluded; no cold-start speedup claim",
+  "baseline_driver_commit": "2b883c5ca6828b5f7e9f088506490817da76579f",
+  "comparator": "Previous optimizer driver uses current joint scorer without candidate IC reuse; current driver supplies the TRAIN-only candidate cache. Same QE math and other caches."
+}

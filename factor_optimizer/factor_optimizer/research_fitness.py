@@ -106,10 +106,10 @@ class RawSeriesCache:
 
 
 def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, cost_rate=.001,
-                  raw_cache=None, empty_leg_policy='signal_cash'):
+                  raw_cache=None, empty_leg_policy='signal_cash', candidate_ic_cache=None):
     """QE metric inputs share signal availability, never ex-post label membership."""
     from dataclasses import replace
-    from factor_optimizer.research_batch import _subset_labels
+    from factor_optimizer.research_batch import _subset_labels, PairICCache, _candidate_ic_key
     from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
     from quant_evaluator.metrics.ic import compute_daily_ic
     if labels.horizon != 1:
@@ -137,12 +137,25 @@ def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, 
             digest.update(canonical.tobytes())
         key = digest.digest()
         cached = raw_cache.get(key)
-    start = 0 if cached is None else 1
-    if start:
-        pair = replace(pair, factor_ids=('CANDIDATE',), values=pair.values[:, :, 1:])
-    ic, _ = compute_daily_ic(pair, target, method='spearman', min_assets=minimum_assets)
-    out = [] if cached is None else [cached]
-    for k, values in enumerate((a, b)[start:]):
+    candidate_ic = None
+    if candidate_ic_cache is not None:
+        if not isinstance(candidate_ic_cache, PairICCache):
+            raise TypeError('candidate_ic_cache must be PairICCache')
+        candidate_ic = candidate_ic_cache.get(_candidate_ic_key(b, target, minimum_assets))
+    columns = ([] if cached is not None else [0]) + ([] if candidate_ic is not None else [1])
+    ic = np.full((len(idx), 2), np.nan)
+    if candidate_ic is not None:
+        ic[:, 1] = candidate_ic
+    if columns:
+        pair = replace(pair, factor_ids=tuple(pair.factor_ids[k] for k in columns),
+                       values=pair.values[:, :, columns])
+        computed, _ = compute_daily_ic(pair, target, method='spearman', min_assets=minimum_assets)
+        ic[:, columns] = computed
+    out = []
+    for k, values in enumerate((a, b)):
+        if k == 0 and cached is not None:
+            out.append(cached)
+            continue
         pnl, turnover = portfolio_series(values, y, cost_rate=cost_rate,
                                         empty_leg_policy=empty_leg_policy)
         out.append(np.column_stack((ic[:, k], pnl, turnover)))
