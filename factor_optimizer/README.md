@@ -159,6 +159,7 @@ complexity/    复杂度 profile / 预算
 - [成本后多指标选优公式](docs/JOINT_SELECTION.md)
 - [二十层衰减诊断、独立层状态与定向平滑](docs/LAYER_DECAY.md)
 - [RAW 指标复用与性能等价验证](docs/RAW_METRIC_REUSE.md)
+- [配对 RankIC 复用与精度隔离](docs/PAIRED_IC_REUSE.md)
 - [冻结后的 TEST / 全样本分离报告](docs/FINAL_REPORT.md)
 - [逐方法带数据验证与当前限制](docs/COSTED_METHOD_AUDIT_20260922.md)
 

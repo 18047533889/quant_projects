@@ -119,8 +119,10 @@ def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, 
             raise TypeError('raw_cache must be RawSeriesCache')
         digest = hashlib.sha256()
         digest.update(repr((a.shape, minimum_assets, cost_rate)).encode())
-        digest.update(np.ascontiguousarray(a, dtype=float).tobytes())
-        digest.update(np.ascontiguousarray(y, dtype=float).tobytes())
+        for panel in (a, y):
+            canonical = np.ascontiguousarray(panel)
+            digest.update(canonical.dtype.str.encode())
+            digest.update(canonical.tobytes())
         key = digest.digest()
         cached = raw_cache.get(key)
     start = 0 if cached is None else 1

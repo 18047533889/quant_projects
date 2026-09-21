@@ -175,7 +175,31 @@ def _subset_labels(labels, indices):
     return replace(labels, **kwargs)
 
 
-def _pair_ic(raw, candidate, batch, labels, indices, config):
+class PairICCache:
+    """At most two RAW IC references, private to one factor's TRAIN search.
+
+    Effective value/mask/label contents and minimum assets define reuse.
+    No mutable input or returned array aliases cached evidence.
+    """
+
+    def __init__(self):
+        from collections import OrderedDict
+        self._entries = OrderedDict()
+
+    def get(self, key):
+        if key not in self._entries:
+            return None
+        self._entries.move_to_end(key)
+        return self._entries[key].copy()
+
+    def put(self, key, value):
+        self._entries[key] = value.copy()
+        self._entries.move_to_end(key)
+        while len(self._entries) > 2:
+            self._entries.popitem(last=False)
+
+
+def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=None):
     from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
     from quant_evaluator.runtime.evaluator import evaluate
 
@@ -193,9 +217,46 @@ def _pair_ic(raw, candidate, batch, labels, indices, config):
     pair = np.stack((a, b, a), axis=-1)
     validity = np.stack((common, common, available), axis=-1)
     factors = FactorBatch(("RAW", "CANDIDATE", "RAW_FULL"), time_axis, batch.asset_axis, pair, validity=validity)
+    columns, keys, pending = [0, 1, 2], {}, {}
+    ic = np.full((len(idx), 3), np.nan)
+    if reference_cache is not None:
+        if not isinstance(reference_cache, PairICCache):
+            raise TypeError("reference_cache must be PairICCache")
+        digest = hashlib.sha256()
+        digest.update(repr((a.shape, config.minimum_assets)).encode())
+        # Identity must not round extended-precision labels into float64 ties.
+        # Including invalid values is conservative: extra misses, never stale hits.
+        y = np.ascontiguousarray(target.values)
+        digest.update(y.dtype.str.encode())
+        digest.update(y.tobytes())
+        digest.update(b"none" if target.validity is None
+                      else np.ascontiguousarray(target.validity).tobytes())
+        columns = [1]
+        for column in (0, 2):
+            state = digest.copy()
+            masked = np.ascontiguousarray(np.where(validity[:, :, column], a, np.nan))
+            state.update(masked.dtype.str.encode())
+            state.update(masked.tobytes())
+            key = state.digest()
+            keys[column] = key
+            cached = reference_cache.get(key)
+            if cached is not None:
+                ic[:, column] = cached
+            elif key not in pending:
+                pending[key] = column
+                columns.append(column)
+        factors = replace(factors, factor_ids=tuple(factors.factor_ids[c] for c in columns),
+                          values=pair[:, :, columns], validity=validity[:, :, columns])
     result = evaluate(factors, target, metrics=["rank_ic_series"], backend="cpu",
                       metric_parameters={"rank_ic_series": {"min_assets": config.minimum_assets}})
-    ic = np.asarray(result.artifacts["rank_ic_series"].values)
+    computed = np.asarray(result.artifacts["rank_ic_series"].values)
+    ic[:, columns] = computed
+    if reference_cache is not None:
+        for key, column in pending.items():
+            reference_cache.put(key, ic[:, column])
+        for column, key in keys.items():
+            if key in pending:
+                ic[:, column] = ic[:, pending[key]]
     good = np.isfinite(ic[:, :2]).all(axis=1)
     day_retention = float(good.sum() / max(1, np.isfinite(ic[:, 2]).sum()))
     retention = min(retention, day_retention)
@@ -300,6 +361,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     outputs, results = [], {}
     for k, factor_id in enumerate(batch.factor_ids):
         train_raw_cache = RawSeriesCache()
+        train_ic_cache = PairICCache()
         raw = np.array(batch.values[:, :, k], dtype=float, copy=True)
         if batch.validity is not None:
             raw[~batch.validity[:, :, k]] = np.nan
@@ -419,13 +481,15 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
         validation_identity, validation_coverage = None, None
         status, reason, records = "raw_retained", "no robust TRAIN improvement", []
         try:
-            _, raw_good, _ = _pair_ic(prefix, prefix, batch, labels, split.train_indices, config)
+            _, raw_good, _ = _pair_ic(prefix, prefix, batch, labels, split.train_indices, config,
+                                      reference_cache=train_ic_cache)
             if raw_good.sum() < config.minimum_train_days:
                 status, reason = "invalid_raw", "insufficient valid RAW training IC"
             else:
                 best = None
                 if baseline_active:
-                    delta, _, _ = _pair_ic(prefix, baseline_values, batch, labels, split.train_indices, config)
+                    delta, _, _ = _pair_ic(prefix, baseline_values, batch, labels, split.train_indices, config,
+                                           reference_cache=train_ic_cache)
                     folds = [np.nanmean(x) for x in np.array_split(delta, 3)]
                     baseline_gain = float(np.mean(folds) - np.std(folds))
                     frozen_baseline = BaselineRepairPlan(baseline_plan, raw_plan)
@@ -463,7 +527,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                         if baseline_active:
                             plan = BaselineRepairPlan(baseline_plan, plan)
                         record["plan_identity"] = plan.identity
-                        delta, good, coverage = _pair_ic(prefix, values, batch, labels, split.train_indices, config)
+                        delta, good, coverage = _pair_ic(prefix, values, batch, labels, split.train_indices, config,
+                                                       reference_cache=train_ic_cache)
                         record.update(coverage=coverage, valid_train_days=int(good.sum()))
                         if coverage < config.minimum_coverage or good.sum() < config.minimum_train_days:
                             raise ValueError("insufficient common coverage or training IC")

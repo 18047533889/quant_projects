@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**77 个 Python 模块、933 个公开函数/类/方法定义**。
+扫描实际包目录：**77 个 Python 模块、937 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -59,7 +59,7 @@
 | [factor_optimizer/ports/__init__.py](../factor_optimizer/ports/__init__.py) | 0 | Ports: narrow consumer-side contracts FO binds other packages through. |
 | [factor_optimizer/ports/factor_intelligence.py](../factor_optimizer/ports/factor_intelligence.py) | 29 | Factor Intelligence provider port (R61-FI-014 / plan §20 E6, matrix E6). |
 | [factor_optimizer/research_baseline.py](../factor_optimizer/research_baseline.py) | 9 | Research baseline recipes and TRAIN-only substantial-degradation guard. |
-| [factor_optimizer/research_batch.py](../factor_optimizer/research_batch.py) | 10 | Bounded research batch optimization with automatic chronological splitting. |
+| [factor_optimizer/research_batch.py](../factor_optimizer/research_batch.py) | 14 | Bounded research batch optimization with automatic chronological splitting. |
 | [factor_optimizer/research_decay.py](../factor_optimizer/research_decay.py) | 1 | TRAIN-only twenty-layer stale-signal decay, not holding-period PnL. |
 | [factor_optimizer/research_diagnostics.py](../factor_optimizer/research_diagnostics.py) | 1 | TRAIN-only multi-dimensional research diagnosis using QE metric authorities. |
 | [factor_optimizer/research_final_report.py](../factor_optimizer/research_final_report.py) | 3 | Authority-side final research reporting; never called by candidate search. |
@@ -6624,9 +6624,39 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 参数：`(labels, config: BatchOptimizationConfig \| None=None)`。
 
+### PairICCache
+
+[实际实现](../factor_optimizer/research_batch.py#L178)。
+
+At most two RAW IC references, private to one factor's TRAIN search.
+
+### PairICCache.__init__
+
+[实际实现](../factor_optimizer/research_batch.py#L185)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self)`。
+
+### PairICCache.get
+
+[实际实现](../factor_optimizer/research_batch.py#L189)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self, key)`。
+
+### PairICCache.put
+
+[实际实现](../factor_optimizer/research_batch.py#L195)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self, key, value)`。
+
 ### optimize_factor_batch
 
-[实际实现](../factor_optimizer/research_batch.py#L258)。
+[实际实现](../factor_optimizer/research_batch.py#L319)。
 
 Optimize aligned QE contracts automatically, preserving every input ID.
 
@@ -6769,7 +6799,7 @@ QE metric inputs share signal availability, never ex-post label membership.
 
 ### compare_joint
 
-[实际实现](../factor_optimizer/research_fitness.py#L139)。
+[实际实现](../factor_optimizer/research_fitness.py#L141)。
 
 Recompute all nonlinear metrics within each shared moving-block draw.
 
@@ -10610,11 +10640,11 @@ Import seen records from dictionaries.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `c155a230a40d9317fddf0721310d5d81c0e89adef651da392d2fc006b1667863` |
-| `factor_optimizer/research_batch.py` | `8f494bca99c5eaa4497f993e9bd7386ae169aa65c31772b075c50b9b4d46a2dc` |
+| `factor_optimizer/research_batch.py` | `e90d1ddf2670208ff3836e7f7f75c6ff08c53a1386a1181740f9387203f1f672` |
 | `factor_optimizer/research_decay.py` | `1355b74f2ca32c7f819357880214580502eeff1df9d09593c601ed14d7fb71b0` |
 | `factor_optimizer/research_diagnostics.py` | `6353a8fcf0777f751b14f255e77930de89696972a99ae5ba4f63ea66beef104f` |
 | `factor_optimizer/research_final_report.py` | `33f8e6806ee3b6416a7b12fd0cf4b3b40235f2862307f982630a5ebd6326c8d7` |
-| `factor_optimizer/research_fitness.py` | `5dc7f29aae9c0960ec1c1a0415c5a870fbd0f78b3ec47d7a7ed9c60eb7c04fff` |
+| `factor_optimizer/research_fitness.py` | `8d1174abfe3cd22c0e76276a88d713fc55fc2a1574169a408c23499bf6c1581f` |
 | `factor_optimizer/research_manifest.py` | `5098274c402cf69b3c90cfb0fdb37b50fe945db89ac74066ec757270bd120a17` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |

@@ -13,6 +13,10 @@ VALIDATION 不复用 TRAIN 缓存，TEST 不加入搜索。
 - 已应用标签有效标记的实际收益数值；
 - minimum_assets 和 research_cost_rate。
 
+补充修正：缓存身份保留数组 dtype 和原始精度，不再先转 float64 计算摘要。
+高精度标签在 float64 下可能合并为相同值，但真实 RankIC 不同；该反例已
+复现并修复。详见 [配对 IC 缓存及精度测试](PAIRED_IC_REUSE.md)。
+
 因此某候选改变缺失位置，或收益、成本、最小资产要求改变，均重新计算。
 时间区间是否重叠仍在查缓存之前检查。轴和切片仍由原来的 FactorBatch、
 LabelBundle 流程处理；缓存只是纯数值序列的复用，不是替代来源身份和准入验证。
