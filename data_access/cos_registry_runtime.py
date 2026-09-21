@@ -74,7 +74,7 @@ _REGISTRY_PATCHES: dict[str, dict[str, Any]] = {
         "schema_replace": {
             "TradeDate": "date", "Symbol": "string", "IndustrySource": "string",
             "IndustryCode": "string", "IndustryName": "string",
-            "UpdateTime": "timestamp",
+            "UpdateTime": "timestamptz",
         }
     },
     "ashare_stock_status": {

@@ -80,7 +80,8 @@ def _is_dirty() -> bool:
 
 
 def _commit_time() -> str:
-    raw = _git("show", "-s", "--format=%cI", "HEAD")
+    # A worktree file named HEAD must not be interpreted as a path argument.
+    raw = _git("show", "-s", "--format=%cI", "HEAD", "--")
     try:
         dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
         return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")

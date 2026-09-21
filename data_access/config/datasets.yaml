@@ -174,6 +174,12 @@ ashare_stock_valuation_daily:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  partitioning:
+    time:
+      source: filename
+      field: TradeDate
+      frequency: daily
+      pattern: "{date}.parquet"
   # 字典 §5 StockValuationDaily：TurnoverRatio/DividendRatio 为百分数 %（÷100）；
   # PeRatio/PbRatio/PsRatio/PcfRatio* 为倍数；Capitalization 系列为股本（股）。
   schema:
@@ -402,6 +408,12 @@ ashare_stock_industry:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  partitioning:
+    time:
+      source: filename
+      field: TradeDate
+      frequency: daily
+      pattern: "{date}.parquet"
   # 字典 §5 StockIndustry：grain=(TradeDate, Symbol, IndustrySource)；join 前必须先
   # filter 单一 IndustrySource（否则行数×6）。IndustrySource ∈ {sw_l1..sw_l3, zjw, jq_l1, jq_l2}。
   schema:

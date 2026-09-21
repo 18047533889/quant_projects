@@ -1,0 +1,66 @@
+{
+  "tests": [
+    {
+      "dataset": "ashare_stock_industry",
+      "date": "2024-08-02",
+      "rows": 5107,
+      "columns": 6,
+      "results_exactly_equal": true,
+      "single_call_seconds": {
+        "explicit_file": 0.09779107599933923,
+        "automatic_partition": 0.01925536899943836
+      },
+      "max_scan_files": 1,
+      "schema_mode": "strict",
+      "file": "/home/sunhaiwei/cos_data/StockIndustry/2024-08-02.parquet",
+      "source_size_bytes": 101081
+    },
+    {
+      "dataset": "ashare_stock_industry",
+      "date": "2026-08-24",
+      "rows": 5211,
+      "columns": 6,
+      "results_exactly_equal": true,
+      "single_call_seconds": {
+        "explicit_file": 0.01743473299939069,
+        "automatic_partition": 0.01863245700042171
+      },
+      "max_scan_files": 1,
+      "schema_mode": "strict",
+      "file": "/home/sunhaiwei/cos_data/StockIndustry/2026-08-24.parquet",
+      "source_size_bytes": 103202
+    },
+    {
+      "dataset": "ashare_stock_valuation_daily",
+      "date": "2024-08-02",
+      "rows": 5107,
+      "columns": 19,
+      "results_exactly_equal": true,
+      "single_call_seconds": {
+        "explicit_file": 0.021902677999605658,
+        "automatic_partition": 0.017121222999776364
+      },
+      "max_scan_files": 1,
+      "schema_mode": "strict",
+      "file": "/home/sunhaiwei/cos_data/StockValuationDaily/2024-08-02.parquet",
+      "source_size_bytes": 667982
+    },
+    {
+      "dataset": "ashare_stock_valuation_daily",
+      "date": "2026-08-24",
+      "rows": 5211,
+      "columns": 19,
+      "results_exactly_equal": true,
+      "single_call_seconds": {
+        "explicit_file": 0.018288497998582898,
+        "automatic_partition": 0.01722021999921708
+      },
+      "max_scan_files": 1,
+      "schema_mode": "strict",
+      "file": "/home/sunhaiwei/cos_data/StockValuationDaily/2026-08-24.parquet",
+      "source_size_bytes": 656146
+    }
+  ],
+  "test_labels_scored": false,
+  "limits": "Reader correctness comparison, not a repeated warmed throughput benchmark; no exposure PIT certification"
+}
