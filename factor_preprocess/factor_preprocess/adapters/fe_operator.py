@@ -118,24 +118,16 @@ def _long_to_wide(
 
 def _stack_back(panel: pd.DataFrame, template: pd.DataFrame, time_col, asset_col, value_col) -> pd.Series:
     """Re-align a wide FE result onto the template's long row order."""
-    wide = panel
-    # Preserve identity types: only the security catalog may equate 1 and "1".
-    lookup = {}
-    times = list(wide.index)
-    for col in wide.columns:
-        series = wide[col]
-        for t in times:
-            v = series.get(t)
-            if v is None:
-                continue
-            if isinstance(v, float) and np.isnan(v):
-                continue
-            lookup[(t, col)] = v
     result = np.full(len(template), np.nan, dtype=float)
-    t_vals = template[time_col].tolist()
-    a_vals = template[asset_col].tolist()
-    for i in range(len(template)):
-        result[i] = lookup.get((t_vals[i], a_vals[i]), np.nan)
+    # Object indexes preserve dictionary-key semantics, including 1 != "1"
+    # and Timestamp != its string representation. DatetimeIndex.get_indexer
+    # would otherwise coerce parseable strings to timestamps.
+    rows = pd.Index(panel.index, dtype=object).get_indexer(
+        pd.Index(template[time_col], dtype=object))
+    cols = pd.Index(panel.columns, dtype=object).get_indexer(
+        pd.Index(template[asset_col], dtype=object))
+    present = (rows >= 0) & (cols >= 0)
+    result[present] = panel.to_numpy()[rows[present], cols[present]]
     return pd.Series(result, index=template.index, name=value_col)
 
 

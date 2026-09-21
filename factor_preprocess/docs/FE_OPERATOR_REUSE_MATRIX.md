@@ -1,5 +1,8 @@
 # FE Operator Reuse Matrix (R61-FI-040)
 
+宽表到长表的对齐语义与性能核验见
+[FE 结果回填性能](FE_PANEL_ALIGNMENT_PERFORMANCE.md)。
+
 Audit of the FactorPreprocess `TransformRegistry` against the FactorEngine
 canonical operator registry (via `factor_engine.api.static_analysis`
 `operator_semantic_metadata` + direct `OperatorRegistry.get(...,

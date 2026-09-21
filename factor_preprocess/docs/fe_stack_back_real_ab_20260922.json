@@ -1,0 +1,29 @@
+{
+  "factor": "weekly_db5616cd85a477b3",
+  "sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+  "days": 500,
+  "assets": 256,
+  "candidates": 94,
+  "bootstrap_draws": 99,
+  "warmup_per_variant": 1,
+  "alternating_pairs": 3,
+  "seconds": {
+    "old": [
+      18.832543812997756,
+      18.954923139997845,
+      19.354266777001612
+    ],
+    "new": [
+      16.388092125002004,
+      16.380519114998606,
+      16.63021586999821
+    ]
+  },
+  "median_seconds": {
+    "old": 18.954923139997845,
+    "new": 16.388092125002004
+  },
+  "exact_outputs_and_all_factor_records": true,
+  "test_evaluated": false,
+  "limits": "same data and candidate budget; warmed optimization only, excluding data reads and first FE registration"
+}

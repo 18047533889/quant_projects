@@ -486,7 +486,7 @@ FE operator adapter (R61-FI-041, plan §26 F2/F3).
 
 ### FeOperatorExecutor
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L142)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L134)。
 
 Callable executor for one FE canonical operator.
 
@@ -498,7 +498,7 @@ Callable executor for one FE canonical operator.
 
 ### FeOperatorExecutor.__init__
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L151)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L143)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -506,7 +506,7 @@ Callable executor for one FE canonical operator.
 
 ### FeOperatorExecutor.__call__
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L169)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L161)。
 
 Route a long-format FP call through the FE operator.
 
@@ -514,13 +514,13 @@ Route a long-format FP call through the FE operator.
 
 ### FeRecipeExecutor
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L262)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L254)。
 
 Execute an all-FE stateless TreatmentRecipe with one panel boundary.
 
 ### FeRecipeExecutor.__init__
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L265)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L257)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -528,7 +528,7 @@ Execute an all-FE stateless TreatmentRecipe with one panel boundary.
 
 ### FeRecipeExecutor.__call__
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L273)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L265)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -536,7 +536,7 @@ Execute an all-FE stateless TreatmentRecipe with one panel boundary.
 
 ### get_fe_executor
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L301)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L293)。
 
 Return a lazily-FE-backed executor for ``canonical``.
 
@@ -5167,7 +5167,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/adapters/data_access.py` | `4bb432d31734d8b16062d1e36010082d829388ca60916c4e0dd0db6b8992e71f` |
 | `factor_preprocess/adapters/ewma_full_replay.py` | `f5d653976ab97b8581d299dddbd49494e65639cba164ee4cea722f30a74d5fb5` |
 | `factor_preprocess/adapters/factor_assets.py` | `490a6d44a56e71ac9b039f871837c410af9b3f78ab2dd4fd02df95b0eed4aa9b` |
-| `factor_preprocess/adapters/fe_operator.py` | `218862f6ac98098b14f611aab9a9644fc6d1dfa6646cac902b5de28b443f8a73` |
+| `factor_preprocess/adapters/fe_operator.py` | `2db01afb750aa694d37b1e133c096a5173284466aa7666a5eeb60671b5e68444` |
 | `factor_preprocess/adapters/fitted_recipe.py` | `f6e770d3b0ad1090b52ce527169005b4ca7f06b58b06462c35db06e9c2c42e2e` |
 | `factor_preprocess/backends/__init__.py` | `764cb2de6fa732845a8040a4910996e1c0c19c210e659b9d9688100589ced7cc` |
 | `factor_preprocess/backends/polars_backend.py` | `e96429361fbae7b5f0d69b23e7e2bfeb7b77e77078a0f8c84f80cd993d8de22a` |
