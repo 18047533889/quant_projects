@@ -1,0 +1,16 @@
+{
+  "factor": "weekly_db5616cd85a477b3",
+  "source_sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+  "role": "training_diagnostic_only",
+  "days": 267,
+  "assets": 256,
+  "first_date": "2024-09-13T00:00:00.000000000",
+  "last_date": "2025-10-27T00:00:00.000000000",
+  "nav_end": 1.6214075637218486,
+  "max_drawdown": 0.1725316435068342,
+  "turnover": 0.014805711610486891,
+  "all_curves_aligned": true,
+  "strict_json": true,
+  "test_evaluated": false,
+  "limits": "TRAIN curve replay only; not a final TEST report; no new authority database"
+}

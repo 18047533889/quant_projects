@@ -110,6 +110,56 @@ def test_report_includes_worst_block_sharpe_used_by_selection(tmp_path):
     frozen = freeze_selection(raw, result, dataset_identity='dataset-v1')
     report = evaluate_frozen(frozen, authority(tmp_path, frozen, Store(labels)))
     assert report['test']['factors']['f']['selected']['worst_block_sharpe'] > 0
+    segment = report['test']
+    assert len(segment['dates']) == 48
+    assert len(segment['factors']['f']['selected']['series']['net_return']) == 48
+
+
+def test_report_curve_keeps_missing_valuation_unknown_without_erasing_known_turnover():
+    from dataclasses import replace
+    from factor_optimizer.research_final_report import freeze_selection, _partition
+    raw, labels, result = sample()
+    result = replace(result, config=replace(result.config, research_cost_rate=0.))
+    idx = result.split.test_indices
+    y = labels.values.copy()
+    for offset, day in enumerate(idx):
+        order = np.argsort(raw.values[day, :, 0])
+        ret = .1 if offset == 0 else -.1 if offset == 1 else .01
+        y[day] = 0.
+        y[day, order[:6]] = -ret
+        y[day, order[-6:]] = ret
+    y[idx[2], np.argmax(raw.values[idx[2], :, 0])] = np.nan
+    frozen = freeze_selection(raw, result, dataset_identity='curve-fixture')
+    report = _partition(frozen, replace(labels, values=y), idx, 'held_out_final')
+    score = report['factors']['f']['raw']
+    curve = score['series']
+    np.testing.assert_allclose(curve['net_return'][:2], [.1, -.1])
+    np.testing.assert_allclose(curve['nav'][:2], [1.1, .99])
+    np.testing.assert_allclose(curve['drawdown'][:2], [0., -.1])
+    assert curve['net_return'][2] is None
+    assert curve['net_return'][3] is not None
+    assert all(v is None for v in curve['nav'][2:])
+    assert all(v is None for v in curve['drawdown'][2:])
+    assert score['turnover'] is not None  # signal known despite missing valuation
+    assert score['max_drawdown'] is None
+
+
+def test_missing_signal_does_not_manufacture_known_turnover_or_reentry_cost():
+    from dataclasses import replace
+    from factor_optimizer.research_final_report import freeze_selection, _partition
+    raw, labels, result = sample()
+    idx = result.split.test_indices
+    validity = np.ones(raw.values.shape, dtype=bool)
+    validity[idx[2]] = False
+    raw = replace(raw, validity=validity)
+    report = _partition(freeze_selection(raw, result, dataset_identity='signal-fixture'),
+                        labels, idx, 'held_out_final')
+    score = report['factors']['f']['raw']
+    assert score['turnover'] is None
+    assert score['turnover_unavailable_reason']
+    assert score['series']['turnover'][2:4] == [None, None]
+    assert score['series']['net_return'][3] is None
+    assert score['series']['turnover'][4] is not None
 
 
 def test_non_durable_authority_is_rejected_before_read():

@@ -6719,7 +6719,7 @@ Freeze identities without reading any label; detect later buffer changes.
 
 ### evaluate_frozen
 
-[实际实现](../factor_optimizer/research_final_report.py#L131)。
+[实际实现](../factor_optimizer/research_final_report.py#L159)。
 
 Read the authority store once; persist TEST and separate description.
 
@@ -10653,7 +10653,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/research_batch.py` | `bf900afa4092d42b7e453e9465893267d1b163be0a75e94e884ada50bf917936` |
 | `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
 | `factor_optimizer/research_diagnostics.py` | `26c82a50b2edcaa4eff8911da11a4fcd52fbad2f5235148202a300d396ced23d` |
-| `factor_optimizer/research_final_report.py` | `9297f01eb1adcd3ea280e8fcde332c21e4c69ec2fef7f35a391a24f86e2d7a7d` |
+| `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |
 | `factor_optimizer/research_fitness.py` | `4ff5f341a903b477850dfcbfb14aad4188b2703cc8ea45f1b7bf0df316317d5c` |
 | `factor_optimizer/research_manifest.py` | `5c92761458c47ff82aa68819341860744d3f146c974318172f28697b0f89a161` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |

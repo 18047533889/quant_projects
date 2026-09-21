@@ -50,7 +50,7 @@ def _profile(result):
     if result.config is None:
         raise ValueError('final reporting requires the recorded search configuration')
     return hashlib.sha256(json.dumps({'search_config': asdict(result.config),
-        'report_version': 'research-final.v1', 'periods_per_year': 252,
+        'report_version': 'research-final.v2-curves', 'periods_per_year': 252,
         'min_periods': 20}, sort_keys=True).encode()).hexdigest()
 
 
@@ -71,7 +71,9 @@ def _partition(frozen, labels, indices, role):
     from quant_evaluator.metrics.ic import compute_daily_ic, compute_mean_ic_value
     from quant_evaluator.metrics.ic_summary import compute_icir
     from quant_evaluator.metrics.quantile import compute_quantile_returns
-    from quant_evaluator.metrics.portfolio_stats import compute_sharpe_ratio, compute_maximum_drawdown
+    from quant_evaluator.metrics.portfolio_stats import (
+        compute_sharpe_ratio, compute_maximum_drawdown, compute_aligned_wealth_curve,
+    )
 
     idx = np.asarray(indices)
     target = _subset_labels(labels, indices)
@@ -100,18 +102,42 @@ def _partition(frozen, labels, indices, role):
                                           if complete.sum() >= 20 else None),
                  'sharpe': None, 'max_drawdown': None, 'turnover': None,
                  'worst_block_sharpe': None,
-                 'portfolio_valid_days': 0, 'portfolio_unavailable_reason': None}
+                 'portfolio_valid_days': 0, 'portfolio_unavailable_reason': None,
+                 'turnover_unavailable_reason': None,
+                 'series': {'rank_ic': [number(v) for v in ic[:, 0]],
+                            **{field: [None]*len(idx) for field in
+                               ('net_return', 'turnover', 'nav', 'drawdown')}}}
             if single:
                 y = target.values if target.validity is None else np.where(target.validity, target.values, np.nan)
                 pnl, turnover = portfolio_series(values, y, cost_rate=frozen.result.config.research_cost_rate,
                     empty_leg_policy=frozen.result.config.research_empty_leg_policy)
+                # Unknown signal is not a cash instruction. A trade requires
+                # both the current and preceding target holdings to be known.
+                signal_pnl, _ = portfolio_series(values, np.zeros_like(values), cost_rate=0.,
+                    empty_leg_policy=frozen.result.config.research_empty_leg_policy)
+                known = np.isfinite(signal_pnl)
+                known_trade = known & np.r_[True, known[:-1]]
+                turnover = np.where(known_trade, turnover, np.nan)
+                if frozen.result.config.research_cost_rate > 0:
+                    pnl = np.where(known_trade, pnl, np.nan)
                 m['portfolio_valid_days'] = int(np.isfinite(pnl).sum())
                 m['turnover'] = number(np.mean(turnover))
+                if not known_trade.all():
+                    m['turnover_unavailable_reason'] = 'unknown current or preceding target holdings'
+                m['series']['net_return'] = [number(v) for v in pnl]
+                m['series']['turnover'] = [number(v) for v in turnover]
                 if np.any(pnl < -1):
                     m['portfolio_unavailable_reason'] = 'returns below -100% require a capital contract'
                 else:
                     m['sharpe'] = number(compute_sharpe_ratio(pnl, min_periods=20))
-                    m['max_drawdown'] = number(compute_maximum_drawdown(pnl)[0])
+                    max_dd, drawdowns, _ = compute_maximum_drawdown(pnl)
+                    m['max_drawdown'] = number(max_dd)
+                    wealth = compute_aligned_wealth_curve(pnl)
+                    unknown = np.maximum.accumulate(~np.isfinite(pnl))
+                    bankrupt = np.maximum.accumulate(pnl == -1.)
+                    wealth = np.where(unknown & ~bankrupt, np.nan, wealth)
+                    m['series']['nav'] = [number(v) for v in wealth]
+                    m['series']['drawdown'] = [number(v) for v in drawdowns]
                     if np.isfinite(pnl).all():
                         blocks = [float(compute_sharpe_ratio(block, min_periods=2))
                                   for block in np.array_split(pnl, 3)]
@@ -121,10 +147,12 @@ def _partition(frozen, labels, indices, role):
                         m['portfolio_unavailable_reason'] = 'missing valuations; full-period drawdown unknown'
             else:
                 m['portfolio_unavailable_reason'] = 'multi-bar or overlapping labels require cohort accounting'
+                m['turnover_unavailable_reason'] = m['portfolio_unavailable_reason']
             scores[key] = m
         factors[name] = scores
     return {'role': role, 'days': len(idx), 'start': str(labels.decision_time[indices[0]]),
             'end': str(labels.decision_time[indices[-1]]), 'factors': factors,
+            'dates': [str(labels.decision_time[i]) for i in indices],
             'portfolio_boundary': 'each reported segment starts from cash; entry cost included'}
 
 
@@ -165,6 +193,7 @@ def evaluate_frozen(frozen, broker):
     if automatic_time_split(labels, frozen.result.config).identity != frozen.split_identity:
         raise ValueError('authority label windows do not match frozen split')
     report = {'selection_hash': frozen.selection_hash, 'profile_hash': frozen.profile_hash,
+              'report_version': 'research-final.v2-curves',
               'dataset_identity': frozen.dataset_identity, 'test_evaluated': True,
               'selection_unchanged': True, 'research_only': True,
               'cost_rate': frozen.result.config.research_cost_rate,
