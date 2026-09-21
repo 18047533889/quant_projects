@@ -1,0 +1,52 @@
+{
+  "factor": "weekly_db5616cd85a477b3",
+  "factor_sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+  "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+  "days": 500,
+  "assets": 256,
+  "diagnosis_input_stage": "accepted_baseline",
+  "turnover": 0.029435861423220973,
+  "turnover_policy": "signal_cash",
+  "selection_portfolio": {
+    "status": "available",
+    "metrics": {
+      "rank_ic": -0.00530337070465075,
+      "rank_icir": -0.0746147672270233,
+      "sharpe": 2.088692041506368,
+      "max_drawdown": 0.18584596181065458,
+      "turnover": 0.029435861423220973,
+      "worst_block_sharpe": 0.9343152797254322
+    },
+    "reason": null,
+    "periods_per_year": 252,
+    "cost_rate": 0.001,
+    "empty_leg_policy": "signal_cash",
+    "semantics": "costed gross-one stock-equal top/bottom quintiles"
+  },
+  "issues": [
+    {
+      "code": "negative_rank_ic",
+      "families": [
+        "SIGN_ORIENTATION"
+      ],
+      "value": -0.00530337070465075,
+      "threshold": 0.0
+    },
+    {
+      "code": "unstable_ic_direction",
+      "families": [],
+      "value": [
+        -0.012236534918722978,
+        -0.005864199889092084,
+        0.0021906226938628124
+      ]
+    }
+  ],
+  "candidate_count": 94,
+  "reverse_candidates": 31,
+  "status": "raw_retained",
+  "test_evaluated": false,
+  "exact_diagnosis_and_selection_metrics": true,
+  "composed_orientation_tags_checked": true,
+  "limits": "TRAIN diagnosis after accepted baseline; not proof a flagged repair improves held-out results"
+}

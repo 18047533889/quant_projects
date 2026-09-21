@@ -6682,7 +6682,7 @@ TRAIN-only multi-dimensional research diagnosis using QE metric authorities.
 
 ### diagnose_training_batch
 
-[实际实现](../factor_optimizer/research_diagnostics.py#L15)。
+[实际实现](../factor_optimizer/research_diagnostics.py#L37)。
 
 Inspect 20 real quantile bins, IC/ICIR and gross-one spread risk on TRAIN.
 
@@ -10650,9 +10650,9 @@ Import seen records from dictionaries.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `4b1a1defd136693361ca4adc3d8a416a80912b400bcb6d5af6b3df707ad81905` |
-| `factor_optimizer/research_batch.py` | `970805f0b4e24c0523695677edd5472f111d098f2877a9881425b96ff0d99e59` |
-| `factor_optimizer/research_decay.py` | `1355b74f2ca32c7f819357880214580502eeff1df9d09593c601ed14d7fb71b0` |
-| `factor_optimizer/research_diagnostics.py` | `6353a8fcf0777f751b14f255e77930de89696972a99ae5ba4f63ea66beef104f` |
+| `factor_optimizer/research_batch.py` | `bf900afa4092d42b7e453e9465893267d1b163be0a75e94e884ada50bf917936` |
+| `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
+| `factor_optimizer/research_diagnostics.py` | `26c82a50b2edcaa4eff8911da11a4fcd52fbad2f5235148202a300d396ced23d` |
 | `factor_optimizer/research_final_report.py` | `9297f01eb1adcd3ea280e8fcde332c21e4c69ec2fef7f35a391a24f86e2d7a7d` |
 | `factor_optimizer/research_fitness.py` | `4ff5f341a903b477850dfcbfb14aad4188b2703cc8ea45f1b7bf0df316317d5c` |
 | `factor_optimizer/research_manifest.py` | `5c92761458c47ff82aa68819341860744d3f146c974318172f28697b0f89a161` |

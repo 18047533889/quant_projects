@@ -111,6 +111,9 @@ def test_default_batch_uses_joint_metrics_and_test_labels_do_not_select():
     assert selected.joint_diagnostics['objective'] == 'joint'
     assert selected.joint_diagnostics['validation_candidate']['sharpe'] > 0
     assert selected.validation_lower_bound > 0
+    assert selected.training_diagnostics['input_stage'] == 'raw'
+    assert all('negative_rank_ic' in c['diagnosed_issues']
+               for c in selected.candidates if c['family'] == 'SIGN_ORIENTATION')
     poisoned = y.copy()
     poisoned[192:] = np.nan
     b = optimize_factor_batch(batch, replace(labels, values=poisoned), config=conf, allow_research=True)

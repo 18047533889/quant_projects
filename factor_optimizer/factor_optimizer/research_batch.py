@@ -450,6 +450,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
         diagnostic_batch = replace(batch, factor_ids=(factor_id,),
             values=diagnostic_values[:, :, None], validity=np.isfinite(diagnostic_values[:, :, None]))
         diagnosis = diagnose_training_batch(diagnostic_batch, labels, config=config)[factor_id]
+        diagnosis["input_stage"] = "accepted_baseline" if baseline_active else "raw"
         factor_specs = list(specs)
         if ('cs_rank_already_present' in baseline_plan.omissions
                 or (baseline_active and 'cs_rank' in baseline_plan.operations)):
@@ -561,6 +562,9 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                 last_base_identity, last_base_values = None, None
                 for family, params, precompiled, orientation in proposals:
                     record = {"family": family, "parameters": dict(params), "orientation": orientation}
+                    record["diagnosed_issues"] = [issue["code"] for issue in diagnosis["issues"]
+                                                  if family in issue["families"] or (
+                                                      orientation == -1 and "SIGN_ORIENTATION" in issue["families"])]
                     if precompiled is not None and precompiled.identity in proposal_sources:
                         record["proposal_source"] = proposal_sources[precompiled.identity]
                     try:

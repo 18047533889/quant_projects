@@ -55,6 +55,8 @@ def test_negative_noisy_factor_can_combine_orientation_and_smoothing(seed):
     assert outcome.selected_family == "CAUSAL_SMOOTHING"
     assert outcome.plan.multiplier == -1
     assert any(r.get("orientation") == -1 for r in outcome.candidates)
+    assert all("negative_rank_ic" in r["diagnosed_issues"]
+               for r in outcome.candidates if r.get("orientation") == -1)
     assert outcome.validation_candidate_identity == outcome.plan_identity
     # The frozen compound plan must actually change values, not just its label.
     from scipy.stats import spearmanr

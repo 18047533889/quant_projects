@@ -23,6 +23,8 @@ def diagnose_layer_decay(batch, labels, split, config, factor_index, *,
     record = dict(partition="TRAIN", status="unavailable", lags=list(lags),
                   layers=[], proposed_half_lives=[], full_notional_turnover=None,
                   high_turnover=False, common_days=0, coverage=0.,
+                  turnover_policy=config.research_empty_leg_policy,
+                  turnover_unavailable_reason="insufficient or unusable signal history",
                   reason="insufficient complete twenty-layer history")
     raw = np.asarray(batch.values[:, :, factor_index], float)
     if batch.validity is not None:
@@ -30,12 +32,12 @@ def diagnose_layer_decay(batch, labels, split, config, factor_index, *,
     raw = np.where(np.isfinite(raw), raw, np.nan)
     # Turnover depends on signals, never on which future returns happen to exist.
     current = raw[idx]
-    from quant_evaluator.metrics.quantile import assign_quantiles_batch
-    bins = assign_quantiles_batch(current, n_quantiles=5)
-    if ((bins == 0).any(axis=1) & (bins == 4).any(axis=1)).all():
-        _, turnover = portfolio_series(current, np.zeros_like(current), cost_rate=0.)
+    signal_pnl, turnover = portfolio_series(current, np.zeros_like(current), cost_rate=0.,
+                                           empty_leg_policy=config.research_empty_leg_policy)
+    if len(current) and np.isfinite(signal_pnl).all():
         record["full_notional_turnover"] = float(turnover.mean())
         record["high_turnover"] = record["full_notional_turnover"] > .5
+        record["turnover_unavailable_reason"] = None
     if raw.shape[1] < 20*minimum_assets_per_quantile or not len(idx):
         return record
     target = _subset_labels(labels, split.train_indices)

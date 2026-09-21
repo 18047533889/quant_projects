@@ -12,6 +12,28 @@ def _number(value):
     return float(value) if np.isfinite(value) else None
 
 
+def _selection_portfolio(values, target, ic, config, single_bar):
+    """Use precisely the selection portfolio and reuse the already computed IC."""
+    from factor_optimizer.research_fitness import portfolio_series, summarize
+    record = dict(status="unavailable", metrics=None, reason=None,
+                  periods_per_year=252,
+                  cost_rate=config.research_cost_rate,
+                  empty_leg_policy=config.research_empty_leg_policy,
+                  semantics="costed gross-one stock-equal top/bottom quintiles")
+    if not single_bar:
+        record["reason"] = "multi-bar or overlapping labels require cohort accounting"
+        return record
+    returns = target.values if target.validity is None else np.where(target.validity, target.values, np.nan)
+    try:
+        pnl, turnover = portfolio_series(values, returns, cost_rate=config.research_cost_rate,
+                                        empty_leg_policy=config.research_empty_leg_policy)
+        record["metrics"] = summarize(np.column_stack((ic, pnl, turnover)))
+        record["status"] = "available"
+    except ValueError as exc:
+        record["reason"] = str(exc)
+    return record
+
+
 def diagnose_training_batch(batch, labels, *, config=None, periods_per_year=252,
                             minimum_assets_per_quantile=10):
     """Inspect 20 real quantile bins, IC/ICIR and gross-one spread risk on TRAIN.
@@ -20,6 +42,8 @@ def diagnose_training_batch(batch, labels, *, config=None, periods_per_year=252,
     number of valid labels; bins share the same dates for the profile. No
     unavailable bin is filled with zero. Portfolio statistics are descriptive
     gross-one top/bottom spreads, not executable or net-of-cost backtests.
+    The separate selection_portfolio field uses the costed quintile selection
+    contract; issues are descriptive hypotheses, never admissions.
     Overlapping/multi-bar labels are not compounded as daily returns.
     """
     from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
@@ -91,7 +115,35 @@ def diagnose_training_batch(batch, labels, *, config=None, periods_per_year=252,
         drawdown = compute_maximum_drawdown(spread)[0] if enough and single_bar and capital_valid else np.nan
         fold_ic = [np.nanmean(f) if np.isfinite(f).sum() >= 10 else np.nan
                    for f in np.array_split(ic[:, k], 3)]
+        signal = train.values[:, :, k]
+        if train.validity is not None:
+            signal = np.where(train.validity[:, :, k], signal, np.nan)
+        selection = _selection_portfolio(signal, target, ic[:, k], config, single_bar)
+        # These are descriptive TRAIN problem flags, not statistical admission
+        # or proof that a named repair will improve the factor.
+        issues = []
+        if decay["high_turnover"]:
+            issues.append(dict(code="high_turnover",
+                families=["CAUSAL_SMOOTHING", "DECAY_REFINEMENT"],
+                value=decay["full_notional_turnover"], threshold=.5))
+        if np.isfinite(mean_ic[k]) and mean_ic[k] < 0:
+            issues.append(dict(code="negative_rank_ic", families=["SIGN_ORIENTATION"],
+                               value=float(mean_ic[k]), threshold=0.))
+        if np.isfinite(fold_ic).all() and min(fold_ic) < 0 < max(fold_ic):
+            issues.append(dict(code="unstable_ic_direction", families=[],
+                               value=[float(x) for x in fold_ic]))
+        if shape:
+            issues.append(dict(code="nonmonotonic_twenty_layer_profile",
+                               families=[shape], center=center))
+        if selection["status"] == "unavailable":
+            issues.append(dict(code="joint_metrics_unavailable", families=[],
+                               reason=selection["reason"]))
+        elif selection["metrics"]["worst_block_sharpe"] < 0:
+            issues.append(dict(code="negative_worst_block", families=[],
+                               value=selection["metrics"]["worst_block_sharpe"]))
         results[name] = {
+            "selection_portfolio": selection,
+            "issues": issues,
             "layer_decay": decay,
             "partition": "TRAIN", "train_days": len(idx), "periods_per_year": periods_per_year,
             "rank_ic": _number(mean_ic[k]), "rank_icir": _number(icir[k]),

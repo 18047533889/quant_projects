@@ -1,5 +1,7 @@
 # 联合多指标研究选优 joint.v1
 
+自动诊断与候选问题关联见 [训练诊断与自动候选](DIAGNOSIS_AND_SELECTION.md)。
+
 `BatchOptimizationConfig.selection_objective` 默认改为 `joint`。
 `rank_ic` 为显式历史复现模式；不因联合指标缺失而暗中退回该模式。
 这不是生产准入：生产仍须完整 FactorFitnessSpec、交易约束、容量与治理证据。

@@ -5,6 +5,49 @@ from factor_optimizer.research_batch import automatic_time_split
 from quant_evaluator.contracts.factor_batch import FactorBatch, AxisRef
 from quant_evaluator.contracts.label_bundle import LabelBundle
 
+def test_turnover_diagnosis_counts_signal_driven_cash_exit_and_reentry():
+    from factor_optimizer.research_decay import diagnose_layer_decay
+    from factor_optimizer.research_batch import BatchOptimizationConfig
+    batch, labels = panel(40)
+    x = np.tile(np.arange(40, dtype=float), (300, 1))
+    x[70] = np.r_[np.zeros(39), 1.]
+    batch = replace(batch, values=x[:, :, None])
+    cfg = BatchOptimizationConfig()
+    split = automatic_time_split(labels, cfg)
+    row = diagnose_layer_decay(batch, labels, split, cfg, 0)
+    assert np.isclose(row['full_notional_turnover'], 3/len(split.train_indices))
+    assert row['turnover_unavailable_reason'] is None
+    old = diagnose_layer_decay(batch, labels, split,
+                              replace(cfg, research_empty_leg_policy='unavailable'), 0)
+    assert old['full_notional_turnover'] is None
+    assert old['turnover_unavailable_reason']
+
+
+def test_selection_diagnosis_matches_costed_joint_scoring_and_reports_issues():
+    from factor_optimizer.research_batch import BatchOptimizationConfig
+    from factor_optimizer.research_diagnostics import diagnose_training_batch
+    from factor_optimizer.research_fitness import paired_series, summarize
+    batch, labels = panel(40)
+    rng = np.random.default_rng(231)
+    x = rng.normal(size=(300, 40))
+    y = -.002*x + rng.normal(0, .01, x.shape)
+    batch, labels = replace(batch, values=x[:, :, None]), replace(labels, values=y)
+    cfg = BatchOptimizationConfig()
+    row = diagnose_training_batch(batch, labels, config=cfg)['u_shape']
+    raw, _ = paired_series(x, x, batch, labels, automatic_time_split(labels, cfg).train_indices,
+                          cost_rate=cfg.research_cost_rate,
+                          empty_leg_policy=cfg.research_empty_leg_policy)
+    assert row['selection_portfolio']['metrics'] == summarize(raw)
+    assert row['selection_portfolio']['status'] == 'available'
+    codes = {issue['code'] for issue in row['issues']}
+    assert 'high_turnover' in codes
+    assert 'negative_rank_ic' in codes
+    poisoned = y.copy()
+    poisoned[automatic_time_split(labels, cfg).validation_start:] = np.nan
+    changed = diagnose_training_batch(batch, replace(labels, values=poisoned), config=cfg)['u_shape']
+    assert changed == row
+
+
 
 def panel(n=400):
     t = 300
