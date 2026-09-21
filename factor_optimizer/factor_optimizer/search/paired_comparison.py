@@ -85,20 +85,41 @@ def compare_paired_draws(
                                       0, 0, 0, 0, "comparison context identity mismatch")
     names = set(evidence.candidate_metrics)
     n = len(evidence.draw_ids)
-    valid = (n > 0 and len(set(evidence.draw_ids)) == n
+    valid = (n > 0 and bool(names) and len(set(evidence.draw_ids)) == n
              and names == set(evidence.baseline_metrics)
              and all(len(evidence.candidate_metrics[k]) == n and
                      len(evidence.baseline_metrics[k]) == n for k in names))
     if not valid:
         return PairedComparisonResult(ComparisonStatus.INVALID_CONTEXT, None, None,
                                       0, 0, 0, 0, "draw identity/shape/metric set mismatch")
+    # Validate all supplied evidence before any decision branch, including
+    # costs on candidates whose utility would otherwise pass superiority.
+    alpha = (1 - thresholds.confidence_level) / 2
+    cost_ok = False
+    if len(evidence.candidate_cost) or len(evidence.baseline_cost):
+        if len(evidence.candidate_cost) != n or len(evidence.baseline_cost) != n:
+            return PairedComparisonResult(ComparisonStatus.INVALID_CONTEXT, None, None,
+                                          0, 0, 0, 0, "cost draws are not paired")
+        try:
+            candidate_cost = [float(v) for v in evidence.candidate_cost]
+            baseline_cost = [float(v) for v in evidence.baseline_cost]
+            savings = [a-b for a, b in zip(baseline_cost, candidate_cost)]
+            if not all(math.isfinite(v) for v in candidate_cost + baseline_cost + savings):
+                raise ValueError("non-finite cost")
+        except (TypeError, ValueError, OverflowError):
+            return PairedComparisonResult(ComparisonStatus.INVALID_CONTEXT, None, None,
+                                          0, 0, 0, 0, "invalid cost draws")
+        cost_lower = _percentile(savings, alpha)
+        cost_ok = cost_lower > 0 and cost_lower >= thresholds.minimum_cost_improvement
     differences = []
     for i in range(n):
-        c = {name: float(evidence.candidate_metrics[name][i]) for name in names}
-        b = {name: float(evidence.baseline_metrics[name][i]) for name in names}
         try:
+            c = {name: float(evidence.candidate_metrics[name][i]) for name in names}
+            b = {name: float(evidence.baseline_metrics[name][i]) for name in names}
+            if not all(math.isfinite(v) for v in (*c.values(), *b.values())):
+                raise ValueError("non-finite metric")
             difference = float(utility(c)) - float(utility(b))
-        except (KeyError, TypeError, ValueError, ZeroDivisionError):
+        except (KeyError, TypeError, ValueError, ZeroDivisionError, OverflowError):
             return PairedComparisonResult(ComparisonStatus.INVALID_CONTEXT, None, None,
                                           0, 0, 0, 0, "utility could not be evaluated")
         if not math.isfinite(difference):
@@ -112,17 +133,9 @@ def compare_paired_draws(
     interval = (_percentile(differences, alpha), _percentile(differences, 1-alpha))
     mean = sum(differences) / n
     lo, hi = interval
-    if lo >= thresholds.minimum_improvement:
+    if lo > 0 and lo >= thresholds.minimum_improvement:
         status, reason = ComparisonStatus.SUPERIOR, "paired lower bound clears minimum improvement"
     else:
-        cost_ok = False
-        if evidence.candidate_cost or evidence.baseline_cost:
-            if len(evidence.candidate_cost) != n or len(evidence.baseline_cost) != n:
-                return PairedComparisonResult(ComparisonStatus.INVALID_CONTEXT, None, None,
-                                              0, 0, 0, 0, "cost draws are not paired")
-            savings = [float(a)-float(b) for a, b in zip(evidence.baseline_cost,
-                                                         evidence.candidate_cost)]
-            cost_ok = _percentile(savings, alpha) >= thresholds.minimum_cost_improvement
         if lo >= -thresholds.maximum_noninferiority_loss and cost_ok:
             status, reason = ComparisonStatus.NON_INFERIOR_CHEAPER, "signed noninferiority and cost bounds pass"
         elif lo >= -thresholds.equivalence_bound and hi <= thresholds.equivalence_bound:

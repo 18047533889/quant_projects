@@ -65,7 +65,8 @@ class UncertaintyConfig:
     equivalence_probability_band: float = 0.15
 
     def __post_init__(self) -> None:
-        if self.minimum_meaningful_improvement < 0:
+        if (not math.isfinite(self.minimum_meaningful_improvement)
+                or self.minimum_meaningful_improvement < 0):
             raise ValueError(
                 "minimum_meaningful_improvement must be >= 0"
             )
@@ -370,6 +371,9 @@ class UncertaintyAwareWinnerSelector:
                     f"missing robustness score for candidate trial_id="
                     f"{evidence.trial_id!r}"
                 )
+
+        if len({e.trial_id for e in candidates}) != len(candidates):
+            raise ValueError("candidate trial IDs must be unique")
 
         # Step 1: compute point + conservative utilities.
         point_utility = {

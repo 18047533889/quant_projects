@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 """阶段1v2：456 因子预处理自动化 + 择优 —— factor_optimizer SearchRunner 统一版。
 
+研究限制：当前评分仍在同一段全历史上完成候选选择和最终重打，不构成独立
+train/validation 或 sealed-test 外样本证据；输出只能用于 research screening。
+
 对每个因子生成 4 个预处理变体（raw / winsor / winsor_zscore / winsor_zscore_neutral），
 用 factor_optimizer 的 SearchSpace + GridSearch 把「变体择优」建模为离散参数搜索：
   - SearchSpace: page(choice) × treatment(choice, 4 token)   → 每页 4 格，全网格 = 456×4
@@ -34,6 +37,7 @@ sys.path.insert(0, str(PROJECT / "factor_optimizer"))
 sys.path.insert(0, str(PROJECT / "factor_preprocess"))
 
 from scipy.stats import rankdata
+from quant_evaluator.metrics.ic_summary import compute_icir
 
 from factor_optimizer.search.runner import SearchRunner, SearchConfig
 from factor_optimizer.contracts.search_budget import SearchBudget
@@ -212,15 +216,35 @@ def rankic_ir_fast(arr, n_days, stride=1):
         ra = rankdata(m[mask]); rb = rankdata(r[mask])
         am = ra - ra.mean(); bm = rb - rb.mean()
         d = np.sqrt((am * am).sum() * (bm * bm).sum())
-        ics.append((am * bm).sum() / d if d > 1e-18 else 0.0)
+        # A constant factor or label cross-section has undefined correlation;
+        # it is not zero IC evidence and must not increase observation_count.
+        if d <= 1e-18:
+            continue
+        ics.append((am * bm).sum() / d)
     if not ics:
-        return 0.0, 0.0, 0
+        return np.nan, np.nan, 0
     s = np.asarray(ics)
     s = s[np.isfinite(s)]
     if len(s) == 0:
-        return 0.0, 0.0, 0
-    mean = float(s.mean()); std = float(s.std())
-    return mean, (mean / std if std > 1e-9 else 0.0), int(len(s))
+        return np.nan, np.nan, 0
+    mean = float(s.mean())
+    # QE is the statistic authority: sample std (ddof=1), >=2 periods, and
+    # exact-zero variance all yield NaN rather than a fabricated zero ICIR.
+    ir = float(compute_icir(s[:, None], min_periods=2)[0])
+    return mean, ir, int(len(s))
+
+
+def chunk_failure_records(pages, exc):
+    """Return one bounded failure record for every page lost with a worker."""
+    return {
+        page: {
+            "error": "chunk_execution_failed",
+            "error_phase": "process_chunk",
+            "error_type": type(exc).__name__,
+            "fallback": "unavailable_raw",
+        }
+        for page in pages
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -237,27 +261,42 @@ def process_chunk(pages):
 
     # 载 chunk 矩阵 → 对齐全宇宙 float32 数组
     page_arr = {}
+    page_failures = {}
     for page in pages:
         fpath = FV_DIR / f"{page}.parquet"
         try:
             mat = pd.read_parquet(fpath)
-        except Exception:
+        except Exception as exc:
+            page_failures[page] = {
+                "error": "factor_matrix_read_failed",
+                "error_phase": "read_factor_matrix",
+                "error_type": type(exc).__name__,
+                "fallback": "unavailable_raw",
+            }
             continue
-        if mat.shape[1] == 0 or mat.isna().all().all():
+        try:
+            if mat.shape[1] == 0 or mat.isna().all().all():
+                raise ValueError("factor matrix is empty")
+            cols = [c for c in universe if c in mat.columns]
+            if not cols:
+                raise ValueError("factor matrix has no universe columns")
+            common = mat.index.intersection(row_index)
+            if len(common) == 0:
+                raise ValueError("factor matrix has no common dates")
+            sub = mat.reindex(index=row_index)[cols].astype(np.float32)
+            arr = np.full((n_days, n_universe), np.nan, dtype=np.float32)
+            arr[:, [col_pos[c] for c in cols]] = sub.values
+            page_arr[page] = arr
+        except Exception as exc:
+            page_failures[page] = {
+                "error": "factor_matrix_prepare_failed",
+                "error_phase": "prepare_factor_matrix",
+                "error_type": type(exc).__name__,
+                "fallback": "unavailable_raw",
+            }
             continue
-        cols = [c for c in universe if c in mat.columns]
-        if not cols:
-            continue
-        common = mat.index.intersection(row_index)
-        if len(common) == 0:
-            continue
-        sub = mat.reindex(index=row_index)[cols].astype(np.float32)
-        arr = np.full((n_days, n_universe), np.nan, dtype=np.float32)
-        arr[:, [col_pos[c] for c in cols]] = sub.values
-        page_arr[page] = arr
     if not page_arr:
-        return {}
-    del mat, sub
+        return page_failures
     gc.collect()
 
     pages_list = list(page_arr)
@@ -293,8 +332,8 @@ def process_chunk(pages):
         out = apply_treatment(arr, token)
         stride = NEUTRAL_STRIDE if token.endswith("neutral") else 1
         mean, ir, n = rankic_ir_fast(out, n_days, stride=stride)
-        if not np.isfinite(ir):
-            ir = 0.0
+        if n <= 0 or not np.isfinite(ir):
+            raise ValueError("undefined ICIR: insufficient or degenerate observations")
         return {"score": float(ir), "evidence_ref": f"{page}:{token}"}
 
     proto = EvaluationProtocol(split_plan=plan, evaluator=evaluation_fn)
@@ -306,19 +345,17 @@ def process_chunk(pages):
     # 当 chunk 仅含全负页时，我们仍要产出 {page: {best_tok, best_steps, variants, ...}}
     # 使 meta 完整（best_tok 可能为 raw 兜底）。这里沿用 session.trials 原始打分聚合。
     page_best = {}
-    seen_success = 0
     for trial in session.trials:
         if not trial.is_successful():
             continue
-        seen_success += 1
         params = trial.metadata.get("params", {})
         page = params.get("page"); token = params.get("treatment")
         if page not in page_arr or token not in TREATMENTS:
             continue
         out = apply_treatment(page_arr[page], token)
         mean, ir, n = rankic_ir_fast(out, n_days, stride=1)
-        if not np.isfinite(ir):
-            ir = 0.0
+        if n <= 0 or not np.isfinite(ir):
+            continue
         rec = page_best.setdefault(page, {"best_ir": -1e18, "variants": {}, "trials": []})
         rec["variants"][token] = {"mean_rankic": round(mean, 6), "rankic_ir": round(ir, 6), "n_days": n}
         rec["trials"].append({"treatment": token, "rankic_ir": round(ir, 6),
@@ -326,36 +363,43 @@ def process_chunk(pages):
         if ir > rec["best_ir"]:
             rec.update({"best_ir": ir, "best_mean": mean, "best_tok": token,
                         "best_steps": TREATMENTS[token][3]})
-    if not seen_success:
-        # chunk 内全部页无成功 trials（不应发生，保护性兜底）——直接按 raw 给占位
-        for page in pages_list:
-            page_best.setdefault(page, {"best_ir": -1e18, "variants": {}, "trials": []})
-            rec = page_best[page]
+    # 每个因子独立兜底。同一 chunk 中其他因子的成功 trial 不能掩盖本因子失败。
+    for page in pages_list:
+        if page not in page_best:
+            rec = page_best.setdefault(page, {"best_ir": -1e18, "variants": {}, "trials": []})
             mean, ir, n = rankic_ir_fast(page_arr[page], n_days, stride=1)
-            rec.update({"best_ir": ir if np.isfinite(ir) else 0.0,
-                        "best_mean": mean, "best_tok": "raw", "best_steps": TREATMENTS["raw"][3]})
-            rec["variants"]["raw"] = {"mean_rankic": round(mean, 6), "rankic_ir": round(float(ir if np.isfinite(ir) else 0.0), 6), "n_days": n}
-            rec["trials"].append({"treatment": "raw", "rankic_ir": round(float(ir if np.isfinite(ir) else 0.0), 6),
-                                  "mean_rankic": round(mean, 6), "steps": TREATMENTS["raw"][3]})
+            raw_valid = n > 0 and np.isfinite(ir) and np.isfinite(mean)
+            score = float(ir) if raw_valid else None
+            mean_score = float(mean) if raw_valid else None
+            rec.update({"best_ir": score,
+                        "best_mean": mean_score, "best_tok": "raw", "best_steps": TREATMENTS["raw"][3],
+                        "fallback": "raw",
+                        "fallback_reason": "no_successful_candidate_trials",
+                        "evaluation_status": "valid" if raw_valid else "invalid",
+                        "optimization_status": "raw_fallback_valid" if raw_valid else "raw_fallback_invalid"})
+            rec["variants"]["raw"] = {"mean_rankic": round(mean_score, 6) if raw_valid else None,
+                                        "rankic_ir": round(score, 6) if raw_valid else None,
+                                        "n_days": n, "valid": raw_valid}
+            rec["trials"].append({"treatment": "raw",
+                                  "rankic_ir": round(score, 6) if raw_valid else None,
+                                  "mean_rankic": round(mean_score, 6) if raw_valid else None,
+                                  "valid": raw_valid, "steps": TREATMENTS["raw"][3]})
 
     # 写盘最优格矩阵 + 组装 meta
-    out_meta = {}
+    out_meta = dict(page_failures)
     for page, rec in page_best.items():
-        if rec.get("best_tok") is None:
-            # 保护性兜底：仍写 raw（原始矩阵），保证 456 页 parquet 全非空
-            rec.update({"best_ir": 0.0, "best_mean": 0.0, "best_tok": "raw",
-                        "best_steps": TREATMENTS["raw"][3]})
-        best_mat = apply_treatment(page_arr[page], rec["best_tok"])
-        df_out = pd.DataFrame(best_mat, index=row_index, columns=universe).astype("float32")
-        df_out = df_out.dropna(axis=1, how="all")
-        df_out.to_parquet(OUT_DIR / f"{page}.parquet")
+        valid = rec.get("evaluation_status", "valid") == "valid"
         variants_meta = {TOKEN2NAME[k]: v for k, v in rec["variants"].items()}
-        out_meta[page] = {
+        page_meta = {
             "best": TOKEN2NAME[rec["best_tok"]],
-            "best_mean_rankic": round(rec["best_mean"], 6),
-            "best_rankic_ir": round(rec["best_ir"], 6),
+            "best_mean_rankic": round(rec["best_mean"], 6) if valid else None,
+            "best_rankic_ir": round(rec["best_ir"], 6) if valid else None,
             "steps": rec["best_steps"],
             "best_treatment_token": rec["best_tok"],
+            "fallback": rec.get("fallback"),
+            "fallback_reason": rec.get("fallback_reason"),
+            "evaluation_status": "valid" if valid else "invalid",
+            "optimization_status": rec.get("optimization_status", "screening_selected"),
             "dsl_preproc_ops": detect_dsl_preproc(page),
             "variants": variants_meta,
             "search": {
@@ -370,12 +414,46 @@ def process_chunk(pages):
                 "trials": rec["trials"],
             },
         }
+        try:
+            best_mat = apply_treatment(page_arr[page], rec["best_tok"])
+            df_out = pd.DataFrame(best_mat, index=row_index, columns=universe).astype("float32")
+            df_out = df_out.dropna(axis=1, how="all")
+            df_out.to_parquet(OUT_DIR / f"{page}.parquet")
+            out_meta[page] = page_meta
+        except Exception as exc:
+            out_meta[page] = {
+                **page_meta,
+                "error": "output_matrix_write_failed",
+                "error_phase": "write_output_matrix",
+                "error_type": type(exc).__name__,
+            }
     return out_meta
 
 
 # ---------------------------------------------------------------------------
 # 主流程
 # ---------------------------------------------------------------------------
+
+def pending_pages(names, existing_outputs, metadata):
+    """Resume only records with both output and successful evaluation metadata.
+
+    This is not an input-content cache: changes to data/configuration still
+    require a fresh campaign/output location.
+    """
+    pending = []
+    for name in names:
+        record = metadata.get(name)
+        complete = (
+            name in existing_outputs
+            and isinstance(record, dict)
+            and not record.get("error")
+            and record.get("evaluation_status") == "valid"
+            and record.get("best_treatment_token") in TREATMENTS
+        )
+        if not complete:
+            pending.append(name)
+    return pending
+
 
 def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -402,7 +480,9 @@ def main():
             old_meta = json.loads(META_PATH.read_text())
         except Exception:
             old_meta = {}
-    todo = [p for p in all_names if p not in already]
+    if not isinstance(old_meta, dict):
+        old_meta = {}
+    todo = pending_pages(all_names, already, old_meta)
     print(f"[opt1v2] 因子数 {len(all_names)}, 待算 {len(todo)}, 已写 {len(already)}", flush=True)
     if not todo:
         print("[opt1v2] 无可算因子", flush=True)
@@ -416,20 +496,23 @@ def main():
     done = 0
     from concurrent.futures import ProcessPoolExecutor, as_completed
     with ProcessPoolExecutor(max_workers=n_workers) as pool:
-        futures = {pool.submit(process_chunk, pages): i for i, pages in enumerate(chunks)}
+        futures = {pool.submit(process_chunk, pages): (i, pages) for i, pages in enumerate(chunks)}
         for fut in as_completed(futures):
+            chunk_index, chunk_pages = futures[fut]
             try:
                 chunk_meta = fut.result()
             except Exception as exc:
-                print(f"[opt1v2] chunk {futures[fut]} 失败: {str(exc)[:150]}", flush=True)
-                chunk_meta = {}
+                print(f"[opt1v2] chunk {chunk_index} 失败: {str(exc)[:150]}", flush=True)
+                chunk_meta = chunk_failure_records(chunk_pages, exc)
             meta.update(chunk_meta)
             done += len(chunk_meta)
             if done % 64 == 0 or done >= len(todo):
                 print(f"[opt1v2] {done}/{len(todo)} 完成, 耗时{time.time()-t0:.0f}s", flush=True)
 
     META_PATH.write_text(json.dumps(meta, ensure_ascii=False, indent=2, default=str))
-    ok = [p for p, m in meta.items() if not m.get("error") and m.get("best_rankic_ir", 0) > 0]
+    ok = [p for p, m in meta.items() if not m.get("error")
+          and isinstance(m.get("best_rankic_ir"), (int, float))
+          and m["best_rankic_ir"] > 0]
     errs = [p for p, m in meta.items() if m.get("error")]
     print(f"[opt1v2] 完成 {len(ok)} 非零 IR 因子 (err {len(errs)}), meta 存 {META_PATH}, 总耗时{time.time()-t0:.0f}s", flush=True)
     import collections

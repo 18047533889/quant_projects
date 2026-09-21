@@ -9742,7 +9742,7 @@ Controls the uncertainty-aware winner selector.
 
 ### UncertaintyEvidence
 
-[实际实现](../factor_optimizer/search/uncertainty_winner.py#L85)。
+[实际实现](../factor_optimizer/search/uncertainty_winner.py#L86)。
 
 Bootstrap uncertainty evidence for a single candidate.
 
@@ -9761,13 +9761,13 @@ Bootstrap uncertainty evidence for a single candidate.
 
 ### UncertaintyAwareWinnerSelector
 
-[实际实现](../factor_optimizer/search/uncertainty_winner.py#L325)。
+[实际实现](../factor_optimizer/search/uncertainty_winner.py#L326)。
 
 Select a winner among candidates using statistical uncertainty.
 
 ### UncertaintyAwareWinnerSelector.__init__
 
-[实际实现](../factor_optimizer/search/uncertainty_winner.py#L335)。
+[实际实现](../factor_optimizer/search/uncertainty_winner.py#L336)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -9775,7 +9775,7 @@ Select a winner among candidates using statistical uncertainty.
 
 ### UncertaintyAwareWinnerSelector.select
 
-[实际实现](../factor_optimizer/search/uncertainty_winner.py#L345)。
+[实际实现](../factor_optimizer/search/uncertainty_winner.py#L346)。
 
 Return the winning candidate among ``candidates``.
 
@@ -9806,7 +9806,7 @@ Versioned policy controlling the robust winner selector.
 
 ### WinnerSetPolicy
 
-[实际实现](../factor_optimizer/search/winner_selector.py#L67)。
+[实际实现](../factor_optimizer/search/winner_selector.py#L68)。
 
 Predeclared policy for a small complementary winner set.
 
@@ -9822,7 +9822,7 @@ Predeclared policy for a small complementary winner set.
 
 ### RobustBalancedUtility
 
-[实际实现](../factor_optimizer/search/winner_selector.py#L144)。
+[实际实现](../factor_optimizer/search/winner_selector.py#L145)。
 
 Compute the robust balanced utility of a candidate recipe.
 
@@ -9832,7 +9832,7 @@ Compute the robust balanced utility of a candidate recipe.
 
 ### augmented_tchebycheff
 
-[实际实现](../factor_optimizer/search/winner_selector.py#L191)。
+[实际实现](../factor_optimizer/search/winner_selector.py#L192)。
 
 Alternative winner metric: augmented weighted Tchebycheff scalarization.
 
@@ -9842,7 +9842,7 @@ Alternative winner metric: augmented weighted Tchebycheff scalarization.
 
 ### select_winner
 
-[实际实现](../factor_optimizer/search/winner_selector.py#L235)。
+[实际实现](../factor_optimizer/search/winner_selector.py#L236)。
 
 Select the single best candidate among the Pareto frontier.
 
@@ -9852,7 +9852,7 @@ Select the single best candidate among the Pareto frontier.
 
 ### select_complementary_winners
 
-[实际实现](../factor_optimizer/search/winner_selector.py#L318)。
+[实际实现](../factor_optimizer/search/winner_selector.py#L319)。
 
 Select zero or more eligible, incremental, non-duplicate candidates.
 
@@ -10082,7 +10082,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/search/dimensions.py` | `d96278aa024bf275edc88072a5abfe0b749f023047971b94bccc99ae67964d90` |
 | `factor_optimizer/search/lineage.py` | `979031c4c987a40cbb1987b360704ffd8fe0749792a21db0352c41497657b25b` |
 | `factor_optimizer/search/multifidelity.py` | `6967520ca3f3f78f5648cfccaa397f759514091f2dbb2bc3977506990f1747df` |
-| `factor_optimizer/search/paired_comparison.py` | `ac6ac9f9d6c720ae6b15fc2b254c764ae05e0e8b3446b92883d6c66dab853047` |
+| `factor_optimizer/search/paired_comparison.py` | `9bfdabf2b4e3c26b41697553fcdcbbcf49f49aa9ef20222546c69f57dfbce3be` |
 | `factor_optimizer/search/pareto.py` | `b368befd9d0d3d46498a43cbd1b399c474d795457de2af27cdd5e9eebbafebe6` |
 | `factor_optimizer/search/plateau.py` | `7c096dfd215cc4d2f22d2953a3adf3ff73ac2914345724aac36e542cda3e117d` |
 | `factor_optimizer/search/runner.py` | `b7e0a5b19c29005e73d6c3b5083a5552a8fe3cd497c13a23e2562faaeeebc13a` |
@@ -10091,8 +10091,8 @@ Import seen records from dictionaries.
 | `factor_optimizer/search/supervised_parameter.py` | `becb5018c82a3c522d8641530ca94ba39c7e3a9d2467ced68e3ae57e4b9a797c` |
 | `factor_optimizer/search/tiered_evaluation.py` | `649bce9eef0084762dae3244a894872e7eabcdeb3a277381c480fb17b563a8c8` |
 | `factor_optimizer/search/treatment_decision.py` | `7073d47030e31fb8b66848c748960ed24da7dcc8452fb0082750a3aa98a0a29e` |
-| `factor_optimizer/search/uncertainty_winner.py` | `3b78c7c867a84cb81d30c134abe2cfe5833ff9ddf99141c862c6fd03a7c7d77b` |
-| `factor_optimizer/search/winner_selector.py` | `12a8815f3953e80b9bacf96c1fe2855e655637fe9e2306ed8eb5149c793efc01` |
+| `factor_optimizer/search/uncertainty_winner.py` | `102b6c9d9ce32b010876c9f915f8abfd0cae70ad9bc180e75ad9cbdbf5387ca9` |
+| `factor_optimizer/search/winner_selector.py` | `3a2ff94402e3eb4b7e1b0a6c373362a96bab475d30c28c05e62db43edc70cb77` |
 | `factor_optimizer/seen/__init__.py` | `f37e222be83f53595c4ee7325542f299a1b6d64eeebce400e5296d0f56d33676` |
 | `factor_optimizer/seen/identity.py` | `dbf0d6cbbb1cd12f907a12fa2ce0089a9c2f1a25c9ee7da96b1735032163ff10` |
 
