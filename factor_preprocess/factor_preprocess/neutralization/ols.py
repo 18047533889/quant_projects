@@ -9,6 +9,33 @@ from typing import Optional, Union
 from datetime import datetime
 
 
+def _align_exposures(values, exposures, date_col, asset_col, value_col):
+    """Join unambiguous exposure columns without changing factor row order."""
+    keys = [date_col, asset_col]
+    if not values.columns.is_unique or not exposures.columns.is_unique:
+        raise ValueError("Input column names must be unique")
+    if exposures.duplicated(keys).any():
+        raise ValueError("Exposure date/asset keys must be unique")
+    exposure_cols = [c for c in exposures.columns if c not in keys]
+    if not exposure_cols:
+        raise ValueError("No exposure columns found")
+    # Use private names on BOTH sides: a user exposure called 'value' must
+    # never resolve to the dependent variable after a pandas suffix merge.
+    private_cols = []
+    used = set(values.columns) | set(exposures.columns)
+    for i in range(len(exposure_cols)):
+        name = f"__ols_exposure_{i}__"
+        while name in used:
+            name = "_" + name
+        used.add(name)
+        private_cols.append(name)
+    merged = values.merge(
+        exposures.rename(columns=dict(zip(exposure_cols, private_cols))),
+        on=keys, how="left", sort=False, validate="many_to_one",
+    )
+    return merged, exposure_cols, private_cols
+
+
 def ols_neutralize(
     values: pd.DataFrame,
     exposures: pd.DataFrame,
@@ -57,25 +84,15 @@ def ols_neutralize(
         row_key = f"_{row_key}"
     values_with_key = values.copy()
     values_with_key[row_key] = np.arange(len(values), dtype=np.intp)
-    merged = values_with_key.merge(
-        exposures,
-        on=[date_col, asset_col],
-        how="left",
-        suffixes=("", "_exp"),
-    )
-
-    # Get exposure columns (exclude metadata)
-    exposure_cols = [c for c in exposures.columns if c not in [date_col, asset_col]]
-
-    if not exposure_cols:
-        raise ValueError("No exposure columns found")
+    merged, _, exposure_cols = _align_exposures(
+        values_with_key, exposures, date_col, asset_col, value_col)
 
     results = []
 
     for date, group in merged.groupby(date_col):
         # Extract y and X
-        y = group[value_col].values
-        X = group[exposure_cols].values
+        y = group[value_col].to_numpy(dtype=float, na_value=np.nan)
+        X = group[exposure_cols].to_numpy(dtype=float, na_value=np.nan)
 
         # Drop rows with any NaN in y or X
         valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
@@ -163,22 +180,14 @@ def compute_exposures(
     -----
     Uses OLS per date. Returns NaN for dates with insufficient data.
     """
-    merged = residuals.merge(
-        exposures,
-        on=[date_col, asset_col],
-        how="left",
-    )
-
-    exposure_cols = [c for c in exposures.columns if c not in [date_col, asset_col]]
-
-    if not exposure_cols:
-        raise ValueError("No exposure columns found")
+    merged, exposure_cols, private_cols = _align_exposures(
+        residuals, exposures, date_col, asset_col, value_col)
 
     results = []
 
     for date, group in merged.groupby(date_col):
-        y = group[value_col].values
-        X = group[exposure_cols].values
+        y = group[value_col].to_numpy(dtype=float, na_value=np.nan)
+        X = group[private_cols].to_numpy(dtype=float, na_value=np.nan)
 
         # Drop NaN
         valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)

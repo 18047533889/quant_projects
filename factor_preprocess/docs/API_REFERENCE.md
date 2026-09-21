@@ -3171,7 +3171,7 @@ OLS neutralization for cross-sectional residuals.
 
 ### ols_neutralize
 
-[实际实现](../factor_preprocess/neutralization/ols.py#L12)。
+[实际实现](../factor_preprocess/neutralization/ols.py#L39)。
 
 Cross-sectional OLS neutralization (per-date residuals).
 
@@ -3181,7 +3181,7 @@ Cross-sectional OLS neutralization (per-date residuals).
 
 ### compute_exposures
 
-[实际实现](../factor_preprocess/neutralization/ols.py#L134)。
+[实际实现](../factor_preprocess/neutralization/ols.py#L151)。
 
 Compute exposure coefficients from factor-exposure regression.
 
@@ -5189,7 +5189,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/neutralization/advanced/robust_regression.py` | `4bf6e81f1e4ab5d3fbc4187749cdbeb4a31c926f30b184c255ad1405ab001316` |
 | `factor_preprocess/neutralization/diagnostics.py` | `03bd20c0d96540ec980b867bbf9312f4163d0ad3295bb89546f3c55450495487` |
 | `factor_preprocess/neutralization/diagnostics_artifact.py` | `f2bfb6b5a11f513162e1feadf23b6c80f1249759d404227bbeea73b76d64e2e0` |
-| `factor_preprocess/neutralization/ols.py` | `05595b174c9fe6eddd4ddaae6f6cf98ad5d702d85224bd0903f3f13e2cae67e2` |
+| `factor_preprocess/neutralization/ols.py` | `a9b95dc544b051228fe9e02ea82d11bee7bf6a2ce62e52f0b73b3febd61be69c` |
 | `factor_preprocess/neutralization/regularized.py` | `addbde6651b22f7fa5c29342a6d33728221323fd21b3c988930e4f84028b9998` |
 | `factor_preprocess/neutralization/spec.py` | `75f210fa4ef2e1c0a2145cd9a8fd341915e9a08b570a47f7dd35e69a2d8e16e1` |
 | `factor_preprocess/regime/__init__.py` | `d6ab83b45ce1968507568b0f12c44ec555e62a7daa58429715ba315a0a2b107d` |
