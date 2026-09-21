@@ -16,6 +16,12 @@ dependencies = [
 factor_engine = ["factor-engine>=0.3.0"]
 quant_evaluator = ["quant-evaluator>=0.0.1a1,<0.2"]
 factor_preprocess = ["factor-preprocess>=0.1.0"]
+research = [
+    "factor-engine>=0.3.0",
+    "quant-evaluator>=0.0.1a1,<0.2",
+    "factor-preprocess>=0.1.0",
+    "data-access>=0.10.2",
+]
 dev = ["pytest>=8.0"]
 
 [tool.setuptools.packages.find]

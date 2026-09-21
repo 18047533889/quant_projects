@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**75 个 Python 模块、927 个公开函数/类/方法定义**。
+扫描实际包目录：**76 个 Python 模块、929 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -63,6 +63,7 @@
 | [factor_optimizer/research_diagnostics.py](../factor_optimizer/research_diagnostics.py) | 1 | TRAIN-only multi-dimensional research diagnosis using QE metric authorities. |
 | [factor_optimizer/research_final_report.py](../factor_optimizer/research_final_report.py) | 3 | Authority-side final research reporting; never called by candidate search. |
 | [factor_optimizer/research_fitness.py](../factor_optimizer/research_fitness.py) | 10 | QE-owned research portfolio metrics and joint paired selection policy. |
+| [factor_optimizer/research_manifest.py](../factor_optimizer/research_manifest.py) | 2 | Bind declared COS factor values to their exact research landing record. |
 | [factor_optimizer/search/__init__.py](../factor_optimizer/search/__init__.py) | 0 | Search orchestration for factor mutation optimization. |
 | [factor_optimizer/search/categorical_strategy.py](../factor_optimizer/search/categorical_strategy.py) | 10 | Categorical search strategy (TPE-style) for treatment auto-optimization. |
 | [factor_optimizer/search/conditional_search.py](../factor_optimizer/search/conditional_search.py) | 24 | Hierarchical conditional search over (repair-family, parameters) (R61-FI-035). |
@@ -6732,6 +6733,38 @@ Recompute all nonlinear metrics within each shared moving-block draw.
 
 参数：`(raw_series, candidate_series, config)`。
 
+## factor_optimizer/research_manifest.py
+
+Bind declared COS factor values to their exact research landing record.
+
+### BoundResearchFactor
+
+[实际实现](../factor_optimizer/research_manifest.py#L11)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+本类声明字段（继承字段见基类；实际限制仍需合同校验）：
+
+| 字段 | 类型 | 默认值/值 |
+|---|---|---|
+| `factor_id` | `str` | `必填/未声明默认` |
+| `factor` | `object` | `必填/未声明默认` |
+| `manifest_uri` | `str` | `必填/未声明默认` |
+| `manifest_sha256` | `str` | `必填/未声明默认` |
+| `expression` | `str` | `必填/未声明默认` |
+| `source_status` | `str` | `必填/未声明默认` |
+| `contains_cs_rank` | `bool` | `必填/未声明默认` |
+| `output_is_cs_rank` | `bool` | `必填/未声明默认` |
+| `lineage` | `object` | `必填/未声明默认` |
+
+### read_bound_factor
+
+[实际实现](../factor_optimizer/research_manifest.py#L83)。
+
+Read declared datasets through DataAccess; enforce URI, bytes and SHA256.
+
+参数：`(store, manifest_dataset, factor_dataset, factor_id, *, manifest_params=None, factor_params=None, allow_research=False)`。
+
 ## factor_optimizer/search/__init__.py
 
 Search orchestration for factor mutation optimization.
@@ -10539,6 +10572,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/research_diagnostics.py` | `6353a8fcf0777f751b14f255e77930de89696972a99ae5ba4f63ea66beef104f` |
 | `factor_optimizer/research_final_report.py` | `33f8e6806ee3b6416a7b12fd0cf4b3b40235f2862307f982630a5ebd6326c8d7` |
 | `factor_optimizer/research_fitness.py` | `5dc7f29aae9c0960ec1c1a0415c5a870fbd0f78b3ec47d7a7ed9c60eb7c04fff` |
+| `factor_optimizer/research_manifest.py` | `5098274c402cf69b3c90cfb0fdb37b50fe945db89ac74066ec757270bd120a17` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |
 | `factor_optimizer/search/conditional_search.py` | `4b6dfeceacd797ad16f2406d0cd8c5cc1a4146c59c65c611f875356ce7251731` |

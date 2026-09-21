@@ -1,0 +1,76 @@
+{
+  "factor": "weekly_4cbd7ca6dccc61dc",
+  "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+  "factor_sha256": "35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59",
+  "factor_uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59/weekly_4cbd7ca6dccc61dc.parquet",
+  "source_status": "evaluated_optimization_pending",
+  "expression": "ts_delta(col('valuation.free_cap'), 20)",
+  "lineage_steps": 0,
+  "contains_cs_rank": false,
+  "days": 500,
+  "assets": 256,
+  "date_span": [
+    "2024-08-02",
+    "2026-08-25"
+  ],
+  "test_evaluated": false,
+  "status": "improved",
+  "selected_family": "INVERTED_U_REPAIR",
+  "reason": "TRAIN winner passed held-out paired block bound",
+  "baseline": {
+    "operations": [
+      "winsor",
+      "cs_rank"
+    ],
+    "omissions": [
+      "neutralization_missing_exposures"
+    ],
+    "accepted": true,
+    "reason": "no_substantial_training_degradation",
+    "coverage": 1,
+    "valid_days": 267,
+    "upper_bound": 0.000006316358793998631,
+    "maximum_loss": 0.01
+  },
+  "joint": {
+    "objective": "joint",
+    "cost_rate": 0.001,
+    "policy": "joint.v1",
+    "baseline_train_raw": {
+      "rank_ic": -0.0036978994219487417,
+      "rank_icir": -0.05617737834536126,
+      "sharpe": 1.80241977526469,
+      "max_drawdown": 0.1638542245618701,
+      "turnover": 0.056956044411153275,
+      "worst_block_sharpe": 0.6636481299873691
+    },
+    "baseline_train_candidate": {
+      "rank_ic": -0.003706877545630786,
+      "rank_icir": -0.05631919210281105,
+      "sharpe": 1.80241977526469,
+      "max_drawdown": 0.1638542245618701,
+      "turnover": 0.056956044411153275,
+      "worst_block_sharpe": 0.6636481299873691
+    },
+    "validation_raw": {
+      "rank_ic": -0.021545540791352992,
+      "rank_icir": -0.3356850168329666,
+      "sharpe": -0.17736527725074852,
+      "max_drawdown": 0.0955056093392171,
+      "turnover": 0.04116319287839191,
+      "worst_block_sharpe": -3.3452684724986037
+    },
+    "validation_candidate": {
+      "rank_ic": 0.01376289742578335,
+      "rank_icir": 0.21218692132737874,
+      "sharpe": 0.8770727917970135,
+      "max_drawdown": 0.0771727589461275,
+      "turnover": 0.036342644495083065,
+      "worst_block_sharpe": -1.1699518574783303
+    },
+    "comparison_status": "SUPERIOR"
+  },
+  "candidate_count": 94,
+  "elapsed_seconds": 84.2582165519998,
+  "limitations": "producer-declared recipe binding, not upstream execution/PIT certification; exposures not supplied"
+}
