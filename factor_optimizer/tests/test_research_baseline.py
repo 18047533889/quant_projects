@@ -123,7 +123,8 @@ def test_validation_rejects_frozen_baseline_without_retry():
     np.testing.assert_array_equal(result.optimized.values, batch.values)
 
 
-def test_validation_exposure_error_cannot_change_training_baseline_decision():
+@pytest.mark.parametrize("failure", ["availability", "duplicate"])
+def test_validation_exposure_error_cannot_change_training_baseline_decision(failure):
     from factor_optimizer.research_batch import optimize_factor_batch, BatchOptimizationConfig
     batch, labels = fixture()
     exposures = pd.DataFrame({'date': np.repeat(batch.time_axis.values, 40),
@@ -133,7 +134,10 @@ def test_validation_exposure_error_cannot_change_training_baseline_decision():
         exposure_columns=('size',), config=BatchOptimizationConfig(selection_objective='rank_ic', families=('SIGN_ORIENTATION',)))
     clean = optimize_factor_batch(batch, labels, exposures=exposures, **kwargs)
     poisoned = exposures.copy()
-    poisoned.loc[poisoned.date >= 144, 'available_time'] += 1000
+    if failure == "availability":
+        poisoned.loc[poisoned.date >= 144, 'available_time'] += 1000
+    else:
+        poisoned = pd.concat([poisoned, poisoned.loc[poisoned.date == 144].iloc[:1]])
     bad = optimize_factor_batch(batch, labels, exposures=poisoned, **kwargs)
     assert clean.factors['good'].baseline_diagnostics == bad.factors['good'].baseline_diagnostics
     assert clean.factors['good'].validation_candidate_identity == bad.factors['good'].validation_candidate_identity
@@ -153,3 +157,22 @@ def test_baseline_plus_sign_is_replayed_as_one_frozen_pipeline():
     assert hasattr(selected.plan, 'baseline')
     assert result.optimized.values.min() >= -1
     assert result.optimized.values.max() <= 0
+
+
+def test_unavailable_training_neutralization_keeps_other_baseline_steps():
+    from factor_optimizer.research_batch import optimize_factor_batch, BatchOptimizationConfig
+    batch, labels = fixture()
+    exposures = pd.DataFrame({'date': np.repeat(batch.time_axis.values, 40),
+        'asset_id': np.tile(batch.asset_axis.values, 240),
+        'available_time': np.repeat(batch.time_axis.values, 40), 'size': np.nan})
+    result = optimize_factor_batch(batch, labels, exposures=exposures, allow_research=True,
+        lineages={'good': TransformLineage()}, exposure_columns=('size',),
+        config=BatchOptimizationConfig(selection_objective='rank_ic', families=('SIGN_ORIENTATION',)))
+    selected = result.factors['good']
+    assert selected.selected_family == 'BASELINE'
+    assert selected.plan.baseline.operations == ('winsor', 'cs_rank')
+    assert 'neutralization_train_rejected' in selected.plan.baseline.omissions
+    assert not selected.baseline_diagnostics['neutralization_attempt']['accepted']
+    assert selected.baseline_diagnostics['accepted']
+    assert result.optimized.values.min() >= 0
+    assert result.optimized.values.max() <= 1

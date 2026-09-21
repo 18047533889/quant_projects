@@ -74,6 +74,9 @@ def ols_neutralize(
     Notes
     -----
     Uses numpy.linalg.lstsq for stability with rank-deficient matrices.
+    Requires positive residual degrees of freedom, counting the intercept.
+    Fully explained sections within 8*eps*max(design.shape) relative roundoff
+    are set to exactly zero so later ranking cannot amplify solver noise.
     Operates per-date (no time-series leakage).
     NaN handling: pairwise deletion per date.
     """
@@ -98,12 +101,15 @@ def ols_neutralize(
         valid_mask = np.isfinite(y) & np.all(np.isfinite(X), axis=1)
         n_valid = np.sum(valid_mask)
 
-        if n_valid < min_observations or n_valid <= X.shape[1]:
-            # Insufficient data or rank deficient
+        if n_valid < min_observations:
+            # Insufficient complete observations.
             residuals = np.full_like(y, np.nan)
         else:
             y_valid = y[valid_mask]
             X_valid = X[valid_mask]
+            # Absent categories add no information but otherwise change the
+            # SVD shape, rank cutoff and rounding; remove them before fitting.
+            X_valid = X_valid[:, np.any(X_valid != 0., axis=0)]
 
             if add_intercept:
                 X_valid = np.column_stack([np.ones(n_valid), X_valid])
@@ -112,17 +118,19 @@ def ols_neutralize(
             try:
                 coef, _, rank, _ = np.linalg.lstsq(X_valid, y_valid, rcond=None)
 
-                # Predict and compute residuals
-                if add_intercept:
-                    X_all = np.column_stack([np.ones(len(y)), X])
-                else:
-                    X_all = X
-
-                y_pred = X_all @ coef
-                residuals = y - y_pred
-
-                # NaN inputs produce NaN residuals
-                residuals[~valid_mask] = np.nan
+                residuals = np.full_like(y, np.nan)
+                # Raw column count is not effective model complexity. Redundant
+                # industry dummies are allowed; saturated projections are not.
+                if rank < n_valid:
+                    y_pred = X_valid @ coef
+                    valid_residuals = y_valid - y_pred
+                    magnitude = max(np.max(np.abs(y_valid)), np.max(np.abs(y_pred)))
+                    tolerance = 8*np.finfo(float).eps*max(X_valid.shape)
+                    if (np.isfinite(valid_residuals).all()
+                            and (magnitude == 0 or
+                                 np.max(np.abs(valid_residuals))/magnitude <= tolerance)):
+                        valid_residuals[:] = 0.
+                    residuals[valid_mask] = valid_residuals
 
             except np.linalg.LinAlgError:
                 # Singular matrix

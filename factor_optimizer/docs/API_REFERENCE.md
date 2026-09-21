@@ -6424,7 +6424,7 @@ Research baseline recipes and TRAIN-only substantial-degradation guard.
 
 ### BaselinePlan.execute
 
-[实际实现](../factor_optimizer/research_baseline.py#L37)。
+[实际实现](../factor_optimizer/research_baseline.py#L38)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6432,7 +6432,7 @@ Research baseline recipes and TRAIN-only substantial-degradation guard.
 
 ### BaselineRepairPlan
 
-[实际实现](../factor_optimizer/research_baseline.py#L78)。
+[实际实现](../factor_optimizer/research_baseline.py#L81)。
 
 Replay the TRAIN-frozen baseline followed by one frozen value repair.
 
@@ -6445,7 +6445,7 @@ Replay the TRAIN-frozen baseline followed by one frozen value repair.
 
 ### BaselineRepairPlan.family
 
-[实际实现](../factor_optimizer/research_baseline.py#L88)。
+[实际实现](../factor_optimizer/research_baseline.py#L91)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6453,7 +6453,7 @@ Replay the TRAIN-frozen baseline followed by one frozen value repair.
 
 ### BaselineRepairPlan.identity
 
-[实际实现](../factor_optimizer/research_baseline.py#L92)。
+[实际实现](../factor_optimizer/research_baseline.py#L95)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6461,7 +6461,7 @@ Replay the TRAIN-frozen baseline followed by one frozen value repair.
 
 ### BaselineRepairPlan.execute
 
-[实际实现](../factor_optimizer/research_baseline.py#L95)。
+[实际实现](../factor_optimizer/research_baseline.py#L98)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6469,7 +6469,7 @@ Replay the TRAIN-frozen baseline followed by one frozen value repair.
 
 ### compile_baseline
 
-[实际实现](../factor_optimizer/research_baseline.py#L102)。
+[实际实现](../factor_optimizer/research_baseline.py#L105)。
 
 Frozen winsor -> OLS -> rank recipe; do not repeat historical CS rank.
 
@@ -6477,7 +6477,7 @@ Frozen winsor -> OLS -> rank recipe; do not repeat historical CS rank.
 
 ### assess_baseline_training
 
-[实际实现](../factor_optimizer/research_baseline.py#L140)。
+[实际实现](../factor_optimizer/research_baseline.py#L143)。
 
 Reject material TRAIN RankIC loss with a paired moving-block upper bound.
 
@@ -10639,8 +10639,8 @@ Import seen records from dictionaries.
 | `factor_optimizer/policy/repair_registry.py` | `1f337900eec0750622901a2f26f0bb19ad5bae248399c62546b3ede85b998545` |
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
-| `factor_optimizer/research_baseline.py` | `c155a230a40d9317fddf0721310d5d81c0e89adef651da392d2fc006b1667863` |
-| `factor_optimizer/research_batch.py` | `e90d1ddf2670208ff3836e7f7f75c6ff08c53a1386a1181740f9387203f1f672` |
+| `factor_optimizer/research_baseline.py` | `3eee6b3b915c7a93df09b61ea7d5b8eaba7b662abf36201b565be048f1c0dfc0` |
+| `factor_optimizer/research_batch.py` | `d2ade22a8c6bfd8ee9a04d01bb1475efc9ac7133590243b5188b178746093049` |
 | `factor_optimizer/research_decay.py` | `1355b74f2ca32c7f819357880214580502eeff1df9d09593c601ed14d7fb71b0` |
 | `factor_optimizer/research_diagnostics.py` | `6353a8fcf0777f751b14f255e77930de89696972a99ae5ba4f63ea66beef104f` |
 | `factor_optimizer/research_final_report.py` | `33f8e6806ee3b6416a7b12fd0cf4b3b40235f2862307f982630a5ebd6326c8d7` |

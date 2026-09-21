@@ -31,7 +31,8 @@ class BaselinePlan:
     def identity(self):
         payload = (self.operations, self.omissions, self.exposure_columns,
                    self.training_context_ref, self.minimum_assets,
-                   self.lower_quantile, self.upper_quantile, 'baseline.v1')
+                   self.lower_quantile, self.upper_quantile,
+                   'baseline.v2-ols-rank-dof' if 'neutralize' in self.operations else 'baseline.v1')
         return hashlib.sha256(json.dumps(payload).encode()).hexdigest()
 
     def execute(self, values, *, exposures=None, allow_research=False):
@@ -49,11 +50,13 @@ class BaselinePlan:
             required = {'date', 'asset_id', 'available_time', *self.exposure_columns}
             if exposures is None or not required.issubset(exposures.columns):
                 raise ValueError('declared exposures and available_time are required')
-            if not exposures.columns.is_unique or exposures.duplicated(['date', 'asset_id']).any():
-                raise ValueError('exposure columns and date/asset keys must be unique')
+            if not exposures.columns.is_unique:
+                raise ValueError('exposure columns must be unique')
             # Validate only rows requested by this execution, not future rows.
             selected = exposures.merge(work[['date', 'asset_id']],
-                                       on=['date', 'asset_id'], how='inner', validate='one_to_one')
+                                       on=['date', 'asset_id'], how='inner', validate='many_to_one')
+            if selected.duplicated(['date', 'asset_id']).any():
+                raise ValueError('requested exposure date/asset keys must be unique')
             if (selected['available_time'].isna().any()
                     or not (selected['available_time'] <= selected['date']).all()):
                 raise ValueError('exposure must be available at the factor decision time')
