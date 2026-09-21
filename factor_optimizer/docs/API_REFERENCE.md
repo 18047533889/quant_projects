@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**76 个 Python 模块、929 个公开函数/类/方法定义**。
+扫描实际包目录：**77 个 Python 模块、933 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -15,6 +15,7 @@
 | [factor_optimizer/adapters/factor_assets.py](../factor_optimizer/adapters/factor_assets.py) | 18 | FA factor-intelligence provider adapters (R61-FI-014 / plan §20 E6, matrix E6). |
 | [factor_optimizer/adapters/factor_engine.py](../factor_optimizer/adapters/factor_engine.py) | 7 | FactorEngineAdapter: protocol for FE integration (optional dependency). |
 | [factor_optimizer/adapters/fitness.py](../factor_optimizer/adapters/fitness.py) | 2 | Fitness adapter: dimension/desirability mapping for generalized treatment decisions. |
+| [factor_optimizer/adapters/layered_decay.py](../factor_optimizer/adapters/layered_decay.py) | 4 | TRAIN-frozen research plan for observation-origin twenty-layer decay. |
 | [factor_optimizer/adapters/preprocessing.py](../factor_optimizer/adapters/preprocessing.py) | 6 | Versioned research bridge from smoothing proposals to real FP kernels. |
 | [factor_optimizer/adapters/quant_evaluator.py](../factor_optimizer/adapters/quant_evaluator.py) | 14 | QuantEvaluatorAdapter: protocol for QE integration (optional dependency). |
 | [factor_optimizer/adapters/repair_execution.py](../factor_optimizer/adapters/repair_execution.py) | 5 | Versioned, research-only execution plans for value-level repair families. |
@@ -380,6 +381,47 @@ True when the FA dimension's raw value is lower-is-better.
 参数：`(dimension: str)`。
 
 返回类型：`bool`。
+
+## factor_optimizer/adapters/layered_decay.py
+
+TRAIN-frozen research plan for observation-origin twenty-layer decay.
+
+### LayeredDecayPlan
+
+[实际实现](../factor_optimizer/adapters/layered_decay.py#L13)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+本类声明字段（继承字段见基类；实际限制仍需合同校验）：
+
+| 字段 | 类型 | 默认值/值 |
+|---|---|---|
+| `half_lives` | `tuple` | `必填/未声明默认` |
+| `training_context_ref` | `str` | `必填/未声明默认` |
+
+### LayeredDecayPlan.parameters
+
+[实际实现](../factor_optimizer/adapters/layered_decay.py#L32)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self)`。
+
+### LayeredDecayPlan.identity
+
+[实际实现](../factor_optimizer/adapters/layered_decay.py#L36)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self)`。
+
+### LayeredDecayPlan.execute
+
+[实际实现](../factor_optimizer/adapters/layered_decay.py#L40)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self, values, *, allow_research=False)`。
 
 ## factor_optimizer/adapters/preprocessing.py
 
@@ -10524,6 +10566,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/adapters/factor_assets.py` | `6a2ad44b43710199fd6eed901de2974fb8a66314f525be016c2f4796bf8af6d4` |
 | `factor_optimizer/adapters/factor_engine.py` | `924ecf37167dfba994e803f88c66ab6bac83586b3452c00b4535c35fbf87d2f0` |
 | `factor_optimizer/adapters/fitness.py` | `4486884657f730c65064fe6e1aebc7555a515fbc3cba41c71c1bf8c9e4c48ce5` |
+| `factor_optimizer/adapters/layered_decay.py` | `86ac91175c82eef473abef116a7a67802872a0da96ce0fa7a6022bf783bb3e26` |
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
 | `factor_optimizer/adapters/repair_execution.py` | `260fad479637ff715f6cbd93e552aab338670727b9600746ec0e1aa7e1481466` |
@@ -10567,7 +10610,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `c155a230a40d9317fddf0721310d5d81c0e89adef651da392d2fc006b1667863` |
-| `factor_optimizer/research_batch.py` | `5ded32878d6ea8ea521ec36c2644bb42854d365ced44976b1c0d6823e7e2ea10` |
+| `factor_optimizer/research_batch.py` | `8f494bca99c5eaa4497f993e9bd7386ae169aa65c31772b075c50b9b4d46a2dc` |
 | `factor_optimizer/research_decay.py` | `1355b74f2ca32c7f819357880214580502eeff1df9d09593c601ed14d7fb71b0` |
 | `factor_optimizer/research_diagnostics.py` | `6353a8fcf0777f751b14f255e77930de89696972a99ae5ba4f63ea66beef104f` |
 | `factor_optimizer/research_final_report.py` | `33f8e6806ee3b6416a7b12fd0cf4b3b40235f2862307f982630a5ebd6326c8d7` |

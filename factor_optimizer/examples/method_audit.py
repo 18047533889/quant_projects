@@ -30,6 +30,9 @@ def method_cases():
                 yield family, dict(plan.parameters), plan
             continue
         if family == "DECAY_REFINEMENT":
+            from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
+            layered = LayeredDecayPlan((3., 10.)*10, "prespecified-method-audit")
+            yield family, dict(layered.parameters), layered
             choices = [dict(prior, half_life_relative=x) for x in (False, True)]
         elif family == "SIGN_ORIENTATION":
             choices = [dict(prior, direction=x) for x in ("keep", "flip")]

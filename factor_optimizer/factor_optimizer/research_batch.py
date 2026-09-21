@@ -376,6 +376,29 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                     proposals.append((p.family, dict(p.parameters), p))
                     present.add(p.identity)
             diagnosis["layer_decay"]["inadmissible_smoothing_scales"] = omissions
+        if not config.families or "DECAY_REFINEMENT" in config.families:
+            from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
+            decay = diagnosis["layer_decay"]
+            layers = decay["layers"]
+            decay["inadmissible_layered_scales"] = []
+            if (decay["status"] == "available" and len(layers) == 20
+                    and sum(x["stable_initial_direction"] for x in layers) >= 10):
+                # Censoring supplies an observed lower bound, not a fitted life.
+                lives = tuple((x["half_life_bars"] or max(decay["lags"]))
+                              if x["stable_initial_direction"] else config.natural_time_scale
+                              for x in layers)
+                present = set()
+                for scale in (1., .5):
+                    try:
+                        p = LayeredDecayPlan(tuple(h*scale for h in lives), train_ref)
+                    except ValueError as exc:
+                        decay["inadmissible_layered_scales"].append(
+                            {"scale": scale, "reason": str(exc)})
+                        continue
+                    if p.identity not in present:
+                        proposals.append((p.family, dict(p.parameters), p))
+                        proposal_sources[p.identity] = "TRAIN_layer_states"
+                        present.add(p.identity)
         compose = config.compose_smoothing_sign and (
             not config.families or "SIGN_ORIENTATION" in config.families)
         # Adjacent signs reuse one materialization, without caching the grid.

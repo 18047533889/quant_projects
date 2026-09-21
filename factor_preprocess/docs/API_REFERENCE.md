@@ -1,7 +1,7 @@
 # factor_preprocess 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**73 个 Python 模块、426 个公开函数/类/方法定义**。
+扫描实际包目录：**74 个 Python 模块、427 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -77,6 +77,7 @@
 | [factor_preprocess/transforms/decomposition/wavelet.py](../factor_preprocess/transforms/decomposition/wavelet.py) | 3 | Wavelet decomposition for offline multi-scale time series analysis. |
 | [factor_preprocess/transforms/event_decay.py](../factor_preprocess/transforms/event_decay.py) | 1 | Short-halflife event-decay persistence (causal, one-sided). |
 | [factor_preprocess/transforms/freshness.py](../factor_preprocess/transforms/freshness.py) | 4 | Data freshness transforms for tracking observation age and staleness. |
+| [factor_preprocess/transforms/layered_decay.py](../factor_preprocess/transforms/layered_decay.py) | 1 | Research-only lagged, normalized decay with observation-origin layer states. |
 | [factor_preprocess/transforms/missingness.py](../factor_preprocess/transforms/missingness.py) | 7 | Missingness transforms for handling missing data. |
 | [factor_preprocess/transforms/repair_shapes.py](../factor_preprocess/transforms/repair_shapes.py) | 6 | Stateless value-repair primitives used by research repair plans. |
 | [factor_preprocess/transforms/rolling.py](../factor_preprocess/transforms/rolling.py) | 4 | Rolling (time-series) transforms with explicit causality. |
@@ -4827,6 +4828,18 @@ Binary indicator for stale data.
 
 返回类型：`pd.Series`。
 
+## factor_preprocess/transforms/layered_decay.py
+
+Research-only lagged, normalized decay with observation-origin layer states.
+
+### layered_decay
+
+[实际实现](../factor_preprocess/transforms/layered_decay.py#L9)。
+
+Filter T x N values using strictly previous-row values and layer labels.
+
+参数：`(values, layers, half_lives, *, allow_research=False)`。
+
 ## factor_preprocess/transforms/missingness.py
 
 Missingness transforms for handling missing data.
@@ -5215,6 +5228,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/transforms/decomposition/wavelet.py` | `b746ea2d02d1589735f3afe1ee6b1f1a1bcdc3f81d8f907a91941560edd29da1` |
 | `factor_preprocess/transforms/event_decay.py` | `f384f17802b5ed0c0b6de29bc21c2addc0b64d4d9f1f75de6773d738842ba13d` |
 | `factor_preprocess/transforms/freshness.py` | `cb62293004c74338f715e75a91f849a4b2b3b4d6f11d2d258ddfcbcf3b97e69a` |
+| `factor_preprocess/transforms/layered_decay.py` | `eef9c4dae3e963e69fea4534b94879c4c04dd3379a6a2a59d80efde8fcaf650f` |
 | `factor_preprocess/transforms/missingness.py` | `42dcbf19613e38f7be1e18283ca4a67e208332b88a6a0fe625b6a86c0724ea4d` |
 | `factor_preprocess/transforms/repair_shapes.py` | `dccea81e1c00e68e144f530eb103e7c217677cc1ae82c5bd5b3ee12695cacea5` |
 | `factor_preprocess/transforms/rolling.py` | `e7b9cc19a0e32c62b2f2d1d216e998ed49c72a3579404efd735f25f1c04e288b` |
