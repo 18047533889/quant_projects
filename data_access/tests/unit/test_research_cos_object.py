@@ -1,6 +1,7 @@
 """Bounded, authorized exact COS reads through the real DataAccess store."""
 import hashlib
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pyarrow as pa
@@ -13,6 +14,7 @@ from data_access.core.storage import StorageSpec
 from data_access.registry.loader import DatasetRegistry, ParametricDataset
 from data_access.read.query_budget import QueryBudget
 from data_access.store import DataAccessStore
+from data_access.read.formats import FormatSpec
 
 
 @pytest.fixture
@@ -54,6 +56,50 @@ def read(source, **kwargs):
     return read_declared_cos_object(
         source[0], "research_panel", params={"factor_id": "f"},
         allow_research=True, **kwargs)
+
+
+@pytest.fixture
+def json_source(source, monkeypatch):
+    payload = b'{"factor_id":"f","expression":"cs_rank(close)","unrelated":42}'
+    ds = replace(source[0]._registry.get('research_panel'),
+                 glob_template='{factor_id}.json', format_spec=FormatSpec.from_yaml('json'))
+    engine = DuckDBEngine(threads=1)
+    store = DataAccessStore(DatasetRegistry({ds.name: ds}), engine)
+    source[1].update(key='pool/f.json', size=len(payload), etag=hashlib.md5(payload).hexdigest())
+    def gateway(cmd, **kwargs):
+        assert cmd[2] == 'cos://bucket/pool/f.json'
+        source[2].append(cmd)
+        Path(cmd[3]).write_bytes(payload)
+        return subprocess.CompletedProcess(cmd, 0, '', '')
+    monkeypatch.setattr(subprocess, 'run', gateway)
+    yield store, source[1], source[2], source[3]
+    engine.close()
+
+
+def test_declared_json_metadata_uses_dataaccess_projection_and_cleanup(json_source):
+    result = read(json_source, columns=['factor_id', 'expression'])
+    assert result.table.to_pydict() == {'factor_id': ['f'], 'expression': ['cs_rank(close)']}
+    assert result.source_uri == 'cos://bucket/pool/f.json'
+    assert not list((json_source[3] / 'cache').rglob('*.json'))
+
+
+def test_json_metadata_has_small_admission_budget(json_source):
+    json_source[1]['size'] = 3*1024**2
+    with pytest.raises(ValidationError, match='budget'):
+        read(json_source)
+    assert json_source[2] == []
+
+
+def test_recursive_metadata_listing_can_discover_nested_json(monkeypatch):
+    from data_access.cos.remote import cos_cli_ls
+    def gateway(cmd, **kwargs):
+        text = ('pool/hash/recipe.json | STANDARD | 2026-09-22 | "12345678abcdef" | 100 B |'
+                if '--recursive' in cmd else 'pool/hash/ | DIR | | | |')
+        return subprocess.CompletedProcess(cmd, 0, text, '')
+    monkeypatch.setattr(subprocess, 'run', gateway)
+    assert cos_cli_ls('cos://bucket/pool/', cli='test-gateway') == []
+    rows = cos_cli_ls('cos://bucket/pool/', cli='test-gateway', recursive=True)
+    assert [(r['key'], r['size']) for r in rows] == [('pool/hash/recipe.json', 100)]
 
 
 def test_real_store_projection_and_ephemeral_cleanup(source):

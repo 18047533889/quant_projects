@@ -46,6 +46,9 @@ def diagnose_training_batch(batch, labels, *, config=None, periods_per_year=252,
         batch.asset_axis, batch.values[idx],
         validity=None if batch.validity is None else batch.validity[idx])
     target = _subset_labels(labels, split.train_indices)
+    # Trust actual label endpoints, not just the nominal horizon field.
+    nonoverlapping = all(target.label_end_time[i] <= target.label_start_time[i+1]
+                         for i in range(len(idx)-1))
     ic, _ = compute_daily_ic(train, target, method="spearman", min_assets=config.minimum_assets)
     mean_ic = compute_mean_ic_value(ic, min_periods=config.minimum_train_days)
     icir = compute_icir(ic, min_periods=config.minimum_train_days)
@@ -78,7 +81,7 @@ def diagnose_training_batch(batch, labels, *, config=None, periods_per_year=252,
                         break
             contrast = float((profile[0]+profile[-1])/2 - profile[9:11].mean())
         spread = np.where(complete, spreads[:, k], np.nan)
-        single_bar = labels.horizon == 1
+        single_bar = labels.horizon == 1 and nonoverlapping
         capital_valid = not np.any(spread < -1.)
         sharpe = compute_sharpe_ratio(spread, periods_per_year=periods_per_year,
                                       min_periods=config.minimum_train_days) if enough and single_bar and capital_valid else np.nan
@@ -98,7 +101,8 @@ def diagnose_training_batch(batch, labels, *, config=None, periods_per_year=252,
             "long_short_sharpe": _number(sharpe), "long_short_max_drawdown": _number(drawdown),
             "portfolio_semantics": "gross-one top/bottom 5% diagnostic spread; no costs or tradability",
             "portfolio_unavailable_reason": (
-                "multi-bar labels are not daily PnL" if not single_bar else
+                "multi-bar labels are not daily PnL" if labels.horizon != 1 else
+                "overlapping label intervals are not daily PnL" if not nonoverlapping else
                 "insufficient complete 20-bin days" if not enough else
                 "returns below -100% require a capital contract" if not capital_valid else
                 "missing dates make full-period drawdown unknown" if not complete.all() else None),

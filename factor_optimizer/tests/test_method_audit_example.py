@@ -46,3 +46,36 @@ def test_method_audit_executes_every_numeric_family_and_marks_missing_inputs():
             assert r["prefix_invariant"] and r["asset_permutation_invariant"]
         else:
             assert r["reason"]
+
+
+def test_method_audit_reports_costed_risk_and_keeps_unavailable_metrics_explicit():
+    spec = importlib.util.spec_from_file_location(
+        "method_audit", Path(__file__).parents[1] / "examples/method_audit.py")
+    audit = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(audit)
+    rng = np.random.default_rng(827)
+    t, a = 240, 40
+    x = rng.normal(size=(t, a))
+    ta = AxisRef("time", "int", t, np.arange(t))
+    aa = AxisRef("asset", "str", a, np.array([f"a{i}" for i in range(a)]))
+    batch = FactorBatch(("signal",), ta, aa, x[:, :, None])
+    labels = LabelBundle("returns", .003*x+rng.normal(0, .01, (t,a)), 1,
+        decision_time=tuple(range(t)), label_start_time=tuple(range(1,t+1)),
+        label_end_time=tuple(range(2,t+2)), asset_axis=aa)
+    rows = audit.audit_methods(batch, labels)
+    raw = next(r for r in rows if r["family"] == "NO_OP_RAW")
+    assert raw["joint_metrics_status"] == "available"
+    assert raw["train_candidate_metrics"]["sharpe"] > 0
+    assert raw["train_candidate_metrics"]["turnover"] > 0
+    assert raw["joint_utility_delta"] == 0
+    flip = next(r for r in rows if r["family"] == "SIGN_ORIENTATION"
+                and r["parameters"]["direction"] == "flip")
+    assert flip["train_candidate_metrics"]["sharpe"] < 0
+    assert not flip["passes_raw_relative_floors"]
+    from dataclasses import replace
+    unavailable = audit.audit_methods(batch, replace(labels, horizon=2))
+    raw = next(r for r in unavailable if r["family"] == "NO_OP_RAW")
+    assert raw["status"] == "executed"
+    assert raw["joint_metrics_status"] == "unavailable"
+    assert "single-bar" in raw["joint_metrics_reason"]
+    assert "train_candidate_metrics" not in raw

@@ -152,6 +152,15 @@ complexity/    复杂度 profile / 预算
   `alphaprobe`（挖掘候选进入寻优）。
 - **输出给**：`factor_assets`（入选 treatment 提交 PromotionGate）。
 
+## 自动优化研究入口与验证
+
+- [基础预处理、去重和退化保护](docs/BASELINE_PIPELINE.md)
+- [成本后多指标选优公式](docs/JOINT_SELECTION.md)
+- [冻结后的 TEST / 全样本分离报告](docs/FINAL_REPORT.md)
+- [逐方法带数据验证与当前限制](docs/COSTED_METHOD_AUDIT_20260922.md)
+
+研究入口不等于生产准入；验证不确认提升时保留 RAW，不强制输出新因子。
+
 ## 相关仓库
 
 - **factor_engine / quant_evaluator** — 计算与证据（adapter protocol）

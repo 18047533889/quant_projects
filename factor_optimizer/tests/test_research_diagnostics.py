@@ -75,6 +75,17 @@ def test_missing_day_does_not_become_zero_pnl_or_known_full_drawdown():
     assert row["long_short_max_drawdown"] is None
 
 
+def test_single_bar_tag_cannot_hide_overlapping_label_timestamps():
+    from factor_optimizer.research_diagnostics import diagnose_training_batch
+    batch, labels = panel()
+    overlapping = replace(labels, label_end_time=tuple(range(3, 303)))
+    row = diagnose_training_batch(batch, overlapping)["u_shape"]
+    assert row["quantile_mean_returns"] is not None
+    assert row["long_short_sharpe"] is None
+    assert row["long_short_max_drawdown"] is None
+    assert "overlapping" in row["portfolio_unavailable_reason"]
+
+
 def test_automatic_search_uses_train_fitted_twenty_bin_center():
     from factor_optimizer.research_batch import optimize_factor_batch, BatchOptimizationConfig
     batch, labels = panel()

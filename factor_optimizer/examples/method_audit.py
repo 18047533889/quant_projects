@@ -13,6 +13,9 @@ from factor_optimizer.policy.repair_registry import RepairFamilyRegistry
 from factor_optimizer.research_batch import (
     BatchOptimizationConfig, automatic_time_split, _pair_ic, optimize_factor_batch,
 )
+from factor_optimizer.research_fitness import (
+    paired_series, summarize, joint_utility, passes_floors,
+)
 
 
 def method_cases():
@@ -93,6 +96,20 @@ def audit_methods(batch, labels):
                            finite_fraction=float(np.isfinite(values).mean()),
                            valid_ic_days=int(good.sum()), paired_retention=retention,
                            train_mean_ic_delta=float(np.nanmean(delta)) if good.any() else None)
+                # Execution invariants and economic availability are separate:
+                # missing PnL must not make a transform look broken or profitable.
+                row["research_cost_rate"] = config.research_cost_rate
+                try:
+                    ar, ac = paired_series(raw, values.reshape(raw.shape), batch,
+                        labels, split.train_indices, minimum_assets=config.minimum_assets,
+                        cost_rate=config.research_cost_rate)
+                    mr, mc = summarize(ar), summarize(ac)
+                    row.update(joint_metrics_status="available",
+                               train_raw_metrics=mr, train_candidate_metrics=mc,
+                               joint_utility_delta=joint_utility(mc)-joint_utility(mr),
+                               passes_raw_relative_floors=passes_floors(mr, mc))
+                except ValueError as exc:
+                    row.update(joint_metrics_status="unavailable", joint_metrics_reason=str(exc))
             except IneligibleValueRepair as exc:
                 row.update(status="requires_additional_inputs_or_control", reason=str(exc))
             except Exception as exc:
@@ -110,7 +127,7 @@ def main():
     result = optimize_factor_batch(batch, labels, allow_research=True)
     report = {
         "inputs": inputs, "test_evaluated": False, "method_audit_partition": "TRAIN only",
-        "limits": "Research RankIC audit; no net-profit claim or upstream PIT re-certification",
+        "limits": "TRAIN execution and costed joint-metric audit; no profit claim or upstream PIT re-certification",
         "method_status_counts": dict(Counter(row["status"] for row in audit)),
         "methods": audit,
         "split": {"train": len(result.split.train_indices),

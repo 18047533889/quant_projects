@@ -284,15 +284,19 @@ def cos_cli_ls(
     *,
     cli: str | None = None,
     timeout_s: float = 60.0,
+    recursive: bool = False,
 ) -> list[dict[str, Any]]:
     """经 COS CLI 网关列出对象元数据（跨账号 bucket 的 LIST 通路）。
 
     ``uri`` 是 ``cos://bucket/prefix``（``s3://`` 自动归一）。返回
     ``_parse_cos_cli_ls_output`` 结构；CLI 失败/超时/输出异常 → []（best-effort，
     绝不阻塞读路径——governor 会按未知成本拒绝，语义同 boto3 HEAD 不可用）。
+    ``recursive=True`` 显式枚举指定前缀下的文件；默认仍只列当前层对象。
     """
     from data_access.cos.mirror import COS_CLI as DEFAULT_CLI
 
+    if type(recursive) is not bool:
+        raise ValueError('recursive must be a strict bool')
     cos_uri = str(uri)
     if cos_uri.startswith("s3://"):
         cos_uri = "cos://" + cos_uri[len("s3://"):]
@@ -300,7 +304,7 @@ def cos_cli_ls(
         return []
     try:
         proc = subprocess.run(
-            [cli or DEFAULT_CLI, "ls", cos_uri],
+            [cli or DEFAULT_CLI, "ls", cos_uri] + (["--recursive"] if recursive else []),
             capture_output=True,
             text=True,
             timeout=timeout_s,

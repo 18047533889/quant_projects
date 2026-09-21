@@ -36,10 +36,10 @@ def read_declared_cos_object(
     instrument_filter=None, query_budget: QueryBudget | None = None,
     allow_research: bool = False,
 ) -> ResearchObjectRead:
-    """Read exactly one declared parquet object through the COS CLI gateway.
+    """Read one declared Parquet or small JSON object through the COS gateway.
 
     Resolve validated dataset parameters, authorize before network I/O, inspect
-    exact-object metadata, admit up to 64 MiB, then fetch into a private ephemeral
+    exact-object metadata, admit up to 64 MiB (2 MiB for JSON), then fetch into a private ephemeral
     directory. Both metadata observations must agree; single-part MD5 ETags
     are verified against the downloaded content. DataAccess performs the
     actual column/time/instrument read with the original dataset contract.
@@ -54,19 +54,23 @@ def read_declared_cos_object(
     store.authorize_dataset(dataset)
     store._authorize_factor_params(dataset, params)
     ds = store._registry.get(dataset)
+    json_metadata = ds.format in {'json', 'jsonl', 'ndjson'}
+    scan_cap = (2 if json_metadata else 64) * 1024**2
+    result_cap = (8 if json_metadata else 128) * 1024**2
+    row_cap = 10_000 if json_metadata else 2_000_000
     budget = store._resolve_read_budget(ds, query_budget)
     budget = replace(
-        budget, max_scan_bytes=min(budget.max_scan_bytes or 64*1024**2, 64*1024**2),
-        max_rows=min(budget.max_rows or 2_000_000, 2_000_000),
-        max_result_bytes=min(budget.max_result_bytes or 128*1024**2, 128*1024**2),
+        budget, max_scan_bytes=min(budget.max_scan_bytes or scan_cap, scan_cap),
+        max_rows=min(budget.max_rows or row_cap, row_cap),
+        max_result_bytes=min(budget.max_result_bytes or result_cap, result_cap),
         max_elapsed_ms=min(budget.max_elapsed_ms or 60_000., 60_000.))
     validate_query_request(budget, columns=list(columns) if columns else None,
                            time_range=time_range)
     if budget.max_remote_requests is not None and budget.max_remote_requests < 3:
         raise ValidationError("remote request budget requires HEAD + GET + HEAD")
     from data_access.cos import remote
-    if not remote.declares_cos_storage(ds) or ds.format not in {"parquet", "pq"}:
-        raise ValidationError("research object must be a declared COS parquet dataset")
+    if not remote.declares_cos_storage(ds) or not (json_metadata or ds.format in {'parquet', 'pq'}):
+        raise ValidationError("research object must be a declared COS Parquet or JSON dataset")
     paths = remote.resolve_remote_paths(ds, time_range=time_range, params=params)
     if len(paths) != 1:
         raise ValidationError("research read requires exactly one object")
@@ -75,8 +79,8 @@ def read_declared_cos_object(
     if (not parsed.netloc or parsed.query or parsed.fragment or
             any(c in key for c in "*?[]{}") or
             ".." in PurePosixPath(unquote(key)).parts or
-            not key.endswith(".parquet")):
-        raise ValidationError("research read requires an exact safe parquet object")
+            not key.endswith(('.json', '.jsonl', '.ndjson') if json_metadata else ('.parquet',))):
+        raise ValidationError("research read requires an exact safe object matching declared format")
     uri = "cos://" + parsed.netloc + "/" + key
     from data_access.cos.mirror import _cli_binary
     cli = _cli_binary()
@@ -95,7 +99,7 @@ def read_declared_cos_object(
         raise ValidationError("object exceeds download/scan budget")
     root = remote.ensure_cache_root_secure()
     with tempfile.TemporaryDirectory(prefix="research-object-", dir=root) as tmp:
-        dest = Path(tmp) / "object.parquet"
+        dest = Path(tmp) / ('object.json' if json_metadata else 'object.parquet')
         try:
             subprocess.run([cli, "cp", uri, str(dest)], check=True, capture_output=True,
                            text=True, timeout=deadline.remaining_secs())
