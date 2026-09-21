@@ -1,0 +1,61 @@
+{
+  "candidate": "backend classification source cache (discarded)",
+  "cold": {
+    "runs": [
+      {
+        "mode": "old",
+        "seconds": 46.89143718500054,
+        "implementations": 4191,
+        "classification_sha256": "3243c3beb1aa37f73f963acebef9c99221e6788100d89b37e5c5da44c7e491de",
+        "cache": "CacheInfo(hits=0, misses=0, maxsize=2048, currsize=0)"
+      },
+      {
+        "mode": "new",
+        "seconds": 47.79203332700126,
+        "implementations": 4191,
+        "classification_sha256": "3243c3beb1aa37f73f963acebef9c99221e6788100d89b37e5c5da44c7e491de",
+        "cache": "CacheInfo(hits=2247, misses=1237, maxsize=2048, currsize=1237)"
+      },
+      {
+        "mode": "new",
+        "seconds": 48.85307862100308,
+        "implementations": 4191,
+        "classification_sha256": "3243c3beb1aa37f73f963acebef9c99221e6788100d89b37e5c5da44c7e491de",
+        "cache": "CacheInfo(hits=2247, misses=1237, maxsize=2048, currsize=1237)"
+      },
+      {
+        "mode": "old",
+        "seconds": 47.99190427699796,
+        "implementations": 4191,
+        "classification_sha256": "3243c3beb1aa37f73f963acebef9c99221e6788100d89b37e5c5da44c7e491de",
+        "cache": "CacheInfo(hits=0, misses=0, maxsize=2048, currsize=0)"
+      }
+    ],
+    "medians": {
+      "old": 47.44167073099925,
+      "new": 48.32255597400217
+    },
+    "identical_classification": true
+  },
+  "real_factor": [
+    {
+      "mode": "old",
+      "seconds": 58.812974094998935,
+      "output_and_records_sha256": "8efbd1e82b2e89b3979f5ccebc62e5ce1615a937f18188b738388cd17b6bfd29",
+      "candidates": 103,
+      "test_evaluated": false,
+      "source_sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d"
+    },
+    {
+      "mode": "new",
+      "seconds": 58.89924329200221,
+      "output_and_records_sha256": "8efbd1e82b2e89b3979f5ccebc62e5ce1615a937f18188b738388cd17b6bfd29",
+      "candidates": 103,
+      "test_evaluated": false,
+      "source_sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d"
+    }
+  ],
+  "profiler_callers": "   Ordered by: cumulative time\n   List reduced from 11434 to 3 due to restriction <'getsource'>\n\nFunction                                             was called by...\n                                                         ncalls  tottime  cumtime\n/usr/lib/python3.12/inspect.py:1272(getsource)       <-       3    0.000    0.001  /home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/polars_dynamics.py:146(<genexpr>)\n                                                              4    0.000    0.008  /home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/polars_dynamics.py:182(<genexpr>)\n                                                             63    0.000    0.036  /home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/polars_geometry_math.py:107(_register_polars_backends)\n                                                           2081    0.002   20.435  /home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/registry.py:539(_freeze_value_unbounded)\n/usr/lib/python3.12/inspect.py:1251(getsourcelines)  <-    2151    0.768   20.470  /usr/lib/python3.12/inspect.py:1272(getsource)\n/usr/lib/python3.12/inspect.py:944(getsourcefile)    <-       1    0.000    0.000  /home/sunhaiwei/quant_projects/factor_engine/backend/operator_capability.py:519(_emitter_source_hash)\n                                                             24    0.000    0.000  /home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/rolling_pack.py:287(register_polars_udf)\n                                                           2151    0.007    0.024  /usr/lib/python3.12/inspect.py:1063(findsource)\n\n\n         96746601 function calls (87533578 primitive calls) in 66.915 seconds\n\n   Ordered by: cumulative time\n   List reduced from 11434 to 12 due to restriction <12>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n      2/1    0.000    0.000   66.545   66.545 /home/sunhaiwei/quant_projects/factor_engine/backend/cleaned_bridge.py:266(ensure_cleaned_loaded)\n      2/1    0.000    0.000   64.966   64.966 /home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/__init__.py:633(ensure_ready)\n        1    0.000    0.000   64.966   64.966 /home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/__init__.py:611(_run_initialization)\n        1    0.001    0.001   64.966   64.966 /home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/__init__.py:941(_load_all_impl)\n 2236/287    0.009    0.000   25.621    0.089 <frozen importlib._bootstrap>:1349(_find_and_load)\n 2204/287    0.007    0.000   25.612    0.089 <frozen importlib._bootstrap>:1304(_find_and_load_unlocked)\n 2142/291    0.005    0.000   25.594    0.088 <frozen importlib._bootstrap>:911(_load_unlocked)\n 1943/291    0.003    0.000   25.587    0.088 <frozen importlib._bootstrap_external>:989(exec_module)\n 5070/568    0.029    0.000   25.532    0.045 <frozen importlib._bootstrap>:480(_call_with_frames_removed)\n 4044/291    0.180    0.000   25.529    0.088 {built-in method builtins.exec}\n8901/8005    0.011    0.000   25.527    0.003 {built-in method builtins.__import__}\n        1    0.013    0.013   24.324   24.324 /home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/spec_completion.py:139(complete_physical_specs)\n\n\n",
+  "test_partition_evaluated": false,
+  "limitation": "current working tree contains other AI changes, including registry code cache; paired processes used the same working-tree sources; no global speed claim"
+}
