@@ -80,7 +80,7 @@ def test_automatic_search_uses_train_fitted_twenty_bin_center():
     batch, labels = panel()
     x = batch.values[:, :, 0]
     y = .04*(x-.2)**2
-    config = BatchOptimizationConfig(families=("U_SHAPE_REPAIR",), bootstrap_draws=99)
+    config = BatchOptimizationConfig(selection_objective='rank_ic', families=("U_SHAPE_REPAIR",), bootstrap_draws=99)
     result = optimize_factor_batch(batch, replace(labels, values=y),
                                    config=config, allow_research=True)
     outcome = result.factors["u_shape"]

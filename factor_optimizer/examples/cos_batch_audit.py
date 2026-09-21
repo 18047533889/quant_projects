@@ -124,9 +124,11 @@ def main():
             "status": r.status, "selected_family": r.selected_family,
             "train_gain": r.train_gain, "validation_lower_bound": r.validation_lower_bound,
             "reason": r.reason, "plan_identity": r.plan_identity,
+            "baseline_diagnostics": dict(r.baseline_diagnostics),
+            "joint_diagnostics": dict(r.joint_diagnostics),
             "candidates": [dict(c) for c in r.candidates],
         } for name, r in result.factors.items()}
-        report["selection_objective"] = "current robust RankIC gate; multi-metric selection not yet wired"
+        report["selection_objective"] = "joint.v1: Sharpe, RankICIR, RankIC, drawdown, worst-block Sharpe, turnover"
     print(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False))
 
 

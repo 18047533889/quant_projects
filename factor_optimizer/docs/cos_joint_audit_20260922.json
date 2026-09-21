@@ -1,0 +1,4313 @@
+{
+  "inputs": {
+    "sources": [
+      {
+        "factor": "alphasage_20260909062020_09e3f39d",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/alphasage_20260909062020_09e3f39d.parquet",
+        "etag": "827388f64f3269ab2ac4f2b3a0a3c6c2",
+        "sha256": "2c65a6650c4ff082b820ada904649520352491ca9630cba0b95dc12cc9e127f3",
+        "downloaded_bytes": 4127982
+      },
+      {
+        "factor": "alphasage_20260909062020_1a8fff63",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/alphasage_20260909062020_1a8fff63.parquet",
+        "etag": "ac00407ca424f298eedfbc889c6df122",
+        "sha256": "63762c41936428086d51b9ffca62c9a369914ada02619790d2019ed24e83f35c",
+        "downloaded_bytes": 3033074
+      },
+      {
+        "factor": "alphasage_20260909062020_20fcde8b",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/alphasage_20260909062020_20fcde8b.parquet",
+        "etag": "0b26ee3263013173cdba6ff166826931",
+        "sha256": "6fab8d05223383de58c48936187280452dfe242540673ddef50f9aba7d07de89",
+        "downloaded_bytes": 3311464
+      }
+    ],
+    "days": 500,
+    "assets": 512,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "selection": "first bounded object keys; assets selected on TRAIN coverage only",
+    "limitations": "research replay; no upstream PIT or investability certification; recipe lineage not loaded"
+  },
+  "test_evaluated": false,
+  "diagnostics": {
+    "alphasage_20260909062020_09e3f39d": {
+      "partition": "TRAIN",
+      "train_days": 267,
+      "periods_per_year": 252,
+      "rank_ic": 0.0020407317363137075,
+      "rank_icir": 0.013924907060618299,
+      "rank_ic_valid_days": 267,
+      "fold_rank_ic": [
+        -0.006202939561620052,
+        -0.009056121531314274,
+        0.021381256301875456
+      ],
+      "complete_quantile_days": 267,
+      "quantile_coverage": 1,
+      "minimum_bin_count": 25,
+      "quantile_mean_returns": [
+        0.002250037606298246,
+        0.002487590302535949,
+        0.002165894459571817,
+        0.0023138883468602576,
+        0.0022792524095609596,
+        0.0019401289546030977,
+        0.002364610159596172,
+        0.0018474742520881893,
+        0.0019805525800770723,
+        0.002364482949437058,
+        0.0018869299149650545,
+        0.002426828950571878,
+        0.001857257730508716,
+        0.002676277728065604,
+        0.002183205157576029,
+        0.002048417449602435,
+        0.0018806384104055791,
+        0.0018367503617742927,
+        0.0014663317363913459,
+        0.00154632007370019
+      ],
+      "u_contrast": -0.00022752759220183807,
+      "proposed_shape_family": null,
+      "proposed_center": null,
+      "long_short_sharpe": -0.962481626018195,
+      "long_short_max_drawdown": 0.12803412201228245,
+      "portfolio_semantics": "gross-one top/bottom 5% diagnostic spread; no costs or tradability",
+      "portfolio_unavailable_reason": null
+    },
+    "alphasage_20260909062020_1a8fff63": {
+      "partition": "TRAIN",
+      "train_days": 267,
+      "periods_per_year": 252,
+      "rank_ic": -0.0011736714587744534,
+      "rank_icir": -0.022840543312983866,
+      "rank_ic_valid_days": 267,
+      "fold_rank_ic": [
+        0.0022851275250683717,
+        -0.0038404948706655647,
+        -0.001965647030726166
+      ],
+      "complete_quantile_days": 0,
+      "quantile_coverage": 0,
+      "minimum_bin_count": 0,
+      "quantile_mean_returns": null,
+      "u_contrast": null,
+      "proposed_shape_family": null,
+      "proposed_center": null,
+      "long_short_sharpe": null,
+      "long_short_max_drawdown": null,
+      "portfolio_semantics": "gross-one top/bottom 5% diagnostic spread; no costs or tradability",
+      "portfolio_unavailable_reason": "insufficient complete 20-bin days"
+    },
+    "alphasage_20260909062020_20fcde8b": {
+      "partition": "TRAIN",
+      "train_days": 267,
+      "periods_per_year": 252,
+      "rank_ic": null,
+      "rank_icir": null,
+      "rank_ic_valid_days": 13,
+      "fold_rank_ic": [
+        null,
+        null,
+        null
+      ],
+      "complete_quantile_days": 0,
+      "quantile_coverage": 0,
+      "minimum_bin_count": 0,
+      "quantile_mean_returns": null,
+      "u_contrast": null,
+      "proposed_shape_family": null,
+      "proposed_center": null,
+      "long_short_sharpe": null,
+      "long_short_max_drawdown": null,
+      "portfolio_semantics": "gross-one top/bottom 5% diagnostic spread; no costs or tradability",
+      "portfolio_unavailable_reason": "insufficient complete 20-bin days"
+    }
+  },
+  "automatic": {
+    "alphasage_20260909062020_09e3f39d": {
+      "status": "raw_retained",
+      "selected_family": "NO_OP_RAW",
+      "train_gain": 0.5733369347440229,
+      "validation_lower_bound": null,
+      "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+      "plan_identity": "7dedad6b0ff0d8c52a50ee1807ebf8cdfd15a1e7387ba8ea6c9e2aec4c564ea6",
+      "baseline_diagnostics": {
+        "operations": [],
+        "omissions": [
+          "lineage_unknown"
+        ],
+        "accepted": false,
+        "reason": "no_eligible_baseline_operations"
+      },
+      "joint_diagnostics": {
+        "objective": "joint",
+        "cost_rate": 0.001,
+        "policy": "joint.v1",
+        "validation_raw": {
+          "rank_ic": 0.013198773675335828,
+          "rank_icir": 0.097368088555037,
+          "sharpe": 0.48880700384624154,
+          "max_drawdown": 0.02089030679820878,
+          "turnover": 0.010909818836953255,
+          "worst_block_sharpe": -0.060143524045784616
+        },
+        "validation_candidate": {
+          "rank_ic": 0.0011440951257457182,
+          "rank_icir": 0.02334586914781182,
+          "sharpe": 0.5816546699216191,
+          "max_drawdown": 0.012799777301233248,
+          "turnover": 0.012411170053047739,
+          "worst_block_sharpe": -1.6469175046209146
+        },
+        "comparison_status": "DEGRADATION_FLOOR_FAILED"
+      },
+      "candidates": [
+        {
+          "family": "ABANDON",
+          "parameters": {},
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: ABANDON has no executable value-level mapping"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.5,
+            "half_life_relative": false
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "b842cbfd691b6d94e2c0596514ca654254e87a68b9ecf4a5be6b65c088948eb1",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0022133636906579005,
+            "rank_icir": 0.0151167867220317,
+            "sharpe": -1.2997920099244675,
+            "max_drawdown": 0.12509558142694388,
+            "turnover": 0.007599723646412856,
+            "worst_block_sharpe": -2.597706168890072
+          },
+          "raw_rank_ic_fold_gain": 0.000026558858441708545,
+          "status": "train_evaluated",
+          "train_gain": 0.0050388063146297735
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.5,
+            "half_life_relative": false
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "98e3c0c84e2f66c293f1e7181d4f87b6cb2cf66ad80fc064f86e318b534f0412",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0022133636906579005,
+            "rank_icir": -0.0151167867220317,
+            "sharpe": 1.2373284840421948,
+            "max_drawdown": 0.05344240025708078,
+            "turnover": 0.007599723646412856,
+            "worst_block_sharpe": -1.154113276679682
+          },
+          "raw_rank_ic_fold_gain": -0.03167154365779175,
+          "status": "train_evaluated",
+          "train_gain": 0.46965224711017833
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.5,
+            "half_life_relative": true
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "07030a089daf5bc0529374b600b55dc48f4c0145518e89230316bf6a0b2a1a40",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021722589215481653,
+            "rank_icir": 0.014832081936017935,
+            "sharpe": -1.3292197110299848,
+            "max_drawdown": 0.1260434472424856,
+            "turnover": 0.007090651249045488,
+            "worst_block_sharpe": -2.6408269952806944
+          },
+          "raw_rank_ic_fold_gain": 0.0000979390008431922,
+          "status": "train_evaluated",
+          "train_gain": 0.00024473033591448923
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.5,
+            "half_life_relative": true
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "28bb44da843f3c77602ff70d27399c87ef024b7ab200be80def2c6717bd76a50",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021722589215481653,
+            "rank_icir": -0.014832081936017935,
+            "sharpe": 1.2711474389723074,
+            "max_drawdown": 0.05119006253577234,
+            "turnover": 0.007090651249045488,
+            "worst_block_sharpe": -1.064506881936545
+          },
+          "raw_rank_ic_fold_gain": -0.03168833852152685,
+          "status": "train_evaluated",
+          "train_gain": 0.4781415355504954
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.8,
+            "half_life_relative": false
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "ce645a9958d70506020f0cb8b17af66967896d548bde01549a5b57c64c9383f5",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021691179481615436,
+            "rank_icir": 0.01481206993308324,
+            "sharpe": -1.3251028404221799,
+            "max_drawdown": 0.12678948999597298,
+            "turnover": 0.007090651249045488,
+            "worst_block_sharpe": -2.609607652017366
+          },
+          "raw_rank_ic_fold_gain": 0.000049101637776910985,
+          "status": "train_evaluated",
+          "train_gain": 0.0010916063143344146
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.8,
+            "half_life_relative": false
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "8e50d62cd67bf928c9904ec80426e63dd5678f41f2d83960c2778e6d50c63477",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021691179481615436,
+            "rank_icir": -0.01481206993308324,
+            "sharpe": 1.2671148319018062,
+            "max_drawdown": 0.05297119995457529,
+            "turnover": 0.007090651249045488,
+            "worst_block_sharpe": -1.1268758366525735
+          },
+          "raw_rank_ic_fold_gain": -0.031686332433871055,
+          "status": "train_evaluated",
+          "train_gain": 0.47508610044311617
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.8,
+            "half_life_relative": true
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "93d839ecf6c829b19f80d5edaa00d155e798ff9165f1fc6d96d1206cef8e57d9",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021319097802924296,
+            "rank_icir": 0.014549407998610053,
+            "sharpe": -1.3429445310684442,
+            "max_drawdown": 0.12660768773786005,
+            "turnover": 0.006908839678557142,
+            "worst_block_sharpe": -2.6752311275988214
+          },
+          "raw_rank_ic_fold_gain": 0.00006792315533928086,
+          "status": "train_evaluated",
+          "train_gain": -0.0022718778970889364
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.8,
+            "half_life_relative": true
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "8ccd9e0140665740f1978231d716a2e5a0a7a14b95fd1fd4bf4e4ad8117fe377",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021319097802924296,
+            "rank_icir": -0.014549407998610053,
+            "sharpe": 1.2858775561454465,
+            "max_drawdown": 0.051616035020814986,
+            "turnover": 0.006908839678557142,
+            "worst_block_sharpe": -1.0366715081799884
+          },
+          "raw_rank_ic_fold_gain": -0.031601920279748445,
+          "status": "train_evaluated",
+          "train_gain": 0.4814136001900464
+        },
+        {
+          "family": "INDUSTRY_NEUTRALIZATION",
+          "parameters": {
+            "exposure_set": "industry",
+            "method": "ols"
+          },
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel"
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 1,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "1b534b130369e9e871653d9a715d21334cb2fb0a1fd12993e39149e02a259427",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0006193557516153798,
+            "rank_icir": 0.006219666587265736,
+            "sharpe": 0.9520886838595345,
+            "max_drawdown": 0.04467598465334993,
+            "turnover": 0.01141776662666812,
+            "worst_block_sharpe": -1.3704237817544012
+          },
+          "raw_rank_ic_fold_gain": -0.026350745027066646,
+          "status": "train_evaluated",
+          "train_gain": 0.4371714433493816
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 2,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "7c906cbff35759cfb9d78066e2878abb0ccb1e0c98d22c5fb479647a8c9445e5",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0006193557516153798,
+            "rank_icir": 0.006219666587265736,
+            "sharpe": 0.9520886838595345,
+            "max_drawdown": 0.04467598465334993,
+            "turnover": 0.01141776662666812,
+            "worst_block_sharpe": -1.3704237817544012
+          },
+          "raw_rank_ic_fold_gain": -0.026350745027066646,
+          "status": "train_evaluated",
+          "train_gain": 0.4371714433493816
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 1,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "4c5fbc44c109a25c4b7568336e3b51e2be53d9eeee86f2436e66ffd074fc894f",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0031701513322573882,
+            "rank_icir": 0.056073997516632924,
+            "sharpe": 1.176759250484834,
+            "max_drawdown": 0.014445291239281942,
+            "turnover": 0.01221773753681684,
+            "worst_block_sharpe": 0.23955880528475187
+          },
+          "raw_rank_ic_fold_gain": -0.013344397755394278,
+          "status": "train_evaluated",
+          "train_gain": 0.5733369347440229
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 2,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "0aa4a9dcddb15505055a78567b9391c7ee7546944dc6d2f7956ba5e6c6195732",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0031701513322573882,
+            "rank_icir": 0.056073997516632924,
+            "sharpe": 1.176759250484834,
+            "max_drawdown": 0.014445291239281942,
+            "turnover": 0.01221773753681684,
+            "worst_block_sharpe": 0.23955880528475187
+          },
+          "raw_rank_ic_fold_gain": -0.013344397755394278,
+          "status": "train_evaluated",
+          "train_gain": 0.5733369347440229
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 1,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "849ccea63194663ad6441ebca07cbc9979aeec3d1427fd73d9fc050228c64aa2",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.003104139174734525,
+            "rank_icir": 0.031917890608801784,
+            "sharpe": -0.16745087330826236,
+            "max_drawdown": 0.062328347215769714,
+            "turnover": 0.010654158030617065,
+            "worst_block_sharpe": -3.016353169033746
+          },
+          "raw_rank_ic_fold_gain": -0.00235697104383867,
+          "status": "train_evaluated",
+          "train_gain": 0.21131796382919454
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 2,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "d6bc154bf6201b5802355596142242fa2194d9dfdf725111380bbd8a5d458e1b",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.003104139174734525,
+            "rank_icir": 0.031917890608801784,
+            "sharpe": -0.16745087330826236,
+            "max_drawdown": 0.062328347215769714,
+            "turnover": 0.010654158030617065,
+            "worst_block_sharpe": -3.016353169033746
+          },
+          "raw_rank_ic_fold_gain": -0.00235697104383867,
+          "status": "train_evaluated",
+          "train_gain": 0.21131796382919454
+        },
+        {
+          "family": "LOW_DOF_INTERACTION",
+          "parameters": {
+            "interaction_degree": 1,
+            "doe_reduction": 0.7
+          },
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation"
+        },
+        {
+          "family": "MISSINGNESS_FRESHNESS",
+          "parameters": {
+            "mode": "flag",
+            "freshness_window": 5
+          },
+          "orientation": 1,
+          "transform": "missing_indicator",
+          "plan_identity": "bb4dafd9d5f8cd409e5561bcd8cf5a1add1146cf1a2fa49b95ed68560b9f92d6",
+          "coverage": 0,
+          "valid_train_days": 0,
+          "status": "ineligible",
+          "reason": "ValueError: insufficient common coverage or training IC"
+        },
+        {
+          "family": "MISSINGNESS_FRESHNESS",
+          "parameters": {
+            "mode": "fill",
+            "freshness_window": 1
+          },
+          "orientation": 1,
+          "transform": "forward_fill",
+          "plan_identity": "7700b907ab6a21bdd7ee9085d9449b85fe0ca81688c358835fa2756c0d451edd",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "raw_rank_ic_fold_gain": 0,
+          "status": "train_evaluated",
+          "train_gain": 0
+        },
+        {
+          "family": "MISSINGNESS_FRESHNESS",
+          "parameters": {
+            "mode": "fill",
+            "freshness_window": 3
+          },
+          "orientation": 1,
+          "transform": "forward_fill",
+          "plan_identity": "a6abfeb37675fc52a6c3ba520071d244e1acf45fe10f012ff40bbd041ab67a88",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "raw_rank_ic_fold_gain": 0,
+          "status": "train_evaluated",
+          "train_gain": 0
+        },
+        {
+          "family": "MISSINGNESS_FRESHNESS",
+          "parameters": {
+            "mode": "fill",
+            "freshness_window": 5
+          },
+          "orientation": 1,
+          "transform": "forward_fill",
+          "plan_identity": "7af54d3fa0db64a0f6aec0d56f9042742e99c90302188ad919b879a60dee0bc0",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "raw_rank_ic_fold_gain": 0,
+          "status": "train_evaluated",
+          "train_gain": 0
+        },
+        {
+          "family": "OPERATOR_SWAP",
+          "parameters": {
+            "target_family": "delay",
+            "aggressiveness": "conservative"
+          },
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "cross_sectional",
+            "tie_method": "average"
+          },
+          "orientation": 1,
+          "transform": "cs_rank",
+          "plan_identity": "21dc1250ae0069e9facaa4cac4139985087ccaefc0427281102248c1733ed078",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "raw_rank_ic_fold_gain": 0,
+          "status": "train_evaluated",
+          "train_gain": 0
+        },
+        {
+          "family": "REPRESENTATION_ZSCORE",
+          "parameters": {
+            "zscore_axis": "cross_sectional",
+            "cap": 3
+          },
+          "orientation": 1,
+          "transform": "capped_zscore",
+          "plan_identity": "1bc421f1a8787f6e2816961af223882dd0413174d3ecd0e5a3fe3b183ddeab6f",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.002041310817865315,
+            "rank_icir": 0.013929132827255473,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "raw_rank_ic_fold_gain": -0.0000075252001304184315,
+          "status": "train_evaluated",
+          "train_gain": 0.0000034233489969448527
+        },
+        {
+          "family": "ROBUST_OUTLIER",
+          "parameters": {
+            "lower_quantile": 0.01,
+            "upper_quantile": 0.99
+          },
+          "orientation": 1,
+          "transform": "cs_winsor",
+          "plan_identity": "dc6e41aadae3c2bd0f8c34dd2d9d34fb870eae66bb3c6389a566a9d44d759980",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0020409329990667183,
+            "rank_icir": 0.013927272613329088,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "raw_rank_ic_fold_gain": -0.000009083851843966655,
+          "status": "train_evaluated",
+          "train_gain": 0.00000154827090326215
+        },
+        {
+          "family": "ROBUST_SCALE",
+          "parameters": {
+            "scale": "mad",
+            "center": "median"
+          },
+          "orientation": 1,
+          "transform": "robust_scale",
+          "plan_identity": "70f5238008ce4da1a441f8b2890a83b67f86bf72abdb3a611a2eaf63bf473c8b",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "raw_rank_ic_fold_gain": 0,
+          "status": "train_evaluated",
+          "train_gain": 0
+        },
+        {
+          "family": "SIGN_ORIENTATION",
+          "parameters": {
+            "direction": "flip"
+          },
+          "orientation": 1,
+          "transform": "sign",
+          "plan_identity": "616577dfa2388c5cc3507d3ff926029d69db71163ce21a2013c75b92fba942fe",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0020407317363137067,
+            "rank_icir": -0.013924907060618299,
+            "sharpe": 1.256472756028133,
+            "max_drawdown": 0.053081782296812555,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -1.1578732046205107
+          },
+          "raw_rank_ic_fold_gain": -0.031532126109019044,
+          "status": "train_evaluated",
+          "train_gain": 0.4731813290406966
+        },
+        {
+          "family": "SIZE_NEUTRALIZATION",
+          "parameters": {
+            "exposure_set": "size",
+            "method": "ols"
+          },
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel"
+        },
+        {
+          "family": "STYLE_NEUTRALIZATION",
+          "parameters": {
+            "exposure_set": "style_multi",
+            "method": "ols"
+          },
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel"
+        },
+        {
+          "family": "TAIL_HINGE",
+          "parameters": {
+            "hinge": "top",
+            "hinge_value": 0
+          },
+          "orientation": 1,
+          "transform": "tail_hinge",
+          "plan_identity": "ef15453a27df422bb779dbd49c201b15ab67e6243d256cad9f2d256d7f09a8f0",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "raw_rank_ic_fold_gain": 0,
+          "status": "train_evaluated",
+          "train_gain": 0
+        },
+        {
+          "family": "TAIL_HINGE",
+          "parameters": {
+            "hinge": "bottom",
+            "hinge_value": 0
+          },
+          "orientation": 1,
+          "transform": "tail_hinge",
+          "plan_identity": "8f7fc06fc232ac63d9014dfec115bcdef93751b93c60b3a0a0c08d602266a010",
+          "coverage": 0,
+          "valid_train_days": 0,
+          "status": "ineligible",
+          "reason": "ValueError: insufficient common coverage or training IC"
+        },
+        {
+          "family": "TAIL_SATURATION",
+          "parameters": {
+            "saturation_quantile": 0.97,
+            "saturate": "top"
+          },
+          "orientation": 1,
+          "transform": "tail_saturation",
+          "plan_identity": "ed6fd45a87f3b30fb745503d26f7741936a2c212f1fc5307b0043e9ff8b9f17c",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0020507498224875097,
+            "rank_icir": 0.013997476406932368,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "raw_rank_ic_fold_gain": -0.00001617594519361521,
+          "status": "train_evaluated",
+          "train_gain": 0.00005900912150363924
+        },
+        {
+          "family": "TAIL_SATURATION",
+          "parameters": {
+            "saturation_quantile": 0.97,
+            "saturate": "bottom"
+          },
+          "orientation": 1,
+          "transform": "tail_saturation",
+          "plan_identity": "bdfedc6e7994e2ed7fb01bcc56c3cf0630267959b9494ee25a7c8fd42eb4e20b",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0020238049924505667,
+            "rank_icir": 0.013809102119366246,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "raw_rank_ic_fold_gain": -0.000031916971591081315,
+          "status": "train_evaluated",
+          "train_gain": -0.00009698279698172607
+        },
+        {
+          "family": "TAIL_SATURATION",
+          "parameters": {
+            "saturation_quantile": 0.97,
+            "saturate": "both"
+          },
+          "orientation": 1,
+          "transform": "tail_saturation",
+          "plan_identity": "b2c2c97f82e3f2e4b4413e0fc8f409d5747fdf2bc3113631b4ca97c6aeec22be",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.002033822974083905,
+            "rank_icir": 0.013881638086398309,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "raw_rank_ic_fold_gain": -0.00004111225466275218,
+          "status": "train_evaluated",
+          "train_gain": -0.000037986129208078534
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 1,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "a8099e1af8051a6b3d1897761f7b30b16e75b4941eefb0a918e109aa2fae2344",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0006193557516153798,
+            "rank_icir": -0.006219666587265736,
+            "sharpe": -1.0863710905090578,
+            "max_drawdown": 0.09457216322738907,
+            "turnover": 0.01141776662666812,
+            "worst_block_sharpe": -2.772669130541622
+          },
+          "raw_rank_ic_fold_gain": -0.00518673720448997,
+          "status": "train_evaluated",
+          "train_gain": 0.01935770766400846
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 2,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "25245b1889c9ca0574b1f42d67bf00e6cd6516742c43c328e56b9a14398226d5",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0006193557516153798,
+            "rank_icir": -0.006219666587265736,
+            "sharpe": -1.0863710905090578,
+            "max_drawdown": 0.09457216322738907,
+            "turnover": 0.01141776662666812,
+            "worst_block_sharpe": -2.772669130541622
+          },
+          "raw_rank_ic_fold_gain": -0.00518673720448997,
+          "status": "train_evaluated",
+          "train_gain": 0.01935770766400846
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 1,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "7a1ddfac61a63d802617a764683c5170a3400e534e00353c253c55e84623a085",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0031701513322573882,
+            "rank_icir": -0.056073997516632924,
+            "sharpe": -1.0555006745761728,
+            "max_drawdown": 0.045768265445084166,
+            "turnover": 0.012222526719649223,
+            "worst_block_sharpe": -2.8773382247258317
+          },
+          "raw_rank_ic_fold_gain": -0.018187947661277775,
+          "status": "train_evaluated",
+          "train_gain": 0.00031754017168272863
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 2,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "6a404d66987e9d3abf6ea2bc8ca23a6bac02f4d8d65f37c84d38c08af6276036",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0031701513322573882,
+            "rank_icir": -0.056073997516632924,
+            "sharpe": -1.0555006745761728,
+            "max_drawdown": 0.045768265445084166,
+            "turnover": 0.012222526719649223,
+            "worst_block_sharpe": -2.8773382247258317
+          },
+          "raw_rank_ic_fold_gain": -0.018187947661277775,
+          "status": "train_evaluated",
+          "train_gain": 0.00031754017168272863
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 1,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "02375066dbe872b4acf31d3fa8410382f9c53957315c0bd4e13d3134f6cfd18b",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003104139174734525,
+            "rank_icir": -0.031917890608801784,
+            "sharpe": 0.04762497625151245,
+            "max_drawdown": 0.05681360862249381,
+            "turnover": 0.010654158030617065,
+            "worst_block_sharpe": -3.0932149084388874
+          },
+          "raw_rank_ic_fold_gain": -0.029258028877466417,
+          "status": "train_evaluated",
+          "train_gain": 0.2100432368573264
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 2,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "1e780664f65efff2af6acb09b24a13b2969087cd61764a02d3e114acb33f83c8",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003104139174734525,
+            "rank_icir": -0.031917890608801784,
+            "sharpe": 0.04762497625151245,
+            "max_drawdown": 0.05681360862249381,
+            "turnover": 0.010654158030617065,
+            "worst_block_sharpe": -3.0932149084388874
+          },
+          "raw_rank_ic_fold_gain": -0.029258028877466417,
+          "status": "train_evaluated",
+          "train_gain": 0.2100432368573264
+        },
+        {
+          "family": "WINDOW_REFINEMENT",
+          "parameters": {
+            "window_mode": "shorter",
+            "scale": 0.7
+          },
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 3,
+            "window": 3
+          },
+          "orientation": 1,
+          "transform": "trailing_sma",
+          "plan_identity": "ec6f189acaca4e096f448b3fa0bc7ef493b82ed95d1d39aaa7b3687282a21b69",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.002244098544830131,
+            "rank_icir": 0.015325277315939374,
+            "sharpe": -1.2920131139077202,
+            "max_drawdown": 0.12461921178326557,
+            "turnover": 0.007672448274608194,
+            "worst_block_sharpe": -2.5956328895451133
+          },
+          "raw_rank_ic_fold_gain": 0.00003789334666306701,
+          "status": "train_evaluated",
+          "train_gain": 0.006336522508148035
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 3,
+            "window": 3
+          },
+          "orientation": -1,
+          "transform": "trailing_sma",
+          "plan_identity": "81714ac5adcbd54e4f4acc4255d12df8c50974317066e5eca6c38b9bb3f4cb97",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.002244098544830131,
+            "rank_icir": -0.015325277315939374,
+            "sharpe": 1.2287953377081582,
+            "max_drawdown": 0.05319173107772115,
+            "turnover": 0.007672448274608194,
+            "worst_block_sharpe": -1.143917244880808
+          },
+          "raw_rank_ic_fold_gain": -0.03168799127624778,
+          "status": "train_evaluated",
+          "train_gain": 0.46868001864294
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 5,
+            "window": 5
+          },
+          "orientation": 1,
+          "transform": "trailing_sma",
+          "plan_identity": "7b59d5aabcc9ec451c0d45622fc08798eb402a8eed6bf09215f6d87fe07cd559",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0022343009067361296,
+            "rank_icir": 0.015258250092616282,
+            "sharpe": -1.2990720286433468,
+            "max_drawdown": 0.12403205394012713,
+            "turnover": 0.007636085960510525,
+            "worst_block_sharpe": -2.5034924410684747
+          },
+          "raw_rank_ic_fold_gain": 0.00005244192522017418,
+          "status": "train_evaluated",
+          "train_gain": 0.006625942729360401
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 5,
+            "window": 5
+          },
+          "orientation": -1,
+          "transform": "trailing_sma",
+          "plan_identity": "a40dbcbe55ba7a9a202eaa2bb6eab9bce1110280cade90070f7d8b10c3d4a695",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0022343009067361296,
+            "rank_icir": -0.015258250092616282,
+            "sharpe": 1.2362077937236258,
+            "max_drawdown": 0.05211182172948603,
+            "turnover": 0.007636085960510525,
+            "worst_block_sharpe": -1.0917706572107704
+          },
+          "raw_rank_ic_fold_gain": -0.03172677824980307,
+          "status": "train_evaluated",
+          "train_gain": 0.47181812341214
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 8,
+            "window": 8
+          },
+          "orientation": 1,
+          "transform": "trailing_sma",
+          "plan_identity": "6fff8e085bfac26f724c8440e870d6fb2486d7028924fd05eeabff3372372394",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0022102436374523238,
+            "rank_icir": 0.015094823564411454,
+            "sharpe": -1.3428043177244096,
+            "max_drawdown": 0.1270519419084353,
+            "turnover": 0.007345187447729172,
+            "worst_block_sharpe": -2.7100894308155024
+          },
+          "raw_rank_ic_fold_gain": 0.00007578586026273967,
+          "status": "train_evaluated",
+          "train_gain": -0.002270304544350621
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 8,
+            "window": 8
+          },
+          "orientation": -1,
+          "transform": "trailing_sma",
+          "plan_identity": "5269c266987e4c5b76b54582185b0f0d90f4514d2ca8da0f010369e40a2360e0",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0022102436374523238,
+            "rank_icir": -0.015094823564411454,
+            "sharpe": 1.2827114017154917,
+            "max_drawdown": 0.052640140720041854,
+            "turnover": 0.007345187447729172,
+            "worst_block_sharpe": -1.1041775718614129
+          },
+          "raw_rank_ic_fold_gain": -0.03175478427346136,
+          "status": "train_evaluated",
+          "train_gain": 0.47785067832837785
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 10,
+            "window": 10
+          },
+          "orientation": 1,
+          "transform": "trailing_sma",
+          "plan_identity": "843ca411a8853df7661bd0000818307bfae9c155b32dc18f6976d91adec0adf6",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021582387173263934,
+            "rank_icir": 0.014740447862587148,
+            "sharpe": -1.3721315320549374,
+            "max_drawdown": 0.12768655437916884,
+            "turnover": 0.007090651249045488,
+            "worst_block_sharpe": -2.7155089447989744
+          },
+          "raw_rank_ic_fold_gain": 0.00003952165932343579,
+          "status": "train_evaluated",
+          "train_gain": -0.006506857804914501
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 10,
+            "window": 10
+          },
+          "orientation": -1,
+          "transform": "trailing_sma",
+          "plan_identity": "5cd80fb51e8d4c4d86712cc694f8f0bee13bf4408fc7d1c6aeed5122b43bf5eb",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021582387173263934,
+            "rank_icir": -0.014740447862587148,
+            "sharpe": 1.313995269957649,
+            "max_drawdown": 0.051581481434773764,
+            "turnover": 0.007090651249045488,
+            "worst_block_sharpe": -1.0441841459873302
+          },
+          "raw_rank_ic_fold_gain": -0.03172053488358606,
+          "status": "train_evaluated",
+          "train_gain": 0.48475333242087015
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 13,
+            "window": 13
+          },
+          "orientation": 1,
+          "transform": "trailing_sma",
+          "plan_identity": "fc304e57dcfffd33ca3145c9db540ba96c03eefdbf10138ac1667eaaa37aa1f0",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021364509585980558,
+            "rank_icir": 0.014592098820393591,
+            "sharpe": -1.3778970261592165,
+            "max_drawdown": 0.12757570980760477,
+            "turnover": 0.0071633758772408265,
+            "worst_block_sharpe": -2.7425626229569615
+          },
+          "raw_rank_ic_fold_gain": 0.000017884802511934598,
+          "status": "train_evaluated",
+          "train_gain": -0.007676367807888662
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 13,
+            "window": 13
+          },
+          "orientation": -1,
+          "transform": "trailing_sma",
+          "plan_identity": "839e7644581253f7c59c35ec1c8dfcca6e1f387e939de49dc9087af9b8cc69ec",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021364509585980558,
+            "rank_icir": -0.014592098820393591,
+            "sharpe": 1.3192434634820653,
+            "max_drawdown": 0.05121066571389422,
+            "turnover": 0.0071633758772408265,
+            "worst_block_sharpe": -1.0182542719529082
+          },
+          "raw_rank_ic_fold_gain": -0.031705453614624735,
+          "status": "train_evaluated",
+          "train_gain": 0.48661784710105194
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 20,
+            "window": 20
+          },
+          "orientation": 1,
+          "transform": "trailing_sma",
+          "plan_identity": "16b44d27157558783f75bc658e5a05af32e30e8cc874a53b06610b47708461ca",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.002123773866908456,
+            "rank_icir": 0.014509785585064473,
+            "sharpe": -1.3892647733839831,
+            "max_drawdown": 0.12841285921060877,
+            "turnover": 0.007308825133631503,
+            "worst_block_sharpe": -2.7876164001252164
+          },
+          "raw_rank_ic_fold_gain": 0.000010041155196593215,
+          "status": "train_evaluated",
+          "train_gain": -0.009794223832491677
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 20,
+            "window": 20
+          },
+          "orientation": -1,
+          "transform": "trailing_sma",
+          "plan_identity": "4a7eefbe8d41dd576fab2b3f20ba906f331fa8dbcaf5441ddf7b2d4496ae8a03",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.002123773866908456,
+            "rank_icir": -0.014509785585064473,
+            "sharpe": 1.328829829910594,
+            "max_drawdown": 0.05045910732666789,
+            "turnover": 0.007308825133631503,
+            "worst_block_sharpe": -0.9633917368107786
+          },
+          "raw_rank_ic_fold_gain": -0.03163758163405512,
+          "status": "train_evaluated",
+          "train_gain": 0.49019959293015336
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 3,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "66799d922d98316adef695b67443c3fa0adafa67493ff73f410575f535927b55",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.002179363457139464,
+            "rank_icir": 0.014881738623319983,
+            "sharpe": -1.327076945831017,
+            "max_drawdown": 0.12691402180434697,
+            "turnover": 0.0070542889349478185,
+            "worst_block_sharpe": -2.5872294847266124
+          },
+          "raw_rank_ic_fold_gain": 0.000055369292011165754,
+          "status": "train_evaluated",
+          "train_gain": 0.001165197878780777
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 3,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "538bb7a935b2f088033a3f880894f425ac83600e08b90dfe448a6a5c03e9a816",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.002179363457139464,
+            "rank_icir": -0.014881738623319983,
+            "sharpe": 1.2691748239192848,
+            "max_drawdown": 0.05282104237612224,
+            "turnover": 0.0070542889349478185,
+            "worst_block_sharpe": -1.1172007994096818
+          },
+          "raw_rank_ic_fold_gain": -0.031689714747514884,
+          "status": "train_evaluated",
+          "train_gain": 0.4756844591715421
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 5,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "1e1d0566b2938032c3c7e2b2a587b1e4d1285321cf597a47f5430ee9095d9eb6",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021722589215481653,
+            "rank_icir": 0.014832081936017935,
+            "sharpe": -1.3292197110299848,
+            "max_drawdown": 0.1260434472424856,
+            "turnover": 0.007090651249045488,
+            "worst_block_sharpe": -2.6408269952806944
+          },
+          "raw_rank_ic_fold_gain": 0.0000979390008431922,
+          "status": "train_evaluated",
+          "train_gain": 0.00024473033591448923
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 5,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "2325dcd3e10e125d9c2d65a2d2f689f203d119cebfe00b63eb509f66e6d3d038",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021722589215481653,
+            "rank_icir": -0.014832081936017935,
+            "sharpe": 1.2711474389723074,
+            "max_drawdown": 0.05119006253577234,
+            "turnover": 0.007090651249045488,
+            "worst_block_sharpe": -1.064506881936545
+          },
+          "raw_rank_ic_fold_gain": -0.03168833852152685,
+          "status": "train_evaluated",
+          "train_gain": 0.4781415355504954
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 8,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "d891cf5f42ff3572a98b211c454875af775b163393f378006b501da2510d7721",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021319097802924296,
+            "rank_icir": 0.014549407998610053,
+            "sharpe": -1.3429445310684442,
+            "max_drawdown": 0.12660768773786005,
+            "turnover": 0.006908839678557142,
+            "worst_block_sharpe": -2.6752311275988214
+          },
+          "raw_rank_ic_fold_gain": 0.00006792315533928086,
+          "status": "train_evaluated",
+          "train_gain": -0.0022718778970889364
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 8,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "77de23b9e855cc85e8b5065634cda870a3b15515b102ae779d208047aee8a196",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021319097802924296,
+            "rank_icir": -0.014549407998610053,
+            "sharpe": 1.2858775561454465,
+            "max_drawdown": 0.051616035020814986,
+            "turnover": 0.006908839678557142,
+            "worst_block_sharpe": -1.0366715081799884
+          },
+          "raw_rank_ic_fold_gain": -0.031601920279748445,
+          "status": "train_evaluated",
+          "train_gain": 0.4814136001900464
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 10,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "b650ba78b9e7b0b27b730a9a73a4fceb8c681dfee4d7e0166f7368b6048cb504",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021133616223518305,
+            "rank_icir": 0.014417775039157438,
+            "sharpe": -1.3493445031993927,
+            "max_drawdown": 0.12926639991554875,
+            "turnover": 0.006908839678557142,
+            "worst_block_sharpe": -2.756857436940193
+          },
+          "raw_rank_ic_fold_gain": 0.00003724285433908615,
+          "status": "train_evaluated",
+          "train_gain": -0.004434913535130536
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 10,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "e7b5daddb65362aaf7382e8c006a633dcd0bce57de529d6864df6f88ae22f58b",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021133616223518305,
+            "rank_icir": -0.014417775039157438,
+            "sharpe": 1.2917751957380785,
+            "max_drawdown": 0.05207517441800147,
+            "turnover": 0.006908839678557142,
+            "worst_block_sharpe": -1.1650086344001538
+          },
+          "raw_rank_ic_fold_gain": -0.03157098338142437,
+          "status": "train_evaluated",
+          "train_gain": 0.4774680900819852
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 13,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "d836a0747f20e7d577e64855b6634ff5e60cc7c31aae3a38b9355e89004c0579",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0020611650118416247,
+            "rank_icir": 0.014048369887365138,
+            "sharpe": -1.432717101489804,
+            "max_drawdown": 0.13171642432737649,
+            "turnover": 0.0068361150503618035,
+            "worst_block_sharpe": -2.878022781134256
+          },
+          "raw_rank_ic_fold_gain": -0.000035501234536237014,
+          "status": "train_evaluated",
+          "train_gain": -0.016913519778304797
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 13,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "9e38e4ef2964698ae50f2a342a03d43c45a3ec28990f1b54509ca2d7b077cb85",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0020611650118416247,
+            "rank_icir": -0.014048369887365138,
+            "sharpe": 1.3759577752135255,
+            "max_drawdown": 0.04975616807043746,
+            "turnover": 0.0068361150503618035,
+            "worst_block_sharpe": -1.001280027007806
+          },
+          "raw_rank_ic_fold_gain": -0.03151626096865616,
+          "status": "train_evaluated",
+          "train_gain": 0.4953068644800826
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 20,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "369cb739b4467305e69401d3e39536f3318f60e34a774b3c67af8289004c5fe1",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.001998594314262355,
+            "rank_icir": 0.013593688183576083,
+            "sharpe": -1.45381621258263,
+            "max_drawdown": 0.13394439701480781,
+            "turnover": 0.0063997672811897735,
+            "worst_block_sharpe": -2.975563486229307
+          },
+          "raw_rank_ic_fold_gain": -0.000161658873821463,
+          "status": "train_evaluated",
+          "train_gain": -0.021044858192589
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 20,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "af0a2d7fa3fc2655c773d9814be5f3d9c20905ca0c77c8ec2a92c34be4096488",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.001998594314262355,
+            "rank_icir": -0.013593688183576083,
+            "sharpe": 1.4013417367686596,
+            "max_drawdown": 0.04936809049525089,
+            "turnover": 0.0063997672811897735,
+            "worst_block_sharpe": -0.9496002339952079
+          },
+          "raw_rank_ic_fold_gain": -0.03138602509222026,
+          "status": "train_evaluated",
+          "train_gain": 0.5010253565691194
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.20629947401590026
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "f29c534091833ba961216ea1521381fa7584626585bb46bdc556675afaa364e2",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.002179363457139464,
+            "rank_icir": 0.014881738623319983,
+            "sharpe": -1.327076945831017,
+            "max_drawdown": 0.12691402180434697,
+            "turnover": 0.0070542889349478185,
+            "worst_block_sharpe": -2.5872294847266124
+          },
+          "raw_rank_ic_fold_gain": 0.000055369292011165754,
+          "status": "train_evaluated",
+          "train_gain": 0.001165197878780777
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.20629947401590026
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "e6e817b33574773034ada16aa3d1ae5bbf5202cc639b93e69a3c967f9b9b5915",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.002179363457139464,
+            "rank_icir": -0.014881738623319983,
+            "sharpe": 1.2691748239192848,
+            "max_drawdown": 0.05282104237612224,
+            "turnover": 0.0070542889349478185,
+            "worst_block_sharpe": -1.1172007994096818
+          },
+          "raw_rank_ic_fold_gain": -0.031689714747514884,
+          "status": "train_evaluated",
+          "train_gain": 0.4756844591715421
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.12944943670387585
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "17817c29e3fe56b1271c47e7e7e29fe680563b5f568d9ae356532376718e1569",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021722589215481653,
+            "rank_icir": 0.014832081936017935,
+            "sharpe": -1.3292197110299848,
+            "max_drawdown": 0.1260434472424856,
+            "turnover": 0.007090651249045488,
+            "worst_block_sharpe": -2.6408269952806944
+          },
+          "raw_rank_ic_fold_gain": 0.0000979390008431922,
+          "status": "train_evaluated",
+          "train_gain": 0.00024473033591448923
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.12944943670387585
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "0c287d68845c3549bce39c588b9f946f6efce991451b318de4a411d04c5db8f9",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021722589215481653,
+            "rank_icir": -0.014832081936017935,
+            "sharpe": 1.2711474389723074,
+            "max_drawdown": 0.05119006253577234,
+            "turnover": 0.007090651249045488,
+            "worst_block_sharpe": -1.064506881936545
+          },
+          "raw_rank_ic_fold_gain": -0.03168833852152685,
+          "status": "train_evaluated",
+          "train_gain": 0.4781415355504954
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.08299595679532877
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "be52f40167fbac22b729247d2ab42b60fc36cf87f5f8638eaeaf9bdeb098b71e",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021319097802924296,
+            "rank_icir": 0.014549407998610053,
+            "sharpe": -1.3429445310684442,
+            "max_drawdown": 0.12660768773786005,
+            "turnover": 0.006908839678557142,
+            "worst_block_sharpe": -2.6752311275988214
+          },
+          "raw_rank_ic_fold_gain": 0.00006792315533928086,
+          "status": "train_evaluated",
+          "train_gain": -0.0022718778970889364
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.08299595679532877
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "2e1d192a6553cd078c5b262b8e5248e1f094bde6a893508af0bde93ce1eb2413",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021319097802924296,
+            "rank_icir": -0.014549407998610053,
+            "sharpe": 1.2858775561454465,
+            "max_drawdown": 0.051616035020814986,
+            "turnover": 0.006908839678557142,
+            "worst_block_sharpe": -1.0366715081799884
+          },
+          "raw_rank_ic_fold_gain": -0.031601920279748445,
+          "status": "train_evaluated",
+          "train_gain": 0.4814136001900464
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.06696700846319258
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "ce2901e48da9f18806bba621eada260ae72fdc0d636418c470a7f9e0e18d2edc",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021133616223518305,
+            "rank_icir": 0.014417775039157438,
+            "sharpe": -1.3493445031993927,
+            "max_drawdown": 0.12926639991554875,
+            "turnover": 0.006908839678557142,
+            "worst_block_sharpe": -2.756857436940193
+          },
+          "raw_rank_ic_fold_gain": 0.00003724285433908615,
+          "status": "train_evaluated",
+          "train_gain": -0.004434913535130536
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.06696700846319258
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "1fecda8f40fede6ab369f693c62ec607a04139bae2596363a65ea17e52b624c8",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021133616223518305,
+            "rank_icir": -0.014417775039157438,
+            "sharpe": 1.2917751957380785,
+            "max_drawdown": 0.05207517441800147,
+            "turnover": 0.006908839678557142,
+            "worst_block_sharpe": -1.1650086344001538
+          },
+          "raw_rank_ic_fold_gain": -0.03157098338142437,
+          "status": "train_evaluated",
+          "train_gain": 0.4774680900819852
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.051922485660828535
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "36a2db3c3e8328a9ea845e66e201adef96691294c6130cc49a583e65a371c0bc",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0020611650118416247,
+            "rank_icir": 0.014048369887365138,
+            "sharpe": -1.432717101489804,
+            "max_drawdown": 0.13171642432737649,
+            "turnover": 0.0068361150503618035,
+            "worst_block_sharpe": -2.878022781134256
+          },
+          "raw_rank_ic_fold_gain": -0.000035501234536237014,
+          "status": "train_evaluated",
+          "train_gain": -0.016913519778304797
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.051922485660828535
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "42b76c7ddbe31e7d7050388d57f0a4576ab730801a93046d7b15e85e37b99ac7",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0020611650118416247,
+            "rank_icir": -0.014048369887365138,
+            "sharpe": 1.3759577752135255,
+            "max_drawdown": 0.04975616807043746,
+            "turnover": 0.0068361150503618035,
+            "worst_block_sharpe": -1.001280027007806
+          },
+          "raw_rank_ic_fold_gain": -0.03151626096865616,
+          "status": "train_evaluated",
+          "train_gain": 0.4953068644800826
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 8,
+            "period_fast": 2,
+            "period_slow": 24,
+            "use_current": false
+          },
+          "orientation": 1,
+          "transform": "kama",
+          "plan_identity": "dc16e9354c31077804956dda4d34b22f022181cd51ced87b207a9613c47b3c59",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021738505102249697,
+            "rank_icir": 0.014845595767677749,
+            "sharpe": -1.2927703522205691,
+            "max_drawdown": 0.12470395406801899,
+            "turnover": 0.00741791207592451,
+            "worst_block_sharpe": -2.601590139325682
+          },
+          "raw_rank_ic_fold_gain": 0.000033941058441825346,
+          "status": "train_evaluated",
+          "train_gain": 0.0057532118301521495
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 8,
+            "period_fast": 2,
+            "period_slow": 24,
+            "use_current": false
+          },
+          "orientation": -1,
+          "transform": "kama",
+          "plan_identity": "3e39f9fa7e44fb4988a5368fbe242d91cfeea85c25a9204fff8ab2ddef0eae81",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021738505102249697,
+            "rank_icir": -0.014845595767677749,
+            "sharpe": 1.2320255405581093,
+            "max_drawdown": 0.05328775889582597,
+            "turnover": 0.00741791207592451,
+            "worst_block_sharpe": -1.2361275239787575
+          },
+          "raw_rank_ic_fold_gain": -0.03164797465704075,
+          "status": "train_evaluated",
+          "train_gain": 0.46623277558800164
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 10,
+            "period_fast": 2,
+            "period_slow": 30,
+            "use_current": false
+          },
+          "orientation": 1,
+          "transform": "kama",
+          "plan_identity": "45210f5c4ea233b9a8ceae998f48a06bd2707be3804a6ce959c9ce44d9f84e4c",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.002156922223414069,
+            "rank_icir": 0.01472970665053626,
+            "sharpe": -1.276825660947746,
+            "max_drawdown": 0.12324411578639198,
+            "turnover": 0.007454274390022179,
+            "worst_block_sharpe": -2.586119145092795
+          },
+          "raw_rank_ic_fold_gain": 0.00004002942790367092,
+          "status": "train_evaluated",
+          "train_gain": 0.008166902535504061
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 10,
+            "period_fast": 2,
+            "period_slow": 30,
+            "use_current": false
+          },
+          "orientation": -1,
+          "transform": "kama",
+          "plan_identity": "e9c9572c41b161326b6a4746b2e2931113eca9c56c34cec21d684b2ac961f766",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.002156922223414069,
+            "rank_icir": -0.01472970665053626,
+            "sharpe": 1.2156695413474072,
+            "max_drawdown": 0.052806775561906175,
+            "turnover": 0.007454274390022179,
+            "worst_block_sharpe": -1.2815727117430251
+          },
+          "raw_rank_ic_fold_gain": -0.03165169408954777,
+          "status": "train_evaluated",
+          "train_gain": 0.4625134845140767
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 13,
+            "period_fast": 2,
+            "period_slow": 39,
+            "use_current": false
+          },
+          "orientation": 1,
+          "transform": "kama",
+          "plan_identity": "2828a8cdaa214d20f153afdda310dd8cdb2a32f9f922bee830199f502b42d0a1",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021030740725772753,
+            "rank_icir": 0.014365931583499672,
+            "sharpe": -1.2846647868519776,
+            "max_drawdown": 0.12370311403539325,
+            "turnover": 0.0074906367041198485,
+            "worst_block_sharpe": -2.6120664535492373
+          },
+          "raw_rank_ic_fold_gain": 0.00001677847923452457,
+          "status": "train_evaluated",
+          "train_gain": 0.006412138591612493
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 13,
+            "period_fast": 2,
+            "period_slow": 39,
+            "use_current": false
+          },
+          "orientation": -1,
+          "transform": "kama",
+          "plan_identity": "b617873c93d934349f332e524c323d483cd326fa0e94ba1b6559e7653169afd8",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021030740725772753,
+            "rank_icir": -0.014365931583499672,
+            "sharpe": 1.2231643230128566,
+            "max_drawdown": 0.05280677556190598,
+            "turnover": 0.0074906367041198485,
+            "worst_block_sharpe": -1.2815727117430251
+          },
+          "raw_rank_ic_fold_gain": -0.03163534299794312,
+          "status": "train_evaluated",
+          "train_gain": 0.46387470248997364
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 20,
+            "period_fast": 2,
+            "period_slow": 60,
+            "use_current": false
+          },
+          "orientation": 1,
+          "transform": "kama",
+          "plan_identity": "5e5a6f57c2d2823c989745ad2b41725e4a9be379d4eacbda459e1868642c1f97",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.002082856628895535,
+            "rank_icir": 0.014234771027617795,
+            "sharpe": -1.2653335937490091,
+            "max_drawdown": 0.12258004712737645,
+            "turnover": 0.00741791207592451,
+            "worst_block_sharpe": -2.547348037418715
+          },
+          "raw_rank_ic_fold_gain": -0.000017541335044625656,
+          "status": "train_evaluated",
+          "train_gain": 0.009901003976673983
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 20,
+            "period_fast": 2,
+            "period_slow": 60,
+            "use_current": false
+          },
+          "orientation": -1,
+          "transform": "kama",
+          "plan_identity": "5a5f5996250f8ef6d80923b6e280b118a6e5ac5aea86fb24def7a15eae828d66",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.002082856628895535,
+            "rank_icir": -0.014234771027617795,
+            "sharpe": 1.2044298994171196,
+            "max_drawdown": 0.052806775561905564,
+            "turnover": 0.00741791207592451,
+            "worst_block_sharpe": -1.2815727117430251
+          },
+          "raw_rank_ic_fold_gain": -0.03163379683209015,
+          "status": "train_evaluated",
+          "train_gain": 0.4613430627847939
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.053621575878972906
+          },
+          "orientation": 1,
+          "transform": "kalman_local_level",
+          "plan_identity": "54d18b2d2f9e5c4353b4c926f94e119636adb84ed8e4e9a8b4e974a96fcb40ca",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.002179510125311291,
+            "rank_icir": 0.014882731984777024,
+            "sharpe": -1.327076945831017,
+            "max_drawdown": 0.12691402180434697,
+            "turnover": 0.0070542889349478185,
+            "worst_block_sharpe": -2.5872294847266124
+          },
+          "raw_rank_ic_fold_gain": 0.000055718794144468635,
+          "status": "train_evaluated",
+          "train_gain": 0.001166034041128805
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.053621575878972906
+          },
+          "orientation": -1,
+          "transform": "kalman_local_level",
+          "plan_identity": "f406cb596e8e2cee002b71f5c0c43fc9b72fec75ea89b38bddc33f5e3bace08d",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.002179510125311291,
+            "rank_icir": -0.014882731984777024,
+            "sharpe": 1.2691748239192848,
+            "max_drawdown": 0.05282104237612224,
+            "turnover": 0.0070542889349478185,
+            "worst_block_sharpe": -1.1172007994096818
+          },
+          "raw_rank_ic_fold_gain": -0.03168977277084042,
+          "status": "train_evaluated",
+          "train_gain": 0.4756836230091941
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.019248918293159143
+          },
+          "orientation": 1,
+          "transform": "kalman_local_level",
+          "plan_identity": "4663096b6f83e5b36f321b06c9d6f28cd4ddb7d45f998eb29abb33fbf47de338",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.002171649645807884,
+            "rank_icir": 0.01482795508345854,
+            "sharpe": -1.3292197110299848,
+            "max_drawdown": 0.1260434472424856,
+            "turnover": 0.007090651249045488,
+            "worst_block_sharpe": -2.6408269952806944
+          },
+          "raw_rank_ic_fold_gain": 0.00009653011455328188,
+          "status": "train_evaluated",
+          "train_gain": 0.00024125666369695375
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.019248918293159143
+          },
+          "orientation": -1,
+          "transform": "kalman_local_level",
+          "plan_identity": "69e9a49ab8f00176b12b93308b4a360b140504ceeaf6997a6b19e347d9c94a2d",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.002171649645807884,
+            "rank_icir": -0.01482795508345854,
+            "sharpe": 1.2711474389723074,
+            "max_drawdown": 0.05119006253577234,
+            "turnover": 0.007090651249045488,
+            "worst_block_sharpe": -1.064506881936545
+          },
+          "raw_rank_ic_fold_gain": -0.0316880958452514,
+          "status": "train_evaluated",
+          "train_gain": 0.4781450092227129
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.007511775869928892
+          },
+          "orientation": 1,
+          "transform": "kalman_local_level",
+          "plan_identity": "21ff7ee5a2603835245a0cf0ee635156a4f376379c46e5229534cb480e61b698",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021391626555165013,
+            "rank_icir": 0.014598541729229477,
+            "sharpe": -1.3398223470092017,
+            "max_drawdown": 0.1266251621196419,
+            "turnover": 0.0069452019926548115,
+            "worst_block_sharpe": -2.6752311275988214
+          },
+          "raw_rank_ic_fold_gain": 0.00007268347826941968,
+          "status": "train_evaluated",
+          "train_gain": -0.0018227573950644338
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.007511775869928892
+          },
+          "orientation": -1,
+          "transform": "kalman_local_level",
+          "plan_identity": "2e72e48d3df5b316e5fea15ac9309ae47371fc1c09be48d9cfc083e1c29de7de",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021391626555165013,
+            "rank_icir": -0.014598541729229477,
+            "sharpe": 1.2823674992061245,
+            "max_drawdown": 0.05161603502081409,
+            "turnover": 0.0069452019926548115,
+            "worst_block_sharpe": -1.0366715081799884
+          },
+          "raw_rank_ic_fold_gain": -0.031604809723592565,
+          "status": "train_evaluated",
+          "train_gain": 0.48089445711031087
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.004806454073100579
+          },
+          "orientation": 1,
+          "transform": "kalman_local_level",
+          "plan_identity": "a2daf0c57e898542a73a7117d4cf7bb6af3ad15be122cbb7b89bbabe68b6d14b",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0021196675181832,
+            "rank_icir": 0.014459473635962547,
+            "sharpe": -1.352250104983888,
+            "max_drawdown": 0.1293930571155373,
+            "turnover": 0.00701792662085015,
+            "worst_block_sharpe": -2.756857436940193
+          },
+          "raw_rank_ic_fold_gain": 0.000037006372086804,
+          "status": "train_evaluated",
+          "train_gain": -0.004794603092314442
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.004806454073100579
+          },
+          "orientation": -1,
+          "transform": "kalman_local_level",
+          "plan_identity": "df59305f9723c3400cb4931ec2a895e8cc059d61d78ca74a34277905ef93bf8e",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0021196675181832,
+            "rank_icir": -0.014459473635962547,
+            "sharpe": 1.2934670715589822,
+            "max_drawdown": 0.052075174418001094,
+            "turnover": 0.00701792662085015,
+            "worst_block_sharpe": -1.1650086344001538
+          },
+          "raw_rank_ic_fold_gain": -0.0315735060061997,
+          "status": "train_evaluated",
+          "train_gain": 0.4776585663041768
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.0028435908208181383
+          },
+          "orientation": 1,
+          "transform": "kalman_local_level",
+          "plan_identity": "67d8745246733dc4ed145201042fefa5ec72f22fed61e457eff9601cc039fec2",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0020697541423458773,
+            "rank_icir": 0.014102981348730479,
+            "sharpe": -1.4455316960387647,
+            "max_drawdown": 0.13239706228990433,
+            "turnover": 0.006690665793971127,
+            "worst_block_sharpe": -2.885125528615116
+          },
+          "raw_rank_ic_fold_gain": -0.00003933697373709149,
+          "status": "train_evaluated",
+          "train_gain": -0.018590175922068686
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.0028435908208181383
+          },
+          "orientation": -1,
+          "transform": "kalman_local_level",
+          "plan_identity": "90d4621c3d21b6c98ae6831eb66611ccea6ec4c4e955d3b04d906b1790863c57",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0020697541423458773,
+            "rank_icir": -0.014102981348730479,
+            "sharpe": 1.389977403305383,
+            "max_drawdown": 0.04975616807043766,
+            "turnover": 0.006690665793971127,
+            "worst_block_sharpe": -1.001280027007806
+          },
+          "raw_rank_ic_fold_gain": -0.03151943095031947,
+          "status": "train_evaluated",
+          "train_gain": 0.4970610452666194
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.0012012527662230554
+          },
+          "orientation": 1,
+          "transform": "kalman_local_level",
+          "plan_identity": "102ffb30ba2a975a475bf02662f31339f2844ed4979e2eb082b34198e954b428",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0020307694017153138,
+            "rank_icir": 0.013804431448846124,
+            "sharpe": -1.4572868358346116,
+            "max_drawdown": 0.1345526264476163,
+            "turnover": 0.006436129595287443,
+            "worst_block_sharpe": -2.971415078280179
+          },
+          "raw_rank_ic_fold_gain": -0.00017001367051392574,
+          "status": "train_evaluated",
+          "train_gain": -0.02131343168487787
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.0012012527662230554
+          },
+          "orientation": -1,
+          "transform": "kalman_local_level",
+          "plan_identity": "cd7e4f411da88fbde3377055c2bda1f53fdc09e969cacfc049ec942583d67595",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": 0.0020407317363137067,
+            "rank_icir": 0.013924907060618299,
+            "sharpe": -1.3242554242461808,
+            "max_drawdown": 0.12695597123113678,
+            "turnover": 0.008363332242463908,
+            "worst_block_sharpe": -2.6427099102170564
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0020307694017153138,
+            "rank_icir": -0.013804431448846124,
+            "sharpe": 1.404381556178632,
+            "max_drawdown": 0.049368090495251316,
+            "turnover": 0.006436129595287443,
+            "worst_block_sharpe": -0.9496002339952079
+          },
+          "raw_rank_ic_fold_gain": -0.03139944926556461,
+          "status": "train_evaluated",
+          "train_gain": 0.5012290761629935
+        }
+      ]
+    },
+    "alphasage_20260909062020_1a8fff63": {
+      "status": "raw_retained",
+      "selected_family": "NO_OP_RAW",
+      "train_gain": null,
+      "validation_lower_bound": null,
+      "reason": "no robust TRAIN improvement",
+      "plan_identity": "ae4f96284cea8333428b23acc5383e55db82981b199899b37005257e430aef68",
+      "baseline_diagnostics": {
+        "operations": [],
+        "omissions": [
+          "lineage_unknown"
+        ],
+        "accepted": false,
+        "reason": "no_eligible_baseline_operations"
+      },
+      "joint_diagnostics": {
+        "objective": "joint",
+        "cost_rate": 0.001,
+        "policy": "joint.v1"
+      },
+      "candidates": [
+        {
+          "family": "ABANDON",
+          "parameters": {},
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: ABANDON has no executable value-level mapping"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.5,
+            "half_life_relative": false
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "71053ec9deac0d1bc3d64b7141c9338c141ee0ad7c235712d88b511f001b9eba",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.5,
+            "half_life_relative": false
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "215955091e6f132150d2b1167856bf0721084ef98c8cbe6e5cfc07a2b50619c7",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.5,
+            "half_life_relative": true
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "d294c9f998f97620e786ac4c285d528ff4a4c9edb07436948b815335e1690725",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.5,
+            "half_life_relative": true
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "d334c349e4306157e96c40db94ca39fab9d9fdd2c6c1863d4cbb6856ed8c08b0",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.8,
+            "half_life_relative": false
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "fdef39f3a001e90c7d08e7810893bceec78d46794ff2fc5907f7579b73cb8069",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.8,
+            "half_life_relative": false
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "d342cf760bd9fbfad0ace39ac12d96d2fcdbef6ea7c24f4b0473b4aff62744b5",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.8,
+            "half_life_relative": true
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "31f3587a85e26bccaa120ada58063bbf555bf1b3278976944b501b13680bc1c9",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.8,
+            "half_life_relative": true
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "c58d2978a01a6812bf5cf9b7796e23d85c1bda37f8a534d9d80e2a1dc70d674d",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "INDUSTRY_NEUTRALIZATION",
+          "parameters": {
+            "exposure_set": "industry",
+            "method": "ols"
+          },
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel"
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 1,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "7244ec0b848f6e77e63fc8273044d40e4e4a10df4af6d1446b87618c910f4ec3",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 2,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "dfeb99614ea1357d9ac853a5c22fadfb55dbe8000fb4f40f128c802a4e33466a",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 1,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "ec47d30d0704e4fc3762190ecd1ec3a631ddb637dc4d3f45c63d2e34494ee221",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 2,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "6e6a33c68a5b94067547b0ecf55f31d1c25caf1e6b4d39cef763fbac774f9615",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 1,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "1b56e3b46e9a30f18397110d96e8ace194e46a03931871ea9b39373819e2db14",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 2,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "9584c0570351932fb51fc0f5f9d78e909387f5c2bd70e7fa73bc24ae2a8704cc",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "LOW_DOF_INTERACTION",
+          "parameters": {
+            "interaction_degree": 1,
+            "doe_reduction": 0.7
+          },
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation"
+        },
+        {
+          "family": "MISSINGNESS_FRESHNESS",
+          "parameters": {
+            "mode": "flag",
+            "freshness_window": 5
+          },
+          "orientation": 1,
+          "transform": "missing_indicator",
+          "plan_identity": "5d3f3d35f1fb5f0a366173f8ee537775583aa0072556aece669bd190e4534b7d",
+          "coverage": 0,
+          "valid_train_days": 0,
+          "status": "ineligible",
+          "reason": "ValueError: insufficient common coverage or training IC"
+        },
+        {
+          "family": "MISSINGNESS_FRESHNESS",
+          "parameters": {
+            "mode": "fill",
+            "freshness_window": 1
+          },
+          "orientation": 1,
+          "transform": "forward_fill",
+          "plan_identity": "f3b848d6df9665a237b0f0396acb1086540d003f3bd3421c393f2e80ccf55162",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "MISSINGNESS_FRESHNESS",
+          "parameters": {
+            "mode": "fill",
+            "freshness_window": 3
+          },
+          "orientation": 1,
+          "transform": "forward_fill",
+          "plan_identity": "740039906e015d71c9119e094aecba47de4539c69093b4b73b9174d903c4a479",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "MISSINGNESS_FRESHNESS",
+          "parameters": {
+            "mode": "fill",
+            "freshness_window": 5
+          },
+          "orientation": 1,
+          "transform": "forward_fill",
+          "plan_identity": "48ca877653ab634b3830d8b20b929c26a006bf58f6044d1eb3bce38339ffac2c",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "OPERATOR_SWAP",
+          "parameters": {
+            "target_family": "delay",
+            "aggressiveness": "conservative"
+          },
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "cross_sectional",
+            "tie_method": "average"
+          },
+          "orientation": 1,
+          "transform": "cs_rank",
+          "plan_identity": "b83b4c7ed2c959dc2362e3d357c3551807c5e94a8262ba420aa87175460283a4",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "REPRESENTATION_ZSCORE",
+          "parameters": {
+            "zscore_axis": "cross_sectional",
+            "cap": 3
+          },
+          "orientation": 1,
+          "transform": "capped_zscore",
+          "plan_identity": "22be4bf3fd586dd22ef82e0474cc66e25ced33b1c2191e9e7068a4f555cebc5d",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "ROBUST_OUTLIER",
+          "parameters": {
+            "lower_quantile": 0.01,
+            "upper_quantile": 0.99
+          },
+          "orientation": 1,
+          "transform": "cs_winsor",
+          "plan_identity": "9f7ee7712fd81cf67851ecde54b62d1be9e0ea6cd507eddfd094d28d73c00780",
+          "coverage": 0,
+          "valid_train_days": 0,
+          "status": "ineligible",
+          "reason": "ValueError: insufficient common coverage or training IC"
+        },
+        {
+          "family": "ROBUST_SCALE",
+          "parameters": {
+            "scale": "mad",
+            "center": "median"
+          },
+          "orientation": 1,
+          "transform": "robust_scale",
+          "plan_identity": "e15099565e57b55daf86e2bf019f7228312a3def121f3eb6f8390910e28c73ce",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "SIGN_ORIENTATION",
+          "parameters": {
+            "direction": "flip"
+          },
+          "orientation": 1,
+          "transform": "sign",
+          "plan_identity": "033703d529e52f54fcdfeb7fc05f76968b7c2cbca769dd78eefd7fa89deb191f",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "SIZE_NEUTRALIZATION",
+          "parameters": {
+            "exposure_set": "size",
+            "method": "ols"
+          },
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel"
+        },
+        {
+          "family": "STYLE_NEUTRALIZATION",
+          "parameters": {
+            "exposure_set": "style_multi",
+            "method": "ols"
+          },
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel"
+        },
+        {
+          "family": "TAIL_HINGE",
+          "parameters": {
+            "hinge": "top",
+            "hinge_value": 0
+          },
+          "orientation": 1,
+          "transform": "tail_hinge",
+          "plan_identity": "ae13ab43adee8068502ab3aefe6c3338a2584e94597f071cdbf57577e3a7f1aa",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "TAIL_HINGE",
+          "parameters": {
+            "hinge": "bottom",
+            "hinge_value": 0
+          },
+          "orientation": 1,
+          "transform": "tail_hinge",
+          "plan_identity": "8bf33c01fd883a3386e847378a023e7d66fa7513f89dd505ab6b7f87b3fe0a09",
+          "coverage": 0,
+          "valid_train_days": 0,
+          "status": "ineligible",
+          "reason": "ValueError: insufficient common coverage or training IC"
+        },
+        {
+          "family": "TAIL_SATURATION",
+          "parameters": {
+            "saturation_quantile": 0.97,
+            "saturate": "top"
+          },
+          "orientation": 1,
+          "transform": "tail_saturation",
+          "plan_identity": "da985aa7a9bfd4454a6bda9fb4b3789477937152923c41209b7f0f33d69d6f99",
+          "coverage": 0,
+          "valid_train_days": 0,
+          "status": "ineligible",
+          "reason": "ValueError: insufficient common coverage or training IC"
+        },
+        {
+          "family": "TAIL_SATURATION",
+          "parameters": {
+            "saturation_quantile": 0.97,
+            "saturate": "bottom"
+          },
+          "orientation": 1,
+          "transform": "tail_saturation",
+          "plan_identity": "cd696ff4971dffa20766ef3a0aa73bfdddcc7aa72d043186e771e44c065116c7",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "TAIL_SATURATION",
+          "parameters": {
+            "saturation_quantile": 0.97,
+            "saturate": "both"
+          },
+          "orientation": 1,
+          "transform": "tail_saturation",
+          "plan_identity": "409678c357265e00c3757c9323a664ad49bbeba87223126daf9fc194f0a8c877",
+          "coverage": 0,
+          "valid_train_days": 0,
+          "status": "ineligible",
+          "reason": "ValueError: insufficient common coverage or training IC"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 1,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "37ea3efe921441a910de97d510f636bb68c48dbc090fdf46c18246f6c67845b0",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 2,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "f1668d2b355fa29dec5c79d1594d0425871034d78b2d7fd8887fa3bd805bc087",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 1,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "1b1148accb12e3e98172f99c73783f4f08ce7a015c4eaa960604082f7c55af94",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 2,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "65599a059e6ab92fa3aff105bacac03c9fdc0ca7eb08ea2d1637f41ce64bd489",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 1,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "25ccc3793f4c632285188a4ad060e3d05de044fd1e6abb2d749546719966451e",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 2,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "transform": "rank_shape",
+          "plan_identity": "87afca7796925c10ff9307be0d716cba63142caefb9197bc1aa0bc39c2b29181",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "WINDOW_REFINEMENT",
+          "parameters": {
+            "window_mode": "shorter",
+            "scale": 0.7
+          },
+          "orientation": 1,
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 3,
+            "window": 3
+          },
+          "orientation": 1,
+          "transform": "trailing_sma",
+          "plan_identity": "65c2697c3b253418eded56ffb10f41c2ed06282673f1ef11a8c6fe2c196820cf",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 3,
+            "window": 3
+          },
+          "orientation": -1,
+          "transform": "trailing_sma",
+          "plan_identity": "5650d5783ff8a5a4021a3ec0094a653fb25f6cb51c981dfcd8720f97270bb3ab",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 5,
+            "window": 5
+          },
+          "orientation": 1,
+          "transform": "trailing_sma",
+          "plan_identity": "eeb55ec53273c7f3b3af9475e9e2c982742d127816b8e4f71e4414055f23bf38",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 5,
+            "window": 5
+          },
+          "orientation": -1,
+          "transform": "trailing_sma",
+          "plan_identity": "0f01e786651b5d7c6e57fe7eb13a845b6c455b3d066fb267e88c128b56e8e6fd",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 8,
+            "window": 8
+          },
+          "orientation": 1,
+          "transform": "trailing_sma",
+          "plan_identity": "9c02639d132593e05b0e3ef122c7781e04bd809841bab0ad3312b2061c5568c7",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 8,
+            "window": 8
+          },
+          "orientation": -1,
+          "transform": "trailing_sma",
+          "plan_identity": "5c98c3bb7443ea7363db4ebfc24b1f11cb6039ce3a24d9664c1a03b055bb7bc7",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 10,
+            "window": 10
+          },
+          "orientation": 1,
+          "transform": "trailing_sma",
+          "plan_identity": "40b199551019314959e2c728b4467d14750f8ae401d1211f97f7e7979ada2c65",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 10,
+            "window": 10
+          },
+          "orientation": -1,
+          "transform": "trailing_sma",
+          "plan_identity": "e94a744e223081fb3e2109335f7f4a414528d6e88e0ca9adf65d6d127d130b67",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 13,
+            "window": 13
+          },
+          "orientation": 1,
+          "transform": "trailing_sma",
+          "plan_identity": "f0c36393907948e90015d29322d2ab186af647605acfa67335378119c85e1ac8",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 13,
+            "window": 13
+          },
+          "orientation": -1,
+          "transform": "trailing_sma",
+          "plan_identity": "5aecb9288c1288875bf5b63664bf9f492b98dde4c6e7ec398271d6e1e3b93da6",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 20,
+            "window": 20
+          },
+          "orientation": 1,
+          "transform": "trailing_sma",
+          "plan_identity": "02574140d6417616d12ad9c667e1b5824b4dbac4147b6bd63f3a997e77489dbb",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 20,
+            "window": 20
+          },
+          "orientation": -1,
+          "transform": "trailing_sma",
+          "plan_identity": "0f5e9fdfa9ac9fd3026fced78853014a4f7704b2befda6ffa6fa6dbc334cab84",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 3,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "f8eca2bc43cf3abac817e351892cfda867573c9d944ef592eb429187903f91c8",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 3,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "ab45eaa225301c75cdc96af3cafbe1b3466b0e1a14861caec8d849f97177e0c6",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 5,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "7b2b51add8db8e7d2394ff1b5c8d9c7dbd5afad383496605cbf0451b262a3620",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 5,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "955b8513353122aceb3a56b5daade8d4ddcfe8de1031afda054ad5205594f37e",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 8,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "6784bc285948fd0921332f538414a76fce72ce3ee55bb7b3f5ec6213cd279484",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 8,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "cf45b7a45aec4c885af588982f6d2a76c9b1a23bdb579d6c127cc3d0386e259a",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 10,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "1c702ea3ecff6369b2615c32c4db0d7cb84dea462f2065a365571175031684be",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 10,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "fe8237931d551ea655fd583f108ea9b2790786a7ab36cb2b7b0c2621d9721d67",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 13,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "3e4517c7b25e15cbc39dfbc40f3171da3d27c4f03fd6960589f01ec1235cf2fb",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 13,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "68ad6d18deaeec97a024229011f35b6364fe52a0b4f753f4882b229ab4bf1405",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 20,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "transform": "ewma",
+          "plan_identity": "39c33127a3b8e8b2ca24fa9799799ef4ed2a8e644f876625057bff530a5167c9",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 20,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "transform": "ewma",
+          "plan_identity": "04d25a88e5dcb27cd1964d529b4870a74b60c744606af0cccafff7a07da229b6",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.20629947401590026
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "1f57332eeb52f063890d303315f36f85e3edf04c466b5f875d9f6624abd0bd1f",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.20629947401590026
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "899c4c455d929ec8ef382f4eac46e9e49a9a825f890184f8ab4b7db73a6caaf1",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.12944943670387585
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "c5c4e5e5dea147b23f9155b81fa7ad98566e285baa66dc537906bb80c76c825c",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.12944943670387585
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "980f67f4729d357e1a312c155ffa459700d2ffdd7f822127c4d9d9cf322c4661",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.08299595679532877
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "34019d11cc0ff757516af29e6f45b8ec264a2bf51933ebf70ca91f1fbd3c8fac",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.08299595679532877
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "136706916567708b7ff3621af7b820397cbe0f11ef72dd5cb3bf12048678798a",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.06696700846319258
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "90b47f1da139b901e332065370040bfd830bbb8df4457c113e972932a1280851",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.06696700846319258
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "479055f9d9e5d9c0cdd11dc711fdfa15ab8ffa0662747959e6690738561b4ec2",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.051922485660828535
+          },
+          "orientation": 1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "bbd39bcf440d021b8d56ef3f3fcc88ed760f8a506c8e9f1fa34cf5c7315f4152",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.051922485660828535
+          },
+          "orientation": -1,
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "db05307253721c6802b384fc1010cd839a9982baea2764658522213847a23a7e",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 8,
+            "period_fast": 2,
+            "period_slow": 24,
+            "use_current": false
+          },
+          "orientation": 1,
+          "transform": "kama",
+          "plan_identity": "d5428902c5400affcc51a08dbb31f7f3dfc7b812ce595f1bb56c44f747ab14aa",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 8,
+            "period_fast": 2,
+            "period_slow": 24,
+            "use_current": false
+          },
+          "orientation": -1,
+          "transform": "kama",
+          "plan_identity": "33d199ad0041aba5bde8ba120c3bfb7d85f7adaabec0f1c8bec176675141b69c",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 10,
+            "period_fast": 2,
+            "period_slow": 30,
+            "use_current": false
+          },
+          "orientation": 1,
+          "transform": "kama",
+          "plan_identity": "bf32665628e068f9d564f75a829a1cc92e1975a6981345516853a53eba9cb896",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 10,
+            "period_fast": 2,
+            "period_slow": 30,
+            "use_current": false
+          },
+          "orientation": -1,
+          "transform": "kama",
+          "plan_identity": "2c3cc17c74ffc5f5f30ab605a04932bac377fc1fe10482917656543b48e2940d",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 13,
+            "period_fast": 2,
+            "period_slow": 39,
+            "use_current": false
+          },
+          "orientation": 1,
+          "transform": "kama",
+          "plan_identity": "93c6c12c97b38e3ef986ee407adb5ccf0f13a1e8dd37076043b13adcb2f573a8",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 13,
+            "period_fast": 2,
+            "period_slow": 39,
+            "use_current": false
+          },
+          "orientation": -1,
+          "transform": "kama",
+          "plan_identity": "58e3a58f412cdd5c800d29f760f6a8cf028ebab03640060aefb7d1cc400cfd04",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 20,
+            "period_fast": 2,
+            "period_slow": 60,
+            "use_current": false
+          },
+          "orientation": 1,
+          "transform": "kama",
+          "plan_identity": "3593e1bf0ee69c972ffad5ecd64fc6ff8ad7b2efdf93ea9dc06998b9caf172f0",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 20,
+            "period_fast": 2,
+            "period_slow": 60,
+            "use_current": false
+          },
+          "orientation": -1,
+          "transform": "kama",
+          "plan_identity": "6326429efbbe9cf1b09e3934c36c40ed4514124047088433857a78ad7da9201a",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.053621575878972906
+          },
+          "orientation": 1,
+          "transform": "kalman_local_level",
+          "plan_identity": "a57408d96b90af39485f271bb2fbe11a322881289ccc75ad0b54180b586b47ee",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.053621575878972906
+          },
+          "orientation": -1,
+          "transform": "kalman_local_level",
+          "plan_identity": "555b65d007d31bf6381bb890868d74b150ee5ca694d4f29a7bb21a29c07ac5d6",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.019248918293159143
+          },
+          "orientation": 1,
+          "transform": "kalman_local_level",
+          "plan_identity": "27315604a969003256948b1d5f745f922905dbefd56a5f31bb8f56b489854604",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.019248918293159143
+          },
+          "orientation": -1,
+          "transform": "kalman_local_level",
+          "plan_identity": "5f49692852c9a2a13dd39987f5fd6c07a3c22a7f200a119fbfca14721459c5ec",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.007511775869928892
+          },
+          "orientation": 1,
+          "transform": "kalman_local_level",
+          "plan_identity": "4cd5a5234a03eb1d6e03c8eafbcd3ac4195035e26dc8d069e65ad22b15e3f35b",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.007511775869928892
+          },
+          "orientation": -1,
+          "transform": "kalman_local_level",
+          "plan_identity": "362fc8402eb0cb9ddca717bf5a81a53dd4e7df4ec96152181e49437bb160877b",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.004806454073100579
+          },
+          "orientation": 1,
+          "transform": "kalman_local_level",
+          "plan_identity": "9f6380f08738228aa5eae1d7dbf9cb287a74f112e7abfb1f721b5624b9179f78",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.004806454073100579
+          },
+          "orientation": -1,
+          "transform": "kalman_local_level",
+          "plan_identity": "fd82c09bbd5bb359cc3d4521492f3d655b991f3e59d6f0f8aabd3e6cb3f19c65",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.0028435908208181383
+          },
+          "orientation": 1,
+          "transform": "kalman_local_level",
+          "plan_identity": "ebb62b193323b50fc9857f434e1af5777d0f3944c1d9a0f2214a5e27aac0e423",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.0028435908208181383
+          },
+          "orientation": -1,
+          "transform": "kalman_local_level",
+          "plan_identity": "1f312d2b485342db80705fe57ae3cd3563cb279611c2d216a915b8019d9cbfbe",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.0012012527662230554
+          },
+          "orientation": 1,
+          "transform": "kalman_local_level",
+          "plan_identity": "6893a32b8054d45af5a41b2bec00035cab044094943fd84595d1e892cb1c452b",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1,
+            "process_noise": 0.0012012527662230554
+          },
+          "orientation": -1,
+          "transform": "kalman_local_level",
+          "plan_identity": "5e546115da08bfa30715d0dfd6a0779327becb311b448d1937639da966c1f088",
+          "coverage": 1,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "ValueError: missing or nonfinite joint metrics cannot be imputed"
+        }
+      ]
+    },
+    "alphasage_20260909062020_20fcde8b": {
+      "status": "invalid_raw",
+      "selected_family": "NO_OP_RAW",
+      "train_gain": null,
+      "validation_lower_bound": null,
+      "reason": "insufficient valid RAW training IC",
+      "plan_identity": "bf6e2bf464eceb989daf6c216e03b30f904a031285cdf3c21240ca643c98e987",
+      "baseline_diagnostics": {
+        "operations": [],
+        "omissions": [
+          "lineage_unknown"
+        ],
+        "accepted": false,
+        "reason": "no_eligible_baseline_operations"
+      },
+      "joint_diagnostics": {
+        "objective": "joint",
+        "cost_rate": 0.001,
+        "policy": "joint.v1"
+      },
+      "candidates": []
+    }
+  },
+  "selection_objective": "joint.v1: Sharpe, RankICIR, RankIC, drawdown, worst-block Sharpe, turnover"
+}

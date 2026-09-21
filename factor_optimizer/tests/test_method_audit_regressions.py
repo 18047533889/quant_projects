@@ -29,7 +29,7 @@ def test_constant_candidate_days_cannot_disappear_from_coverage():
     raw = batch.values[:, :, 0]
     candidate = raw.copy()
     candidate[::2] = 0.
-    _, good, retention = _pair_ic(raw, candidate, batch, labels, tuple(range(100)), BatchOptimizationConfig())
+    _, good, retention = _pair_ic(raw, candidate, batch, labels, tuple(range(100)), BatchOptimizationConfig(selection_objective='rank_ic', ))
     assert good.sum() == 50
     assert retention == pytest.approx(.5)
 
@@ -39,7 +39,7 @@ def test_missing_whole_candidate_days_count_against_valid_ic_coverage():
     raw = batch.values[:, :, 0]
     candidate = raw.copy()
     candidate[::2] = np.nan
-    _, good, retention = _pair_ic(raw, candidate, batch, labels, tuple(range(100)), BatchOptimizationConfig())
+    _, good, retention = _pair_ic(raw, candidate, batch, labels, tuple(range(100)), BatchOptimizationConfig(selection_objective='rank_ic', ))
     assert good.sum() == 50
     assert retention == pytest.approx(.5)
 
@@ -47,7 +47,7 @@ def test_missing_whole_candidate_days_count_against_valid_ic_coverage():
 @pytest.mark.parametrize("seed", [193, 817])
 def test_negative_noisy_factor_can_combine_orientation_and_smoothing(seed):
     batch, labels = panel(seed)
-    config = BatchOptimizationConfig(families=("SIGN_ORIENTATION", "CAUSAL_SMOOTHING"),
+    config = BatchOptimizationConfig(selection_objective='rank_ic', families=("SIGN_ORIENTATION", "CAUSAL_SMOOTHING"),
                                      bootstrap_draws=99)
     result = optimize_factor_batch(batch, labels, config=config, allow_research=True)
     outcome = result.factors["negative_noisy"]
@@ -66,19 +66,19 @@ def test_negative_noisy_factor_can_combine_orientation_and_smoothing(seed):
 
 def test_auto_grid_covers_both_tail_directions():
     from factor_optimizer.research_batch import _specs
-    specs = _specs(BatchOptimizationConfig(families=("TAIL_HINGE", "TAIL_SATURATION")))
+    specs = _specs(BatchOptimizationConfig(selection_objective='rank_ic', families=("TAIL_HINGE", "TAIL_SATURATION")))
     assert {p["hinge"] for f,p in specs if f == "TAIL_HINGE"} == {"top", "bottom"}
     assert {p["saturate"] for f,p in specs if f == "TAIL_SATURATION"} == {"top", "bottom", "both"}
 
 
 def test_scale_is_rejected_at_configuration_boundary():
     with pytest.raises(ValueError, match="scale"):
-        BatchOptimizationConfig(natural_time_scale=10001)
+        BatchOptimizationConfig(selection_objective='rank_ic', natural_time_scale=10001)
 
 
 def test_compound_selection_does_not_consume_test_labels():
     batch, labels = panel()
-    config = BatchOptimizationConfig(families=("SIGN_ORIENTATION", "DECAY_REFINEMENT"), bootstrap_draws=99)
+    config = BatchOptimizationConfig(selection_objective='rank_ic', families=("SIGN_ORIENTATION", "DECAY_REFINEMENT"), bootstrap_draws=99)
     a = optimize_factor_batch(batch, labels, config=config, allow_research=True)
     values = labels.values.copy()
     values[240:] = np.nan
@@ -92,7 +92,7 @@ def test_compound_selection_does_not_consume_test_labels():
 
 def test_disabling_composition_retains_standalone_sign_and_candidate_budget_is_enforced():
     batch, labels = panel()
-    conf = BatchOptimizationConfig(families=("SIGN_ORIENTATION", "DECAY_REFINEMENT"),
+    conf = BatchOptimizationConfig(selection_objective='rank_ic', families=("SIGN_ORIENTATION", "DECAY_REFINEMENT"),
                                     compose_smoothing_sign=False, bootstrap_draws=99)
     outcome = optimize_factor_batch(batch, labels, config=conf, allow_research=True).factors["negative_noisy"]
     assert outcome.selected_family == "SIGN_ORIENTATION"
@@ -105,7 +105,7 @@ def test_disabling_composition_retains_standalone_sign_and_candidate_budget_is_e
 @pytest.mark.parametrize("value", [1, "yes", None])
 def test_orientation_configuration_requires_real_boolean(value):
     with pytest.raises(ValueError, match="compose_smoothing_sign"):
-        BatchOptimizationConfig(compose_smoothing_sign=value)
+        BatchOptimizationConfig(selection_objective='rank_ic', compose_smoothing_sign=value)
 
 
 def test_signed_candidates_reuse_one_base_materialization(monkeypatch):
@@ -120,7 +120,7 @@ def test_signed_candidates_reuse_one_base_materialization(monkeypatch):
 
     monkeypatch.setattr(ValueRepairPlan, "execute", measured)
     batch, labels = panel()
-    config = BatchOptimizationConfig(families=("SIGN_ORIENTATION", "DECAY_REFINEMENT"),
+    config = BatchOptimizationConfig(selection_objective='rank_ic', families=("SIGN_ORIENTATION", "DECAY_REFINEMENT"),
                                      bootstrap_draws=99)
     result = optimize_factor_batch(batch, labels, config=config, allow_research=True)
     outcome = result.factors["negative_noisy"]

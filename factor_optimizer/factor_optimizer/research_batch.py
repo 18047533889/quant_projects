@@ -1,7 +1,7 @@
 """Bounded research batch optimization with automatic chronological splitting.
 
 No production admission, trading-profit claim, or sealed-test evaluation. QE
-owns RankIC; FP/FE adapters own transformations. Only TRAIN chooses one plan
+owns IC and portfolio metrics; FP/FE adapters own transformations. Only TRAIN chooses one plan
 per factor. VALIDATION can accept that plan or fall back to RAW, never retry
 the next candidate. TEST labels are never sent to an evaluator here.
 """
@@ -38,8 +38,15 @@ class BatchOptimizationConfig:
     families: tuple[str, ...] = ()
     maximum_candidates: int = 128
     compose_smoothing_sign: bool = True
+    selection_objective: str = 'joint'
+    research_cost_rate: float = .001
 
     def __post_init__(self):
+        if self.selection_objective not in {'joint', 'rank_ic'}:
+            raise ValueError('selection_objective must be joint or rank_ic')
+        if (isinstance(self.research_cost_rate, bool) or not math.isfinite(self.research_cost_rate)
+                or self.research_cost_rate < 0):
+            raise ValueError('research_cost_rate must be finite and nonnegative')
         for name in ("train_fraction", "validation_fraction",
                      "confidence_level"):
             v = getattr(self, name)
@@ -99,6 +106,7 @@ class FactorOptimizationResult:
     validation_coverage: float | None = None
     training_diagnostics: Mapping[str, Any] | None = None
     baseline_diagnostics: Mapping[str, Any] | None = None
+    joint_diagnostics: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -255,6 +263,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     VALIDATION, and leave TEST labels unused. The output applies the frozen
     accepted plan to factor values (including later rows), not future labels.
     Missing DSL/exposures are explicit ineligible candidate records.
+    Default joint.v1 compares costed Sharpe, ICIR, IC, drawdown, stability and
+    turnover. Explicit selection_objective='rank_ic' reproduces legacy scoring.
     """
     if allow_research is not True:
         raise ValueError("explicit allow_research=True is required; not production admission")
@@ -277,6 +287,9 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     from factor_optimizer.research_diagnostics import diagnose_training_batch
     from factor_optimizer.research_baseline import (
         compile_baseline, assess_baseline_training, BaselineRepairPlan,
+    )
+    from factor_optimizer.research_fitness import (
+        paired_series, summarize, joint_utility, passes_floors, compare_joint,
     )
     from factor_optimizer.adapters.repair_execution import compile_value_repair
     from factor_optimizer.adapters.preprocessing import compile_admissible_smoothing_grid
@@ -356,6 +369,10 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                                        natural_time_scale=config.natural_time_scale,
                                        training_context_ref=train_ref)
         chosen, train_gain, lower = raw_plan, None, None
+        joint = config.selection_objective == 'joint'
+        joint_record = {'objective': config.selection_objective,
+                        'cost_rate': config.research_cost_rate if joint else None,
+                        'policy': 'joint.v1' if joint else 'legacy_rank_ic'}
         validation_identity, validation_coverage = None, None
         status, reason, records = "raw_retained", "no robust TRAIN improvement", []
         try:
@@ -370,6 +387,19 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                     baseline_gain = float(np.mean(folds) - np.std(folds))
                     frozen_baseline = BaselineRepairPlan(baseline_plan, raw_plan)
                     best = (baseline_gain, frozen_baseline.identity, frozen_baseline, baseline_values)
+                    if joint:
+                        try:
+                            ar, ac = paired_series(prefix, baseline_values, batch, labels, split.train_indices,
+                                minimum_assets=config.minimum_assets, cost_rate=config.research_cost_rate)
+                            mr, mc = summarize(ar), summarize(ac)
+                            baseline_gain = joint_utility(mc)-joint_utility(mr)
+                            best = ((baseline_gain, frozen_baseline.identity, frozen_baseline, baseline_values)
+                                    if passes_floors(mr, mc) else None)
+                            joint_record['baseline_train_raw'] = mr
+                            joint_record['baseline_train_candidate'] = mc
+                        except ValueError as exc:
+                            best = None
+                            joint_record['baseline_unavailable'] = str(exc)
                 last_base_identity, last_base_values = None, None
                 for family, params, precompiled, orientation in proposals:
                     record = {"family": family, "parameters": dict(params), "orientation": orientation}
@@ -396,6 +426,15 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                             raise ValueError("insufficient chronological training folds")
                         fold_gains = np.array([np.nanmean(x) for x in chunks])
                         gain = float(fold_gains.mean() - fold_gains.std())
+                        if joint:
+                            ar, ac = paired_series(prefix, values, batch, labels, split.train_indices,
+                                minimum_assets=config.minimum_assets, cost_rate=config.research_cost_rate)
+                            mr, mc = summarize(ar), summarize(ac)
+                            record.update(train_raw_metrics=mr, train_candidate_metrics=mc,
+                                          raw_rank_ic_fold_gain=gain)
+                            if not passes_floors(mr, mc):
+                                raise ValueError('joint raw-relative degradation floor failed')
+                            gain = joint_utility(mc)-joint_utility(mr)
                         record.update(status="train_evaluated", train_gain=gain, plan_identity=plan.identity,
                                       coverage=coverage)
                         if gain > config.minimum_improvement:
@@ -421,7 +460,21 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                         batch, labels, split.validation_indices, config)
                     validation_coverage = coverage
                     if coverage >= config.minimum_coverage and good.sum() >= config.minimum_validation_days:
-                        lower = _lower_bound(delta, config, labels.horizon)
+                        if joint:
+                            ar, ac = paired_series(validation_raw, validation_values, batch, labels,
+                                split.validation_indices, minimum_assets=config.minimum_assets,
+                                cost_rate=config.research_cost_rate)
+                            mr, mc = summarize(ar), summarize(ac)
+                            joint_record.update(validation_raw=mr, validation_candidate=mc)
+                            if passes_floors(mr, mc):
+                                comparison = compare_joint(ar, ac, config)
+                                joint_record['comparison_status'] = comparison.status.value
+                                if comparison.difference_interval is not None:
+                                    lower = comparison.difference_interval[0]
+                            else:
+                                joint_record['comparison_status'] = 'DEGRADATION_FLOOR_FAILED'
+                        else:
+                            lower = _lower_bound(delta, config, labels.horizon)
                     baseline_only = winner.family == 'BASELINE'
                     confirmed = lower is not None and (
                         lower >= -maximum_baseline_loss if baseline_only
@@ -447,7 +500,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
         results[factor_id] = FactorOptimizationResult(
             factor_id, status, chosen.family, chosen.identity, chosen, train_gain, lower,
             tuple(records), reason, validation_identity, validation_coverage, MappingProxyType(diagnosis),
-            MappingProxyType(baseline_record))
+            MappingProxyType(baseline_record), MappingProxyType(joint_record))
     values = np.stack(outputs, axis=-1)
     optimized = FactorBatch(batch.factor_ids, batch.time_axis, batch.asset_axis,
                             values, validity=np.isfinite(values),

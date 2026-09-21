@@ -45,7 +45,7 @@ def _config(**overrides):
         bootstrap_draws=99,
     )
     values.update(overrides)
-    return BatchOptimizationConfig(**values)
+    return BatchOptimizationConfig(selection_objective='rank_ic', **values)
 
 
 def test_long_forward_labels_are_purged_by_actual_end_time_not_nominal_horizon():
@@ -156,7 +156,7 @@ def test_factor_validity_false_is_equivalent_to_missing_raw_value():
 @pytest.mark.parametrize("families", ["SIGN_ORIENTATION", (True,), ("",)])
 def test_family_configuration_rejects_non_tuple_or_non_name_members(families):
     with pytest.raises(ValueError, match="families"):
-        BatchOptimizationConfig(families=families)
+        BatchOptimizationConfig(selection_objective='rank_ic', families=families)
 
 
 @pytest.mark.parametrize("field", [
@@ -169,8 +169,7 @@ def test_family_configuration_rejects_non_tuple_or_non_name_members(families):
 ])
 def test_boolean_and_nan_numeric_configuration_is_rejected(field):
     with pytest.raises((TypeError, ValueError)):
-        BatchOptimizationConfig(**{field: True})
+        BatchOptimizationConfig(selection_objective='rank_ic', **{field: True})
     with pytest.raises((TypeError, ValueError)):
-        BatchOptimizationConfig(**{field: float("nan")})
-
+        BatchOptimizationConfig(selection_objective='rank_ic', **{field: float("nan")})
 

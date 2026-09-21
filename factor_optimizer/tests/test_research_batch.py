@@ -20,7 +20,9 @@ def fixture():
 
 def api():
     from factor_optimizer.research_batch import optimize_factor_batch, BatchOptimizationConfig
-    return optimize_factor_batch, BatchOptimizationConfig
+    # These analytical fixtures test RankIC mechanics, not daily return risk.
+    from functools import partial
+    return optimize_factor_batch, partial(BatchOptimizationConfig, selection_objective='rank_ic')
 
 def test_automatic_batch_repairs_sign_and_u_but_preserves_good_and_invalid_raw():
     optimize, Config = api()

@@ -73,9 +73,10 @@ result = optimize_factor_batch(
 
 ## 尚未闭合的范围
 
-当前训练退化保护与研究选优仍使用 RankIC。Sharpe、RankICIR、回撤、
-换手和稳定性的联合决策、真实 COS 配方谱系/暴露的自动加载，以及最终冻结 TEST
-和全样本分开的报告，仍需继续接入；本说明不声称这些已完成。
+基础预处理 TRAIN 退化保护仍使用 RankIC；后续默认选择与验证已改为
+[joint.v1](JOINT_SELECTION.md)，包含 Sharpe、RankICIR、回撤、换手与稳定性。
+真实 COS 配方谱系/暴露的自动加载，以及最终冻结 TEST 和全样本分开的报告仍待完成。
+下文早期回放数字来自当时的 RankIC 模式，不代表 joint.v1 的回放结果。
 
 ## 2026-09-22 验证证据
 

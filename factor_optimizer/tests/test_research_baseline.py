@@ -74,7 +74,7 @@ def test_baseline_training_guard_rejects_large_loss_and_ignores_future_labels():
     from factor_optimizer.research_batch import BatchOptimizationConfig, automatic_time_split
     from dataclasses import replace
     batch, labels = fixture()
-    config = BatchOptimizationConfig()
+    config = BatchOptimizationConfig(selection_objective='rank_ic', )
     split = automatic_time_split(labels, config)
     raw = batch.values[:, :, 0]
     candidate = -raw
@@ -95,7 +95,7 @@ def test_batch_applies_baseline_before_search_and_freezes_composed_plan():
     batch, labels = fixture()
     batch = replace(batch, factor_ids=('good',), values=batch.values[:, :, :1])
     result = optimize_factor_batch(batch, labels, allow_research=True,
-        config=BatchOptimizationConfig(families=('SIGN_ORIENTATION',)),
+        config=BatchOptimizationConfig(selection_objective='rank_ic', families=('SIGN_ORIENTATION',)),
         lineages={'good': TransformLineage()})
     factor = result.factors['good']
     assert factor.selected_family == 'BASELINE'
@@ -117,7 +117,7 @@ def test_validation_rejects_frozen_baseline_without_retry():
     y = labels.values.copy()
     y[144:192] = 0
     result = optimize_factor_batch(batch, replace(labels, values=y), allow_research=True,
-        config=BatchOptimizationConfig(families=('SIGN_ORIENTATION',)),
+        config=BatchOptimizationConfig(selection_objective='rank_ic', families=('SIGN_ORIENTATION',)),
         lineages={'good': TransformLineage()})
     assert result.factors['good'].selected_family == 'NO_OP_RAW'
     np.testing.assert_array_equal(result.optimized.values, batch.values)
@@ -130,7 +130,7 @@ def test_validation_exposure_error_cannot_change_training_baseline_decision():
         'asset_id': np.tile(batch.asset_axis.values, 240),
         'available_time': np.repeat(batch.time_axis.values, 40), 'size': 1.})
     kwargs = dict(allow_research=True, lineages={'good': TransformLineage()},
-        exposure_columns=('size',), config=BatchOptimizationConfig(families=('SIGN_ORIENTATION',)))
+        exposure_columns=('size',), config=BatchOptimizationConfig(selection_objective='rank_ic', families=('SIGN_ORIENTATION',)))
     clean = optimize_factor_batch(batch, labels, exposures=exposures, **kwargs)
     poisoned = exposures.copy()
     poisoned.loc[poisoned.date >= 144, 'available_time'] += 1000
@@ -147,7 +147,7 @@ def test_baseline_plus_sign_is_replayed_as_one_frozen_pipeline():
     batch = replace(batch, values=-batch.values)
     result = optimize_factor_batch(batch, labels, allow_research=True,
         lineages={'good': TransformLineage()},
-        config=BatchOptimizationConfig(families=('SIGN_ORIENTATION',)))
+        config=BatchOptimizationConfig(selection_objective='rank_ic', families=('SIGN_ORIENTATION',)))
     selected = result.factors['good']
     assert selected.selected_family == 'SIGN_ORIENTATION'
     assert hasattr(selected.plan, 'baseline')
