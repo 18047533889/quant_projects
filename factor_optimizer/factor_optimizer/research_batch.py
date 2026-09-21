@@ -107,6 +107,7 @@ class FactorOptimizationResult:
     training_diagnostics: Mapping[str, Any] | None = None
     baseline_diagnostics: Mapping[str, Any] | None = None
     joint_diagnostics: Mapping[str, Any] | None = None
+    materialization_error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -497,6 +498,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                         'policy': 'joint.v1' if joint else 'legacy_rank_ic'}
         validation_identity, validation_coverage = None, None
         status, reason, records = "raw_retained", "no robust TRAIN improvement", []
+        materialization_error = None
         try:
             _, raw_good, _ = _pair_ic(prefix, prefix, batch, labels, split.train_indices, config,
                                       reference_cache=train_ic_cache)
@@ -621,7 +623,17 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                 full = pd.DataFrame({"date": np.repeat(batch.time_axis.values, raw.shape[1]),
                                      "asset_id": np.tile(batch.asset_axis.values, len(raw)), "value": raw.ravel()})
                 kwargs = {'exposures': exposures} if isinstance(chosen, BaselineRepairPlan) else {}
-                out = np.asarray(chosen.execute(full, allow_research=True, **kwargs), dtype=float).reshape(raw.shape)
+                try:
+                    out = np.asarray(chosen.execute(full, allow_research=True, **kwargs), dtype=float).reshape(raw.shape)
+                except Exception as exc:
+                    # Future input failures cannot rewrite the frozen selection
+                    # or previously validated values. Do not splice RAW into an
+                    # optimized series, and do not retry selection on TEST.
+                    materialization_error = f"{type(exc).__name__}: {exc}"
+                    out = np.full(raw.shape, np.nan)
+                    out[:split.test_start] = validation_values
+                    status = "materialization_failed"
+                    reason = "frozen selection preserved; post-validation values unavailable"
         except Exception as exc:
             chosen, out, status = raw_plan, raw, "error_raw_retained"
             reason = f"{type(exc).__name__}: {exc}"
@@ -629,7 +641,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
         results[factor_id] = FactorOptimizationResult(
             factor_id, status, chosen.family, chosen.identity, chosen, train_gain, lower,
             tuple(records), reason, validation_identity, validation_coverage, MappingProxyType(diagnosis),
-            MappingProxyType(baseline_record), MappingProxyType(joint_record))
+            MappingProxyType(baseline_record), MappingProxyType(joint_record), materialization_error)
     values = np.stack(outputs, axis=-1)
     optimized = FactorBatch(batch.factor_ids, batch.time_axis, batch.asset_axis,
                             values, validity=np.isfinite(values),

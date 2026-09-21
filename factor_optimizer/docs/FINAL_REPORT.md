@@ -5,6 +5,20 @@
 冻结包含原始/输出数组与有效掩码、轴、选中计划、时间分割及搜索配置的身份。
 冻结不读取标签。后续缓冲区、计划或配置改变，会在打开测试标签前被拒绝。
 
+## 后续落值失败不改写已冻结方案
+
+通过 VALIDATION 的方案在应用到完整输入时，如果 TEST 区间的暴露出现晚到、
+重复键等执行异常，返回 `status=materialization_failed` 和
+`materialization_error`。保留原先的 plan_identity、selected_family、
+TRAIN 增益和 VALIDATION 置信下界；此前已成功生成的验证前缀保持不变，
+从 test_start 起的输出为 NaN、validity=False。
+
+这不是切换为 RAW，更不是重新在 TEST 挑选方案。调用方必须显示失败，
+不能把缺失值填零或将该因子当成完整可用结果。修正输入后应使用同一个
+冻结 plan 重放，不因未来数据故障重新搜索。最终报告的冻结与身份核验
+都会拒绝未解决的 materialization_failed，避免在已知无法生成输出时消耗
+一次性的 TEST 标签访问机会。成功落值路径不改变既有结果。
+
 ## 一次性读取与持久化
 
 `evaluate_frozen(frozen, broker)` 必须获得既有 `TestAuthorityBroker`，
@@ -69,6 +83,19 @@ report = evaluate_frozen(frozen, broker)
 使用带随机日收益的合成数据验证真实 broker/SQLite 跨实例持久行为，不模拟其权限判定。
 覆盖成功报告、缓存复用、冻结输出篡改、成本配置更改、无持久权限和读取后失败。
 真实 COS TEST 还没有打开：自动化整改尚未全部收尾，必须保留最终独立检验机会。
+
+后续落值隔离补充（2026-09-22）：晚到暴露和重复键两个仅发生于 TEST
+日期的反例，旧实现都错误改变已冻结 plan_identity；修复后保留已选方案、
+已验证前缀与验证统计，后续值缺失且最终报告拒绝。专项测试 20 passed；
+两库全套 1770 passed、1 xfailed、16 warnings（137.77 秒）。
+根测试仍为 14 项既有收集错误（57.58 秒），清单同 METHOD_AUDIT_20260922.md。
+
+真实 COS 因子 alphasage_20260909062020_09e3f39d，经 DataAccess 读取，
+500 日 × 256 股票，bootstrap_draws=99，修改前后完整搜索 95 个候选，
+输出数组、候选评分记录、方案身份、状态与验证下界完全一致，均保留 RAW。
+这验证成功路径未变，不代表该因子得到收益提升；未计算 TEST 指标，也
+不是性能加速实验。来源及内容校验见
+[真实对照证据](materialization_real_ab_20260922.json)。
 
 2026-09-22 验证：优化库与预处理库 **1,724 passed、1 xfailed、16 warnings**，
 123.66 秒。XFAIL 为既有离线 HP 滤波的前缀不变性。

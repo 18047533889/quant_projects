@@ -108,6 +108,40 @@ def test_batch_applies_baseline_before_search_and_freezes_composed_plan():
     np.testing.assert_allclose(factor.plan.execute(long, allow_research=True),
                                result.optimized.values[:, :, 0].ravel())
 
+@pytest.mark.parametrize("failure", ["availability", "duplicate"])
+def test_test_period_exposure_failure_preserves_frozen_selection_and_prefix(failure):
+    from factor_optimizer.research_batch import optimize_factor_batch, BatchOptimizationConfig
+    batch, labels = fixture()
+    exposures = pd.DataFrame({'date': np.repeat(batch.time_axis.values, 40),
+        'asset_id': np.tile(batch.asset_axis.values, 240),
+        'available_time': np.repeat(batch.time_axis.values, 40), 'size': 1.})
+    kwargs = dict(allow_research=True, lineages={'good': TransformLineage()},
+        exposure_columns=('size',), config=BatchOptimizationConfig(
+            selection_objective='rank_ic', families=('SIGN_ORIENTATION',)))
+    clean = optimize_factor_batch(batch, labels, exposures=exposures, **kwargs)
+    assert clean.factors['good'].selected_family == 'BASELINE'
+    cut = clean.split.test_start
+    poisoned = exposures.copy()
+    if failure == "availability":
+        poisoned.loc[poisoned.date >= cut, 'available_time'] += 1000
+    else:
+        poisoned = pd.concat([poisoned, poisoned.loc[poisoned.date == cut].iloc[:1]])
+    bad = optimize_factor_batch(batch, labels, exposures=poisoned, **kwargs)
+    expected, actual = clean.factors['good'], bad.factors['good']
+    assert actual.plan_identity == expected.plan_identity
+    assert actual.selected_family == expected.selected_family
+    assert actual.train_gain == expected.train_gain
+    assert actual.validation_lower_bound == expected.validation_lower_bound
+    assert actual.status == 'materialization_failed'
+    assert actual.materialization_error
+    np.testing.assert_array_equal(bad.optimized.values[:cut], clean.optimized.values[:cut])
+    assert np.isnan(bad.optimized.values[cut:]).all()
+    assert not bad.optimized.validity[cut:].any()
+    assert not bad.test_evaluated
+    from factor_optimizer.research_final_report import freeze_selection
+    with pytest.raises(ValueError, match='materialization'):
+        freeze_selection(batch, bad, dataset_identity='synthetic')
+
 
 def test_validation_rejects_frozen_baseline_without_retry():
     from factor_optimizer.research_batch import optimize_factor_batch, BatchOptimizationConfig

@@ -27,6 +27,8 @@ def _digest(raw, result):
             or not np.array_equal(raw.asset_axis.values, result.optimized.asset_axis.values)):
         raise ValueError('frozen raw and selected axes differ')
     for name, item in result.factors.items():
+        if item.materialization_error is not None or item.status == 'materialization_failed':
+            raise ValueError('resolve frozen plan materialization failure before final reporting')
         if item.plan_identity != item.plan.identity:
             raise ValueError('selected plan identity changed')
         h.update(json.dumps((name, item.plan_identity, item.selected_family, item.status)).encode())
