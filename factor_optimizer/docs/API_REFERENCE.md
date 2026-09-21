@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**73 个 Python 模块、919 个公开函数/类/方法定义**。
+扫描实际包目录：**74 个 Python 模块、922 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -60,6 +60,7 @@
 | [factor_optimizer/research_baseline.py](../factor_optimizer/research_baseline.py) | 9 | Research baseline recipes and TRAIN-only substantial-degradation guard. |
 | [factor_optimizer/research_batch.py](../factor_optimizer/research_batch.py) | 10 | Bounded research batch optimization with automatic chronological splitting. |
 | [factor_optimizer/research_diagnostics.py](../factor_optimizer/research_diagnostics.py) | 1 | TRAIN-only multi-dimensional research diagnosis using QE metric authorities. |
+| [factor_optimizer/research_final_report.py](../factor_optimizer/research_final_report.py) | 3 | Authority-side final research reporting; never called by candidate search. |
 | [factor_optimizer/research_fitness.py](../factor_optimizer/research_fitness.py) | 6 | QE-owned research portfolio metrics and joint paired selection policy. |
 | [factor_optimizer/search/__init__.py](../factor_optimizer/search/__init__.py) | 0 | Search orchestration for factor mutation optimization. |
 | [factor_optimizer/search/categorical_strategy.py](../factor_optimizer/search/categorical_strategy.py) | 10 | Categorical search strategy (TPE-style) for treatment auto-optimization. |
@@ -6569,10 +6570,11 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 | `split` | `AutomaticTimeSplit` | `必填/未声明默认` |
 | `execution_mode` | `str` | `'research_only'` |
 | `test_evaluated` | `bool` | `False` |
+| `config` | `BatchOptimizationConfig \| None` | `None` |
 
 ### automatic_time_split
 
-[实际实现](../factor_optimizer/research_batch.py#L143)。
+[实际实现](../factor_optimizer/research_batch.py#L144)。
 
 60/20/20 in time, warmup, and purge real label windows at boundaries.
 
@@ -6580,7 +6582,7 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 ### optimize_factor_batch
 
-[实际实现](../factor_optimizer/research_batch.py#L257)。
+[实际实现](../factor_optimizer/research_batch.py#L258)。
 
 Optimize aligned QE contracts automatically, preserving every input ID.
 
@@ -6597,6 +6599,43 @@ TRAIN-only multi-dimensional research diagnosis using QE metric authorities.
 Inspect 20 real quantile bins, IC/ICIR and gross-one spread risk on TRAIN.
 
 参数：`(batch, labels, *, config=None, periods_per_year=252, minimum_assets_per_quantile=10)`。
+
+## factor_optimizer/research_final_report.py
+
+Authority-side final research reporting; never called by candidate search.
+
+### FrozenSelection
+
+[实际实现](../factor_optimizer/research_final_report.py#L38)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+本类声明字段（继承字段见基类；实际限制仍需合同校验）：
+
+| 字段 | 类型 | 默认值/值 |
+|---|---|---|
+| `raw` | `object` | `必填/未声明默认` |
+| `result` | `object` | `必填/未声明默认` |
+| `dataset_identity` | `str` | `必填/未声明默认` |
+| `selection_hash` | `str` | `必填/未声明默认` |
+| `profile_hash` | `str` | `必填/未声明默认` |
+| `split_identity` | `str` | `必填/未声明默认` |
+
+### freeze_selection
+
+[实际实现](../factor_optimizer/research_final_report.py#L55)。
+
+Freeze identities without reading any label; detect later buffer changes.
+
+参数：`(raw, result, *, dataset_identity)`。
+
+### evaluate_frozen
+
+[实际实现](../factor_optimizer/research_final_report.py#L128)。
+
+Read the authority store once; persist TEST and separate description.
+
+参数：`(frozen, broker)`。
 
 ## factor_optimizer/research_fitness.py
 
@@ -10452,8 +10491,9 @@ Import seen records from dictionaries.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `c155a230a40d9317fddf0721310d5d81c0e89adef651da392d2fc006b1667863` |
-| `factor_optimizer/research_batch.py` | `87d0deb5d2b0e24aff2882502dce24a062bec315559ce1f7f010bf6d8313b132` |
+| `factor_optimizer/research_batch.py` | `9ac01a9bc9eb76740b2551cfbc98784224b85af3ccc848ce3795448998a0412b` |
 | `factor_optimizer/research_diagnostics.py` | `5a2f8b586bae701f72ecc50b35e1cce997acfb1b70029fe99a3488165f0c9857` |
+| `factor_optimizer/research_final_report.py` | `33f8e6806ee3b6416a7b12fd0cf4b3b40235f2862307f982630a5ebd6326c8d7` |
 | `factor_optimizer/research_fitness.py` | `e8dac708b2a7d4a6dfc6aeb14f574cf752ee86f6c2267503b6f05c5d8a93535b` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |

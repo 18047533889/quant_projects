@@ -138,6 +138,7 @@ class BatchOptimizationResult:
     split: AutomaticTimeSplit
     execution_mode: str = "research_only"
     test_evaluated: bool = False
+    config: BatchOptimizationConfig | None = None
 
 
 def automatic_time_split(labels, config: BatchOptimizationConfig | None = None):
@@ -505,7 +506,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     optimized = FactorBatch(batch.factor_ids, batch.time_axis, batch.asset_axis,
                             values, validity=np.isfinite(values),
                             context_refs={"optimization_mode": "research_only", "split": split.identity})
-    return BatchOptimizationResult(optimized, MappingProxyType(results), split)
+    return BatchOptimizationResult(optimized, MappingProxyType(results), split, config=config)
 
 
 __all__ = ["BatchOptimizationConfig", "AutomaticTimeSplit", "FactorOptimizationResult",
