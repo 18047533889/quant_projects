@@ -98,7 +98,12 @@ def _assign_quantiles_jit(values: np.ndarray, n_quantiles: int, policy: str) -> 
                 elif frac > 1.0 - 1e-9:
                     boundaries[b] = v_sorted[lo + 1]
                 else:
-                    boundaries[b] = v_sorted[lo] + frac * (v_sorted[lo + 1] - v_sorted[lo])
+                    left, right = float(v_sorted[lo]), float(v_sorted[lo + 1])
+                    delta = right - left
+                    if np.isfinite(delta):
+                        boundaries[b] = left + frac * delta
+                    else:
+                        boundaries[b] = (1.0 - frac) * left + frac * right
 
             # Assign quantiles - mimic numpy searchsorted behavior
             # searchsorted returns the insertion position to maintain sorted order

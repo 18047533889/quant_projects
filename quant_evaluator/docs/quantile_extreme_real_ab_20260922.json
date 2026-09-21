@@ -1,0 +1,26 @@
+{
+  "factor": "weekly_db5616cd85a477b3",
+  "source_sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+  "days": 500,
+  "assets": 256,
+  "bootstrap_draws": 99,
+  "candidate_count": 103,
+  "durations": {
+    "old": [
+      15.457618788001128,
+      15.040474286000972,
+      15.057402266000281
+    ],
+    "new": [
+      15.762097153001378,
+      15.44158213099945,
+      15.043754227001045
+    ]
+  },
+  "medians": {
+    "old": 15.057402266000281,
+    "new": 15.44158213099945
+  },
+  "exact_outputs_and_candidates": true,
+  "test_evaluated": false
+}

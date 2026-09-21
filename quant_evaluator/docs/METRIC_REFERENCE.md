@@ -5418,13 +5418,13 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.predictive._worst_period](../metrics/predictive.py#L97)
 - [quant_evaluator.metrics.quality._valid_pair_mask](../metrics/quality.py#L17)
 - [quant_evaluator.metrics.quality.compute_coverage_per_factor](../metrics/quality.py#L94)
-- [quant_evaluator.metrics.quantile._percentile_boundaries](../metrics/quantile.py#L197)
-- [quant_evaluator.metrics.quantile._searchsorted_bins](../metrics/quantile.py#L234)
-- [quant_evaluator.metrics.quantile._validate_quantile_count](../metrics/quantile.py#L76)
-- [quant_evaluator.metrics.quantile.assign_quantiles_batch](../metrics/quantile.py#L252)
-- [quant_evaluator.metrics.quantile.compute_quantile_returns](../metrics/quantile.py#L310)
-- [quant_evaluator.metrics.quantile.compute_quantile_returns_fast](../metrics/quantile.py#L41)
-- [quant_evaluator.metrics.quantile_numba.compute_quantile_returns_numba](../metrics/quantile_numba.py#L227)
+- [quant_evaluator.metrics.quantile._percentile_boundaries](../metrics/quantile.py#L198)
+- [quant_evaluator.metrics.quantile._searchsorted_bins](../metrics/quantile.py#L240)
+- [quant_evaluator.metrics.quantile._validate_quantile_count](../metrics/quantile.py#L77)
+- [quant_evaluator.metrics.quantile.assign_quantiles_batch](../metrics/quantile.py#L258)
+- [quant_evaluator.metrics.quantile.compute_quantile_returns](../metrics/quantile.py#L316)
+- [quant_evaluator.metrics.quantile.compute_quantile_returns_fast](../metrics/quantile.py#L42)
+- [quant_evaluator.metrics.quantile_numba.compute_quantile_returns_numba](../metrics/quantile_numba.py#L232)
 - [quant_evaluator.metrics.quantile_shape._as_matrix](../metrics/quantile_shape.py#L29)
 - [quant_evaluator.metrics.quantile_shape._finite_columns](../metrics/quantile_shape.py#L37)
 - [quant_evaluator.metrics.risk.drawdown_analysis.compute_drawdown_series](../metrics/risk/drawdown_analysis.py#L65)
@@ -5568,7 +5568,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.predictive.compute_yearly_rank_ic` | `3bcfb31c9e1d4aab95241fee6b7da6b70319f6204e6b92974a6eb9793a86077a` |
 | `quant_evaluator.metrics.quality._valid_pair_mask` | `d59adb953f5c638c642cf2182f64b0fbc47284a545f3f8944860bb52e27bfc4a` |
 | `quant_evaluator.metrics.quality.compute_coverage_per_factor` | `5d8c23026037e9481ee3a7cd3b6ed1df255ee7a5e0c21ed7eb718fa83344411d` |
-| `quant_evaluator.metrics.quantile._percentile_boundaries` | `b69287bce1769a089514326ba8dc46db33c8c8cc7159e902dc0489d6a37a992e` |
+| `quant_evaluator.metrics.quantile._percentile_boundaries` | `54b193352f71f621617f3f9e0885d91048bf74821c901d06590665a77182b4ba` |
 | `quant_evaluator.metrics.quantile._searchsorted_bins` | `14ea6c1f029264e10fd45d2396c34b2f7773096e89dd3ed8985d7fd3de90f155` |
 | `quant_evaluator.metrics.quantile._validate_quantile_count` | `2034e129494bc9950df02d152b2d1de1f360662b7c65caeefc1c7f1cb755aae2` |
 | `quant_evaluator.metrics.quantile.assign_quantiles_batch` | `9317b2dc6d614ad166e129412a8038461aeae918c17c5dd373a121cbeae717b1` |

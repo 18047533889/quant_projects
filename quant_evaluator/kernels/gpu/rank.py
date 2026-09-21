@@ -248,9 +248,15 @@ def batched_quantile_assignment(values, n_quantiles: int = 10, method: str = "ma
     frac = cp.where(frac > 1.0 - 1e-9, 1.0, frac)
     lo = cp.clip(lo, 0, n - 2)
     hi = lo + 1
-    v_lo = cp.take_along_axis(sv_ok, lo, axis=1)
-    v_hi = cp.take_along_axis(sv_ok, hi, axis=1)
-    boundaries = v_lo + frac * (v_hi - v_lo)  # (R_ok, nq-1)
+    v_lo = cp.take_along_axis(sv_ok, lo, axis=1).astype(cp.float64)
+    v_hi = cp.take_along_axis(sv_ok, hi, axis=1).astype(cp.float64)
+    delta = v_hi - v_lo
+    finite_delta = cp.isfinite(delta)
+    safe_delta = cp.where(finite_delta, delta, 0.0)
+    boundaries = cp.where(finite_delta, v_lo + frac * safe_delta,
+                          (1.0 - frac) * v_lo + frac * v_hi)
+    # Avoid 0 * inf at snapped endpoints and preserve their exact tie policy.
+    boundaries = cp.where(frac == 0.0, v_lo, cp.where(frac == 1.0, v_hi, boundaries))
 
     # searchsorted side='right' (MAX): count boundaries <= value (value ==
     # boundary goes to the HIGHER bin).  side='right' insertion index = number

@@ -16,6 +16,7 @@ QE-Q-P0-002: NumPy-Numba boundary parity validation
 """
 
 from typing import Optional, Tuple
+import math
 import numpy as np
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
@@ -227,7 +228,12 @@ def _percentile_boundaries(
         elif frac > 1.0 - 1e-9:
             boundaries[b] = sv[lo + 1]
         else:
-            boundaries[b] = sv[lo] + frac * (sv[lo + 1] - sv[lo])
+            # Promote before subtraction: int64 may wrap and float32 may
+            # overflow even when the final interpolated boundary is finite.
+            left, right = float(sv[lo]), float(sv[lo + 1])
+            delta = right - left
+            boundaries[b] = (left + frac * delta if math.isfinite(delta)
+                             else (1.0 - frac) * left + frac * right)
     return boundaries
 
 
