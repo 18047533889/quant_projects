@@ -102,10 +102,12 @@ def audit_methods(batch, labels):
                 # Execution invariants and economic availability are separate:
                 # missing PnL must not make a transform look broken or profitable.
                 row["research_cost_rate"] = config.research_cost_rate
+                row["empty_leg_policy"] = config.research_empty_leg_policy
                 try:
                     ar, ac = paired_series(raw, values.reshape(raw.shape), batch,
                         labels, split.train_indices, minimum_assets=config.minimum_assets,
-                        cost_rate=config.research_cost_rate)
+                        cost_rate=config.research_cost_rate,
+                        empty_leg_policy=config.research_empty_leg_policy)
                     mr, mc = summarize(ar), summarize(ac)
                     row.update(joint_metrics_status="available",
                                train_raw_metrics=mr, train_candidate_metrics=mc,

@@ -103,7 +103,8 @@ def _partition(frozen, labels, indices, role):
                  'portfolio_valid_days': 0, 'portfolio_unavailable_reason': None}
             if single:
                 y = target.values if target.validity is None else np.where(target.validity, target.values, np.nan)
-                pnl, turnover = portfolio_series(values, y, cost_rate=frozen.result.config.research_cost_rate)
+                pnl, turnover = portfolio_series(values, y, cost_rate=frozen.result.config.research_cost_rate,
+                    empty_leg_policy=frozen.result.config.research_empty_leg_policy)
                 m['portfolio_valid_days'] = int(np.isfinite(pnl).sum())
                 m['turnover'] = number(np.mean(turnover))
                 if np.any(pnl < -1):
@@ -167,6 +168,7 @@ def evaluate_frozen(frozen, broker):
               'dataset_identity': frozen.dataset_identity, 'test_evaluated': True,
               'selection_unchanged': True, 'research_only': True,
               'cost_rate': frozen.result.config.research_cost_rate,
+              'empty_leg_policy': frozen.result.config.research_empty_leg_policy,
               'test': _partition(frozen, labels, frozen.result.split.test_indices, 'held_out_final'),
               'full_sample': _partition(frozen, labels, tuple(range(len(labels.decision_time))), 'descriptive_only')}
     if _digest(frozen.raw, frozen.result) != frozen.selection_hash:

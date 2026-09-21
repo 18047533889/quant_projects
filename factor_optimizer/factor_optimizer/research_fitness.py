@@ -10,11 +10,14 @@ import math
 import numpy as np
 
 
-def portfolio_series(values, returns, *, cost_rate=.001):
+def portfolio_series(values, returns, *, cost_rate=.001, empty_leg_policy='signal_cash'):
     """Top/bottom quintiles, gross-one equal stock weights, signal-only membership.
 
     Full-notional turnover includes initial entry from cash. Missing selected
-    labels invalidate that day's PnL; absent legs are unknown, not free cash.
+    labels invalidate that day's PnL. Under signal_cash, a sufficiently observed,
+    nonconstant signal with an empty quantile leg follows QE's zero target weights
+    (including liquidation costs). Missing/constant signals remain unavailable.
+    unavailable reproduces the older strict empty-leg rejection.
     """
     from quant_evaluator.metrics.quantile import assign_quantiles_batch
     from quant_evaluator.metrics.portfolio_stats import equal_gross_weights, equal_gross_long_short_returns
@@ -24,6 +27,8 @@ def portfolio_series(values, returns, *, cost_rate=.001):
         raise ValueError('matching (time, asset) panels required')
     if isinstance(cost_rate, bool) or not math.isfinite(cost_rate) or cost_rate < 0:
         raise ValueError('cost_rate must be finite and nonnegative')
+    if empty_leg_policy not in ('signal_cash', 'unavailable'):
+        raise ValueError('empty_leg_policy must be signal_cash or unavailable')
     bins = assign_quantiles_batch(values, n_quantiles=5)
     long, short = bins == 4, bins == 0
     active = long.any(axis=1) & short.any(axis=1)
@@ -32,7 +37,14 @@ def portfolio_series(values, returns, *, cost_rate=.001):
                                          missing_return_policy='drop')
     # QE half-sum convention -> explicit full traded notional, including entry.
     turnover = 2 * compute_turnover_series(np.vstack((np.zeros((1, values.shape[1])), weights)))[1:]
-    pnl[~active] = np.nan
+    if empty_leg_policy == 'unavailable':
+        pnl[~active] = np.nan
+    else:
+        finite = np.isfinite(values)
+        low = np.min(np.where(finite, values, np.inf), axis=1)
+        high = np.max(np.where(finite, values, -np.inf), axis=1)
+        known_signal = (finite.sum(axis=1) >= 5) & (high > low)
+        pnl[~known_signal] = np.nan
     return pnl, turnover
 
 
@@ -94,7 +106,7 @@ class RawSeriesCache:
 
 
 def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, cost_rate=.001,
-                  raw_cache=None):
+                  raw_cache=None, empty_leg_policy='signal_cash'):
     """QE metric inputs share signal availability, never ex-post label membership."""
     from dataclasses import replace
     from factor_optimizer.research_batch import _subset_labels
@@ -118,7 +130,7 @@ def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, 
         if not isinstance(raw_cache, RawSeriesCache):
             raise TypeError('raw_cache must be RawSeriesCache')
         digest = hashlib.sha256()
-        digest.update(repr((a.shape, minimum_assets, cost_rate)).encode())
+        digest.update(repr((a.shape, minimum_assets, cost_rate, empty_leg_policy)).encode())
         for panel in (a, y):
             canonical = np.ascontiguousarray(panel)
             digest.update(canonical.dtype.str.encode())
@@ -131,7 +143,8 @@ def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, 
     ic, _ = compute_daily_ic(pair, target, method='spearman', min_assets=minimum_assets)
     out = [] if cached is None else [cached]
     for k, values in enumerate((a, b)[start:]):
-        pnl, turnover = portfolio_series(values, y, cost_rate=cost_rate)
+        pnl, turnover = portfolio_series(values, y, cost_rate=cost_rate,
+                                        empty_leg_policy=empty_leg_policy)
         out.append(np.column_stack((ic[:, k], pnl, turnover)))
     if raw_cache is not None and cached is None:
         raw_cache.put(key, out[0])

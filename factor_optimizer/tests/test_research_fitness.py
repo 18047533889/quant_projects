@@ -63,6 +63,34 @@ def test_constantly_tied_signal_is_unavailable_not_cash_success():
     assert np.isnan(pnl).all()
 
 
+def test_nonconstant_ties_that_empty_a_leg_follow_qe_cash_and_exit_cost():
+    from factor_optimizer.research_fitness import portfolio_series
+    values = np.vstack((np.arange(20, dtype=float), np.r_[np.zeros(19), 1.],
+                        np.r_[np.zeros(19), 1.], np.arange(20, dtype=float)))
+    # The sparse signal is known and nonconstant, but all percentile cutoffs
+    # are zero, so tie='max' leaves the bottom bucket empty.
+    pnl, turnover = portfolio_series(values, np.zeros_like(values), cost_rate=.001)
+    np.testing.assert_array_equal(turnover, [1., 1., 0., 1.])
+    np.testing.assert_allclose(pnl, [-.001, -.001, 0., -.001])
+    legacy, _ = portfolio_series(values, np.zeros_like(values), empty_leg_policy='unavailable')
+    assert np.isnan(legacy[1:3]).all()
+    np.testing.assert_allclose(legacy[[0, 3]], [-.001, -.001])
+
+
+def test_signal_cash_rule_is_label_independent_but_missing_signal_is_unknown():
+    from factor_optimizer.research_fitness import portfolio_series
+    values = np.tile(np.r_[np.zeros(19), 1.], (3, 1))
+    returns = np.full_like(values, np.nan)
+    pnl, turnover = portfolio_series(values, returns)
+    np.testing.assert_array_equal(pnl, np.zeros(3))
+    np.testing.assert_array_equal(turnover, np.zeros(3))
+    values[1, :] = np.nan
+    values[2, :] = 1.
+    missing, _ = portfolio_series(values, returns)
+    assert missing[0] == 0.
+    assert np.isnan(missing[1:]).all()
+
+
 def test_default_batch_uses_joint_metrics_and_test_labels_do_not_select():
     from dataclasses import replace
     from factor_optimizer.research_batch import optimize_factor_batch, BatchOptimizationConfig
@@ -123,3 +151,12 @@ def test_raw_series_cache_is_exact_across_masks_costs_and_mutated_returns():
         again = fitness.paired_series(raw, c, batch, target, tuple(range(60)),
                                       cost_rate=cost, raw_cache=cache)
         np.testing.assert_array_equal(again[0], expected[0])
+    raw[10] = 0.
+    raw[10, -1] = 1.
+    for policy in ('unavailable', 'signal_cash', 'unavailable'):
+        expected = fitness.paired_series(raw, raw, batch, labels, tuple(range(60)),
+                                         empty_leg_policy=policy)
+        actual = fitness.paired_series(raw, raw, batch, labels, tuple(range(60)),
+                                       raw_cache=cache, empty_leg_policy=policy)
+        np.testing.assert_array_equal(actual[0], expected[0])
+        assert bool(np.isnan(actual[0][10, 1])) == (policy == 'unavailable')

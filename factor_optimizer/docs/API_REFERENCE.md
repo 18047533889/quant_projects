@@ -6519,10 +6519,11 @@ Conservative defaults; callers need not choose calendar cutoffs.
 | `compose_smoothing_sign` | `bool` | `True` |
 | `selection_objective` | `str` | `'joint'` |
 | `research_cost_rate` | `float` | `0.001` |
+| `research_empty_leg_policy` | `str` | `'signal_cash'` |
 
 ### AutomaticTimeSplit
 
-[实际实现](../factor_optimizer/research_batch.py#L85)。
+[实际实现](../factor_optimizer/research_batch.py#L88)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6539,7 +6540,7 @@ Conservative defaults; callers need not choose calendar cutoffs.
 
 ### FactorOptimizationResult
 
-[实际实现](../factor_optimizer/research_batch.py#L95)。
+[实际实现](../factor_optimizer/research_batch.py#L98)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6565,7 +6566,7 @@ Conservative defaults; callers need not choose calendar cutoffs.
 
 ### OrientedRepairPlan
 
-[实际实现](../factor_optimizer/research_batch.py#L114)。
+[实际实现](../factor_optimizer/research_batch.py#L117)。
 
 Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
@@ -6578,7 +6579,7 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 ### OrientedRepairPlan.family
 
-[实际实现](../factor_optimizer/research_batch.py#L124)。
+[实际实现](../factor_optimizer/research_batch.py#L127)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6586,7 +6587,7 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 ### OrientedRepairPlan.identity
 
-[实际实现](../factor_optimizer/research_batch.py#L128)。
+[实际实现](../factor_optimizer/research_batch.py#L131)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6594,7 +6595,7 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 ### OrientedRepairPlan.execute
 
-[实际实现](../factor_optimizer/research_batch.py#L131)。
+[实际实现](../factor_optimizer/research_batch.py#L134)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6602,7 +6603,7 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 ### BatchOptimizationResult
 
-[实际实现](../factor_optimizer/research_batch.py#L136)。
+[实际实现](../factor_optimizer/research_batch.py#L139)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6619,7 +6620,7 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 ### automatic_time_split
 
-[实际实现](../factor_optimizer/research_batch.py#L145)。
+[实际实现](../factor_optimizer/research_batch.py#L148)。
 
 60/20/20 in time, warmup, and purge real label windows at boundaries.
 
@@ -6627,13 +6628,13 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 ### PairICCache
 
-[实际实现](../factor_optimizer/research_batch.py#L179)。
+[实际实现](../factor_optimizer/research_batch.py#L182)。
 
 At most two RAW IC references, private to one factor's TRAIN search.
 
 ### PairICCache.__init__
 
-[实际实现](../factor_optimizer/research_batch.py#L186)。
+[实际实现](../factor_optimizer/research_batch.py#L189)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6641,7 +6642,7 @@ At most two RAW IC references, private to one factor's TRAIN search.
 
 ### PairICCache.get
 
-[实际实现](../factor_optimizer/research_batch.py#L190)。
+[实际实现](../factor_optimizer/research_batch.py#L193)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6649,7 +6650,7 @@ At most two RAW IC references, private to one factor's TRAIN search.
 
 ### PairICCache.put
 
-[实际实现](../factor_optimizer/research_batch.py#L196)。
+[实际实现](../factor_optimizer/research_batch.py#L199)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6657,7 +6658,7 @@ At most two RAW IC references, private to one factor's TRAIN search.
 
 ### optimize_factor_batch
 
-[实际实现](../factor_optimizer/research_batch.py#L320)。
+[实际实现](../factor_optimizer/research_batch.py#L323)。
 
 Optimize aligned QE contracts automatically, preserving every input ID.
 
@@ -6718,7 +6719,7 @@ Freeze identities without reading any label; detect later buffer changes.
 
 ### evaluate_frozen
 
-[实际实现](../factor_optimizer/research_final_report.py#L130)。
+[实际实现](../factor_optimizer/research_final_report.py#L131)。
 
 Read the authority store once; persist TEST and separate description.
 
@@ -6734,11 +6735,11 @@ QE-owned research portfolio metrics and joint paired selection policy.
 
 Top/bottom quintiles, gross-one equal stock weights, signal-only membership.
 
-参数：`(values, returns, *, cost_rate=0.001)`。
+参数：`(values, returns, *, cost_rate=0.001, empty_leg_policy='signal_cash')`。
 
 ### summarize
 
-[实际实现](../factor_optimizer/research_fitness.py#L39)。
+[实际实现](../factor_optimizer/research_fitness.py#L51)。
 
 Summarize aligned columns [RankIC, net portfolio return, full turnover].
 
@@ -6746,7 +6747,7 @@ Summarize aligned columns [RankIC, net portfolio return, full turnover].
 
 ### joint_utility
 
-[实际实现](../factor_optimizer/research_fitness.py#L65)。
+[实际实现](../factor_optimizer/research_fitness.py#L77)。
 
 Prespecified bounded research utility; never fitted to VALIDATION/TEST.
 
@@ -6754,7 +6755,7 @@ Prespecified bounded research utility; never fitted to VALIDATION/TEST.
 
 ### passes_floors
 
-[实际实现](../factor_optimizer/research_fitness.py#L72)。
+[实际实现](../factor_optimizer/research_fitness.py#L84)。
 
 Hard raw-relative guards prevent one metric buying material damage.
 
@@ -6762,13 +6763,13 @@ Hard raw-relative guards prevent one metric buying material damage.
 
 ### RawSeriesCache
 
-[实际实现](../factor_optimizer/research_fitness.py#L82)。
+[实际实现](../factor_optimizer/research_fitness.py#L94)。
 
 One-entry RAW evidence cache; returned arrays never alias stored state.
 
 ### RawSeriesCache.__init__
 
-[实际实现](../factor_optimizer/research_fitness.py#L85)。
+[实际实现](../factor_optimizer/research_fitness.py#L97)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6776,7 +6777,7 @@ One-entry RAW evidence cache; returned arrays never alias stored state.
 
 ### RawSeriesCache.get
 
-[实际实现](../factor_optimizer/research_fitness.py#L89)。
+[实际实现](../factor_optimizer/research_fitness.py#L101)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6784,7 +6785,7 @@ One-entry RAW evidence cache; returned arrays never alias stored state.
 
 ### RawSeriesCache.put
 
-[实际实现](../factor_optimizer/research_fitness.py#L92)。
+[实际实现](../factor_optimizer/research_fitness.py#L104)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6792,15 +6793,15 @@ One-entry RAW evidence cache; returned arrays never alias stored state.
 
 ### paired_series
 
-[实际实现](../factor_optimizer/research_fitness.py#L96)。
+[实际实现](../factor_optimizer/research_fitness.py#L108)。
 
 QE metric inputs share signal availability, never ex-post label membership.
 
-参数：`(raw, candidate, batch, labels, indices, *, minimum_assets=20, cost_rate=0.001, raw_cache=None)`。
+参数：`(raw, candidate, batch, labels, indices, *, minimum_assets=20, cost_rate=0.001, raw_cache=None, empty_leg_policy='signal_cash')`。
 
 ### compare_joint
 
-[实际实现](../factor_optimizer/research_fitness.py#L141)。
+[实际实现](../factor_optimizer/research_fitness.py#L154)。
 
 Recompute all nonlinear metrics within each shared moving-block draw.
 
@@ -10649,11 +10650,11 @@ Import seen records from dictionaries.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `4b1a1defd136693361ca4adc3d8a416a80912b400bcb6d5af6b3df707ad81905` |
-| `factor_optimizer/research_batch.py` | `88efcb0cfb4274397a29d7c0603dc1d237aca22de25001ad25bb568a6c4b1ce5` |
+| `factor_optimizer/research_batch.py` | `82d03a2059b464688891f71a4a1b101ea6f6b970ae277fda8ac73193580cfa6e` |
 | `factor_optimizer/research_decay.py` | `1355b74f2ca32c7f819357880214580502eeff1df9d09593c601ed14d7fb71b0` |
 | `factor_optimizer/research_diagnostics.py` | `6353a8fcf0777f751b14f255e77930de89696972a99ae5ba4f63ea66beef104f` |
-| `factor_optimizer/research_final_report.py` | `58ec87ceff4f1994388e884b4aa7f32f71120c6eff41c3d9f624203ad6f077c9` |
-| `factor_optimizer/research_fitness.py` | `8d1174abfe3cd22c0e76276a88d713fc55fc2a1574169a408c23499bf6c1581f` |
+| `factor_optimizer/research_final_report.py` | `9297f01eb1adcd3ea280e8fcde332c21e4c69ec2fef7f35a391a24f86e2d7a7d` |
+| `factor_optimizer/research_fitness.py` | `1ce2fb162704cd2f98475e062335497828fad8afda2c8507048da8f4489c05fe` |
 | `factor_optimizer/research_manifest.py` | `5c92761458c47ff82aa68819341860744d3f146c974318172f28697b0f89a161` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |

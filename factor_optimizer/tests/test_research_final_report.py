@@ -85,7 +85,11 @@ def test_failed_post_exposure_report_cannot_reopen_test(tmp_path):
     assert store.reads == 1
 
 
-def test_cost_profile_cannot_be_changed_to_reopen_same_holdout(tmp_path):
+@pytest.mark.parametrize('profile_change', [
+    {'research_cost_rate': 0.},
+    {'research_empty_leg_policy': 'unavailable'},
+])
+def test_cost_profile_cannot_be_changed_to_reopen_same_holdout(tmp_path, profile_change):
     from dataclasses import replace
     from factor_optimizer.research_final_report import freeze_selection, evaluate_frozen
     from factor_optimizer.contracts.campaign_store import CampaignStateError
@@ -93,7 +97,7 @@ def test_cost_profile_cannot_be_changed_to_reopen_same_holdout(tmp_path):
     frozen = freeze_selection(raw, result, dataset_identity='dataset-v1')
     store = Store(labels)
     evaluate_frozen(frozen, authority(tmp_path, frozen, store))
-    changed = replace(result, config=replace(result.config, research_cost_rate=0.))
+    changed = replace(result, config=replace(result.config, **profile_change))
     alternate = freeze_selection(raw, changed, dataset_identity='dataset-v1')
     with pytest.raises(CampaignStateError):
         authority(tmp_path, alternate, Store(labels))

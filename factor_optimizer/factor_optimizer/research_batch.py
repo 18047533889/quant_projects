@@ -40,8 +40,11 @@ class BatchOptimizationConfig:
     compose_smoothing_sign: bool = True
     selection_objective: str = 'joint'
     research_cost_rate: float = .001
+    research_empty_leg_policy: str = 'signal_cash'
 
     def __post_init__(self):
+        if self.research_empty_leg_policy not in ('signal_cash', 'unavailable'):
+            raise ValueError('research_empty_leg_policy must be signal_cash or unavailable')
         if self.selection_objective not in {'joint', 'rank_ic'}:
             raise ValueError('selection_objective must be joint or rank_ic')
         if (isinstance(self.research_cost_rate, bool) or not math.isfinite(self.research_cost_rate)
@@ -380,6 +383,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
             train_hash.update(labels.validity[np.asarray(split.train_indices)].tobytes())
         train_hash.update(json.dumps(batch.asset_axis.values.tolist(), default=str).encode())
         train_hash.update((factor_id + split.identity).encode())
+        train_hash.update(config.research_empty_leg_policy.encode())
         train_ref = train_hash.hexdigest()
         baseline_plan = compile_baseline(lineages.get(factor_id),
             training_context_ref=train_ref, exposure_columns=exposure_columns,
@@ -494,6 +498,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
         chosen, train_gain, lower = raw_plan, None, None
         joint = config.selection_objective == 'joint'
         joint_record = {'objective': config.selection_objective,
+                        'empty_leg_policy': config.research_empty_leg_policy,
                         'cost_rate': config.research_cost_rate if joint else None,
                         'policy': 'joint.v1' if joint else 'legacy_rank_ic'}
         validation_identity, validation_coverage = None, None
@@ -517,6 +522,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                         try:
                             ar, ac = paired_series(prefix, baseline_values, batch, labels, split.train_indices,
                                 minimum_assets=config.minimum_assets, cost_rate=config.research_cost_rate,
+                                empty_leg_policy=config.research_empty_leg_policy,
                                 raw_cache=train_raw_cache)
                             mr, mc = summarize(ar), summarize(ac)
                             baseline_gain = joint_utility(mc)-joint_utility(mr)
@@ -559,6 +565,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                         if joint:
                             ar, ac = paired_series(prefix, values, batch, labels, split.train_indices,
                                 minimum_assets=config.minimum_assets, cost_rate=config.research_cost_rate,
+                                empty_leg_policy=config.research_empty_leg_policy,
                                 raw_cache=train_raw_cache)
                             mr, mc = summarize(ar), summarize(ac)
                             record.update(train_raw_metrics=mr, train_candidate_metrics=mc,
@@ -594,7 +601,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                         if joint:
                             ar, ac = paired_series(validation_raw, validation_values, batch, labels,
                                 split.validation_indices, minimum_assets=config.minimum_assets,
-                                cost_rate=config.research_cost_rate)
+                                cost_rate=config.research_cost_rate,
+                                empty_leg_policy=config.research_empty_leg_policy)
                             mr, mc = summarize(ar), summarize(ac)
                             joint_record.update(validation_raw=mr, validation_candidate=mc)
                             if passes_floors(mr, mc):

@@ -1,0 +1,93 @@
+{
+  "factor": "weekly_db5616cd85a477b3",
+  "factor_sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+  "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+  "days": 500,
+  "assets": 256,
+  "test_evaluated": false,
+  "empty_leg_policy": "signal_cash",
+  "train_days": 267,
+  "empty_quantile_leg_days": 7,
+  "old_nonfinite_pnl_days": 7,
+  "new_nonfinite_pnl_days": 0,
+  "unchanged_active_day_metrics": true,
+  "cash_day_net_returns": [
+    -0.001,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "cash_day_turnover": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "status": "raw_retained",
+  "selected_family": "NO_OP_RAW",
+  "train_gain": 0.11165439682022438,
+  "validation_lower_bound": null,
+  "baseline": {
+    "operations": [
+      "winsor",
+      "cs_rank"
+    ],
+    "omissions": [
+      "neutralization_missing_exposures"
+    ],
+    "accepted": true,
+    "reason": "no_substantial_training_degradation",
+    "coverage": 1.0,
+    "valid_days": 267,
+    "upper_bound": 0.002050934682814894,
+    "maximum_loss": 0.01
+  },
+  "joint": {
+    "objective": "joint",
+    "empty_leg_policy": "signal_cash",
+    "cost_rate": 0.001,
+    "policy": "joint.v1",
+    "baseline_train_raw": {
+      "rank_ic": -0.0060321893386178355,
+      "rank_icir": -0.08557145352186224,
+      "sharpe": 2.2236579510039816,
+      "max_drawdown": 0.1725316435068342,
+      "turnover": 0.014805711610486891,
+      "worst_block_sharpe": 1.1582010526532172
+    },
+    "baseline_train_candidate": {
+      "rank_ic": -0.00530337070465075,
+      "rank_icir": -0.0746147672270233,
+      "sharpe": 2.088692041506368,
+      "max_drawdown": 0.18584596181065458,
+      "turnover": 0.029435861423220973,
+      "worst_block_sharpe": 0.9343152797254322
+    },
+    "validation_raw": {
+      "rank_ic": 0.010351676742059794,
+      "rank_icir": 0.157879772138836,
+      "sharpe": 0.8388943507252635,
+      "max_drawdown": 0.09621648916795206,
+      "turnover": 0.01401417525773196,
+      "worst_block_sharpe": -1.0526736890682997
+    },
+    "validation_candidate": {
+      "rank_ic": -0.00858422943998815,
+      "rank_icir": -0.12046867092360558,
+      "sharpe": 0.5371519747892766,
+      "max_drawdown": 0.09387314729994731,
+      "turnover": 0.10454252577319588,
+      "worst_block_sharpe": -1.2025961987622718
+    },
+    "comparison_status": "DEGRADATION_FLOOR_FAILED"
+  },
+  "candidate_count": 94,
+  "train_evaluated_count": 70,
+  "limitations": "TRAIN-only root-cause policy choice; cost .001; bootstrap 99; no TEST evaluation, PIT or tradability certification"
+}
