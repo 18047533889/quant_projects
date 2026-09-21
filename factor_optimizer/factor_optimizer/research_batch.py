@@ -98,6 +98,7 @@ class FactorOptimizationResult:
     validation_candidate_identity: str | None = None
     validation_coverage: float | None = None
     training_diagnostics: Mapping[str, Any] | None = None
+    baseline_diagnostics: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -245,7 +246,9 @@ def _lower_bound(differences, config, horizon):
     return float(np.quantile(draws, (1-config.confidence_level)/2))
 
 
-def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
+def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
+                          lineages=None, exposures=None, exposure_columns=(),
+                          maximum_baseline_loss=.01):
     """Optimize aligned QE contracts automatically, preserving every input ID.
 
     Defaults fit candidate choices on TRAIN, confirm only its winner on
@@ -256,6 +259,12 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
     if allow_research is not True:
         raise ValueError("explicit allow_research=True is required; not production admission")
     config = config or BatchOptimizationConfig()
+    if (isinstance(maximum_baseline_loss, bool) or not math.isfinite(maximum_baseline_loss)
+            or maximum_baseline_loss < 0):
+        raise ValueError('maximum_baseline_loss must be finite and nonnegative')
+    lineages = {} if lineages is None else lineages
+    if not isinstance(lineages, Mapping) or set(lineages) - set(batch.factor_ids):
+        raise ValueError('lineages must map input factor IDs to explicit treatment lineage')
     if (batch.time_axis.values is None or batch.asset_axis.values is None
             or labels.asset_axis is None or labels.asset_axis.values is None):
         raise ValueError("explicit time and asset axes are required")
@@ -266,7 +275,9 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
     split = automatic_time_split(labels, config)
     specs = _specs(config)
     from factor_optimizer.research_diagnostics import diagnose_training_batch
-    diagnostics = diagnose_training_batch(batch, labels, config=config)
+    from factor_optimizer.research_baseline import (
+        compile_baseline, assess_baseline_training, BaselineRepairPlan,
+    )
     from factor_optimizer.adapters.repair_execution import compile_value_repair
     from factor_optimizer.adapters.preprocessing import compile_admissible_smoothing_grid
     from quant_evaluator.contracts.factor_batch import FactorBatch
@@ -278,10 +289,11 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
         if batch.validity is not None:
             raw[~batch.validity[:, :, k]] = np.nan
         raw[~np.isfinite(raw)] = np.nan
-        # No test values or test labels enter the candidate fit or score.
-        prefix = raw[:split.test_start]
-        frame = pd.DataFrame({"date": np.repeat(batch.time_axis.values[:split.test_start], raw.shape[1]),
-                              "asset_id": np.tile(batch.asset_axis.values, split.test_start),
+        # Candidate transforms see TRAIN history only. VALIDATION is materialized
+        # once, after its sole candidate has been frozen on TRAIN.
+        prefix = raw[:split.validation_start]
+        frame = pd.DataFrame({"date": np.repeat(batch.time_axis.values[:split.validation_start], raw.shape[1]),
+                              "asset_id": np.tile(batch.asset_axis.values, split.validation_start),
                               "value": prefix.ravel()})
         train_hash = hashlib.sha256()
         train_hash.update(raw[:split.validation_start].tobytes())
@@ -291,8 +303,34 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
         train_hash.update(json.dumps(batch.asset_axis.values.tolist(), default=str).encode())
         train_hash.update((factor_id + split.identity).encode())
         train_ref = train_hash.hexdigest()
+        baseline_plan = compile_baseline(lineages.get(factor_id),
+            training_context_ref=train_ref, exposure_columns=exposure_columns,
+            minimum_assets=config.minimum_assets)
+        baseline_record = {'operations': baseline_plan.operations,
+                           'omissions': baseline_plan.omissions, 'accepted': False,
+                           'reason': 'no_eligible_baseline_operations'}
+        baseline_values, baseline_active = prefix, False
+        if baseline_plan.operations:
+            try:
+                proposed = np.asarray(baseline_plan.execute(frame, exposures=exposures,
+                                      allow_research=True), dtype=float).reshape(prefix.shape)
+                baseline_record.update(assess_baseline_training(prefix, proposed, batch,
+                    labels, split, config, maximum_loss=maximum_baseline_loss))
+                if baseline_record['accepted']:
+                    baseline_values, baseline_active = proposed, True
+            except Exception as exc:
+                baseline_record.update(reason=f'baseline_unavailable: {type(exc).__name__}: {exc}')
+        search_frame = frame.copy()
+        search_frame['value'] = baseline_values.ravel()
+        diagnostic_values = raw.copy()
+        diagnostic_values[:split.validation_start] = baseline_values
+        diagnostic_batch = replace(batch, factor_ids=(factor_id,),
+            values=diagnostic_values[:, :, None], validity=np.isfinite(diagnostic_values[:, :, None]))
+        diagnosis = diagnose_training_batch(diagnostic_batch, labels, config=config)[factor_id]
         factor_specs = list(specs)
-        diagnosis = diagnostics[factor_id]
+        if ('cs_rank_already_present' in baseline_plan.omissions
+                or (baseline_active and 'cs_rank' in baseline_plan.operations)):
+            factor_specs = [(f, p) for f, p in factor_specs if f != 'REPRESENTATION_RANK']
         shape = diagnosis["proposed_shape_family"]
         if shape and (not config.families or shape in config.families):
             # Up to two TRAIN-fitted proposals supplement the prespecified grid.
@@ -326,6 +364,12 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
                 status, reason = "invalid_raw", "insufficient valid RAW training IC"
             else:
                 best = None
+                if baseline_active:
+                    delta, _, _ = _pair_ic(prefix, baseline_values, batch, labels, split.train_indices, config)
+                    folds = [np.nanmean(x) for x in np.array_split(delta, 3)]
+                    baseline_gain = float(np.mean(folds) - np.std(folds))
+                    frozen_baseline = BaselineRepairPlan(baseline_plan, raw_plan)
+                    best = (baseline_gain, frozen_baseline.identity, frozen_baseline, baseline_values)
                 last_base_identity, last_base_values = None, None
                 for family, params, precompiled, orientation in proposals:
                     record = {"family": family, "parameters": dict(params), "orientation": orientation}
@@ -335,11 +379,13 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
                         record["transform"] = plan.transform
                         if plan.identity != last_base_identity:
                             base_values = np.asarray(plan.execute(
-                                frame, allow_research=True), dtype=float).reshape(prefix.shape)
+                                search_frame, allow_research=True), dtype=float).reshape(prefix.shape)
                             last_base_identity, last_base_values = plan.identity, base_values
                         values = last_base_values if orientation == 1 else -last_base_values
                         if orientation == -1:
                             plan = OrientedRepairPlan(plan)
+                        if baseline_active:
+                            plan = BaselineRepairPlan(baseline_plan, plan)
                         record["plan_identity"] = plan.identity
                         delta, good, coverage = _pair_ic(prefix, values, batch, labels, split.train_indices, config)
                         record.update(coverage=coverage, valid_train_days=int(good.sum()))
@@ -363,12 +409,28 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
                     gain, _, winner, values = best
                     validation_identity = winner.identity
                     train_gain = gain
-                    delta, good, coverage = _pair_ic(prefix, values, batch, labels, split.validation_indices, config)
+                    validation_raw = raw[:split.test_start]
+                    validation_frame = pd.DataFrame({
+                        'date': np.repeat(batch.time_axis.values[:split.test_start], raw.shape[1]),
+                        'asset_id': np.tile(batch.asset_axis.values, split.test_start),
+                        'value': validation_raw.ravel()})
+                    kwargs = {'exposures': exposures} if isinstance(winner, BaselineRepairPlan) else {}
+                    validation_values = np.asarray(winner.execute(validation_frame,
+                        allow_research=True, **kwargs), dtype=float).reshape(validation_raw.shape)
+                    delta, good, coverage = _pair_ic(validation_raw, validation_values,
+                        batch, labels, split.validation_indices, config)
                     validation_coverage = coverage
                     if coverage >= config.minimum_coverage and good.sum() >= config.minimum_validation_days:
                         lower = _lower_bound(delta, config, labels.horizon)
-                    if lower is not None and lower > 0 and lower >= config.minimum_improvement:
-                        chosen, status, reason = winner, "improved", "TRAIN winner passed held-out paired block bound"
+                    baseline_only = winner.family == 'BASELINE'
+                    confirmed = lower is not None and (
+                        lower >= -maximum_baseline_loss if baseline_only
+                        else lower > 0 and lower >= config.minimum_improvement)
+                    if confirmed:
+                        chosen = winner
+                        status = 'baseline_accepted' if baseline_only else 'improved'
+                        reason = ('TRAIN baseline passed held-out noninferiority bound' if baseline_only
+                                  else 'TRAIN winner passed held-out paired block bound')
                     else:
                         reason = "TRAIN winner not confirmed on VALIDATION; retained RAW without retry"
             if chosen.family == "NO_OP_RAW":
@@ -376,14 +438,16 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
             else:
                 full = pd.DataFrame({"date": np.repeat(batch.time_axis.values, raw.shape[1]),
                                      "asset_id": np.tile(batch.asset_axis.values, len(raw)), "value": raw.ravel()})
-                out = np.asarray(chosen.execute(full, allow_research=True), dtype=float).reshape(raw.shape)
+                kwargs = {'exposures': exposures} if isinstance(chosen, BaselineRepairPlan) else {}
+                out = np.asarray(chosen.execute(full, allow_research=True, **kwargs), dtype=float).reshape(raw.shape)
         except Exception as exc:
             chosen, out, status = raw_plan, raw, "error_raw_retained"
             reason = f"{type(exc).__name__}: {exc}"
         outputs.append(out)
         results[factor_id] = FactorOptimizationResult(
             factor_id, status, chosen.family, chosen.identity, chosen, train_gain, lower,
-            tuple(records), reason, validation_identity, validation_coverage, MappingProxyType(diagnosis))
+            tuple(records), reason, validation_identity, validation_coverage, MappingProxyType(diagnosis),
+            MappingProxyType(baseline_record))
     values = np.stack(outputs, axis=-1)
     optimized = FactorBatch(batch.factor_ids, batch.time_axis, batch.asset_axis,
                             values, validity=np.isfinite(values),

@@ -1,0 +1,1377 @@
+{
+  "provenance": {
+    "sources": [
+      {
+        "factor": "alphasage_20260909062020_09e3f39d",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/alphasage_20260909062020_09e3f39d.parquet",
+        "etag": "827388f64f3269ab2ac4f2b3a0a3c6c2",
+        "sha256": "2c65a6650c4ff082b820ada904649520352491ca9630cba0b95dc12cc9e127f3",
+        "downloaded_bytes": 4127982
+      }
+    ],
+    "days": 500,
+    "assets": 256,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "selection": "first bounded object keys; assets selected on TRAIN coverage only",
+    "limitations": "research replay; no upstream PIT or investability certification; recipe lineage not loaded"
+  },
+  "definition": "AdjVwap(t)/AdjVwap(t-5)-1; known untreated DataAccess market-derived control, NOT original COS factor recipe",
+  "test_evaluated": false,
+  "baseline": {
+    "operations": [
+      "winsor",
+      "cs_rank"
+    ],
+    "omissions": [
+      "neutralization_missing_exposures"
+    ],
+    "accepted": true,
+    "reason": "no_substantial_training_degradation",
+    "coverage": 1,
+    "valid_days": 267,
+    "upper_bound": 0.000030767678065082535,
+    "maximum_loss": 0.01
+  },
+  "status": "raw_retained",
+  "selected_family": "NO_OP_RAW",
+  "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+  "train_gain": 0.08473486664531635,
+  "validation_lower_bound": -0.02673252961299245,
+  "candidates": [
+    {
+      "family": "ABANDON",
+      "parameters": {},
+      "orientation": 1,
+      "status": "ineligible",
+      "reason": "IneligibleValueRepair: ABANDON has no executable value-level mapping"
+    },
+    {
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": false
+      },
+      "orientation": 1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "5e4f6f1768da4633549522e3adfd3897b7c85424f45b2f7db2124a1aa44347f8",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.02067792628075203
+    },
+    {
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": false
+      },
+      "orientation": -1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "80e79480044cd290b20441a3c1584cbec3f5287cfba3e114a52444ac52534bd0",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.05415726249436555
+    },
+    {
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": true
+      },
+      "orientation": 1,
+      "transform": "ewma",
+      "plan_identity": "5c77b94e0c4b4f703dd89f967a40b05bc993d39f49c512897d317dc772291e74",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.027637594320194095
+    },
+    {
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": true
+      },
+      "orientation": -1,
+      "transform": "ewma",
+      "plan_identity": "ba86acc8c4dd7694e68c6c0f66b9f5af4e2e1ef3c45aed2e326a3696ebc6135e",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.05880959535678183
+    },
+    {
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.8,
+        "half_life_relative": false
+      },
+      "orientation": 1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "b5e69407eb8ed0326e70931d871f85d881f92bec8bbcb318fa4ed6668ebef4d2",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.02949837696964101
+    },
+    {
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.8,
+        "half_life_relative": false
+      },
+      "orientation": -1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "c2c254f0f51863dda76f57137f737f84585c89735aebf06f130e75c6643d298c",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.05499936518424561
+    },
+    {
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.8,
+        "half_life_relative": true
+      },
+      "orientation": 1,
+      "transform": "ewma",
+      "plan_identity": "f2e3010fbcc033079b4edc97b83347b5f1ffc9b8621f4c25a933270f68601669",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.022853682641320722
+    },
+    {
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.8,
+        "half_life_relative": true
+      },
+      "orientation": -1,
+      "transform": "ewma",
+      "plan_identity": "4ab749fd0f6846278d64e648bae0b808063490758277db4f800700b8bee71039",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.0626795758497904
+    },
+    {
+      "family": "INDUSTRY_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "industry",
+        "method": "ols"
+      },
+      "orientation": 1,
+      "status": "ineligible",
+      "reason": "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 1,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "5a1e11ef111a34cdbbe9b4b7c903503654e9ca48d6d3b5dc0b6ac796ab5e96f0",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.08473486664531635
+    },
+    {
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "4b9f04e658a4a2c8234ac7f4b9661cb33561a82bf9055c631f830f951b69d311",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.08473486664531635
+    },
+    {
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.5,
+        "power": 1,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "3200d1e9685e2209e7256d486de58f62c3dff9ba8e25d565603838e8dc3eeeef",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.07375376950753924
+    },
+    {
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.5,
+        "power": 2,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "a9550d55d06b6051cda7df858e887ef644d5dbc69b7428920bfcdc29b371825a",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.07375376950753924
+    },
+    {
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.65,
+        "power": 1,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "b7ef503f26b496313961b2a6d974a4721c8dd605eecda1224e2015a2c00fc7e6",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.03710692331640464
+    },
+    {
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.65,
+        "power": 2,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "fc2be852adae9c5644b8ca38f7859d752611f67dbf11501da8eb3aba9f5ac2cb",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.03710692331640464
+    },
+    {
+      "family": "LOW_DOF_INTERACTION",
+      "parameters": {
+        "interaction_degree": 1,
+        "doe_reduction": 0.7
+      },
+      "orientation": 1,
+      "status": "ineligible",
+      "reason": "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation"
+    },
+    {
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "flag",
+        "freshness_window": 5
+      },
+      "orientation": 1,
+      "transform": "missing_indicator",
+      "plan_identity": "aaa299950de62a86c0eae069d178f2af9fce1f9d474906b19ee8ebca38c7fa4a",
+      "coverage": 0,
+      "valid_train_days": 0,
+      "status": "ineligible",
+      "reason": "ValueError: insufficient common coverage or training IC"
+    },
+    {
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "fill",
+        "freshness_window": 1
+      },
+      "orientation": 1,
+      "transform": "forward_fill",
+      "plan_identity": "1bc14611b6638ee557ea2564745111ff4f2ab4c207aa9b990bbf57d0d8f5dae7",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.000011702396672030562
+    },
+    {
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "fill",
+        "freshness_window": 3
+      },
+      "orientation": 1,
+      "transform": "forward_fill",
+      "plan_identity": "26552c236404fb272ac5186153b58e90b4a3de7884ac08d6c8603a5d2c7ab953",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.000011702396672030562
+    },
+    {
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "fill",
+        "freshness_window": 5
+      },
+      "orientation": 1,
+      "transform": "forward_fill",
+      "plan_identity": "6e9a7c280a10fe1c0969a79785a9790422290ff6c15a0f88d152dcf8e1a7e0c2",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.000011702396672030562
+    },
+    {
+      "family": "OPERATOR_SWAP",
+      "parameters": {
+        "target_family": "delay",
+        "aggressiveness": "conservative"
+      },
+      "orientation": 1,
+      "status": "ineligible",
+      "reason": "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation"
+    },
+    {
+      "family": "REPRESENTATION_ZSCORE",
+      "parameters": {
+        "zscore_axis": "cross_sectional",
+        "cap": 3
+      },
+      "orientation": 1,
+      "transform": "capped_zscore",
+      "plan_identity": "c18e2ec0bf88d6d67120acc40043cabe798bf0ebd4188eec16c7a3be0e1b7bb8",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.000011702396672030562
+    },
+    {
+      "family": "ROBUST_OUTLIER",
+      "parameters": {
+        "lower_quantile": 0.01,
+        "upper_quantile": 0.99
+      },
+      "orientation": 1,
+      "transform": "cs_winsor",
+      "plan_identity": "b057c0904e087046595bea0c4ed80c4649d44fc80d94eb854f4319245f1bb90e",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.000011702396672030562
+    },
+    {
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "mad",
+        "center": "median"
+      },
+      "orientation": 1,
+      "transform": "robust_scale",
+      "plan_identity": "1bc39f17bba5065475b6f3810fcd028d43232fdc3a96061f82a60b61c296c50f",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.000011702396672030562
+    },
+    {
+      "family": "SIGN_ORIENTATION",
+      "parameters": {
+        "direction": "flip"
+      },
+      "orientation": 1,
+      "transform": "sign",
+      "plan_identity": "b93e19cfbcff5c8f132474e15386fe0eca366ed9da25ebec8da56c5ac7adf73b",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.06582645540187138
+    },
+    {
+      "family": "SIZE_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "size",
+        "method": "ols"
+      },
+      "orientation": 1,
+      "status": "ineligible",
+      "reason": "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "family": "STYLE_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "style_multi",
+        "method": "ols"
+      },
+      "orientation": 1,
+      "status": "ineligible",
+      "reason": "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "family": "TAIL_HINGE",
+      "parameters": {
+        "hinge": "top",
+        "hinge_value": 0
+      },
+      "orientation": 1,
+      "transform": "tail_hinge",
+      "plan_identity": "8137a10d8e4c155fa761ad55e504cc4af7c654cfcc855b2765e3ea4620d19fe6",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.000011702396672030562
+    },
+    {
+      "family": "TAIL_HINGE",
+      "parameters": {
+        "hinge": "bottom",
+        "hinge_value": 0
+      },
+      "orientation": 1,
+      "transform": "tail_hinge",
+      "plan_identity": "709c4aefafd014a0fcd9cf40c6d39dcc5b2eb95584bb34021530cf9f43f0c47e",
+      "coverage": 0,
+      "valid_train_days": 0,
+      "status": "ineligible",
+      "reason": "ValueError: insufficient common coverage or training IC"
+    },
+    {
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "top"
+      },
+      "orientation": 1,
+      "transform": "tail_saturation",
+      "plan_identity": "0b7c0e8b91264e6a5da999204a01912b9c99c42508de0390973ce5428605f8cd",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.000029850409653796732
+    },
+    {
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "bottom"
+      },
+      "orientation": 1,
+      "transform": "tail_saturation",
+      "plan_identity": "78a335f2c4cb79df33797dd92fe5c69b4c3890a46e55d824ff8dbff2660a3f19",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.000011729968685144616
+    },
+    {
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "both"
+      },
+      "orientation": 1,
+      "transform": "tail_saturation",
+      "plan_identity": "a802cca53ab05bb47e9fd5c8ae61c6d7e9109895cf50b4d28fef3821a0bb2227",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.00006235027511911015
+    },
+    {
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 1,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "a45a683caa321ecdf2920cbc81f4cf734bcfc749857511b3262c99212ceb10e7",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.02414247909251394
+    },
+    {
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "6fe6b03b54f510db6f34051fd06a3e3953de2dc1b5309e6e78a3358600e3f31a",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.02414247909251394
+    },
+    {
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.5,
+        "power": 1,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "c2cae992bdbaf8f35ede424f9f5a4a156ba4c1f52a7d5e197c6902c4acea78d7",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.01303672172214539
+    },
+    {
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.5,
+        "power": 2,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "90778c4d4e12b380068653bd483f56098b859c21cad6c02a9936d6fe761b3ace",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.01303672172214539
+    },
+    {
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.65,
+        "power": 1,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "15f0cbfc8cf9a3ff1a66e7912de4949ebc89577a435636af77ee9d415909d248",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.02834118557325426
+    },
+    {
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.65,
+        "power": 2,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "b9e3fb914a91e93fa9ca5b7d7c8c803753fd3d7fecbaffbce6fd53d4c13a1d7a",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.02834118557325426
+    },
+    {
+      "family": "WINDOW_REFINEMENT",
+      "parameters": {
+        "window_mode": "shorter",
+        "scale": 0.7
+      },
+      "orientation": 1,
+      "status": "ineligible",
+      "reason": "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation"
+    },
+    {
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.625,
+        "power": 1,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "6add1eb52248dcc63625dd0359dd20caea8aea2c4a942e386838866350c8bca5",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.043635471802814
+    },
+    {
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.625,
+        "power": 2,
+        "asymmetry": false
+      },
+      "orientation": 1,
+      "transform": "rank_shape",
+      "plan_identity": "b6a8aa777878467a3dc1239b7b08431c06cd0faa6c1577072572b0a0cbb7a485",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.043635471802814
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 3,
+        "window": 3
+      },
+      "orientation": 1,
+      "transform": "trailing_sma",
+      "plan_identity": "0c35ba6d7e5326b6f438d706b684070be7c8b3f034b78a5ca38699249d22fbdf",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.01960124683068576
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 3,
+        "window": 3
+      },
+      "orientation": -1,
+      "transform": "trailing_sma",
+      "plan_identity": "9f00d11ff7c8c45a3c79e9ca57d883f10e1f60905ea1d8090805506a8dcec20c",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.050225810055448
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 5,
+        "window": 5
+      },
+      "orientation": 1,
+      "transform": "trailing_sma",
+      "plan_identity": "bf6aa922bcfc8db2a887d4e002fd87b7cf8c6076999a35685dcbddefe8f9a9e9",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.027792353167741746
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 5,
+        "window": 5
+      },
+      "orientation": -1,
+      "transform": "trailing_sma",
+      "plan_identity": "b5c829798d21485dcdb3e34678d495bcb0101b3041c6e9cabb75c9bbfde9637f",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.04833038723973611
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 8,
+        "window": 8
+      },
+      "orientation": 1,
+      "transform": "trailing_sma",
+      "plan_identity": "f03f69c38741ead2713bfd8367ecf177e66f942e36b9a36c8cb445d0d3b24731",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.02586024545459393
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 8,
+        "window": 8
+      },
+      "orientation": -1,
+      "transform": "trailing_sma",
+      "plan_identity": "890d5a56fc7e0002ae4ace5939d550906688254c8f9dc5b6bd1f2bbee575cc04",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.052857018402927884
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 10,
+        "window": 10
+      },
+      "orientation": 1,
+      "transform": "trailing_sma",
+      "plan_identity": "4736e7ed2c5e8485c510eaac32da867664bd47d397875c2583948558ac663f5e",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.02162521184361253
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 10,
+        "window": 10
+      },
+      "orientation": -1,
+      "transform": "trailing_sma",
+      "plan_identity": "0fbe856322347994803eb71ba36991c69aa4a7389405c534ee27aa43a9121f1d",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.05419337925222967
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 13,
+        "window": 13
+      },
+      "orientation": 1,
+      "transform": "trailing_sma",
+      "plan_identity": "c140b9dd079c3f5e20d2cb1024d78c11f0dd19f407e03f210b227e049629d618",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.01824354712187498
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 13,
+        "window": 13
+      },
+      "orientation": -1,
+      "transform": "trailing_sma",
+      "plan_identity": "1d88009148027cc9fab6ce7e7e7ae0f3c20cebcee4bc80d2d2b2fa9049b2353d",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.056641219884880384
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 20,
+        "window": 20
+      },
+      "orientation": 1,
+      "transform": "trailing_sma",
+      "plan_identity": "d886755395e18607906f38d32101ae3c0e9c220a52c0702e6fc7d29be713d0df",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.008637306165099038
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 20,
+        "window": 20
+      },
+      "orientation": -1,
+      "transform": "trailing_sma",
+      "plan_identity": "3a57341c5b08bf371d6ced056e18325b87e8b942f835f9203c080aeebfae07d7",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.06281443712130255
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 3,
+        "min_periods": 1
+      },
+      "orientation": 1,
+      "transform": "ewma",
+      "plan_identity": "cbf0b39525f6928aae99cdf2e89f18d22a8f64f7d203a5c14b453bb300a31780",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.02936346502448821
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 3,
+        "min_periods": 1
+      },
+      "orientation": -1,
+      "transform": "ewma",
+      "plan_identity": "58f83ff8c2a8f4a71de78d5260601deb88c969accf35b0b28dd9ef4a1d3fb634",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.054661121479646704
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 5,
+        "min_periods": 1
+      },
+      "orientation": 1,
+      "transform": "ewma",
+      "plan_identity": "10d4d6a0afda53cec9aebf09575d22da00268ab49e8c18ce4883f53a8681f74e",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.027637594320194095
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 5,
+        "min_periods": 1
+      },
+      "orientation": -1,
+      "transform": "ewma",
+      "plan_identity": "000e942bb4b09745b90c8653acff40267826e84f3193a4e2554cc20beba45a30",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.05880959535678183
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 8,
+        "min_periods": 1
+      },
+      "orientation": 1,
+      "transform": "ewma",
+      "plan_identity": "b80d7c8b87413de32375806481d65886759bc9883e61078496fd54aa0a34a15b",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.022853682641320722
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 8,
+        "min_periods": 1
+      },
+      "orientation": -1,
+      "transform": "ewma",
+      "plan_identity": "29a74cde7efe6a601880ae39a14d928fd0ecf34f361b9b2b151b08b5bb6c5381",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.0626795758497904
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 10,
+        "min_periods": 1
+      },
+      "orientation": 1,
+      "transform": "ewma",
+      "plan_identity": "da23d294e717137e3aaf7b93a9312d1051e5f87447ce97a0103fe170d92fa3bf",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.0195377628553771
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 10,
+        "min_periods": 1
+      },
+      "orientation": -1,
+      "transform": "ewma",
+      "plan_identity": "fd808202fe3a8d59ed6c24fdbdb7e5b9b833ae45e3ef4d8f9f6e5ba8f0845c24",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.06283812631766267
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 13,
+        "min_periods": 1
+      },
+      "orientation": 1,
+      "transform": "ewma",
+      "plan_identity": "de3f097621cceef874c012162e449049e617bdfb4d6d4fd9c9c728e467843fd0",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.015850613737580538
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 13,
+        "min_periods": 1
+      },
+      "orientation": -1,
+      "transform": "ewma",
+      "plan_identity": "8fcdd6894fccad4559ffec1850f1f448d9129c6d18acc45fc3e58ff6018870a6",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.06197963436412706
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 20,
+        "min_periods": 1
+      },
+      "orientation": 1,
+      "transform": "ewma",
+      "plan_identity": "ce8f9516b3785e6c38f1635de4941e2b0bfcf4c3d0119078ff3206080395ff4f",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.009938906460671137
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 20,
+        "min_periods": 1
+      },
+      "orientation": -1,
+      "transform": "ewma",
+      "plan_identity": "6d60ef87be2043d490932dcf36204c5700a4d149a7711b246a91d4859e449184",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.05749477938465648
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.20629947401590026
+      },
+      "orientation": 1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "ada3439f10b3bf9e92645f0a5b13397bac1b80a91e2bfd08f88ca8d7f9078da6",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.02936346502448821
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.20629947401590026
+      },
+      "orientation": -1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "f8289c4dce71e9dc6891e16e880c74738f4baf6d862e848f91786378468b2a73",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.054661121479646704
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.12944943670387585
+      },
+      "orientation": 1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "45649ef06a39969a8fc2b036e1e7ea9aab82dc9daf2f94e1c8b5a5b616cff476",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.027637594320194095
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.12944943670387585
+      },
+      "orientation": -1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "c708b01e2cd58666c8ebd8196a23946ee0937e197db9592415edfcd622f49906",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.05880959535678183
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.08299595679532877
+      },
+      "orientation": 1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "5eb152f1ce46859af86d6507d721554a92217817c42a51c4c6d574078d551c20",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.022853682641320722
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.08299595679532877
+      },
+      "orientation": -1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "b20146c57877bebac3a80684135c2bebc5e78eb7abc642d17567c6138dd8cde2",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.0626795758497904
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.06696700846319258
+      },
+      "orientation": 1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "6e2548c6457677299a27048cfb6861b2b9b6b8a5ffab044429c6b0742ba97ae7",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.0195377628553771
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.06696700846319258
+      },
+      "orientation": -1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "1022bf4b7fb4792738ea22a296dbf8e79d11cd6b30eaa15263fd18292dad8e2a",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.06283812631766267
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.051922485660828535
+      },
+      "orientation": 1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "56ba395f9ef36d89bb4d857b6a03622b4d1a9cc9bd2e25e576f087214396ca14",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.015850613737580538
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.051922485660828535
+      },
+      "orientation": -1,
+      "transform": "one_sided_iir_lowpass",
+      "plan_identity": "2c90e5679a757fa15592629143af9812eabda4b449db27e4b5a72afb56e53341",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.06197963436412706
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 8,
+        "period_fast": 2,
+        "period_slow": 24,
+        "use_current": false
+      },
+      "orientation": 1,
+      "transform": "kama",
+      "plan_identity": "92e8dea8818e5da77ea9fa792f3d42282baf6a0b832b4a9f2e33fe4ff11f58d4",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.019441174235373677
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 8,
+        "period_fast": 2,
+        "period_slow": 24,
+        "use_current": false
+      },
+      "orientation": -1,
+      "transform": "kama",
+      "plan_identity": "537882d4d408648558a25f89e75b4c7e8c94cb118bed1ec3cf9d900f76aeae5a",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.04112302373248382
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 10,
+        "period_fast": 2,
+        "period_slow": 30,
+        "use_current": false
+      },
+      "orientation": 1,
+      "transform": "kama",
+      "plan_identity": "262b03049dd6eaeb0dd3195665dd42526107fb5d5f279b242cb408d1020fdb5a",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.014315566285109112
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 10,
+        "period_fast": 2,
+        "period_slow": 30,
+        "use_current": false
+      },
+      "orientation": -1,
+      "transform": "kama",
+      "plan_identity": "3f06d3a66df694e587f73522cdee9b093712c626e55754d162eac803bec21b04",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.04251897981362429
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 13,
+        "period_fast": 2,
+        "period_slow": 39,
+        "use_current": false
+      },
+      "orientation": 1,
+      "transform": "kama",
+      "plan_identity": "e0f669faad98c6e700aef4343340446706cc1e0d0ae577684d73701cc8c8db44",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.01374983581646653
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 13,
+        "period_fast": 2,
+        "period_slow": 39,
+        "use_current": false
+      },
+      "orientation": -1,
+      "transform": "kama",
+      "plan_identity": "6198804ce61537e8b8e1591a11543cb396f441f9ba05462ae1f56b31a9658b24",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.04731767116665532
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 20,
+        "period_fast": 2,
+        "period_slow": 60,
+        "use_current": false
+      },
+      "orientation": 1,
+      "transform": "kama",
+      "plan_identity": "a6b1f827314942995416fb7af9c174bc97e3df4e2772dbbe98eddbbcac46d9dc",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.004288405375560257
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 20,
+        "period_fast": 2,
+        "period_slow": 60,
+        "use_current": false
+      },
+      "orientation": -1,
+      "transform": "kama",
+      "plan_identity": "1a181842d1e137aee5c61ba2c0cc15a2741c84e27a6b9376a7e83dcabfb4cb10",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.054753785371407813
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.053621575878972906
+      },
+      "orientation": 1,
+      "transform": "kalman_local_level",
+      "plan_identity": "07bcb5d167587dcf5e24564c8bb761386be3ad584b90eac8eeb6ab05d8538e6d",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.029361779298037453
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.053621575878972906
+      },
+      "orientation": -1,
+      "transform": "kalman_local_level",
+      "plan_identity": "6085949654bc897a983d9843580fa052f95571eb65d57d3b87d794c204784d32",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.05466007670112065
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.019248918293159143
+      },
+      "orientation": 1,
+      "transform": "kalman_local_level",
+      "plan_identity": "f3f43d2c099b28b888cd1b9096ca900ef9d8e16dd09d5ef710fb1d583fb0592b",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.027580959477371828
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.019248918293159143
+      },
+      "orientation": -1,
+      "transform": "kalman_local_level",
+      "plan_identity": "bbb90c0e571c12bb78e3fe51946af3941f33926f4aed6ac5f6f18db00f9cdeb3",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.05877359109082637
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.007511775869928892
+      },
+      "orientation": 1,
+      "transform": "kalman_local_level",
+      "plan_identity": "1940364f5fd77fe15854c0f1e8d65d84ca25b418161dadaa5025eee7c4ee7af1",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.02245205393859009
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.007511775869928892
+      },
+      "orientation": -1,
+      "transform": "kalman_local_level",
+      "plan_identity": "db48771ef9afca040f50b4795b84f1dbea8b3a9b97d681df087030b7c9e0f1e4",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.06230148789464962
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.004806454073100579
+      },
+      "orientation": 1,
+      "transform": "kalman_local_level",
+      "plan_identity": "93cba5d2a830814d51b066ade6ba672414408e23b2599c3bab97cae789fae063",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.018942915360115012
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.004806454073100579
+      },
+      "orientation": -1,
+      "transform": "kalman_local_level",
+      "plan_identity": "ea93cad21d0509b35ae3a67c415b761d6b263aabd665588179aa41f37bb2487f",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.06192125652475699
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0028435908208181383
+      },
+      "orientation": 1,
+      "transform": "kalman_local_level",
+      "plan_identity": "5e4610dfe19678e636013b3b6cefb26ab3214b9108257ccc40bd6024d71e2f5a",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.015208400248585923
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0028435908208181383
+      },
+      "orientation": -1,
+      "transform": "kalman_local_level",
+      "plan_identity": "ac7db629b7891e28b80a5b8d38107cfa392affc8f8f2720c65e1f2d64e89877f",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.0599234714585565
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0012012527662230554
+      },
+      "orientation": 1,
+      "transform": "kalman_local_level",
+      "plan_identity": "2b6e0550ef09226e7f1d129a6c5c48a1aeb4c5de0dcb05af1a2ed377ba7508f8",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": -0.009800464448113225
+    },
+    {
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0012012527662230554
+      },
+      "orientation": -1,
+      "transform": "kalman_local_level",
+      "plan_identity": "51557b69bc5e0ab6bfc2d09b3c8c424e1144fb17beb5f338398b844a11daf08a",
+      "coverage": 1,
+      "valid_train_days": 267,
+      "status": "train_evaluated",
+      "train_gain": 0.05334825179050619
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "scope": "240x40 synthetic one factor; full research optimizer call, no baseline lineage; 1 warmup + 3 paired measurements",
+  "exact_parity": true,
+  "seconds": {
+    "old": [
+      4.4549707670003045,
+      4.394638640999801,
+      4.482483959999627
+    ],
+    "new": [
+      4.713000938000732,
+      4.290608350000184,
+      4.2033972119998
+    ]
+  },
+  "median_speedup": 1.0383074854641798
+}
