@@ -1,0 +1,64 @@
+# 自动优化完成度与剩余真实接线
+
+本清单区分代码能力、合成验收和真实运行证据，不是“全部完成”声明。
+工作树核验基点 b7f3ec234，正式路径 /home/sunhaiwei/quant_projects。
+
+## 已有真实证据
+
+- DataAccess 读取绑定清单与因子 SHA256，排除质量阻断项；公开批量示例
+  传递源声明谱系，当前固定样本为两个因子、500 日、256 股票。
+- 基础缩尾和排名、重复 CS-rank 抑制、TRAIN 单指标及联合退化保护。
+- TRAIN 诊断与成本后组合口径一致；训练后只验证一个冻结赢家，失败保留 RAW。
+- 20 层形状、分层衰减、27 个准入平滑参数及其他数值方法已有逐案例回放。
+- 当前完整逐方法记录为 65 案例：54 执行、11 需要额外输入或属于控制操作。
+  “执行”不等于通过验证，更不等于未来收益保证。
+- FP/FE 结果对齐和 RankIC 系数路径已有完整优化 A/B，输出和候选记录逐项等值。
+
+证据分别见 COS_DIAGNOSTICS_20260922.md、method_family_recheck_20260922.json、
+BASELINE_PIPELINE.md、DIAGNOSIS_AND_SELECTION.md，以及 FP/QE 的性能核验文档。
+
+## 11 个未执行案例必须拆开解释
+
+| 分支 | 案例数 | 实际缺口 | 下一步验收要求 |
+|---|---:|---|---|
+| INDUSTRY/SIZE/STYLE_NEUTRALIZATION | 3 | 声明的外部暴露与可信历史可用时间 | 暴露对齐、可用时间、真实中性化及收益退化对照 |
+| WINDOW_REFINEMENT/OPERATOR_SWAP/LOW_DOF_INTERACTION | 3 | 需要 FE DSL 重编译，不是单列值变换 | 绑定原 DSL、语义约束、因果重算、候选去重及验证 |
+| REPRESENTATION_RANK 的 ts（average/min） | 2 | **缺少已声明并绑定的窗口**，不是缺少外部数据 | 补齐窗口与时间语义；验证历史、并列值、缺失与自动搜索 |
+| REPRESENTATION_ZSCORE 的 ts | 1 | **缺少已声明并绑定的窗口**，不是缺少外部数据 | 明确当前值／滞后统计、窗口、零方差、极值与自动搜索 |
+| ABANDON | 1 | 停止／放弃控制，不是数值变换 | 验证控制流程，不伪装成产生新因子 |
+| MISSINGNESS_FRESHNESS 的 drop | 1 | 行选择，不符合保持行对齐的 Series 接口 | 保留行选择和覆盖约束契约，不静默删行以美化评分 |
+
+上述 ts 分支已在修复注册表中声明选项，但 research adapter 目前主动拒绝：
+“time-series rank/zscore lacks a registry window parameter”。
+不能把它们算成已经完成，或将随意窗口藏入实现。
+后续需要同步检查参数域、因果类别、计划身份、CS-rank 去重规则和自动候选枚举。
+
+## 历史暴露边界
+
+已核验的历史行业与估值 UpdateTime 有后补记录，见 BASELINE_PIPELINE.md。
+这既不能证明信息当时不可用，也不能证明当时已可用。
+不得把 TradeDate 直接改名为 available_time 当作 PIT 证据。
+基础流程目前明确记录 neutralization_missing_exposures；这不是完成中性化。
+
+## TEST 接线边界
+
+最终报告已具备冻结身份、持久一次性读取、逐日曲线以及 TEST/full_sample
+角色隔离的合成验收，真实 TRAIN 曲线也已验证；真实 TEST 仍未打开。
+
+本次只读核查在 factor_optimizer、factor_assets、quant_platform 的指定目录
+以及总仓库深度 3 的 sqlite/db 文件名范围内，未发现可确认的真实
+TestAuthorityBroker 状态库配置。发现的 data/alphaprobe/hypothesis.sqlite3
+不是据此就能认定为 TEST 状态库；jobs/e2e_f_noise_failure_gc.py 的
+campaign.sqlite3 属于合成 E2E 工作目录创建，不是正式评估接线证据。
+这只是限定范围内的核查，不声称全服务器没有其他配置。
+
+继续真实最终评估前，应明确唯一持久状态库、真实数据集身份与授权标签读取端。
+不得临时换库、改数据集别名或修改测试分割来重开已经消耗的 TEST。
+当前真实数据是否存在历史暴露证据、TEST 正式配置位置已向用户询问；
+在等待信息时，窗口分支等纯代码缺口仍可继续推进。
+
+## 不能据此宣称
+
+不能宣称所有方法真实验收完毕、真实 TEST 已通过、稳定盈利、绝对无 bug，
+或已证明全局最快。平台根测试仍有 14 项收集错误，模块清单见
+METHOD_AUDIT_20260922.md，未掩盖或关闭检查。
