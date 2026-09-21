@@ -97,6 +97,7 @@ class FactorOptimizationResult:
     reason: str
     validation_candidate_identity: str | None = None
     validation_coverage: float | None = None
+    training_diagnostics: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -264,6 +265,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
         raise ValueError("factor and label axes must match exactly")
     split = automatic_time_split(labels, config)
     specs = _specs(config)
+    from factor_optimizer.research_diagnostics import diagnose_training_batch
+    diagnostics = diagnose_training_batch(batch, labels, config=config)
     from factor_optimizer.adapters.repair_execution import compile_value_repair
     from factor_optimizer.adapters.preprocessing import compile_admissible_smoothing_grid
     from quant_evaluator.contracts.factor_batch import FactorBatch
@@ -288,7 +291,17 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
         train_hash.update(json.dumps(batch.asset_axis.values.tolist(), default=str).encode())
         train_hash.update((factor_id + split.identity).encode())
         train_ref = train_hash.hexdigest()
-        proposals = [(family, params, None) for family, params in specs]
+        factor_specs = list(specs)
+        diagnosis = diagnostics[factor_id]
+        shape = diagnosis["proposed_shape_family"]
+        if shape and (not config.families or shape in config.families):
+            # Up to two TRAIN-fitted proposals supplement the prespecified grid.
+            # They count against the same budget and get no validation retries.
+            for power in (1., 2.):
+                params = {"center": diagnosis["proposed_center"], "power": power, "asymmetry": False}
+                if (shape, params) not in factor_specs:
+                    factor_specs.append((shape, params))
+        proposals = [(family, params, None) for family, params in factor_specs]
         if not config.families or "CAUSAL_SMOOTHING" in config.families:
             proposals += [(p.family, dict(p.parameters), p) for p in compile_admissible_smoothing_grid(
                 natural_time_scale=config.natural_time_scale, training_context_ref=train_ref)]
@@ -370,7 +383,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
         outputs.append(out)
         results[factor_id] = FactorOptimizationResult(
             factor_id, status, chosen.family, chosen.identity, chosen, train_gain, lower,
-            tuple(records), reason, validation_identity, validation_coverage)
+            tuple(records), reason, validation_identity, validation_coverage, MappingProxyType(diagnosis))
     values = np.stack(outputs, axis=-1)
     optimized = FactorBatch(batch.factor_ids, batch.time_axis, batch.asset_axis,
                             values, validity=np.isfinite(values),

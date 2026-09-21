@@ -15,6 +15,9 @@
 COS 语义与 PIT 契约: [`docs/COS语义与PIT契约.md`](docs/COS语义与PIT契约.md) ｜
 运维手册: [`docs/DATAACCESS_OPERATIONS_RUNBOOK.md`](docs/DATAACCESS_OPERATIONS_RUNBOOK.md)
 
+跨账号 COS 的单对象研究读取：[有界读取、临时文件清理与限制](docs/RESEARCH_COS_OBJECTS.md)
+（仅研究用途，不替代 production/PIT 读取契约）。
+
 ---
 
 ## 它是什么 / 不是什么

@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**70 个 Python 模块、903 个公开函数/类/方法定义**。
+扫描实际包目录：**71 个 Python 模块、904 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -58,6 +58,7 @@
 | [factor_optimizer/ports/__init__.py](../factor_optimizer/ports/__init__.py) | 0 | Ports: narrow consumer-side contracts FO binds other packages through. |
 | [factor_optimizer/ports/factor_intelligence.py](../factor_optimizer/ports/factor_intelligence.py) | 29 | Factor Intelligence provider port (R61-FI-014 / plan §20 E6, matrix E6). |
 | [factor_optimizer/research_batch.py](../factor_optimizer/research_batch.py) | 10 | Bounded research batch optimization with automatic chronological splitting. |
+| [factor_optimizer/research_diagnostics.py](../factor_optimizer/research_diagnostics.py) | 1 | TRAIN-only multi-dimensional research diagnosis using QE metric authorities. |
 | [factor_optimizer/search/__init__.py](../factor_optimizer/search/__init__.py) | 0 | Search orchestration for factor mutation optimization. |
 | [factor_optimizer/search/categorical_strategy.py](../factor_optimizer/search/categorical_strategy.py) | 10 | Categorical search strategy (TPE-style) for treatment auto-optimization. |
 | [factor_optimizer/search/conditional_search.py](../factor_optimizer/search/conditional_search.py) | 24 | Hierarchical conditional search over (repair-family, parameters) (R61-FI-035). |
@@ -6417,10 +6418,11 @@ Conservative defaults; callers need not choose calendar cutoffs.
 | `reason` | `str` | `必填/未声明默认` |
 | `validation_candidate_identity` | `str \| None` | `None` |
 | `validation_coverage` | `float \| None` | `None` |
+| `training_diagnostics` | `Mapping[str, Any] \| None` | `None` |
 
 ### OrientedRepairPlan
 
-[实际实现](../factor_optimizer/research_batch.py#L103)。
+[实际实现](../factor_optimizer/research_batch.py#L104)。
 
 Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
@@ -6433,7 +6435,7 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 ### OrientedRepairPlan.family
 
-[实际实现](../factor_optimizer/research_batch.py#L113)。
+[实际实现](../factor_optimizer/research_batch.py#L114)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6441,7 +6443,7 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 ### OrientedRepairPlan.identity
 
-[实际实现](../factor_optimizer/research_batch.py#L117)。
+[实际实现](../factor_optimizer/research_batch.py#L118)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6449,7 +6451,7 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 ### OrientedRepairPlan.execute
 
-[实际实现](../factor_optimizer/research_batch.py#L120)。
+[实际实现](../factor_optimizer/research_batch.py#L121)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6457,7 +6459,7 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 ### BatchOptimizationResult
 
-[实际实现](../factor_optimizer/research_batch.py#L125)。
+[实际实现](../factor_optimizer/research_batch.py#L126)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6473,7 +6475,7 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 ### automatic_time_split
 
-[实际实现](../factor_optimizer/research_batch.py#L133)。
+[实际实现](../factor_optimizer/research_batch.py#L134)。
 
 60/20/20 in time, warmup, and purge real label windows at boundaries.
 
@@ -6481,11 +6483,23 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 ### optimize_factor_batch
 
-[实际实现](../factor_optimizer/research_batch.py#L247)。
+[实际实现](../factor_optimizer/research_batch.py#L248)。
 
 Optimize aligned QE contracts automatically, preserving every input ID.
 
 参数：`(batch, labels, *, config=None, allow_research=False)`。
+
+## factor_optimizer/research_diagnostics.py
+
+TRAIN-only multi-dimensional research diagnosis using QE metric authorities.
+
+### diagnose_training_batch
+
+[实际实现](../factor_optimizer/research_diagnostics.py#L15)。
+
+Inspect 20 real quantile bins, IC/ICIR and gross-one spread risk on TRAIN.
+
+参数：`(batch, labels, *, config=None, periods_per_year=252, minimum_assets_per_quantile=10)`。
 
 ## factor_optimizer/search/__init__.py
 
@@ -10288,7 +10302,8 @@ Import seen records from dictionaries.
 | `factor_optimizer/policy/repair_registry.py` | `1f337900eec0750622901a2f26f0bb19ad5bae248399c62546b3ede85b998545` |
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
-| `factor_optimizer/research_batch.py` | `f05d9fa37676c5bf34a18f760e0d5f392b947f45dff4ad576ddf0dc4bbd2a919` |
+| `factor_optimizer/research_batch.py` | `d0c4884faac303721216d83b995adf952b2452cb3a00ff3d0456cbf3c6b999b7` |
+| `factor_optimizer/research_diagnostics.py` | `5a2f8b586bae701f72ecc50b35e1cce997acfb1b70029fe99a3488165f0c9857` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |
 | `factor_optimizer/search/conditional_search.py` | `4b6dfeceacd797ad16f2406d0cd8c5cc1a4146c59c65c611f875356ce7251731` |
