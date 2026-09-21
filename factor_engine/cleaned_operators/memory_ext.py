@@ -43,6 +43,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view
 
 from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.common.strict_params import strict_int
@@ -181,16 +182,91 @@ def _autocorrelation_time(chunk: np.ndarray, max_lag: int) -> float:
     return _geyer_ims_tau(rho)
 
 
+def _geyer_tau_column(col: np.ndarray, w: int, ml: int) -> tuple[np.ndarray, np.ndarray]:
+    """Geyer IMS / IPS autocorrelation time for one column, batched over rows.
+
+    ``rho_k`` uses the standard finite-N denominator of ``_sample_acf``
+    (``gamma_k = dot(c[:N-k], c[k:]) / (N-k)`` over the trailing contiguous
+    finite cohort, ``rho_k = gamma_k / gamma_0``), and the Geyer truncation
+    rules are preserved bit-for-bit at the level that matters: the paired
+    sequence ``P_k = rho_(2k) + rho_(2k+1)`` is cut at the first ``P_k <= 0``
+    (signed compare, never an absolute-value gate), the unpaired final even lag
+    is dropped, and IMS additionally takes the running minimum before summing.
+
+    The vectorised layout keeps every row's trailing contiguous run in the last
+    ``run`` columns of the window (zero-filled in front) so each lag-k product
+    matrix only ever pairs two in-run values.  Returns ``(tau_ims, tau_ips)``,
+    NaN wherever the authority fails closed.
+    """
+    n = col.size
+    tau_i = np.full(n, np.nan, dtype=float)
+    tau_p = np.full(n, np.nan, dtype=float)
+    if n == 0:
+        return tau_i, tau_p
+    fin = np.isfinite(col)
+    if not np.any(fin):
+        return tau_i, tau_p
+    ar = np.arange(n)
+    pad = np.concatenate([np.full(w - 1, np.nan, dtype=float), col])
+    win = sliding_window_view(pad, w)[:n]           # row t -> x[max(0,t-w+1)..t]
+    last_bad = np.maximum.accumulate(np.where(fin, -1, ar))
+    run = np.minimum(np.where(fin, ar - last_bad, 0), w)
+    cols = np.arange(w)
+    mask = cols[None, :] >= (w - run)[:, None]      # trailing contiguous run
+    vals = np.where(mask, win, 0.0)
+    mag = np.abs(vals).max(axis=1)
+    ok = (run >= 3) & np.isfinite(mag) & (mag != 0.0)
+    if not ok.any():
+        return tau_i, tau_p
+    head = np.clip(w - run, 0, w - 1)
+    cen = vals - vals[ar, head][:, None]
+    allfin = (np.isfinite(cen) | ~mask).all(axis=1)
+    if not allfin.all():
+        alt = vals / np.where(mag > 0.0, mag, 1.0)[:, None]
+        alt = alt - alt[ar, head][:, None]
+        cen = np.where(allfin[:, None], cen, alt)
+    scale = np.where(mask, cen, 0.0).__abs__().max(axis=1)
+    cen = cen / np.where(scale == 0.0, 1.0, scale)[:, None]
+    mean = np.where(mask, cen, 0.0).sum(axis=1) / run
+    cen = np.where(mask, cen - mean[:, None], 0.0)
+    spread = np.abs(cen).max(axis=1)
+    cen = cen / np.where(spread == 0.0, 1.0, spread)[:, None]
+    gamma0 = (cen * cen).sum(axis=1) / run
+    ok &= np.isfinite(gamma0) & (gamma0 > 0.0)
+    if not ok.any():
+        return tau_i, tau_p
+    rho = np.empty((n, ml + 1), dtype=float)
+    rho[:, 0] = 1.0
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        for k in range(1, ml + 1):
+            # fused ``sum(c[t] * c[t+k])`` — no (n, w) temporary per lag
+            num = np.einsum("ij,ij->i", cen[:, : w - k], cen[:, k:])
+            rho[:, k] = (num / (run - k)) / gamma0
+    # lags beyond min(max_lag, N-1) do not exist in the authority's rho array
+    m = np.minimum(ml, run - 1)
+    rho = np.where(np.arange(ml + 1)[None, :] <= m[:, None], rho, 0.0)
+    cmax = (ml + 1) // 2
+    jj = np.arange(cmax)
+    pairs = rho[:, 0: 2 * cmax: 2] + rho[:, 1: 2 * cmax: 2]
+    count = (m + 1) // 2
+    live = jj[None, :] < count[:, None]
+    neg = (pairs <= 0.0) & live
+    last = np.where(neg.any(axis=1), neg.argmax(axis=1), count)
+    keep = jj[None, :] < last[:, None]
+    ims = np.where(keep, np.minimum.accumulate(pairs, axis=1), 0.0).sum(axis=1)
+    ips = np.where(keep, pairs, 0.0).sum(axis=1)
+    tau_i[ok] = -1.0 + 2.0 * ims[ok]
+    tau_p[ok] = -1.0 + 2.0 * ips[ok]
+    return tau_i, tau_p
+
+
 def _autocorrelation_time_series(x2d: np.ndarray, window: int, max_lag: int) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
     ml = int(max_lag)
     for c in range(cols):
-        col = x2d[:, c]
-        for r in range(rows):
-            i0 = max(0, r - w + 1)
-            out[r, c] = _autocorrelation_time(col[i0 : r + 1], ml)
+        out[:, c] = _geyer_tau_column(x2d[:, c], w, ml)[0]
     return out
 
 
@@ -200,15 +276,7 @@ def _autocorrelation_time_series_ips(x2d: np.ndarray, window: int, max_lag: int)
     w = int(window)
     ml = int(max_lag)
     for c in range(cols):
-        col = x2d[:, c]
-        for r in range(rows):
-            i0 = max(0, r - w + 1)
-            rho = _sample_acf(_trailing_contiguous_finite(col[i0 : r + 1]), ml)
-            if rho.size == 0:
-                continue
-            val = _geyer_ips_tau(rho)
-            if np.isfinite(val):
-                out[r, c] = val
+        out[:, c] = _geyer_tau_column(x2d[:, c], w, ml)[1]
     return out
 
 
@@ -250,30 +318,22 @@ def _fractional_difference_series(x2d: np.ndarray, fd: float, cutoff: int) -> np
     c = int(cutoff)
     if rows <= c or cols == 0:
         return out  # No full-support output; do not allocate cutoff-sized weights.
-    w = _fd_weights(fd, c)
+    wts = _fd_weights(fd, c)
     for col in range(cols):
-        colv = x2d[:, col]
-        for r in range(rows):
-            # R11 #41: the fractional filter has a causal support of ``cutoff+1``
-            # terms (x_t .. x_{t-cutoff}).  The startup region ``r < cutoff``
-            # cannot apply the declared filter — a shortened prefix is a DIFFERENT
-            # transform under the same factor name, so it fails closed (NaN)
-            # until the full filter history is available (min_periods =
-            # cutoff + 1 rows).
-            if r < c:
-                continue
-            seg = colv[r - c : r + 1]  # x_{t-c}..x_t
-            if not np.isfinite(seg).all():
-                out[r, col] = np.nan
-                continue
-            rev = seg[::-1]  # x_t, x_{t-1}, ..., x_{t-c}
-            magnitude = float(np.max(np.abs(rev)))
-            if magnitude == 0.0:
-                out[r, col] = 0.0
-                continue
-            with np.errstate(over="ignore", invalid="ignore"):
-                value = float(np.dot(rev / magnitude, w)) * magnitude
-            out[r, col] = value if np.isfinite(value) else np.nan
+        # R11 #41: the fractional filter has a causal support of ``cutoff+1``
+        # terms (x_t .. x_{t-cutoff}).  The startup region ``r < cutoff`` cannot
+        # apply the declared filter — a shortened prefix is a DIFFERENT transform
+        # under the same factor name, so it fails closed (NaN) until the full
+        # filter history is available (min_periods = cutoff + 1 rows).
+        pad = np.concatenate([np.full(c, np.nan, dtype=float), x2d[:, col]])
+        seg = sliding_window_view(pad, c + 1)[c:rows]   # row r -> x[r-c .. r]
+        rev = seg[:, ::-1]                              # x_r .. x_{r-c}
+        full = np.isfinite(seg).all(axis=1)
+        mag = np.abs(rev).max(axis=1)
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            val = (rev / np.where(mag > 0.0, mag, 1.0)[:, None]) @ wts * mag
+        res = np.where(full, np.where(np.isfinite(val), val, np.nan), np.nan)
+        out[c:, col] = np.where(full & (mag == 0.0), 0.0, res)
     return out
 
 

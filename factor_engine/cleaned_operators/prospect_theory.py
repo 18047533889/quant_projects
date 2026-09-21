@@ -38,6 +38,60 @@ from factor_engine.cleaned_operators.rolling_pack import frame_like
 
 _EPS = 1e-12
 
+
+def _trailing_window_matrix(values: np.ndarray, w: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Trailing-window gather for one column, NaN-aware.
+
+    Returns ``(W, valid, seg_n)``: row ``r`` of ``W`` holds rows
+    ``max(0, r-w+1) .. r`` of ``values`` in a ``w``-wide row (short leading rows
+    are NaN padded at the tail); ``valid`` marks the positions that are both
+    in-window and finite — exactly the authority's ``seg[np.isfinite(seg)]`` —
+    and ``seg_n = min(r+1, w)`` is that ``seg.size``.  Only the *set* of valid
+    positions is used downstream, so the padding side is immaterial.
+    """
+    rows = values.shape[0]
+    pos = np.arange(w)
+    start = np.maximum(0, np.arange(rows) - w + 1)
+    gather = np.clip(start[:, None] + pos[None, :], 0, rows - 1)
+    inwin = np.ascontiguousarray(pos[None, :] < (np.arange(rows) + 1)[:, None])
+    W = np.where(inwin, values[gather], np.nan)
+    return W, inwin & np.isfinite(W), inwin.sum(axis=1)
+
+
+def _trailing_run_matrix(values: np.ndarray, w: int):
+    """Trailing *contiguous finite* run ending at every row, NaN padded.
+
+    Row ``r`` holds the maximal trailing finite run of ``values[max(0,r-w+1)..r]``
+    starting at column 0 (never re-connected across a gap; a NaN at ``r`` yields
+    the empty run), so the padded tail of the row is exactly the authority's
+    ``_trailing_contiguous`` / ``_trailing_contiguous_finite`` block.
+    """
+    rows = values.shape[0]
+    idx = np.arange(rows)
+    last_bad = np.where(np.isfinite(values), -1, idx)
+    np.maximum.accumulate(last_bad, out=last_bad)
+    start = np.maximum(np.maximum(0, idx - w + 1), last_bad + 1)
+    length = np.where(np.isfinite(values), idx - start + 1, 0)
+    pos = np.arange(w)
+    gather = np.clip(start[:, None] + pos[None, :], 0, rows - 1)
+    V = np.where(pos[None, :] < length[:, None], values[gather], np.nan)
+    return V, length
+
+
+def _padded_median(A: np.ndarray, cnt: np.ndarray) -> np.ndarray:
+    """``np.median`` of the leading ``cnt`` entries of each row of ``A``.
+
+    ``A`` carries NaN in the unused tail (sorted last), so the two middle order
+    statistics of the valid prefix are picked directly; the average of the two
+    middles reproduces ``np.median`` bit for bit (including ``cnt < 1`` -> NaN).
+    """
+    S = np.sort(A, axis=1)
+    ridx = np.arange(A.shape[0])
+    lo = (cnt - 1) // 2
+    hi = cnt // 2
+    return (S[ridx, lo] + S[ridx, hi]) / 2.0
+
+
 # R11 round-3 #118: trailing-window coverage gate.  A window of 60 with only 8
 # valid returns would build 1/8-probability decision weights and compare them
 # against full-60 peers — a coverage-confounded cross-section.  A sample is
@@ -118,29 +172,68 @@ def _column_cpt(
     min_periods: int,
     min_coverage: float = _MIN_COVERAGE,
 ) -> np.ndarray:
-    rows = returns.shape[0]
-    out = np.full(rows, np.nan)
-    for t in range(rows):
-        lo = max(0, t - window + 1)
-        seg = returns[lo : t + 1]
-        valid = seg[np.isfinite(seg)]
-        if valid.size < min_periods:
-            continue
-        # R11 round-3 #118: coverage gate.  A window of 60 with only 8 valid
-        # returns builds 1/8-probability decision weights and compares them
-        # against full-60 peers — a coverage-confounded cross-section.  Require
-        # at least ``min_coverage`` (default 0.8) of the trailing window to be
-        # finite, else NaN.
-        if valid.size / max(1, seg.size) < min_coverage:
-            continue
-        out[t] = _cpt_from_sample(
-            np.sort(valid),
-            preset["alpha"],
-            preset["lambda"],
-            preset["gamma_gain"],
-            preset["gamma_loss"],
-        )
+    """CPT value of the trailing window at every row of one column.
+
+    Row-parallel replacement of the per-row loop: the trailing windows are
+    gathered once into a ``(rows, window)`` matrix (NaN preserving) and
+    ``_cpt_batch`` evaluates all of them at once.  Same gates, same
+    ``np.sort``-based ranking, same decision weights.
+    """
+    values = np.asarray(returns, dtype=float).reshape(-1)
+    W, mask, seg_n = _trailing_window_matrix(values, int(window))
+    return _cpt_batch(W, mask, seg_n, preset, int(min_periods), float(min_coverage))
+
+
+def _cpt_batch(
+    W: np.ndarray,
+    mask: np.ndarray,
+    seg_n: np.ndarray,
+    preset: dict[str, float],
+    min_periods: int,
+    min_coverage: float = _MIN_COVERAGE,
+) -> np.ndarray:
+    """Vectorised ``_column_cpt``: every trailing window of one column at once.
+
+    The window matrix is sorted once (NaN padded to the tail, so the valid
+    prefix is the authority's ``np.sort(valid)``); gains are then read in
+    descending order by reversing that prefix and losses in place, and the
+    decision weights are the differences of the probability-weighting function
+    at the cumulative probabilities, exactly as in ``_cpt_from_sample``.
+    """
+    rows, w = W.shape
+    cnt = mask.sum(axis=1)
+    win_n = np.maximum(seg_n, 1)
+    ok = (cnt >= min_periods) & (cnt >= 2) & (cnt / win_n >= min_coverage)
+    out = np.full(rows, np.nan, dtype=float)
+    if not ok.any():
+        return out
+    alpha = preset["alpha"]
+    lam = preset["lambda"]
+    gamma_gain = preset["gamma_gain"]
+    gamma_loss = preset["gamma_loss"]
+
+    S = np.sort(W, axis=1)
+    ks = np.arange(w)
+    prob = 1.0 / np.maximum(cnt, 1)
+    n_loss = (S < 0.0).sum(axis=1)
+    n_gain = np.maximum(cnt - n_loss, 0)
+    gain_idx = np.maximum(cnt[:, None] - 1 - ks[None, :], 0)
+    G = np.take_along_axis(S, gain_idx, axis=1)
+    valid_g = ks[None, :] < n_gain[:, None]
+    valid_l = ks[None, :] < n_loss[:, None]
+
+    cum = prob[:, None] * (ks + 1.0)[None, :]
+    prior = prob[:, None] * ks[None, :].astype(float)
+    dec_g = _probability_weight(cum, gamma_gain) - _probability_weight(prior, gamma_gain)
+    dec_l = _probability_weight(cum, gamma_loss) - _probability_weight(prior, gamma_loss)
+
+    Gv = np.where(valid_g, G, 0.0)
+    Lv = np.where(valid_l, S, 0.0)
+    total = np.sum(dec_g * np.power(Gv, alpha), axis=1)
+    total = total + np.sum(dec_l * (-lam * np.power(-Lv, alpha)), axis=1)
+    out[ok] = total[ok]
     return out
+
 
 
 def _metadata_proxy() -> Any:

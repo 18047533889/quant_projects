@@ -199,34 +199,153 @@ class TsBuresCorrShift(SeriesOperator):
         return _frame_like(x, out)
 
 
+def _linear_quantiles_rows(mat: np.ndarray, counts: np.ndarray, qs: np.ndarray) -> np.ndarray:
+    """Per-row ``method="linear"`` quantiles of ``mat`` ignoring NaN.
+
+    ``mat`` is ``(rows, width)`` with the missing entries as NaN and
+    ``counts`` is the per-row number of finite entries.  This reproduces
+    ``np.nanquantile(mat, qs, axis=1)`` bit-for-bit (same virtual-index rule
+    ``q*(n-1)``, same ``_get_indexes`` bound handling, same two-branch
+    ``_lerp``) but at a fraction of the cost: numpy's nan-variant partitions the
+    whole slice once per quantile, which dominated the R62 profile (22 ms of a
+    25 ms kernel).  ``np.sort`` puts NaN last, so the first ``counts`` columns of
+    each row are exactly the sorted finite subset the nan-variant works on.
+    """
+    srt = np.sort(mat, axis=1)
+    n = counts.astype(np.float64)
+    nmax = (counts - 1).astype(np.float64)
+    vidx = qs[None, :] * nmax[:, None]                     # virtual indexes
+    above = vidx >= nmax[:, None]                          # -> take the row max
+    prev = np.floor(vidx)
+    nxt = prev + 1.0
+    prev = np.where(above, nmax[:, None], prev)
+    nxt = np.where(above, nmax[:, None], nxt)
+    below = vidx < 0.0
+    prev = np.where(below, 0.0, prev)
+    nxt = np.where(below, 0.0, nxt)
+    rows = np.arange(mat.shape[0])[:, None]
+    pi = prev.astype(np.intp)
+    ni = nxt.astype(np.intp)
+    a = srt[rows, pi]
+    b = srt[rows, ni]
+    diff = b - a
+    gamma = vidx - prev
+    res = a + diff * gamma
+    res = np.where(gamma >= 0.5, b - diff * (1.0 - gamma), res)
+    return res
+
+
+def _bin_states(edges: np.ndarray, values: np.ndarray, finite: np.ndarray, hi_clip: int) -> np.ndarray:
+    """Tie-aware right-closed binning (``markov_dynamics._bin``), batched.
+
+    ``searchsorted(edges, v, side="left") - 1`` equals the number of edges
+    strictly below ``v`` for the sorted quantile edges; the accumulation is done
+    one edge at a time instead of materialising a ``(rows, width, n_bins)``
+    boolean block (3x faster at these shapes).  Non-finite values keep the
+    ``-1`` sentinel.
+    """
+    st = np.zeros(values.shape, dtype=np.int64)
+    for e in range(edges.shape[1]):
+        st += edges[:, e][:, None] < values
+    st -= 1
+    np.clip(st, 0, hi_clip, out=st)
+    return np.where(finite, st, -1)
+
+
 def _km_series(vals_2d: np.ndarray, window: int, bins: int, lag: int, order: int, min_bin_count: int) -> np.ndarray:
     """Kramers-Moyal D1/D2 evaluated at the current state (shared kernel).
 
-    2026-08 V3 completion (spec §三): the coefficients come from the shared
-    ``DiscreteStateDynamicsKernel`` — deterministic *quantile* state bins over the
-    strictly-past window ``[t-W, t-1]``, a per-bin ``min_bin_count`` gate, lagged
-    increments ``dx = x[s+lag]-x[s]``, and the strict Kramers-Moyal scaling
+    R62: row-batched, loop-free re-implementation of the estimator documented
+    below — deterministic *quantile* state bins over the strictly-past window
+    ``[t-W, t-1]``, a per-bin ``min_bin_count`` gate, lagged increments
+    ``dx = x[s+lag]-x[s]``, and the strict Kramers-Moyal scaling
     ``D2 = mean(dx^2)/(2*lag)``.  The current value only selects its state bin;
     it never enters the historical estimates.
-    """
-    from factor_engine.cleaned_operators.markov_dynamics import _state_dynamics_series
 
+    Everything that varies per row is a batched array operation:
+
+    * the trailing windows live in a right-aligned ``(rows, W)`` NaN-padded
+      matrix, so ``past[:-lg]`` / ``past[lg:]`` become plain shifts;
+    * the per-row quantile edges come from one manual linear-quantile pass over
+      the rows that hold two or more finite observations (see
+      ``_linear_quantiles_rows`` — bit-identical to ``np.nanquantile``);
+    * ``_bin``'s ``searchsorted(edges, v, side="left") - 1`` is the broadcast
+      count ``sum(edges < v) - 1`` clipped to ``[0, B-1]`` with a ``-1``
+      sentinel for non-finite values;
+    * the per-(row, bin) counts / ``sum(dx)`` / ``sum(dx^2)`` are accumulated
+      with ``np.bincount`` over ``row*B + bin`` keys, and the output is the
+      estimate of the bin the *current* value falls into, guarded by the same
+      maturity (``>= 10`` finite past observations) and ``min_state_support``
+      gates as the reference.
+
+    The transition matrix / stationary distribution / bin centers that the
+    reference kernel also computed are never read by this caller, so they are
+    not built (no per-row ``eig``).
+    """
     rows, cols = vals_2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
+    w = int(window)
+    B = int(bins)
+    lg = int(lag)
+    mss = int(min_bin_count)
+    mh = 10  # _state_dynamics_series(min_history=10) default
+    if rows == 0 or cols == 0 or B < 2 or w <= lg or mss > w - lg:
+        return out
+    hi_clip = B - 1
+    qs = np.linspace(0.0, 1.0, B + 1)
+    tcol = np.arange(rows, dtype=np.int64)[:, None]
+    idx = tcol - w + np.arange(w, dtype=np.int64)[None, :]
+    in_win = (idx >= 0) & (idx <= tcol - 1)   # strictly-past rows [t-W, t-1]
+    gather = np.clip(idx, 0, rows - 1)
+    rowsel = np.arange(rows)
     for col in range(cols):
-        res = _state_dynamics_series(
-            vals_2d[:, col], int(window), int(bins), int(lag), int(min_bin_count),
-            min_state_support=int(min_bin_count)
-        )
-        d = res["D1"] if order == 1 else res["D2"]
-        for t in range(rows):
-            k = res["state"][t]
-            if not np.isfinite(k):
-                continue
-            k = int(k)
-            v = d[t, k]
-            if np.isfinite(v):
-                out[t, col] = v
+        x = np.asarray(vals_2d[:, col], dtype=float)
+        past = np.where(in_win, x[gather], np.nan)          # (rows, w)
+        finite = np.isfinite(past)
+        n_fin = finite.sum(axis=1)
+        pf = np.where(finite, past, np.nan)
+        nz = (n_fin > 0)[:, None]
+        # nanmin/nanmax over the finite subset; all-NaN rows get a dummy that is
+        # never read (they are masked by ``ok`` below).
+        lo = np.nanmin(np.where(nz, pf, 0.0), axis=1)
+        hi = np.nanmax(np.where(nz, pf, 0.0), axis=1)
+        ok = np.isfinite(x) & (n_fin >= 2)
+        edges = np.zeros((rows, B + 1), dtype=float)
+        if ok.any():
+            slo = lo[ok]
+            scale = hi[ok] - slo
+            # ``scale == 0`` (constant window) collapses to the constant edge,
+            # matching the reference's ``np.full(B+1, lo)`` early return; the
+            # unit denominator only keeps the normalisation finite for quantile.
+            den = np.where(scale == 0.0, 1.0, scale)
+            norm = (pf[ok] - slo[:, None]) / den[:, None]
+            edges[ok] = slo[:, None] + scale[:, None] * _linear_quantiles_rows(
+                norm, n_fin[ok], qs
+            )
+        # tie-aware right-closed binning (``_bin``): NaN/Inf -> -1 sentinel.
+        state = _bin_states(edges, past, finite, hi_clip)
+        inc = past[:, lg:] - past[:, :-lg]
+        base_bin = state[:, :-lg]
+        nxt_bin = state[:, lg:]
+        trans_ok = (base_bin >= 0) & (nxt_bin >= 0)
+        key = tcol * B + np.clip(base_bin, 0, hi_clip)
+        keys = key[trans_ok]
+        dx = inc[trans_ok]
+        total = rows * B
+        cnt = np.bincount(keys, minlength=total).reshape(rows, B).astype(float)
+        sums = np.bincount(keys, weights=dx, minlength=total).reshape(rows, B)
+        sqs = np.bincount(keys, weights=dx * dx, minlength=total).reshape(rows, B)
+        denom = np.where(cnt > 0.0, cnt, 1.0)
+        if order == 1:
+            est = (sums / denom) / lg
+        else:
+            est = (sqs / denom) / (2.0 * lg)
+        # min_state_support + maturity + current-row gates of the reference.
+        est = np.where(cnt >= mss, est, np.nan)
+        est = np.where((n_fin >= mh)[:, None], est, np.nan)
+        cur_state = np.clip(np.sum(edges < x[:, None], axis=1) - 1, 0, hi_clip)
+        val = est[rowsel, cur_state]
+        out[:, col] = np.where(ok & np.isfinite(val), val, np.nan)
     return out
 
 

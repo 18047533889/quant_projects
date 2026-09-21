@@ -57,6 +57,36 @@ def _has_spread(valid: np.ndarray, *, eps: float = 1e-12, min_count: int = 2) ->
     return bool(np.isfinite(valid).all() and np.std(valid, ddof=0) >= eps)
 
 
+# ---------------------------------------------------------------------------
+# R62 vectorised kernels for the trailing-window risk operators.
+#
+# Window == the raw positional slice values[lo(r):r+1] with
+# lo(r) = max(0, r - w + 1) (exactly map_rolling's slice; no calendar
+# arithmetic).  Quantiles use np.quantile's default 'linear' rule on the finite
+# values only; non-finite slots are padded with +inf so they sort past every
+# finite value and never enter a quantile / tail / cluster decision.
+# ---------------------------------------------------------------------------
+def _r62_win(rows: int, w: int):
+    r = np.arange(rows)[:, None]
+    lo = np.maximum(0, r - w + 1)
+    return lo, lo + np.arange(w)[None, :]
+
+
+def _r62_quantile(V: np.ndarray, fin: np.ndarray, q: float) -> np.ndarray:
+    rows, W = V.shape
+    X = np.sort(np.where(fin, V, np.inf), axis=1)
+    cnt = fin.sum(axis=1)
+    pos = q * (cnt - 1)
+    li = np.clip(np.floor(pos).astype(np.int64), 0, W - 1)
+    hi = np.clip(np.ceil(pos).astype(np.int64), 0, W - 1)
+    frac = pos - li
+    rr = np.arange(rows)
+    # Rows with no finite value (cnt == 0) index a padded +inf and would raise a
+    # spurious invalid-op warning; they are rejected by the caller's guard.
+    with np.errstate(invalid="ignore"):
+        return X[rr, li] * (1.0 - frac) + X[rr, hi] * frac
+
+
 @register_operator(
     name="ts_lower_partial_moment",
     category="time_series_risk",
@@ -167,7 +197,7 @@ class TsExpectedShortfall(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, window: int = 60, q: float = 0.05, side: str = "lower", min_tail_count: int = 5, **_: Any) -> pd.DataFrame:
         w = check_window(window)
         quantile = float(q)
-        # Round-7 P0: ES ``q`` is a *tail fraction* — q > 0.5 is not tail-risk
+        # Round-7 P0: ES ``q`` is a *tail fraction* -- q > 0.5 is not tail-risk
         # semantics (a q=0.8 "lower tail" is the bottom 80% of the distribution).
         if not 0.0 < quantile <= 0.5:
             raise ValueError("q must be in (0, 0.5] for expected-shortfall tail semantics")
@@ -176,23 +206,31 @@ class TsExpectedShortfall(SeriesOperator):
             raise ValueError("side must be 'lower' or 'upper'")
         min_tail = max(2, int(min_tail_count))
 
-        def _fn(chunk: np.ndarray) -> float:
-            valid = valid_values(chunk)
-            # R5 P1-38(a): a constant window has a well-defined ES (the tail mean
-            # is the sample value itself) — only the sample-size floor applies.
-            if valid.size < min_tail:
-                return np.nan
-            if side_kind == "lower":
-                thr = float(np.quantile(valid, quantile))
-                tail = valid[valid <= thr]
+        # R62: threshold is the window quantile itself (np.quantile 'linear'),
+        # tail = finite values on the tail side of it, out = mean(tail).
+        xv = x.to_numpy(dtype=float)
+        rows, cols = xv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        r = np.arange(rows)[:, None]
+        lo, i = _r62_win(rows, w)
+        valid = i <= r
+        idx = np.clip(i, 0, rows - 1)
+        lower = side_kind == "lower"
+        for col in range(cols):
+            V = xv[idx, col]
+            fin = valid & np.isfinite(V)
+            cnt = fin.sum(axis=1)
+            if lower:
+                thr = _r62_quantile(V, fin, quantile)
+                tail = fin & (V <= thr[:, None])
             else:
-                thr = float(np.quantile(valid, 1.0 - quantile))
-                tail = valid[valid >= thr]
-            if tail.size < min_tail:
-                return np.nan
-            return float(np.mean(tail))
-
-        return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
+                thr = _r62_quantile(V, fin, 1.0 - quantile)
+                tail = fin & (V >= thr[:, None])
+            tcnt = tail.sum(axis=1)
+            tsum = np.where(tail, V, 0.0).sum(axis=1)
+            ok = (cnt >= min_tail) & (tcnt >= min_tail)
+            out[:, col] = np.where(ok, tsum / np.maximum(tcnt, 1), np.nan)
+        return frame_like(x, out)
 
 
 @register_operator(
@@ -369,50 +407,53 @@ class TsExtremeClusterRatio(SeriesOperator):
         if side_kind == "absolute" and absolute_thr is not None and absolute_thr < 0.0:
             raise ValueError("absolute threshold must be non-negative")
 
-        def _extreme(chunk: np.ndarray) -> np.ndarray:
-            valid = chunk[np.isfinite(chunk)]
-            if valid.size == 0:
-                return np.zeros_like(chunk, dtype=bool)
+        # R62: same window, same quantile, same censoring of NaN gaps -- the
+        # "clustered" count is the number of adjacent extreme *pairs in the
+        # finite subsequence* (a NaN gap keeps the previous extreme flag).
+        xv = x.to_numpy(dtype=float)
+        rows, cols = xv.shape
+        out = np.full((rows, cols), np.nan, dtype=float)
+        r = np.arange(rows)[:, None]
+        lo, i = _r62_win(rows, w)
+        valid = i <= r
+        idx = np.clip(i, 0, rows - 1)
+        mincnt = max(2, int(mp))
+        for col in range(cols):
+            V = xv[idx, col]
+            fin = valid & np.isfinite(V)
+            cnt = fin.sum(axis=1)
+            nn = np.maximum(cnt, 1).astype(float)
+            mean = np.where(fin, V, 0.0).sum(axis=1) / nn
+            cen = np.where(fin, V - mean[:, None], 0.0)
+            with np.errstate(invalid="ignore", over="ignore"):
+                std0 = np.sqrt((cen * cen).sum(axis=1) / nn)
+            spread = (cnt >= mincnt) & (std0 >= 1e-12)
             if use_quantile:
                 if side_kind == "absolute":
-                    thr = float(np.quantile(np.abs(valid), quantile))
-                    return np.abs(chunk) >= thr
-                if side_kind == "upper":
-                    thr = float(np.quantile(valid, quantile))
-                    return chunk >= thr
-                thr = float(np.quantile(valid, 1.0 - quantile))
-                return chunk <= thr
-            thr = float(absolute_thr)
-            if side_kind == "absolute":
-                return np.abs(chunk) >= thr
-            if side_kind == "upper":
-                return chunk >= thr
-            return chunk <= thr
-
-        def _fn(chunk: np.ndarray) -> float:
-            finite = np.isfinite(chunk)
-            if not _has_spread(chunk[finite], min_count=mp):
-                return np.nan
-            extreme = _extreme(chunk)
-            count = int(extreme.sum())
-            if count < mp:
-                return np.nan
-            # R5 P1-38(c): NaN must not be treated as a non-extreme point that
-            # cuts a cluster.  Censor it: skip the position and keep the "previous
-            # was extreme" flag, so extremes separated only by missing values
-            # still count as adjacent.
-            clustered = 0
-            prev = False
-            for i in range(len(chunk)):
-                if not finite[i]:
-                    continue
-                cur = bool(extreme[i])
-                if cur and prev:
-                    clustered += 1
-                prev = cur
-            return float(clustered / count)
-
-        return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
+                    thr = _r62_quantile(np.abs(V), fin, quantile)
+                    ext = fin & (np.abs(V) >= thr[:, None])
+                elif side_kind == "upper":
+                    thr = _r62_quantile(V, fin, quantile)
+                    ext = fin & (V >= thr[:, None])
+                else:
+                    thr = _r62_quantile(V, fin, 1.0 - quantile)
+                    ext = fin & (V <= thr[:, None])
+            else:
+                if side_kind == "absolute":
+                    ext = fin & (np.abs(V) >= absolute_thr)
+                elif side_kind == "upper":
+                    ext = fin & (V >= absolute_thr)
+                else:
+                    ext = fin & (V <= absolute_thr)
+            count = ext.sum(axis=1)
+            pos = np.cumsum(fin, axis=1) - 1
+            Ec = np.zeros_like(ext)
+            rr, cc = np.nonzero(fin)
+            Ec[rr, pos[rr, cc]] = ext[rr, cc]
+            clustered = (Ec[:, :-1] & Ec[:, 1:]).sum(axis=1)
+            ok = spread & (count >= mp)
+            out[:, col] = np.where(ok, clustered / np.maximum(count, 1), np.nan)
+        return frame_like(x, out)
 
 
 def _register_surface() -> None:

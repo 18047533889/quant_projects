@@ -32,6 +32,60 @@ from factor_engine.cleaned_operators.rolling_pack import (
 
 _EPS = 1e-12
 
+
+def _trailing_window_matrix(values: np.ndarray, w: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Trailing-window gather for one column, NaN-aware.
+
+    Returns ``(W, valid, seg_n)``: row ``r`` of ``W`` holds rows
+    ``max(0, r-w+1) .. r`` of ``values`` in a ``w``-wide row (short leading rows
+    are NaN padded at the tail); ``valid`` marks the positions that are both
+    in-window and finite — exactly the authority's ``seg[np.isfinite(seg)]`` —
+    and ``seg_n = min(r+1, w)`` is that ``seg.size``.  Only the *set* of valid
+    positions is used downstream, so the padding side is immaterial.
+    """
+    rows = values.shape[0]
+    pos = np.arange(w)
+    start = np.maximum(0, np.arange(rows) - w + 1)
+    gather = np.clip(start[:, None] + pos[None, :], 0, rows - 1)
+    inwin = np.ascontiguousarray(pos[None, :] < (np.arange(rows) + 1)[:, None])
+    W = np.where(inwin, values[gather], np.nan)
+    return W, inwin & np.isfinite(W), inwin.sum(axis=1)
+
+
+def _trailing_run_matrix(values: np.ndarray, w: int):
+    """Trailing *contiguous finite* run ending at every row, NaN padded.
+
+    Row ``r`` holds the maximal trailing finite run of ``values[max(0,r-w+1)..r]``
+    starting at column 0 (never re-connected across a gap; a NaN at ``r`` yields
+    the empty run), so the padded tail of the row is exactly the authority's
+    ``_trailing_contiguous`` / ``_trailing_contiguous_finite`` block.
+    """
+    rows = values.shape[0]
+    idx = np.arange(rows)
+    last_bad = np.where(np.isfinite(values), -1, idx)
+    np.maximum.accumulate(last_bad, out=last_bad)
+    start = np.maximum(np.maximum(0, idx - w + 1), last_bad + 1)
+    length = np.where(np.isfinite(values), idx - start + 1, 0)
+    pos = np.arange(w)
+    gather = np.clip(start[:, None] + pos[None, :], 0, rows - 1)
+    V = np.where(pos[None, :] < length[:, None], values[gather], np.nan)
+    return V, length
+
+
+def _padded_median(A: np.ndarray, cnt: np.ndarray) -> np.ndarray:
+    """``np.median`` of the leading ``cnt`` entries of each row of ``A``.
+
+    ``A`` carries NaN in the unused tail (sorted last), so the two middle order
+    statistics of the valid prefix are picked directly; the average of the two
+    middles reproduces ``np.median`` bit for bit (including ``cnt < 1`` -> NaN).
+    """
+    S = np.sort(A, axis=1)
+    ridx = np.arange(A.shape[0])
+    lo = (cnt - 1) // 2
+    hi = cnt // 2
+    return (S[ridx, lo] + S[ridx, hi]) / 2.0
+
+
 # P1-16: the fixed-point / IRLS iterate is emitted ONLY when the maximum
 # absolute update between iterations satisfies a RELATIVE tolerance; a window
 # that does not converge within ``_MAX_ITER_*`` iterations emits NaN — a stale
@@ -183,10 +237,74 @@ class TsExpectile(SeriesOperator):
         **_: Any,
     ) -> pd.DataFrame:
         w, tt, nmin = _parameters(window, tau, n_min, 3)
-        return frame_like(
-            x,
-            map_rolling(x.to_numpy(dtype=float), w, lambda c: _expectile_chunk(c, tt, nmin)),
-        )
+        xv = x.to_numpy(dtype=float)
+        out = np.empty_like(xv)
+        for c in range(xv.shape[1]):
+            out[:, c] = _expectile_batch(xv[:, c], w, tt, nmin)
+        return frame_like(x, out)
+
+
+def _expectile_batch(
+    values: np.ndarray, window: int, tau: float, n_min: int
+) -> np.ndarray:
+    """Row-parallel ``_expectile``: every trailing window iterates together.
+
+    The Newey-Powell fixed point is run on the whole panel at once (each row
+    frozen as soon as it converges, exactly like the authority's ``break``), so
+    the per-window Python loop disappears while the convergence contract —
+    normalized update AND estimating score within 1e-12, else NaN — is kept.
+    """
+    rows = values.shape[0]
+    w = max(3, int(window))
+    tt = float(tau)
+    nmin = int(n_min)
+    W, mask, _ = _trailing_window_matrix(values, w)
+    cnt = mask.sum(axis=1)
+    out = np.full(rows, np.nan, dtype=float)
+    tail = min(tt, 1.0 - tt)
+    gate = (cnt >= 3) & (cnt * tail >= nmin)
+    if not gate.any():
+        return out
+    with np.errstate(invalid="ignore"):
+        vmin = np.fmin.reduce(W, axis=1, initial=np.inf)
+        vmax = np.fmax.reduce(W, axis=1, initial=-np.inf)
+    center = vmin / 2.0 + vmax / 2.0
+    shifted = W - center[:, None]
+    with np.errstate(invalid="ignore"):
+        scale = np.fmax.reduce(np.abs(shifted), axis=1, initial=-np.inf)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        norm = shifted / scale[:, None]
+    A = np.where(mask, norm, 0.0)
+    mf = mask.astype(float)
+    with np.errstate(invalid="ignore"):
+        e = np.nansum(norm, axis=1) / np.maximum(cnt, 1)
+    live = gate & np.isfinite(scale) & (scale != 0.0)
+    conv = np.zeros(rows, dtype=bool)
+    if live.any():
+        ridx = np.arange(rows)
+        for _ in range(_MAX_ITER_EXPECTILE):
+            act = live & ~conv
+            if not act.any():
+                break
+            wgt = np.abs(tt - np.where(A < e[:, None], 1.0, 0.0)) * mf
+            s = wgt.sum(axis=1)
+            with np.errstate(invalid="ignore", divide="ignore"):
+                e_new = (wgt * A).sum(axis=1) / s
+            resid = (A - e_new[:, None]) * mf
+            score = np.sum(
+                np.where(resid >= 0.0, tt, 1.0 - tt) * resid, axis=1
+            ) / s
+            stopped = np.abs(e_new - e) <= 1e-12
+            stopped &= np.abs(score) <= 1e-12
+            empty = s <= _EPS
+            e = np.where(act & ~empty, e_new, e)
+            conv = conv | (act & (stopped | empty))
+        result = center + scale * e
+        ok = live & conv & np.isfinite(result)
+        out[ok] = result[ok]
+    zero = gate & (scale == 0.0)
+    out[zero] = center[zero]
+    return out
 
 
 def _expectile_slope(yv: np.ndarray, xv: np.ndarray, tau: float, n_min: int = _DEFAULT_N_MIN) -> float:

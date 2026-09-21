@@ -32,6 +32,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata, ParamRole, ParamSpec, RelationalParamSpec, SeriesOperator, register_operator,
@@ -171,6 +172,137 @@ def _pearson_lag(a: np.ndarray, lag: int) -> float:
 
 
 # --------------------------------------------------------------------------
+# R62 vectorised rolling hit-process machinery
+# --------------------------------------------------------------------------
+def _win_pad_rows(col: np.ndarray, w: int) -> np.ndarray:
+    """Trailing windows ``(n, w)``; row r = col[r-w+1 .. r], NaN where negative."""
+    pre = np.concatenate([np.full(w - 1, np.nan), col])
+    return sliding_window_view(pre, w)
+
+
+def _quantile_interp(sorted_win: np.ndarray, counts: np.ndarray, levels) -> np.ndarray:
+    """``np.quantile(finite_row, levels, method="linear")`` for every row.
+
+    ``sorted_win`` (n, W) holds the finite values first (ascending, NaN in the
+    pad tail) and ``counts`` (n,) the finite count.  Reproduces numpy's linear
+    method: index ``q*(p-1)`` bracketed by floor/ceil with a fractional lerp.
+    """
+    lv = np.asarray(levels, dtype=float)
+    if lv.ndim == 1:
+        lv = lv[None, :]
+    pm1 = np.maximum(counts - 1, 0)
+    pos = lv * pm1[:, None].astype(np.float64)
+    pm1i = np.maximum(pm1.astype(np.int64)[:, None], 0)
+    lo = np.clip(np.floor(pos).astype(np.int64), 0, pm1i)
+    hi = np.minimum(lo + 1, pm1i)
+    frac = pos - lo
+    a = np.take_along_axis(sorted_win, lo, axis=1)
+    b = np.take_along_axis(sorted_win, hi, axis=1)
+    return a + (b - a) * frac
+
+
+def _rolling_quantile(Wm: np.ndarray, levels) -> np.ndarray:
+    """``np.nanquantile`` along axis 1, without numpy's hidden per-row loop."""
+    Ws = np.sort(Wm, axis=1)
+    cnt = np.isfinite(Wm).sum(axis=1)
+    return _quantile_interp(Ws, cnt, levels)
+
+
+def _hit_pair_stats(col, thr, lag, w, lower):
+    """Pair-window sums of the window-threshold hit process.
+
+    Pairs are ``(t, t-lag)`` inside the window; returns ``(N, S1, S2, Sxy)``
+    (pair count, hits at ``t``, hits at ``t-lag``, hits at both).
+    """
+    n = col.size
+    wp = w - lag
+    if wp < 1:
+        z = np.zeros(n, dtype=np.int64)
+        return z, z, z, z
+    fx = np.isfinite(col)
+    vy = np.concatenate([np.full(lag, np.nan), col[: n - lag]]) if lag < n else np.full(n, np.nan)
+    ax = fx.copy()
+    ax[: min(lag, n)] = False
+    if lag < n:
+        ax[lag:] &= fx[: n - lag]
+    A = sliding_window_view(
+        np.concatenate([np.zeros(wp - 1), ax.astype(np.float64)]), wp
+    ).astype(bool)
+    PX = sliding_window_view(np.concatenate([np.full(wp - 1, np.nan), col]), wp)
+    PY = sliding_window_view(np.concatenate([np.full(wp - 1, np.nan), vy]), wp)
+    t = thr[:, None]
+    HX = A & ((PX <= t) if lower else (PX >= t))
+    HY = A & ((PY <= t) if lower else (PY >= t))
+    return A.sum(axis=1), HX.sum(axis=1), HY.sum(axis=1), (HX & HY).sum(axis=1)
+
+
+def _window_threshold(col, w, qt, fixed_threshold):
+    """Per-row tail threshold ``Q_q`` (lower) / ``Q_{1-q}`` (upper) of the
+    trailing window; ``fixed_threshold`` estimates it from the strictly-past
+    leading rows only (R26-105..107 current-window-prior semantics)."""
+    rows = col.size
+    if not fixed_threshold:
+        return _rolling_quantile(_win_pad_rows(col, w), np.array([qt]))[:, 0]
+    thr = np.empty(rows)
+    thr[0] = np.nanquantile(col[:1], qt)
+    if rows > 1:
+        lead = _win_pad_rows(col, max(w - 1, 1))
+        thr[1:] = _rolling_quantile(lead, np.array([qt]))[: rows - 1, 0]
+    return thr
+
+
+def _quantilogram_series(x2d, window, q, lag, side, fixed_threshold=False):
+    """Vectorised ``Corr(H_t, H_{t-lag})`` over trailing hit windows."""
+    rows, cols = x2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    w, lg = int(window), int(lag)
+    qt = float(q) if side == "lower" else 1.0 - float(q)
+    lower = side == "lower"
+    m = np.minimum(np.arange(rows) + 1, w)
+    for c in range(cols):
+        col = x2d[:, c]
+        with np.errstate(all="ignore"):
+            thr = _window_threshold(col, w, qt, fixed_threshold)
+        N, S1, S2, Sxy = _hit_pair_stats(col, thr, lg, w, lower)
+        with np.errstate(all="ignore"):
+            # hits are 0/1, so var(g) = (N*Sg - Sg^2)/N^2 and the demeaned
+            # correlation is (N*Sxy - S1*S2)/sqrt(S1*(N-S1)*S2*(N-S2)).
+            corr = (N * Sxy - S1 * S2) / np.sqrt(
+                np.maximum(S1 * (N - S1), 0.0) * np.maximum(S2 * (N - S2), 0.0)
+            )
+            varx = S1 * (N - S1) / (N * N).astype(np.float64)
+            vary = S2 * (N - S2) / (N * N).astype(np.float64)
+        ok = (m > lg + 2) & (N >= lg + 2) & (varx > _EPS) & (vary > _EPS) & np.isfinite(thr)
+        out[:, c] = np.where(ok, corr, np.nan)
+    return out
+
+
+def _extremogram_series(x2d, window, q, lag, side, fixed_threshold=False):
+    """Vectorised ``P(E_{t+lag}=1 | E_t=1) - P(E)``."""
+    rows, cols = x2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    w, lg = int(window), int(lag)
+    qt = float(q) if side == "lower" else 1.0 - float(q)
+    lower = side == "lower"
+    m = np.minimum(np.arange(rows) + 1, w)
+    for c in range(cols):
+        col = x2d[:, c]
+        with np.errstate(all="ignore"):
+            thr = _window_threshold(col, w, qt, fixed_threshold)
+        Wm = _win_pad_rows(col, w)
+        fin = np.isfinite(Wm)
+        hit = fin & ((Wm <= thr[:, None]) if lower else (Wm >= thr[:, None]))
+        hsum = hit.sum(axis=1).astype(np.float64)
+        nfin = fin.sum(axis=1).astype(np.float64)
+        N, S1, S2, Sxy = _hit_pair_stats(col, thr, lg, w, lower)
+        with np.errstate(all="ignore"):
+            val = Sxy / S2.astype(np.float64) - hsum / nfin
+        ok = (m > lg + 1) & (N >= 3) & (S2 > 0) & (nfin > 0) & np.isfinite(thr)
+        out[:, c] = np.where(ok, val, np.nan)
+    return out
+
+
+# --------------------------------------------------------------------------
 # quantilogram
 # --------------------------------------------------------------------------
 def _quantilogram_chunk(
@@ -226,10 +358,8 @@ class TsQuantilogram(SeriesOperator):
             raise ValueError("ts_quantilogram requires window >= lag + 3")
         return frame_like(
             x,
-            map_rolling(
-                x.to_numpy(dtype=float),
-                w,
-                lambda c: _quantilogram_chunk(c, q, lg, side, fixed_threshold),
+            _quantilogram_series(
+                x.to_numpy(dtype=float), w, q, lg, side, fixed_threshold
             ),
         )
 
@@ -485,10 +615,8 @@ class TsExtremogram(SeriesOperator):
             raise ValueError("ts_extremogram requires window >= lag + 2")
         return frame_like(
             x,
-            map_rolling(
-                x.to_numpy(dtype=float),
-                w,
-                lambda c: _extremogram_excess_chunk(c, q, lg, side, fixed_threshold),
+            _extremogram_series(
+                x.to_numpy(dtype=float), w, q, lg, side, fixed_threshold
             ),
         )
 

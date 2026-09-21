@@ -198,6 +198,163 @@ def _recurrence_stats_window(
     return rate, ent, trapping, divergence
 
 
+def _rqa_run_hist(mat: np.ndarray, min_line: int, fold: int = 1) -> np.ndarray:
+    """Run-length histogram of every boolean row of ``mat`` (vectorised).
+
+    ``mat`` is ``(B, n)`` where ``B = R_out * fold``: the ``fold`` sub-rows that
+    belong to one output row (the diagonal offsets, or the recurrence-matrix
+    columns) are summed into that single row.  Each maximal run of True is
+    counted once when its length reaches ``min_line``; the result is an int64
+    ``(R_out, n + 1)`` histogram whose column ``l`` counts runs of length ``l``
+    (column 0 is always 0).  Equivalent to the authority's per-line ``while``
+    loops: the False sentinels around each row turn the run boundaries into a
+    single ``np.diff`` transition pass, and starts / ends strictly alternate so
+    one flat non-zero pass recovers and pairs all of them.
+    """
+    b, n = mat.shape
+    nn = n + 1
+    r_out = b // fold
+    e = np.zeros((b, nn + 1), dtype=bool)
+    e[:, 1:nn] = mat
+    d = np.diff(e.view(np.int8), axis=1).reshape(-1)
+    pos = np.flatnonzero(d)
+    if pos.size == 0:
+        return np.zeros((r_out, nn), dtype=np.int64)
+    starts = pos[0::2]
+    ends = pos[1::2]
+    lengths = (ends % nn) - (starts % nn)
+    keep = lengths >= min_line
+    hist = np.bincount(
+        (starts // (nn * fold))[keep] * nn + lengths[keep],
+        minlength=r_out * nn,
+    )
+    return hist.reshape(r_out, nn)
+
+
+def _rqa_batch_column(
+    v: np.ndarray,
+    w: int,
+    dim: int,
+    delay: int,
+    eps_fraction: float,
+    min_line: int,
+    min_eff: int,
+) -> np.ndarray:
+    """All four RQA statistics for every trailing window of one column.
+
+    Row-parallel replacement of ``_recurrence_stats_window``: the phase-space
+    embeddings of every row live in one padded ``(rows, mpad, dim)`` array, so
+    the pairwise distance matrix, the thresholding and the diagonal / vertical
+    line-length histograms are all computed without a Python row loop.
+    """
+    rows = v.shape[0]
+    span = (dim - 1) * delay
+    mpad = w - span
+    stats = np.full((rows, 4), np.nan, dtype=float)
+    if mpad < 4:
+        return stats
+    idx = np.arange(rows)
+    # Longest trailing contiguous finite run ending at each row: the run starts
+    # right after the last gap at or before it (R5 P0-03: a gap never
+    # re-connects, and a NaN current row yields the empty block).
+    last_bad = np.where(np.isfinite(v), -1, idx)
+    np.maximum.accumulate(last_bad, out=last_bad)
+    start = np.maximum(np.maximum(0, idx - w + 1), last_bad + 1)
+    length = np.where(np.isfinite(v), idx - start + 1, 0)
+    M = length - span
+    ok = (length >= min_eff) & (M >= 4)
+    if not ok.any():
+        return stats
+
+    pos = np.arange(w)
+    gather = np.clip(start[:, None] + pos[None, :], 0, rows - 1)
+    V = np.where(pos[None, :] < length[:, None], v[gather], np.nan)
+
+    # scale = 1.4826 * MAD, falling back to the population std (same two-step
+    # guard as the authority); median of an even-length run is the mean of the
+    # two middle order statistics, so a sort gives the identical value.
+    Vs = np.sort(V, axis=1)
+    mid_lo = (length - 1) // 2
+    mid_hi = length // 2
+    med = (Vs[idx, mid_lo] + Vs[idx, mid_hi]) / 2.0
+    devs = np.sort(np.abs(V - med[:, None]), axis=1)
+    scale = 1.4826 * ((devs[idx, mid_lo] + devs[idx, mid_hi]) / 2.0)
+    bad = ~np.isfinite(scale) | (scale <= _EPS)
+    if bad.any():
+        with np.errstate(invalid="ignore"):
+            std = np.nanstd(V, axis=1)
+        scale = np.where(bad, std, scale)
+    bad = ~np.isfinite(scale) | (scale <= _EPS)
+    if bad.all():
+        return stats
+    eps = float(eps_fraction) * scale * float(np.sqrt(max(1, int(dim))))
+
+    # Phase-space embedding P[i, j] = v[start + i + j*delay], i < M.
+    eidx = idx[:mpad]
+    P = np.empty((rows, mpad, dim), dtype=float)
+    for j in range(dim):
+        P[:, :, j] = V[:, eidx + j * delay]
+    block = eidx[None, :] < M[:, None]
+    P = np.where(block[:, :, None], P, 0.0)
+
+    # Σ_j (P_i,j - P_k,j)^2 accumulated coordinate by coordinate: identical
+    # summation order to the authority's ``np.sum(..., axis=2)`` but with a
+    # single 2-D temporary per coordinate instead of a 4-D broadcast.
+    pdist = np.empty((rows, mpad, mpad), dtype=float)
+    buf = np.empty((rows, mpad, mpad), dtype=float)
+    for j in range(dim):
+        np.subtract(P[:, None, :, j], P[:, :, None, j], out=buf)
+        np.multiply(buf, buf, out=buf)
+        if j == 0:
+            pdist[...] = buf
+        else:
+            pdist += buf
+    np.sqrt(pdist, out=pdist)
+    R = (pdist <= eps[:, None, None]) & block[:, None, :] & block[:, :, None]
+    R &= ~np.eye(mpad, dtype=bool)
+
+    total_pairs = M * (M - 1)
+    rate = R.sum(axis=(1, 2)) / np.maximum(total_pairs, 1)
+
+    # Diagonal lines (offset slicing stacked into one (rows*K, mpad) matrix)
+    # and vertical lines (transposed matrix); the padded tail of a short row is
+    # all-False, which terminates a boundary run exactly like the authority's
+    # end-of-loop flush.
+    off = np.arange(1, mpad)[:, None]
+    iii = np.arange(mpad)[None, :]
+    jjj = iii + off
+    diag_valid = jjj < mpad
+    Dg = R[:, iii, np.minimum(jjj, mpad - 1)] & diag_valid[None, :, :]
+    K = mpad - 1
+    Hd = _rqa_run_hist(
+        np.ascontiguousarray(Dg).reshape(rows * K, mpad), min_line, K
+    )
+    Rv = np.ascontiguousarray(R.transpose(0, 2, 1))
+    Hv = _rqa_run_hist(Rv.reshape(rows * mpad, mpad), min_line, mpad)
+
+    lens = np.arange(mpad + 1, dtype=float)
+    tot_d = Hd.sum(axis=1)
+    has_d = tot_d > 0
+    p = Hd / np.maximum(tot_d, 1)[:, None]
+    ent = -np.where(Hd > 0, p * np.log(np.where(Hd > 0, p, 1.0)), 0.0).sum(axis=1)
+    support = np.maximum(2, M - int(min_line))
+    ent = np.where(has_d, ent / np.log(support), np.nan)
+    lmax = mpad - np.argmax(Hd[:, ::-1] > 0, axis=1)
+    divergence = np.where(has_d, 1.0 / np.maximum(lmax, 1), np.nan)
+
+    tot_v = Hv.sum(axis=1)
+    trapping = np.where(
+        tot_v > 0, (Hv * lens[None, :]).sum(axis=1) / np.maximum(tot_v, 1), np.nan
+    )
+
+    keep = ok & ~bad
+    stats[:, 0] = np.where(keep, rate, np.nan)
+    stats[:, 1] = np.where(keep, ent, np.nan)
+    stats[:, 2] = np.where(keep, trapping, np.nan)
+    stats[:, 3] = np.where(keep, divergence, np.nan)
+    return stats
+
+
 def _recurrence_series(
     values: np.ndarray,
     window: int,
@@ -220,20 +377,10 @@ def _recurrence_series(
     min_eff = max(mp, int(np.ceil(float(min_effective_fraction) * w)))
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
-        for r in range(rows):
-            lo = max(0, r - w + 1)
-            chunk = values[lo : r + 1, c]
-            # Audit P1-B: never compress NaN out of the time axis.  A phase-space
-            # embedding coordinate that is missing invalidates the embedding; the
-            # longest trailing contiguous finite run keeps the time structure and
-            # never re-connects data across a gap.
-            v = _trailing_contiguous_finite(chunk)
-            if v.size < min_eff:
-                continue
-            stats = _recurrence_stats_window(v, dim, delay, eps_fraction, min_line)
-            if stats is None:
-                continue
-            out[r, c] = stats[which]
+        out[:, c] = _rqa_batch_column(
+            np.ascontiguousarray(values[:, c]), w, int(dim), int(delay),
+            float(eps_fraction), int(min_line), min_eff,
+        )[:, int(which)]
     return out
 
 

@@ -71,6 +71,54 @@ def _column_map(xv: np.ndarray, fn) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
+# R62: shared trailing-window matrix helpers
+# ---------------------------------------------------------------------------
+# The tail kernels below were per-row Python loops (``for t in range(n)``:
+# take the trailing window, drop NaN, run a scalar estimator).  They are now a
+# single ``(T, w)`` trailing-aligned window matrix plus axis=1 numpy kernels:
+# one batch covers every window, no Python loop over time survives.
+
+def _winmat(x: np.ndarray, w: int) -> np.ndarray:
+    """``(T, w)`` trailing-aligned window matrix (NaN before the series start).
+
+    ``W[t, j]`` holds ``x[t - w + 1 + j]`` and the slots that would fall before
+    row 0 are NaN, so ``W[t]`` is exactly the authority's trailing chunk
+    ``x[max(0, t - w + 1) : t + 1]`` right-aligned.
+    """
+    n = int(x.shape[0])
+    if n == 0:
+        return np.empty((0, w), dtype=float)
+    src = np.arange(n)[:, None] - (w - 1) + np.arange(w)[None, :]
+    return np.where(src >= 0, x[np.clip(src, 0, n - 1)], np.nan)
+
+
+def _linear_quantile(sorted_windows: np.ndarray, counts: np.ndarray, p: float) -> np.ndarray:
+    """Row-wise ``np.quantile(row[:counts], p, method='linear')``.
+
+    ``sorted_windows`` is the ascending-per-row window matrix (padding NaN in
+    the last ``w - counts`` slots), which is never read.  The arithmetic
+    (virtual index / floor / lerp direction) mirrors numpy's own ``_quantile``
+    so the threshold is the same float the authority computes.
+    """
+    n = counts.astype(np.float64)
+    # numpy 'linear': virtual_index = (n - 1) * q  (see numpy _QuantileMethods)
+    virtual = (n - 1.0) * p
+    top = np.maximum(counts - 1, 0)
+    prev = np.floor(virtual)
+    nxt = prev + 1.0
+    above = virtual >= (counts - 1)
+    below = virtual < 0
+    gamma = virtual - prev
+    i0 = np.where(above, top, np.where(below, 0, prev)).astype(np.intp)
+    i1 = np.where(above, top, np.where(below, 0, nxt)).astype(np.intp)
+    a = np.take_along_axis(sorted_windows, np.clip(i0, 0, None)[:, None], axis=1)[:, 0]
+    b = np.take_along_axis(sorted_windows, np.clip(i1, 0, None)[:, None], axis=1)[:, 0]
+    diff = b - a
+    return np.where(gamma >= 0.5, b - diff * (1 - gamma), a + diff * gamma)
+
+
+
+# ---------------------------------------------------------------------------
 # ts_hill_tail_index
 # ---------------------------------------------------------------------------
 
@@ -155,6 +203,9 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
     NaN for that window (the input units are returns / centred residual / signed
     signal / positive magnitude — see the authoritative ``input_units``).
     ``min_tail_count`` gates the minimum number of exceedances.
+
+    R62: one ``(T, w)`` trailing-window batch replaces the per-row loop; the
+    estimate is scale-invariant, so the 1e±300 panels need no rescaling.
     """
     n = series.shape[0]
     w = strict_integer(window, "window", minimum=2)
@@ -167,59 +218,56 @@ def _hill_series(series: np.ndarray, window: int, side: str, tail_fraction: floa
     mtc = strict_integer(min_tail_count, "min_tail_count", minimum=3)
     _reject_price_level(series)
     out = np.full(n, np.nan)
-    for t in range(n):
-        lo = max(0, t - w + 1)
-        chunk = series[lo : t + 1]
-        valid = chunk[np.isfinite(chunk)]
-        if valid.size < mtc:
-            continue
-        # ONE kernel for both sides: upper operates on x, lower on the mirrored
-        # series z = -x.  HillLower(x) == HillUpper(-x) exactly — there is no
-        # separate lower-tail code path to drift.  After mirroring, the same
-        # classic-Hill domain applies to both sides: a strictly-positive
-        # threshold and strictly-positive observations above it.
-        # Classic Hill is defined only for a strictly-positive threshold and
-        # strictly-positive exceedance values.  A negative upper-tail threshold
-        # (for example an all-negative window) is not rescued by a positive
-        # ratio: its resulting negative estimate is outside the estimator's
-        # domain.  The lower side uses the same rule after mirroring ``z=-x``.
-        # R26-060..062: the LOWER tail is only a valid Hill problem on SIGNED
-        # data (returns / residuals / downside losses), whose negative values
-        # mirror onto positive, unbounded-above loss magnitudes.  A window with
-        # NO negative values is a strictly-positive level / magnitude whose left
-        # tail is BOUNDED below by 0 — classic Hill (``z = -x`` mirror) does not
-        # apply to it and produces a misleading negative ξ.  Such a window fails
-        # closed to NaN (explicitly unsupported lower tail for positive levels).
-        if side == "lower" and float(np.min(valid)) >= 0.0:
-            continue
-        z = valid if side == "upper" else -valid
-        u = float(np.quantile(z, 1.0 - frac))
-        exc = z[z > u]
-        if not np.isfinite(u) or u <= 0.0:
-            continue  # Hill requires a finite, strictly-positive threshold
-        if exc.size < mtc:
-            continue
-        # R16-140: classic Hill is defined on a STRICTLY-POSITIVE tail magnitude.
-        # A ``u < 0`` threshold with a mixed-sign exceedance set would feed
-        # ``log(negative)`` into the mean; that is undefined, not a valid
-        # estimator.  Every ratio ``x_i / u`` must be strictly positive (same
-        # sign, same as the threshold) — otherwise the window is NaN.
-        if np.any(~np.isfinite(exc)) or np.any(exc <= u):
-            continue
-        # Compute log(exc/u) without forming a potentially overflowing ratio.
-        # log1p preserves nextafter-sized exceedances close to the threshold;
-        # log differences cover the full finite dynamic range farther away.
-        delta = exc - u
-        near = delta <= u
-        log_ratios = np.empty(exc.size, dtype=float)
-        log_ratios[near] = np.log1p(delta[near] / u)
-        log_ratios[~near] = np.log(exc[~near]) - np.log(u)
-        if not np.all(np.isfinite(log_ratios)):
-            continue
-        xi = float(np.mean(log_ratios))
-        if np.isfinite(xi):
-            out[t] = xi
-    return out
+    if n == 0:
+        return out
+    # ONE kernel for both sides: upper operates on x, lower on the mirrored
+    # series z = -x.  HillLower(x) == HillUpper(-x) exactly — there is no
+    # separate lower-tail code path to drift.  After mirroring, the same
+    # classic-Hill domain applies to both sides: a strictly-positive
+    # threshold and strictly-positive observations above it.
+    # Classic Hill is defined only for a strictly-positive threshold and
+    # strictly-positive exceedance values.  A negative upper-tail threshold
+    # (for example an all-negative window) is not rescued by a positive
+    # ratio: its resulting negative estimate is outside the estimator's
+    # domain.  The lower side uses the same rule after mirroring ``z=-x``.
+    # R26-060..062: the LOWER tail is only a valid Hill problem on SIGNED
+    # data (returns / residuals / downside losses), whose negative values
+    # mirror onto positive, unbounded-above loss magnitudes.  A window with
+    # NO negative values is a strictly-positive level / magnitude whose left
+    # tail is BOUNDED below by 0 — classic Hill (``z = -x`` mirror) does not
+    # apply to it and produces a misleading negative ξ.  Such a window fails
+    # closed to NaN (explicitly unsupported lower tail for positive levels).
+    W = _winmat(series, w)
+    fin = np.isfinite(W)
+    counts = fin.sum(axis=1)
+    ok = counts >= mtc
+    if side == "lower":
+        min_valid = np.min(np.where(fin, W, np.inf), axis=1)
+        ok = ok & ~(min_valid >= 0.0)
+    Z = -W if side == "lower" else W
+    # non-finite slots (padding, NaN, +/-inf) are excluded BEFORE the sort so the
+    # ascending layout is guaranteed: finite values in [0, m), NaN after.
+    u = _linear_quantile(np.sort(np.where(fin, Z, np.nan), axis=1), counts, 1.0 - frac)
+    with np.errstate(invalid="ignore"):
+        exc = fin & (Z > u[:, None])
+    k = exc.sum(axis=1)
+    # R16-140: classic Hill is defined on a STRICTLY-POSITIVE tail magnitude.
+    # A ``u < 0`` threshold with a mixed-sign exceedance set would feed
+    # ``log(negative)`` into the mean; that is undefined, not a valid
+    # estimator.  Every ratio ``x_i / u`` must be strictly positive (same
+    # sign, same as the threshold) — otherwise the window is NaN.
+    ok = ok & np.isfinite(u) & (u > 0.0) & (k >= mtc)
+    # Compute log(exc/u) without forming a potentially overflowing ratio.
+    # log1p preserves nextafter-sized exceedances close to the threshold;
+    # log differences cover the full finite dynamic range farther away.
+    zz = np.where(exc, Z, 1.0)
+    uu = np.where(exc, u[:, None], 1.0)
+    delta = zz - uu
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        log_ratios = np.where(delta <= uu, np.log1p(delta / uu), np.log(zz) - np.log(uu))
+    ok = ok & np.all(np.isfinite(log_ratios) | ~exc, axis=1)
+    xi = np.where(exc, log_ratios, 0.0).sum(axis=1) / np.maximum(k, 1)
+    return np.where(ok, xi, np.nan)
 
 
 @register_operator(
@@ -380,6 +428,14 @@ def _extremal_index_series(
     * a NaN (unknown-state) gap always BREAKS the current run — an exceedance on
       the far side of a missing bar is never joined to one on the near side,
       regardless of ``run_length`` (no compression across unknown gaps).
+
+    R62: the sequential scan is closed-form.  Between two consecutive
+    exceedances at window offsets ``p < j`` every intervening bar is by
+    construction a finite non-exceedance, so the authority's ``gap`` is
+    ``j - p - 1`` unless a NaN intervenes, in which case the NaN forces
+    ``gap = run_length`` (a break).  Hence the cluster break is exactly
+    ``(j - p - 1 >= run_length) | any NaN strictly between`` — a masked
+    prefix-count expression over the ``(T, w)`` window batch.
     """
     n = series.shape[0]
     w = strict_integer(window, "window", minimum=2)
@@ -389,46 +445,41 @@ def _extremal_index_series(
     rl = strict_integer(run_length, "run_length", minimum=1)
     mex = strict_integer(min_exceed, "min_exceed", minimum=2)
     out = np.full(n, np.nan)
-    for t in range(n):
-        lo = max(0, t - w + 1)
-        chunk = series[lo : t + 1]
-        valid = chunk[np.isfinite(chunk)]
-        if valid.size < 3:
-            continue
-        if side == "upper":
-            thr = float(np.quantile(valid, quant))
-            is_exceed = lambda v: v > thr  # noqa: E731
-        else:
-            # R4-87: lower tail = strictly below the (1-quant) quantile, so a
-            # positive price/valuation series keeps a well-defined lower tail.
-            thr = float(np.quantile(valid, 1.0 - quant))
-            is_exceed = lambda v: v < thr  # noqa: E731
-        # R11: gap-based clustering with an explicit run_length, and a NaN bar
-        # BREAKS the current run (pre-R11 carried ``prev`` across NaN, so
-        # ``Extreme, NaN, NaN, NaN, Extreme`` was miscounted as ONE cluster).
-        count = 0
-        clusters = 0
-        seen_exceed = False
-        gap = 0  # consecutive non-exceedances since the last exceedance
-        for v in chunk:
-            if not np.isfinite(v):
-                # Unknown state: force a break — set the gap to run_length so
-                # the next exceedance necessarily opens a new cluster.
-                gap = rl
-                continue
-            e = bool(is_exceed(v))
-            if e:
-                count += 1
-                if not seen_exceed or gap >= rl:
-                    clusters += 1
-                seen_exceed = True
-                gap = 0
-            else:
-                gap += 1
-        if count < mex:
-            continue
-        out[t] = float(clusters / count)
-    return out
+    if n == 0:
+        return out
+    W = _winmat(series, w)
+    fin = np.isfinite(W)
+    counts = fin.sum(axis=1)
+    sorted_w = np.sort(np.where(fin, W, np.nan), axis=1)
+    if side == "upper":
+        thr = _linear_quantile(sorted_w, counts, quant)
+        exc = fin & (W > thr[:, None])
+    else:
+        # R4-87: lower tail = strictly below the (1-quant) quantile, so a
+        # positive price/valuation series keeps a well-defined lower tail.
+        thr = _linear_quantile(sorted_w, counts, 1.0 - quant)
+        exc = fin & (W < thr[:, None])
+    # R11: gap-based clustering with an explicit run_length, and a NaN bar
+    # BREAKS the current run (pre-R11 carried ``prev`` across NaN, so
+    # ``Extreme, NaN, NaN, NaN, Extreme`` was miscounted as ONE cluster).
+    offsets = np.arange(w, dtype=np.int64)
+    seen_at = np.where(exc, offsets[None, :], -1)
+    prev_incl = np.maximum.accumulate(seen_at, axis=1)
+    prev = np.concatenate((np.full((n, 1), -1, dtype=np.int64), prev_incl[:, :-1]), axis=1)
+    nan_incl = np.cumsum(~fin, axis=1)                       # NaNs in offsets 0..i
+    nan_excl = np.concatenate(                              # NaNs in offsets 0..i-1
+        (np.zeros((n, 1), dtype=np.int64), nan_incl[:, :-1]), axis=1
+    )
+    has_prev = exc & (prev >= 0)
+    nan_between = has_prev & (
+        (nan_excl - np.take_along_axis(nan_incl, np.clip(prev, 0, w - 1), axis=1)) > 0
+    )
+    gap_break = has_prev & ((offsets[None, :] - prev - 1) >= rl)
+    breaks = (nan_between | gap_break).sum(axis=1)
+    k = exc.sum(axis=1)
+    ok = (counts >= 3) & (k >= mex)
+    theta = np.where(k >= 1, 1.0 + breaks, 0.0) / np.maximum(k, 1)
+    return np.where(ok, theta, np.nan)
 
 
 @register_operator(
@@ -503,41 +554,64 @@ def _mean_excess_slope_series(
     mirrored series ``y = -x`` reusing the exact upper-tail computation, so
     ``ME_lower(x) == ME_upper(-x)`` and the slope sign is interpreted
     identically on both sides (positive = heavy tail).
+
+    R62: the nine threshold quantiles and their exceedance means are one
+    ``(T, w)`` batch each; the OLS uses the authority's own
+    ``Σ(u-ū)²`` / ``Σ(u-ū)(m-m̄)`` form (deliberately NOT rescaled): the
+    authority overflows to NaN on the 1e+300 panel and underflows below ``_EPS``
+    on 1e-300, and both fail-closed patterns are part of the contract.
     """
     n = series.shape[0]
     w = strict_integer(window, "window", minimum=2)
     mtc = strict_integer(min_tail_count, "min_tail_count", minimum=2)
     out = np.full(n, np.nan)
-    for t in range(n):
-        lo = max(0, t - w + 1)
-        chunk = series[lo : t + 1]
-        valid = chunk[np.isfinite(chunk)]
-        if valid.size < mtc + 3:
-            continue
-        # R11: the lower tail is the exact mirror of the upper tail on ``y = -x``
-        # (ME_lower(x) == ME_upper(-x)); reusing one code path keeps the slope
-        # direction consistent with the documented interpretation on both sides.
-        work = -valid if side == "lower" else valid
-        us: list[float] = []
-        mes: list[float] = []
-        for p in np.linspace(0.55, 0.95, 9):
-            u = float(np.quantile(work, p))
-            exc = work[work > u] - u
-            if exc.size < mtc:
-                continue
-            us.append(u)
-            mes.append(float(exc.mean()))
-        if len(us) < 3:
-            continue
-        ua = np.asarray(us)
-        ma = np.asarray(mes)
-        denom = float(np.sum((ua - ua.mean()) ** 2))
-        if denom <= _EPS:
-            continue
-        slope = float(np.sum((ua - ua.mean()) * (ma - ma.mean())) / denom)
-        if np.isfinite(slope):
-            out[t] = slope
-    return out
+    if n == 0:
+        return out
+    # R11: the lower tail is the exact mirror of the upper tail on ``y = -x``
+    # (ME_lower(x) == ME_upper(-x)); reusing one code path keeps the slope
+    # direction consistent with the documented interpretation on both sides.
+    W = _winmat(series, w)
+    fin = np.isfinite(W)
+    counts = fin.sum(axis=1)
+    work = -W if side == "lower" else W
+    sorted_work = np.sort(np.where(fin, work, np.nan), axis=1)
+    # prefix sums of the ascending window: the k exceedances are exactly the top
+    # k values S[:, m-k : m], so their sum is one lookup into this table (the
+    # exceedance count still comes from the exact ``> u`` mask, ties included).
+    cw = np.cumsum(np.where(np.isfinite(sorted_work), sorted_work, 0.0), axis=1)
+    csum = np.concatenate((np.zeros((n, 1)), cw[:, :-1]), axis=1)
+    total = cw[:, -1]
+    grid = np.linspace(0.55, 0.95, 9)
+    ok = counts >= (mtc + 3)
+    thr_found = np.zeros((n, 9), dtype=bool)
+    u_mat = np.empty((n, 9), dtype=float)
+    me_mat = np.empty((n, 9), dtype=float)
+    for j, p in enumerate(grid):
+        u = _linear_quantile(sorted_work, counts, float(p))
+        k = (sorted_work > u[:, None]).sum(axis=1)
+        keep = ok & (k >= mtc)
+        start = np.clip(counts - k, 0, w - 1)
+        top = np.take_along_axis(csum, start[:, None], axis=1)[:, 0]
+        with np.errstate(invalid="ignore", over="ignore", divide="ignore"):
+            me = (total - top) / np.maximum(k, 1) - u
+        u_mat[:, j] = np.where(keep, u, np.nan)
+        me_mat[:, j] = np.where(keep, me, np.nan)
+        thr_found[:, j] = keep
+    used = thr_found.sum(axis=1)
+    ok = ok & (used >= 3)
+    used_f = np.maximum(used, 1).astype(np.float64)
+    u_z = np.where(thr_found, u_mat, 0.0)
+    me_z = np.where(thr_found, me_mat, 0.0)
+    u_bar = u_z.sum(axis=1) / used_f
+    me_bar = me_z.sum(axis=1) / used_f
+    du = np.where(thr_found, u_mat - u_bar[:, None], 0.0)
+    dm = np.where(thr_found, me_mat - me_bar[:, None], 0.0)
+    with np.errstate(invalid="ignore", over="ignore", divide="ignore"):
+        denom = (du * du).sum(axis=1)
+        numer = (du * dm).sum(axis=1)
+        slope = numer / denom
+    ok = ok & (denom > _EPS) & np.isfinite(slope)
+    return np.where(ok, slope, np.nan)
 
 
 @register_operator(
@@ -602,6 +676,11 @@ def _gpd_shape_pwm_series(
     ``b0 = mean(x)``, ``b1 = Σ ((i-1)/(n-1)) x_(i) / n`` and
     ``ξ̂ = 2 - b0 / (2 b1 - b0)`` (from τ2 = L2/L1 = 1/(2-ξ)).  Deterministic,
     no optimizer; fail-closed when the denominator degenerates.
+
+    R62: one ``(T, w)`` batch.  The exceedances are gathered straight out of
+    the per-row sorted window (upper = top-k ascending, lower = bottom-k
+    reversed) and the PWM weights are applied positionally, so no per-window
+    Python loop survives.
     """
     n = series.shape[0]
     w = strict_integer(window, "window", minimum=2)
@@ -610,34 +689,45 @@ def _gpd_shape_pwm_series(
         raise ValueError("tail_fraction must satisfy 0 < tail_fraction <= 0.5")
     mtc = strict_integer(min_tail_count, "min_tail_count", minimum=3)
     out = np.full(n, np.nan)
-    for t in range(n):
-        lo = max(0, t - w + 1)
-        chunk = series[lo : t + 1]
-        valid = chunk[np.isfinite(chunk)]
-        if valid.size < mtc + 2:
-            continue
-        if side == "upper":
-            u = float(np.quantile(valid, 1.0 - frac))
-            exc = valid[valid > u] - u
-        else:
-            # R4-87: lower tail = excess ``u - x`` below the frac-quantile
-            # threshold; defined for positive price/valuation series too.
-            u = float(np.quantile(valid, frac))
-            exc = u - valid[valid < u]
-        if exc.size < mtc:
-            continue
-        exc = np.sort(exc)
-        m = exc.size
-        b0 = float(exc.mean())
-        weights = np.arange(m, dtype=float) / max(m - 1, 1)
-        b1 = float(np.sum(weights * exc) / m)
+    if n == 0:
+        return out
+    W = _winmat(series, w)
+    fin = np.isfinite(W)
+    counts = fin.sum(axis=1)
+    ok = counts >= (mtc + 2)
+    sorted_w = np.sort(np.where(fin, W, np.nan), axis=1)
+    if side == "upper":
+        u = _linear_quantile(sorted_w, counts, 1.0 - frac)
+        exc = fin & (W > u[:, None])
+    else:
+        # R4-87: lower tail = excess ``u - x`` below the frac-quantile
+        # threshold; defined for positive price/valuation series too.
+        u = _linear_quantile(sorted_w, counts, frac)
+        exc = fin & (W < u[:, None])
+    k = exc.sum(axis=1)
+    ok = ok & (k >= mtc)
+    # exc ascending inside the run: upper = S[m-k .. m-1] - u,
+    # lower = u - S[k-1 .. 0] (the mirrored bottom-k, still ascending).
+    rank = np.arange(w, dtype=np.int64)[None, :]
+    if side == "upper":
+        gather = (counts - k)[:, None] + rank
+    else:
+        gather = (k - 1)[:, None] - rank
+    in_run = rank < k[:, None]
+    picked = np.take_along_axis(sorted_w, np.clip(gather, 0, w - 1), axis=1)
+    with np.errstate(invalid="ignore"):
+        ex_val = (picked - u[:, None]) if side == "upper" else (u[:, None] - picked)
+    ex_val = np.where(in_run, ex_val, np.nan)
+    weights = np.where(in_run, rank / np.maximum(k - 1, 1)[:, None], np.nan)
+    kf = np.maximum(k, 1)
+    b0 = np.where(in_run, ex_val, 0.0).sum(axis=1) / kf
+    b1 = np.where(in_run, weights * ex_val, 0.0).sum(axis=1) / kf
+    with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
         denom = 2.0 * b1 - b0
-        if abs(denom) <= _EPS:
-            continue
+        ok = ok & (np.abs(denom) > _EPS)
         xi = 2.0 - b0 / denom
-        if np.isfinite(xi):
-            out[t] = xi
-    return out
+    ok = ok & np.isfinite(xi)
+    return np.where(ok, xi, np.nan)
 
 
 @register_operator(

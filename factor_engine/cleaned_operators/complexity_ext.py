@@ -49,6 +49,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
@@ -251,15 +252,22 @@ def _forbidden_ordinal_ratio_series(
     min_embeddings: int = _MIN_EMBEDDINGS,
     mode: str = "excess",
 ) -> np.ndarray:
-    """Rolling forbidden-ordinal-pattern statistic.
+    """Rolling forbidden-ordinal-pattern statistic (vectorised kernel).
 
     ``mode`` selects the reported quantity (R11 round-2 review #20/#21):
       * ``"excess"``        — ``max(0, F_obs - F_null)``  (historical behavior);
-      * ``"ratio"``         — the RAW ``F_obs = 1 - n_obs/fact`` (the true
-                              "fraction of forbidden patterns");
-      * ``"signed_excess"`` — the UNCLIPPED ``F_obs - F_null`` (keeps the
-                              information in "fewer forbidden patterns than the
-                              null", which the clip-to-0 erases).
+      * ``"ratio"``         — the RAW ``F_obs = 1 - n_obs/fact``;
+      * ``"signed_excess"`` — the UNCLIPPED ``F_obs - F_null``.
+
+    R62: the per-row Python scan is replaced by one ordinal-embedding pass per
+    column.  Every embedding start ``i`` gets a base-``order`` integer code for
+    its stable rank pattern (ties drop the embedding), the distinct-pattern
+    count of a window becomes ``Hc[:, hi] - Hc[:, lo]`` over a one-hot cumsum
+    table, and the no-tie embedding count ``n_valid`` is a cumsum difference —
+    so the row loop is gone while the trail-contiguous-finite run (review
+    R4-64), the dropped ties (review round-3 #44) and the audit-#88 null
+    baseline (ties excluded from N) are preserved exactly.
+
     ``min_embeddings`` is the binding-time feasibility floor; the kernel itself
     additionally fails closed when fewer than 2 no-tie embeddings survive.
     """
@@ -268,53 +276,66 @@ def _forbidden_ordinal_ratio_series(
     w, o, d = int(window), int(order), int(delay)
     fact = float(math.factorial(o))
     embed_len = (o - 1) * d + 1
+    # base-``order`` positional code: a bijection on rank permutations, so the
+    # distinct-code count equals the authority's ``len(set(patterns))``.
+    powers = (o ** np.arange(o)).astype(np.int64)
+    base_p = 1.0 - 1.0 / fact
+    idx = np.arange(rows)
+    i0 = np.maximum(idx - w + 1, 0)
     for c in range(cols):
         col = x2d[:, c]
-        for r in range(rows):
-            i0 = max(0, r - w + 1)
-            chunk = col[i0 : r + 1]
-            run = _trailing_contiguous_finite(chunk)  # review R4-64
-            n = run.size
-            if n < embed_len:
-                continue
-            patterns: set[tuple[int, ...]] = set()
-            n_emb = 0      # ALL embeddings (valid + tied)
-            n_valid = 0    # embeddings that produced a no-tie pattern
-            for start in range(n - embed_len + 1):
-                vals = run[start + np.arange(o) * d]
-                n_emb += 1
-                code = _ordinal_pattern_code(vals)
-                if code is not None:
-                    n_valid += 1
-                    patterns.add(code)
-            if not patterns or n_valid < 2:
-                continue
-            n_obs = len(patterns)
-            # Finite-sample baseline (review R4-63): with N valid embeddings of a
-            # random series, E[F] = (1 - 1/fact)^N — so order=6 / window=120
-            # (only ~115 embeddings vs 720 patterns) mechanically reports ~0.84
-            # even for white noise.  Report the *excess* forbiddenness above the
-            # random null: F_excess = F_obs - E[F_random | N, order].
-            #
-            # Audit #88: the null baseline N must count ONLY usable no-tie
-            # embeddings (``n_valid``).  Ties are dropped from the observed
-            # pattern set, so their count must NOT enter the null baseline — the
-            # old code used ``n_emb`` (all embeddings), under-stating the null
-            # when ties are frequent and over-reporting forbiddenness.
-            #
-            # Audit #87: ``(1 - 1/m!)^N`` treats the N ordinal embeddings as
-            # independent, but overlapping embeddings are correlated, so it is an
-            # APPROXIMATION.  For a production (strictly-validated) null use a
-            # permutation/surrogate null; this extended factor documents the
-            # approximation honestly instead of pretending exactness.
+        n = col.size
+        n_emb = n - embed_len + 1
+        if n_emb <= 0:
+            continue
+        E = sliding_window_view(col, embed_len)[:, ::d]
+        valid = np.isfinite(E).all(axis=1)
+        if not valid.any():
+            continue
+        srt = np.sort(E, axis=1)
+        tied = valid & ((srt[:, 1:] - srt[:, :-1]) == 0).any(axis=1)
+        good = valid & ~tied
+        if not good.any():
+            continue
+        # stable rank pattern == _ordinal_pattern_code (no ties on good rows)
+        pat = np.argsort(
+            np.argsort(np.where(good[:, None], E, 0.0), axis=1, kind="stable"),
+            axis=1,
+            kind="stable",
+        )
+        _uniq, inv = np.unique((pat @ powers)[good], return_inverse=True)
+        # one-hot cumsum table over embedding starts: Hc[:, g] counts pattern
+        # hits among starts < g, so a window count is a cumsum difference.
+        Hc = np.zeros((_uniq.size, n_emb + 1))
+        Hc[inv, np.arange(n_emb)[good] + 1] = 1.0
+        Hc = np.cumsum(Hc, axis=1)
+        Gc = np.concatenate(([0.0], np.cumsum(good.astype(np.float64))))
+        # review R4-64: only the trailing contiguous finite run is a valid
+        # sample for the current window; a NaN today returns the empty block.
+        fin = np.isfinite(col)
+        last_nan = np.where(~fin, idx, -1)
+        np.maximum.accumulate(last_nan, out=last_nan)
+        lo = np.maximum(last_nan + 1, i0)
+        hi = idx - embed_len + 1
+        hi_c = np.clip(hi + 1, 0, n_emb)
+        lo_c = np.clip(lo, 0, n_emb)
+        counts = Hc[:, hi_c] - Hc[:, lo_c]
+        n_obs = (counts > 0).sum(axis=0).astype(np.float64)
+        # Audit #88: the null baseline N must count ONLY usable no-tie
+        # embeddings (``n_valid``); tied embeddings are dropped from the
+        # observed pattern set and must not inflate the baseline either.
+        n_valid = Gc[hi_c] - Gc[lo_c]
+        ok = (hi >= lo) & (n_valid >= 2) & (n_obs > 0)
+        with np.errstate(all="ignore"):
             f_obs = 1.0 - n_obs / fact
-            f_null = float((1.0 - 1.0 / fact) ** n_valid)
+            f_null = base_p ** n_valid
             if mode == "ratio":
-                out[r, c] = f_obs
+                val = f_obs
             elif mode == "signed_excess":
-                out[r, c] = f_obs - f_null
+                val = f_obs - f_null
             else:  # excess (clipped, historical behavior)
-                out[r, c] = max(0.0, f_obs - f_null)
+                val = np.maximum(0.0, f_obs - f_null)
+        out[:, c] = np.where(ok, val, np.nan)
     return out
 
 

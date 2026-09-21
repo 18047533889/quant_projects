@@ -79,6 +79,60 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# R62 vectorised kernels for ep1_earnings_autocorr (lag-1 Pearson on the finite
+# subsequence of the raw positional trailing window x[lo(r):r+1],
+# lo(r) = max(0, r - w + 1) -- no calendar arithmetic).
+# ---------------------------------------------------------------------------
+def _r62_win(rows: int, w: int):
+    r = np.arange(rows)[:, None]
+    lo = np.maximum(0, r - w + 1)
+    return lo, lo + np.arange(w)[None, :]
+
+
+def _r62_pack(col: np.ndarray, i: np.ndarray, rows: int):
+    r = np.arange(rows)[:, None]
+    valid = i <= r
+    idx = np.clip(i, 0, rows - 1)
+    v = col[idx]
+    m = valid & np.isfinite(v)
+    cnt = m.sum(axis=1)
+    pos = np.cumsum(m, axis=1) - 1
+    C = np.zeros((rows, i.shape[1]), dtype=float)
+    rr, cc = np.nonzero(m)
+    C[rr, pos[rr, cc]] = v[rr, cc]
+    return C, cnt
+
+
+def _r62_lag1_corr(C: np.ndarray, cnt: np.ndarray, min_pairs: int):
+    """lag-1 Pearson corr of C[r, 0:cnt]-vs-C[r, 1:cnt], np.corrcoef-equivalent."""
+    rows, W = C.shape
+    n = cnt - 1
+    ok = (n >= min_pairs) & (cnt >= 1)
+    K = W - 1
+    A = C[:, :K]
+    B = C[:, 1:]
+    jj = np.arange(K)[None, :]
+    mk = ok[:, None] & (jj < n[:, None])
+    n1 = np.where(ok, n, 2).astype(float)  # degenerate rows use a benign 2
+    inv = np.true_divide(1.0, n1 - 1.0)
+    mx = np.where(mk, A, 0.0).sum(axis=1) / n1
+    my = np.where(mk, B, 0.0).sum(axis=1) / n1
+    ac = np.where(mk, A - mx[:, None], 0.0)
+    bc = np.where(mk, B - my[:, None], 0.0)
+    M2x = (ac * ac).sum(axis=1)
+    M2y = (bc * bc).sum(axis=1)
+    num = (ac * bc).sum(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+        # np.corrcoef order: np.cov's dot * 1/(n-1), then (c01/d0)/d1, then the
+        # real part is clipped to [-1, 1].
+        sx = np.sqrt(M2x * inv)
+        sy = np.sqrt(M2y * inv)
+        corr = np.clip(((num * inv) / sx) / sy, -1.0, 1.0)
+    good = ok & (sx > 1e-12) & (sy > 1e-12)
+    return corr, good
+
+
+# ---------------------------------------------------------------------------
 # 1. earnings stability family
 # ---------------------------------------------------------------------------
 @register_operator(
@@ -620,6 +674,8 @@ class Ep1EarningsAutocorr(SeriesOperator):
     )
 
     def _calculate_series(self, earnings: pd.DataFrame, window: int = 8, min_periods: int = 4, **_: Any) -> pd.DataFrame:
+        # R62: lag-1 Pearson corr on the finite subsequence of x[lo:r+1].
+        # Guard: finite count >= mp, pair count >= 2, both std(ddof=1) > 1e-12.
         w = _check_int(window, "window", 3)
         mp = _check_int(min_periods, "min_periods", 3)
         if mp > w:
@@ -627,23 +683,12 @@ class Ep1EarningsAutocorr(SeriesOperator):
         ev = earnings.to_numpy(dtype=float)
         rows, cols = ev.shape
         out = np.full((rows, cols), np.nan, dtype=float)
+        _, i = _r62_win(rows, w)
         for col in range(cols):
-            for row in range(rows):
-                lo = max(0, row - w + 1)
-                chunk = ev[lo:row + 1, col]
-                ok = np.isfinite(chunk)
-                if ok.sum() < mp:
-                    continue
-                vals = chunk[ok]
-                x = vals[:-1]
-                y = vals[1:]
-                if x.size < 2:
-                    continue
-                sx = float(np.std(x, ddof=1))
-                sy = float(np.std(y, ddof=1))
-                if sx <= 1e-12 or sy <= 1e-12:
-                    continue
-                out[row, col] = float(np.corrcoef(x, y)[0, 1])
+            C, cnt = _r62_pack(ev[:, col], i, rows)
+            corr, good = _r62_lag1_corr(C, cnt, 2)
+            good = good & (cnt >= mp)
+            out[:, col] = np.where(good, corr, np.nan)
         return _frame_like(earnings, out)
 
 

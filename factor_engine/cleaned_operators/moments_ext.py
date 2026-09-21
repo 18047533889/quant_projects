@@ -294,6 +294,206 @@ def _hartigan_dip(x_sorted: np.ndarray) -> float:
     return dip / (2.0 * n)
 
 
+# ---------------------------------------------------------------------------
+# R62: lockstep-batched AS 217 dip (no per-row Python loop)
+# ---------------------------------------------------------------------------
+
+def _trailing_windows(x: np.ndarray, w: int) -> np.ndarray:
+    """``(T, w)`` trailing-aligned window matrix (NaN before the series start)."""
+    n = int(x.shape[0])
+    if n == 0:
+        return np.empty((0, w), dtype=float)
+    src = np.arange(n)[:, None] - (w - 1) + np.arange(w)[None, :]
+    return np.where(src >= 0, x[np.clip(src, 0, n - 1)], np.nan)
+
+
+def _dip_scan(_A: np.ndarray, _optimum: np.ndarray, _rel: np.ndarray, _x: np.ndarray,
+              _offset: int, _live: np.ndarray) -> np.ndarray:
+    """Batched ``_dip_compute_dip``: max envelope-to-ECDF distance per row.
+
+    The per-row ``for j`` / ``for jj`` pair is evaluated as one ``(rows, L)``
+    block per ``j`` step (``L`` = the longest link of that step), with the
+    authority's ``tmp_val = 1.0`` floor preserved.
+    """
+    T, W = _A.shape[0], _A.shape[1] - 1
+    rows = np.arange(T)
+    sign = 1 + -2 * _offset
+    ret = np.zeros(T)
+    k = 0
+    while True:
+        j = _x + k
+        act = _live & (j < _rel)
+        if not act.any():
+            break
+        link_lo = _optimum[rows, np.clip(j + 1 - _offset, 0, W)]
+        link_hi = _optimum[rows, np.clip(j + _offset, 0, W)]
+        usable = act & ((link_hi - link_lo) > 1) & (_A[rows, link_hi] != _A[rows, link_lo])
+        length = np.where(usable, link_hi - link_lo + 1, 0)
+        lmax = int(length.max())
+        if lmax > 0:
+            off = np.arange(lmax)[None, :]
+            pos = link_lo[:, None] + off
+            inside = off < length[:, None]
+            dev = _A[rows[:, None], np.clip(pos, 0, W)] - _A[rows, link_lo][:, None]
+            with np.errstate(invalid="ignore", divide="ignore"):
+                slope = np.where(
+                    usable, (link_hi - link_lo) / (_A[rows, link_hi] - _A[rows, link_lo]), 0.0
+                )
+            vals = sign * ((pos - link_lo[:, None] + sign) - dev * slope[:, None])
+            step = np.where(inside, vals, -np.inf).max(axis=1)
+            cand = np.where(usable, np.maximum(1.0, step), 1.0)
+            ret = np.where(act, np.maximum(ret, cand), ret)
+        else:
+            ret = np.where(act, np.maximum(ret, 1.0), ret)
+        k += 1
+    return ret
+
+
+def _dip_lockstep(_A: np.ndarray, _m: np.ndarray, _active: np.ndarray, w: int) -> np.ndarray:
+    """AS 217 (S-version) for every window at once; returns the raw dip*2n."""
+    T = _A.shape[0]
+    W = w
+    rows = np.arange(T)
+
+    # --- GCM change-point chains mn[i] (prefix, walking down) ---
+    top = int(_m.max()) if T else 0
+    mn = np.zeros((T, W + 1), dtype=np.int64)
+    mn[:, 1] = 1
+    for i in range(2, top + 1):
+        act = _active & (i <= _m)
+        if not act.any():
+            break
+        cur = np.where(act, i - 1, 0)
+        ai = _A[:, i]
+        while True:
+            b = mn[rows, cur]
+            aa = _A[rows, cur]
+            ab = _A[rows, b]
+            done = ~act | (cur <= 1) | ((ai - aa) * (cur - b) < (aa - ab) * (i - cur))
+            if done.all():
+                break
+            cur = np.where(done, cur, b)
+        mn[:, i] = np.where(act, cur, 0)
+
+    # --- LCM change-point chains mj[i] (suffix, walking up) ---
+    mj = np.zeros((T, W + 1), dtype=np.int64)
+    mj[rows, _m] = _m
+    for i in range(top - 1, 0, -1):
+        act = _active & (i < _m)
+        if not act.any():
+            continue
+        cur = np.where(act, i + 1, 0)
+        ai = _A[:, i]
+        while True:
+            b = mj[rows, cur]
+            aa = _A[rows, cur]
+            ab = _A[rows, b]
+            done = ~act | (cur >= _m) | ((ai - aa) * (cur - b) < (aa - ab) * (i - cur))
+            if done.all():
+                break
+            cur = np.where(done, cur, b)
+        mj[:, i] = np.where(act, cur, 0)
+
+    low = np.ones(T, dtype=np.int64)
+    high = _m.copy()
+    dip = np.zeros(T)
+    finished = ~_active
+    gcm = np.zeros((T, W + 1), dtype=np.int64)
+    lcm = np.zeros((T, W + 1), dtype=np.int64)
+
+    for _ in range(top + 10):
+        if not (_active & ~finished).any():
+            break
+        live = _active & ~finished
+
+        # --- gcm chain: from high down to low through mn ---
+        gcm[:, 1] = high
+        ptr = np.ones(T, dtype=np.int64)
+        while True:
+            more = live & (gcm[rows, ptr] > low)
+            if not more.any():
+                break
+            nxt = np.where(more, ptr + 1, ptr)
+            src = mn[rows, gcm[rows, nxt - 1]]
+            sel = np.where(more)[0]
+            gcm[sel, nxt[sel]] = src[sel]
+            ptr = nxt
+        gcm_rel = ptr.copy()
+
+        # --- lcm chain: from low up to high through mj ---
+        lcm[:, 1] = low
+        ptr = np.ones(T, dtype=np.int64)
+        while True:
+            more = live & (lcm[rows, ptr] < high)
+            if not more.any():
+                break
+            nxt = np.where(more, ptr + 1, ptr)
+            src = mj[rows, lcm[rows, nxt - 1]]
+            sel = np.where(more)[0]
+            lcm[sel, nxt[sel]] = src[sel]
+            ptr = nxt
+        lcm_rel = ptr.copy()
+
+        gcm_x = gcm_rel.copy()
+        gcm_y = gcm_rel - 1
+        lcm_x = lcm_rel.copy()
+        lcm_y = np.full(T, 2, dtype=np.int64)
+
+        # --- _dip_max_distance (only when either chain is not a single link) ---
+        run = live & ((gcm_rel != 2) | (lcm_rel != 2))
+        d = np.zeros(T)
+        if run.any():
+            ret_d = np.zeros(T)
+            act2 = run.copy()
+            while act2.any():
+                gy = gcm[rows, gcm_y]
+                ly = lcm[rows, lcm_y]
+                is_maj = gy > ly
+                imaj = is_maj.astype(np.int64)
+                i_ = np.where(is_maj, gy, ly)
+                j_ = np.where(is_maj, ly, gy)
+                i1 = np.where(
+                    is_maj,
+                    gcm[rows, np.clip(gcm_y + 1, 0, W)],
+                    lcm[rows, np.clip(lcm_y - 1, 0, W)],
+                )
+                sign = 2 * imaj - 1
+                with np.errstate(invalid="ignore", divide="ignore"):
+                    denom = _A[rows, i_] - _A[rows, i1]
+                    dx = np.where(
+                        denom == 0.0,
+                        0.0,
+                        sign * ((j_ - i1 + sign)
+                                - (_A[rows, j_] - _A[rows, i1]) * (i_ - i1) / denom),
+                    )
+                gcm_y = gcm_y - (1 - imaj)
+                lcm_y = lcm_y + imaj
+                take = act2 & (dx >= ret_d)
+                ret_d = np.where(take, dx, ret_d)
+                gcm_x = np.where(take, gcm_y + 1, gcm_x)
+                lcm_x = np.where(take, lcm_y - imaj, lcm_x)
+                gcm_y = np.maximum(gcm_y, 1)
+                lcm_y = np.minimum(lcm_y, lcm_rel)
+                act2 = act2 & (gcm[rows, gcm_y] != lcm[rows, lcm_y])
+            d = ret_d
+
+        dip_l = _dip_scan(_A, gcm, gcm_rel, gcm_x, 0, live)
+        dip_u = _dip_scan(_A, lcm, lcm_rel, lcm_x, 1, live)
+        # authority: ``tmp_val = dip_u if dip_l < dip_u else dip_l`` -> MAX
+        tmp_val = np.maximum(dip_l, dip_u)
+        brk = live & (d < dip)
+        cont = live & ~brk
+        dip = np.where(cont & (dip < tmp_val), tmp_val, dip)
+        stop = cont & (low == gcm[rows, np.clip(gcm_x, 0, W)]) & (
+            high == lcm[rows, np.clip(lcm_x, 0, W)]
+        )
+        finished = finished | brk | stop
+        upd = cont & ~stop
+        low = np.where(upd, gcm[rows, np.clip(gcm_x, 0, W)], low)
+        high = np.where(upd, lcm[rows, np.clip(lcm_x, 0, W)], high)
+    return dip
+
+
 def _dip_series(
     x2d: np.ndarray,
     window: int,
@@ -308,24 +508,42 @@ def _dip_series(
     if not np.isfinite(mcf) or not 0.0 < mcf <= 1.0:
         raise ValueError("min_coverage_fraction must be finite and in (0, 1]")
     for c in range(cols):
-        col = x2d[:, c]
-        for r in range(rows):
-            i0 = max(0, r - w + 1)
-            chunk = col[i0 : r + 1]
-            valid = chunk[np.isfinite(chunk)]
-            # R14-P1: statistical-usability gate — same effective-n / coverage
-            # contract as the L-moments; the dip needs a higher coverage default
-            # (0.8) because the empirical-CDF geometry is sensitive to sparse
-            # windows.
-            if valid.size < mp:
-                continue
-            if valid.size / float(chunk.size) < mcf:
-                continue
-            if float(valid.min()) == float(valid.max()):
-                continue  # degenerate constant window -> NaN (never fabricate 0)
-            magnitude = float(np.max(np.abs(valid)))
-            out[r, c] = _hartigan_dip(np.sort(valid / magnitude))
+        out[:, c] = _dip_column(x2d[:, c], w, mp, mcf)
     return out
+
+
+def _dip_column(col: np.ndarray, w: int, mp: int, mcf: float) -> np.ndarray:
+    """One column of ``_dip_series`` (the panel row loop is gone; every window
+    is a row of the ``(T, w)`` batch)."""
+    n = int(col.shape[0])
+    out = np.full(n, np.nan, dtype=float)
+    if n == 0:
+        return out
+    W = w
+    win = _trailing_windows(col, W)
+    fin = np.isfinite(win)
+    m = fin.sum(axis=1)
+    nominal = np.minimum(np.arange(n) + 1, W)
+    # R14-P1: statistical-usability gate — effective n after dropping NaN, plus
+    # the fraction the finite values cover of the NOMINAL length of this
+    # trailing window (``min(r+1, window)``).
+    active = (m >= mp) & (mp >= 2) & (m / np.maximum(nominal, 1) >= mcf)
+    order = np.sort(np.where(fin, win, np.nan), axis=1)
+    top_idx = np.clip(m - 1, 0, W - 1)
+    vmin = np.where(active, order[:, 0], np.nan)
+    vmax = np.where(active, order[np.arange(n), top_idx], np.nan)
+    # degenerate constant window -> NaN (never fabricate 0)
+    active = active & (vmin != vmax)
+    if not active.any():
+        return out
+    magnitude = np.maximum(np.abs(vmin), np.abs(vmax))
+    A = np.zeros((n, W + 1), dtype=float)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        A[:, 1:] = order / magnitude[:, None]
+    raw = _dip_lockstep(A, m, active, W)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        val = raw / (2.0 * m)
+    return np.where(active, val, np.nan)
 
 
 @register_operator(

@@ -756,7 +756,7 @@ class ButterworthLowpassCausalOperator(SeriesOperator):
         order: int = 2,
         **_: Any,
     ) -> pd.DataFrame:
-        """Execute Butterworth low-pass filtering."""
+        """Execute Butterworth low-pass filtering (vectorized over finite runs)."""
         if cutoff_period < 3:
             raise ValueError(
                 f"ts_butterworth_lowpass_causal requires cutoff_period >= 3, got {cutoff_period}"
@@ -787,41 +787,34 @@ class ButterworthLowpassCausalOperator(SeriesOperator):
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
 
+        zi0 = sp_signal.sosfilt_zi(sos)
+
         for col in range(cols):
-            # Initialize state for cascaded second-order sections
-            # sos shape: (n_sections, 6) where each row is [b0, b1, b2, a0, a1, a2]
-            n_sections = sos.shape[0]
-            zi = None  # Lazy initialization with first valid value
+            xc = xv[:, col]
+            fin = np.isfinite(xc)
+            if not fin.any():
+                continue
 
-            for row in range(rows):
-                x_curr = xv[row, col]
+            # Group contiguous finite indices into runs.  The recursive state is
+            # chained across runs so that a NaN (which emits NaN and freezes the
+            # state) resumes from the pre-gap state -- exactly the scalar
+            # semantics.  Only the very first finite value of the column is a
+            # steady-state passthrough (zi = sosfilt_zi(sos) * x_curr), which
+            # sosfilt reproduces identically.
+            idx = np.where(fin)[0]
+            brk = np.where(np.diff(idx) > 1)[0] + 1
+            runs = np.split(idx, brk)
 
-                if not np.isfinite(x_curr):
-                    # NaN input: output NaN, state freezes
-                    out[row, col] = np.nan
-                    continue
-
-                # Initialize state with first valid observation
-                if zi is None:
-                    zi_template = sp_signal.sosfilt_zi(sos)
-                    zi = zi_template * x_curr
-                    out[row, col] = x_curr
-                    continue
-
-                # Forward filter through cascaded sections
-                y = x_curr
-                for s in range(n_sections):
-                    b0, b1, b2, a0, a1, a2 = sos[s, :]
-                    # Normalize by a0 (should be 1.0 but for safety)
-                    b0, b1, b2, a1, a2 = b0/a0, b1/a0, b2/a0, a1/a0, a2/a0
-
-                    # Direct Form II transposed (standard for IIR SOS)
-                    y_out = b0 * y + zi[s, 0]
-                    zi[s, 0] = b1 * y - a1 * y_out + zi[s, 1]
-                    zi[s, 1] = b2 * y - a2 * y_out
-                    y = y_out
-
-                out[row, col] = y
+            prev_zi = None
+            for run in runs:
+                seg = xc[run]
+                if prev_zi is None:
+                    zi = zi0 * seg[0]
+                else:
+                    zi = prev_zi
+                y, zi_out = sp_signal.sosfilt(sos, seg, zi=zi)
+                out[run, col] = y
+                prev_zi = zi_out
 
         from factor_engine.cleaned_operators.rolling_pack import frame_like
         return frame_like(x, out)

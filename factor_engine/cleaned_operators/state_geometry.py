@@ -20,6 +20,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
@@ -124,6 +125,16 @@ def _column_map(xv: np.ndarray, fn) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 def _state_density_series(series: np.ndarray, window: int, bandwidth: float, min_periods: int) -> np.ndarray:
+    """Epanechnikov density of the strictly-past state space (R62 batch kernel).
+
+    One sliding window matrix ``(n, w)`` holds ``R_t = {x_{t-W},...,x_{t-1}}``
+    for every row; the robust scale (``1.4826*MAD``, falling back to the
+    population std exactly as before) and the kernel mean are row reductions.
+    The column is rescaled by a power of two first: the whole statistic is
+    scale invariant, so this is lossless, and it keeps ``sum x**2`` from
+    overflowing for 1e+300-scale levels while still reproducing the authority's
+    raw-unit under/overflow of the ``std`` fallback (via ``np.ldexp``).
+    """
     n = series.shape[0]
     w = max(2, int(window))
     bw = float(bandwidth)
@@ -133,40 +144,43 @@ def _state_density_series(series: np.ndarray, window: int, bandwidth: float, min
     # non-finite — is not a usable density scale.  The old ``max(1e-6, ...)``
     # clamped it to a tiny epsilon and emitted a meaningless number; a degenerate
     # state density is not a usable factor, so fail the whole series closed.
-    if not np.isfinite(bw) or bw <= 0.0:
+    if n == 0 or not np.isfinite(bw) or bw <= 0.0:
         return out
-    for t in range(n):
-        lo = max(0, t - w)
-        past = series[lo:t]                       # strictly past [t-W, t-1]
-        cur = series[t]
-        finite = past[np.isfinite(past)]
-        if finite.size < mp or not np.isfinite(cur):
-            continue
-        med = float(np.median(finite))
-        mad = 1.4826 * float(np.median(np.abs(finite - med)))
-        scale = mad if mad > 0.0 else float(np.std(finite))
-        # R14 P2 (reject-not-clamp): the kernel's own bandwidth h = bandwidth*s
-        # must be a strictly positive finite number.  An all-identical / point-mass
-        # history (zero spread) or a non-finite spread estimate has no kernel
-        # density — the old arbitrary 1.0 was discontinuous with the kernel's peak
-        # (P1-05).  Fail closed to NaN instead of clamping to an epsilon.
-        if not np.isfinite(scale) or scale <= 0.0:
-            out[t] = np.nan
-            continue
-        # Divide in two stages so tiny-but-valid physical scales are not
-        # dominated by an absolute epsilon; the standardized density is scale
-        # invariant by definition.
-        u = ((finite - cur) / scale) / bw
-        kern = 0.75 * (1.0 - u * u) * (np.abs(u) <= 1.0)
-        # Proper kernel-density normalisation: f̂(x) = (1/n) Σ K(u)/h, NOT the
-        # raw kernel mass mean(K) — otherwise this is a "local proximity" score,
-        # not a density (P1-05).
-        # P1 (round 7): raw KDE density carries unit 1/unit(x), so price /
-        # market-cap / return densities are incomparable across series.  Multiply
-        # by the past robust scale to make the mining-facing output a
-        # standardized, dimensionless local density — density in MAD units,
-        # f̂(x)·s = mean(K)/bw (h = bw·s).
-        out[t] = float(np.mean(kern)) / bw
+    finite_all = np.isfinite(series)
+    if not np.any(finite_all):
+        return out
+    expo = int(np.frexp(float(np.max(np.abs(series[finite_all]))))[1])
+    xs = np.ldexp(series, -expo)
+    pad = np.concatenate([np.full(w, np.nan, dtype=float), xs])
+    past = sliding_window_view(pad, w)[:n]          # row t -> x[t-W..t-1]
+    finite = np.isfinite(past)
+    cnt = finite.sum(axis=1)
+    valid = (cnt >= mp) & np.isfinite(xs)
+    ar = np.arange(n)
+    k = cnt
+    lo_i = np.maximum(k - 1, 0) // 2
+    hi_i = k // 2
+    srt = np.sort(np.where(finite, past, np.inf), axis=1)
+    med = 0.5 * (srt[ar, lo_i] + srt[ar, hi_i])
+    dev = np.sort(np.where(finite, np.abs(past - med[:, None]), np.inf), axis=1)
+    mad = 1.4826 * (0.5 * (dev[ar, lo_i] + dev[ar, hi_i]))
+    cnt_safe = np.maximum(cnt, 1)
+    mean = np.where(finite, past, 0.0).sum(axis=1) / cnt_safe
+    var = np.where(finite, (past - mean[:, None]) ** 2, 0.0).sum(axis=1) / cnt_safe
+    std_s = np.sqrt(var)
+    # R14 P2 (reject-not-clamp): the kernel's own bandwidth h = bandwidth*s must
+    # be a strictly positive finite number.  A point-mass history (zero spread)
+    # has no kernel density; fail closed instead of clamping to 1.0.
+    scale = np.where(mad > 0.0, mad, std_s)
+    scale_raw = np.ldexp(scale, expo)
+    good = valid & np.isfinite(scale_raw) & (scale_raw > 0.0)
+    if not np.any(good):
+        return out
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        u = ((past - xs[:, None]) / scale[:, None]) / bw
+        kern = np.where(finite, 0.75 * (1.0 - u * u) * (np.abs(u) <= 1.0), 0.0)
+        dens = kern.sum(axis=1) / cnt_safe / bw
+    out[good] = dens[good]
     return out
 
 

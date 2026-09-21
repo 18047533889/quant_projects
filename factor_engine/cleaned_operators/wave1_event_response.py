@@ -46,6 +46,18 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# R62 vectorised kernel for erd_post_event_hazard.
+#
+# Event flags are read on the raw positional trailing window
+# ``ev[lo(r):r+1]``, ``lo(r) = max(0, r - w + 1)`` (no calendar arithmetic).
+# ---------------------------------------------------------------------------
+def _r62_win(rows: int, w: int):
+    r = np.arange(rows)[:, None]
+    lo = np.maximum(0, r - w + 1)
+    return lo, lo + np.arange(w)[None, :]
+
+
+# ---------------------------------------------------------------------------
 # 1. event count/age-weighted decay kernels
 # ---------------------------------------------------------------------------
 @register_operator(
@@ -378,31 +390,37 @@ class ErdPostEventHazard(SeriesOperator):
     )
 
     def _calculate_series(self, event: pd.DataFrame, window: int = 60, k: int = 5, min_events: int = 4, **_: Any) -> pd.DataFrame:
+        # R62: per local event position p (0-based in the window), an event at
+        # p is *followed* iff p + k < L (the k-window fits inside the chunk,
+        # L = window length) and any event lands in local (p .. p+k].  NaN never
+        # counts as an event.  out = followed / n_events.
         w = _check_int(window, "window", 4)
         kk = _check_int(k, "k", 1)
         me = _check_int(min_events, "min_events", 2)
         ev = event.to_numpy(dtype=float)
         rows, cols = ev.shape
         out = np.full((rows, cols), np.nan, dtype=float)
+        half = w // 2
+        r = np.arange(rows)[:, None]
+        lo, i = _r62_win(rows, w)
+        valid = i <= r
+        idx = np.clip(i, 0, rows - 1)
+        L = r - lo + 1
+        jj = np.arange(w)
+        fits = (jj[None, :] + kk) < L
+        lo_p = np.minimum(jj + 1, w)
+        hi_p = np.minimum(jj + kk + 1, w)
         for col in range(cols):
-            ev_col = ev[:, col]
-            for row in range(rows):
-                lo = max(0, row - w + 1)
-                chunk = ev_col[lo:row + 1]
-                ok = np.isfinite(chunk)
-                if ok.sum() < w // 2:
-                    continue
-                vals = chunk
-                positions = np.flatnonzero(np.isfinite(vals) & (vals != 0))
-                if positions.size < me:
-                    continue
-                followed = 0
-                for p in positions:
-                    if p + kk < vals.size:
-                        nxt = vals[p + 1:p + kk + 1]
-                        if np.any(np.isfinite(nxt) & (nxt != 0)):
-                            followed += 1
-                out[row, col] = followed / positions.size
+            vals = ev[idx, col]
+            fin = valid & np.isfinite(vals)
+            cntfin = fin.sum(axis=1)
+            B = fin & (vals != 0.0)
+            cnt_ev = B.sum(axis=1)
+            P = np.concatenate((np.zeros((rows, 1)), np.cumsum(B, axis=1)), axis=1)
+            has_next = (P[:, hi_p] - P[:, lo_p]) > 0
+            followed = (B & has_next & fits).sum(axis=1)
+            ok = (cntfin >= half) & (cnt_ev >= me)
+            out[:, col] = np.where(ok, followed / np.maximum(cnt_ev, 1), np.nan)
         return _frame_like(event, out)
 
 

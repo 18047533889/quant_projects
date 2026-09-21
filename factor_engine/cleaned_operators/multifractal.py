@@ -37,6 +37,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view
 
 from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
@@ -181,24 +182,160 @@ def _hurst_generalized(vals: np.ndarray, q: float) -> float:
     return float(slope) / q
 
 
-def _hurst_series(x2d: np.ndarray, window: int, q: float) -> np.ndarray:
-    rows, cols = x2d.shape
-    out = np.full((rows, cols), np.nan, dtype=float)
-    w = int(window)
-    for c in range(cols):
-        col = x2d[:, c]
-        for r in range(rows):
-            # R4-94: ``window`` is a real horizon — the trailing window must be
-            # fully accumulated before an H estimate is emitted.  Previously the
-            # ``max(0, r - w + 1)`` truncation let a partial window start
-            # estimating H as soon as the aligned-pair floor was met (e.g.
-            # ~10 rows into a window=120 series), which is not the same scaling
-            # law as the full window and produced unstable early values.
-            if r + 1 < w:
-                continue
-            i0 = r - w + 1
-            out[r, c] = _hurst_generalized(col[i0 : r + 1], q)
+
+
+# ---------------------------------------------------------------------------
+# R62 vectorised H(q) machinery.  The scalar helpers above remain the readable
+# reference; these batch the SAME computation over every row of a column:
+# one sliding window matrix (n, window), one structure-function panel per
+# dyadic lag, one masked log-log OLS per moment order.  Every gate is mirrored
+# exactly (same trailing-contiguous cohort, same aligned-pair floors, same
+# ``R^2 >= 0.9`` fail-closed rule, same window warm-up).
+# ---------------------------------------------------------------------------
+_MF_LOG_T = np.log(np.asarray(_LAGS, dtype=float))
+
+
+def _mf_fit_line(y: np.ndarray, valid: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Row-wise OLS slope and R^2 of ``y`` on the fixed dyadic log-lags.
+
+    Equivalent to ``np.polyfit(log_t, log_s, 1)`` + the authority's R^2, with
+    both sides mean-centred first so a large common log-scale offset (the
+    ``_stable_dimensionless_chunk`` magnitude is absorbed into a constant shift
+    of ``log S``) cannot eat the slope's significant digits.
+    """
+    vd = valid.astype(float)
+    cnt = vd.sum(axis=1)
+    csafe = np.maximum(cnt, 1.0)
+    ys = np.where(valid, y, 0.0)
+    ybar = ys.sum(axis=1) / csafe
+    yc = np.where(valid, y - ybar[:, None], 0.0)
+    xc = np.where(valid, _MF_LOG_T[None, :], 0.0)
+    sx = xc.sum(axis=1)
+    sxy = (xc * yc).sum(axis=1)
+    var = (xc * xc).sum(axis=1) - sx * sx / csafe
+    with np.errstate(divide="ignore", invalid="ignore"):
+        slope = np.where(var > 0.0, sxy / np.where(var > 0.0, var, 1.0), np.nan)
+        fit = slope[:, None] * (_MF_LOG_T[None, :] - (sx / csafe)[:, None])
+        ss_res = np.where(valid, (yc - fit) ** 2, 0.0).sum(axis=1)
+        ss_tot = (yc * yc).sum(axis=1)
+        r2 = np.where(ss_tot > 1e-12, 1.0 - ss_res / np.where(ss_tot > 1e-12, ss_tot, 1.0), np.nan)
+    return slope, r2
+
+
+def _mf_h_column(col: np.ndarray, window: int, qs, scaled: bool) -> np.ndarray:
+    """H(q) for every row of one column; returns ``(len(qs), rows)``.
+
+    ``scaled`` selects the ``_stable_dimensionless_chunk`` path (divide the
+    window by its largest finite magnitude before the structure function) used
+    by the spread / spectrum / curvature kernels; ``scaled=False`` reproduces
+    the raw ``_hurst_generalized`` path of ``ts_generalized_hurst_exponent``,
+    where an overflowing or underflowing ``|dx|**q`` still fails closed.
+    """
+    rows = int(col.size)
+    W = int(window)
+    nq = len(qs)
+    out = np.full((nq, rows), np.nan, dtype=float)
+    if rows == 0 or W < int(_LAGS[-1]) + 2:
+        return out
+    xp = np.concatenate([np.full(W - 1, np.nan, dtype=float), col])
+    win = sliding_window_view(xp, W)                      # row r -> x[r-W+1 .. r]
+    mag = np.where(np.isfinite(win), np.abs(win), 0.0).max(axis=1)
+    fin = np.isfinite(col)
+    ar = np.arange(rows)
+    last_bad = np.maximum.accumulate(np.where(fin, -1, ar))
+    run_len = np.where(fin, ar - last_bad, 0)
+    run = np.minimum(run_len, W)                          # window-clipped cohort
+    base = (ar >= W - 1) & (run >= int(_LAGS[-1]) + 2)
+    if scaled:
+        base = base & np.isfinite(mag) & (mag > 0.0)
+    cols = np.arange(W)
+    cohort = cols[None, :] >= (W - run)[:, None]           # trailing run columns
+    log_s = np.full((nq, len(_LAGS), rows), np.nan, dtype=float)
+    with np.errstate(over="ignore", under="ignore", invalid="ignore", divide="ignore"):
+        for li, lag in enumerate(_LAGS):
+            cnt = run - lag
+            d = win[:, lag:] - win[:, :-lag]
+            if scaled:
+                d = d / mag[:, None]
+            ad = np.abs(d)
+            ad = np.where(cohort[:, : W - lag] & cohort[:, lag:], ad, 0.0)
+            a2 = ad * ad
+            for qi, q in enumerate(qs):
+                required = max(_MIN_PAIRS_PER_LAG, int(np.ceil(_MIN_PAIRS_PER_LAG * abs(float(q)))))
+                if q == 0.5:
+                    val = np.sqrt(ad)
+                elif q == 1.0:
+                    val = ad
+                elif q == 2.0:
+                    val = a2
+                elif q == 3.0:
+                    val = a2 * ad
+                elif q == 4.0:
+                    val = a2 * a2
+                else:
+                    val = ad ** float(q)
+                s = val.sum(axis=1) / np.maximum(cnt, 1)
+                good = base & (run >= lag + 2) & (cnt >= required) & np.isfinite(s) & (s > 0.0)
+                log_s[qi, li] = np.where(good, np.log(np.where(good, s, 1.0)), np.nan)
+    for qi, q in enumerate(qs):
+        vq = np.isfinite(log_s[qi])
+        slope, r2 = _mf_fit_line(log_s[qi].T, vq.T)
+        gate = (vq.sum(axis=0) >= _MIN_LAGS_FOR_FIT) & np.isfinite(slope) & np.isfinite(r2) & (r2 >= _MIN_SCALING_R2)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out[qi] = np.where(gate, slope / float(q), np.nan)
     return out
+
+
+def _mf_h_matrix(x2d: np.ndarray, window: int, qs, scaled: bool) -> np.ndarray:
+    """``(rows, cols, len(qs))`` H(q) panel (columns stay independent)."""
+    rows, cols = x2d.shape
+    out = np.full((rows, cols, len(qs)), np.nan, dtype=float)
+    for c in range(cols):
+        out[:, c, :] = _mf_h_column(x2d[:, c], window, qs, scaled).T
+    return out
+
+
+def _mf_poly_fit_mask(hs: np.ndarray, qs: np.ndarray, deg: int) -> tuple[np.ndarray, np.ndarray]:
+    """Row-wise polynomial fit of ``hs`` on ``qs`` over the finite entries.
+
+    Returns ``(coeffs, sel)`` with ``coeffs`` the ``(n_sel, deg+1)`` least
+    squares coefficients (highest power first, as ``np.polyfit``) for the rows
+    selected by ``sel`` (at least ``deg + 2`` finite moment orders).
+    """
+    ok = np.isfinite(hs)
+    pat = (ok * (1 << np.arange(len(qs)))).sum(axis=1)
+    parts = []
+    sels = []
+    for p in np.unique(pat):
+        idx = [i for i in range(len(qs)) if (int(p) >> i) & 1]
+        if len(idx) < deg + 2:
+            continue
+        sel = pat == p
+        sub = hs[sel][:, idx]                       # (m, k)
+        vander = np.vander(qs[idx], deg + 1)
+        coef = np.linalg.lstsq(vander, sub.T, rcond=None)[0]   # (deg+1, m)
+        parts.append(coef)
+        sels.append(sel)
+    if not parts:
+        return np.empty((0, deg + 1)), np.zeros(hs.shape[0], dtype=bool)
+    n = hs.shape[0]
+    coeffs = np.full((n, deg + 1), np.nan, dtype=float)
+    sel_all = np.zeros(n, dtype=bool)
+    for coef, sel in zip(parts, sels):
+        coeffs[sel] = coef.T
+        sel_all |= sel
+    return coeffs, sel_all
+
+def _hurst_series(x2d: np.ndarray, window: int, q: float) -> np.ndarray:
+    """Generalised Hurst exponent ``H(q)`` for every row (R62 batch kernel).
+
+    Audit P1-D: the log-log scaling fit needs at least three valid lags and a
+    minimum R² — a two-point line would produce a spuriously precise Hurst.
+    Audit #91: the trailing contiguous finite run is the COMMON cohort for all
+    lags, so a missing pattern cannot make different lags estimate scaling on
+    different data slices.
+    """
+    return _mf_h_matrix(x2d, window, (float(q),), False)[:, :, 0]
 
 
 def _hurst_spread_series(x2d: np.ndarray, window: int) -> np.ndarray:
@@ -210,22 +347,12 @@ def _hurst_spread_series(x2d: np.ndarray, window: int) -> np.ndarray:
     required (P0-6): ``_hurst_generalized`` returns NaN when the current
     observation is missing, so the spread emits NaN on a stale-history window.
     """
-    rows, cols = x2d.shape
-    out = np.full((rows, cols), np.nan, dtype=float)
-    w = int(window)
-    for c in range(cols):
-        col = x2d[:, c]
-        for r in range(rows):
-            if r + 1 < w:
-                continue
-            i0 = r - w + 1
-            chunk = _stable_dimensionless_chunk(col[i0 : r + 1])
-            if chunk is None:
-                continue
-            h1 = _hurst_generalized(chunk, 1.0)
-            h4 = _hurst_generalized(chunk, 4.0)
-            if np.isfinite(h1) and np.isfinite(h4):
-                out[r, c] = h1 - h4
+    hs = _mf_h_matrix(x2d, window, (1.0, 4.0), True)
+    h1 = hs[:, :, 0]
+    h4 = hs[:, :, 1]
+    out = np.full(h1.shape, np.nan, dtype=float)
+    ok = np.isfinite(h1) & np.isfinite(h4)
+    out[ok] = h1[ok] - h4[ok]
     return out
 
 
@@ -258,67 +385,47 @@ def _spectrum_width_series(x2d: np.ndarray, window: int) -> np.ndarray:
     the fitted grid.  Fails closed (NaN) on insufficient history / too few
     finite ``q`` points.  The current row is required (P0-6).
     """
-    rows, cols = x2d.shape
+    qs = np.asarray(_Q_GRID, dtype=float)
+    hs = _mf_h_matrix(x2d, window, tuple(float(v) for v in qs), True)
+    rows, cols, _ = hs.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    w = int(window)
-    qs = _Q_GRID
-    for c in range(cols):
-        col = x2d[:, c]
-        for r in range(rows):
-            if r + 1 < w:
-                continue
-            i0 = r - w + 1
-            chunk = _stable_dimensionless_chunk(col[i0 : r + 1])
-            if chunk is None:
-                continue
-            hs = np.asarray([_hurst_generalized(chunk, q_) for q_ in qs], dtype=float)
-            ok = np.isfinite(hs)
-            # Audit #90-style floor: a quadratic tau(q) has 3 parameters; fitting
-            # to only 3 q-points leaves zero residual DOF.  Require >= 4.
-            if int(ok.sum()) < 4:
-                continue
-            q_ok = qs[ok]
-            tau = q_ok * hs[ok] - 1.0
-            # Fit a smooth tau(q) before differentiating (Legendre transform).
-            coeffs = np.polyfit(q_ok, tau, 2)
-            if not np.all(np.isfinite(coeffs)):
-                continue
-            # alpha(q) = d(tau)/dq evaluated on the fitted q points.
-            alpha_vals = np.polyval(np.polyder(coeffs), q_ok)
-            if not np.all(np.isfinite(alpha_vals)):
-                continue
-            width = float(np.max(alpha_vals) - np.min(alpha_vals))
-            if np.isfinite(width) and width >= 0.0:
-                out[r, c] = width
+    flat = hs.reshape(rows * cols, -1)
+    okq = np.isfinite(flat)
+    # tau(q) = q*H(q) - 1 keeps the finite pattern of H(q).
+    tau = qs[None, :] * flat - 1.0
+    coeffs, sel = _mf_poly_fit_mask(tau, qs, 2)
+    if sel.any():
+        c2 = coeffs[:, 0]
+        c1 = coeffs[:, 1]
+        # alpha(q) = d(tau)/dq evaluated on the FINITE q grid points only.
+        alpha = 2.0 * c2[:, None] * qs[None, :] + c1[:, None]
+        good = np.all(np.isfinite(coeffs), axis=1)
+        good &= np.where(okq, np.isfinite(alpha), True).all(axis=1)
+        fin = okq & np.isfinite(alpha)
+        amax = np.where(fin, alpha, -np.inf).max(axis=1)
+        amin = np.where(fin, alpha, np.inf).min(axis=1)
+        width = amax - amin
+        good &= np.isfinite(width) & (width >= 0.0)
+        out.reshape(-1)[sel] = np.where(good, width, np.nan)[sel]
     return out
 
 
 def _curvature_series(x2d: np.ndarray, window: int) -> np.ndarray:
-    rows, cols = x2d.shape
+    """Quadratic coefficient of ``H(q) = a + b*q + c*q^2`` (R62 batch kernel).
+
+    Audit #89/#90: reviewed q grid, and >= 4 finite q points so the quadratic
+    (3 parameters) is estimated, not interpolated.
+    """
+    qs = np.asarray([0.5, 1.0, 2.0, 3.0, 4.0], dtype=float)
+    hs = _mf_h_matrix(x2d, window, tuple(float(v) for v in qs), True)
+    rows, cols, _ = hs.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    w = int(window)
-    # Audit #89: reviewed q grid for the spectrum (large positive q is
-    # dominated by single extreme increments and is not robust).
-    qs = np.array([0.5, 1.0, 2.0, 3.0, 4.0])
-    for c in range(cols):
-        col = x2d[:, c]
-        for r in range(rows):
-            if r + 1 < w:
-                continue
-            i0 = r - w + 1
-            chunk = _stable_dimensionless_chunk(col[i0 : r + 1])
-            if chunk is None:
-                continue
-            hs = np.asarray([_hurst_generalized(chunk, q_) for q_ in qs], dtype=float)
-            ok = np.isfinite(hs)
-            # Audit #90: a quadratic fit has 3 parameters; fitting to only 3
-            # q-points leaves zero residual DOF (the fit is exactly
-            # interpolated, not estimated).  Require >= 4 valid q points.
-            if int(ok.sum()) < 4:
-                continue
-            coeffs = np.polyfit(qs[ok], hs[ok], 2)
-            if np.isfinite(coeffs[0]):
-                out[r, c] = float(coeffs[0])
+    flat = hs.reshape(rows * cols, -1)
+    coeffs, sel = _mf_poly_fit_mask(flat, qs, 2)
+    if sel.any():
+        c2 = coeffs[:, 0]
+        good = np.isfinite(c2)
+        out.reshape(-1)[sel] = np.where(good, c2, np.nan)[sel]
     return out
 
 

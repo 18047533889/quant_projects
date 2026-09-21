@@ -26,6 +26,7 @@ from factor_engine.cleaned_operators.parameter_validation import strict_integer,
 
 import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view
 
 from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.common.daily_panel import _aligned
@@ -548,6 +549,166 @@ class TsArCoefficient(SeriesOperator):
         return _frame_like(x, out)
 
 
+
+
+# ---------------------------------------------------------------------------
+# R62 vectorised kernels for the three remaining per-row loops.
+#
+# ``_scale_finite`` (divide the segment by its largest finite magnitude) and
+# the trailing-contiguous cohort are both preserved bit-for-bit, but as one
+# batch per column: a single ``(n, w)`` sliding window matrix holds
+# ``xv[max(0,t-w+1) : t+1]``, the trailing run is the last ``L`` columns, and
+# every mean / variance / lag-shift is a masked row reduction.  Scaling each
+# row by its own window magnitude is what the authority does, so even
+# knife-edge panels (exactly-equal increments) keep the same underflow pattern.
+# ---------------------------------------------------------------------------
+def _scaled_window(col: np.ndarray, fin: np.ndarray, w: int) -> tuple[np.ndarray, np.ndarray]:
+    """``_scale_finite`` segment matrix + trailing contiguous run length."""
+    n = col.size
+    pad = np.concatenate([np.full(w - 1, np.nan, dtype=float), col])
+    win = sliding_window_view(pad, w)[:n]        # row t -> x[max(0,t-w+1) .. t]
+    with np.errstate(invalid="ignore", divide="ignore"):
+        mag = np.where(np.isfinite(win), np.abs(win), 0.0).max(axis=1)
+        sw = win / np.where(mag > 0.0, mag, 1.0)[:, None]
+    ar = np.arange(n)
+    last_bad = np.maximum.accumulate(np.where(fin, -1, ar))
+    run = np.minimum(np.where(fin, ar - last_bad, 0), w)
+    return sw, run
+
+
+def _iter_run_groups(run: np.ndarray):
+    """Yield ``(rows, L)`` groups of equal trailing-run length, largest first.
+
+    Every row is reduced on its own *compacted* ``(k, L)`` trailing-run block
+    rather than on the padded ``(k, w)`` window.  NumPy's pairwise summation
+    groups by position, so a padded row reproduces the last-bit rounding of a
+    length-``w`` array instead of the length-``L`` array the authority sums —
+    and on knife-edge windows (exactly-equal increments, true variance ~1e-34)
+    that difference is amplified into O(1) relative error.  Batching by ``L``
+    is the only layout whose rounding is bit-identical to HEAD's per-row call.
+    """
+    nz = np.flatnonzero(run)
+    if nz.size == 0:
+        return
+    r = run[nz]
+    order = np.argsort(r, kind="stable")
+    srt, rs = nz[order], r[order]
+    cut = np.flatnonzero(np.concatenate(([True], rs[1:] != rs[:-1])))
+    ends = np.concatenate((cut[1:], [rs.size]))
+    for a, b in zip(cut, ends):
+        yield srt[a:b], int(rs[a])
+
+
+def _variance_ratio_proxy_col(col: np.ndarray, w: int, mp: int, q: int) -> np.ndarray:
+    """``ts_variance_ratio_proxy`` kernel for one column (batched by run length)."""
+    n = col.size
+    res = np.full(n, np.nan, dtype=float)
+    fin = np.isfinite(col)
+    if n == 0 or not np.any(fin):
+        return res
+    sw, run = _scaled_window(col, fin, w)
+    for idx, L in _iter_run_groups(run):
+        # gates mirror the authority exactly: vals.size < mp / rets.size < mp /
+        # qrets.size < 2 (== ``L - q < 2``).
+        if L < mp or L - 1 < mp or L - q < 2:
+            continue
+        vals = sw[idx, w - L:]
+        var1 = np.var(vals[:, 1:] - vals[:, :-1], axis=1)
+        varq = np.var(vals[:, q:] - vals[:, :-q], axis=1)
+        good = var1 > 0.0
+        if not good.any():
+            continue
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+            val = varq / (q * np.where(good, var1, 1.0)) - 1.0
+        res[idx[good]] = val[good]
+    return res
+
+
+def _lo_mackinlay_z_col(col: np.ndarray, w: int, mp: int, q: int) -> np.ndarray:
+    """``ts_lo_mackinlay_z`` kernel for one column (batched by run length)."""
+    n = col.size
+    res = np.full(n, np.nan, dtype=float)
+    fin = np.isfinite(col)
+    if n == 0 or not np.any(fin) or q >= w:
+        return res
+    sw, run = _scaled_window(col, fin, w)
+    weights = [(2.0 * (q - k) / q) ** 2 for k in range(1, int(q))]
+    for idx, L in _iter_run_groups(run):
+        nr = L - 1                      # number of 1-period returns
+        # ``vals.size < mp`` and the ``rets.size < periods + 1`` feasibility gate.
+        if L < mp or nr < q + 1:
+            continue
+        vals = sw[idx, w - L:]
+        rets = vals[:, 1:] - vals[:, :-1]
+        mu = rets.sum(axis=1) / nr
+        dev = rets - mu[:, None]
+        denom = (dev * dev).sum(axis=1)
+        # ``_lo_mackinlay_vr`` uses the (n-1) denominator; <= 0 fails closed.
+        sigma_a2 = denom / (nr - 1.0)
+        good = sigma_a2 > 0.0
+        if not good.any():
+            continue
+        # overlapping q-period return sums == np.convolve(rets, ones(q), "valid")
+        qsum = sliding_window_view(rets, q, axis=1).sum(axis=2)
+        m = q * (nr - q + 1) * (1.0 - q / nr)
+        qdev = qsum - q * mu[:, None]
+        sigma_c2 = (qdev * qdev).sum(axis=1) / m
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+            vr = sigma_c2 / np.where(good, sigma_a2, 1.0)
+        good &= np.isfinite(vr)
+        if not good.any():
+            continue
+        den2 = denom * denom
+        dev2 = dev * dev
+        theta = np.zeros(rets.shape[0], dtype=float)
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+            for k, wt in zip(range(1, int(q)), weights):
+                num = (dev2[:, : nr - k] * dev2[:, k:]).sum(axis=1)
+                theta += wt * (num / den2)
+            z = (vr - 1.0) / np.sqrt(theta)
+        good &= (theta > 0.0) & (m > 0.0)
+        res[idx[good]] = z[good]
+    return res
+
+
+def _level_shift_score_col(col: np.ndarray, w: int, mp: int) -> np.ndarray:
+    """``ts_level_shift_score`` kernel for one column (physical-midpoint split)."""
+    n = col.size
+    res = np.full(n, np.nan, dtype=float)
+    fin = np.isfinite(col)
+    if n == 0 or not np.any(fin):
+        return res
+    win, run = _scaled_window(col, fin, w)
+    ar = np.arange(n)
+    seg = np.minimum(ar + 1, w)
+    lo = ar - seg + 1
+    s = ar - run + 1
+    first_len = np.clip(lo + seg // 2 - s, 0, run)
+    second_len = run - first_len
+    cols = np.arange(w)
+    start = w - run
+    in_run = cols[None, :] >= start[:, None]
+    m_first = in_run & (cols[None, :] < (start + first_len)[:, None])
+    m_second = cols[None, :] >= (start + first_len)[:, None]
+    safe = np.maximum(run, 1)
+    mu = np.where(in_run, win, 0.0).sum(axis=1) / safe
+    sd = np.sqrt(np.where(in_run, (win - mu[:, None]) ** 2, 0.0).sum(axis=1) / safe)
+    mf = np.where(m_first, win, 0.0).sum(axis=1) / np.maximum(first_len, 1)
+    ms = np.where(m_second, win, 0.0).sum(axis=1) / np.maximum(second_len, 1)
+    good = (run >= mp) & (first_len > 0) & (second_len > 0) & (sd > 0.0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        val = (ms - mf) / np.where(sd > 0.0, sd, 1.0)
+    res[good] = val[good]
+    return res
+
+
+def _column_kernel(xv: np.ndarray, fn) -> np.ndarray:
+    rows, cols = xv.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for c in range(cols):
+        out[:, c] = fn(xv[:, c])
+    return out
+
 def _lo_mackinlay_vr(rets: np.ndarray, q: int) -> float:
     """Overlapping Lo–MacKinlay variance-ratio estimator VR(q).
 
@@ -659,32 +820,8 @@ class TsVarianceRatioProxy(SeriesOperator):
         if periods > w-2:
             raise ValueError("q must be <= window - 2")
         xv = x.to_numpy(dtype=float)
-        rows, cols = xv.shape
-        out = np.full((rows, cols), np.nan, dtype=float)
-        for col in range(cols):
-            for row in range(rows):
-                start = max(0, row - w + 1)
-                segment = _scale_finite(xv[start : row + 1, col])
-                # Trailing contiguous run: a gap must not re-pair values that
-                # were not temporally adjacent (review P1-123).
-                vals = _trailing_contiguous(segment)
-                if vals.size < mp:
-                    continue
-                rets = np.diff(vals)
-                if rets.size < mp:
-                    continue
-                var1 = float(np.var(rets))
-                if var1 <= 0.0:
-                    continue
-                # q-period returns
-                n = rets.size
-                qrets = np.array([vals[i + periods] - vals[i] for i in range(0, n - periods + 1)])
-                if qrets.size < 2:
-                    continue
-                varq = float(np.var(qrets))
-                out[row, col] = varq / (periods * var1) - 1.0
+        out = _column_kernel(xv, lambda col: _variance_ratio_proxy_col(col, w, mp, periods))
         return _frame_like(x, out)
-
 
 @register_operator(
     name="ts_lo_mackinlay_vr",
@@ -782,21 +919,8 @@ class TsLoMackinlayZ(SeriesOperator):
         if periods > w-2:
             raise ValueError("q must be <= window - 2")
         xv = x.to_numpy(dtype=float)
-        rows, cols = xv.shape
-        out = np.full((rows, cols), np.nan, dtype=float)
-        for col in range(cols):
-            for row in range(rows):
-                start = max(0, row - w + 1)
-                segment = _scale_finite(xv[start : row + 1, col])
-                vals = _trailing_contiguous(segment)
-                if vals.size < mp:
-                    continue
-                rets = np.diff(vals)
-                if rets.size < periods + 1:
-                    continue
-                out[row, col] = _lo_mackinlay_z(rets, periods)
+        out = _column_kernel(xv, lambda col: _lo_mackinlay_z_col(col, w, mp, periods))
         return _frame_like(x, out)
-
 
 @register_operator(
     name="ts_cumulative_deviation_score",
@@ -880,26 +1004,8 @@ class TsLevelShiftScore(SeriesOperator):
         window = strict_integer(window,"window",minimum=20)
         w, mp = _remaining_window(window,min_periods,4,levels_extra=0)
         xv = x.to_numpy(dtype=float)
-        rows, cols = xv.shape
-        out = np.full((rows, cols), np.nan, dtype=float)
-        for col in range(cols):
-            for row in range(rows):
-                start = max(0, row - w + 1)
-                segment = _scale_finite(xv[start : row + 1, col])
-                # Trailing contiguous run: a NaN must not re-pair rows on either
-                # side of a gap (review R11 #12).
-                vals = _trailing_contiguous(segment)
-                if vals.size < mp:
-                    continue
-                first, second = _trailing_run_halves(segment)
-                if first.size == 0 or second.size == 0:
-                    continue
-                sd = float(np.std(vals))
-                if sd <= 0.0:
-                    continue
-                out[row, col] = float(np.mean(second) - np.mean(first)) / sd
+        out = _column_kernel(xv, lambda col: _level_shift_score_col(col, w, mp))
         return _frame_like(x, out)
-
 
 @register_operator(
     name="ts_vol_shift_score",

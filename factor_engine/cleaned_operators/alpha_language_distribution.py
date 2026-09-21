@@ -19,10 +19,13 @@ windows (too few samples / zero scale) return NaN, never Inf or an invented 0.
 """
 from __future__ import annotations
 
+import math
+
 from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view
 
 from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import (
@@ -110,6 +113,280 @@ def _mad(vals: np.ndarray) -> float:
     return float(np.median(np.abs(vals - np.median(vals))))
 
 
+# ---------------------------------------------------------------------------
+# R62 vectorised two-window / rolling-window machinery
+# ---------------------------------------------------------------------------
+_Q_GRID9 = np.linspace(0.1, 0.9, 9)
+_A_TRANSPORT9 = np.column_stack(
+    [np.ones_like(_Q_GRID9), _Q_GRID9 - 0.5, (_Q_GRID9 - 0.5) ** 2]
+)
+_TRIU_CACHE: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+
+
+def _triu_idx(m: int):
+    if m not in _TRIU_CACHE:
+        _TRIU_CACHE[m] = np.triu_indices(m, k=1)
+    return _TRIU_CACHE[m]
+
+
+def _win_pad_rows(col: np.ndarray, w: int) -> np.ndarray:
+    """Trailing windows ``(n, w)``; row r = col[r-w+1 .. r], NaN where negative."""
+    pre = np.concatenate([np.full(w - 1, np.nan), col])
+    return sliding_window_view(pre, w)
+
+
+def _quantile_interp(sorted_win: np.ndarray, counts: np.ndarray, levels) -> np.ndarray:
+    """``np.quantile(finite_row, levels, method="linear")`` for every row.
+
+    ``sorted_win`` (n, W) holds the finite values first (ascending, NaN in the
+    pad tail) and ``counts`` (n,) the finite count.  Reproduces numpy's linear
+    method: index ``q*(p-1)`` bracketed by floor/ceil with a fractional lerp.
+    """
+    lv = np.asarray(levels, dtype=float)
+    if lv.ndim == 1:
+        lv = lv[None, :]
+    pm1 = np.maximum(counts - 1, 0)
+    pos = lv * pm1[:, None].astype(np.float64)
+    pm1i = np.maximum(pm1.astype(np.int64)[:, None], 0)
+    lo = np.clip(np.floor(pos).astype(np.int64), 0, pm1i)
+    hi = np.minimum(lo + 1, pm1i)
+    frac = pos - lo
+    a = np.take_along_axis(sorted_win, lo, axis=1)
+    b = np.take_along_axis(sorted_win, hi, axis=1)
+    return a + (b - a) * frac
+
+
+def _rolling_quantile(Wm: np.ndarray, levels) -> np.ndarray:
+    """``np.nanquantile`` along axis 1 without numpy's hidden per-row loop."""
+    Ws = np.sort(Wm, axis=1)
+    cnt = np.isfinite(Wm).sum(axis=1)
+    return _quantile_interp(Ws, cnt, levels)
+
+
+def _two_window_pads(col: np.ndarray, ws: int, wl: int):
+    """Recent ``[r-ws+1, r]`` / older ``[r-ws-wl+1, r-ws]`` trailing windows.
+
+    The older window is NaN wherever it falls before the panel start, which is
+    exactly ``map_two_window``'s ``old_end < 0`` -> NaN rule.
+    """
+    n = col.size
+    pre = np.concatenate([np.full(ws + wl - 1, np.nan), col])
+    return sliding_window_view(pre, ws)[wl : wl + n], sliding_window_view(pre, wl)[0:n]
+
+
+def _sorted_prefix_median(sorted_rows: np.ndarray, count: np.ndarray) -> np.ndarray:
+    """Median of the finite prefix of each ascending-sorted row.
+
+    ``sorted_rows`` (n, W) is finite-first ascending with a NaN pad tail and
+    ``count`` (n,) the finite count, so the median rank depends only on
+    ``count`` -- a pure gather.  ``np.nanmedian(..., axis=1)`` would be a
+    hidden per-row Python loop (numpy's ``apply_along_axis`` fallback).
+    """
+    last = sorted_rows.shape[1] - 1
+    c = np.maximum(count, 1)
+    k1 = np.minimum((c - 1) // 2, last)
+    k2 = np.minimum(c // 2, last)
+    a = np.take_along_axis(sorted_rows, k1[:, None], axis=1)[:, 0]
+    b = np.take_along_axis(sorted_rows, k2[:, None], axis=1)[:, 0]
+    return np.where(count > 0, 0.5 * (a + b), np.nan)
+
+
+def _median_mad_sorted(Osorted: np.ndarray):
+    """Median and MAD of each sorted row (finite prefix, NaN pad tail)."""
+    count = np.isfinite(Osorted).sum(axis=1)
+    med = _sorted_prefix_median(Osorted, count)
+    dev = np.sort(np.abs(Osorted - med[:, None]), axis=1)
+    mad = _sorted_prefix_median(dev, count)
+    return med, mad
+
+
+def _pairwise_median(Comb: np.ndarray, m: np.ndarray) -> np.ndarray:
+    """Median of the pairwise absolute differences of each row's finite sample.
+
+    ``Comb`` (n, W) is sorted finite-first with a NaN tail and ``m`` is the
+    finite count.  The finite values' *positions* depend only on ``m``, so rows
+    are grouped by sample size and each group is selected with a fixed ``kth``
+    partition -- no per-row Python work, no ``np.nanmedian`` row loop.
+    """
+    out = np.full(Comb.shape[0], np.nan)
+    ok = m >= 2
+    if not ok.any():
+        return out
+    for mv in np.unique(m[ok]):
+        idx = np.flatnonzero(ok & (m == mv))
+        ii, jj = _triu_idx(int(mv))
+        sub = Comb[idx]
+        d = sub[:, jj] - sub[:, ii]          # sorted asc -> jj>ii gives |diff|
+        c = d.shape[1]
+        k1 = (c - 1) // 2
+        k2 = c // 2
+        if k1 == k2:
+            out[idx] = np.partition(d, k1, axis=1)[:, k1]
+        else:
+            p = np.partition(d, [k1, k2], axis=1)
+            out[idx] = 0.5 * (p[:, k1] + p[:, k2])
+    return out
+
+
+def _es_asymmetry_series(x2d: np.ndarray, window: int, q: float, min_tail: int) -> np.ndarray:
+    """``(u - l) / (u + l)`` with ``u`` / ``l`` the mean upper / lower tail depth."""
+    rows, cols = x2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    w = int(window)
+    for c in range(cols):
+        Wm = _win_pad_rows(x2d[:, c], w)
+        fin = np.isfinite(Wm)
+        cnt = fin.sum(axis=1)
+        with np.errstate(all="ignore"):
+            quants = _rolling_quantile(Wm, np.array([q, 1.0 - q]))
+            q_lo = quants[:, 0]
+            q_up = quants[:, 1]
+            up = fin & (Wm > q_up[:, None])
+            lo = fin & (Wm < q_lo[:, None])
+            cup = up.sum(axis=1)
+            clo = lo.sum(axis=1)
+            u = np.where(up, Wm, 0.0).sum(axis=1) / cup - q_up
+            l = q_lo - np.where(lo, Wm, 0.0).sum(axis=1) / clo
+            denom = u + l
+            val = (u - l) / denom
+        ok = ((cnt >= 2 * min_tail) & (cup >= min_tail) & (clo >= min_tail)
+              & np.isfinite(denom) & (denom >= _EPS))
+        out[:, c] = np.where(ok, val, np.nan)
+    return out
+
+
+def _location_shift_series(x2d, ws, wl, mp):
+    """``(median(A) - median(B)) / (MAD(B) + eps)`` on the two windows."""
+    rows, cols = x2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for c in range(cols):
+        rec, old = _two_window_pads(x2d[:, c], ws, wl)
+        Rs = np.sort(rec, axis=1)
+        Os = np.sort(old, axis=1)
+        cnt_r = np.isfinite(Rs).sum(axis=1)
+        cnt_o = np.isfinite(Os).sum(axis=1)
+        med_r = _sorted_prefix_median(Rs, cnt_r)
+        med_o, mad_o = _median_mad_sorted(Os)
+        with np.errstate(all="ignore"):
+            val = (med_r - med_o) / mad_o
+        ok = (cnt_r >= mp) & (cnt_o >= mp) & np.isfinite(mad_o) & (mad_o >= _EPS)
+        out[:, c] = np.where(ok, val, np.nan)
+    return out
+
+
+def _wasserstein_shift_series(x2d, ws, wl, mp):
+    """Mean ``|Q_A(u) - Q_B(u)|`` over an ``n``-point grid, scaled by MAD(B)."""
+    rows, cols = x2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for c in range(cols):
+        rec, old = _two_window_pads(x2d[:, c], ws, wl)
+        Rs = np.sort(rec, axis=1)
+        Os = np.sort(old, axis=1)
+        cnt_r = np.isfinite(Rs).sum(axis=1)
+        cnt_o = np.isfinite(Os).sum(axis=1)
+        ng = np.maximum(cnt_r, cnt_o)
+        ncol = int(ng.max()) if ng.size else 1
+        i = np.arange(max(ncol, 1))[None, :]
+        # np.linspace(0, 1, n): u_i = i/(n-1) step, last point pinned to 1.
+        lv = i / np.maximum(ng - 1, 1)[:, None].astype(np.float64)
+        lv = np.where(np.arange(max(ncol, 1))[None, :] < ng[:, None], lv, 0.0)
+        qa = _quantile_interp(Rs, cnt_r, lv)
+        qb = _quantile_interp(Os, cnt_o, lv)
+        gmask = i < ng[:, None]
+        with np.errstate(all="ignore"):
+            w1 = np.where(gmask, np.abs(qa - qb), 0.0).sum(axis=1) / ng
+        _med_o, mad_o = _median_mad_sorted(Os)
+        with np.errstate(all="ignore"):
+            val = w1 / mad_o
+        ok = (cnt_r >= mp) & (cnt_o >= mp) & np.isfinite(mad_o) & (mad_o >= _EPS)
+        out[:, c] = np.where(ok, val, np.nan)
+    return out
+
+
+def _transport_series(x2d, ws, wl, mp, which):
+    """OLS ``dQ(q) = a + b*z + c*z^2`` on the fixed grid; ``which`` 1 -> b, 2 -> c."""
+    rows, cols = x2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    for c in range(cols):
+        rec, old = _two_window_pads(x2d[:, c], ws, wl)
+        Rs = np.sort(rec, axis=1)
+        Os = np.sort(old, axis=1)
+        cnt_r = np.isfinite(Rs).sum(axis=1)
+        cnt_o = np.isfinite(Os).sum(axis=1)
+        dq = _quantile_interp(Rs, cnt_r, _Q_GRID9) - _quantile_interp(Os, cnt_o, _Q_GRID9)
+        fit_mask = (cnt_r >= 3) & (cnt_o >= 3)
+        dqm = np.where(np.isfinite(dq), dq, 0.0)
+        dqm = np.where(fit_mask[:, None], dqm, 0.0)
+        with np.errstate(all="ignore"):
+            coef, *_ = np.linalg.lstsq(_A_TRANSPORT9, dqm.T, rcond=None)
+            val = coef[which]
+        ok = (cnt_r >= mp) & (cnt_o >= mp) & np.all(np.isfinite(coef), axis=0)
+        out[:, c] = np.where(ok, val, np.nan)
+    return out
+
+
+def _mmd_rbf_shift_series(x2d, ws, wl, mp):
+    """RBF-kernel MMD^2 with the median-heuristic bandwidth (deterministic).
+
+    The kernel is exactly invariant under a common rescaling of the samples and
+    the bandwidth, so the samples are put on an ``np.frexp`` power-of-two column
+    scale (lossless) before the pairwise kernels; that keeps ``exp`` finite for
+    1e+-300 data.  ``tau`` is still ALSO evaluated on the authority scale so the
+    overflow-to-NaN behaviour of the historical kernel is reproduced verbatim.
+    """
+    rows, cols = x2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    sent = 1e150
+    Ri, Rj = _triu_idx(ws)
+    Oi, Oj = _triu_idx(wl)
+    for c in range(cols):
+        col = x2d[:, c]
+        rec, old = _two_window_pads(col, ws, wl)
+        Rp = np.isfinite(rec)
+        Op = np.isfinite(old)
+        cnt_r = Rp.sum(axis=1)
+        cnt_o = Op.sum(axis=1)
+        fin = np.isfinite(col)
+        if fin.any():
+            ma = float(np.max(np.abs(col[fin])))
+            e = math.frexp(ma)[1] if (ma > 0.0 and np.isfinite(ma)) else 0
+        else:
+            e = 0
+        sc = math.ldexp(1.0, -e)
+        Rs = np.sort(np.where(Rp, rec * sc, np.nan), axis=1)
+        Os = np.sort(np.where(Op, old * sc, np.nan), axis=1)
+        Comb = np.sort(np.concatenate([Rs, Os], axis=1), axis=1)
+        m = cnt_r + cnt_o
+        with np.errstate(all="ignore"):
+            sigma_s = _pairwise_median(Comb, m)
+            sigma_o = np.ldexp(sigma_s, e)
+        # the NaN pad lives in the sorted TAIL, so mask on the sorted array
+        Rf = np.where(np.isfinite(Rs), Rs, sent)
+        Of = np.where(np.isfinite(Os), Os, sent)
+        with np.errstate(all="ignore"):
+            tau_o = 2.0 * sigma_o * sigma_o
+            tau = 2.0 * sigma_s * sigma_s
+            t2 = tau[:, None]
+            t3 = tau[:, None, None]
+            cntr = cnt_r.astype(np.float64)
+            cnto = cnt_o.astype(np.float64)
+            nri = (ws - cnt_r).astype(np.float64)
+            noi = (wl - cnt_o).astype(np.float64)
+            # symmetric blocks: diagonal ones + twice the strict upper triangle
+            dr = Rf[:, Ri] - Rf[:, Rj]
+            kxx = cntr + 2.0 * np.exp(-(dr * dr) / t2).sum(axis=1) - nri * (nri - 1.0)
+            do = Of[:, Oi] - Of[:, Oj]
+            kyy = cnto + 2.0 * np.exp(-(do * do) / t2).sum(axis=1) - noi * (noi - 1.0)
+            dxy = Rf[:, :, None] - Of[:, None, :]
+            kxy = np.exp(-(dxy * dxy) / t3).sum(axis=(1, 2)) - nri * noi
+            mmd2 = (kxx / (cntr * cntr) + kyy / (cnto * cnto) - 2.0 * kxy / (cntr * cnto))
+            val = np.maximum(mmd2, 0.0)
+        ok = ((cnt_r >= mp) & (cnt_o >= mp) & (m >= 4)
+              & np.isfinite(sigma_o) & (sigma_o >= _EPS) & np.isfinite(tau_o))
+        out[:, c] = np.where(ok, val, np.nan)
+    return out
+
+
 @register_operator(
     name="ts_tail_imbalance",
     category="time_series_distribution",
@@ -186,34 +463,10 @@ class TsExpectedShortfallAsymmetry(SeriesOperator):
         if not 0.0 < quantile < 0.5:
             raise ValueError("q must be in (0, 0.5)")
         min_tail = max(2, int(min_tail_count))
-        xv = x.to_numpy(dtype=float)
-
-        def _fn(chunk: np.ndarray) -> float:
-            v = valid_values(chunk)
-            if v.size < 2 * min_tail:
-                return np.nan
-            q_up = float(np.quantile(v, 1.0 - quantile))
-            q_lo = float(np.quantile(v, quantile))
-            up_tail = v[v > q_up]
-            lo_tail = v[v < q_lo]
-            if up_tail.size < min_tail or lo_tail.size < min_tail:
-                return np.nan
-            u = float(np.mean(up_tail - q_up))
-            l = float(np.mean(q_lo - lo_tail))
-            denom = u + l
-            if not np.isfinite(denom) or denom < _EPS:
-                return np.nan
-            return float((u - l) / denom)
-
-        from factor_engine.cleaned_operators.rolling_pack import map_rolling
-
-        return frame_like(x, map_rolling(xv, w, _fn))
-
-
-def _empirical_quantiles(v: np.ndarray, grid: np.ndarray) -> np.ndarray:
-    return np.quantile(v, grid, method="linear")
-
-
+        return frame_like(
+            x,
+            _es_asymmetry_series(x.to_numpy(dtype=float), w, quantile, min_tail),
+        )
 @register_operator(
     name="ts_wasserstein_shift",
     category="time_series_distribution",
@@ -239,26 +492,10 @@ class TsWassersteinShift(SeriesOperator):
         ws = check_window(recent_window, name="recent_window")
         wl = check_window(old_window, name="old_window")
         mp = max(3, int(min_periods))
-        xv = x.to_numpy(dtype=float)
-
-        def _fn(recent: np.ndarray, old: np.ndarray) -> float:
-            ra = valid_values(recent)
-            oa = valid_values(old)
-            if ra.size < mp or oa.size < mp:
-                return np.nan
-            n = max(ra.size, oa.size)
-            grid = np.linspace(0.0, 1.0, n)
-            qa = _empirical_quantiles(ra, grid)
-            qb = _empirical_quantiles(oa, grid)
-            w1 = float(np.mean(np.abs(qa - qb)))
-            mad_o = _mad(oa)
-            if not np.isfinite(mad_o) or mad_o < _EPS:
-                return np.nan
-            return w1 / mad_o
-
-        return frame_like(x, map_two_window(xv, ws, wl, _fn))
-
-
+        return frame_like(
+            x,
+            _wasserstein_shift_series(x.to_numpy(dtype=float), ws, wl, mp),
+        )
 @register_operator(
     name="ts_ks_shift",
     category="time_series_distribution",
@@ -321,21 +558,10 @@ class TsLocationShift(SeriesOperator):
         ws = check_window(recent_window, name="recent_window")
         wl = check_window(old_window, name="old_window")
         mp = max(3, int(min_periods))
-        xv = x.to_numpy(dtype=float)
-
-        def _fn(recent: np.ndarray, old: np.ndarray) -> float:
-            ra = valid_values(recent)
-            oa = valid_values(old)
-            if ra.size < mp or oa.size < mp:
-                return np.nan
-            mad_o = _mad(oa)
-            if not np.isfinite(mad_o) or mad_o < _EPS:
-                return np.nan
-            return (float(np.median(ra)) - float(np.median(oa))) / mad_o
-
-        return frame_like(x, map_two_window(xv, ws, wl, _fn))
-
-
+        return frame_like(
+            x,
+            _location_shift_series(x.to_numpy(dtype=float), ws, wl, mp),
+        )
 @register_operator(
     name="ts_scale_shift",
     category="time_series_distribution",
@@ -430,19 +656,10 @@ class TsQuantileTransportSlope(SeriesOperator):
         ws = check_window(recent_window, name="recent_window")
         wl = check_window(old_window, name="old_window")
         mp = max(3, int(min_periods))
-        xv = x.to_numpy(dtype=float)
-
-        def _fn(recent: np.ndarray, old: np.ndarray) -> float:
-            ra = valid_values(recent)
-            oa = valid_values(old)
-            if ra.size < mp or oa.size < mp:
-                return np.nan
-            fit = _quantile_transport_fit(recent, old)
-            return np.nan if fit is None else fit[1]
-
-        return frame_like(x, map_two_window(xv, ws, wl, _fn))
-
-
+        return frame_like(
+            x,
+            _transport_series(x.to_numpy(dtype=float), ws, wl, mp, 1),
+        )
 @register_operator(
     name="ts_quantile_transport_curvature",
     category="time_series_distribution",
@@ -470,19 +687,10 @@ class TsQuantileTransportCurvature(SeriesOperator):
         ws = check_window(recent_window, name="recent_window")
         wl = check_window(old_window, name="old_window")
         mp = max(3, int(min_periods))
-        xv = x.to_numpy(dtype=float)
-
-        def _fn(recent: np.ndarray, old: np.ndarray) -> float:
-            ra = valid_values(recent)
-            oa = valid_values(old)
-            if ra.size < mp or oa.size < mp:
-                return np.nan
-            fit = _quantile_transport_fit(recent, old)
-            return np.nan if fit is None else fit[2]
-
-        return frame_like(x, map_two_window(xv, ws, wl, _fn))
-
-
+        return frame_like(
+            x,
+            _transport_series(x.to_numpy(dtype=float), ws, wl, mp, 2),
+        )
 def _mmd_rbf(recent: np.ndarray, old: np.ndarray, min_periods: int) -> float:
     """MMD² with an RBF kernel; σ = median heuristic over the combined sample.
 
@@ -544,10 +752,10 @@ class TsMmdRbfShift(SeriesOperator):
         ws = check_window(recent_window, name="recent_window")
         wl = check_window(old_window, name="old_window")
         mp = max(4, int(min_periods))
-        xv = x.to_numpy(dtype=float)
-        return frame_like(x, map_two_window(xv, ws, wl, lambda r, o: _mmd_rbf(r, o, mp)))
-
-
+        return frame_like(
+            x,
+            _mmd_rbf_shift_series(x.to_numpy(dtype=float), ws, wl, mp),
+        )
 _NEW_CANONICALS = (
     "ts_tail_imbalance",
     "ts_expected_shortfall_asymmetry",

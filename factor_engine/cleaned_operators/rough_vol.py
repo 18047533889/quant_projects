@@ -48,6 +48,17 @@ from factor_engine.cleaned_operators.base import (
 )
 from factor_engine.cleaned_operators.rolling_pack import check_window, frame_like, register_polars_bridge
 
+import warnings
+from contextlib import contextmanager
+
+
+@contextmanager
+def _warn_off():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        yield
+
+
 _EPS = 1e-12
 _MIN_FINITE = 5
 _LONG_LAG = 16  # ts_vol_scaling_break needs N >= LONG_LAG+1 increments
@@ -318,6 +329,157 @@ def _scaling_break(
     return float(h_short - h_long)
 
 
+# ---------------------------------------------------------------------------
+# Vectorized (C-level) rolling cores -- replace the per-window Python loop.
+# Window construction is right-aligned with leading NaN padding so that every
+# row (including warm-up windows shorter than ``window``) uses its TRUE time
+# axis; the structure function only ever sees fully-finite increment pairs, so
+# NaN gating, warm-up lengths and coverage semantics are byte-identical to the
+# scalar reference implementation above.
+# ---------------------------------------------------------------------------
+
+def _vec_windows(col: np.ndarray, w: int) -> tuple[np.ndarray, np.ndarray]:
+    """Right-aligned trailing windows of ``col``; shape (n, w).
+
+    Row ``r`` holds ``col[max(0, r-w+1):r+1]`` in its trailing columns, leading
+    columns are NaN.  ``L[r]`` is the true window length (= min(r+1, w)).
+    """
+    n = int(col.shape[0])
+    if n == 0:
+        return np.empty((0, w)), np.empty((0,))
+    L = np.minimum(np.arange(n) + 1, w)
+    valid = np.arange(w)[None, :] >= (w - L)[:, None]
+    src = np.clip(np.arange(n)[:, None] - w + 1 + np.arange(w)[None, :], 0, n - 1)
+    W = np.full((n, w), np.nan)
+    W[valid] = col[src[valid]]
+    return W, L
+
+
+def _vec_normalize(W: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Vectorized ``_dimensionless_path`` across all windows."""
+    n = W.shape[0]
+    if W.shape[1] == 0:
+        return np.full((n, 0), np.nan), np.zeros((n, 0), bool), np.full(n, np.nan)
+    M = np.isfinite(W)
+    has_finite = M.any(axis=1)
+    first_idx = M.argmax(axis=1)
+    first_val = np.where(has_finite, W[np.arange(n), first_idx], np.nan)
+    shifted = W - first_val[:, None]
+    mag = np.nanmax(np.abs(shifted), axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        N = shifted / mag[:, None]
+    N = np.where((mag == 0.0)[:, None], np.nan, N)
+    return N, M, mag
+
+
+def _vec_scale_sf(
+    N: np.ndarray, M: np.ndarray, L: np.ndarray, w: int, d: int, p: float,
+    min_pairs: int, min_pair_fraction: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Vectorized ``_scaled_log_structure_function`` + gate for scale ``d``."""
+    if N.shape[1] == 0 or N.shape[1] <= d:
+        z = np.zeros(N.shape[0])
+        return np.full(N.shape[0], np.nan), np.full(N.shape[0], np.nan), np.zeros(N.shape[0], bool)
+    inc = N[:, d:] - N[:, :-d]
+    finite = np.isfinite(inc)
+    n_pairs = finite.sum(axis=1)
+    denom = (L - d).astype(float)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        coverage = np.where(denom > 0, n_pairs / denom, np.nan)
+    magnitudes = np.abs(inc)
+    positive = magnitudes > 0
+    with np.errstate(divide="ignore", invalid="ignore"):
+        plog = np.where(positive, p * np.log(magnitudes), -np.inf)
+    mx = np.max(plog, axis=1)
+    with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+        sumexp = np.exp(plog - mx[:, None]).sum(axis=1)
+    lse = np.where(np.isfinite(mx), mx + np.log(sumexp), -np.inf)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        sl = (lse - np.log(np.where(n_pairs > 0, n_pairs, 1.0))) / p
+    sl = np.where((n_pairs > 0) & np.isfinite(lse), sl, np.nan)
+    passes = np.isfinite(sl) & (n_pairs >= min_pairs) & (coverage >= min_pair_fraction)
+    return sl, coverage, passes
+
+
+def _vec_roughness(
+    col: np.ndarray, w: int, p: float, scales: tuple[int, ...],
+    min_pairs: int, min_pair_fraction: float, imbalance: float,
+) -> np.ndarray:
+    W, L = _vec_windows(col, w)
+    if W.shape[0] == 0 or W.shape[1] == 0:
+        return np.full(W.shape[0], np.nan)
+    N, M, _ = _vec_normalize(W)
+    tot_finite = M.sum(axis=1)
+    nsc = len(scales)
+    logd = np.log(np.asarray(scales, dtype=float))
+    ys = np.full((W.shape[0], nsc), np.nan)
+    covs = np.full((W.shape[0], nsc), np.nan)
+    passes = np.zeros((W.shape[0], nsc), dtype=bool)
+    for si, d in enumerate(scales):
+        sl, cov, ps = _vec_scale_sf(N, M, L, w, d, p, min_pairs, min_pair_fraction)
+        ys[:, si] = sl
+        covs[:, si] = cov
+        passes[:, si] = ps
+    k = passes.sum(axis=1)
+    x = logd[None, :]
+    xp = np.where(passes, x, 0.0)
+    yp = np.where(passes, ys, 0.0)
+    sum_x = xp.sum(axis=1)
+    sum_y = yp.sum(axis=1)
+    sum_xy = (xp * yp).sum(axis=1)
+    sum_x2 = (xp * x).sum(axis=1)
+    kk = np.where(k > 0, k, 1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        slope = (sum_xy - sum_x * sum_y / kk) / (sum_x2 - sum_x ** 2 / kk)
+    slope = np.where(k >= 2, slope, np.nan)
+    cov_pass = np.where(passes, covs, np.nan)
+    with np.errstate(divide="ignore", invalid="ignore"), _warn_off():
+        min_cov = np.nanmin(cov_pass, axis=1)
+        max_cov = np.nanmax(cov_pass, axis=1)
+    balanced = (min_cov > 0) & (max_cov / min_cov <= imbalance)
+    out = np.where((k >= 2) & balanced & (tot_finite >= _MIN_FINITE), slope, np.nan)
+    return out
+
+
+def _vec_scaling_break(
+    col: np.ndarray, w: int, p: float, min_pairs: int,
+    min_pair_fraction: float, imbalance: float,
+) -> np.ndarray:
+    W, L = _vec_windows(col, w)
+    if W.shape[0] == 0:
+        return np.full(0, np.nan)
+    N, M, _ = _vec_normalize(W)
+    tot_finite = M.sum(axis=1)
+    lags = (1, 2, 8, _LONG_LAG)
+    y: dict[int, np.ndarray] = {}
+    cov: dict[int, np.ndarray] = {}
+    allpass = np.ones(W.shape[0], dtype=bool)
+    for d in lags:
+        sl, cov_, ps = _vec_scale_sf(N, M, L, w, d, p, min_pairs, min_pair_fraction)
+        y[d] = sl
+        cov[d] = cov_
+        allpass &= ps
+    covs = np.stack([cov[d] for d in lags], axis=1)
+    with _warn_off():
+        balanced = (np.nanmin(covs, axis=1) > 0) & (
+            np.nanmax(covs, axis=1) / np.nanmin(covs, axis=1) <= imbalance
+        )
+    valid = allpass & balanced & (tot_finite >= _MIN_FINITE)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        h_short = (y[2] - y[1]) / np.log(2.0)
+        h_long = (y[_LONG_LAG] - y[8]) / np.log(2.0)
+    out = np.where(valid, h_short - h_long, np.nan)
+    return out
+
+
+def _apply_vec(x_arr: np.ndarray, core, *args) -> np.ndarray:
+    cols = x_arr.shape[1]
+    out = np.empty_like(x_arr, dtype=float)
+    for c in range(cols):
+        out[:, c] = core(x_arr[:, c], *args)
+    return out
+
+
 @register_operator(
     name="ts_vol_pvariation_roughness",
     category="time_series_volatility",
@@ -377,8 +539,11 @@ class TsVolPvariationRoughness(SeriesOperator):
         sc = _validate_scales(scales)
         mp = _validate_min_pairs(min_pairs)
         mpf = _validate_min_pair_fraction(min_pair_fraction)
-        fn = lambda v: _pv_roughness(v, pp, sc, mp, mpf, _MAX_COVERAGE_IMBALANCE)  # noqa: E731
-        return frame_like(x, _rolling_values(x.to_numpy(dtype=float), w, fn))
+        arr = x.to_numpy(dtype=float)
+        out = _apply_vec(
+            arr, _vec_roughness, w, pp, sc, mp, mpf, _MAX_COVERAGE_IMBALANCE
+        )
+        return frame_like(x, out)
 
 
 @register_operator(
@@ -425,8 +590,11 @@ class TsVolScalingBreak(SeriesOperator):
         pp = _validate_p(p)
         mp = _validate_min_pairs(min_pairs)
         mpf = _validate_min_pair_fraction(min_pair_fraction)
-        fn = lambda v: _scaling_break(v, pp, mp, mpf, _MAX_COVERAGE_IMBALANCE)  # noqa: E731
-        return frame_like(x, _rolling_values(x.to_numpy(dtype=float), w, fn))
+        arr = x.to_numpy(dtype=float)
+        out = _apply_vec(
+            arr, _vec_scaling_break, w, pp, mp, mpf, _MAX_COVERAGE_IMBALANCE
+        )
+        return frame_like(x, out)
 
 
 _NEW_CANONICALS = (

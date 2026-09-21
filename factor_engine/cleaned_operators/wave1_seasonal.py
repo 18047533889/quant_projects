@@ -45,6 +45,81 @@ def _frame_like(template: pd.DataFrame, values: np.ndarray) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# R62 vectorised kernels (trailing-window, zero per-row Python loops).
+#
+# All four kernels are strictly causal: row r reads only rows <= r, exactly as
+# the reference per-row loops.  Windows are the *raw position* window
+# ``x[lo(r):r+1]`` with ``lo(r) = max(0, r - W + 1)`` -- the index carries no
+# information (no calendar-day / weekday arithmetic anywhere in this file), so
+# lag_week / window are pure positional offsets, identical to the reference.
+# ---------------------------------------------------------------------------
+def _r62_win(rows: int, w: int):
+    """Trailing-window frame: ``lo[:,None]`` is the window start row."""
+    r = np.arange(rows)[:, None]
+    lo = np.maximum(0, r - w + 1)
+    i = lo + np.arange(w)[None, :]
+    return lo, i
+
+
+def _r62_pack(col: np.ndarray, i: np.ndarray, rows: int):
+    """Left-packed finite subsequence of ``x[lo(r):r+1]``.
+
+    Returns ``(C, cnt)`` where ``C[r, 0:cnt[r]]`` is the finite subsequence in
+    raw order (the exact analogue of ``chunk[np.isfinite(chunk)]``) zero-padded
+    after ``cnt[r]``.  One cumsum + one scatter -> no row loop.
+    """
+    r = np.arange(rows)[:, None]
+    valid = i <= r
+    idx = np.clip(i, 0, rows - 1)
+    v = col[idx]
+    m = valid & np.isfinite(v)
+    cnt = m.sum(axis=1)
+    pos = np.cumsum(m, axis=1) - 1
+    C = np.zeros((rows, i.shape[1]), dtype=float)
+    rr, cc = np.nonzero(m)
+    C[rr, pos[rr, cc]] = v[rr, cc]
+    return C, cnt
+
+
+def _r62_lagcorr(C: np.ndarray, cnt: np.ndarray, lag: int, min_pairs: int):
+    """Pearson corr of ``(C[:, :-lag], C[:, lag:])`` over the first cnt-lag pairs.
+
+    Mirrors ``np.corrcoef`` exactly: centring uses ``sum/n`` and the correlation
+    is ``num / sqrt(M2x * M2y)`` (the ddof=1 factors cancel), so overflow in the
+    ``huge`` panel degrades to NaN in the same way as the reference.  Returns
+    ``(corr, good)``; ``good`` folds in the sample floor and the reference's
+    ``std(ddof=1) <= 1e-12`` degeneracy guard.
+    """
+    rows, W = C.shape
+    n = cnt - lag
+    ok = n >= min_pairs
+    K = W - lag
+    if K <= 0:
+        return np.zeros(rows), np.zeros(rows, dtype=bool)
+    A = C[:, :K]
+    B = C[:, lag:]
+    jj = np.arange(K)[None, :]
+    mk = ok[:, None] & (jj < n[:, None])
+    n1 = np.where(ok, n, 2).astype(float)  # degenerate rows use a benign 2
+    inv = np.true_divide(1.0, n1 - 1.0)
+    mx = np.where(mk, A, 0.0).sum(axis=1) / n1
+    my = np.where(mk, B, 0.0).sum(axis=1) / n1
+    ac = np.where(mk, A - mx[:, None], 0.0)
+    bc = np.where(mk, B - my[:, None], 0.0)
+    M2x = (ac * ac).sum(axis=1)
+    M2y = (bc * bc).sum(axis=1)
+    num = (ac * bc).sum(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore", over="ignore"):
+        # np.cov: c = dot(X, X.T) * (1/(n-1)); np.corrcoef: (c01/d0)/d1 then
+        # clip the real part to [-1, 1] -- both matter for exact tie-breaks.
+        sx = np.sqrt(M2x * inv)
+        sy = np.sqrt(M2y * inv)
+        corr = np.clip(((num * inv) / sx) / sy, -1.0, 1.0)
+    good = ok & (sx > 1e-12) & (sy > 1e-12)
+    return corr, good
+
+
+# ---------------------------------------------------------------------------
 # 1. seasonal-lag comparison
 # ---------------------------------------------------------------------------
 @register_operator(
@@ -259,6 +334,10 @@ class Cs1WeekdayEffectStrength(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, lag_week: int = 5, window: int = 40, min_periods: int = 8, **_: Any) -> pd.DataFrame:
+        # R62: prefix-sum over the two difference series.
+        #   d1 pairs: i in [lo+1 .. r] with both finite  (i-1 >= lo)
+        #   d5 pairs: i in [lo+lw .. r] with both finite (i-lw >= lo)
+        #   m1 = mean(d1), m5 = mean(d5); out = m5/m1 (0 when m1 <= 1e-12)
         lw = _check_int(lag_week, "lag_week", 1)
         w = _check_int(window, "window", 3)
         mp = _check_int(min_periods, "min_periods", 4)
@@ -267,25 +346,39 @@ class Cs1WeekdayEffectStrength(SeriesOperator):
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
+        r = np.arange(rows)
+        lo = np.maximum(0, r - w + 1)
+        st1 = np.minimum(np.maximum(1, lo + 1), rows)
+        st5 = np.minimum(lo + lw, rows)
         for col in range(cols):
-            for row in range(rows):
-                lo = max(0, row - w + 1)
-                idxs = np.arange(lo, row + 1)
-                d1: list[float] = []
-                d5: list[float] = []
-                for i in idxs:
-                    if i - 1 >= lo and np.isfinite(xv[i, col]) and np.isfinite(xv[i - 1, col]):
-                        d1.append(abs(xv[i, col] - xv[i - 1, col]))
-                    if i - lw >= lo and np.isfinite(xv[i, col]) and np.isfinite(xv[i - lw, col]):
-                        d5.append(abs(xv[i, col] - xv[i - lw, col]))
-                if len(d1) < mp or len(d5) < 1:
-                    continue
-                m1 = float(np.mean(d1))
-                m5 = float(np.mean(d5))
-                if m1 <= 1e-12:
-                    out[row, col] = 0.0
-                else:
-                    out[row, col] = m5 / m1
+            xc = xv[:, col]
+            d1 = np.zeros(rows, dtype=float)
+            c1 = np.zeros(rows, dtype=float)
+            d5 = np.zeros(rows, dtype=float)
+            c5 = np.zeros(rows, dtype=float)
+            if rows > 1:
+                a, b = xc[1:], xc[:-1]
+                m = np.isfinite(a) & np.isfinite(b)
+                d1[1:] = np.where(m, np.abs(a - b), 0.0)
+                c1[1:] = m
+            if rows > lw:
+                a, b = xc[lw:], xc[:-lw]
+                m = np.isfinite(a) & np.isfinite(b)
+                d5[lw:] = np.where(m, np.abs(a - b), 0.0)
+                c5[lw:] = m
+            S1 = np.concatenate(([0.0], np.cumsum(d1)))
+            C1 = np.concatenate(([0.0], np.cumsum(c1)))
+            S5 = np.concatenate(([0.0], np.cumsum(d5)))
+            C5 = np.concatenate(([0.0], np.cumsum(c5)))
+            sum1 = S1[r + 1] - S1[st1]
+            cnt1 = C1[r + 1] - C1[st1]
+            sum5 = S5[r + 1] - S5[st5]
+            cnt5 = C5[r + 1] - C5[st5]
+            ok = (cnt1 >= mp) & (cnt5 >= 1)
+            m1 = sum1 / np.where(cnt1 > 0, cnt1, 1.0)
+            m5 = sum5 / np.where(cnt5 > 0, cnt5, 1.0)
+            val = np.where(m1 <= 1e-12, 0.0, m5 / np.where(np.abs(m1) > 0.0, m1, 1.0))
+            out[:, col] = np.where(ok, val, np.nan)
         return _frame_like(x, out)
 
 
@@ -362,39 +455,29 @@ class Cs1WeekCyclePhase(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, lag_week: int = 5, min_periods: int = 6, **_: Any) -> pd.DataFrame:
+        # R62: pack the finite subsequence of x[max(0,r-2*lw):r+1] then score every
+        # lag 1..lw.  best_lag = first lag attaining the max |corr| (strict '>');
+        # out = (best_lag - 1) / lw.  Guard: vals.size >= mp+1 and, per lag,
+        # x_.size >= mp and std(ddof=1) > 1e-12.
         lw = _check_int(lag_week, "lag_week", 2)
         mp = _check_int(min_periods, "min_periods", 3)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
+        _, i = _r62_win(rows, 2 * lw + 1)
         for col in range(cols):
-            for row in range(rows):
-                lo = max(0, row - lw * 2)
-                chunk = xv[lo:row + 1, col]
-                ok = np.isfinite(chunk)
-                if ok.sum() < mp:
-                    continue
-                vals = chunk[ok]
-                if vals.size < mp + 1:
-                    continue
-                best = -1.0
-                best_lag = -1
-                for lag in range(1, lw + 1):
-                    x_ = vals[:-lag]
-                    y_ = vals[lag:]
-                    if x_.size < mp:
-                        continue
-                    sx = float(np.std(x_, ddof=1))
-                    sy = float(np.std(y_, ddof=1))
-                    if sx <= 1e-12 or sy <= 1e-12:
-                        continue
-                    c = abs(float(np.corrcoef(x_, y_)[0, 1]))
-                    if c > best:
-                        best = c
-                        best_lag = lag
-                if best_lag < 0:
-                    continue
-                out[row, col] = (best_lag - 1) / lw
+            C, cnt = _r62_pack(xv[:, col], i, rows)
+            base = cnt >= (mp + 1)
+            best = np.full(rows, -np.inf)
+            best_lag = np.zeros(rows, dtype=int)
+            for lag in range(1, lw + 1):
+                corr, good = _r62_lagcorr(C, cnt, lag, mp)
+                cc = np.where(good & base & np.isfinite(corr), np.abs(corr), -np.inf)
+                upd = cc > best
+                best = np.where(upd, cc, best)
+                best_lag = np.where(upd, lag, best_lag)
+            sel = best > -np.inf
+            out[:, col] = np.where(sel, (best_lag - 1) / lw, np.nan)
         return _frame_like(x, out)
 
 
@@ -423,35 +506,25 @@ class Cs1WeeklyHarmonicPower(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, lag_week: int = 5, min_periods: int = 6, **_: Any) -> pd.DataFrame:
+        # R62: symmetric to cs1_week_cycle_phase but over lags (lw, 2*lw) and the
+        # output is the mean of the accepted |corr| values.  Guard: vals.size >= mp
+        # and per lag vals.size > lag and x_.size >= mp and std(ddof=1) > 1e-12.
         lw = _check_int(lag_week, "lag_week", 2)
         mp = _check_int(min_periods, "min_periods", 3)
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
+        _, i = _r62_win(rows, 3 * lw + 1)
         for col in range(cols):
-            for row in range(rows):
-                lo = max(0, row - lw * 3)
-                chunk = xv[lo:row + 1, col]
-                ok = np.isfinite(chunk)
-                if ok.sum() < mp:
-                    continue
-                vals = chunk[ok]
-                cors: list[float] = []
-                for lag in (lw, 2 * lw):
-                    if vals.size <= lag:
-                        continue
-                    x_ = vals[:-lag]
-                    y_ = vals[lag:]
-                    if x_.size < mp:
-                        continue
-                    sx = float(np.std(x_, ddof=1))
-                    sy = float(np.std(y_, ddof=1))
-                    if sx <= 1e-12 or sy <= 1e-12:
-                        continue
-                    cors.append(abs(float(np.corrcoef(x_, y_)[0, 1])))
-                if not cors:
-                    continue
-                out[row, col] = float(np.mean(cors))
+            C, cnt = _r62_pack(xv[:, col], i, rows)
+            ssum = np.zeros(rows, dtype=float)
+            scnt = np.zeros(rows, dtype=float)
+            for lag in (lw, 2 * lw):
+                corr, good = _r62_lagcorr(C, cnt, lag, mp)
+                good = good & (cnt >= mp) & (cnt > lag)
+                ssum = ssum + np.where(good, np.abs(corr), 0.0)
+                scnt = scnt + good
+            out[:, col] = np.where(scnt > 0, ssum / np.maximum(scnt, 1.0), np.nan)
         return _frame_like(x, out)
 
 
@@ -481,6 +554,11 @@ class Cs1SeasonalResidualSmoothness(SeriesOperator):
     )
 
     def _calculate_series(self, x: pd.DataFrame, lag_week: int = 5, window: int = 40, min_periods: int = 8, **_: Any) -> pd.DataFrame:
+        # R62: residual r[i] = x[i] - x[i-lw] over i in [lo+lw .. r]; mean and
+        # std(ddof=1) from a centred two-pass over the window matrix (matches
+        # np.std, so the huge panel still overflows to inf and the tiny panel
+        # still underflows to 0).  den = |mean|; out = 0 if den<=1e-12 else
+        # s/(den+1e-12).
         lw = _check_int(lag_week, "lag_week", 1)
         w = _check_int(window, "window", 3)
         mp = _check_int(min_periods, "min_periods", 4)
@@ -489,26 +567,28 @@ class Cs1SeasonalResidualSmoothness(SeriesOperator):
         xv = x.to_numpy(dtype=float)
         rows, cols = xv.shape
         out = np.full((rows, cols), np.nan, dtype=float)
+        r = np.arange(rows)[:, None]
+        lo = np.maximum(0, r - w + 1)
+        j = np.arange(w)[None, :]
+        i = lo + j
+        pos_ok = (j >= lw) & (i <= r)
+        idx = np.clip(i, 0, rows - 1)
+        idx_l = np.clip(i - lw, 0, rows - 1)
         for col in range(cols):
-            for row in range(rows):
-                lo = max(0, row - w + 1)
-                resid: list[float] = []
-                for i in range(lo, row + 1):
-                    if i - lw >= lo:
-                        a = xv[i, col]
-                        b = xv[i - lw, col]
-                        if np.isfinite(a) and np.isfinite(b):
-                            resid.append(a - b)
-                if len(resid) < mp:
-                    continue
-                r = np.array(resid)
-                m = float(np.mean(r))
-                s = float(np.std(r, ddof=1))
-                den = abs(m)
-                if den <= 1e-12:
-                    out[row, col] = 0.0
-                else:
-                    out[row, col] = s / (den + 1e-12)
+            xc = xv[:, col]
+            a = xc[idx]
+            b = xc[idx_l]
+            mm = pos_ok & np.isfinite(a) & np.isfinite(b)
+            res = np.where(mm, a - b, 0.0)
+            cnt = mm.sum(axis=1)
+            mean = res.sum(axis=1) / np.where(cnt > 0, cnt, 1.0)
+            cen = np.where(mm, res - mean[:, None], 0.0)
+            ss = (cen * cen).sum(axis=1)
+            with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+                s = np.sqrt(ss / np.maximum(cnt - 1, 1))
+                den = np.abs(mean)
+                val = np.where(den <= 1e-12, 0.0, s / (den + 1e-12))
+            out[:, col] = np.where(cnt >= mp, val, np.nan)
         return _frame_like(x, out)
 
 

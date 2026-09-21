@@ -26,6 +26,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view as slw
 
 from factor_engine.cleaned_operators.base import (
     OperatorMetadata,
@@ -809,6 +810,55 @@ class TsTransitionIntensity(SeriesOperator):
         return frame_like(x, out)
 
 
+def _sign_persistence_series(x2d: np.ndarray, window: int, mp: int) -> np.ndarray:
+    """Lag-1 sign autocorrelation over trailing windows (vectorised kernel).
+
+    ``sign`` is +1 / -1 on strictly positive / negative rows and NaN otherwise,
+    so a zero or a gap breaks the adjacent-sign pair.  Pairs are indexed by their
+    EARLIER row, which makes each window a plain ``window-1`` slice of the pair
+    prefix sums, so the per-row Python loop is gone while the guards (>=``mp``
+    jointly finite pairs, non-degenerate signs on both sides) are unchanged.
+
+    ``corr`` follows from ``a, b in {+1, -1}``:
+    ``(N*Sab - Sa*Sb) / sqrt((N^2 - Sa^2)(N^2 - Sb^2))``, and ``std(a) == 0``
+    is exactly ``|Sa| == N``.
+    """
+    rows, cols = x2d.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    w = int(window)
+    wp = w - 1
+    if wp < 1 or rows < 2:
+        return out
+    for c in range(cols):
+        col = x2d[:, c]
+        fin = np.isfinite(col)
+        sgn = np.where(fin & (col > 0), 1.0, np.where(fin & (col < 0), -1.0, 0.0))
+        okp = sgn != 0.0
+        a = sgn
+        b = np.empty(rows)
+        b[:-1] = sgn[1:]
+        b[-1] = 0.0
+        va = okp.copy()
+        va[:-1] &= okp[1:]
+        va[-1] = False
+        pre_a = np.concatenate([np.zeros(wp - 1), va * a])
+        pre_b = np.concatenate([np.zeros(wp - 1), va * b])
+        pre_v = np.concatenate([np.zeros(wp - 1), va.astype(np.float64)])
+        pre_p = np.concatenate([np.zeros(wp - 1), va * a * b])
+        # sliding row k covers pair indices [k-wp+1, k]; output row r wants k=r-1
+        N = slw(pre_v, wp).sum(axis=1)[:-1]
+        Sa = slw(pre_a, wp).sum(axis=1)[:-1]
+        Sb = slw(pre_b, wp).sum(axis=1)[:-1]
+        Sab = slw(pre_p, wp).sum(axis=1)[:-1]
+        with np.errstate(all="ignore"):
+            corr = (N * Sab - Sa * Sb) / np.sqrt(
+                np.maximum(N * N - Sa * Sa, 0.0) * np.maximum(N * N - Sb * Sb, 0.0)
+            )
+        ok = (N >= mp) & (np.abs(Sa) != N) & (np.abs(Sb) != N)
+        out[1:, c] = np.where(ok, corr, np.nan)
+    return out
+
+
 @register_operator(
     name="ts_sign_persistence",
     category="time_series_state",
@@ -832,25 +882,10 @@ class TsSignPersistence(SeriesOperator):
     def _calculate_series(self, x: pd.DataFrame, window: int = 20, min_periods: int = 3, **_: Any) -> pd.DataFrame:
         w = check_window(window)
         mp = max(3, int(min_periods))
-        xv = x.to_numpy(dtype=float)
-
-        def _fn(chunk: np.ndarray) -> float:
-            sign = np.where(np.isfinite(chunk) & (chunk > 0), 1.0,
-                            np.where(np.isfinite(chunk) & (chunk < 0), -1.0, np.nan))
-            s0 = sign[:-1]
-            s1 = sign[1:]
-            finite = np.isfinite(s0) & np.isfinite(s1)
-            if int(finite.sum()) < mp:
-                return np.nan
-            a = s0[finite]
-            b = s1[finite]
-            if float(np.std(a)) == 0.0 or float(np.std(b)) == 0.0:
-                return np.nan
-            return float(np.corrcoef(a, b)[0, 1])
-
-        return frame_like(x, map_rolling(xv, w, _fn))
-
-
+        return frame_like(
+            x,
+            _sign_persistence_series(x.to_numpy(dtype=float), w, mp),
+        )
 @register_operator(
     name="ts_sign_cluster_index",
     category="time_series_state",

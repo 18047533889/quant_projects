@@ -437,7 +437,7 @@ def _z_normalize(sub: np.ndarray) -> np.ndarray:
 
 def _matrix_profile_series(
     x2d: np.ndarray, window: int, subsequence_length: int, history: int,
-    *, return_counts: bool = False,
+    *, return_counts: bool = False, skip_freq_disp: bool = False,
 ) -> tuple[np.ndarray, ...]:
     """Shared matrix-profile kernel -> (novelty, motif_age, frequency, dispersion).
 
@@ -473,61 +473,59 @@ def _matrix_profile_series(
     if w < h:
         raise ValueError("window must be >= history")
     ez = max(0, int(L // 4))  # matrix-profile exclusion zone (>= m/4)
+    inv_sqrt_L = 1.0 / float(np.sqrt(L))
+    if rows < L:
+        if return_counts:
+            return novelty, age, frequency, dispersion, matches, eligible
+        return novelty, age, frequency, dispersion
+    Nw = rows - L + 1
+    q_idx = np.arange(Nw)
+    s_band = np.arange(Nw)
+    # Lower-triangular search band: candidates strictly prior to the query plus
+    # the exclusion zone.  s0 = max(0, r-h, r-w) with r = q+L-1 reduces to
+    # max(0, q-(h-L+1), q-(w-L+1));  s1 = r-L-ez = q-1-ez.
+    s0_vec = np.maximum(0, np.maximum(q_idx - (h - L + 1), q_idx - (w - L + 1)))
+    s1_vec = q_idx - 1 - ez
+    band = (s_band[None, :] >= s0_vec[:, None]) & (s_band[None, :] <= s1_vec[:, None])
     for c in range(cols):
         x = x2d[:, c]
-        for r in range(rows):
-            if r + 1 < L:
-                continue  # current subsequence not complete yet
-            z = x[r - L + 1 : r + 1]
-            if not np.all(np.isfinite(z)):
-                continue
-            s0 = max(0, r - h, r - w)
-            s1 = r - L - ez  # strictly prior + exclusion zone
-            if s0 > s1:
-                continue
-            zz = _z_normalize(z)
-            if not np.all(np.isfinite(zz)):
-                # R11 round-3 #64: the current subsequence is constant -> its
-                # z-normalised shape is degenerate (all zeros) and no defined
-                # shape distance exists -> NaN for this row.
-                continue
-            best_d = np.inf
-            best_s = -1
-            dists: list[float] = []
-            # R6-149: use the RMS z-normalised Euclidean distance d/√L so
-            # subsequence_length=20 and =80 patterns of the same strength are
-            # comparable — the raw Euclidean distance grows ~√L with the window
-            # length, making cross-parameter novelty values incomparable.
-            inv_sqrt_L = 1.0 / float(np.sqrt(L))
-            for s in range(s0, s1 + 1):
-                cand = x[s : s + L]
-                if not np.all(np.isfinite(cand)):
-                    continue
-                cz = _z_normalize(cand)
-                if not np.all(np.isfinite(cz)):
-                    # R11 round-3 #64: a constant historical candidate has no
-                    # shape; it must not match the current pattern.
-                    continue
-                d = float(np.linalg.norm(zz - cz) * inv_sqrt_L)
-                dists.append(d)
-                if d < best_d:
-                    best_d = d
-                    best_s = s
-            if not dists:
-                continue
-            eligible[r, c] = len(dists)
-            novelty[r, c] = best_d
-            # R11 round-3 #63: the age of the motif is the START-to-START age.
-            # The current subsequence starts at ``r - L + 1`` (its end is ``r``),
-            # and ``best_s`` is the historical best-match START.  The old
-            # ``r - best_s`` counted end-to-start, systematically L-1 bars too
-            # old.  True age = (r - L + 1) - best_s.
-            age[r, c] = (r - L + 1 - best_s) / float(h)
-            if len(dists) >= 3:
-                thr = float(np.median(dists)) * 0.5
-                matches[r, c] = float(sum(d <= thr for d in dists))
-                frequency[r, c] = matches[r, c] / float(len(dists))
-                dispersion[r, c] = float(np.std(dists))
+        # All length-L subsequences as rows; z-normalise each (constant or
+        # non-finite subsequences are invalid -> NaN -> excluded).
+        C = np.lib.stride_tricks.sliding_window_view(x, L)  # (Nw, L)
+        row_finite = np.isfinite(C).all(axis=1)
+        mu = C.mean(axis=1)
+        sd = C.std(axis=1)
+        valid = row_finite & (sd > _EPS)
+        Z = np.full((Nw, L), np.nan, dtype=float)
+        Z[valid] = (C[valid] - mu[valid, None]) / sd[valid, None]
+        # z-normalised rows have unit norm => ||zq-zc||^2 = 2L - 2*(zq.zc).
+        # A full Gram matrix is only (Nw, Nw) (Nw ~= rows - L + 1 << 1e4).
+        G = Z @ Z.T
+        dist2 = 2.0 * L - 2.0 * G
+        # argmin over squared distance needs no sqrt; sqrt only the per-row min.
+        mask = band & valid[None, :] & valid[:, None]
+        d2_masked = np.where(mask, dist2, np.inf)
+        best_s = d2_masked.argmin(axis=1)
+        min_d2 = d2_masked[np.arange(Nw), best_s]
+        has_match = np.isfinite(min_d2) & valid
+        r_out = q_idx + L - 1
+        best_d = np.sqrt(np.maximum(min_d2, 0.0)) * inv_sqrt_L
+        novelty[r_out, c] = np.where(has_match, best_d, np.nan)
+        age[r_out, c] = np.where(has_match, (q_idx - best_s) / float(h), np.nan)
+        elig = mask.sum(axis=1)
+        eligible[r_out, c] = elig
+        # frequency / dispersion need the per-query candidate set (>=3):
+        if not skip_freq_disp:
+            for q in np.nonzero((elig >= 3) & valid)[0]:
+                # distances (not squared) in the same RMS units as novelty:
+                # d = sqrt(dist2) / sqrt(L) -- matches the scalar authority's
+                # `np.linalg.norm(zz - cz) * inv_sqrt_L`.
+                ds = np.sqrt(np.maximum(d2_masked[q, mask[q]], 0.0)) * inv_sqrt_L
+                thr = float(np.median(ds)) * 0.5
+                m = int(np.sum(ds <= thr))
+                frequency[r_out[q], c] = m / ds.size
+                dispersion[r_out[q], c] = float(np.std(ds))
+                matches[r_out[q], c] = m
     if return_counts:
         return novelty, age, frequency, dispersion, matches, eligible
     return novelty, age, frequency, dispersion
@@ -677,6 +675,7 @@ class TsMultivariateMatrixProfileNovelty(SeriesOperator):
     ) -> pd.DataFrame:
         novelty, _age, _freq, _disp = _matrix_profile_series(
             x.to_numpy(dtype=float), window, subsequence_length, history,
+            skip_freq_disp=True,
         )
         return frame_like(x, novelty)
 
@@ -713,6 +712,7 @@ class TsMatrixProfileMotifAge(SeriesOperator):
     ) -> pd.DataFrame:
         _novelty, age, _freq, _disp = _matrix_profile_series(
             x.to_numpy(dtype=float), window, subsequence_length, history,
+            skip_freq_disp=True,
         )
         return frame_like(x, age)
 

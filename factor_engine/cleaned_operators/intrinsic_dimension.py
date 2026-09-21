@@ -231,15 +231,142 @@ def _delay_intrinsic_dim(chunk: np.ndarray, dim: int, k: int, delay: int, theile
     return float(np.median(dims))
 
 
+_FX_MAX_HALF = float(np.finfo(float).max) / 2.0
+
+
+def _finite_midpoint_batch(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Batched :func:`_finite_midpoint`: finite binary64 midpoint, no same-sign overflow."""
+    direct = (np.signbit(a) != np.signbit(b)) | (
+        (np.abs(a) <= _FX_MAX_HALF) & (np.abs(b) <= _FX_MAX_HALF)
+    )
+    with np.errstate(over="ignore"):
+        halves = a / 2.0 + b / 2.0
+        summed = (a + b) / 2.0
+    return np.where(direct, summed, halves)
+
+
+def _common_scale_batch(pts: np.ndarray, valid: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Batched :func:`_common_scale_points` over a padded ``(rows, n_pts, dim)`` cloud.
+
+    Returns ``(normalized, scale, ok)``.  The scalar helper signalled an
+    infeasible cloud by returning ``None``; ``ok`` is that same per-row decision
+    (finite non-zero scale and an all-finite normalised cloud).
+    """
+    has = valid.any(axis=1)
+    dummy = np.where(has[:, None, None], np.where(valid[..., None], pts, np.nan), 0.0)
+    center = _finite_midpoint_batch(np.nanmin(dummy, axis=1), np.nanmax(dummy, axis=1))
+    shifted = pts - center[:, None, :]
+    scale = np.where(valid[..., None], np.abs(shifted), -np.inf).max(axis=(1, 2))
+    ok = np.isfinite(scale) & (scale > 0.0)
+    safe = np.where(ok, scale, 1.0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        norm = shifted / safe[:, None, None]
+    ok &= np.isfinite(np.where(valid[..., None], norm, 0.0)).all(axis=(1, 2))
+    return norm, scale, ok
+
+
+def _distinct_rows_batch(norm: np.ndarray, valid: np.ndarray, counts: np.ndarray,
+                         rel_tol: float = 1e-8) -> np.ndarray:
+    """Batched :func:`_distinct_count_scale_robust` — distinct rounded rows per row.
+
+    ``np.unique(grid, axis=0).shape[0]`` equals one plus the number of adjacent
+    pairs that differ in the lexicographically sorted grid, which a per-row
+    ``np.lexsort`` gives without materialising the unique array.  Invalid (padded)
+    points are all-NaN keys and numpy sorts NaN last, so the leading
+    ``counts[i]`` sorted rows of row ``i`` are exactly its compacted cloud.
+    """
+    grid = np.rint(norm / rel_tol)
+    grid = np.where(valid[..., None], grid, np.nan)
+    keys = tuple(grid[:, :, c] for c in range(grid.shape[2] - 1, -1, -1))
+    order = np.lexsort(keys, axis=1) if len(keys) > 1 else np.argsort(keys[0], axis=1)
+    gs = np.take_along_axis(grid, order[:, :, None], axis=1)
+    neq = (gs[:, 1:, :] != gs[:, :-1, :]).any(axis=2)
+    idx = np.arange(neq.shape[1])[None, :]
+    cnt = (neq & (idx < (counts - 1)[:, None])).sum(axis=1)
+    return np.where(counts > 0, 1 + cnt, 0)
+
+
 def _intrinsic_dim_series(x2d: np.ndarray, window: int, dim: int, k: int, delay: int, theiler_window: int) -> np.ndarray:
+    """Levina-Bickel local-dimension medians for every trailing window, batched.
+
+    R62: the per-row anchor loop is gone.  Every trailing window lives in a
+    left-aligned ``(rows, W)`` NaN-padded matrix, so the delay cloud of all rows
+    is one fancy-index gather ``zp[:, posidx]`` with the *row-independent* index
+    map ``pos(point, coord) = point + coord*delay`` (point ``k`` sits at
+    chunk-local time ``lag + k``, which keeps the Theiler test the real-time
+    ``|k - a| > theiler_window``).
+
+    The pairwise cloud distances exploit the fact that every coordinate of the
+    delay cloud is the *same* 1-D window shifted by ``coord*delay``::
+
+        ||p_k - p_a||^2 = sum_c (z[k + c*delay] - z[a + c*delay])^2
+
+    so one row-chunked ``(rows, W, W)`` squared-difference matrix plus ``dim``
+    diagonal slices yields every pairwise distance — no
+    ``(rows, n_pts, n_pts, dim)`` broadcast.  For each anchor the ``k`` nearest
+    strictly-positive distances come from a single ``np.partition`` along the
+    anchor axis, and the per-row local dimensions are reduced by a median.
+    """
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
     w = int(window)
-    for c in range(cols):
-        col = x2d[:, c]
-        for r in range(rows):
-            i0 = max(0, r - w + 1)
-            out[r, c] = _delay_intrinsic_dim(col[i0 : r + 1], dim, k, delay, theiler_window)
+    d = int(dim)
+    dl = int(delay)
+    kk = int(k)
+    th = int(theiler_window)
+    lag = dl * (d - 1)
+    n_pts = w - lag
+    if rows == 0 or cols == 0 or d < 1 or dl < 1 or kk < 2 or n_pts <= 0 or w < lag + 1:
+        return out
+    posidx = np.arange(n_pts)[:, None] + dl * np.arange(d)[None, :]      # (n_pts, dim)
+    tcol = np.arange(rows, dtype=np.int64)[:, None]
+    widx = np.maximum(0, tcol - w + 1) + np.arange(w, dtype=np.int64)[None, :]
+    in_win = widx <= tcol
+    gather = np.clip(widx, 0, rows - 1)
+    allowed = np.abs(np.arange(n_pts)[:, None] - np.arange(n_pts)[None, :]) > th
+    chunk = max(1, int(2.0e6 // max(w * w, 1)))
+    for col in range(cols):
+        x = np.asarray(x2d[:, col], dtype=float)
+        zp = np.where(in_win, x[gather], np.nan)          # left-aligned window rows
+        pts = zp[:, posidx]                               # (rows, n_pts, dim)
+        valid = np.isfinite(pts).all(axis=2)
+        counts = valid.sum(axis=1)
+        norm, scale, ok = _common_scale_batch(pts, valid)
+        n_distinct = _distinct_rows_batch(norm, valid, counts)
+        gate = ok & (counts >= kk + 1) & (n_distinct >= kk + 1)
+        est = np.full((rows, n_pts), np.nan, dtype=float)
+        for c0 in range(0, rows, chunk):
+            c1 = min(c0 + chunk, rows)
+            zc = zp[c0:c1]
+            # per-coordinate midrange centres cancel inside every difference, so
+            # scaling the lag difference by the row's one scalar reproduces the
+            # common-scale cloud metric (identical up to one rounding).
+            with np.errstate(invalid="ignore", divide="ignore"):
+                diff = (zc[:, :, None] - zc[:, None, :]) / scale[c0:c1, None, None]
+            a2 = diff * diff
+            sq = a2[:, 0:n_pts, 0:n_pts].copy()
+            for j in range(1, d):
+                sq += a2[:, j * dl : j * dl + n_pts, j * dl : j * dl + n_pts]
+            sq = np.sqrt(sq, out=sq)
+            near = (sq > 0.0) & np.isfinite(sq) & allowed[None, :, :]
+            cnt = near.sum(axis=2)
+            part = np.partition(np.where(near, sq, np.nan), kk - 1, axis=2)[:, :, :kk]
+            nmax = part[:, :, kk - 1]
+            with np.errstate(invalid="ignore", divide="ignore"):
+                log_term = np.sum(
+                    np.log(nmax)[:, :, None] - np.log(part[:, :, : kk - 1]), axis=2
+                )
+                estimate = (kk - 1) / log_term
+            good = (
+                (cnt >= kk) & np.isfinite(log_term) & (log_term > 0.0)
+                & np.isfinite(estimate) & (estimate > 0.0)
+            )
+            est[c0:c1] = np.where(good, estimate, np.nan)
+        med = np.full(rows, np.nan, dtype=float)
+        has_est = np.isfinite(est).any(axis=1)
+        if has_est.any():
+            med[has_est] = np.nanmedian(est[has_est], axis=1)
+        out[:, col] = np.where(gate & np.isfinite(med), med, np.nan)
     return out
 
 

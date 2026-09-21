@@ -35,6 +35,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from numpy.lib.stride_tricks import sliding_window_view
 
 from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.rolling_pack import frame_like, register_polars_bridge
@@ -162,52 +163,100 @@ def _trend_pairs(x: np.ndarray, t: int, scales: list[int]) -> list[tuple[int, fl
     return pairs
 
 
+
+
+# ---------------------------------------------------------------------------
+# R62 vectorised per-scale trend statistics.  ``_scale_trend`` above stays the
+# readable reference; the batch version performs the SAME operations on every
+# row of one column (all-``s``-rows-finite requirement, ``amplitude``
+# normalisation, centred OLS slope, residual scale floor) with one sliding
+# window matrix per scale.
+# ---------------------------------------------------------------------------
+_SCALE_RS_FLOOR = np.finfo(float).eps * 8.0
+
+
+def _scale_trend_vec(col: np.ndarray, s: int) -> tuple[np.ndarray, np.ndarray]:
+    """``_scale_trend`` for every row of one column: (slope, rs)."""
+    n = int(col.size)
+    slope = np.full(n, np.nan, dtype=float)
+    rs = np.full(n, np.nan, dtype=float)
+    xs = np.arange(int(s), dtype=float)
+    dx = xs - xs.mean()
+    sxx = float(np.dot(dx, dx))
+    if n < int(s) or sxx <= 0.0:
+        return slope, rs
+    win = sliding_window_view(col, int(s))              # row j ends at row j+s-1
+    with np.errstate(invalid="ignore", divide="ignore"):
+        amp = np.max(np.abs(win), axis=1)
+        ys = win / amp[:, None]
+        ybar = ys.mean(axis=1)
+        sl = (ys - ybar[:, None]) @ dx / sxx
+        resid = ys - (ybar[:, None] + sl[:, None] * dx[None, :])
+        r = np.sqrt(np.mean(resid * resid, axis=1))
+    ok = (np.isfinite(win).all(axis=1) & np.isfinite(amp) & (amp != 0.0)
+          & np.isfinite(sl) & np.isfinite(r) & (r > _SCALE_RS_FLOOR))
+    end = np.arange(int(s) - 1, n)
+    slope[end[ok]] = sl[ok]
+    rs[end[ok]] = r[ok]
+    return slope, rs
+
+
+def _scale_t_stats(x2d: np.ndarray, scales: list[int]) -> np.ndarray:
+    """``(rows, cols, len(scales))`` of ``T_s = slope / rs`` (NaN when invalid)."""
+    rows, cols = x2d.shape
+    out = np.full((rows, cols, len(scales)), np.nan, dtype=float)
+    for c in range(cols):
+        for si, s in enumerate(scales):
+            sl, rs = _scale_trend_vec(x2d[:, c], s)
+            good = np.isfinite(sl) & np.isfinite(rs) & (rs > 0.0)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                out[:, c, si] = np.where(good, sl / np.where(rs > 0.0, rs, 1.0), np.nan)
+    return out
+
 def _consensus_series(x2d: np.ndarray, scales: list[int]) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    for c in range(cols):
-        x = x2d[:, c]
-        for t in range(rows):
-            pairs = _trend_pairs(x, t, scales)
-            if len(pairs) != len(scales):
-                continue
-            out[t, c] = float(np.mean(np.sign([T for _s, T in pairs])))
+    if not scales:
+        return out
+    tstats = _scale_t_stats(x2d, scales)
+    all_ok = np.isfinite(tstats).all(axis=2)
+    mean_sign = np.sign(tstats).mean(axis=2)
+    out[all_ok] = mean_sign[all_ok]
     return out
 
 
 def _dispersion_series(x2d: np.ndarray, scales: list[int]) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    for c in range(cols):
-        x = x2d[:, c]
-        for t in range(rows):
-            pairs = _trend_pairs(x, t, scales)
-            if len(pairs) != len(scales) or len(pairs) < 2:
-                continue
-            ts = np.asarray([T for _s, T in pairs], dtype=float)
-            med = float(np.median(ts))
-            out[t, c] = float(np.median(np.abs(ts - med)))
+    if len(scales) < 2:
+        return out
+    tstats = _scale_t_stats(x2d, scales)
+    all_ok = np.isfinite(tstats).all(axis=2)
+    med = np.median(tstats, axis=2)
+    mad = np.median(np.abs(tstats - med[:, :, None]), axis=2)
+    good = all_ok & np.isfinite(mad)
+    out[good] = mad[good]
     return out
 
 
 def _curvature_series(x2d: np.ndarray, scales: list[int]) -> np.ndarray:
     rows, cols = x2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    for c in range(cols):
-        x = x2d[:, c]
-        for t in range(rows):
-            pairs = _trend_pairs(x, t, scales)
-            if len(pairs) != len(scales) or len(pairs) < 3:
-                continue
-            ls = np.asarray([np.log(float(s)) for s, _T in pairs], dtype=float)
-            y = np.asarray([T for _s, T in pairs], dtype=float)
-            if len(np.unique(np.round(ls, 10))) < 3:
-                continue
-            X = np.column_stack([np.ones(len(ls)), ls, ls ** 2])
-            beta, *_ = np.linalg.lstsq(X, y, rcond=None)
-            coef = float(beta[2])
-            if np.isfinite(coef):
-                out[t, c] = coef
+    if len(scales) < 3:
+        return out
+    ls = np.asarray([np.log(float(s)) for s in scales], dtype=float)
+    if len(np.unique(np.round(ls, 10))) < 3:
+        return out
+    tstats = _scale_t_stats(x2d, scales)
+    all_ok = np.isfinite(tstats).all(axis=2)
+    X = np.column_stack([np.ones(len(ls)), ls, ls ** 2])
+    Y = tstats.reshape(rows * cols, len(scales)).T
+    with np.errstate(invalid="ignore", divide="ignore"):
+        beta, *_ = np.linalg.lstsq(X, Y, rcond=None)
+    coef = beta[2]
+    good = (all_ok.reshape(-1) & np.isfinite(coef))
+    flat = out.reshape(-1)
+    flat[good] = coef[good]
     return out
 
 

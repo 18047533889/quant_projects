@@ -138,6 +138,40 @@ def _ols_fit(y: np.ndarray) -> tuple[float, float, float]:
     return float(b), float(a), float(np.std(resid))
 
 
+def _vec_monotonicity(col: np.ndarray, w: int, mp: int) -> np.ndarray:
+    """Vectorized twin of the per-window Kendall (C-D)/(C+D) loop (R62).
+
+    The authority compresses the window to its finite entries and counts
+    sign-agreement over all pairs; on the padded trailing window matrix that is
+    exactly the set of (i<j) slots where BOTH entries are finite, so a single
+    broadcast diff matrix per row-block replaces the double Python loop.
+    """
+    n = col.size
+    L = np.minimum(np.arange(n) + 1, w)
+    valid_row = np.arange(w)[None, :] >= (w - L)[:, None]
+    src_idx = np.clip(np.arange(n)[:, None] - w + 1 + np.arange(w)[None, :], 0, n - 1)
+    W = np.where(valid_row, col[src_idx], np.nan)
+    fin = np.isfinite(W)
+    cnt = fin.sum(axis=1)
+    iu = np.triu_indices(w, 1)
+    pair_ok = (fin[:, iu[0]] & fin[:, iu[1]])
+    with np.errstate(invalid="ignore"):
+        diff = W[:, iu[1]] - W[:, iu[0]]  # x_j - x_i for j>i slots
+        c = ((diff > 0.0) & pair_ok).sum(axis=1)
+        d = ((diff < 0.0) & pair_ok).sum(axis=1)
+    total = c + d
+    ok = (cnt >= mp) & (total > 0)
+    return np.where(ok, (c - d) / np.where(total > 0, total, 1), np.nan)
+
+
+def _apply_vec_monotonic(x2d: np.ndarray, w: int, mp: int) -> np.ndarray:
+    cols = x2d.shape[1]
+    out = np.empty_like(x2d, dtype=float)
+    for c in range(cols):
+        out[:, c] = _vec_monotonicity(x2d[:, c], int(w), int(mp))
+    return out
+
+
 @register_operator(
     name="ts_monotonicity",
     category="time_series_shape",
@@ -184,7 +218,7 @@ class TsMonotonicity(SeriesOperator):
                 return np.nan
             return float((c - d) / total)
 
-        return frame_like(x, map_rolling(xv, w, _fn))
+        return frame_like(x, _apply_vec_monotonic(xv, w, mp))
 
 
 @register_operator(

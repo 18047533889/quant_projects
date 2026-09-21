@@ -125,6 +125,52 @@ def _hodges_lehmann(v: np.ndarray) -> float:
     return float(_finite_midpoint(central[0], central[1]))
 
 
+def _vec_qn_scale(col: np.ndarray, w: int, mp: int) -> np.ndarray:
+    """Column-wise Qn scale over trailing windows (vectorised, R62).
+
+    The authority loops rows and calls ``_qn_scale`` on the trailing
+    contiguously-finite run.  The run values are the same for every row that
+    shares a run length ``n``, so rows are grouped by ``n`` and each group is
+    solved with one ``np.partition`` over the compact upper-triangle of
+    pairwise absolute differences (the k-th order statistic of a set does not
+    depend on the pair enumeration order).  No per-row Python loop remains.
+    """
+    n_row = col.size
+    out = np.full(n_row, np.nan)
+    if n_row == 0:
+        return out
+    # trailing contiguous finite run [s, lf] ending at the current row (the
+    # same contract as trailing_contiguous_finite: a NaN row -> empty run)
+    _s, k, _lf = _hl_run_bounds(col, w)
+    ok = k >= max(mp, 2)
+    if not ok.any():
+        return out
+    for kv in np.unique(k[ok]):
+        kv = int(kv)
+        if kv < 2:
+            continue
+        rows_idx = np.where(ok & (k == kv))[0]
+        pairs = kv * (kv - 1) // 2
+        h = kv // 2 + 1
+        kth = h * (h - 1) // 2
+        if kth < 1 or kth > pairs:
+            continue
+        ii, jj = np.triu_indices(kv, 1)
+        cn = _QN_D_INF * _qn_dn(kv)
+        # row-block chunking keeps the (rows, pairs) temporaries bounded
+        step = max(1, int(4_000_000 // max(pairs, 1)))
+        for start in range(0, rows_idx.size, step):
+            blk = rows_idx[start : start + step]
+            pos = blk[:, None] - kv + 1 + np.arange(kv)[None, :]
+            V = col[pos]
+            D = np.abs(V[:, jj] - V[:, ii])
+            stat = np.partition(D, kth - 1, axis=1)[:, kth - 1]
+            with np.errstate(invalid="ignore", over="ignore"):
+                val = cn * stat
+            out[blk] = np.where(np.isfinite(val), val, np.nan)
+    return out
+
+
 def _ts_qn_scale(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.DataFrame:
     if int(window) < 2:
         raise ValueError("ts_qn_scale requires window >= 2")
@@ -134,15 +180,7 @@ def _ts_qn_scale(x: pd.DataFrame, window: int = 60, min_periods: int = 8) -> pd.
     arr = x.to_numpy(dtype=float)
     out = np.full((rows, cols), np.nan, dtype=float)
     for c in range(cols):
-        col = arr[:, c]
-        for r in range(rows):
-            lo = max(0, r - w + 1)
-            v = trailing_contiguous_finite(col[lo : r + 1])
-            if v.size < mp:
-                continue
-            val = _qn_scale(v)
-            if np.isfinite(val):
-                out[r, c] = float(val)
+        out[:, c] = _vec_qn_scale(arr[:, c], w, mp)
     return frame_like(x, out)
 
 
