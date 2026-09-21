@@ -108,3 +108,56 @@ def compile_smoothing_repair(family: str, parameters: Mapping[str, object], *,
         raise IneligibleSmoothingRepair(f"{family} cannot execute {transform}: {exc}") from exc
     return SmoothingRepairPlan(family, transform, tuple(sorted(kwargs.items())),
                                training_context_ref, float(natural_time_scale))
+
+
+def compile_admissible_smoothing_grid(
+        *, natural_time_scale: float, training_context_ref: str,
+        target_time_scales=(3.0, 5.0, 8.0, 10.0, 13.0, 20.0, 30.0, 60.0),
+) -> Tuple[SmoothingRepairPlan, ...]:
+    """Compile a small method-balanced grid inside both FO and FP domains.
+
+    Target time scales are desired half-lives/windows in bars. The compiler
+    converts each target to FO's relative parameter, validates the declared
+    FO domain, then binds resolved kernel arguments against FP admissibility.
+    A target legal for one method can therefore be absent for another; no
+    value is clamped or run out of domain.
+
+    The deterministic result contains immutable evidence-bound plans and is
+    de-duplicated after integer-valued SMA/KAMA mappings. It is intended for
+    research batch enumeration, not production admission.
+    """
+    if (isinstance(natural_time_scale, bool)
+            or not isinstance(natural_time_scale, numbers.Real)
+            or not math.isfinite(natural_time_scale)
+            or not 1 <= natural_time_scale <= 10000):
+        raise ValueError("TRAIN natural_time_scale must be finite and within [1, 10000] bars")
+    if isinstance(target_time_scales, (str, bytes)):
+        raise ValueError("target_time_scales must be an iterable of positive finite bars")
+
+    targets = []
+    for target in target_time_scales:
+        if (isinstance(target, bool) or not isinstance(target, numbers.Real)
+                or not math.isfinite(target) or target <= 0):
+            raise ValueError("each target_time_scale must be a positive finite number")
+        targets.append(float(target))
+
+    plans = []
+    seen = set()
+    for method in ("SMA", "EWMA", "IIR", "KAMA", "Kalman"):
+        for target in targets:
+            relative = target / float(natural_time_scale)
+            if not 0.1 <= relative <= 2.0:
+                continue
+            try:
+                plan = compile_smoothing_repair(
+                    "CAUSAL_SMOOTHING",
+                    {"method": method, "natural_time_scale_relative": relative},
+                    natural_time_scale=natural_time_scale,
+                    training_context_ref=training_context_ref,
+                )
+            except IneligibleSmoothingRepair:
+                continue
+            if plan.identity not in seen:
+                seen.add(plan.identity)
+                plans.append(plan)
+    return tuple(plans)

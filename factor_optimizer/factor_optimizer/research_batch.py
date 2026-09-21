@@ -1,0 +1,327 @@
+"""Bounded research batch optimization with automatic chronological splitting.
+
+No production admission, trading-profit claim, or sealed-test evaluation. QE
+owns RankIC; FP/FE adapters own transformations. Only TRAIN chooses one plan
+per factor. VALIDATION can accept that plan or fall back to RAW, never retry
+the next candidate. TEST labels are never sent to an evaluator here.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field, replace
+import hashlib
+import json
+import math
+from types import MappingProxyType
+from typing import Any, Mapping
+
+import numpy as np
+
+
+@dataclass(frozen=True)
+class BatchOptimizationConfig:
+    """Conservative defaults; callers need not choose calendar cutoffs."""
+    train_fraction: float = .60
+    validation_fraction: float = .20
+    warmup_bars: int = 30
+    embargo_bars: int = 1
+    minimum_train_days: int = 60
+    minimum_validation_days: int = 30
+    minimum_test_days: int = 30
+    minimum_assets: int = 20
+    minimum_coverage: float = .90
+    minimum_improvement: float = .01
+    confidence_level: float = .95
+    bootstrap_draws: int = 499
+    block_length: int = 5
+    seed: int = 20260921
+    natural_time_scale: float = 10.
+    families: tuple[str, ...] = ()
+    maximum_candidates: int = 64
+
+    def __post_init__(self):
+        for name in ("train_fraction", "validation_fraction",
+                     "confidence_level"):
+            v = getattr(self, name)
+            if isinstance(v, bool) or not math.isfinite(v) or not 0 < v < 1:
+                raise ValueError(f"{name} must be in (0,1)")
+        if (isinstance(self.minimum_coverage, bool) or not math.isfinite(self.minimum_coverage)
+                or not 0 < self.minimum_coverage <= 1):
+            raise ValueError("minimum_coverage must be in (0,1]")
+        if self.train_fraction + self.validation_fraction >= 1:
+            raise ValueError("a separate TEST partition is required")
+        for name in ("warmup_bars", "embargo_bars", "minimum_train_days",
+                     "minimum_validation_days", "minimum_test_days", "minimum_assets",
+                     "bootstrap_draws", "block_length", "maximum_candidates", "seed"):
+            v = getattr(self, name)
+            if type(v) is not int or v < (0 if name in {"warmup_bars", "embargo_bars", "seed"} else 1):
+                raise ValueError(f"{name} must be a valid integer")
+        if self.bootstrap_draws < 99:
+            raise ValueError("bootstrap_draws must be at least 99")
+        if self.minimum_assets < 3:
+            raise ValueError("minimum_assets must be at least 3")
+        if (isinstance(self.minimum_improvement, bool) or isinstance(self.natural_time_scale, bool)
+                or not math.isfinite(self.minimum_improvement) or self.minimum_improvement < 0
+                or not math.isfinite(self.natural_time_scale) or self.natural_time_scale < 1):
+            raise ValueError("invalid gain or natural time scale")
+        if isinstance(self.families, (str, bytes)) or any(
+                not isinstance(name, str) or not name.strip() for name in self.families):
+            raise ValueError("families must be a sequence of nonempty family names")
+        object.__setattr__(self, "families", tuple(self.families))
+        if len(set(self.families)) != len(self.families):
+            raise ValueError("families must be unique")
+
+
+@dataclass(frozen=True)
+class AutomaticTimeSplit:
+    train_indices: tuple[int, ...]
+    validation_indices: tuple[int, ...]
+    test_indices: tuple[int, ...]
+    validation_start: int
+    test_start: int
+    identity: str
+
+
+@dataclass(frozen=True)
+class FactorOptimizationResult:
+    factor_id: str
+    status: str
+    selected_family: str
+    plan_identity: str
+    plan: Any
+    train_gain: float | None
+    validation_lower_bound: float | None
+    candidates: tuple[Mapping[str, Any], ...]
+    reason: str
+
+
+@dataclass(frozen=True)
+class BatchOptimizationResult:
+    optimized: Any
+    factors: Mapping[str, FactorOptimizationResult]
+    split: AutomaticTimeSplit
+    execution_mode: str = "research_only"
+    test_evaluated: bool = False
+
+
+def automatic_time_split(labels, config: BatchOptimizationConfig | None = None):
+    """60/20/20 in time, warmup, and purge real label windows at boundaries."""
+    config = config or BatchOptimizationConfig()
+    n = len(labels.decision_time)
+    v = int(n * config.train_fraction)
+    t = int(n * (config.train_fraction + config.validation_fraction))
+    if not 0 < v < t < n:
+        raise ValueError("insufficient observations for chronological split")
+    train_cutoff = labels.decision_time[max(0, v - config.embargo_bars)]
+    validation_cutoff = labels.decision_time[max(0, t - config.embargo_bars)]
+    train = tuple(i for i in range(config.warmup_bars, v)
+                  if labels.label_end_time[i] < train_cutoff)
+    valid = tuple(i for i in range(v, t) if labels.label_end_time[i] < validation_cutoff)
+    test = tuple(range(t, n))
+    if (len(train) < config.minimum_train_days or len(valid) < config.minimum_validation_days
+            or len(test) < config.minimum_test_days):
+        raise ValueError("insufficient observations after warmup and label-window purge")
+    payload = (train, valid, test, tuple(map(str, labels.decision_time)),
+               tuple(map(str, labels.label_end_time[:t])))
+    identity = hashlib.sha256(json.dumps(payload).encode()).hexdigest()
+    return AutomaticTimeSplit(train, valid, test, v, t, identity)
+
+
+def _subset_labels(labels, indices):
+    idx = np.asarray(indices)
+    kwargs = {"values": labels.values[idx],
+              "validity": None if labels.validity is None else labels.validity[idx]}
+    for name in ("decision_time", "execution_time", "signal_available_time",
+                 "label_start_time", "label_end_time", "observation_time"):
+        seq = getattr(labels, name)
+        kwargs[name] = tuple(seq[i] for i in indices) if seq else ()
+    return replace(labels, **kwargs)
+
+
+def _pair_ic(raw, candidate, batch, labels, indices, config):
+    from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
+    from quant_evaluator.runtime.evaluator import evaluate
+
+    idx = np.asarray(indices)
+    a, b = raw[idx], candidate[idx]
+    target = _subset_labels(labels, indices)
+    available = np.isfinite(a) & np.isfinite(target.values)
+    if target.validity is not None:
+        available &= target.validity
+    common = available & np.isfinite(b)
+    retention = float(common.sum() / max(1, available.sum()))
+    time_axis = AxisRef("time", batch.time_axis.dtype, len(idx), batch.time_axis.values[idx])
+    pair = np.stack((a, b), axis=-1)
+    validity = np.repeat(common[:, :, None], 2, axis=2)
+    factors = FactorBatch(("RAW", "CANDIDATE"), time_axis, batch.asset_axis, pair, validity=validity)
+    result = evaluate(factors, target, metrics=["rank_ic_series"], backend="cpu",
+                      metric_parameters={"rank_ic_series": {"min_assets": config.minimum_assets}})
+    ic = np.asarray(result.artifacts["rank_ic_series"].values)
+    good = np.isfinite(ic).all(axis=1)
+    # Retain the full timeline: invalid days remain NaN for block resampling.
+    diff = ic[:, 1] - ic[:, 0]
+    return diff, good, retention
+
+
+def _specs(config):
+    from factor_optimizer.policy.repair_registry import RepairFamilyRegistry
+    registry = RepairFamilyRegistry.default()
+    families = config.families or tuple(registry.family_names)
+    specs = []
+    for family in sorted(families):
+        prior = registry.get(family).parameter_prior.to_dict()
+        if family == "NO_OP_RAW":
+            continue
+        if family in {"U_SHAPE_REPAIR", "INVERTED_U_REPAIR"}:
+            choices = [dict(prior, center=c, power=p, asymmetry=False)
+                       for c in (.35, .5, .65) for p in (1., 2.)]
+        elif family == "CAUSAL_SMOOTHING":
+            # Compiled per factor with its TRAIN evidence reference below.
+            choices = []
+        elif family == "DECAY_REFINEMENT":
+            choices = [dict(prior, decay=d, half_life_relative=r)
+                       for d in (.5, .8) for r in (False, True)]
+        elif family == "MISSINGNESS_FRESHNESS":
+            choices = [dict(prior, mode="flag")]
+            choices += [dict(prior, mode="fill", freshness_window=w) for w in (1, 3, 5)]
+        else:
+            choices = [prior]
+        specs.extend((family, p) for p in choices)
+    if len(specs) > config.maximum_candidates:
+        raise ValueError("candidate budget is too small for declared families")
+    return specs
+
+
+def _lower_bound(differences, config, horizon):
+    # Moving blocks preserve within-block dependence and missing-date positions.
+    length = max(config.block_length, int(horizon))
+    n = len(differences)
+    if n < 3 * length:
+        return None
+    rng = np.random.default_rng(config.seed)
+    draws = []
+    for _ in range(config.bootstrap_draws):
+        starts = rng.integers(0, n-length+1, size=math.ceil(n/length))
+        values = np.concatenate([differences[s:s+length] for s in starts])[:n]
+        values = values[np.isfinite(values)]
+        if len(values) < config.minimum_validation_days:
+            return None
+        draws.append(float(values.mean()))
+    return float(np.quantile(draws, (1-config.confidence_level)/2))
+
+
+def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
+    """Optimize aligned QE contracts automatically, preserving every input ID.
+
+    Defaults fit candidate choices on TRAIN, confirm only its winner on
+    VALIDATION, and leave TEST labels unused. The output applies the frozen
+    accepted plan to factor values (including later rows), not future labels.
+    Missing DSL/exposures are explicit ineligible candidate records.
+    """
+    if allow_research is not True:
+        raise ValueError("explicit allow_research=True is required; not production admission")
+    config = config or BatchOptimizationConfig()
+    if (batch.time_axis.values is None or batch.asset_axis.values is None
+            or labels.asset_axis is None or labels.asset_axis.values is None):
+        raise ValueError("explicit time and asset axes are required")
+    if (not np.array_equal(batch.time_axis.values, np.asarray(labels.decision_time))
+            or not np.array_equal(batch.asset_axis.values, labels.asset_axis.values)
+            or labels.values.shape != batch.values.shape[:2]):
+        raise ValueError("factor and label axes must match exactly")
+    split = automatic_time_split(labels, config)
+    specs = _specs(config)
+    from factor_optimizer.adapters.repair_execution import compile_value_repair
+    from factor_optimizer.adapters.preprocessing import compile_admissible_smoothing_grid
+    from quant_evaluator.contracts.factor_batch import FactorBatch
+    import pandas as pd
+
+    outputs, results = [], {}
+    for k, factor_id in enumerate(batch.factor_ids):
+        raw = np.array(batch.values[:, :, k], dtype=float, copy=True)
+        if batch.validity is not None:
+            raw[~batch.validity[:, :, k]] = np.nan
+        raw[~np.isfinite(raw)] = np.nan
+        # No test values or test labels enter the candidate fit or score.
+        prefix = raw[:split.test_start]
+        frame = pd.DataFrame({"date": np.repeat(batch.time_axis.values[:split.test_start], raw.shape[1]),
+                              "asset_id": np.tile(batch.asset_axis.values, split.test_start),
+                              "value": prefix.ravel()})
+        train_hash = hashlib.sha256()
+        train_hash.update(raw[:split.validation_start].tobytes())
+        train_hash.update(labels.values[np.asarray(split.train_indices)].tobytes())
+        if labels.validity is not None:
+            train_hash.update(labels.validity[np.asarray(split.train_indices)].tobytes())
+        train_hash.update(json.dumps(batch.asset_axis.values.tolist(), default=str).encode())
+        train_hash.update((factor_id + split.identity).encode())
+        train_ref = train_hash.hexdigest()
+        proposals = [(family, params, None) for family, params in specs]
+        if not config.families or "CAUSAL_SMOOTHING" in config.families:
+            proposals += [(p.family, dict(p.parameters), p) for p in compile_admissible_smoothing_grid(
+                natural_time_scale=config.natural_time_scale, training_context_ref=train_ref)]
+        if len(proposals) > config.maximum_candidates:
+            raise ValueError("candidate budget is too small for admitted smoothing grid")
+        raw_plan = compile_value_repair("NO_OP_RAW", {"keep_raw": True},
+                                       natural_time_scale=config.natural_time_scale,
+                                       training_context_ref=train_ref)
+        chosen, train_gain, lower = raw_plan, None, None
+        status, reason, records = "raw_retained", "no robust TRAIN improvement", []
+        try:
+            _, raw_good, _ = _pair_ic(prefix, prefix, batch, labels, split.train_indices, config)
+            if raw_good.sum() < config.minimum_train_days:
+                status, reason = "invalid_raw", "insufficient valid RAW training IC"
+            else:
+                best = None
+                for family, params, precompiled in proposals:
+                    record = {"family": family, "parameters": dict(params)}
+                    try:
+                        plan = precompiled or compile_value_repair(family, params,
+                            natural_time_scale=config.natural_time_scale, training_context_ref=train_ref)
+                        values = np.asarray(plan.execute(frame, allow_research=True), dtype=float).reshape(prefix.shape)
+                        delta, good, coverage = _pair_ic(prefix, values, batch, labels, split.train_indices, config)
+                        if coverage < config.minimum_coverage or good.sum() < config.minimum_train_days:
+                            raise ValueError("insufficient common coverage or training IC")
+                        chunks = np.array_split(delta, 3)
+                        if any(np.isfinite(x).sum() < 10 for x in chunks):
+                            raise ValueError("insufficient chronological training folds")
+                        fold_gains = np.array([np.nanmean(x) for x in chunks])
+                        gain = float(fold_gains.mean() - fold_gains.std())
+                        record.update(status="train_evaluated", train_gain=gain, plan_identity=plan.identity,
+                                      coverage=coverage)
+                        if gain > config.minimum_improvement:
+                            entry = (gain, plan.identity, plan, values)
+                            if best is None or (-gain, plan.identity) < (-best[0], best[1]):
+                                best = entry
+                    except Exception as exc:
+                        record.update(status="ineligible", reason=f"{type(exc).__name__}: {exc}")
+                    records.append(MappingProxyType(record))
+                if best is not None:
+                    gain, _, winner, values = best
+                    train_gain = gain
+                    delta, good, coverage = _pair_ic(prefix, values, batch, labels, split.validation_indices, config)
+                    if coverage >= config.minimum_coverage and good.sum() >= config.minimum_validation_days:
+                        lower = _lower_bound(delta, config, labels.horizon)
+                    if lower is not None and lower > 0 and lower >= config.minimum_improvement:
+                        chosen, status, reason = winner, "improved", "TRAIN winner passed held-out paired block bound"
+                    else:
+                        reason = "TRAIN winner not confirmed on VALIDATION; retained RAW without retry"
+            if chosen.family == "NO_OP_RAW":
+                out = raw
+            else:
+                full = pd.DataFrame({"date": np.repeat(batch.time_axis.values, raw.shape[1]),
+                                     "asset_id": np.tile(batch.asset_axis.values, len(raw)), "value": raw.ravel()})
+                out = np.asarray(chosen.execute(full, allow_research=True), dtype=float).reshape(raw.shape)
+        except Exception as exc:
+            chosen, out, status = raw_plan, raw, "error_raw_retained"
+            reason = f"{type(exc).__name__}: {exc}"
+        outputs.append(out)
+        results[factor_id] = FactorOptimizationResult(
+            factor_id, status, chosen.family, chosen.identity, chosen, train_gain, lower,
+            tuple(records), reason)
+    values = np.stack(outputs, axis=-1)
+    optimized = FactorBatch(batch.factor_ids, batch.time_axis, batch.asset_axis,
+                            values, validity=np.isfinite(values),
+                            context_refs={"optimization_mode": "research_only", "split": split.identity})
+    return BatchOptimizationResult(optimized, MappingProxyType(results), split)
+
+
+__all__ = ["BatchOptimizationConfig", "AutomaticTimeSplit", "FactorOptimizationResult",
+           "BatchOptimizationResult", "automatic_time_split", "optimize_factor_batch"]

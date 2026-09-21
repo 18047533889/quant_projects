@@ -1,5 +1,7 @@
 # factor_preprocess 中文功能与算法指南
 
+新增 `transforms.repair_shapes` 值修复研究原语：U/倒 U（含非对称侧尺度）、尾部 hinge/saturation、截断 zscore、稳健缩放等。它们由 Optimizer 的版本化研究计划调用，不等于加入生产 registry admission。完整公式与自动选参规则见 [自动优化指南](https://github.com/HKUST-QUANT-SOCIETY/factor_optimizer/blob/main/docs/AUTO_OPTIMIZATION.md)；本库签名见 API 参考。
+
 本文以当前源码、默认注册表和测试为准，说明已实现功能、数学口径、输入输出、因果边界与能力限制。它不把规划中的功能写成现有能力。逐项签名与源码定位见 [API 参考](API_REFERENCE.md)，当前环境的注册元数据与参数表见 [变换目录](TRANSFORM_CATALOG.md)。
 
 ## 1. 定位与工作流

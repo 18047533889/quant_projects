@@ -1,7 +1,7 @@
 # factor_preprocess 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**72 个 Python 模块、420 个公开函数/类/方法定义**。
+扫描实际包目录：**73 个 Python 模块、426 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -78,6 +78,7 @@
 | [factor_preprocess/transforms/event_decay.py](../factor_preprocess/transforms/event_decay.py) | 1 | Short-halflife event-decay persistence (causal, one-sided). |
 | [factor_preprocess/transforms/freshness.py](../factor_preprocess/transforms/freshness.py) | 4 | Data freshness transforms for tracking observation age and staleness. |
 | [factor_preprocess/transforms/missingness.py](../factor_preprocess/transforms/missingness.py) | 7 | Missingness transforms for handling missing data. |
+| [factor_preprocess/transforms/repair_shapes.py](../factor_preprocess/transforms/repair_shapes.py) | 6 | Stateless value-repair primitives used by research repair plans. |
 | [factor_preprocess/transforms/rolling.py](../factor_preprocess/transforms/rolling.py) | 4 | Rolling (time-series) transforms with explicit causality. |
 | [factor_preprocess/transforms/smoothing.py](../factor_preprocess/transforms/smoothing.py) | 6 | Causal one-sided signal smoothers. |
 | [factor_preprocess/transforms/treatment_variants.py](../factor_preprocess/transforms/treatment_variants.py) | 1 | Treatment variant transforms that the eligibility engine may propose. |
@@ -4900,6 +4901,70 @@ Impute missing values with fallback strategy hierarchy.
 
 返回类型：`pd.Series`。
 
+## factor_preprocess/transforms/repair_shapes.py
+
+Stateless value-repair primitives used by research repair plans.
+
+### cross_sectional_rank
+
+[实际实现](../factor_preprocess/transforms/repair_shapes.py#L31)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(values: pd.DataFrame, *, method: str='average')`。
+
+返回类型：`pd.Series`。
+
+### rank_shape
+
+[实际实现](../factor_preprocess/transforms/repair_shapes.py#L37)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(values: pd.DataFrame, *, center: float, power: float, inverted: bool=False, asymmetric: bool=False)`。
+
+返回类型：`pd.Series`。
+
+### capped_zscore
+
+[实际实现](../factor_preprocess/transforms/repair_shapes.py#L59)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(values: pd.DataFrame, *, cap: float)`。
+
+返回类型：`pd.Series`。
+
+### tail_hinge
+
+[实际实现](../factor_preprocess/transforms/repair_shapes.py#L65)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(values: pd.DataFrame, *, hinge: str, hinge_value: float)`。
+
+返回类型：`pd.Series`。
+
+### tail_saturation
+
+[实际实现](../factor_preprocess/transforms/repair_shapes.py#L76)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(values: pd.DataFrame, *, quantile: float, side: str)`。
+
+返回类型：`pd.Series`。
+
+### robust_scale
+
+[实际实现](../factor_preprocess/transforms/repair_shapes.py#L91)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(values: pd.DataFrame, *, scale: str, center: str)`。
+
+返回类型：`pd.Series`。
+
 ## factor_preprocess/transforms/rolling.py
 
 Rolling (time-series) transforms with explicit causality.
@@ -5151,6 +5216,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/transforms/event_decay.py` | `f384f17802b5ed0c0b6de29bc21c2addc0b64d4d9f1f75de6773d738842ba13d` |
 | `factor_preprocess/transforms/freshness.py` | `cb62293004c74338f715e75a91f849a4b2b3b4d6f11d2d258ddfcbcf3b97e69a` |
 | `factor_preprocess/transforms/missingness.py` | `42dcbf19613e38f7be1e18283ca4a67e208332b88a6a0fe625b6a86c0724ea4d` |
+| `factor_preprocess/transforms/repair_shapes.py` | `a96b932705a8be2ca13a3fb2db959093be8053d6a61e6c2f0d8f719971bfc70c` |
 | `factor_preprocess/transforms/rolling.py` | `e7b9cc19a0e32c62b2f2d1d216e998ed49c72a3579404efd735f25f1c04e288b` |
 | `factor_preprocess/transforms/smoothing.py` | `5e908acfa31095262483c9c0e9987cf4fc2fe46744e8d7111a6ca543b4341dd6` |
 | `factor_preprocess/transforms/treatment_variants.py` | `5d3a3dd9c7c0e014be750edcf9e37c628113acd17d8ec3dc09076e13aa3b2b4b` |

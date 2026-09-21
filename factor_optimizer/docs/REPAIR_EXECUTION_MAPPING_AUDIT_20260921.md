@@ -1,5 +1,7 @@
 # Repair family → 执行映射审计（2026-09-21）
 
+此页保留第一轮审计时点。第二轮已经补齐值级执行桥和自动优化入口，下述“只有两个 family 接通”不再代表最新状态；当前能力与公式见 [自动优化指南](AUTO_OPTIMIZATION.md)。
+
 ## 结论
 
 注册表声明了 20 个 repair family；声明、条件搜索和 supervised 参数冻结都不等于处理已执行。逐项检查 FO 全部 adapters，并交叉检索 FE/FP 原语与测试后，FO 当前只有 `CAUSAL_SMOOTHING`、`DECAY_REFINEMENT` 两个 family 有版本化的公开编译执行桥；其余不少 family 已有底层原语，但尚未由 FO 自动接线。

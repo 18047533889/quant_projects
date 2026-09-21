@@ -16,6 +16,8 @@
 
 文档交付时的测试结果与未通过项见 [验证记录](docs/VALIDATION.md)。
 
+新增库内入口：`factor_optimizer.research_batch.optimize_factor_batch`，默认自动按时间切分、训练选参、验证及 RAW 兜底，无需手填日期。见 [自动优化与方法公式](docs/AUTO_OPTIMIZATION.md)。该入口仅用于研究，不执行生产入库或 sealed-test 认证。
+
 ## 它是什么 / 不是什么
 
 **做什么：** 候选变异生成（6 种变异算子 × 语法校验）、SearchRunner 编排、
