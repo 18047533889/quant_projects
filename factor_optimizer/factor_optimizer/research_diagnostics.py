@@ -57,6 +57,9 @@ def diagnose_training_batch(batch, labels, *, config=None, periods_per_year=252,
     spreads = .5 * compute_top_bottom_spread(quantiles)
     results = {}
     for k, name in enumerate(batch.factor_ids):
+        from factor_optimizer.research_decay import diagnose_layer_decay
+        decay = diagnose_layer_decay(batch, labels, split, config, k,
+                                     minimum_assets_per_quantile=minimum_assets_per_quantile)
         complete = np.isfinite(quantiles[:, :, k]).all(axis=1)
         enough = (complete.sum() >= config.minimum_train_days and
                   complete.mean() >= config.minimum_coverage)
@@ -89,6 +92,7 @@ def diagnose_training_batch(batch, labels, *, config=None, periods_per_year=252,
         fold_ic = [np.nanmean(f) if np.isfinite(f).sum() >= 10 else np.nan
                    for f in np.array_split(ic[:, k], 3)]
         results[name] = {
+            "layer_decay": decay,
             "partition": "TRAIN", "train_days": len(idx), "periods_per_year": periods_per_year,
             "rank_ic": _number(mean_ic[k]), "rank_icir": _number(icir[k]),
             "rank_ic_valid_days": int(np.isfinite(ic[:, k]).sum()),

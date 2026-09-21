@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**74 个 Python 模块、922 个公开函数/类/方法定义**。
+扫描实际包目录：**75 个 Python 模块、923 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -59,6 +59,7 @@
 | [factor_optimizer/ports/factor_intelligence.py](../factor_optimizer/ports/factor_intelligence.py) | 29 | Factor Intelligence provider port (R61-FI-014 / plan §20 E6, matrix E6). |
 | [factor_optimizer/research_baseline.py](../factor_optimizer/research_baseline.py) | 9 | Research baseline recipes and TRAIN-only substantial-degradation guard. |
 | [factor_optimizer/research_batch.py](../factor_optimizer/research_batch.py) | 10 | Bounded research batch optimization with automatic chronological splitting. |
+| [factor_optimizer/research_decay.py](../factor_optimizer/research_decay.py) | 1 | TRAIN-only twenty-layer stale-signal decay, not holding-period PnL. |
 | [factor_optimizer/research_diagnostics.py](../factor_optimizer/research_diagnostics.py) | 1 | TRAIN-only multi-dimensional research diagnosis using QE metric authorities. |
 | [factor_optimizer/research_final_report.py](../factor_optimizer/research_final_report.py) | 3 | Authority-side final research reporting; never called by candidate search. |
 | [factor_optimizer/research_fitness.py](../factor_optimizer/research_fitness.py) | 6 | QE-owned research portfolio metrics and joint paired selection policy. |
@@ -6588,6 +6589,18 @@ Optimize aligned QE contracts automatically, preserving every input ID.
 
 参数：`(batch, labels, *, config=None, allow_research=False, lineages=None, exposures=None, exposure_columns=(), maximum_baseline_loss=0.01)`。
 
+## factor_optimizer/research_decay.py
+
+TRAIN-only twenty-layer stale-signal decay, not holding-period PnL.
+
+### diagnose_layer_decay
+
+[实际实现](../factor_optimizer/research_decay.py#L7)。
+
+Compare x[t-lag] with the same y[t] and common TRAIN dates at each lag.
+
+参数：`(batch, labels, split, config, factor_index, *, minimum_assets_per_quantile=10)`。
+
 ## factor_optimizer/research_diagnostics.py
 
 TRAIN-only multi-dimensional research diagnosis using QE metric authorities.
@@ -10491,8 +10504,9 @@ Import seen records from dictionaries.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `c155a230a40d9317fddf0721310d5d81c0e89adef651da392d2fc006b1667863` |
-| `factor_optimizer/research_batch.py` | `9ac01a9bc9eb76740b2551cfbc98784224b85af3ccc848ce3795448998a0412b` |
-| `factor_optimizer/research_diagnostics.py` | `9d08e9a910de905c9f02e1dfc5f7539aa3a5572fa4f03d5e79b008551dcef20f` |
+| `factor_optimizer/research_batch.py` | `fe4b3f281bc91c5c271fd0dd69632140927ef246d122dffa28a0f1b484028f0c` |
+| `factor_optimizer/research_decay.py` | `1355b74f2ca32c7f819357880214580502eeff1df9d09593c601ed14d7fb71b0` |
+| `factor_optimizer/research_diagnostics.py` | `6353a8fcf0777f751b14f255e77930de89696972a99ae5ba4f63ea66beef104f` |
 | `factor_optimizer/research_final_report.py` | `33f8e6806ee3b6416a7b12fd0cf4b3b40235f2862307f982630a5ebd6326c8d7` |
 | `factor_optimizer/research_fitness.py` | `e8dac708b2a7d4a6dfc6aeb14f574cf752ee86f6c2267503b6f05c5d8a93535b` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |

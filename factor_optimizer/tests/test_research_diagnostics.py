@@ -122,3 +122,62 @@ def test_nonreturn_scale_labels_do_not_crash_other_factor_diagnoses():
     assert result["down"]["rank_ic"] < -.99
     assert result["down"]["long_short_max_drawdown"] is None
     assert result["down"]["portfolio_unavailable_reason"]
+
+
+def test_layer_decay_preserves_persistent_twenty_bin_signal_and_right_censoring():
+    from factor_optimizer.research_diagnostics import diagnose_training_batch
+    batch, labels = panel()
+    row = diagnose_training_batch(batch, labels)["u_shape"]["layer_decay"]
+    assert row["partition"] == "TRAIN"
+    assert row["status"] == "available"
+    assert len(row["layers"]) == 20
+    for layer in row["layers"]:
+        np.testing.assert_allclose(layer["mean_excess_returns"],
+                                   layer["mean_excess_returns"][0])
+        assert layer["half_life_bars"] is None
+        assert layer["right_censored"]
+    assert row["full_notional_turnover"] < .02
+
+
+def test_layer_decay_detects_fast_loss_without_recommending_slow_smoothing():
+    from factor_optimizer.research_diagnostics import diagnose_training_batch
+    batch, labels = panel()
+    rng = np.random.default_rng(216)
+    x = rng.normal(size=batch.values.shape[:2])
+    batch = replace(batch, values=x[:, :, None])
+    labels = replace(labels, values=.01*x + rng.normal(0, .001, x.shape))
+    row = diagnose_training_batch(batch, labels)["u_shape"]["layer_decay"]
+    assert row["status"] == "available"
+    assert row["layers"][0]["half_life_bars"] == 1
+    assert row["layers"][-1]["half_life_bars"] == 1
+    assert row["full_notional_turnover"] > 1
+    assert row["proposed_half_lives"] == []
+
+
+def test_layer_decay_insufficient_bins_is_not_an_invented_half_life():
+    from factor_optimizer.research_diagnostics import diagnose_training_batch
+    batch, labels = panel(100)
+    row = diagnose_training_batch(batch, labels)["u_shape"]["layer_decay"]
+    assert row["status"] == "unavailable"
+    assert row["layers"] == []
+    assert row["proposed_half_lives"] == []
+
+
+def test_automatic_smoothing_adds_train_measured_decay_scale():
+    from factor_optimizer.research_batch import optimize_factor_batch, BatchOptimizationConfig
+    batch, labels = panel(240)
+    rng = np.random.default_rng(217)
+    x = rng.normal(size=batch.values.shape[:2])
+    for t in range(1, len(x)):
+        x[t] = .9*x[t-1] + np.sqrt(1-.9**2)*x[t]
+    batch = replace(batch, values=x[:, :, None])
+    labels = replace(labels, values=.01*x + rng.normal(0, .005, x.shape))
+    config = BatchOptimizationConfig(families=("CAUSAL_SMOOTHING",), bootstrap_draws=99)
+    result = optimize_factor_batch(batch, labels, config=config, allow_research=True)
+    factor = result.factors["u_shape"]
+    targets = factor.training_diagnostics["layer_decay"]["proposed_half_lives"]
+    assert targets
+    targeted = [r for r in factor.candidates if r.get("proposal_source") == "TRAIN_layer_decay"]
+    assert targeted
+    assert all(r["parameters"]["halflife"] in targets for r in targeted)
+    assert all(r["status"] in ("train_evaluated", "ineligible") for r in targeted)

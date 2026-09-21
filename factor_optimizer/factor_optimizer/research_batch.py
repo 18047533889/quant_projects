@@ -354,9 +354,27 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                 if (shape, params) not in factor_specs:
                     factor_specs.append((shape, params))
         proposals = [(family, params, None) for family, params in factor_specs]
+        proposal_sources = {}
         if not config.families or "CAUSAL_SMOOTHING" in config.families:
             proposals += [(p.family, dict(p.parameters), p) for p in compile_admissible_smoothing_grid(
                 natural_time_scale=config.natural_time_scale, training_context_ref=train_ref)]
+            from factor_optimizer.adapters.preprocessing import compile_smoothing_repair
+            present = {p.identity for _, _, p in proposals if p is not None}
+            omissions = []
+            for half_life in diagnosis["layer_decay"]["proposed_half_lives"]:
+                try:
+                    p = compile_smoothing_repair("CAUSAL_SMOOTHING",
+                        {"method": "EWMA", "natural_time_scale_relative":
+                         half_life/config.natural_time_scale},
+                        natural_time_scale=config.natural_time_scale, training_context_ref=train_ref)
+                except ValueError as exc:
+                    omissions.append({"half_life": half_life, "reason": str(exc)})
+                    continue
+                proposal_sources[p.identity] = "TRAIN_layer_decay"
+                if p.identity not in present:
+                    proposals.append((p.family, dict(p.parameters), p))
+                    present.add(p.identity)
+            diagnosis["layer_decay"]["inadmissible_smoothing_scales"] = omissions
         compose = config.compose_smoothing_sign and (
             not config.families or "SIGN_ORIENTATION" in config.families)
         # Adjacent signs reuse one materialization, without caching the grid.
@@ -404,6 +422,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                 last_base_identity, last_base_values = None, None
                 for family, params, precompiled, orientation in proposals:
                     record = {"family": family, "parameters": dict(params), "orientation": orientation}
+                    if precompiled is not None and precompiled.identity in proposal_sources:
+                        record["proposal_source"] = proposal_sources[precompiled.identity]
                     try:
                         plan = precompiled or compile_value_repair(family, params,
                             natural_time_scale=config.natural_time_scale, training_context_ref=train_ref)

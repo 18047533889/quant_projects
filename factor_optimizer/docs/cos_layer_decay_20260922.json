@@ -1,0 +1,724 @@
+{
+  "inputs": {
+    "sources": [
+      {
+        "factor": "alphasage_20260909062020_09e3f39d",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/alphasage_20260909062020_09e3f39d.parquet",
+        "etag": "827388f64f3269ab2ac4f2b3a0a3c6c2",
+        "sha256": "2c65a6650c4ff082b820ada904649520352491ca9630cba0b95dc12cc9e127f3",
+        "downloaded_bytes": 4127982
+      },
+      {
+        "factor": "alphasage_20260909062020_1a8fff63",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/alphasage_20260909062020_1a8fff63.parquet",
+        "etag": "ac00407ca424f298eedfbc889c6df122",
+        "sha256": "63762c41936428086d51b9ffca62c9a369914ada02619790d2019ed24e83f35c",
+        "downloaded_bytes": 3033074
+      },
+      {
+        "factor": "alphasage_20260909062020_20fcde8b",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/alphasage_20260909062020_20fcde8b.parquet",
+        "etag": "0b26ee3263013173cdba6ff166826931",
+        "sha256": "6fab8d05223383de58c48936187280452dfe242540673ddef50f9aba7d07de89",
+        "downloaded_bytes": 3311464
+      }
+    ],
+    "days": 500,
+    "assets": 256,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "selection": "first bounded object keys; assets selected on TRAIN coverage only",
+    "limitations": "research replay; no upstream PIT or investability certification; recipe lineage not loaded"
+  },
+  "test_evaluated": false,
+  "load_seconds": 6.5981926179993025,
+  "optimization_seconds": 120.48019517499961,
+  "factors": {
+    "alphasage_20260909062020_09e3f39d": {
+      "status": "raw_retained",
+      "selected_family": "NO_OP_RAW",
+      "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+      "train_gain": 0.6290929994425849,
+      "validation_lower_bound": null,
+      "diagnostics": {
+        "layer_decay": {
+          "partition": "TRAIN",
+          "status": "available",
+          "lags": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            15,
+            20
+          ],
+          "layers": [
+            {
+              "layer": 1,
+              "mean_excess_returns": [
+                0.00020836530843680422,
+                0.00029169057414955374,
+                0.00040019561614230124,
+                0.0003277456914738906,
+                0.0002147348031403358,
+                0.00019918455121331586,
+                0.00018758649849538587,
+                0.00021047955350327245,
+                0.000246279637336729,
+                0.0002476278811822846,
+                0.0002502101701275674,
+                0.00030655131853371634,
+                0.0002554009936292155
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 2,
+              "mean_excess_returns": [
+                0.00020318758096791155,
+                0.00016370649166970645,
+                0.00006680028590422232,
+                0.000026999983798595913,
+                0.00010843092917451625,
+                0.000153337774984708,
+                0.0001487874820892862,
+                0.00009855976351247174,
+                0.000003861341960919327,
+                -0.00006242331289186569,
+                -0.00008921637622511555,
+                -0.00021547664904845865,
+                -0.00033519318997561387
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 3,
+              "mean_excess_returns": [
+                0.00007768897713007613,
+                0.00000952489766236026,
+                0.0000043665608756636904,
+                0.00012752619000264118,
+                0.00013521549576173768,
+                0.00012306346430365515,
+                0.0002083254460205333,
+                0.0002472942899492628,
+                0.0003190061938312937,
+                0.0004209802159815114,
+                0.0005023239276478824,
+                0.0005408721321771483,
+                0.00061925169655053
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 4,
+              "mean_excess_returns": [
+                0.00047565334144924896,
+                0.00048674126949381144,
+                0.0004697821276013373,
+                0.00046445131619933945,
+                0.0005051937513504433,
+                0.0004987954554021767,
+                0.00047365208256045145,
+                0.0004597165408837339,
+                0.00045641179590750645,
+                0.00047065302316539866,
+                0.0004162336366459388,
+                0.00033770737240878466,
+                0.00031648632698018256
+              ],
+              "stable_initial_direction": true,
+              "half_life_bars": null,
+              "right_censored": true
+            },
+            {
+              "layer": 5,
+              "mean_excess_returns": [
+                0.00032454573584773786,
+                0.0002999979537754719,
+                0.00027947753249981083,
+                0.00023689332307563516,
+                0.0002293801221902233,
+                0.00021267340143910486,
+                0.00016239789255537504,
+                0.0001218989096432521,
+                0.00009992996342358024,
+                0.000036615492437748904,
+                0.0000616193904608621,
+                0.00027083346167970553,
+                0.00032354955952546054
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 6,
+              "mean_excess_returns": [
+                -0.0004533578052664028,
+                -0.00033955654185695446,
+                -0.00022319455994334212,
+                -0.0002531275271746954,
+                -0.00036992607912621336,
+                -0.00042260016976108976,
+                -0.0003922849123904277,
+                -0.0003152400945216601,
+                -0.00032792230043361106,
+                -0.0002776292670855958,
+                -0.0003597816593432575,
+                -0.00045155115397868095,
+                -0.0002401584777424015
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 7,
+              "mean_excess_returns": [
+                -0.00037699551567536404,
+                -0.0005460521591862297,
+                -0.0006487388151060403,
+                -0.0006561597506138506,
+                -0.0005615423048854913,
+                -0.00044559133616376854,
+                -0.00038669236394986406,
+                -0.0004728111870283551,
+                -0.000497318459970906,
+                -0.0006102894623773817,
+                -0.0005883661737876118,
+                -0.0004419304626951595,
+                -0.0003363138877516673
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 8,
+              "mean_excess_returns": [
+                0.0001106644477785742,
+                0.0001358943005463194,
+                0.00012712651903009904,
+                0.00021550859790864132,
+                0.0002988198801338366,
+                0.00024272788900015966,
+                0.00017060981560485834,
+                0.0002389120700617507,
+                0.0002452117542438057,
+                0.000276719273048787,
+                0.000305403484583807,
+                0.0002987796307409376,
+                0.0001333365120476755
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 9,
+              "mean_excess_returns": [
+                0.00009522596563206442,
+                0.00016025226032460424,
+                0.00015225486315547502,
+                0.00013776702150406173,
+                0.00003659564939699294,
+                -0.000021195739399836086,
+                -0.00003594333954826878,
+                0.000004350241062222344,
+                0.00001004200975586992,
+                0.00002500471311632846,
+                0.00006235577567867205,
+                0.00010322166828959048,
+                0.000055514352548030595
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 10,
+              "mean_excess_returns": [
+                0.00010103094888277026,
+                0.00012607694156481549,
+                0.00018646631480717063,
+                0.00010434936813062474,
+                0.00016032750083247262,
+                0.00025524145606151024,
+                0.00022993716191506793,
+                0.00023031378543896116,
+                0.00030759460122380046,
+                0.0002982203209547432,
+                0.0002894792523371362,
+                0.00026778653961706604,
+                0.00039690387789850746
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 11,
+              "mean_excess_returns": [
+                0.00009962937096254563,
+                0.00007754083906165976,
+                0.000030475101423555093,
+                0.000009977245124132344,
+                0.000004579736178141662,
+                -0.000014428609620715194,
+                -0.000004319194309821136,
+                -0.00007858149389666534,
+                -0.00007624619643255296,
+                -0.0000043273174695765734,
+                -0.0000572802272176466,
+                -0.0002215067873532474,
+                -0.00026444443293764723
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 12,
+              "mean_excess_returns": [
+                0.0001416959790166892,
+                0.00016283872077061477,
+                0.000177963745025703,
+                0.0003340403070434139,
+                0.0003623724291526741,
+                0.00036702638337944793,
+                0.00041811063916931114,
+                0.0004337884166113721,
+                0.00036090305803392465,
+                0.00040241402029684225,
+                0.00044497194936783695,
+                0.0005818486037450436,
+                0.00039784042516898563
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 13,
+              "mean_excess_returns": [
+                0.0005975240618899234,
+                0.0005761625212088943,
+                0.0005336696926041034,
+                0.0004676964697353349,
+                0.0004919713531731636,
+                0.0006335562607138679,
+                0.0005819750313680373,
+                0.0005593839908139066,
+                0.0005621307126632547,
+                0.0005730615402977341,
+                0.0005133267945780085,
+                0.00017085171030804672,
+                0.000210063546291053
+              ],
+              "stable_initial_direction": true,
+              "half_life_bars": 15,
+              "right_censored": false
+            },
+            {
+              "layer": 14,
+              "mean_excess_returns": [
+                0.00009135157789740201,
+                0.00005258388233518411,
+                0.000035755399869812344,
+                0.00002228112100137292,
+                -0.00006247031428265425,
+                -0.0002348524047386459,
+                -0.00019634244210075825,
+                -0.00014633697690360047,
+                -0.00008318487372909923,
+                -0.0001080141879339667,
+                -0.000034384412026652856,
+                0.00008741605101305644,
+                0.000058807590316143015
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 15,
+              "mean_excess_returns": [
+                -0.00012972021444677322,
+                -0.00012844130854828344,
+                -0.00003596547372723654,
+                -0.00007851987413489566,
+                -0.000005005870090071134,
+                0.000018898882301414706,
+                -5.690589621117126e-7,
+                -0.00003173180800062447,
+                0.000018626456941226492,
+                0.000010236413283483113,
+                -0.00006225508443921747,
+                -0.00022645756663584627,
+                -0.00029672472988764924
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 16,
+              "mean_excess_returns": [
+                0.000027991374140449616,
+                0.000041453993883449984,
+                0.000011476490071689557,
+                0.000054963041927147486,
+                -0.0000010598899217840228,
+                -0.00008402177150980548,
+                -0.00006713456358884435,
+                -0.00010253681755775309,
+                -0.00015414516768816835,
+                -0.00022875410111780959,
+                -0.00020195219835255647,
+                0.00012348739204153382,
+                0.00023876155387518946
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 17,
+              "mean_excess_returns": [
+                -0.0002705994789110409,
+                -0.00028629003111967213,
+                -0.0002530198489971698,
+                -0.0002227470006483683,
+                -0.00023193720161262564,
+                -0.0001517940102393272,
+                -0.00013265319202063428,
+                -0.00014382815745249387,
+                -0.00018289312462887422,
+                -0.0001536045677658162,
+                -0.00013058668659941724,
+                -0.00020401599214061794,
+                -0.00032068495341191133
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 18,
+              "mean_excess_returns": [
+                -0.0006002707025666714,
+                -0.0006180645625905314,
+                -0.0006550320255933671,
+                -0.0006287773163973401,
+                -0.0006391429592997023,
+                -0.0006072494667084745,
+                -0.0006512001131178018,
+                -0.0006025939726553018,
+                -0.0006213546779299816,
+                -0.0006410537057646406,
+                -0.0006506003190301049,
+                -0.0005863611183193326,
+                -0.00035564669893000376
+              ],
+              "stable_initial_direction": true,
+              "half_life_bars": null,
+              "right_censored": true
+            },
+            {
+              "layer": 19,
+              "mean_excess_returns": [
+                -0.00025589326791684565,
+                -0.00017811230299829395,
+                -0.0001758918192019121,
+                -0.00021016216134381248,
+                -0.0001766196145713577,
+                -0.00019274139944922835,
+                -0.00018680133169458296,
+                -0.00017429874606663268,
+                -0.00017126272411232898,
+                -0.00016573914753458354,
+                -0.0001854645861438592,
+                -0.000244004795691759,
+                -0.00036992339884690074
+              ],
+              "stable_initial_direction": false,
+              "half_life_bars": null,
+              "right_censored": false
+            },
+            {
+              "layer": 20,
+              "mean_excess_returns": [
+                -0.00046771768524910066,
+                -0.00048794774014647885,
+                -0.00048396770644187215,
+                -0.00048070604661186597,
+                -0.0004999174166946368,
+                -0.0005300306112084706,
+                -0.0005274415380951943,
+                -0.0005367383073971193,
+                -0.0005156700003963875,
+                -0.000509697823823625,
+                -0.000486036658262272,
+                -0.0004980513546915293,
+                -0.00048682666534717866
+              ],
+              "stable_initial_direction": true,
+              "half_life_bars": null,
+              "right_censored": true
+            }
+          ],
+          "proposed_half_lives": [],
+          "full_notional_turnover": 0.007963346787389547,
+          "high_turnover": false,
+          "common_days": 267,
+          "coverage": 1,
+          "reason": null,
+          "scale_rule": "median tail first-half-crossing; censored lower bound",
+          "inadmissible_smoothing_scales": []
+        },
+        "partition": "TRAIN",
+        "train_days": 267,
+        "periods_per_year": 252,
+        "rank_ic": 0.002479410295355235,
+        "rank_icir": 0.01668404902839326,
+        "rank_ic_valid_days": 267,
+        "fold_rank_ic": [
+          -0.006361802285570107,
+          -0.0061237229288168896,
+          0.019923756100452696
+        ],
+        "complete_quantile_days": 267,
+        "quantile_coverage": 1,
+        "minimum_bin_count": 12,
+        "quantile_mean_returns": [
+          0.002076899499804542,
+          0.0020717217723356537,
+          0.0019462231684978146,
+          0.00234418753281699,
+          0.0021930799272154786,
+          0.0014151763861013364,
+          0.0014915386756923737,
+          0.001979198639146312,
+          0.0019637601569998026,
+          0.0019695651402505086,
+          0.0019681635623302845,
+          0.0020102301703844292,
+          0.002466058253257663,
+          0.0019598857692651422,
+          0.0017388139769209646,
+          0.00189652556550819,
+          0.0015979347124566979,
+          0.0012682634888010677,
+          0.001612640923450893,
+          0.0014008165061186381
+        ],
+        "u_contrast": -0.00023000634832880682,
+        "proposed_shape_family": null,
+        "proposed_center": null,
+        "long_short_sharpe": -0.8306837584485502,
+        "long_short_max_drawdown": 0.13739953387157922,
+        "portfolio_semantics": "gross-one top/bottom 5% diagnostic spread; no costs or tradability",
+        "portfolio_unavailable_reason": null
+      },
+      "baseline": {
+        "operations": [],
+        "omissions": [
+          "lineage_unknown"
+        ],
+        "accepted": false,
+        "reason": "no_eligible_baseline_operations"
+      },
+      "joint": {
+        "objective": "joint",
+        "cost_rate": 0.001,
+        "policy": "joint.v1",
+        "validation_raw": {
+          "rank_ic": 0.01445277196760365,
+          "rank_icir": 0.11100205530938402,
+          "sharpe": 1.5549703830773027,
+          "max_drawdown": 0.02229402738975362,
+          "turnover": 0.011109998999099186,
+          "worst_block_sharpe": 0.31108033151610587
+        },
+        "validation_candidate": {
+          "rank_ic": 0.002926699650062492,
+          "rank_icir": 0.045048086902111,
+          "sharpe": -0.9669658927020562,
+          "max_drawdown": 0.02659507591650037,
+          "turnover": 0.012532848190822706,
+          "worst_block_sharpe": -3.3509035796459323
+        },
+        "comparison_status": "DEGRADATION_FLOOR_FAILED"
+      },
+      "candidate_status_counts": {
+        "ineligible": 11,
+        "train_evaluated": 84
+      },
+      "targeted_candidates": []
+    },
+    "alphasage_20260909062020_1a8fff63": {
+      "status": "raw_retained",
+      "selected_family": "NO_OP_RAW",
+      "reason": "no robust TRAIN improvement",
+      "train_gain": null,
+      "validation_lower_bound": null,
+      "diagnostics": {
+        "layer_decay": {
+          "partition": "TRAIN",
+          "status": "unavailable",
+          "lags": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            15,
+            20
+          ],
+          "layers": [],
+          "proposed_half_lives": [],
+          "full_notional_turnover": null,
+          "high_turnover": false,
+          "common_days": 0,
+          "coverage": 0,
+          "reason": "insufficient complete twenty-layer history",
+          "inadmissible_smoothing_scales": []
+        },
+        "partition": "TRAIN",
+        "train_days": 267,
+        "periods_per_year": 252,
+        "rank_ic": -0.0011838079520328246,
+        "rank_icir": -0.015728042510993693,
+        "rank_ic_valid_days": 267,
+        "fold_rank_ic": [
+          0.003908476040548427,
+          -0.005112914155045797,
+          -0.0023469857416010963
+        ],
+        "complete_quantile_days": 0,
+        "quantile_coverage": 0,
+        "minimum_bin_count": 0,
+        "quantile_mean_returns": null,
+        "u_contrast": null,
+        "proposed_shape_family": null,
+        "proposed_center": null,
+        "long_short_sharpe": null,
+        "long_short_max_drawdown": null,
+        "portfolio_semantics": "gross-one top/bottom 5% diagnostic spread; no costs or tradability",
+        "portfolio_unavailable_reason": "insufficient complete 20-bin days"
+      },
+      "baseline": {
+        "operations": [],
+        "omissions": [
+          "lineage_unknown"
+        ],
+        "accepted": false,
+        "reason": "no_eligible_baseline_operations"
+      },
+      "joint": {
+        "objective": "joint",
+        "cost_rate": 0.001,
+        "policy": "joint.v1"
+      },
+      "candidate_status_counts": {
+        "ineligible": 95
+      },
+      "targeted_candidates": []
+    },
+    "alphasage_20260909062020_20fcde8b": {
+      "status": "invalid_raw",
+      "selected_family": "NO_OP_RAW",
+      "reason": "insufficient valid RAW training IC",
+      "train_gain": null,
+      "validation_lower_bound": null,
+      "diagnostics": {
+        "layer_decay": {
+          "partition": "TRAIN",
+          "status": "unavailable",
+          "lags": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            9,
+            10,
+            15,
+            20
+          ],
+          "layers": [],
+          "proposed_half_lives": [],
+          "full_notional_turnover": null,
+          "high_turnover": false,
+          "common_days": 0,
+          "coverage": 0,
+          "reason": "insufficient complete twenty-layer history",
+          "inadmissible_smoothing_scales": []
+        },
+        "partition": "TRAIN",
+        "train_days": 267,
+        "periods_per_year": 252,
+        "rank_ic": null,
+        "rank_icir": null,
+        "rank_ic_valid_days": 2,
+        "fold_rank_ic": [
+          null,
+          null,
+          null
+        ],
+        "complete_quantile_days": 0,
+        "quantile_coverage": 0,
+        "minimum_bin_count": 0,
+        "quantile_mean_returns": null,
+        "u_contrast": null,
+        "proposed_shape_family": null,
+        "proposed_center": null,
+        "long_short_sharpe": null,
+        "long_short_max_drawdown": null,
+        "portfolio_semantics": "gross-one top/bottom 5% diagnostic spread; no costs or tradability",
+        "portfolio_unavailable_reason": "insufficient complete 20-bin days"
+      },
+      "baseline": {
+        "operations": [],
+        "omissions": [
+          "lineage_unknown"
+        ],
+        "accepted": false,
+        "reason": "no_eligible_baseline_operations"
+      },
+      "joint": {
+        "objective": "joint",
+        "cost_rate": 0.001,
+        "policy": "joint.v1"
+      },
+      "candidate_status_counts": {},
+      "targeted_candidates": []
+    }
+  }
+}

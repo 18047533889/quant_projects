@@ -156,6 +156,7 @@ complexity/    复杂度 profile / 预算
 
 - [基础预处理、去重和退化保护](docs/BASELINE_PIPELINE.md)
 - [成本后多指标选优公式](docs/JOINT_SELECTION.md)
+- [二十层衰减诊断与定向平滑](docs/LAYER_DECAY.md)
 - [冻结后的 TEST / 全样本分离报告](docs/FINAL_REPORT.md)
 - [逐方法带数据验证与当前限制](docs/COSTED_METHOD_AUDIT_20260922.md)
 
