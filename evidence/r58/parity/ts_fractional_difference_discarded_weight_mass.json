@@ -1,0 +1,22 @@
+{
+ "canonical": "ts_fractional_difference_discarded_weight_mass",
+ "review_id": "r58-surface-promotion:ts_fractional_difference_discarded_weight_mass",
+ "semantic_hash": "4d2b1512df8ed58b",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "fd": 0.4,
+  "cutoff": 20
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1200,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

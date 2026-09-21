@@ -1,0 +1,23 @@
+{
+ "canonical": "ts_pickands_tail_index",
+ "review_id": "r58-surface-promotion:ts_pickands_tail_index",
+ "semantic_hash": "2e58bd61a958fd63",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "window": 20,
+  "k": 3,
+  "side": "upper"
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 330,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

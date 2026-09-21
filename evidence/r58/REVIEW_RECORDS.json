@@ -1,0 +1,2247 @@
+[
+ {
+  "canonical": "HMA",
+  "review_id": "r58-surface-promotion:HMA",
+  "semantic_hash": "5c1cdc0af36db3eb",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "rounding": "floor"
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 111,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "RSX",
+  "review_id": "r58-surface-promotion:RSX",
+  "semantic_hash": "4058b559a290fb2f",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "length": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "acos_bounded",
+  "review_id": "r58-surface-promotion:acos_bounded",
+  "semantic_hash": "b0af21dd1fcd1c98",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 280,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "aq1_cash_flow_volatility",
+  "review_id": "r58-surface-promotion:aq1_cash_flow_volatility",
+  "semantic_hash": "fd61705ff052419d",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 8,
+   "min_periods": 4
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1165,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "asin_bounded",
+  "review_id": "r58-surface-promotion:asin_bounded",
+  "semantic_hash": "b0af21dd1fcd1c98",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 280,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "category_age",
+  "review_id": "r58-surface-promotion:category_age",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "category_age_lower_bound",
+  "review_id": "r58-surface-promotion:category_age_lower_bound",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "category_frequency",
+  "review_id": "r58-surface-promotion:category_frequency",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "category_transition_rate",
+  "review_id": "r58-surface-promotion:category_transition_rate",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "category_transition_surprise",
+  "review_id": "r58-surface-promotion:category_transition_surprise",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "cos_phase",
+  "review_id": "r58-surface-promotion:cos_phase",
+  "semantic_hash": "b0af21dd1fcd1c98",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1098,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "cs1_monthly_lag_ratio",
+  "review_id": "r58-surface-promotion:cs1_monthly_lag_ratio",
+  "semantic_hash": "fa2526c7e2fb6163",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 835,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "cs1_seasonal_relative_rank",
+  "review_id": "r58-surface-promotion:cs1_seasonal_relative_rank",
+  "semantic_hash": "a7078b3c49d491cc",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1061,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "cs1_seasonal_residual_smoothness",
+  "review_id": "r58-surface-promotion:cs1_seasonal_residual_smoothness",
+  "semantic_hash": "f661ad20a58733ef",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1066,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "cs1_week_cycle_phase",
+  "review_id": "r58-surface-promotion:cs1_week_cycle_phase",
+  "semantic_hash": "6f32e64cf17f9b4d",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1128,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "cs1_weekday_anomaly",
+  "review_id": "r58-surface-promotion:cs1_weekday_anomaly",
+  "semantic_hash": "6615deb66b5cb849",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1076,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "cs1_weekday_effect_strength",
+  "review_id": "r58-surface-promotion:cs1_weekday_effect_strength",
+  "semantic_hash": "f661ad20a58733ef",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1108,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "cs1_weekday_lag_ratio",
+  "review_id": "r58-surface-promotion:cs1_weekday_lag_ratio",
+  "semantic_hash": "46af1141dcfb1f3c",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 961,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "cs1_weekday_lag_zscore",
+  "review_id": "r58-surface-promotion:cs1_weekday_lag_zscore",
+  "semantic_hash": "a7078b3c49d491cc",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1061,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "cs1_weekly_harmonic_power",
+  "review_id": "r58-surface-promotion:cs1_weekly_harmonic_power",
+  "semantic_hash": "6f32e64cf17f9b4d",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1083,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "cs_isolation_forest_score",
+  "review_id": "r58-surface-promotion:cs_isolation_forest_score",
+  "semantic_hash": "ba91831e10a7c9fb",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "n_trees": 100,
+   "contamination": 0.1,
+   "random_seed": 42
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 490,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "cs_physical_panel_coverage",
+  "review_id": "r58-surface-promotion:cs_physical_panel_coverage",
+  "semantic_hash": "fdde8815cb1b40db",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1200,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ep1_earnings_autocorr",
+  "review_id": "r58-surface-promotion:ep1_earnings_autocorr",
+  "semantic_hash": "6506b168195a32e4",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 8,
+   "min_periods": 4
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1165,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ep1_earnings_consistency",
+  "review_id": "r58-surface-promotion:ep1_earnings_consistency",
+  "semantic_hash": "d124eccde435e831",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 8,
+   "min_periods": 3
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1179,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ep1_earnings_surprise_decay",
+  "review_id": "r58-surface-promotion:ep1_earnings_surprise_decay",
+  "semantic_hash": "5c941acd1668cf13",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "half_life": 6.0,
+   "min_periods": 4
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1158,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ep1_roa_stability",
+  "review_id": "r58-surface-promotion:ep1_roa_stability",
+  "semantic_hash": "718ffa2414a042af",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 8,
+   "min_periods": 4
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1165,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "erd_burst_duration",
+  "review_id": "r58-surface-promotion:erd_burst_duration",
+  "semantic_hash": "ab8b8a388802a194",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1098,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "erd_cross_events_spacing",
+  "review_id": "r58-surface-promotion:erd_cross_events_spacing",
+  "semantic_hash": "b40c41b3c478f819",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 890,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "erd_event_rate_decay_slope",
+  "review_id": "r58-surface-promotion:erd_event_rate_decay_slope",
+  "semantic_hash": "050c481109f036a2",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 10,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "erd_event_response_amplitude",
+  "review_id": "r58-surface-promotion:erd_event_response_amplitude",
+  "semantic_hash": "fe460a8ae037f96d",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1190,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "erd_half_life_decay_count",
+  "review_id": "r58-surface-promotion:erd_half_life_decay_count",
+  "semantic_hash": "1cd75d66070c251c",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1190,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "erd_marked_event_decay",
+  "review_id": "r58-surface-promotion:erd_marked_event_decay",
+  "semantic_hash": "fe460a8ae037f96d",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1190,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "erd_post_event_hazard",
+  "review_id": "r58-surface-promotion:erd_post_event_hazard",
+  "semantic_hash": "4e314f052472dd01",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 890,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "erd_recency_decay",
+  "review_id": "r58-surface-promotion:erd_recency_decay",
+  "semantic_hash": "d86091495f1d95ff",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1200,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "erd_sign_consistent_decay",
+  "review_id": "r58-surface-promotion:erd_sign_consistent_decay",
+  "semantic_hash": "b656e008473abfe3",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1190,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "es1_earnings_cv",
+  "review_id": "r58-surface-promotion:es1_earnings_cv",
+  "semantic_hash": "08fcedfc52347dc1",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 8,
+   "min_periods": 4
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1068,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "es1_earnings_mean_reversion_speed",
+  "review_id": "r58-surface-promotion:es1_earnings_mean_reversion_speed",
+  "semantic_hash": "6506b168195a32e4",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 8,
+   "min_periods": 4
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1068,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "es1_negative_earnings_streak",
+  "review_id": "r58-surface-promotion:es1_negative_earnings_streak",
+  "semantic_hash": "cffa98f8bfacffd6",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1098,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "event_response_effective_events",
+  "review_id": "r58-surface-promotion:event_response_effective_events",
+  "semantic_hash": "5e8cb135611ff65f",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "history_window": 20,
+   "horizon": 20,
+   "refractory": 3
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 907,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "event_response_overlap_ratio",
+  "review_id": "r58-surface-promotion:event_response_overlap_ratio",
+  "semantic_hash": "5e8cb135611ff65f",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "history_window": 20,
+   "horizon": 20,
+   "refractory": 3
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 907,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "financial_snapshot_lag",
+  "review_id": "r58-surface-promotion:financial_snapshot_lag",
+  "semantic_hash": "de1cfcc8b6ca623e",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "lag": 1
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1190,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "fundamental_staleness_days",
+  "review_id": "r58-surface-promotion:fundamental_staleness_days",
+  "semantic_hash": "fcc111064fa20944",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1098,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "hfl_variance_ratio",
+  "review_id": "r58-surface-promotion:hfl_variance_ratio",
+  "semantic_hash": "e21fae14ce33b4f4",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "k": 3,
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1113,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "lf1_herfindahl_volume",
+  "review_id": "r58-surface-promotion:lf1_herfindahl_volume",
+  "semantic_hash": "7fd30d280d8aa34f",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "min_breadth": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 556,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "lf1_liquidity_decay_base",
+  "review_id": "r58-surface-promotion:lf1_liquidity_decay_base",
+  "semantic_hash": "1f33e04fa3c7ea4a",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "decay_scale": 2.0,
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1200,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "lf1_market_share_turnover",
+  "review_id": "r58-surface-promotion:lf1_market_share_turnover",
+  "semantic_hash": "82c7d3df4ebea6a0",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "min_breadth": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 556,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "lf1_mean_variance_turnover",
+  "review_id": "r58-surface-promotion:lf1_mean_variance_turnover",
+  "semantic_hash": "7581ca3c529e4405",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1170,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "lf1_own_volume_share",
+  "review_id": "r58-surface-promotion:lf1_own_volume_share",
+  "semantic_hash": "6c8bc5a6bde6efd7",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1070,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ofi_dominant_direction",
+  "review_id": "r58-surface-promotion:ofi_dominant_direction",
+  "semantic_hash": "4b74e55959a85694",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 2,
+   "threshold": 0.5
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1190,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ofi_imbalance_agreement",
+  "review_id": "r58-surface-promotion:ofi_imbalance_agreement",
+  "semantic_hash": "c16283c3013f2e0a",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1190,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ofi_volume_flow_regime",
+  "review_id": "r58-surface-promotion:ofi_volume_flow_regime",
+  "semantic_hash": "4b74e55959a85694",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 2,
+   "threshold": 0.5
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1190,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ofi_volume_imbalance",
+  "review_id": "r58-surface-promotion:ofi_volume_imbalance",
+  "semantic_hash": "c16283c3013f2e0a",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1088,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ofi_zero_flow_balance",
+  "review_id": "r58-surface-promotion:ofi_zero_flow_balance",
+  "semantic_hash": "c16283c3013f2e0a",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1190,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "relation_distinct_count",
+  "review_id": "r58-surface-promotion:relation_distinct_count",
+  "semantic_hash": "3c8c95a9f2f52bf5",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1200,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "report_asof",
+  "review_id": "r58-surface-promotion:report_asof",
+  "semantic_hash": "a189f20b5925cc1d",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "max_lookback": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1200,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "sin_phase",
+  "review_id": "r58-surface-promotion:sin_phase",
+  "semantic_hash": "b0af21dd1fcd1c98",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1098,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "state_age",
+  "review_id": "r58-surface-promotion:state_age",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "state_episode_age",
+  "review_id": "r58-surface-promotion:state_episode_age",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "state_episode_age_lower_bound",
+  "review_id": "r58-surface-promotion:state_episode_age_lower_bound",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "state_episode_censored_flag",
+  "review_id": "r58-surface-promotion:state_episode_censored_flag",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "state_flip_age",
+  "review_id": "r58-surface-promotion:state_flip_age",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "state_flip_density",
+  "review_id": "r58-surface-promotion:state_flip_density",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "state_persistence",
+  "review_id": "r58-surface-promotion:state_persistence",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "state_transition_count",
+  "review_id": "r58-surface-promotion:state_transition_count",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "state_transition_rate",
+  "review_id": "r58-surface-promotion:state_transition_rate",
+  "semantic_hash": "4745bde223b4c028",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 152,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "sv_net_flow_direction",
+  "review_id": "r58-surface-promotion:sv_net_flow_direction",
+  "semantic_hash": "c16283c3013f2e0a",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1190,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "sv_own_flow_fraction",
+  "review_id": "r58-surface-promotion:sv_own_flow_fraction",
+  "semantic_hash": "c86fb125305702d2",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1070,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "sv_self_relative_change",
+  "review_id": "r58-surface-promotion:sv_self_relative_change",
+  "semantic_hash": "96fa21d39dcc02f9",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1078,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "tod_edge_activity",
+  "review_id": "r58-surface-promotion:tod_edge_activity",
+  "semantic_hash": "a84a9477104d27a6",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1190,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "tod_intraday_range_position",
+  "review_id": "r58-surface-promotion:tod_intraday_range_position",
+  "semantic_hash": "400c8c46524c44e8",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1088,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_abs_entropy_nats",
+  "review_id": "r58-surface-promotion:ts_abs_entropy_nats",
+  "semantic_hash": "249da95e182bc983",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 1
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1200,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_autocorrelation_time_initial_positive_sequence",
+  "review_id": "r58-surface-promotion:ts_autocorrelation_time_initial_positive_sequence",
+  "semantic_hash": "a814d4b252a7e2ed",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 120,
+   "max_lag": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 905,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_butterworth_lowpass_causal",
+  "review_id": "r58-surface-promotion:ts_butterworth_lowpass_causal",
+  "semantic_hash": "8ecfd1a86fc2456b",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "cutoff_period": 20,
+   "order": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1098,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_causal_local_linear_smoother",
+  "review_id": "r58-surface-promotion:ts_causal_local_linear_smoother",
+  "semantic_hash": "d470a99fc7a267aa",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 10
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1102,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_cumulative_deviation_score",
+  "review_id": "r58-surface-promotion:ts_cumulative_deviation_score",
+  "semantic_hash": "c808514c6830bceb",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 5
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 745,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_effective_turning_rate",
+  "review_id": "r58-surface-promotion:ts_effective_turning_rate",
+  "semantic_hash": "2dbcb854af4adcdf",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "epsilon": 0.0,
+   "min_periods": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 905,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_expectile",
+  "review_id": "r58-surface-promotion:ts_expectile",
+  "semantic_hash": "300b3a8edc60844f",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 60,
+   "tau": 0.1,
+   "n_min": 3
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 890,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_extremogram",
+  "review_id": "r58-surface-promotion:ts_extremogram",
+  "semantic_hash": "0cb0a011283fa35a",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 120,
+   "quantile": 0.1,
+   "lag": 1,
+   "side": "lower",
+   "fixed_threshold": false
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1155,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_fractional_difference_discarded_weight_mass",
+  "review_id": "r58-surface-promotion:ts_fractional_difference_discarded_weight_mass",
+  "semantic_hash": "4d2b1512df8ed58b",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "fd": 0.4,
+   "cutoff": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1200,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_hampel_filter_causal",
+  "review_id": "r58-surface-promotion:ts_hampel_filter_causal",
+  "semantic_hash": "ef8101c686bac49e",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "n_sigma": 3.0,
+   "replacement": "clip",
+   "scale_floor": 1e-10
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1098,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_hodges_lehmann_location",
+  "review_id": "r58-surface-promotion:ts_hodges_lehmann_location",
+  "semantic_hash": "e126d05c07d84e5a",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 999,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_lo_mackinlay_vr",
+  "review_id": "r58-surface-promotion:ts_lo_mackinlay_vr",
+  "semantic_hash": "445ea90d9d89ee16",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 60,
+   "min_periods": 10,
+   "q": 5
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 444,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_lo_mackinlay_z",
+  "review_id": "r58-surface-promotion:ts_lo_mackinlay_z",
+  "semantic_hash": "445ea90d9d89ee16",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 60,
+   "min_periods": 10,
+   "q": 5
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 444,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_mean_abs_deviation",
+  "review_id": "r58-surface-promotion:ts_mean_abs_deviation",
+  "semantic_hash": "a0e877dc2bf44e9c",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1200,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_mean_abs_deviation_strict",
+  "review_id": "r58-surface-promotion:ts_mean_abs_deviation_strict",
+  "semantic_hash": "2c22c62b204ff4b4",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 260,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_mean_reversion_ou_approx_half_life",
+  "review_id": "r58-surface-promotion:ts_mean_reversion_ou_approx_half_life",
+  "semantic_hash": "cf9832a6a81bc1b2",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 120,
+   "min_periods": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 972,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_mean_reversion_ou_approx_half_life_prior",
+  "review_id": "r58-surface-promotion:ts_mean_reversion_ou_approx_half_life_prior",
+  "semantic_hash": "dc1c3563af669cab",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 120,
+   "min_periods": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 962,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_median3_causal",
+  "review_id": "r58-surface-promotion:ts_median3_causal",
+  "semantic_hash": "446379e9e71b587e",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {},
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 925,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_median_abs_deviation",
+  "review_id": "r58-surface-promotion:ts_median_abs_deviation",
+  "semantic_hash": "a0e877dc2bf44e9c",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1200,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_pickands_tail_index",
+  "review_id": "r58-surface-promotion:ts_pickands_tail_index",
+  "semantic_hash": "2e58bd61a958fd63",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "k": 3,
+   "side": "upper"
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 330,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_quantilogram",
+  "review_id": "r58-surface-promotion:ts_quantilogram",
+  "semantic_hash": "0cb0a011283fa35a",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 120,
+   "quantile": 0.1,
+   "lag": 1,
+   "side": "lower",
+   "fixed_threshold": false
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1136,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_robust_ema",
+  "review_id": "r58-surface-promotion:ts_robust_ema",
+  "semantic_hash": "c76dc05cccf7d625",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "span": 20,
+   "clip_sigma": 3.0,
+   "warmup_window": 20,
+   "scale_floor": 1e-10
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1200,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_rolling_median_causal",
+  "review_id": "r58-surface-promotion:ts_rolling_median_causal",
+  "semantic_hash": "6785a3a06694476f",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 5,
+   "min_periods": 3
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1171,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_super_smoother",
+  "review_id": "r58-surface-promotion:ts_super_smoother",
+  "semantic_hash": "76f8ceebb7f994a3",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "period": 10
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1098,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "ts_variance_ratio_proxy",
+  "review_id": "r58-surface-promotion:ts_variance_ratio_proxy",
+  "semantic_hash": "eeee05913e6a9413",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 60,
+   "min_periods": 10,
+   "q": 5
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 402,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "val1_earnings_yield_ma_diff",
+  "review_id": "r58-surface-promotion:val1_earnings_yield_ma_diff",
+  "semantic_hash": "7f803404e7c6866d",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "baseline_window": 12,
+   "min_periods": 4
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1058,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "val1_earnings_yield_persistence",
+  "review_id": "r58-surface-promotion:val1_earnings_yield_persistence",
+  "semantic_hash": "b46e072e4585ee28",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 12,
+   "min_periods": 4
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1168,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "val1_earnings_yield_slope",
+  "review_id": "r58-surface-promotion:val1_earnings_yield_slope",
+  "semantic_hash": "9c83ad5d3c0908e8",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 12,
+   "min_periods": 5
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1058,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "val1_equity_yield_dispersion",
+  "review_id": "r58-surface-promotion:val1_equity_yield_dispersion",
+  "semantic_hash": "bac4b7939503a9db",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "min_breadth": 10
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 490,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "val1_fcf_yield_growth",
+  "review_id": "r58-surface-promotion:val1_fcf_yield_growth",
+  "semantic_hash": "538bf6ca933cdee0",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "min_periods": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 999,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "val1_valuation_percentile_own",
+  "review_id": "r58-surface-promotion:val1_valuation_percentile_own",
+  "semantic_hash": "97416deb074e880c",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "history_window": 60,
+   "min_periods": 10
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 998,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "val1_valuation_stat_spread",
+  "review_id": "r58-surface-promotion:val1_valuation_stat_spread",
+  "semantic_hash": "9f05bf798b97d291",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "min_breadth": 10
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 490,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "val1_valuation_z_own",
+  "review_id": "r58-surface-promotion:val1_valuation_z_own",
+  "semantic_hash": "97416deb074e880c",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "history_window": 60,
+   "min_periods": 10
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 998,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "val1_valuations_lag_component",
+  "review_id": "r58-surface-promotion:val1_valuations_lag_component",
+  "semantic_hash": "81714f959fb233d5",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "fast_window": 5,
+   "slow_window": 20,
+   "min_periods": 4
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 996,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "vax_liquidity_penalty_exposure",
+  "review_id": "r58-surface-promotion:vax_liquidity_penalty_exposure",
+  "semantic_hash": "bbc3323681175640",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1170,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ },
+ {
+  "canonical": "vv1_vol_of_vol",
+  "review_id": "r58-surface-promotion:vv1_vol_of_vol",
+  "semantic_hash": "114dc166ee9af05a",
+  "approved_authoring_tier": "daily",
+  "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+  "parity_params": {
+   "window": 20,
+   "min_periods": 2
+  },
+  "pandas_shape": [
+   120,
+   10
+  ],
+  "polars_shape": [
+   120,
+   10
+  ],
+  "finite_values": 1190,
+  "max_abs_diff": 0.0,
+  "result": "PASS"
+ }
+]

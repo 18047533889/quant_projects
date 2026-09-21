@@ -1,0 +1,19 @@
+{
+ "canonical": "erd_burst_duration",
+ "review_id": "r58-surface-promotion:erd_burst_duration",
+ "semantic_hash": "ab8b8a388802a194",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {},
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1098,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

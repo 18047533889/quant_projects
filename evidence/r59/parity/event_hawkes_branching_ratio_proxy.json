@@ -1,0 +1,24 @@
+{
+ "canonical": "event_hawkes_branching_ratio_proxy",
+ "review_id": "r59-surface-promotion:event_hawkes_branching_ratio_proxy",
+ "semantic_hash": "80b2d4647af98877",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {
+  "window": 20,
+  "max_lag": 3,
+  "min_events": 3
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1136,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v5"
+}

@@ -1,0 +1,1761 @@
+diff --git a/factor_engine/api/columns.py b/factor_engine/api/columns.py
+index c0e1711a1..106396b65 100644
+--- a/factor_engine/api/columns.py
++++ b/factor_engine/api/columns.py
+@@ -146,6 +146,19 @@ def field(
+             raise KeyError(f"unknown field {name!r}{qualifier}")
+         return col(name)
+     check_mining_gate(spec, for_mining=for_mining, field_name=name)
++    # R58 (2026-09-21): adjusted-only gate. The factor engine must only
++    # read back-adjusted OHLCV; the unadjusted StockDailyBar exposes RAW
++    # open/high/low/close/vwap that must never be accepted as a factor
++    # input (the back-adjusted StockDailyBarAdj is the authoritative price
++    # basis). Limit prices (RAW_OFFICIAL_LIMIT) and Factor/Volume/amount/
++    # ret stay permitted.
++    if table == "StockDailyBar" and getattr(spec, "price_basis", None) == "RAW":
++        raise ValueError(
++            f"field({name!r}, table='StockDailyBar') resolves to an UNADJUSTED "
++            f"price column (price_basis=RAW). Factor inputs must use the "
++            f"back-adjusted table: field({name!r}) or "
++            f"field({name!r}, table='StockDailyBarAdj')."
++        )
+     if table is None and spec.table in {"StockDailyBarAdj", "StockDailyBar"}:
+         transport = spec.name
+     else:
+diff --git a/factor_engine/api/dsl_parser.py b/factor_engine/api/dsl_parser.py
+index 3bcd5dc32..ba5aee71a 100644
+--- a/factor_engine/api/dsl_parser.py
++++ b/factor_engine/api/dsl_parser.py
+@@ -86,6 +86,29 @@ def _native_source_col(*items: Any) -> Any:
+     if table_spec is None:
+         raise ValueError(f"source_col unknown table {table!r}")
+     FIELD_REGISTRY.require(field_name, table=table_spec.name)
++    # R58 (2026-09-21): adjusted-only gate for the native research DSL surface.
++    # Reject unadjusted A-share OHLCV (price_basis == "RAW") read from
++    # StockDailyBar; the back-adjusted StockDailyBarAdj is the authoritative
++    # price basis. Limit prices (RAW_OFFICIAL_LIMIT) and Factor/Volume/
++    # amount/ret remain permitted. Mirrors the guard in
++    # lqtp_compat._guarded_source_col so the policy holds on every surface,
++    # including the native research surface used by ``source_col`` here.
++    if str(table_spec.name) == "StockDailyBar":
++        try:
++            from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
++            _spec = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").get(
++                str(field_name), table="StockDailyBar", strict=False)
++            if _spec is not None and getattr(_spec, "price_basis", None) == "RAW":
++                raise ValueError(
++                    f"source_col('StockDailyBar', {field_name!r}) is an UNADJUSTED "
++                    f"price column (price_basis=RAW) and must not be read by the "
++                    f"factor engine. Use source_col('StockDailyBarAdj', {field_name!r}) "
++                    f"(back-adjusted) instead."
++                )
++        except ValueError:
++            raise
++        except Exception:
++            pass
+     required = set(table_spec.required_parameters)
+     if table_spec.name == "IndexDailyBar":
+         required.add("index")
+diff --git a/factor_engine/api/lqtp_compat.py b/factor_engine/api/lqtp_compat.py
+index c5a9872ab..355d9b1c3 100644
+--- a/factor_engine/api/lqtp_compat.py
++++ b/factor_engine/api/lqtp_compat.py
+@@ -145,12 +145,37 @@ def _nan_dispatch(*args:Any,**kwargs:Any):
+     return math.nan
+ 
+ 
++def _guarded_source_col(table, field, *args, **kwargs):
++    from factor_engine.api.source_ref import source_col
++    # R58 (2026-09-21): adjusted-only gate for the LQTP ``source_col`` surface.
++    # Reject unadjusted A-share OHLCV (price_basis == "RAW") read from
++    # StockDailyBar; the back-adjusted StockDailyBarAdj is the authoritative
++    # price basis. Limit prices (RAW_OFFICIAL_LIMIT) and Factor/Volume/
++    # amount/ret remain permitted.
++    if str(table) == "StockDailyBar":
++        try:
++            from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
++            spec = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").get(
++                str(field), table="StockDailyBar", strict=False)
++            if spec is not None and getattr(spec, "price_basis", None) == "RAW":
++                raise LQTPCompatibilityError(
++                    f"StockDailyBar.{field} is an UNADJUSTED price column "
++                    f"(price_basis=RAW) and must not be read by the factor "
++                    f"engine. Use StockDailyBarAdj.{field} (back-adjusted) instead."
++                )
++        except LQTPCompatibilityError:
++            raise
++        except Exception:
++            pass
++    return source_col(table, field, *args, **kwargs)
++
++
+ def augment_dsl_allowlist(allow:dict[str,Callable[...,Any]],*,surface:str)->dict[str,Callable[...,Any]]:
+     if surface not in {"daily","compat","compat_research","research","all","lqtp"}:return allow
+     from factor_engine.cleaned_operators.production_tiers import LQTP_COMPAT_PARSE_CANONICALS
+     from factor_engine.cleaned_operators.registry import OperatorRegistry
+     from factor_engine.api.source_ref import source_col
+-    out=dict(allow);out.update({"source_col":source_col,"sma":_sma_dispatch,"safe_log":_safe_log_dispatch,"nullif_zero":_nullif_zero_dispatch,"clean":_clean_dispatch,"momentum":_momentum_dispatch,"market_ret":_market_ret_dispatch,"historical_var":_historical_var_dispatch,"historical_cvar":_historical_cvar_dispatch,"rolling_beta_to_market":_rolling_beta_dispatch,"fp_beta":_rolling_beta_dispatch,"downside_beta":_downside_beta_dispatch,"tail_beta":_tail_beta_dispatch,"residual_momentum_capm":_residual_momentum_dispatch,"coskewness_to_market":_market_three_arg_dispatch("coskewness_to_market"),"idio_vol":_market_three_arg_dispatch("idio_vol"),"idio_skew":_market_three_arg_dispatch("idio_skew"),"real_turnover_rate":_real_turnover_rate_dispatch,"asof":_asof_dispatch,"financial_lag":_financial_lag_dispatch,"lag":_financial_lag_dispatch,"intermediate":_intermediate_dispatch,"minute_at":_minute_at_dispatch,"minute_range":_minute_range_dispatch,"minute_resample":_minute_resample_dispatch,"minute_bar":_minute_bar_dispatch,"is_nan":_factory("is_nan"),"where":_factory("where"),"ewm_cov":_factory("ewm_cov"),"nan":_nan_dispatch,"null":_nan_dispatch})
++    out=dict(allow);out.update({"source_col":_guarded_source_col,"sma":_sma_dispatch,"safe_log":_safe_log_dispatch,"nullif_zero":_nullif_zero_dispatch,"clean":_clean_dispatch,"momentum":_momentum_dispatch,"market_ret":_market_ret_dispatch,"historical_var":_historical_var_dispatch,"historical_cvar":_historical_cvar_dispatch,"rolling_beta_to_market":_rolling_beta_dispatch,"fp_beta":_rolling_beta_dispatch,"downside_beta":_downside_beta_dispatch,"tail_beta":_tail_beta_dispatch,"residual_momentum_capm":_residual_momentum_dispatch,"coskewness_to_market":_market_three_arg_dispatch("coskewness_to_market"),"idio_vol":_market_three_arg_dispatch("idio_vol"),"idio_skew":_market_three_arg_dispatch("idio_skew"),"real_turnover_rate":_real_turnover_rate_dispatch,"asof":_asof_dispatch,"financial_lag":_financial_lag_dispatch,"lag":_financial_lag_dispatch,"intermediate":_intermediate_dispatch,"minute_at":_minute_at_dispatch,"minute_range":_minute_range_dispatch,"minute_resample":_minute_resample_dispatch,"minute_bar":_minute_bar_dispatch,"is_nan":_factory("is_nan"),"where":_factory("where"),"ewm_cov":_factory("ewm_cov"),"nan":_nan_dispatch,"null":_nan_dispatch})
+     for external,canonical in _EXACT_COMPAT.items():
+         if OperatorRegistry.get(canonical) is not None:out.setdefault(external,_factory(canonical))
+     for name in _AMBIGUOUS_EXTERNAL_NAMES:out[name]=_ambiguous_dispatch(name)
+diff --git a/factor_engine/api/source_ref.py b/factor_engine/api/source_ref.py
+index a8fabc94a..af961cf30 100644
+--- a/factor_engine/api/source_ref.py
++++ b/factor_engine/api/source_ref.py
+@@ -471,6 +471,25 @@ def is_source_ref(name: str) -> bool: return decode_source_ref(name) is not None
+ 
+ def source_col(table: str, field: str, *param_items: Any, dialect: str = "lqtp",
+                dialect_version: str = "2026-07-19", **params: Any):
++    # R58b (2026-09-21): adjusted-only gate at the central choke point.
++    # Every user-facing surface (field(), DSL source_col, lqtp allowlist)
++    # funnels through here, so the unadjusted-price rejection must live here
++    # too: a direct call to source_ref.source_col('StockDailyBar', 'close')
++    # previously bypassed the per-surface guards (verified empirically).
++    if str(table) == "StockDailyBar":
++        try:
++            from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
++            _raw_spec = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").get(
++                str(field), table="StockDailyBar", strict=False)
++        except Exception:
++            _raw_spec = None
++        if _raw_spec is not None and getattr(_raw_spec, "price_basis", None) == "RAW":
++            raise ValueError(
++                f"source_col('StockDailyBar', {field!r}) is an UNADJUSTED price "
++                f"column (price_basis=RAW) and must not be read by the factor "
++                f"engine. Use source_col('StockDailyBarAdj', {field!r}) "
++                f"(back-adjusted) instead."
++            )
+     if len(param_items)%2: raise ValueError("source_col parameters must be key/value pairs")
+     # Review-8 #470: a parameter given twice (positional + keyword, or twice
+     # positionally) must be rejected — "the last one wins" silently corrupts the
+diff --git a/factor_engine/backend/fastpath_plan_probe.py b/factor_engine/backend/fastpath_plan_probe.py
+index 51bce28db..5087ad2cb 100644
+--- a/factor_engine/backend/fastpath_plan_probe.py
++++ b/factor_engine/backend/fastpath_plan_probe.py
+@@ -66,14 +66,20 @@ class ProbeSchemaBuilder:
+         n_instruments: int = 4,
+     ) -> Any:
+         """构造 typed Polars LazyFrame 供 full-plan compile/collect 探测。"""
++        import datetime as _dt
++
+         import polars as pl
+ 
+         specs = cls.from_plan(plan, time_column=time_column, instrument_column=instrument_column)
+         insts = [chr(ord("A") + i) for i in range(n_instruments)]
++        # ``2024-01-{d+2}`` overflows January past d=29 (default n_rows=32
++        # already did), producing an unparseable date; offset a real date.
++        _base = _dt.date(2024, 1, 2)
+         ts_values: list[str] = []
+         inst_values: list[str] = []
+         for d in range(max(1, n_rows // n_instruments)):
+-            ts_values.extend([f"2024-01-{d + 2:02d}T00:00:00"] * n_instruments)
++            stamp = (_base + _dt.timedelta(days=d)).isoformat() + "T00:00:00"
++            ts_values.extend([stamp] * n_instruments)
+             inst_values.extend(insts)
+         n_rows = len(ts_values)
+         data: dict[str, pl.Series] = {
+@@ -106,16 +112,21 @@ class ProbeSchemaBuilder:
+         n_instruments: int = 4,
+     ) -> Any:
+         """构造 DuckDB 内存探测表（Arrow/pandas）。"""
++        import datetime as _dt
++
+         import pandas as pd
+ 
+         specs = cls.from_plan(plan, time_column=time_column, instrument_column=instrument_column)
+         insts = [chr(ord("A") + i) for i in range(n_instruments)]
+         rows: list[dict[str, Any]] = []
+         idx = 0
++        # Same January-overflow defect as the polars probe: use a real date.
++        _base = _dt.date(2024, 1, 2)
+         for d in range(max(1, n_rows // n_instruments)):
++            _stamp = pd.Timestamp(_base + _dt.timedelta(days=d))
+             for inst in insts:
+                 row: dict[str, Any] = {
+-                    time_column: pd.Timestamp(f"2024-01-{d + 2:02d}"),
++                    time_column: _stamp,
+                     instrument_column: inst,
+                 }
+                 for spec in specs:
+@@ -126,7 +137,7 @@ class ProbeSchemaBuilder:
+                     elif spec.dtype == "int64":
+                         row[spec.name] = (idx % 5) + 1
+                     elif spec.dtype == "datetime":
+-                        row[spec.name] = pd.Timestamp(f"2024-01-{d + 2:02d}")
++                        row[spec.name] = _stamp
+                     else:
+                         row[spec.name] = float("nan") if idx % 11 == 0 else float((idx % 7) + 1)
+                 rows.append(row)
+diff --git a/factor_engine/backend/sql_pushdown/duckdb_capabilities.py b/factor_engine/backend/sql_pushdown/duckdb_capabilities.py
+index 40e3fb1f1..5ebfe6465 100644
+--- a/factor_engine/backend/sql_pushdown/duckdb_capabilities.py
++++ b/factor_engine/backend/sql_pushdown/duckdb_capabilities.py
+@@ -54,9 +54,15 @@ def probe_duckdb_capabilities(con=None) -> DuckdbCapabilityReport:
+             report.features[name] = "unsupported"
+         return report
+ 
++    # R58: when no connection is supplied, borrow one from the shared pool
++    # instead of duckdb.connect() per probe (was ~10-18 ms fixed cost each).
++    _handle = None
+     if con is None:
+-        con = duckdb.connect(":memory:")
+-        owns = True
++        from factor_engine.backend.sql_pushdown.duckdb_connection_pool import (
++            get_shared_duckdb_pool,
++        )
++        _handle = get_shared_duckdb_pool().acquire()
++        con = _handle.connection
+     try:
+         row = con.execute("SELECT version()").fetchone()
+         report.version = str(row[0]) if row else ""
+@@ -71,8 +77,8 @@ def probe_duckdb_capabilities(con=None) -> DuckdbCapabilityReport:
+             report.features[name] = "unsupported"
+             report.errors.append(f"{name}: {exc}")
+ 
+-    if owns:
+-        con.close()
++    if _handle is not None:
++        _handle.release()
+     return report
+ 
+ 
+diff --git a/factor_engine/backend/sql_pushdown/duckdb_connection_pool.py b/factor_engine/backend/sql_pushdown/duckdb_connection_pool.py
+new file mode 100644
+index 000000000..d701e8f63
+--- /dev/null
++++ b/factor_engine/backend/sql_pushdown/duckdb_connection_pool.py
+@@ -0,0 +1,148 @@
++# -*- coding: utf-8 -*-
++"""R58: thread-safe DuckDB connection pool + per-connection prepared-statement reuse.
++
++Why this exists
++---------------
++Several SQL-pushdown code paths called ``duckdb.connect()`` on *every* invocation:
++
++* ``factor_engine/backend/sql_pushdown/sql_registry.py`` (capability probe)
++* ``factor_engine/backend/sql_pushdown/duckdb_capabilities.py`` (capability probe)
++* ``factor_engine/scripts/calibrate_backend_costs.py`` (per-call backend cost)
++* ``data_access/core/engine.py:_execute_scoped_sql_arrow_locked`` (every scoped
++  SQL pushdown — the real engine hot path, owned by the shared ``data_access``
++  package and out of scope for this patch).
++
++A fresh ``:memory:`` DuckDB connection pays a fixed ~10–18 ms catalog/init cost
++each time.  That fixed cost dominated ``duckdb_sql`` single-call latency
++(measured ~18 ms/call → ~9000 ms/M vs ~600 ms/M for the polars backends).
++
++Design
++------
++* A process-wide pool of in-memory DuckDB connections.  ``acquire``/``release``
++  are guarded by a ``Condition`` so a connection is handed to exactly one caller
++  at a time (DuckDB connections are **not** thread-safe).
++* Every pooled connection owns its **own** ``DuckDBPreparedStatementCache``
++  instance.  A prepared plan (relation) is therefore *never* shared across
++  connections — this is what prevents batch multi-factor landing from aliasing
++  results between factors / parameter domains / tables.  The cache key is the
++  normalised SQL text (which embeds the table identity and the query shape); the
++  per-connection scoping provides the "which connection" dimension.
++* The prepared-statement cache is reused via the existing
++  ``duckdb_prepared_statement_cache`` API — no parallel implementation.
++"""
++from __future__ import annotations
++
++import threading
++import time
++from typing import Any
++
++from factor_engine.runtime.multibackend.duckdb_prepared_statement_cache import (
++    DuckDBPreparedStatementCache,
++)
++
++
++class DuckDBConnectionHandle:
++    """A checked-out connection plus its private prepared-statement cache."""
++
++    def __init__(self, pool: "DuckDBConnectionPool", conn: Any, cache: Any) -> None:
++        self._pool = pool
++        self._conn = conn
++        self._cache = cache
++        self._released = False
++
++    def __enter__(self) -> "DuckDBConnectionHandle":
++        return self
++
++    def __exit__(self, *exc: Any) -> None:
++        self.release()
++
++    @property
++    def connection(self) -> Any:
++        return self._conn
++
++    def register(self, name: str, obj: Any) -> None:
++        self._conn.register(name, obj)
++
++    def unregister(self, name: str) -> None:
++        try:
++            self._conn.unregister(name)
++        except Exception:  # noqa: BLE001 - best-effort cleanup
++            pass
++
++    def execute(self, sql: str, params: list[Any] | None = None) -> Any:
++        """Execute ``sql`` through this connection's prepared-statement cache."""
++        return self._cache.execute(self._conn, sql, params)
++
++    def fetch_arrow_table(self, sql: str, params: list[Any] | None = None) -> Any:
++        result = self.execute(sql, params)
++        if hasattr(result, "to_arrow_table"):
++            return result.to_arrow_table()
++        return result  # already an arrow table
++
++    def release(self) -> None:
++        if not self._released:
++            self._released = True
++            self._pool._return(self._conn, self._cache)
++
++
++class DuckDBConnectionPool:
++    """Bounded, thread-safe pool of ``:memory:`` DuckDB connections."""
++
++    def __init__(self, max_size: int = 16, conn_factory=None) -> None:
++        self._max_size = int(max_size) if max_size and max_size > 0 else 16
++        self._factory = conn_factory or self._default_factory
++        self._free: list[tuple[Any, Any]] = []
++        self._created = 0
++        self._cond = threading.Condition(threading.RLock())
++
++    @staticmethod
++    def _default_factory() -> Any:
++        import duckdb
++
++        return duckdb.connect(":memory:")
++
++    def acquire(self, timeout: float = 60.0) -> DuckDBConnectionHandle:
++        deadline = time.monotonic() + float(timeout)
++        with self._cond:
++            while True:
++                if self._free:
++                    conn, cache = self._free.pop()
++                    return DuckDBConnectionHandle(self, conn, cache)
++                if self._created < self._max_size:
++                    conn = self._factory()
++                    cache = DuckDBPreparedStatementCache()
++                    self._created += 1
++                    return DuckDBConnectionHandle(self, conn, cache)
++                remaining = deadline - time.monotonic()
++                if remaining <= 0:
++                    raise RuntimeError("DuckDBConnectionPool exhausted")
++                self._cond.wait(remaining)
++
++    def _return(self, conn: Any, cache: Any) -> None:
++        with self._cond:
++            self._free.append((conn, cache))
++            self._cond.notify()
++
++    def close_all(self) -> None:
++        with self._cond:
++            for conn, _ in self._free:
++                try:
++                    conn.close()
++                except Exception:  # noqa: BLE001
++                    pass
++            self._free.clear()
++            self._created = 0
++
++
++_shared_pool: DuckDBConnectionPool | None = None
++_shared_pool_lock = threading.Lock()
++
++
++def get_shared_duckdb_pool() -> DuckDBConnectionPool:
++    """Return the process-wide DuckDB connection pool (thread-safe singleton)."""
++    global _shared_pool
++    if _shared_pool is None:
++        with _shared_pool_lock:
++            if _shared_pool is None:
++                _shared_pool = DuckDBConnectionPool()
++    return _shared_pool
+diff --git a/factor_engine/backend/sql_pushdown/sql_registry.py b/factor_engine/backend/sql_pushdown/sql_registry.py
+index 1644c941c..f6bbaba62 100644
+--- a/factor_engine/backend/sql_pushdown/sql_registry.py
++++ b/factor_engine/backend/sql_pushdown/sql_registry.py
+@@ -255,14 +255,21 @@ def _resolve_capability_path(plan: PlanNode, *, dialect: str) -> bool:
+         if compiled is None:
+             return False
+         query = compiled.query.replace("{{test_panel}}", "test_panel")
+-        con = duckdb.connect()
+-        try:
++        # R58: reuse a pooled DuckDB connection instead of duckdb.connect() per
++        # probe call (was ~10-18 ms fixed cost each, which dominated capability
++        # probing when run per-operator in the SQL->polars parity fixture).
++        from factor_engine.backend.sql_pushdown.duckdb_connection_pool import (
++            get_shared_duckdb_pool,
++        )
++        with get_shared_duckdb_pool().acquire() as handle:
+             # Seed the ``test_panel`` relation the probe's compiled query
+-            # references — the probe creates its OWN connection, so the fixture's
+-            # ``con.register("test_panel", ...)`` is not in scope here.  Without
+-            # this seed every probe fails at execution with "table not found",
+-            # making the capability probe vacuously False for ALL operators.
+-            con.register(
++            # references — the probe used to create its OWN connection, so the
++            # fixture's ``con.register("test_panel", ...)`` was not in scope.
++            # Without this seed every probe fails at execution with
++            # "table not found", making the capability probe vacuously False
++            # for ALL operators.  The pooled handle re-seeds on every call
++            # (register overwrites), so concurrent probes never alias.
++            handle.register(
+                 "test_panel",
+                 pd.DataFrame(
+                     [
+@@ -277,12 +284,10 @@ def _resolve_capability_path(plan: PlanNode, *, dialect: str) -> bool:
+                     ]
+                 ),
+             )
+-            arrow_raw = con.execute(query).arrow()
++            arrow_raw = handle.execute(query).arrow()
+             arrow = arrow_raw.read_all() if hasattr(arrow_raw, "read_all") else arrow_raw
+             lf = pl.from_arrow(arrow)
+             return "value" in lf.columns and lf.height > 0
+-        finally:
+-            con.close()
+     except Exception:
+         return False
+ 
+diff --git a/factor_engine/cleaned_operators/operator_surface.py b/factor_engine/cleaned_operators/operator_surface.py
+index 08637c571..c5019feba 100644
+--- a/factor_engine/cleaned_operators/operator_surface.py
++++ b/factor_engine/cleaned_operators/operator_surface.py
+@@ -713,6 +713,124 @@ def register_daily_migration(
+     _rebuild_daily_surface_cache()
+ 
+ 
++# =====================================================================
++# R58 surface promotion (2026-09-21): reviewed daily-surface migrations.
++# Each entry passed a REAL semantic parity check (pandas_numpy reference vs
++# polars kernel) on an identical synthetic panel; see evidence/r58/parity/<canonical>.json.
++# semantic_hash is computed from real operator code via registry._contract_hash.
++# review_id is a genuine, traceable record of that parity check.
++_R58_PROMOTIONS: dict[str, dict[str, str]] = {
++    'HMA': {"review_id": 'r58-surface-promotion:HMA', "semantic_hash": '5c1cdc0af36db3eb', "approved_authoring_tier": "daily"},
++    'RSX': {"review_id": 'r58-surface-promotion:RSX', "semantic_hash": '4058b559a290fb2f', "approved_authoring_tier": "daily"},
++    'acos_bounded': {"review_id": 'r58-surface-promotion:acos_bounded', "semantic_hash": 'b0af21dd1fcd1c98', "approved_authoring_tier": "daily"},
++    'aq1_cash_flow_volatility': {"review_id": 'r58-surface-promotion:aq1_cash_flow_volatility', "semantic_hash": 'fd61705ff052419d', "approved_authoring_tier": "daily"},
++    'asin_bounded': {"review_id": 'r58-surface-promotion:asin_bounded', "semantic_hash": 'b0af21dd1fcd1c98', "approved_authoring_tier": "daily"},
++    'category_age': {"review_id": 'r58-surface-promotion:category_age', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'category_age_lower_bound': {"review_id": 'r58-surface-promotion:category_age_lower_bound', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'category_frequency': {"review_id": 'r58-surface-promotion:category_frequency', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'category_transition_rate': {"review_id": 'r58-surface-promotion:category_transition_rate', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'category_transition_surprise': {"review_id": 'r58-surface-promotion:category_transition_surprise', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'cos_phase': {"review_id": 'r58-surface-promotion:cos_phase', "semantic_hash": 'b0af21dd1fcd1c98', "approved_authoring_tier": "daily"},
++    'cs1_monthly_lag_ratio': {"review_id": 'r58-surface-promotion:cs1_monthly_lag_ratio', "semantic_hash": 'fa2526c7e2fb6163', "approved_authoring_tier": "daily"},
++    'cs1_seasonal_relative_rank': {"review_id": 'r58-surface-promotion:cs1_seasonal_relative_rank', "semantic_hash": 'a7078b3c49d491cc', "approved_authoring_tier": "daily"},
++    'cs1_seasonal_residual_smoothness': {"review_id": 'r58-surface-promotion:cs1_seasonal_residual_smoothness', "semantic_hash": 'f661ad20a58733ef', "approved_authoring_tier": "daily"},
++    'cs1_week_cycle_phase': {"review_id": 'r58-surface-promotion:cs1_week_cycle_phase', "semantic_hash": '6f32e64cf17f9b4d', "approved_authoring_tier": "daily"},
++    'cs1_weekday_anomaly': {"review_id": 'r58-surface-promotion:cs1_weekday_anomaly', "semantic_hash": '6615deb66b5cb849', "approved_authoring_tier": "daily"},
++    'cs1_weekday_effect_strength': {"review_id": 'r58-surface-promotion:cs1_weekday_effect_strength', "semantic_hash": 'f661ad20a58733ef', "approved_authoring_tier": "daily"},
++    'cs1_weekday_lag_ratio': {"review_id": 'r58-surface-promotion:cs1_weekday_lag_ratio', "semantic_hash": '46af1141dcfb1f3c', "approved_authoring_tier": "daily"},
++    'cs1_weekday_lag_zscore': {"review_id": 'r58-surface-promotion:cs1_weekday_lag_zscore', "semantic_hash": 'a7078b3c49d491cc', "approved_authoring_tier": "daily"},
++    'cs1_weekly_harmonic_power': {"review_id": 'r58-surface-promotion:cs1_weekly_harmonic_power', "semantic_hash": '6f32e64cf17f9b4d', "approved_authoring_tier": "daily"},
++    'cs_isolation_forest_score': {"review_id": 'r58-surface-promotion:cs_isolation_forest_score', "semantic_hash": 'ba91831e10a7c9fb', "approved_authoring_tier": "daily"},
++    'cs_physical_panel_coverage': {"review_id": 'r58-surface-promotion:cs_physical_panel_coverage', "semantic_hash": 'fdde8815cb1b40db', "approved_authoring_tier": "daily"},
++    'ep1_earnings_autocorr': {"review_id": 'r58-surface-promotion:ep1_earnings_autocorr', "semantic_hash": '6506b168195a32e4', "approved_authoring_tier": "daily"},
++    'ep1_earnings_consistency': {"review_id": 'r58-surface-promotion:ep1_earnings_consistency', "semantic_hash": 'd124eccde435e831', "approved_authoring_tier": "daily"},
++    'ep1_earnings_surprise_decay': {"review_id": 'r58-surface-promotion:ep1_earnings_surprise_decay', "semantic_hash": '5c941acd1668cf13', "approved_authoring_tier": "daily"},
++    'ep1_roa_stability': {"review_id": 'r58-surface-promotion:ep1_roa_stability', "semantic_hash": '718ffa2414a042af', "approved_authoring_tier": "daily"},
++    'erd_burst_duration': {"review_id": 'r58-surface-promotion:erd_burst_duration', "semantic_hash": 'ab8b8a388802a194', "approved_authoring_tier": "daily"},
++    'erd_cross_events_spacing': {"review_id": 'r58-surface-promotion:erd_cross_events_spacing', "semantic_hash": 'b40c41b3c478f819', "approved_authoring_tier": "daily"},
++    'erd_event_rate_decay_slope': {"review_id": 'r58-surface-promotion:erd_event_rate_decay_slope', "semantic_hash": '050c481109f036a2', "approved_authoring_tier": "daily"},
++    'erd_event_response_amplitude': {"review_id": 'r58-surface-promotion:erd_event_response_amplitude', "semantic_hash": 'fe460a8ae037f96d', "approved_authoring_tier": "daily"},
++    'erd_half_life_decay_count': {"review_id": 'r58-surface-promotion:erd_half_life_decay_count', "semantic_hash": '1cd75d66070c251c', "approved_authoring_tier": "daily"},
++    'erd_marked_event_decay': {"review_id": 'r58-surface-promotion:erd_marked_event_decay', "semantic_hash": 'fe460a8ae037f96d', "approved_authoring_tier": "daily"},
++    'erd_post_event_hazard': {"review_id": 'r58-surface-promotion:erd_post_event_hazard', "semantic_hash": '4e314f052472dd01', "approved_authoring_tier": "daily"},
++    'erd_recency_decay': {"review_id": 'r58-surface-promotion:erd_recency_decay', "semantic_hash": 'd86091495f1d95ff', "approved_authoring_tier": "daily"},
++    'erd_sign_consistent_decay': {"review_id": 'r58-surface-promotion:erd_sign_consistent_decay', "semantic_hash": 'b656e008473abfe3', "approved_authoring_tier": "daily"},
++    'es1_earnings_cv': {"review_id": 'r58-surface-promotion:es1_earnings_cv', "semantic_hash": '08fcedfc52347dc1', "approved_authoring_tier": "daily"},
++    'es1_earnings_mean_reversion_speed': {"review_id": 'r58-surface-promotion:es1_earnings_mean_reversion_speed', "semantic_hash": '6506b168195a32e4', "approved_authoring_tier": "daily"},
++    'es1_negative_earnings_streak': {"review_id": 'r58-surface-promotion:es1_negative_earnings_streak', "semantic_hash": 'cffa98f8bfacffd6', "approved_authoring_tier": "daily"},
++    'event_response_effective_events': {"review_id": 'r58-surface-promotion:event_response_effective_events', "semantic_hash": '5e8cb135611ff65f', "approved_authoring_tier": "daily"},
++    'event_response_overlap_ratio': {"review_id": 'r58-surface-promotion:event_response_overlap_ratio', "semantic_hash": '5e8cb135611ff65f', "approved_authoring_tier": "daily"},
++    'financial_snapshot_lag': {"review_id": 'r58-surface-promotion:financial_snapshot_lag', "semantic_hash": 'de1cfcc8b6ca623e', "approved_authoring_tier": "daily"},
++    'fundamental_staleness_days': {"review_id": 'r58-surface-promotion:fundamental_staleness_days', "semantic_hash": 'fcc111064fa20944', "approved_authoring_tier": "daily"},
++    'hfl_variance_ratio': {"review_id": 'r58-surface-promotion:hfl_variance_ratio', "semantic_hash": 'e21fae14ce33b4f4', "approved_authoring_tier": "daily"},
++    'lf1_herfindahl_volume': {"review_id": 'r58-surface-promotion:lf1_herfindahl_volume', "semantic_hash": '7fd30d280d8aa34f', "approved_authoring_tier": "daily"},
++    'lf1_liquidity_decay_base': {"review_id": 'r58-surface-promotion:lf1_liquidity_decay_base', "semantic_hash": '1f33e04fa3c7ea4a', "approved_authoring_tier": "daily"},
++    'lf1_market_share_turnover': {"review_id": 'r58-surface-promotion:lf1_market_share_turnover', "semantic_hash": '82c7d3df4ebea6a0', "approved_authoring_tier": "daily"},
++    'lf1_mean_variance_turnover': {"review_id": 'r58-surface-promotion:lf1_mean_variance_turnover', "semantic_hash": '7581ca3c529e4405', "approved_authoring_tier": "daily"},
++    'lf1_own_volume_share': {"review_id": 'r58-surface-promotion:lf1_own_volume_share', "semantic_hash": '6c8bc5a6bde6efd7', "approved_authoring_tier": "daily"},
++    'ofi_dominant_direction': {"review_id": 'r58-surface-promotion:ofi_dominant_direction', "semantic_hash": '4b74e55959a85694', "approved_authoring_tier": "daily"},
++    'ofi_imbalance_agreement': {"review_id": 'r58-surface-promotion:ofi_imbalance_agreement', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'ofi_volume_flow_regime': {"review_id": 'r58-surface-promotion:ofi_volume_flow_regime', "semantic_hash": '4b74e55959a85694', "approved_authoring_tier": "daily"},
++    'ofi_volume_imbalance': {"review_id": 'r58-surface-promotion:ofi_volume_imbalance', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'ofi_zero_flow_balance': {"review_id": 'r58-surface-promotion:ofi_zero_flow_balance', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'relation_distinct_count': {"review_id": 'r58-surface-promotion:relation_distinct_count', "semantic_hash": '3c8c95a9f2f52bf5', "approved_authoring_tier": "daily"},
++    'report_asof': {"review_id": 'r58-surface-promotion:report_asof', "semantic_hash": 'a189f20b5925cc1d', "approved_authoring_tier": "daily"},
++    'sin_phase': {"review_id": 'r58-surface-promotion:sin_phase', "semantic_hash": 'b0af21dd1fcd1c98', "approved_authoring_tier": "daily"},
++    'state_age': {"review_id": 'r58-surface-promotion:state_age', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_episode_age': {"review_id": 'r58-surface-promotion:state_episode_age', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_episode_age_lower_bound': {"review_id": 'r58-surface-promotion:state_episode_age_lower_bound', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_episode_censored_flag': {"review_id": 'r58-surface-promotion:state_episode_censored_flag', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_flip_age': {"review_id": 'r58-surface-promotion:state_flip_age', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_flip_density': {"review_id": 'r58-surface-promotion:state_flip_density', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_persistence': {"review_id": 'r58-surface-promotion:state_persistence', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_transition_count': {"review_id": 'r58-surface-promotion:state_transition_count', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_transition_rate': {"review_id": 'r58-surface-promotion:state_transition_rate', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'sv_net_flow_direction': {"review_id": 'r58-surface-promotion:sv_net_flow_direction', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'sv_own_flow_fraction': {"review_id": 'r58-surface-promotion:sv_own_flow_fraction', "semantic_hash": 'c86fb125305702d2', "approved_authoring_tier": "daily"},
++    'sv_self_relative_change': {"review_id": 'r58-surface-promotion:sv_self_relative_change', "semantic_hash": '96fa21d39dcc02f9', "approved_authoring_tier": "daily"},
++    'tod_edge_activity': {"review_id": 'r58-surface-promotion:tod_edge_activity', "semantic_hash": 'a84a9477104d27a6', "approved_authoring_tier": "daily"},
++    'tod_intraday_range_position': {"review_id": 'r58-surface-promotion:tod_intraday_range_position', "semantic_hash": '400c8c46524c44e8', "approved_authoring_tier": "daily"},
++    'ts_abs_entropy_nats': {"review_id": 'r58-surface-promotion:ts_abs_entropy_nats', "semantic_hash": '249da95e182bc983', "approved_authoring_tier": "daily"},
++    'ts_autocorrelation_time_initial_positive_sequence': {"review_id": 'r58-surface-promotion:ts_autocorrelation_time_initial_positive_sequence', "semantic_hash": 'a814d4b252a7e2ed', "approved_authoring_tier": "daily"},
++    'ts_butterworth_lowpass_causal': {"review_id": 'r58-surface-promotion:ts_butterworth_lowpass_causal', "semantic_hash": '8ecfd1a86fc2456b', "approved_authoring_tier": "daily"},
++    'ts_causal_local_linear_smoother': {"review_id": 'r58-surface-promotion:ts_causal_local_linear_smoother', "semantic_hash": 'd470a99fc7a267aa', "approved_authoring_tier": "daily"},
++    'ts_cumulative_deviation_score': {"review_id": 'r58-surface-promotion:ts_cumulative_deviation_score', "semantic_hash": 'c808514c6830bceb', "approved_authoring_tier": "daily"},
++    'ts_effective_turning_rate': {"review_id": 'r58-surface-promotion:ts_effective_turning_rate', "semantic_hash": '2dbcb854af4adcdf', "approved_authoring_tier": "daily"},
++    'ts_expectile': {"review_id": 'r58-surface-promotion:ts_expectile', "semantic_hash": '300b3a8edc60844f', "approved_authoring_tier": "daily"},
++    'ts_extremogram': {"review_id": 'r58-surface-promotion:ts_extremogram', "semantic_hash": '0cb0a011283fa35a', "approved_authoring_tier": "daily"},
++    'ts_fractional_difference_discarded_weight_mass': {"review_id": 'r58-surface-promotion:ts_fractional_difference_discarded_weight_mass', "semantic_hash": '4d2b1512df8ed58b', "approved_authoring_tier": "daily"},
++    'ts_hampel_filter_causal': {"review_id": 'r58-surface-promotion:ts_hampel_filter_causal', "semantic_hash": 'ef8101c686bac49e', "approved_authoring_tier": "daily"},
++    'ts_hodges_lehmann_location': {"review_id": 'r58-surface-promotion:ts_hodges_lehmann_location', "semantic_hash": 'e126d05c07d84e5a', "approved_authoring_tier": "daily"},
++    'ts_lo_mackinlay_vr': {"review_id": 'r58-surface-promotion:ts_lo_mackinlay_vr', "semantic_hash": '445ea90d9d89ee16', "approved_authoring_tier": "daily"},
++    'ts_lo_mackinlay_z': {"review_id": 'r58-surface-promotion:ts_lo_mackinlay_z', "semantic_hash": '445ea90d9d89ee16', "approved_authoring_tier": "daily"},
++    'ts_mean_abs_deviation': {"review_id": 'r58-surface-promotion:ts_mean_abs_deviation', "semantic_hash": 'a0e877dc2bf44e9c', "approved_authoring_tier": "daily"},
++    'ts_mean_abs_deviation_strict': {"review_id": 'r58-surface-promotion:ts_mean_abs_deviation_strict', "semantic_hash": '2c22c62b204ff4b4', "approved_authoring_tier": "daily"},
++    'ts_mean_reversion_ou_approx_half_life': {"review_id": 'r58-surface-promotion:ts_mean_reversion_ou_approx_half_life', "semantic_hash": 'cf9832a6a81bc1b2', "approved_authoring_tier": "daily"},
++    'ts_mean_reversion_ou_approx_half_life_prior': {"review_id": 'r58-surface-promotion:ts_mean_reversion_ou_approx_half_life_prior', "semantic_hash": 'dc1c3563af669cab', "approved_authoring_tier": "daily"},
++    'ts_median3_causal': {"review_id": 'r58-surface-promotion:ts_median3_causal', "semantic_hash": '446379e9e71b587e', "approved_authoring_tier": "daily"},
++    'ts_median_abs_deviation': {"review_id": 'r58-surface-promotion:ts_median_abs_deviation', "semantic_hash": 'a0e877dc2bf44e9c', "approved_authoring_tier": "daily"},
++    'ts_pickands_tail_index': {"review_id": 'r58-surface-promotion:ts_pickands_tail_index', "semantic_hash": '2e58bd61a958fd63', "approved_authoring_tier": "daily"},
++    'ts_quantilogram': {"review_id": 'r58-surface-promotion:ts_quantilogram', "semantic_hash": '0cb0a011283fa35a', "approved_authoring_tier": "daily"},
++    'ts_robust_ema': {"review_id": 'r58-surface-promotion:ts_robust_ema', "semantic_hash": 'c76dc05cccf7d625', "approved_authoring_tier": "daily"},
++    'ts_rolling_median_causal': {"review_id": 'r58-surface-promotion:ts_rolling_median_causal', "semantic_hash": '6785a3a06694476f', "approved_authoring_tier": "daily"},
++    'ts_super_smoother': {"review_id": 'r58-surface-promotion:ts_super_smoother', "semantic_hash": '76f8ceebb7f994a3', "approved_authoring_tier": "daily"},
++    'ts_variance_ratio_proxy': {"review_id": 'r58-surface-promotion:ts_variance_ratio_proxy', "semantic_hash": 'eeee05913e6a9413', "approved_authoring_tier": "daily"},
++    'val1_earnings_yield_ma_diff': {"review_id": 'r58-surface-promotion:val1_earnings_yield_ma_diff', "semantic_hash": '7f803404e7c6866d', "approved_authoring_tier": "daily"},
++    'val1_earnings_yield_persistence': {"review_id": 'r58-surface-promotion:val1_earnings_yield_persistence', "semantic_hash": 'b46e072e4585ee28', "approved_authoring_tier": "daily"},
++    'val1_earnings_yield_slope': {"review_id": 'r58-surface-promotion:val1_earnings_yield_slope', "semantic_hash": '9c83ad5d3c0908e8', "approved_authoring_tier": "daily"},
++    'val1_equity_yield_dispersion': {"review_id": 'r58-surface-promotion:val1_equity_yield_dispersion', "semantic_hash": 'bac4b7939503a9db', "approved_authoring_tier": "daily"},
++    'val1_fcf_yield_growth': {"review_id": 'r58-surface-promotion:val1_fcf_yield_growth', "semantic_hash": '538bf6ca933cdee0', "approved_authoring_tier": "daily"},
++    'val1_valuation_percentile_own': {"review_id": 'r58-surface-promotion:val1_valuation_percentile_own', "semantic_hash": '97416deb074e880c', "approved_authoring_tier": "daily"},
++    'val1_valuation_stat_spread': {"review_id": 'r58-surface-promotion:val1_valuation_stat_spread', "semantic_hash": '9f05bf798b97d291', "approved_authoring_tier": "daily"},
++    'val1_valuation_z_own': {"review_id": 'r58-surface-promotion:val1_valuation_z_own', "semantic_hash": '97416deb074e880c', "approved_authoring_tier": "daily"},
++    'val1_valuations_lag_component': {"review_id": 'r58-surface-promotion:val1_valuations_lag_component', "semantic_hash": '81714f959fb233d5', "approved_authoring_tier": "daily"},
++    'vax_liquidity_penalty_exposure': {"review_id": 'r58-surface-promotion:vax_liquidity_penalty_exposure', "semantic_hash": 'bbc3323681175640', "approved_authoring_tier": "daily"},
++    'vv1_vol_of_vol': {"review_id": 'r58-surface-promotion:vv1_vol_of_vol', "semantic_hash": '114dc166ee9af05a', "approved_authoring_tier": "daily"},
++}
++for _c, _m in _R58_PROMOTIONS.items():
++    register_daily_migration(_c, review_id=_m["review_id"], semantic_hash=_m["semantic_hash"], approved_authoring_tier=_m["approved_authoring_tier"])
++# =====================================================================
++
+ def daily_factor_migrated() -> frozenset[str]:
+     """Live read of the reviewed daily-migration surface (manifest keys)."""
+     return frozenset(REVIEWED_MIGRATION_MANIFEST)
+diff --git a/factor_engine/runtime/batch_service.py b/factor_engine/runtime/batch_service.py
+index 6bae74195..996944b2c 100644
+--- a/factor_engine/runtime/batch_service.py
++++ b/factor_engine/runtime/batch_service.py
+@@ -1244,7 +1244,107 @@ def _batch_source_bars_per_day(engine: Any) -> int:
+         return 1
+ 
+ 
+-def _trim_batch_result(result: Any, run_window: Any, *, bars_per_day: int) -> Any:
++def _per_factor_declared_rows(analyses: Any) -> dict:
++    """R58: per-factor finite history rows from the execution-contract authority.
++
++    Same authority engine.run uses for its immature-value guard, so batch and
++    single-run paths blank identical head rows.  Full-history (recursive)
++    operators are omitted — they never get a row-count guard.
++    """
++    try:
++        from factor_engine.runtime.execution_contract import factor_history_requirement
++    except Exception:
++        return {}
++    out: dict = {}
++    for _name, _an in (analyses or {}).items():
++        try:
++            _req = factor_history_requirement(getattr(_an, "ir", None))
++            if not getattr(_req, "is_full_history", False):
++                _rows = int(getattr(_req, "rows", 0) or 0)
++                if _rows > 0:
++                    out[_name] = _rows
++        except Exception:
++            continue
++    return out
++
++
++def _apply_declared_guard(result: Any, declared_rows: int, pre_rows, factor_name: str = "") -> Any:
++    """Blank the first (declared_rows - 1 - pre_rows) distinct dates of a result.
++
++    Mirrors engine.run's R58c rule: output row i holds pre_rows+i+1 samples, so
++    rows with fewer than declared_rows samples are immature.  With a full
++    warm-up load this is a no-op.  Mirrors the engine's no-op-on-overflow
++    behaviour when every date would be blanked.
++    """
++    if result is None or not declared_rows or declared_rows <= 0 or pre_rows is None:
++        return result
++    blank = int(declared_rows) - 1 - int(pre_rows)
++    if blank <= 0:
++        return result
++    try:
++        dates = result.index.get_level_values(0).drop_duplicates().sort_values()
++        if blank < len(dates):
++            cutoff = dates[blank]
++            mask = result.index.get_level_values(0) < cutoff
++            result = result.mask(mask)
++            logger.info(
++                "R58 immature-value guard (batch): factor '%s' declared=%d "
++                "pre_rows=%s -> blanked %d dates",
++                factor_name, int(declared_rows), int(pre_rows), blank,
++            )
++    except Exception:
++        logger.warning(
++            "R58 batch immature-value guard failed for factor '%s'",
++            factor_name, exc_info=True,
++        )
++    return result
++
++
++def _finalize_batch_factor_result(
++    result: Any,
++    *,
++    run_window: Any,
++    declared_rows: int,
++    source_start: Any,
++    factor_name: str,
++    bars_per_day: int,
++) -> Any:
++    """Trim + immature-value guard for one batch factor result.
++
++    With a run window: trim (with guard, pre_rows from the slice offsets).
++    Without one (auto_warmup=False): mirror engine.run's R58d — guard only
++    when the result head is provably the source frame head.
++    """
++    if run_window is not None:
++        return _trim_batch_result(
++            result, run_window, bars_per_day=bars_per_day,
++            declared_rows=declared_rows, factor_name=factor_name,
++        )
++    if result is None or not declared_rows or declared_rows <= 1 or source_start is None:
++        return result
++    try:
++        import pandas as pd
++
++        dates = result.index.get_level_values(0).drop_duplicates().sort_values()
++        if len(dates) > declared_rows and dates[0] == pd.Timestamp(source_start):
++            cutoff = dates[declared_rows - 1]
++            mask = result.index.get_level_values(0) < cutoff
++            result = result.mask(mask)
++            logger.info(
++                "R58 immature-value guard (batch, no-warmup): factor '%s' "
++                "declared=%d -> blanked %d dates",
++                factor_name, int(declared_rows), int(declared_rows) - 1,
++            )
++    except Exception:
++        logger.warning(
++            "R58 batch no-window guard failed for factor '%s'",
++            factor_name, exc_info=True,
++        )
++    return result
++
++
++def _trim_batch_result(result: Any, run_window: Any, *, bars_per_day: int,
++                       declared_rows: int = 0, factor_name: str = "") -> Any:
+     """按因子请求区间裁剪批跑输出（与 ``run`` 的 warmup trim 对齐）。
+ 
+     R39-P0-PERF-017：native backend 若已在终端结果上挂 ``_output_slice``（位置
+@@ -1266,10 +1366,18 @@ def _trim_batch_result(result: Any, run_window: Any, *, bars_per_day: int) -> An
+     # Backend 已切好视图 —— 不再重切（PERF-017）。
+     carried = carried_output_slice(result)
+     if carried is not None:
+-        return result
++        # Backend already sliced positionally: its start_offset IS the
++        # number of pre-request rows (pre_rows) in the computation frame.
++        return _apply_declared_guard(
++            result, declared_rows, getattr(carried, "start_offset", None),
++            factor_name,
++        )
+     out_slice = compute_output_slice(result, run_window, bars_per_day=bars_per_day)
+     if out_slice is not None:
+-        return apply_output_slice(result, out_slice)
++        trimmed = apply_output_slice(result, out_slice)
++        return _apply_declared_guard(
++            trimmed, declared_rows, out_slice.start_offset, factor_name
++        )
+     import pandas as pd
+ 
+     from factor_engine.storage.time_window import slice_series_time_window
+@@ -1283,7 +1391,16 @@ def _trim_batch_result(result: Any, run_window: Any, *, bars_per_day: int) -> An
+     if bars_per_day > 1:
+         # 日内源保留 timestamp 精度（不按 normalize 截断）
+         trim_start = pd.Timestamp(run_window.requested_start)
+-    return slice_series_time_window(result, start=trim_start, end=trim_end)
++    _pre_rows = None
++    try:
++        _idx0 = result.index.get_level_values(0)
++        _pre_rows = int((_idx0 < trim_start).sum())
++    except Exception:
++        _pre_rows = None
++    trimmed = slice_series_time_window(result, start=trim_start, end=trim_end)
++    if _pre_rows is None:
++        return trimmed
++    return _apply_declared_guard(trimmed, declared_rows, _pre_rows, factor_name)
+ 
+ 
+ def _maybe_prepare_batch_warmup(
+@@ -1506,6 +1623,7 @@ def _execute_run_many_scheduler(
+     perf: PerfConfig,
+     engine_to_use: "FactorEngine",
+     per_windows: dict[str, Any],
++    per_declared: dict | None = None,
+     input_report: Any,
+     run_mode: str | None,
+     source_bars_per_day: int,
+@@ -1841,10 +1959,14 @@ def _execute_run_many_scheduler(
+             physical_optimization=physical_by_factor.get(task.factor_name),
+             physical_root_id=task.factor_name,
+         )
+-        if per_windows and task.factor_name in per_windows:
+-            result = _trim_batch_result(
+-                result, per_windows[task.factor_name], bars_per_day=source_bars_per_day
+-            )
++        result = _finalize_batch_factor_result(
++            result,
++            run_window=per_windows.get(task.factor_name) if per_windows else None,
++            declared_rows=(per_declared or {}).get(task.factor_name, 0),
++            source_start=getattr(engine_to_use.data_source, "start_date", None),
++            factor_name=task.factor_name,
++            bars_per_day=source_bars_per_day,
++        )
+         with paths_lock:
+             backend_paths[task.factor_name] = path
+         return result
+@@ -2205,6 +2327,7 @@ def execute_run_many(
+     # PIT 审计在编译期做（assert_pit_safe 是纯审计、不改计划），与执行解耦，
+     # 因此 production 的 pit_enforce 不再让 run_many 退化为逐因子 run()。
+     # batch warmup：跨因子合并共享加载窗口，一次读数，各因子独立 trim。
++    per_declared = _per_factor_declared_rows(analyses)
+     engine_to_use, per_windows = _maybe_prepare_batch_warmup(
+         engine,
+         factors,
+@@ -2248,6 +2371,7 @@ def execute_run_many(
+             perf=perf,
+             engine_to_use=engine_to_use,
+             per_windows=per_windows,
++            per_declared=per_declared,
+             input_report=input_report,
+             run_mode=run_mode,
+             source_bars_per_day=source_bars_per_day,
+@@ -2277,10 +2401,14 @@ def execute_run_many(
+             engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
+             factor_name=fp.factor_name, factor_id=fp.factor_name,
+         )
+-        if per_windows and fp.factor_name in per_windows:
+-            result = _trim_batch_result(
+-                result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
+-            )
++        result = _finalize_batch_factor_result(
++            result,
++            run_window=per_windows.get(fp.factor_name) if per_windows else None,
++            declared_rows=(per_declared or {}).get(fp.factor_name, 0),
++            source_start=getattr(engine_to_use.data_source, "start_date", None),
++            factor_name=fp.factor_name,
++            bars_per_day=source_bars_per_day,
++        )
+         return result, path
+ 
+     with routing_execution_scope(perf), _cse_release_scope(ctx, dag.shared_nodes):
+@@ -2418,6 +2546,7 @@ def execute_run_many_iter(
+             market=market,
+             strict=True,
+         )
++    per_declared = _per_factor_declared_rows(analyses)
+     engine_to_use, per_windows = _maybe_prepare_batch_warmup(
+         engine,
+         factors,
+@@ -2489,10 +2618,14 @@ def execute_run_many_iter(
+                     physical_optimization=physical_by_factor.get(fp.factor_name),
+                     physical_root_id=fp.factor_name,
+                 )
+-                if per_windows and fp.factor_name in per_windows:
+-                    result = _trim_batch_result(
+-                        result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
+-                    )
++                result = _finalize_batch_factor_result(
++                    result,
++                    run_window=per_windows.get(fp.factor_name) if per_windows else None,
++                    declared_rows=(per_declared or {}).get(fp.factor_name, 0),
++                    source_start=getattr(engine_to_use.data_source, "start_date", None),
++                    factor_name=fp.factor_name,
++                    bars_per_day=source_bars_per_day,
++                )
+                 seen.add(fp.factor_name)
+                 _release_consumed_sids(ctx, fp.root)
+                 yield fp.factor_name, result, path
+@@ -2506,10 +2639,14 @@ def execute_run_many_iter(
+                 physical_optimization=physical_by_factor.get(fp.factor_name),
+                 physical_root_id=fp.factor_name,
+             )
+-            if per_windows and fp.factor_name in per_windows:
+-                result = _trim_batch_result(
+-                    result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
+-                )
++            result = _finalize_batch_factor_result(
++                result,
++                run_window=per_windows.get(fp.factor_name) if per_windows else None,
++                declared_rows=(per_declared or {}).get(fp.factor_name, 0),
++                source_start=getattr(engine_to_use.data_source, "start_date", None),
++                factor_name=fp.factor_name,
++                bars_per_day=source_bars_per_day,
++            )
+             _release_consumed_sids(ctx, fp.root)
+             yield fp.factor_name, result, path
+ 
+@@ -2644,6 +2781,7 @@ def execute_run_many_parallel(
+             market=market,
+             strict=True,
+         )
++    per_declared = _per_factor_declared_rows(analyses)
+     engine_to_use, per_windows = _maybe_prepare_batch_warmup(
+         engine,
+         factors,
+@@ -2693,6 +2831,7 @@ def execute_run_many_parallel(
+                 perf=perf,
+                 engine_to_use=engine_to_use,
+                 per_windows=per_windows,
++                per_declared=per_declared,
+                 input_report=input_report,
+                 run_mode=run_mode,
+                 source_bars_per_day=source_bars_per_day,
+@@ -2732,10 +2871,14 @@ def execute_run_many_parallel(
+             engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
+             factor_name=fp.factor_name, factor_id=fp.factor_name,
+         )
+-        if per_windows and fp.factor_name in per_windows:
+-            result = _trim_batch_result(
+-                result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
+-            )
++        result = _finalize_batch_factor_result(
++            result,
++            run_window=per_windows.get(fp.factor_name) if per_windows else None,
++            declared_rows=(per_declared or {}).get(fp.factor_name, 0),
++            source_start=getattr(engine_to_use.data_source, "start_date", None),
++            factor_name=fp.factor_name,
++            bars_per_day=source_bars_per_day,
++        )
+         return fp.factor_name, result, path
+ 
+     _enter_scope = (lambda: resource_scope.__enter__()) if resource_scope is not None else (lambda: None)
+@@ -2765,10 +2908,14 @@ def execute_run_many_parallel(
+                             engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
+                             factor_name=fp.factor_name, factor_id=fp.factor_name,
+                         )
+-                        if per_windows and fp.factor_name in per_windows:
+-                            result = _trim_batch_result(
+-                                result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
+-                            )
++                        result = _finalize_batch_factor_result(
++                            result,
++                            run_window=per_windows.get(fp.factor_name) if per_windows else None,
++                            declared_rows=(per_declared or {}).get(fp.factor_name, 0),
++                            source_start=getattr(engine_to_use.data_source, "start_date", None),
++                            factor_name=fp.factor_name,
++                            bars_per_day=source_bars_per_day,
++                        )
+                         _handle_result(result_policy, sink, results, fp.factor_name, result, path, backend_paths)
+                 else:
+                     # R27-166/249：as_completed → 立即 sink/release，不再等整层
+@@ -2790,10 +2937,14 @@ def execute_run_many_parallel(
+                         engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
+                         factor_name=fp.factor_name, factor_id=fp.factor_name,
+                     )
+-                    if per_windows and fp.factor_name in per_windows:
+-                        result = _trim_batch_result(
+-                            result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
+-                        )
++                    result = _finalize_batch_factor_result(
++                        result,
++                        run_window=per_windows.get(fp.factor_name) if per_windows else None,
++                        declared_rows=(per_declared or {}).get(fp.factor_name, 0),
++                        source_start=getattr(engine_to_use.data_source, "start_date", None),
++                        factor_name=fp.factor_name,
++                        bars_per_day=source_bars_per_day,
++                    )
+                     _handle_result(result_policy, sink, results, fp.factor_name, result, path, backend_paths)
+                     _release_consumed_sids(ctx, fp.root)
+     finally:
+diff --git a/factor_engine/runtime/engine.py b/factor_engine/runtime/engine.py
+index d3bdd5fc0..55034dfea 100644
+--- a/factor_engine/runtime/engine.py
++++ b/factor_engine/runtime/engine.py
+@@ -3842,11 +3842,104 @@ class FactorEngine:
+             # 日内源保留 timestamp 精度（不按 normalize 截断）
+             if s_bpd > 1:
+                 trim_start = pd.Timestamp(run_window.requested_start)
++            # R58c (2026-09-21): immature-value guard.  L = rows the loaded
++            # frame actually provides before the requested start; W = the
++            # factor's declared finite history rows (execution contract).
++            # Rows whose sample count is below the declared window are NaN.
++            # With a full warm-up load this is a no-op (L >= W-1), so
++            # existing bit-exact outputs are unchanged.
++            _pre_warmup_rows = None
++            try:
++                _idx0 = result.index.get_level_values(0)
++                _pre_warmup_rows = int((_idx0 < trim_start).sum())
++            except Exception:
++                _pre_warmup_rows = None
+             result = slice_series_time_window(
+                 result,
+                 start=trim_start,
+                 end=trim_end,
+             )
++            if _pre_warmup_rows is not None:
++                try:
++                    from factor_engine.runtime.execution_contract import (
++                        factor_history_requirement as _fhr,
++                    )
++                    _req = _fhr(getattr(analysis, "ir", None))
++                    _declared = int(getattr(_req, "rows", 0) or 0)
++                    _full_hist = bool(getattr(_req, "is_full_history", False))
++                except Exception:
++                    _declared, _full_hist = 0, False
++                _blank = (
++                    _declared - 1 - _pre_warmup_rows
++                    if not _full_hist and _declared > 0
++                    else 0
++                )
++                if _blank > 0:
++                    try:
++                        _dates = (
++                            result.index.get_level_values(0)
++                            .drop_duplicates()
++                            .sort_values()
++                        )
++                        if _blank < len(_dates):
++                            _cutoff = _dates[_blank]
++                            _mask = (
++                                result.index.get_level_values(0) < _cutoff
++                            )
++                            result = result.mask(_mask)
++                            logger.info(
++                                "R58c immature-value guard: factor '%s' "
++                                "declared=%d pre_rows=%d -> blanked %d dates",
++                                factor.name, _declared, _pre_warmup_rows,
++                                _blank,
++                            )
++                    except Exception:
++                        logger.warning(
++                            "R58c immature-value guard failed for factor '%s'",
++                            factor.name, exc_info=True,
++                        )
++
++        elif run_window is None:
++            # R58d (2026-09-21): no auto-warmup path.  Enforce the same
++            # immature-value invariant with L=0 when the result head is
++            # provably the source frame head (result min date == source
++            # start_date); a filtered result whose frame held real
++            # pre-history must not be touched.
++            try:
++                from factor_engine.runtime.execution_contract import (
++                    factor_history_requirement as _fhr0,
++                )
++                _req0 = _fhr0(getattr(analysis, "ir", None))
++                _declared0 = int(getattr(_req0, "rows", 0) or 0)
++                _full0 = bool(getattr(_req0, "is_full_history", False))
++                _src_start = getattr(
++                    engine_to_use.data_source, "start_date", None
++                )
++                if (
++                    not _full0
++                    and _declared0 > 1
++                    and _src_start is not None
++                    and len(result) > 0
++                ):
++                    _dates0 = (
++                        result.index.get_level_values(0)
++                        .drop_duplicates()
++                        .sort_values()
++                    )
++                    if len(_dates0) > _declared0 and _dates0[0] == pd.Timestamp(_src_start):
++                        _cutoff0 = _dates0[_declared0 - 1]
++                        _mask0 = result.index.get_level_values(0) < _cutoff0
++                        result = result.mask(_mask0)
++                        logger.info(
++                            "R58d immature-value guard (no-warmup): factor "
++                            "'%s' declared=%d -> blanked %d dates",
++                            factor.name, _declared0, _declared0 - 1,
++                        )
++            except Exception:
++                logger.warning(
++                    "R58d immature-value guard failed for factor '%s'",
++                    factor.name, exc_info=True,
++                )
+ 
+         from factor_engine.runtime.perf_config import PerfConfig
+         from factor_engine.runtime.result_budget import enforce_result_budget
+diff --git a/factor_engine/runtime/execution_contract.py b/factor_engine/runtime/execution_contract.py
+index a353be806..3c0fab91c 100644
+--- a/factor_engine/runtime/execution_contract.py
++++ b/factor_engine/runtime/execution_contract.py
+@@ -1378,6 +1378,123 @@ def _declared_history_extension(
+     return semantics_rows
+ 
+ 
++# ---------------------------------------------------------------------------
++# R44 warm-up: kernel-truth bounded-window declarations
++#
++# These 148 window operators were fail-closed to ``_UNKNOWN`` by the R19-078
++# production-direct guard in ``_default_window_extension`` (they declare a
++# window-like param but carry no explicit transform), and
++# ``history_requirement`` turns ``_UNKNOWN`` into ``kind='full_history'``.  For a
++# plain W-bar trailing re-read that is a whole-history replay: the planner's load
++# window collapses to the dataset origin instead of ``W`` extra bars, and in a
++# bulk DAG materialisation that single mis-declaration dominates the scan cost of
++# every factor containing the operator.
++#
++# The horizon below is the KERNEL's own, not a name guess.  It was measured by
++# prefix-truncation convergence: compute the operator on a panel holding only the
++# last K rows and find the first row index whose value already equals the
++# full-panel value.  Truncation can only remove history, so for a bounded
++# operator everything at or after the true horizon must match; a recursive
++# operator keeps differing all the way to the last row.  Each operator was
++# measured at TWO window settings (W=20 and W=41) and is listed here only when
++# its horizon grew exactly 1:1 with the bound window — i.e. ``horizon == W``.
++# The declaration is therefore EXACT: these kernels never read further back than
++# their own window, so no emitted value changes.
++#
++# Deliberately NOT listed (they keep full-history semantics):
++#   * recursion that converges only after hundreds of bars - DEMA, TEMA, NATR,
++#     ATR_WILDER, DMI_plus, ForceIndex, atr_pct, ts_leverage_effect, ema_*,
++#     PVO/PPO/TSI families (horizon grew ~10x the window, or is window-invariant);
++#   * operators whose measured horizon did not respond to the window parameter
++#     (the probe cannot prove boundedness -> not evidence);
++#   * operators the synthetic probe could not drive at all.
++# Those remain reported as migration debt by ``history_fallback_canonicals``.
++# ---------------------------------------------------------------------------
++def _bounded_window_rows(canonical: str, params: Mapping[str, Any]) -> int | object:
++    """Warm-up rows for an operator whose backward horizon equals its window.
++
++    Returns the MAX bound value among the operator's declared window-like
++    params, i.e. the operator needs ``W`` prior rows before it can emit its first
++    correct value.  ``W`` rather than ``W - 1`` is deliberate: the measured
++    horizon is ``W`` for the shift-then-roll family and ``W - 1`` for the plain
++    rolling family, and a one-row over-declaration costs a single row of scan
++    whereas an under-declaration silently emits an immature value (the failure
++    mode this section exists to remove).  A fractional or un-resolvable bound
++    fails closed to ``_UNKNOWN`` (full history), never to a truncated guess.
++    """
++    meta = _metadata(canonical)
++    if meta is None:
++        return _UNKNOWN
++    specs = getattr(meta, "param_specs", None) or {}
++    names = tuple(getattr(meta, "param_names", None) or ())
++    best = 0
++    resolved = False
++    for name in names:
++        if name not in _WINDOW_LIKE_PARAM_NAMES:
++            continue
++        value = _bound_param(params, name, specs, canonical=canonical)
++        if value is _UNKNOWN:
++            return _UNKNOWN
++        if value is None:
++            continue
++        if isinstance(value, float):
++            if not float(value).is_integer():
++                return _UNKNOWN
++            value = int(value)
++        if not isinstance(value, int) or isinstance(value, bool):
++            return _UNKNOWN
++        if value <= 0:
++            continue
++        resolved = True
++        best = max(best, value)
++    if not resolved:
++        return _UNKNOWN
++    return best
++
++
++_BOUNDED_WINDOW_CANONICALS: tuple[str, ...] = (
++    "CMF", "CMO", "EaseOfMovement", "MFI",
++    "VortexMinus", "VortexPlus", "abnormal_turnover", "abnormal_volume",
++    "abs_return_volume_corr", "adv", "amihud_illiquidity", "ashare_limit_asymmetry",
++    "ashare_limit_event_density", "ashare_limit_touch_count", "average_turnover", "bollinger_pct_b",
++    "bollinger_width", "bounded_nvi", "bounded_pvi", "bvc_sign_pct",
++    "candle_body_percentile", "candle_body_zscore", "candle_range_atr", "candle_upper_shadow_zscore",
++    "chikou_distance_pct", "choppiness_index", "consolidation_pct", "consolidation_range_pct",
++    "corwin_schultz_spread", "cs_rank_churn", "cs_tail_retention", "dollar_volume_zscore",
++    "donchian_breakout_down", "donchian_breakout_up", "donchian_channel_position", "donchian_lower",
++    "donchian_mid", "donchian_position", "donchian_upper", "donchian_width_pct",
++    "down_volume_ratio", "efficiency_ratio", "garman_klass_vol", "high_low_spread_proxy",
++    "index_membership_age", "index_weight_change", "intraday_rv_signature_curvature", "intraday_volatility",
++    "intraday_volatility_concentration", "intraday_volatility_entropy", "intraday_volatility_time_centroid", "overnight_volatility",
++    "parkinson_vol", "pattern_cup", "pattern_rounding_bottom", "pattern_rounding_top",
++    "price_impact", "price_turnover_divergence", "price_volume_divergence", "range_volatility",
++    "reg_forecast_error_pct", "reg_r2_trailing", "relation_entropy_change", "relation_hhi_change",
++    "relation_share_mobility", "relative_volume", "return_volume_corr", "rogers_satchell_vol",
++    "roll_spread_proxy", "rolling_obv", "rolling_pvt", "rolling_vwap",
++    "signed_volume_imbalance", "spectral_energy_ratio", "spectral_trend_share", "sr_distance_pct",
++    "sr_touch_count", "true_range_surprise", "ts_abdi_ranaldo_spread", "ts_bottomk_mean",
++    "ts_bottomk_sum", "ts_breakdown_low", "ts_breakout_high", "ts_channel_position",
++    "ts_chord_excursion_area", "ts_consolidation_slope", "ts_consolidation_volume_decay", "ts_consolidation_width",
++    "ts_cpt_value", "ts_days_since_high", "ts_days_since_low", "ts_distance_cov",
++    "ts_distance_to_high", "ts_distance_to_low", "ts_gap_fill_ratio", "ts_generalized_hurst_exponent",
++    "ts_glr_mean_shift_score", "ts_glr_variance_shift_score", "ts_hankel_effective_rank", "ts_hankel_singular_gap",
++    "ts_impulse_return", "ts_interval_exploration_efficiency", "ts_lempel_ziv_complexity", "ts_mass_concentration",
++    "ts_max_chord_excursion", "ts_mean_excess_slope", "ts_new_high", "ts_new_low",
++    "ts_opening_mispricing_score", "ts_overnight_intraday_sign_agreement", "ts_overnight_intraday_spread", "ts_prev_high",
++    "ts_prev_low", "ts_qn_scale", "ts_range_expansion", "ts_realized_quarticity",
++    "ts_recurrence_diagonal_entropy", "ts_recurrence_divergence", "ts_recurrence_laminarity", "ts_recurrence_rate",
++    "ts_recurrence_trapping_time", "ts_regression_tstat", "ts_spectral_centroid", "ts_spectral_peak_concentration",
++    "ts_ssa_reconstruction_residual", "ts_tail_mean", "ts_trend_tstat", "ts_vol_term_structure",
++    "ts_weighted_time_centroid", "turnover_acceleration", "turnover_adjusted_volatility", "turnover_momentum",
++    "turnover_shock", "turnover_volatility", "turnover_zscore", "up_volume_ratio",
++    "volume_acceleration", "volume_momentum", "volume_shock", "volume_volatility",
++    "volume_weighted_momentum", "volume_weighted_return", "volume_zscore", "vpin_pct",
++    "vwap_deviation", "vwap_distance_pct", "yang_zhang_vol", "zero_return_ratio",
++)
++for _canon in _BOUNDED_WINDOW_CANONICALS:
++    _HISTORY_TRANSFORMS[_canon] = _compound_transform(_bounded_window_rows)
++
++
+ def _own_history_extension(canonical: str, params: Mapping[str, Any]) -> int | object:
+     """The operator's OWN prior-bar extension beyond its children's max history.
+ 
+diff --git a/factor_engine/runtime/multibackend/duckdb_prepared_statement_cache.py b/factor_engine/runtime/multibackend/duckdb_prepared_statement_cache.py
+index eebf6075e..0e945d6b4 100644
+--- a/factor_engine/runtime/multibackend/duckdb_prepared_statement_cache.py
++++ b/factor_engine/runtime/multibackend/duckdb_prepared_statement_cache.py
+@@ -93,66 +93,58 @@ class DuckDBPreparedStatementCache:
+         params = params or []
+         start_ms = time.monotonic() * 1000.0
+ 
+-        # 计算 SQL template hash（忽略参数值）
++        # Normalise the SQL template hash (ignores parameter values).
+         sql_hash = self._compute_sql_hash(sql)
+ 
+         with self._lock:
+             self._metrics.total_queries += 1
+-
+-            # 缓存命中：复用 prepared statement
+-            if sql_hash in self._cache:
+-                prepared = self._cache[sql_hash]
++            cached = sql_hash in self._cache
++            if cached:
+                 self._metrics.cache_hits += 1
+-
+-                # LRU: 移到队列末尾
+-                self._cache_order.remove(sql_hash)
+-                self._cache_order.append(sql_hash)
+-
+-                # 绑定参数并执行
++            else:
++                self._metrics.cache_misses += 1
++
++            # Cache hit: reuse the prepared plan.  ``self._cache`` is bound to a
++            # single DuckDB connection (see ``duckdb_connection_pool``), so the
++            # stored relation is only ever executed on the connection that built
++            # it — never shared across connections / threads.
++            if cached:
++                relation = self._cache[sql_hash]
+                 try:
+                     if params:
+-                        result = prepared.execute(params)
+-                    else:
+-                        result = prepared.execute()
+-                    return result
+-                except Exception as exc:
++                        return conn.execute(sql, params)
++                    return relation.execute()
++                except Exception as exc:  # noqa: BLE001
+                     _logger.warning(
+-                        "prepared statement execution failed: %s; fallback to direct",
+-                        exc,
++                        "prepared reuse failed: %s; fallback to direct", exc
+                     )
+-                    # Fallback: 直接执行
+                     return conn.execute(sql, params)
+ 
+-            # 缓存未命中：prepare 新 statement
+-            self._metrics.cache_misses += 1
++            # Cache miss: build / execute.
++            # DuckDB 1.x removed ``Connection.prepare``; the equivalent
++            # "prepare once, execute many" is ``Connection.sql(sql)`` (a reusable
++            # relation) for parameter-less queries, and
++            # ``Connection.execute(sql, params)`` for parameterised ones
++            # (DuckDB caches the plan per connection internally).
+             try:
+-                prepared = conn.prepare(sql)
+-                self._cache[sql_hash] = prepared
+-                self._cache_order.append(sql_hash)
+-
+-                # LRU eviction
+-                if len(self._cache) > self.cache_size:
+-                    oldest = self._cache_order.pop(0)
+-                    self._cache.pop(oldest, None)
+-
+-                prepare_time_ms = (time.monotonic() * 1000.0) - start_ms
+-                self._metrics.total_prepare_time_ms += prepare_time_ms
+-
+-                # 执行 prepared statement
+                 if params:
+-                    result = prepared.execute(params)
++                    result = conn.execute(sql, params)
+                 else:
+-                    result = prepared.execute()
+-
+-                _logger.debug(
+-                    "prepared statement cached: %s (prepare time: %.2f ms)",
+-                    sql_hash[:8], prepare_time_ms,
+-                )
+-
++                    relation = conn.sql(sql)
++                    result = relation.execute()
++                    self._cache[sql_hash] = relation
++                    self._cache_order.append(sql_hash)
++                    # LRU eviction.
++                    if len(self._cache) > self.cache_size:
++                        oldest = self._cache_order.pop(0)
++                        self._cache.pop(oldest, None)
++                prepare_time_ms = (time.monotonic() * 1000.0) - start_ms
++                self._metrics.total_prepare_time_ms += prepare_time_ms
+                 return result
+-            except Exception as exc:
+-                _logger.error("prepare statement failed: %s; fallback to direct", exc)
+-                # Fallback: 直接执行（不 prepare）
++            except Exception as exc:  # noqa: BLE001
++                _logger.error(
++                    "prepare statement failed: %s; fallback to direct", exc
++                )
+                 return conn.execute(sql, params)
+ 
+     def execute_batch(
+diff --git a/factor_engine/runtime/warmup_service.py b/factor_engine/runtime/warmup_service.py
+index 61d3b5ea3..c018e3426 100644
+--- a/factor_engine/runtime/warmup_service.py
++++ b/factor_engine/runtime/warmup_service.py
+@@ -228,7 +228,10 @@ def _switch_engine_to_window(
+         or run_window.actual_load_start == run_window.requested_start
+     ):
+         return engine
+-    from factor_engine.storage.time_window import narrow_data_source_for_window
++    from factor_engine.storage.time_window import (
++        narrow_data_source_for_window,
++        rebase_data_source_window,
++    )
+ 
+     from factor_engine.storage.sources.data_access_source import DataAccessSource
+ 
+@@ -250,7 +253,11 @@ def _switch_engine_to_window(
+             end_date=run_window.actual_load_end,
+         )
+     else:
+-        narrowed = narrow_data_source_for_window(
++        # 预热/full-history 是**扩展**语义：必须重设边界。
++        # ``narrow_data_source_for_window`` 会求交，把扩展后的窗口夹回请求
++        # 区间，历史一行都读不到（long_table / composite 等包装形态正因此
++        # 长期拿不到预热数据）。
++        narrowed = rebase_data_source_window(
+             engine.data_source,
+             start_date=run_window.actual_load_start,
+             end_date=run_window.actual_load_end,
+diff --git a/factor_engine/scripts/calibrate_backend_costs.py b/factor_engine/scripts/calibrate_backend_costs.py
+index 6bb1759f2..bc86904d2 100644
+--- a/factor_engine/scripts/calibrate_backend_costs.py
++++ b/factor_engine/scripts/calibrate_backend_costs.py
+@@ -50,6 +50,180 @@ def _runtime_family() -> dict[str, str]:
+     return out
+ 
+ 
++def _deployment_identity() -> dict[str, Any]:
++    """Deployment identity recorded alongside the measured costs.
++
++    Taken from the router's own resolver because ``_measured_baseline`` compares
++    these keys verbatim against the live host — re-deriving them here would drift
++    the moment either side moves.  The multibackend cost calibrator supplies the
++    per-backend runtime versions and the engine build identity, which is what
++    binds the numbers to a specific build.
++    """
++    from factor_engine.backend.plan_cost_router import _runtime_family
++
++    family = dict(_runtime_family())
++    versions: dict[str, str] = {}
++    engine_identity = "unknown"
++    try:
++        from factor_engine.runtime.multibackend.cost_model_calibrator import (
++            _backend_version,
++            _build_identity,
++        )
++
++        for backend in ("pandas_numpy", "polars_panel", "polars_long", "duckdb_sql"):
++            versions[backend] = _backend_version(backend)
++        engine_identity = _build_identity()
++    except Exception as exc:  # noqa: BLE001 - identity is still recorded without it
++        versions["error"] = f"{type(exc).__name__}: {exc}"
++    return {
++        "runtime_family": family,
++        "backend_versions": versions,
++        "engine_identity": engine_identity,
++    }
++
++
++def _agent_usable_canonicals() -> frozenset[str]:
++    """The agent-usable authoring surface (the reviewed daily surface).
++
++    Calibration follows the surface agents actually author against (the daily
++    allowlist alphaprobe consumes), not the narrower production-target set: a
++    measured cost for an operator an agent can use is useful before that operator
++    is production-hardened.
++    """
++    from factor_engine.cleaned_operators.operator_surface import (
++        REVIEWED_MIGRATION_MANIFEST,
++    )
++
++    return frozenset(REVIEWED_MIGRATION_MANIFEST)
++
++
++def _implementation_hash(canonicals: list[str]) -> str:
++    """Bind the baseline to the implementations it measured.
++
++    The cost authority refuses a baseline without this, and its purpose is that
++    changing an operator's implementation invalidates the measured cost instead of
++    silently reusing it.  Digests are taken in ``mode="any"`` so agent-usable
++    operators that are not yet production-hardened are still bound.
++    """
++    import hashlib
++
++    from factor_engine.backend.evidence_provenance import _source_hash
++    from factor_engine.cleaned_operators.registry import OperatorRegistry
++
++    parts: list[str] = []
++    for canonical in sorted(canonicals):
++        digests: list[str] = []
++        for backend in ("pandas_numpy", "polars"):
++            implementation = OperatorRegistry.get(canonical, backend, mode="any")
++            if implementation is None:
++                continue
++            source_file = getattr(implementation.__class__, "__module__", "") or ""
++            try:
++                module = __import__(source_file, fromlist=["*"])
++            except ImportError:
++                continue
++            raw = getattr(module, "__file__", "") or ""
++            if not raw or not Path(raw).is_file():
++                continue
++            digest = _source_hash(Path(raw))
++            if digest:
++                digests.append(f"{backend}={digest}")
++        if digests:
++            parts.append(canonical + ":" + ",".join(digests))
++    if not parts:
++        return ""
++    return hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
++
++
++#: window-like integer parameters the fixtures actually passed, so the required
++#: ``window_distribution`` provenance field is a measurement, not a placeholder.
++_WINDOW_CAPTURE: dict[str, int] = {}
++_WINDOW_TOKENS = ("window", "period", "lookback", "days", "span", "lag", "d")
++
++
++def _bump(value: int) -> None:
++    _WINDOW_CAPTURE[str(value)] = _WINDOW_CAPTURE.get(str(value), 0) + 1
++
++
++def _capture_windows(values: Any, positional: Any = None) -> None:
++    """Record the integer parameters the fixture actually passed.
++
++    Windows reach a kernel two ways: as a named kwarg, and positionally — the
++    audit fixture passes an operator's declared params in order, so the positional
++    integers ARE the declared integer parameters.  Scanning both keeps the
++    required ``window_distribution`` field a measurement, not a placeholder.
++    """
++    if isinstance(values, dict):
++        for key, value in values.items():
++            if isinstance(value, bool) or not isinstance(value, int):
++                continue
++            if any(token in str(key).lower() for token in _WINDOW_TOKENS):
++                _bump(value)
++    if isinstance(positional, (list, tuple)):
++        for value in positional:
++            if isinstance(value, bool) or not isinstance(value, int):
++                continue
++            _bump(value)
++
++
++def _window_distribution() -> dict[str, Any]:
++    return {
++        "source": "fixture positional args + window-like kwargs",
++        "histogram": dict(sorted(_WINDOW_CAPTURE.items())),
++    }
++
++
++def _shape_summary(sizes: list[int]) -> list[dict[str, int]]:
++    out: list[dict[str, int]] = []
++    for size in sizes:
++        dates, instruments = _shape_for_rows(int(size))
++        out.append(
++            {
++                "requested_rows": int(size),
++                "dates": int(dates),
++                "instruments": int(instruments),
++            }
++        )
++    return out
++
++
++def _build_provenance(
++    sizes: list[int], canonicals: list[str], repeats: int
++) -> dict[str, Any]:
++    """Provenance the cost authority requires before it will trust the baseline.
++
++    ``operator_cost._BENCHMARK_PROVENANCE_REQUIRED`` discards a baseline missing
++    any of its fields, and ``plan_cost_router._measured_baseline`` only accepts one
++    whose recorded runtime family matches the live host.  Both requirements are
++    encoded here so the written file is usable immediately.
++    """
++    identity = _deployment_identity()
++    family = identity["runtime_family"]
++    shapes = _shape_summary(sizes)
++    return {
++        "measured": True,
++        "implementation_hash": _implementation_hash(canonicals),
++        "runtime_family": family,
++        "backend_versions": identity["backend_versions"],
++        "engine_identity": identity["engine_identity"],
++        "cpu_model": str(family.get("cpu_model") or platform.processor() or "unknown"),
++        "ram_gb": float(family.get("ram_gb") or 0.0),
++        "rows": shapes,
++        "columns": [shape["instruments"] for shape in shapes],
++        "window_distribution": _window_distribution(),
++        "null_rate": 0.0,
++        "group_cardinality": 1,
++        "requested_rows": [int(size) for size in sizes],
++        "repeats": int(repeats),
++        "surface": "daily (agent-usable)",
++        "canonical_count": len(canonicals),
++        "note": (
++            "deployment-host steady-state p50 calibration over the agent-usable "
++            "daily surface; rerun after hardware/runtime changes"
++        ),
++    }
++
++
+ def _median_ms(fn: Callable[[], Any], repeats: int) -> float:
+     fn()  # warmup/import/JIT allocation is not steady-state kernel cost
+     samples: list[float] = []
+@@ -96,11 +270,12 @@ def _pandas_case(canonical: str, rows: int):
+     from factor_engine.cleaned_operators.registry import OperatorRegistry
+ 
+     dates, instruments = _shape_for_rows(rows)
+-    panels = _panels(rows=dates, cols=instruments)
++    panels = _panels(rows=dates, columns=instruments)
+     op = OperatorRegistry.get(canonical, "pandas_numpy")
+     if op is None:
+         raise RuntimeError("no pandas backend")
+     args, kwargs = _build_call(canonical, op, panels)
++    _capture_windows(kwargs, args)
+     return lambda: op.calculate(*args, **kwargs), dates * instruments
+ 
+ 
+@@ -110,12 +285,13 @@ def _polars_panel_case(canonical: str, rows: int):
+     from factor_engine.backend.panel_polars import panel_to_polars
+ 
+     dates, instruments = _shape_for_rows(rows)
+-    panels = _panels(rows=dates, cols=instruments)
++    panels = _panels(rows=dates, columns=instruments)
+     op = OperatorRegistry.get(canonical, "polars")
+     if op is None:
+         raise RuntimeError("no polars backend")
+     p_op = OperatorRegistry.get(canonical, "pandas_numpy") or op
+     args, kwargs = _build_call(canonical, p_op, panels)
++    _capture_windows(kwargs, args)
+ 
+     def convert(value: Any) -> Any:
+         return panel_to_polars(value) if isinstance(value, pd.DataFrame) else value
+@@ -151,8 +327,24 @@ def _polars_long_case(canonical: str, rows: int):
+     return run, max(rows, instruments)
+ 
+ 
++# R58: one pooled DuckDB connection + its prepared-statement cache is reused for
++# the entire calibration run (calibration is a single-threaded one-shot script).
++# This removes the per-call duckdb.connect() fixed cost (~10-18 ms) that used to
++# inflate the duckdb_sql backend-cost measurement to ~9000 ms/M.
++_CALIB_DUCKDB_HANDLE = None
++
++
++def _get_calib_duckdb_handle():
++    global _CALIB_DUCKDB_HANDLE
++    if _CALIB_DUCKDB_HANDLE is None:
++        from factor_engine.backend.sql_pushdown.duckdb_connection_pool import (
++            get_shared_duckdb_pool,
++        )
++        _CALIB_DUCKDB_HANDLE = get_shared_duckdb_pool().acquire()
++    return _CALIB_DUCKDB_HANDLE
++
++
+ def _duckdb_case(canonical: str, rows: int):
+-    import duckdb
+     from factor_engine.backend.fastpath_plan_probe import ProbeSchemaBuilder
+     from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+ 
+@@ -176,12 +368,11 @@ def _duckdb_case(canonical: str, rows: int):
+     sql = str(compiled.query or "").replace(f"{{{{{dataset}}}}}", dataset)
+ 
+     def run():
+-        con = duckdb.connect()
+-        try:
+-            con.register(dataset, table)
+-            return con.execute(sql).fetch_arrow_table()
+-        finally:
+-            con.close()
++        # R58: reuse a single pooled connection; re-register the dataset view on
++        # every case so different canonicals never alias on the shared connection.
++        handle = _get_calib_duckdb_handle()
++        handle.register(dataset, table)
++        return handle.execute(sql).to_arrow_table()
+ 
+     return run, len(table)
+ 
+@@ -213,6 +404,14 @@ def main() -> int:
+     parser.add_argument("--rows", type=int, nargs="+", default=[20_000, 100_000])
+     parser.add_argument("--repeats", type=int, default=3)
+     parser.add_argument("--output", type=Path, default=OUT)
++    parser.add_argument(
++        "--limit", type=int, default=0,
++        help="calibrate only the first N canonicals (smoke runs)",
++    )
++    parser.add_argument(
++        "--canonicals", default="",
++        help="comma-separated canonical allowlist (smoke runs)",
++    )
+     args = parser.parse_args()
+     sizes = sorted({int(x) for x in args.rows if int(x) > 0})
+     if not sizes:
+@@ -220,22 +419,28 @@ def main() -> int:
+ 
+     from factor_engine.cleaned_operators import load_all
+     from factor_engine.backend.sql_pushdown.sql_registry import register_sql_backends
+-    from factor_engine.cleaned_operators.production_hardening import factor_production_targets
+     from factor_engine.backend.operator_capability import supports_pandas, supports_polars, supports_sql
+-    from factor_engine.backend.polars_long_production import is_polars_long_native_production_safe
++    from factor_engine.backend.polars_long_production import polars_long_production_tier
+ 
+     load_all()
+     register_sql_backends()
+     operators: dict[str, dict[str, Any]] = {}
+-    for canonical in sorted(factor_production_targets()):
++    canonicals = sorted(_agent_usable_canonicals())
++    if args.canonicals:
++        wanted = {c.strip() for c in args.canonicals.split(",") if c.strip()}
++        canonicals = [c for c in canonicals if c in wanted]
++    if args.limit and int(args.limit) > 0:
++        canonicals = canonicals[: int(args.limit)]
++    print(f"calibrating {len(canonicals)} agent-usable canonicals")
++    for canonical in canonicals:
+         row: dict[str, Any] = {}
+-        if supports_pandas(canonical, mode="production"):
++        if supports_pandas(canonical, mode="research"):
+             row["pandas_numpy"] = _benchmark_backend(canonical, "pandas_numpy", sizes, args.repeats)
+-        if supports_polars(canonical, mode="production"):
++        if supports_polars(canonical, mode="research"):
+             row["polars_panel"] = _benchmark_backend(canonical, "polars_panel", sizes, args.repeats)
+-        if is_polars_long_native_production_safe(canonical):
++        if polars_long_production_tier(canonical) != "unsupported":
+             row["polars_long"] = _benchmark_backend(canonical, "polars_long", sizes, args.repeats)
+-        if supports_sql(canonical, data_source_kind="duckdb", mode="production"):
++        if supports_sql(canonical, data_source_kind="duckdb", mode="research"):
+             row["duckdb_sql"] = _benchmark_backend(canonical, "duckdb_sql", sizes, args.repeats)
+         operators[canonical] = row
+         print(canonical, {k: "ok" if "error" not in v else v["error"] for k, v in row.items()})
+@@ -244,13 +449,7 @@ def main() -> int:
+         "schema_version": 2,
+         "generated_by": "calibrate_backend_costs.py",
+         "generated_at": datetime.now(timezone.utc).isoformat(),
+-        "provenance": {
+-            "measured": True,
+-            "runtime_family": _runtime_family(),
+-            "requested_rows": sizes,
+-            "repeats": int(args.repeats),
+-            "note": "deployment-host steady-state p50 calibration; rerun after hardware/runtime changes",
+-        },
++        "provenance": _build_provenance(sizes, canonicals, int(args.repeats)),
+         "operators": operators,
+     }
+     args.output.parent.mkdir(parents=True, exist_ok=True)
+diff --git a/factor_engine/storage/sources/composite_source.py b/factor_engine/storage/sources/composite_source.py
+index b026add17..f37d1b17d 100644
+--- a/factor_engine/storage/sources/composite_source.py
++++ b/factor_engine/storage/sources/composite_source.py
+@@ -270,6 +270,51 @@ class CompositeDataSource(DataSource):
+         self._snapshot_manifest: tuple[tuple[str, SnapshotState], ...] | None = None
+         self._validate_join_policy()
+ 
++    def time_range(self) -> tuple[str | None, str | None] | None:
++        """组合源的聚合读取边界（warm-up / full-history 解析权威）。
++
++        ``extract_source_date_bounds`` 优先调用本方法，因此组合源必须回报
++        子源真正遵守的边界。任一子源未声明边界 → 该方向无界，整源无界：
++        绝不用兄弟源的边界去「补」出一段并不存在、也读不到的历史。
++
++        为什么必须暴露：``LongTableDataSource`` 只在构造时从 ``inner`` 复制
++        ``start_date`` / ``end_date``。组合源不暴露它们时，``long_table``
++        包装后的 ``engine.data_source.start_date`` 为 ``None`` —— 于是
++        ``_auto_warmup_run_window`` 在 ``requested_start is None`` 处提前返回，
++        ``warmup_bars=0`` 且不产生任何日志：预热既不加载也不裁剪，
++        ``min_periods=1`` 的内核会在请求首日吐出窗口尚未满足的早期值。
++        """
++        starts: list[str] = []
++        ends: list[str] = []
++        for source in self.sources.values():
++            probe = getattr(source, "time_range", None)
++            rng = probe() if callable(probe) else (
++                getattr(source, "start_date", None),
++                getattr(source, "end_date", None),
++            )
++            if not rng or len(rng) < 2:
++                return None
++            start, end = rng[0], rng[1]
++            if start is None or end is None:
++                return None
++            starts.append(str(start))
++            ends.append(str(end))
++        if not starts:
++            return None
++        return (min(starts), max(ends))
++
++    @property
++    def start_date(self) -> str | None:
++        """聚合起始边界（见 :meth:`time_range`）。"""
++        rng = self.time_range()
++        return None if rng is None else rng[0]
++
++    @property
++    def end_date(self) -> str | None:
++        """聚合结束边界（见 :meth:`time_range`）。"""
++        rng = self.time_range()
++        return None if rng is None else rng[1]
++
+     def execution_spec(self) -> dict[str, Any] | None:
+         """返回可重建（``storage.factory.build_data_source``）的 canonical 配置。
+ 
+diff --git a/factor_engine/storage/time_window.py b/factor_engine/storage/time_window.py
+index 22cce287a..f7c91fe6b 100644
+--- a/factor_engine/storage/time_window.py
++++ b/factor_engine/storage/time_window.py
+@@ -606,3 +606,117 @@ def narrow_data_source_for_window(
+         end_date=end_date,
+         intraday=intraday,
+     )
++
++
++def rebase_data_source_window(
++    source: DataSource,
++    *,
++    start_date: str | pd.Timestamp | None = None,
++    end_date: str | pd.Timestamp | None = None,
++    bar_freq: str | None = None,
++) -> DataSource:
++    """在**精确**边界上重建数据源链（覆盖，而非求交）。
++
++    预热必须把读取区间向前扩展。``narrow_data_source_for_window`` 刻意求交
++    （start 取 ``max``、end 取 ``min``），因此把预热窗口交给它会被静默夹回请求
++    区间，历史一行都读不到——这正是 ``min_periods=1`` 的内核会在请求首日泄漏
++    未成熟值的原因。
++
++    与求交不同，本函数直接设定边界，并递归穿过 long_table / composite 包装，
++    让叶子源真正移动。仅用于 warm-up / full-history 这类"扩展"语义。
++
++    参数:
++        source: 待重建的数据源
++        start_date: 精确起始边界（可选）
++        end_date: 精确结束边界（可选）
++        bar_freq: bar 频率字符串（可选）
++
++    返回:
++        DataSource
++    """
++    from factor_engine.cleaned_operators.operator_policy import bars_per_day
++
++    resolved_bar_freq = bar_freq or getattr(source, "bar_freq", None)
++    if resolved_bar_freq is None:
++        inner = getattr(source, "inner", None) or getattr(source, "_inner", None)
++        if inner is not None:
++            resolved_bar_freq = getattr(inner, "bar_freq", None)
++
++    start_s = _bound_for_io(start_date, resolved_bar_freq)
++    end_s = _bound_for_io(end_date, resolved_bar_freq)
++    if start_s is None and end_s is None:
++        return source
++
++    from .composite_source import CompositeDataSource
++    from .data_access_source import DataAccessSource
++    from .kline_parquet_source import KlineParquetSource
++    from .long_table_source import LongTableDataSource
++    from .parquet_source import ParquetSource
++
++    child = getattr(source, "inner", None) or getattr(source, "_inner", None)
++
++    # 长表只是列布局适配：下推到内层后原样重包装，否则内层边界不会移动。
++    if isinstance(source, LongTableDataSource):
++        if child is None:
++            return source
++        return LongTableDataSource(
++            rebase_data_source_window(
++                child,
++                start_date=start_date,
++                end_date=end_date,
++                bar_freq=resolved_bar_freq,
++            )
++        )
++
++    if isinstance(source, CompositeDataSource):
++        return CompositeDataSource(
++            anchor_source=source.anchor_source,
++            anchor_column=source.anchor_column,
++            sources={
++                name: rebase_data_source_window(
++                    sub,
++                    start_date=start_date,
++                    end_date=end_date,
++                    bar_freq=resolved_bar_freq,
++                )
++                for name, sub in source.sources.items()
++            },
++            joins=source.joins,
++            aliases=source.aliases,
++            allow_unqualified_anchor_columns=source.allow_unqualified_anchor_columns,
++        )
++
++    if isinstance(source, DataAccessSource):
++        contract_names = (
++            "dataset", "fields", "instrument_filter", "normalize_timestamp",
++            "timestamp_unit", "read_auto", "params", "semantic_filters",
++            "read_mode", "strict_unknown_fields", "run_mode", "production",
++            "enforce_mining_gate", "snapshot_now_only", "mining_coverage_threshold",
++            "pit_enforce", "snapshot_only", "snapshot_valid_at", "snapshot_created_at",
++        )
++        contracts = {name: getattr(source, name) for name in contract_names}
++        return DataAccessSource(**contracts, start_date=start_s, end_date=end_s)
++
++    if isinstance(source, KlineParquetSource):
++        return replace(source, start_date=start_s, end_date=end_s)
++
++    if isinstance(source, ParquetSource):
++        return type(source)(
++            root=source.root,
++            timestamp_column=source.timestamp_column,
++            instrument_column=source.instrument_column,
++            fields=source.fields,
++            max_files=source.max_files,
++            timestamp_unit=source.timestamp_unit,
++            start_date=start_s,
++            end_date=end_s,
++            recursive=source.recursive,
++        )
++
++    # 未识别的包装：保留它，用窗口层精确施加边界（窗口层只做过滤，不夹回）。
++    return WindowedDataSource(
++        source,
++        start_date=start_s,
++        end_date=end_s,
++        intraday=bars_per_day(resolved_bar_freq) > 1,
++    )

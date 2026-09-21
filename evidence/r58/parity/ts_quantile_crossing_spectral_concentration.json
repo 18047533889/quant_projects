@@ -1,0 +1,24 @@
+{
+ "canonical": "ts_quantile_crossing_spectral_concentration",
+ "review_id": "r58-surface-promotion:ts_quantile_crossing_spectral_concentration",
+ "semantic_hash": "f65d6b9ae06d0678",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "window": 120,
+  "quantile": 0.1,
+  "side": "lower",
+  "fixed_threshold": false
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 142,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

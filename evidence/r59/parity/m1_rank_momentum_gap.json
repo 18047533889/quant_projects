@@ -1,0 +1,25 @@
+{
+ "canonical": "m1_rank_momentum_gap",
+ "review_id": "r59-surface-promotion:m1_rank_momentum_gap",
+ "semantic_hash": "50f3858e1d4f68af",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {
+  "fast_window": 5,
+  "slow_window": 20,
+  "min_periods": 3,
+  "min_breadth": 3
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1176,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v4"
+}

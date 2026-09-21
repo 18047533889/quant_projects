@@ -1,0 +1,24 @@
+{
+ "canonical": "ts_dfa_hurst",
+ "review_id": "r59-surface-promotion:ts_dfa_hurst",
+ "semantic_hash": "7f7f053e00a33519",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {
+  "window": 250,
+  "min_scale": 4,
+  "max_scale": 32
+ },
+ "pandas_shape": [
+  512,
+  10
+ ],
+ "polars_shape": [
+  512,
+  10
+ ],
+ "finite_values": 3850,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v5"
+}

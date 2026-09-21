@@ -1,0 +1,24 @@
+{
+ "canonical": "event_response_effective_events",
+ "review_id": "r59-surface-promotion:event_response_effective_events",
+ "semantic_hash": "5e8cb135611ff65f",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {
+  "history_window": 20,
+  "horizon": 20,
+  "refractory": 3
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 907,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v1"
+}

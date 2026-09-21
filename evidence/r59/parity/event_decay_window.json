@@ -1,0 +1,23 @@
+{
+ "canonical": "event_decay_window",
+ "review_id": "r59-surface-promotion:event_decay_window",
+ "semantic_hash": "68a0cf5414aa5938",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {
+  "window": 20,
+  "halflife": 20
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 159,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v2"
+}

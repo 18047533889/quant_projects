@@ -1,0 +1,22 @@
+{
+ "canonical": "ep1_roa_stability",
+ "review_id": "r58-surface-promotion:ep1_roa_stability",
+ "semantic_hash": "718ffa2414a042af",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "window": 8,
+  "min_periods": 4
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1165,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

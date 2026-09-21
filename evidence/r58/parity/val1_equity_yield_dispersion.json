@@ -1,0 +1,21 @@
+{
+ "canonical": "val1_equity_yield_dispersion",
+ "review_id": "r58-surface-promotion:val1_equity_yield_dispersion",
+ "semantic_hash": "bac4b7939503a9db",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "min_breadth": 10
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 490,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

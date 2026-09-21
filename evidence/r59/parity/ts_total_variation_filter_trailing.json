@@ -1,0 +1,19 @@
+{
+ "canonical": "ts_total_variation_filter_trailing",
+ "review_id": "r59-surface-promotion-pandasonly:ts_total_variation_filter_trailing",
+ "semantic_hash": "0ace6112ba7c7573",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas-kernel execution evidence on synth panel (polars backend unsupported for this canonical; the auto router falls back to the pandas_numpy backend at runtime). NOT a pandas-vs-polars parity check.",
+ "parity_params": {
+  "window": 20,
+  "lambda_tv": 0.1
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": null,
+ "finite_values": 1182,
+ "max_abs_diff": null,
+ "result": "EXEC_OK"
+}

@@ -1,0 +1,18 @@
+{
+ "canonical": "WMA",
+ "review_id": "r59-surface-promotion-pandasonly:WMA",
+ "semantic_hash": "27069cad30a82cf2",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas-kernel execution evidence on synth panel (polars backend unsupported for this canonical; the auto router falls back to the pandas_numpy backend at runtime). NOT a pandas-vs-polars parity check.",
+ "parity_params": {
+  "window": 10
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": null,
+ "finite_values": 1199,
+ "max_abs_diff": null,
+ "result": "EXEC_OK"
+}

@@ -1,0 +1,22 @@
+{
+ "canonical": "state_l2_partial_adjustment",
+ "review_id": "r59-surface-promotion:state_l2_partial_adjustment",
+ "semantic_hash": "60df243de483c159",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {
+  "lambda_smooth": 1.0
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1098,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v4"
+}

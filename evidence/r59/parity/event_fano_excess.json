@@ -1,0 +1,23 @@
+{
+ "canonical": "event_fano_excess",
+ "review_id": "r59-surface-promotion:event_fano_excess",
+ "semantic_hash": "a387925812ecac07",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {
+  "window": 240,
+  "block": 20
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 210,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v2"
+}

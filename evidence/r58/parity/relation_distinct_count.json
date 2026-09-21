@@ -1,0 +1,19 @@
+{
+ "canonical": "relation_distinct_count",
+ "review_id": "r58-surface-promotion:relation_distinct_count",
+ "semantic_hash": "3c8c95a9f2f52bf5",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {},
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1200,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

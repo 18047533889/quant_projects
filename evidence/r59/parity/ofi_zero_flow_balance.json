@@ -1,0 +1,23 @@
+{
+ "canonical": "ofi_zero_flow_balance",
+ "review_id": "r59-surface-promotion:ofi_zero_flow_balance",
+ "semantic_hash": "c16283c3013f2e0a",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {
+  "window": 20,
+  "min_periods": 2
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1190,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v1"
+}

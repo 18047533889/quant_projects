@@ -1,0 +1,19 @@
+{
+ "canonical": "ts_activity_spectral_entropy",
+ "review_id": "r59-surface-promotion-pandasonly:ts_activity_spectral_entropy",
+ "semantic_hash": "205777716b0bad8f",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas-kernel execution evidence on synth panel (polars backend unsupported for this canonical; the auto router falls back to the pandas_numpy backend at runtime). NOT a pandas-vs-polars parity check.",
+ "parity_params": {
+  "window": 20,
+  "input_kind": "NonNegativeActivity"
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": null,
+ "finite_values": 159,
+ "max_abs_diff": null,
+ "result": "EXEC_OK"
+}

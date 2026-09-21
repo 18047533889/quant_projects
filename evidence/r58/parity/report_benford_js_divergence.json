@@ -1,0 +1,21 @@
+{
+ "canonical": "report_benford_js_divergence",
+ "review_id": "r58-surface-promotion:report_benford_js_divergence",
+ "semantic_hash": "26b259e797a66831",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "window": 60
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1102,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

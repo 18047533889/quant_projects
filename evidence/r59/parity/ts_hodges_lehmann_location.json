@@ -1,0 +1,23 @@
+{
+ "canonical": "ts_hodges_lehmann_location",
+ "review_id": "r59-surface-promotion:ts_hodges_lehmann_location",
+ "semantic_hash": "e126d05c07d84e5a",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {
+  "window": 20,
+  "min_periods": 2
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 999,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v1"
+}

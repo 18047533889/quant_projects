@@ -1,0 +1,19 @@
+{
+ "canonical": "erd_post_event_hazard",
+ "review_id": "r58-surface-promotion:erd_post_event_hazard",
+ "semantic_hash": "4e314f052472dd01",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {},
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 890,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

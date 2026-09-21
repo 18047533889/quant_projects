@@ -1,0 +1,22 @@
+{
+ "canonical": "tod_intraday_range_position",
+ "review_id": "r58-surface-promotion:tod_intraday_range_position",
+ "semantic_hash": "400c8c46524c44e8",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "window": 20,
+  "min_periods": 2
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1088,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

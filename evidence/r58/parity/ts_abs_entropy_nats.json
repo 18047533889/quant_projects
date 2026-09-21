@@ -1,0 +1,22 @@
+{
+ "canonical": "ts_abs_entropy_nats",
+ "review_id": "r58-surface-promotion:ts_abs_entropy_nats",
+ "semantic_hash": "249da95e182bc983",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "window": 20,
+  "min_periods": 1
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1200,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

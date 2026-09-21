@@ -1,0 +1,19 @@
+{
+ "canonical": "ts_ssa_denoise_trailing",
+ "review_id": "r59-surface-promotion-pandasonly:ts_ssa_denoise_trailing",
+ "semantic_hash": "1117731d573233d9",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas-kernel execution evidence on synth panel (polars backend unsupported for this canonical; the auto router falls back to the pandas_numpy backend at runtime). NOT a pandas-vs-polars parity check.",
+ "parity_params": {
+  "window": 20,
+  "n_components": 3
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": null,
+ "finite_values": 1161,
+ "max_abs_diff": null,
+ "result": "EXEC_OK"
+}

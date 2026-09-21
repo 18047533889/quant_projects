@@ -1,0 +1,1435 @@
+# R59 — 落值性能根治 + 186 算子晋升 daily surface（2026-09-21/23）
+
+## 一、落值慢的根因与修复（polars_expr_emitter.py）
+
+根因：18 个 `rolling_map` Python UDF 每行每窗口每标的调一次 Python，单个因子落值 95–585s。
+修复：全部下沉为
+1. **polars 原生**：`ts_quantile`→`rolling_quantile(linear)`、`ts_skew`→`rolling_skew(bias=False)`（加 `_sd>0` 零方差 gate 对齐 pandas）；
+2. **块帧向量化 numpy**（每算子每标的一次调用）：mad/product(frexp)/argmax/argmin/time_slope/monotonicity/turning_point_ratio/endpoint_deviation/vol_shift/drawdown_duration/recovery_fraction/kurt/quantile_range/median_abs_deviation/mean_abs_deviation/under_water/running_peak；
+3. **corr/cov 块帧化**：`_rolling_pair_block_frame` + `_np_pair_corr`/`_np_pair_cov`，替换 4 处 list-frame 派发。
+
+### 落值耗时（25×500 真实面板，单因子，auto_long）
+
+| 算子 | 旧 | 新 | 加速 |
+|---|---|---|---|
+| ts_quantile | 585.5s | 2.40s | 244× |
+| ts_skew | 161.7s | 2.62s | 62× |
+| ts_median_abs_deviation | 111.0s | 5.20s | 21× |
+| ts_corr | 51s | 4.27s | 12× |
+| ts_cov | 51s | 4.57s | 11× |
+| ts_mean_abs_deviation | 38.7s | 2.69s | 14× |
+| ts_kurt | 46.9s | 6.72s | 7× |
+| ts_product | 43.6s | 3.49s | 12.5× |
+| 地板（ts_mean/ts_std/ts_zscore） | — | 2.5–9.5s | 数据加载上限，未变 |
+
+## 二、开发中抓出并修正的语义 bug（对照 pandas 权威）
+
+1. **ts_product 符号错误**（历史 bug）：旧 UDF 用 `sum(valid)<0` 判号，重写为 frexp 尾数/指数乘法对齐 `_stable_product`，符号精确。
+2. **monotonicity C/D 反号**；frexp 指数 off-by-one；skew 零方差 gate；drawdown last-break 公式；recovery 峰位行坐标；vol_shift 物理窗 `n_phys=min(i+1,w)`。
+
+## 三、ts_vol_shift_score 最终仲裁
+
+kernel_ab 中 old UDF 报 19/720 NaN 不一致 → 与 `regression_models._trailing_run_halves` 权威逐行对拍：**新 kernel 完全一致（worst=3.89e-16, nan_mismatch=0, 960 cases）**；不一致全部来自旧 UDF 在预热边缘行（n<w）midpoint 语义错误。
+
+## 四、daily surface 晋升（operator_surface.py）
+
+- parity 波 v1=123 / v2=44 / v4=30 / v5=16 → **166 个**真 parity PASS；
+- pandas-only 执行证据 **20 个**（polars 后端不支持、auto 路由回 pandas）；
+- 合计 **186 个**晋升 daily（`_R59_PROMOTIONS`，注册于 R58 block 之后）。
+- **排除 30 个 RESEARCH_ONLY 算子**：静态 research 面与 daily 分区重叠会触发 `finalize_layer_governance` 重叠检查（首次插入时被抓出并回滚修正）；12 个 unsafe/internal/legacy 维持排除。
+- triage 最终：A=186 / B=381 / C=12（`evidence/r59/surface_triage_r59.json`）。
+
+## 五、dsl_parser.py 解析期 gate
+
+新增 `_missing_required_params` + parse 期缺参拒绝（镜像运行时 binder），`ts_abdi_ranaldo_spread(close,20)` 现在解析期即拒绝。
+
+## 六、回归结论
+
+- kernel A/B：18 kernel 全部通过（skew-const/vol_shift FAIL 均为 harness/旧 UDF 历史行为，权威对拍通过）；
+- 端到端 smoke：12 算子真实落值全部干净完成（ts_product 无 NaN→u64 crash，3.49s）；
+- 治理检查：`load_all()` + `finalize_layer_governance` 通过，migrated surface = 1429；
+- 真实数据 corr/cov 端到端 = 引擎落值与 pandas rolling 对照一致（本地对拍脚本 `/tmp/r59_pair_e2e.py`）。
+
+## 证据文件
+
+- `evidence/r59/parity/<canonical>.json`（186 份逐算子证据）
+- `evidence/r59/R59_PROMOTION_MERGE.json`
+- `evidence/r59/surface_triage_r59.json`
+- `evidence/r59/R59_CONSOLIDATED.patch`（emitter ×6 + parser ×2 + surface）
+- 基准：`/home/sunhaiwei/_r84b_new_kernel.json`、重测日志 `/tmp/r84c_retime.log`
+
+按规不 commit/push；R58 改动保持原样。
+
+```
+# ---- r59_emitter.patch ----
+--- a/factor_engine/backend/polars_expr_emitter.py
++++ b/factor_engine/backend/polars_expr_emitter.py
+@@ -24,6 +24,8 @@
+ 
+ from typing import Any
+ 
++import warnings
++
+ import numpy as np
+ 
+ from factor_engine.planner.logical_plan import PlanNode
+@@ -817,6 +819,400 @@
+     return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
+ 
+ 
++
++# =====================================================================
++# R59 fast-path: per-instrument block lowering for rolling_map kernels.
++#
++# The ``rolling_map`` tier costs one Python call per (row, window) per
++# instrument; on a real 25x500 panel a single ts_quantile factor spent
++# 585 s inside this dispatch loop (R84 microbench), ts_skew 162 s,
++# ts_median_abs_deviation 111 s. The kernels below keep the exact
++# per-window formulas of the pandas authorities but evaluate them
++# vectorized: ONE Python call per (op, instrument) over a head-padded
++# sliding-window matrix (row i = chronological window of length w ending
++# at row i; NaN padding reproduces the shorter edge windows of
++# ``rolling_map``). Non-finite inputs are masked to NaN first, matching
++# the isfinite filters of the pandas references. Parity harness and
++# before/after numbers: evidence/r59/.
++# =====================================================================
++def _rolling_block_frame(
++    inner: pl.LazyFrame,
++    w: int,
++    fn,
++) -> pl.LazyFrame:
++    """Per-instrument block evaluation of ``fn(sw) -> (rows,)``.
++
++    ``sw`` has shape (rows, w), chronological, head-NaN-padded. Returns the
++    compiled frame keyed (ts, inst) with the lowered ``_VAL`` column (same
++    contract as the corr/cov list-frame paths).
++    """
++    w = max(int(w), 1)
++
++    def _one(rec: dict) -> list:
++        vals = np.asarray(rec["__blk_vals"], dtype=np.float64)
++        if vals.size == 0:
++            return []
++        padded = np.concatenate([np.full(w - 1, np.nan), vals])
++        sw = np.lib.stride_tricks.sliding_window_view(padded, w)
++        return fn(sw).tolist()
++
++    packed = (
++        inner.sort([_INST, _TS])
++        .group_by(_INST, maintain_order=True)
++        .agg(pl.col(_TS), pl.col(_VAL).alias("__blk_vals"))
++        .with_columns(
++            pl.struct("__blk_vals")
++            .map_elements(_one, return_dtype=pl.List(pl.Float64))
++            .alias("__blk_out")
++        )
++        .explode(_TS, "__blk_out")
++    )
++    return packed.select(_TS, _INST, pl.col("__blk_out").alias(_VAL))
++
++
++def _np_mask_finite(sw: np.ndarray) -> np.ndarray:
++    return np.where(np.isfinite(sw), sw, np.nan)
++
++
++def _np_roll_median_ad(scale: float, min_periods: int):
++    """Median Absolute Deviation over finite window values (pandas authority)."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        m = _np_mask_finite(sw)
++        with warnings.catch_warnings():
++            warnings.simplefilter("ignore")
++            med = np.nanmedian(m, axis=1)
++            dev = np.abs(m - med[:, None])
++            out = np.nanmedian(dev, axis=1) * float(scale)
++        n = np.isfinite(m).sum(axis=1)
++        out[n < min_periods] = np.nan
++        return out
++    return _fn
++
++
++def _np_roll_mean_ad(min_periods: int = 1):
++    """Mean Absolute Deviation over finite window values."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        m = _np_mask_finite(sw)
++        with warnings.catch_warnings():
++            warnings.simplefilter("ignore")
++            mu = np.nanmean(m, axis=1)
++            dev = np.abs(m - mu[:, None])
++            out = np.nanmean(dev, axis=1)
++        n = np.isfinite(m).sum(axis=1)
++        out[n < min_periods] = np.nan
++        return out
++    return _fn
++
++
++def _np_roll_product(min_periods: int = 1):
++    """Rolling product: 0 / negative-sign / NaN-skip / Inf-poison / overflow
++    handled exactly like the former per-window pandas formula."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        finite = np.isfinite(sw)
++        m = np.where(finite, sw, np.nan)
++        has_inf = np.any(np.isinf(sw), axis=1)
++        has_zero = np.any(m == 0.0, axis=1)
++        n = finite.sum(axis=1)
++        with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
++            neg = np.nansum(m < 0.0, axis=1)
++            log_abs = np.nansum(np.log(np.abs(np.where(m == 0.0, 1.0, m))), axis=1)
++            sign = np.where(neg % 2 == 1, -1.0, 1.0)
++            out = sign * np.exp(log_abs)
++        out[has_inf] = np.nan
++        out[has_zero & ~has_inf] = 0.0
++        overflow = log_abs > np.log(np.finfo(np.float64).max)
++        out[overflow & ~has_zero & ~has_inf] = np.nan
++        out[n < min_periods] = np.nan
++        return out
++    return _fn
++
++
++def _np_roll_argext(pick: str):
++    """Rolling distance to the window extreme (0 = current bar; ties pick the
++    most recent occurrence; an all-invalid window is NULL)."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        with warnings.catch_warnings():
++            warnings.simplefilter("ignore")
++            if pick == "max":
++                extreme = np.nanmax(sw, axis=1)
++            else:
++                extreme = np.nanmin(sw, axis=1)
++        finite = np.isfinite(sw)
++        eq = (sw == extreme[:, None]) & finite
++        has = eq.any(axis=1)
++        age = eq[:, ::-1].argmax(axis=1).astype(np.float64)
++        out = np.where(has, age, np.nan)
++        out[~finite.any(axis=1)] = np.nan
++        return out
++    return _fn
++
++
++def _np_roll_time_slope(min_periods: int = 2):
++    """OLS slope on within-window physical positions of the valid cells
++    (gap-compressed re-centering identical to the pandas reference)."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        finite = np.isfinite(sw)
++        n = finite.sum(axis=1).astype(np.float64)
++        idx = np.arange(sw.shape[1], dtype=np.float64)
++        vf = np.where(finite, sw, 0.0)
++        st = (finite * idx).sum(axis=1)
++        stt = (finite * (idx * idx)).sum(axis=1)
++        sy = vf.sum(axis=1)
++        sty = (vf * idx).sum(axis=1)
++        denom = n * stt - st * st
++        num = n * sty - st * sy
++        out = np.where(np.abs(denom) > 0.0, num / np.where(denom == 0.0, 1.0, denom), np.nan)
++        out[n < min_periods] = np.nan
++        return out
++    return _fn
++
++
++def _np_roll_monotonicity(min_periods: int):
++    """Kendall-style (C-D)/(C+D) over finite pairs in chronological order,
++    ties skipped — identical to the former O(n^2) per-window loop."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        rows, w = sw.shape
++        finite = np.isfinite(sw)
++        n = finite.sum(axis=1)
++        out = np.full(rows, np.nan)
++        iu = np.triu(np.ones((w, w), dtype=bool), k=1)
++        chunk = max(1, int(2_000_000 // max(w * w, 1)))
++        with np.errstate(invalid="ignore"):
++            for s0 in range(0, rows, chunk):
++                s1 = min(rows, s0 + chunk)
++                v = np.where(finite[s0:s1], sw[s0:s1], np.nan)
++                d = v[:, :, None] - v[:, None, :]
++                good = finite[s0:s1, :, None] & finite[s0:s1, None, :] & iu
++                c = np.count_nonzero((d > 0) & good, axis=(1, 2)).astype(np.float64)
++                dd = np.count_nonzero((d < 0) & good, axis=(1, 2)).astype(np.float64)
++                tot = c + dd
++                out[s0:s1] = np.where(tot > 0, (c - dd) / np.where(tot == 0, 1.0, tot), np.nan)
++        out[n < min_periods] = np.nan
++        return out
++    return _fn
++
++
++def _np_trailing_gather(sw: np.ndarray):
++    """Gather the trailing contiguous finite run of each window row.
++
++    Returns (values, run_len): values[i, k] = run element k (NaN beyond the
++    run); run_len[i] = length of the finite run ending at the last column.
++    Matches the pandas ``_trailing_contiguous`` authority (a non-finite
++    current row yields an empty run).
++    """
++    rows, w = sw.shape
++    idx = np.arange(w)
++    valid = np.isfinite(sw)
++    last_bad = np.where(~valid, idx, -1)
++    last_bad = np.maximum.accumulate(last_bad, axis=1)
++    run = (w - 1 - last_bad[:, -1]).astype(np.int64)
++    start = (w - run).astype(np.int64)
++    pos = start[:, None] + idx[None, :]
++    within = idx[None, :] < run[:, None]
++    pos = np.where(within, pos, 0)
++    vals = np.take_along_axis(sw, np.clip(pos, 0, w - 1), axis=1)
++    vals = np.where(within, vals, np.nan)
++    return vals, run
++
++
++def _np_roll_turning_point_ratio():
++    """Direction-reversal ratio over the trailing contiguous segment."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        vals, run = _np_trailing_gather(sw)
++        with np.errstate(invalid="ignore"):
++            d = np.diff(vals, axis=1)
++            prod = d[:, 1:] * d[:, :-1]
++            turns = np.count_nonzero(prod < 0, axis=1).astype(np.float64)
++        denom = (run - 2).astype(np.float64)
++        out = np.where(denom > 0, turns / np.where(denom == 0, 1.0, denom), np.nan)
++        out[run < 4] = np.nan
++        return out
++    return _fn
++
++
++def _np_roll_endpoint_deviation(min_periods: int):
++    """(x_t - OLS prediction) / residual std over the trailing contiguous
++    segment; centered two-pass moments keep price-scale precision."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        rows, w = sw.shape
++        vals, run = _np_trailing_gather(sw)
++        idx = np.arange(w, dtype=np.float64)
++        kmask = idx[None, :] < run[:, None]
++        n = run.astype(np.float64)
++        sx = np.where(kmask, idx, 0.0).sum(axis=1)
++        sy = np.where(np.isfinite(vals), vals, 0.0).sum(axis=1)
++        with np.errstate(invalid="ignore", divide="ignore"):
++            xbar = sx / np.maximum(n, 1.0)
++            ybar = sy / np.maximum(n, 1.0)
++            xc = np.where(kmask, idx[None, :] - xbar[:, None], 0.0)
++            yc = np.where(np.isfinite(vals), vals - ybar[:, None], 0.0)
++            sxxc = (xc * xc).sum(axis=1)
++            sxyc = (xc * yc).sum(axis=1)
++            syyc = (yc * yc).sum(axis=1)
++            b = np.where(sxxc > 0, sxyc / np.where(sxxc == 0, 1.0, sxxc), 0.0)
++            a = ybar - b * xbar
++            resid2 = syyc - 2.0 * b * sxyc + b * b * sxxc
++            sigma = np.sqrt(np.maximum(resid2, 0.0) / np.maximum(n, 1.0))
++            x_hat = a + b * (n - 1.0)
++            last = vals[np.arange(rows), np.maximum(run - 1, 0)]
++            num = last - x_hat
++            out = num / np.where(np.abs(sigma) >= _EPS_TINY, sigma, 1.0)
++            out = np.where(
++                np.abs(sigma) < _EPS_TINY,
++                np.where(np.abs(num) < _EPS_TINY, 0.0, np.nan),
++                out,
++            )
++        out[run < min_periods] = np.nan
++        return out
++    return _fn
++
++
++def _np_roll_vol_shift(min_periods: int):
++    """log(second-half std / first-half std) with the physical-midpoint split
++    of the trailing contiguous segment (no gap compression)."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        w = sw.shape[1]
++        vals, run = _np_trailing_gather(sw)
++        seg = np.where(np.isfinite(vals), vals, np.nan)
++        mid = w // 2
++        gap = w - run
++        first_len = np.minimum(np.maximum(mid - gap, 0), run)
++        idx = np.arange(w)
++        m1 = idx[None, :] < first_len[:, None]
++        m2 = (idx[None, :] >= first_len[:, None]) & (idx[None, :] < run[:, None])
++        with warnings.catch_warnings():
++            warnings.simplefilter("ignore")
++
++            def _std(mask):
++                cnt = mask.sum(axis=1).astype(np.float64)
++                ssum = np.where(mask, seg, 0.0).sum(axis=1)
++                mu = np.where(cnt > 0, ssum / np.maximum(cnt, 1.0), 0.0)
++                dev2 = np.where(mask, (seg - mu[:, None]) ** 2, 0.0).sum(axis=1)
++                return np.sqrt(np.maximum(dev2, 0.0) / np.maximum(cnt, 1.0)), cnt
++
++            sd1, n1 = _std(m1)
++            sd2, n2 = _std(m2)
++        with np.errstate(divide="ignore", invalid="ignore"):
++            out = np.log(sd2 / sd1)
++        out[(n1 < 2) | (n2 < 2)] = np.nan
++        out[(sd1 <= 0) | (sd2 <= 0)] = np.nan
++        out[run < min_periods] = np.nan
++        return out
++    return _fn
++
++
++def _np_roll_running_peak(sw: np.ndarray):
++    """Running peak within each window row, reset to -inf at non-finite rows."""
++    rows, w = sw.shape
++    valid = np.isfinite(sw)
++    peak = np.full(rows, -np.inf)
++    pk = np.full((rows, w), -np.inf)
++    for j in range(w):
++        vj = valid[:, j]
++        xj = np.where(vj, sw[:, j], -np.inf)
++        peak = np.maximum(peak, xj)
++        pk[:, j] = peak
++        peak = np.where(vj, peak, -np.inf)
++    return valid, pk
++
++
++def _np_roll_under_water():
++    """Fraction of valid window rows below the running peak (current row must
++    be finite; the peak never crosses a gap)."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        valid, pk = _np_roll_running_peak(sw)
++        under = valid & (sw < pk)
++        cnt = under.sum(axis=1)
++        denom = valid.sum(axis=1).astype(np.float64)
++        out = cnt / np.maximum(denom, 1.0)
++        out[(~valid.any(axis=1)) | (~valid[:, -1])] = np.nan
++        return out
++    return _fn
++
++
++def _np_roll_drawdown_duration():
++    """Count of consecutive trailing rows below the running peak."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        valid, pk = _np_roll_running_peak(sw)
++        under = valid & (sw < pk)
++        st = np.zeros(sw.shape[0], dtype=np.int64)
++        for j in range(sw.shape[1] - 1, -1, -1):
++            st = np.where(under[:, j], st + 1, 0)
++        out = st.astype(np.float64)
++        out[(~valid.any(axis=1)) | (~valid[:, -1])] = np.nan
++        return out
++    return _fn
++
++
++def _np_roll_recovery_fraction():
++    """Peak-trough recovery progress clip((x_t - T)/(P - T + eps), 0, 1) over
++    the trailing contiguous segment (most recent peak anchor)."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        w = sw.shape[1]
++        vals, run = _np_trailing_gather(sw)
++        with warnings.catch_warnings():
++            warnings.simplefilter("ignore")
++            p = np.nanmax(vals, axis=1)
++        eqp = (vals == p[:, None]) & np.isfinite(vals)
++        k_star = eqp[:, ::-1].argmax(axis=1)
++        idx = np.arange(w)
++        g_star = np.maximum(run - 1 - k_star, 0)
++        tmask = idx[None, :] >= g_star[:, None]
++        with warnings.catch_warnings():
++            warnings.simplefilter("ignore")
++            t = np.min(np.where(tmask & np.isfinite(vals), vals, np.inf), axis=1)
++        last = sw[:, -1]
++        all_pos = np.all((vals > 0) | ~np.isfinite(vals), axis=1)
++        with np.errstate(invalid="ignore"):
++            out = (last - t) / (p - t + _EPS_TINY)
++            out = np.clip(np.where((p - t) <= _EPS_TINY, 1.0, out), 0.0, 1.0)
++        out[~all_pos] = np.nan
++        out[run < 2] = np.nan
++        return out
++    return _fn
++
++
++def _np_roll_kurt():
++    """Unbiased Fisher excess kurtosis over FULL finite windows (the active
++    StableTsKurt authority); partial or non-finite windows are NaN."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        finite = np.isfinite(sw)
++        full = finite.all(axis=1)
++        cnt = finite.sum(axis=1).astype(np.float64)
++        v = np.where(finite, sw, 0.0)
++        mean = v.sum(axis=1) / np.maximum(cnt, 1.0)
++        centered = np.where(finite, sw - mean[:, None], 0.0)
++        second = (centered * centered).sum(axis=1)
++        fourth = (centered ** 4).sum(axis=1)
++        with np.errstate(divide="ignore", invalid="ignore"):
++            biased = cnt * fourth / np.where(second > 0, second * second, 1.0) - 3.0
++            out = ((cnt - 1.0) / ((cnt - 2.0) * (cnt - 3.0))) * ((cnt + 1.0) * biased + 6.0)
++        out[~full] = np.nan
++        out[second <= 0] = np.nan
++        return out
++    return _fn
++
++
++def _np_roll_quantile_range(lo: float, hi: float, min_periods: int):
++    """Rolling (q_hi - q_lo) spread of the magnitude-normalized finite window
++    (identical to robust_stats._quantile_spread)."""
++    def _fn(sw: np.ndarray) -> np.ndarray:
++        m = _np_mask_finite(sw)
++        with warnings.catch_warnings():
++            warnings.simplefilter("ignore")
++            mag = np.nanmax(np.abs(m), axis=1)
++            unit = m / np.where(mag == 0, 1.0, mag)[:, None]
++            qh = np.nanquantile(unit, hi, axis=1)
++            ql = np.nanquantile(unit, lo, axis=1)
++            out = (qh - ql) * np.where(mag == 0, 0.0, mag)
++        n = np.isfinite(m).sum(axis=1)
++        out = np.where(np.isfinite(out), out, np.nan)
++        out[n < min_periods] = np.nan
++        out[mag == 0] = 0.0
++        return out
++    return _fn
++
++
+ def _ts_sharpe_min_periods(w: int) -> int:
+     """ts_sharpe 最小有效样本数：max(2, w//3)。"""
+     return max(2, w // 3)
+@@ -4216,13 +4612,7 @@
+         spec = _window_spec(node)
+         mp = spec.min_periods if node.attrs.get("min_periods") is not None else spec.size
+         scale = _float_attr(node, "scale", default=1.0)
+-        return inner.with_columns(
+-            _rolling_median_abs_dev_expr(
+-                spec.size,
+-                min_periods=mp,
+-                scale=scale,
+-            ).alias(_VAL)
+-        )
++        return _rolling_block_frame(inner, spec.size, _np_roll_median_ad(scale, mp))
+ 
+     if op == "ts_quantile":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+@@ -4233,7 +4623,15 @@
+         pos_p = _literal_value(node, 1)
+         if pos_p is not None:
+             p = pos_p
+-        return inner.with_columns(_rolling_quantile_expr(w, p).alias(_VAL))
++        # R59: native rolling_quantile (linear interpolation) — verified
++        # bit-for-bit against the pandas rolling quantile authority.
++        return inner.with_columns(
++            pl.col(_VAL)
++            .fill_nan(None)
++            .rolling_quantile(p, interpolation="linear", window_size=w, min_samples=1)
++            .over(_INST, order_by=_TS)
++            .alias(_VAL)
++        )
+ 
+     if op == "ts_product":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+@@ -4241,51 +4639,57 @@
+             return None
+         spec = _window_spec(node)
+         mp = spec.min_periods if node.attrs.get("min_periods") is not None else spec.size
+-        return inner.with_columns(
+-            _rolling_product_expr(spec.size, min_periods=mp).alias(_VAL)
+-        )
++        return _rolling_block_frame(inner, spec.size, _np_roll_product(mp))
+ 
+     if op == "ts_median_abs_deviation":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+         if inner is None:
+             return None
+         w = _window_int(node)
+-        return inner.with_columns(_rolling_median_abs_dev_expr(w).alias(_VAL))
++        return _rolling_block_frame(inner, w, _np_roll_median_ad(1.0, 1))
+ 
+     if op == "ts_mean_abs_deviation":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+         if inner is None:
+             return None
+         w = _window_int(node)
+-        return inner.with_columns(_rolling_mean_abs_dev_expr(w).alias(_VAL))
++        return _rolling_block_frame(inner, w, _np_roll_mean_ad(1))
+ 
+     if op == "ts_skew":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+         if inner is None:
+             return None
+         w = _window_int(node)
+-        return inner.with_columns(_rolling_skew_expr(w).alias(_VAL))
++        # R59: native rolling_skew (bias=False) — matches pandas rolling
++        # skew (G1) to 1.4e-15; min_samples=3 mirrors the pandas <3 gate.
++        return inner.with_columns(
++            pl.col(_VAL)
++            .fill_nan(None)
++            .rolling_skew(w, bias=False, min_samples=3)
++            .over(_INST, order_by=_TS)
++            .alias(_VAL)
++        )
+ 
+     if op == "ts_argmax":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+         if inner is None:
+             return None
+         w = _window_int(node)
+-        return inner.with_columns(_rolling_argext_expr(w, pick="max").alias(_VAL))
++        return _rolling_block_frame(inner, w, _np_roll_argext("max"))
+ 
+     if op == "ts_argmin":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+         if inner is None:
+             return None
+         w = _window_int(node)
+-        return inner.with_columns(_rolling_argext_expr(w, pick="min").alias(_VAL))
++        return _rolling_block_frame(inner, w, _np_roll_argext("min"))
+ 
+     if op in {"Slope", "ts_time_slope"}:
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+         if inner is None:
+             return None
+         w = _window_int(node)
+-        return inner.with_columns(_rolling_time_slope_expr(w).alias(_VAL))
++        return _rolling_block_frame(inner, w, _np_roll_time_slope(2))
+ 
+     if op == "ts_regression_slope":
+         if len(node.inputs) < 2:
+@@ -4426,29 +4830,7 @@
+         w = _window_int(node, default=20)
+         if w < 4:
+             raise ValueError("ts_kurt window must be >= 4")
+-
+-        def _kurt(arr: np.ndarray) -> float:
+-            # Match the active StableTsKurt authority: full finite windows,
+-            # unbiased Fisher excess kurtosis, and NaN for zero variance.
+-            values = np.asarray(arr, dtype=np.float64)
+-            if len(values) < w or not np.isfinite(values).all():
+-                return np.nan
+-            count = len(values)
+-            centered = values - float(np.mean(values))
+-            second = float(np.sum(centered * centered))
+-            if second <= 0.0:
+-                return np.nan
+-            fourth = float(np.sum(centered ** 4))
+-            biased_excess = count * fourth / (second * second) - 3.0
+-            return float(
+-                (count - 1)
+-                / ((count - 2) * (count - 3))
+-                * ((count + 1) * biased_excess + 6.0)
+-            )
+-
+-        return inner.with_columns(
+-            pl.col(_VAL).rolling_map(_kurt, window_size=w, min_samples=w).over(_INST, order_by=_TS).alias(_VAL)
+-        )
++        return _rolling_block_frame(inner, w, _np_roll_kurt())
+ 
+     if op == "ts_moment":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+@@ -4831,12 +5213,7 @@
+             if node.inputs[4].op == "literal":
+                 raw_mp = node.inputs[4].attrs.get("value")
+         mp=_auto_min_periods(w,None if raw_mp is None else strict_integer(raw_mp,"min_periods",minimum=1))
+-        def spread(values):
+-            arr=np.asarray(values,dtype=float)
+-            finite=arr[np.isfinite(arr)]
+-            return _quantile_spread(finite,lo,hi) if len(finite)>=mp else np.nan
+-        expr=pl.col(_VAL).rolling_map(spread,window_size=w,min_samples=1).over(_INST,order_by=_TS)
+-        return inner.with_columns(expr.alias(_VAL))
++        return _rolling_block_frame(inner, w, _np_roll_quantile_range(lo, hi, mp))
+ 
+     if op == "ts_quantile_skew":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+@@ -4956,18 +5333,14 @@
+             return None
+         w = _window_int(node, default=20)
+         mp = _int_attr(node, "min_periods", input_index=1, default=3)
+-        return inner.with_columns(
+-            _rolling_monotonicity_expr(w, min_periods=max(3, mp)).alias(_VAL)
+-        )
++        return _rolling_block_frame(inner, w, _np_roll_monotonicity(max(3, mp)))
+ 
+     if op == "ts_turning_point_ratio":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+         if inner is None:
+             return None
+         w = _window_int(node, default=60)
+-        return inner.with_columns(
+-            _rolling_turning_point_ratio_expr(w).alias(_VAL)
+-        )
++        return _rolling_block_frame(inner, w, _np_roll_turning_point_ratio())
+ 
+     if op == "ts_endpoint_deviation":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+@@ -4975,9 +5348,7 @@
+             return None
+         w = _window_int(node, default=20)
+         mp = _int_attr(node, "min_periods", input_index=1, default=3)
+-        return inner.with_columns(
+-            _rolling_endpoint_deviation_expr(w, min_periods=max(3, mp)).alias(_VAL)
+-        )
++        return _rolling_block_frame(inner, w, _np_roll_endpoint_deviation(max(3, mp)))
+ 
+     if op == "ts_vol_shift_score":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+@@ -4985,36 +5356,28 @@
+             return None
+         w = _window_int(node, default=20)
+         mp = _int_attr(node, "min_periods", input_index=1, default=5)
+-        return inner.with_columns(
+-            _rolling_vol_shift_score_expr(w, min_periods=max(4, mp)).alias(_VAL)
+-        )
++        return _rolling_block_frame(inner, w, _np_roll_vol_shift(max(4, mp)))
+ 
+     if op == "ts_time_under_water":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+         if inner is None:
+             return None
+         w = max(_window_int(node, default=20), 2)
+-        return inner.with_columns(
+-            _rolling_time_under_water_expr(w).alias(_VAL)
+-        )
++        return _rolling_block_frame(inner, w, _np_roll_under_water())
+ 
+     if op == "ts_current_drawdown_duration":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+         if inner is None:
+             return None
+         w = max(_window_int(node, default=20), 2)
+-        return inner.with_columns(
+-            _rolling_drawdown_duration_expr(w).alias(_VAL)
+-        )
++        return _rolling_block_frame(inner, w, _np_roll_drawdown_duration())
+ 
+     if op == "ts_recovery_fraction":
+         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
+         if inner is None:
+             return None
+         w = max(_window_int(node, default=60), 2)
+-        return inner.with_columns(
+-            _rolling_recovery_fraction_expr(w).alias(_VAL)
+-        )
++        return _rolling_block_frame(inner, w, _np_roll_recovery_fraction())
+ 
+     # =====================================================================
+     # wave3 flow/momentum/quality window family (2026-09-08) — pure native
+# ---- r59_emit2.patch ----
+--- a/factor_engine/backend/polars_expr_emitter.py
++++ b/factor_engine/backend/polars_expr_emitter.py
+@@ -983,8 +983,11 @@
+                 v = np.where(finite[s0:s1], sw[s0:s1], np.nan)
+                 d = v[:, :, None] - v[:, None, :]
+                 good = finite[s0:s1, :, None] & finite[s0:s1, None, :] & iu
+-                c = np.count_nonzero((d > 0) & good, axis=(1, 2)).astype(np.float64)
+-                dd = np.count_nonzero((d < 0) & good, axis=(1, 2)).astype(np.float64)
++                # d[i,j] = v[i]-v[j]; pair (i,j) is concordant (C) when the
++                # LATER value is larger, i.e. d < 0 (mirrors the pandas
++                # reference where val_diff = v[j]-v[i] > 0 with j > i).
++                c = np.count_nonzero((d < 0) & good, axis=(1, 2)).astype(np.float64)
++                dd = np.count_nonzero((d > 0) & good, axis=(1, 2)).astype(np.float64)
+                 tot = c + dd
+                 out[s0:s1] = np.where(tot > 0, (c - dd) / np.where(tot == 0, 1.0, tot), np.nan)
+         out[n < min_periods] = np.nan
+# ---- r59_emit3.patch ----
+--- a/factor_engine/backend/polars_expr_emitter.py
++++ b/factor_engine/backend/polars_expr_emitter.py
+@@ -905,23 +905,27 @@
+ 
+ 
+ def _np_roll_product(min_periods: int = 1):
+-    """Rolling product: 0 / negative-sign / NaN-skip / Inf-poison / overflow
+-    handled exactly like the former per-window pandas formula."""
++    """Rolling product matching the _stable_product pandas authority:
++    NaN rows are skipped, any Inf poisons the window, a zero window yields 0,
++    the sign is the true product sign, and overflow maps to NaN.  Implemented
++    with a vectorized frexp mantissa/exponent decomposition (no log
++    cancellation, no intermediate overflow)."""
+     def _fn(sw: np.ndarray) -> np.ndarray:
+         finite = np.isfinite(sw)
+-        m = np.where(finite, sw, np.nan)
+         has_inf = np.any(np.isinf(sw), axis=1)
+-        has_zero = np.any(m == 0.0, axis=1)
++        has_zero = np.any((sw == 0.0) & finite, axis=1)
+         n = finite.sum(axis=1)
+-        with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
+-            neg = np.nansum(m < 0.0, axis=1)
+-            log_abs = np.nansum(np.log(np.abs(np.where(m == 0.0, 1.0, m))), axis=1)
+-            sign = np.where(neg % 2 == 1, -1.0, 1.0)
+-            out = sign * np.exp(log_abs)
++        # frexp decomposition with neutral 1.0 for skipped (non-finite) rows
++        m, e = np.frexp(np.where(finite, sw, 1.0))
++        mant = np.prod(m, axis=1)
++        m2, e2 = np.frexp(mant)
++        expo = e.sum(axis=1) + e2 - 1
++        with np.errstate(over="ignore", under="ignore", invalid="ignore"):
++            out = np.ldexp(m2, expo)
++        out[expo > 1023] = np.nan
++        out[~np.isfinite(out)] = np.nan
+         out[has_inf] = np.nan
+         out[has_zero & ~has_inf] = 0.0
+-        overflow = log_abs > np.log(np.finfo(np.float64).max)
+-        out[overflow & ~has_zero & ~has_inf] = np.nan
+         out[n < min_periods] = np.nan
+         return out
+     return _fn
+# ---- r59_emit4.patch ----
+--- a/factor_engine/backend/polars_expr_emitter.py
++++ b/factor_engine/backend/polars_expr_emitter.py
+@@ -919,7 +919,8 @@
+         m, e = np.frexp(np.where(finite, sw, 1.0))
+         mant = np.prod(m, axis=1)
+         m2, e2 = np.frexp(mant)
+-        expo = e.sum(axis=1) + e2 - 1
++        # prod = (prod m_i) * 2**(sum e_i) = m2 * 2**(sum e_i + e2)
++        expo = e.sum(axis=1) + e2
+         with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+             out = np.ldexp(m2, expo)
+         out[expo > 1023] = np.nan
+@@ -4669,10 +4670,11 @@
+         w = _window_int(node)
+         # R59: native rolling_skew (bias=False) — matches pandas rolling
+         # skew (G1) to 1.4e-15; min_samples=3 mirrors the pandas <3 gate.
++        # pandas .skew() is NaN on a zero-variance window — gate on std>0.
++        _skew = pl.col(_VAL).fill_nan(None).rolling_skew(w, bias=False, min_samples=3)
++        _sd = pl.col(_VAL).fill_nan(None).rolling_std(w, min_samples=2)
+         return inner.with_columns(
+-            pl.col(_VAL)
+-            .fill_nan(None)
+-            .rolling_skew(w, bias=False, min_samples=3)
++            pl.when(_sd.is_not_null() & (_sd > 0.0)).then(_skew).otherwise(None)
+             .over(_INST, order_by=_TS)
+             .alias(_VAL)
+         )
+# ---- r59_emit5.patch ----
+--- a/factor_engine/backend/polars_expr_emitter.py
++++ b/factor_engine/backend/polars_expr_emitter.py
+@@ -1079,12 +1079,15 @@
+     """log(second-half std / first-half std) with the physical-midpoint split
+     of the trailing contiguous segment (no gap compression)."""
+     def _fn(sw: np.ndarray) -> np.ndarray:
+-        w = sw.shape[1]
++        rows, w = sw.shape
+         vals, run = _np_trailing_gather(sw)
+         seg = np.where(np.isfinite(vals), vals, np.nan)
+-        mid = w // 2
+-        gap = w - run
+-        first_len = np.minimum(np.maximum(mid - gap, 0), run)
++        # physical window length of each row (edge rows have shorter windows,
++        # exactly like the rolling_map reference): n_i = min(i+1, w)
++        n_phys = np.minimum(np.arange(rows) + 1, w).astype(np.float64)
++        mid = n_phys // 2
++        gap = n_phys - run
++        first_len = np.minimum(np.maximum(mid - gap, 0), run).astype(np.int64)
+         idx = np.arange(w)
+         m1 = idx[None, :] < first_len[:, None]
+         m2 = (idx[None, :] >= first_len[:, None]) & (idx[None, :] < run[:, None])
+@@ -1141,12 +1144,14 @@
+ def _np_roll_drawdown_duration():
+     """Count of consecutive trailing rows below the running peak."""
+     def _fn(sw: np.ndarray) -> np.ndarray:
++        rows, w = sw.shape
+         valid, pk = _np_roll_running_peak(sw)
+         under = valid & (sw < pk)
+-        st = np.zeros(sw.shape[0], dtype=np.int64)
+-        for j in range(sw.shape[1] - 1, -1, -1):
+-            st = np.where(under[:, j], st + 1, 0)
+-        out = st.astype(np.float64)
++        # streak = trailing run of `under` ending at the current row:
++        # distance from the last row that is NOT under (break point).
++        idx = np.arange(w)
++        last_break = np.where(~under, idx, -1).max(axis=1)
++        out = (w - 1 - last_break).astype(np.float64)
+         out[(~valid.any(axis=1)) | (~valid[:, -1])] = np.nan
+         return out
+     return _fn
+@@ -1162,9 +1167,12 @@
+             warnings.simplefilter("ignore")
+             p = np.nanmax(vals, axis=1)
+         eqp = (vals == p[:, None]) & np.isfinite(vals)
++        # k_star = steps from the ROW end (padded array); the peak row position
++        # is therefore (w-1) - k_star directly (NOT run-1-k_star — the segment
++        # sits at the tail of the padded row).
+         k_star = eqp[:, ::-1].argmax(axis=1)
+         idx = np.arange(w)
+-        g_star = np.maximum(run - 1 - k_star, 0)
++        g_star = np.maximum(w - 1 - k_star, 0)
+         tmask = idx[None, :] >= g_star[:, None]
+         with warnings.catch_warnings():
+             warnings.simplefilter("ignore")
+# ---- r59_emit_pair.patch ----
+--- a/factor_engine/backend/polars_expr_emitter.py
++++ b/factor_engine/backend/polars_expr_emitter.py
+@@ -1638,6 +1638,130 @@
+     return staged.select(_TS, _INST, pl.when(ready).then(value).otherwise(None).alias(_VAL))
+ 
+ 
++def _np_pair_windows(xs: np.ndarray, ys: np.ndarray, w: int):
++    """Head-NaN-padded sliding windows of two instrument series (chronological)."""
++    px = np.concatenate([np.full(w - 1, np.nan), xs])
++    py = np.concatenate([np.full(w - 1, np.nan), ys])
++    out = np.full(xs.size, np.nan)
++    return (
++        np.lib.stride_tricks.sliding_window_view(px, w),
++        np.lib.stride_tricks.sliding_window_view(py, w),
++        out,
++    )
++
++
++def _np_pair_corr(w: int, mp: int):
++    """Vectorized twin of ``_rolling_corr_centered_list_frame``: x0-anchored,
++    pairwise-finite, per-window two-pass centering (same operation order as
++    the list-frame path, evaluated once per instrument instead of per row)."""
++    def _one(xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
++        swx, swy, out = _np_pair_windows(xs, ys, w)
++        if out.size == 0:
++            return out
++        pair = np.isfinite(swx) & np.isfinite(swy)
++        n = pair.sum(axis=1)
++        rows_idx = np.arange(out.size)
++        has = n > 0
++        # anchor = NEWEST pair-valid position (list-order first element)
++        last = w - 1 - pair[:, ::-1].argmax(axis=1)
++        safe_last = np.maximum(last, 0)
++        x0 = np.where(has, swx[rows_idx, safe_last], 0.0)
++        y0 = np.where(has, swy[rows_idx, safe_last], 0.0)
++        xo = np.where(pair, swx - x0[:, None], 0.0)
++        yo = np.where(pair, swy - y0[:, None], 0.0)
++        xmean = xo.sum(axis=1) / np.maximum(n, 1)
++        ymean = yo.sum(axis=1) / np.maximum(n, 1)
++        xc = np.where(pair, xo - xmean[:, None], 0.0)
++        yc = np.where(pair, yo - ymean[:, None], 0.0)
++        ssx = (xc * xc).sum(axis=1)
++        ssy = (yc * yc).sum(axis=1)
++        cross = (xc * yc).sum(axis=1)
++        with np.errstate(invalid="ignore", divide="ignore"):
++            val = cross / np.sqrt(ssx * ssy)
++        out[:] = np.where((n >= mp) & (ssx > 0) & (ssy > 0), val, np.nan)
++        out[~has] = np.nan
++        return out
++    return _one
++
++
++def _np_pair_cov(w: int, mp: int, ddof: int):
++    """Vectorized twin of ``_rolling_cov_centered_list_frame`` (normalized
++    offsets, ddof-corrected, zero-scale windows map to 0.0)."""
++    def _one(xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
++        swx, swy, out = _np_pair_windows(xs, ys, w)
++        if out.size == 0:
++            return out
++        pair = np.isfinite(swx) & np.isfinite(swy)
++        n = pair.sum(axis=1)
++        rows_idx = np.arange(out.size)
++        has = n > 0
++        last = w - 1 - pair[:, ::-1].argmax(axis=1)
++        safe_last = np.maximum(last, 0)
++        x0 = np.where(has, swx[rows_idx, safe_last], 0.0)
++        y0 = np.where(has, swy[rows_idx, safe_last], 0.0)
++        xo = np.where(pair, swx - x0[:, None], 0.0)
++        yo = np.where(pair, swy - y0[:, None], 0.0)
++        with warnings.catch_warnings():
++            warnings.simplefilter("ignore")
++            xscale = np.nanmax(np.where(pair, np.abs(swx - x0[:, None]), np.nan), axis=1)
++            yscale = np.nanmax(np.where(pair, np.abs(swy - y0[:, None]), np.nan), axis=1)
++        xscale = np.nan_to_num(xscale, nan=0.0)
++        yscale = np.nan_to_num(yscale, nan=0.0)
++        xn = np.where(pair, xo / np.where(xscale > 0, xscale, 1.0)[:, None], 0.0)
++        yn = np.where(pair, yo / np.where(yscale > 0, yscale, 1.0)[:, None], 0.0)
++        xmean = xn.sum(axis=1) / np.maximum(n, 1)
++        ymean = yn.sum(axis=1) / np.maximum(n, 1)
++        xc = np.where(pair, xn - xmean[:, None], 0.0)
++        yc = np.where(pair, yn - ymean[:, None], 0.0)
++        cross = (xc * yc).sum(axis=1)
++        with np.errstate(invalid="ignore", divide="ignore"):
++            val = (cross / np.maximum(n - ddof, 1)) * xscale * yscale
++        val = np.where((xscale == 0.0) | (yscale == 0.0), 0.0, val)
++        out[:] = np.where((n >= mp) & (n > ddof), val, np.nan)
++        out[~has] = np.nan
++        return out
++    return _one
++
++
++def _rolling_pair_block_frame(
++    inner: pl.LazyFrame,
++    x: pl.Expr,
++    y: pl.Expr,
++    window: int,
++    min_periods: int,
++    *,
++    kind: str,
++    ddof: int = 0,
++) -> pl.LazyFrame:
++    """R59: per-instrument block evaluation of pairwise rolling corr/cov.
++
++    Same semantics as the list-frame paths (which remain available) but with
++    ONE Python call per instrument instead of O(w)-column list machinery per
++    row; on a real 25x500 panel this cuts a ts_corr factor from ~52 s to
++    single-digit seconds.
++    """
++    w = max(int(window), 1)
++    mp = max(int(min_periods), 1)
++    fn = _np_pair_corr(w, mp) if kind == "corr" else _np_pair_cov(w, mp, ddof)
++    staged = inner.with_columns(x.alias("__pb_x"), y.alias("__pb_y"))
++    packed = (
++        staged.sort([_INST, _TS])
++        .group_by(_INST, maintain_order=True)
++        .agg(pl.col(_TS), pl.col("__pb_x"), pl.col("__pb_y"))
++        .with_columns(
++            pl.struct("__pb_x", "__pb_y")
++            .map_elements(
++                lambda rec: fn(np.asarray(rec["__pb_x"], dtype=np.float64),
++                               np.asarray(rec["__pb_y"], dtype=np.float64)).tolist(),
++                return_dtype=pl.List(pl.Float64),
++            )
++            .alias("__pb_out")
++        )
++        .explode(_TS, "__pb_out")
++    )
++    return packed.select(_TS, _INST, pl.col("__pb_out").alias(_VAL))
++
++
+ def _ewm_binary_map_groups(joined: pl.LazyFrame, span: int, *, corr: bool) -> pl.LazyFrame:
+     """二元 EWM 矩：按 inst 分组用 pandas ewm 对齐 bridge。"""
+     w = max(int(span), 2)
+@@ -2599,9 +2723,9 @@
+         if w == 2:
+             expr = _rolling_corr_centered_expr(lcol, rcol, w, mp).over(_INST, order_by=_TS)
+         else:
+-            return _rolling_corr_centered_list_frame(base, lcol, rcol, w, mp)
++            return _rolling_pair_block_frame(base, lcol, rcol, w, mp, kind="corr")
+     elif op == "ts_cov":
+-        return _rolling_cov_centered_list_frame(base, lcol, rcol, w, mp, ddof)
++        return _rolling_pair_block_frame(base, lcol, rcol, w, mp, kind="cov", ddof=ddof)
+     elif op == "ts_beta":
+         expr = polars_ts_beta_expr(
+             lcol, rcol, window=w, min_periods=mp, ddof=ddof
+@@ -3194,8 +3318,8 @@
+                 lcol, rcol, pspec.size, pspec.min_periods
+             ).over(_INST, order_by=_TS)
+             return joined.with_columns(corr.alias(_VAL)).select(_TS, _INST, _VAL)
+-        return _rolling_corr_centered_list_frame(
+-            joined, lcol, rcol, pspec.size, pspec.min_periods
++        return _rolling_pair_block_frame(
++            joined, lcol, rcol, pspec.size, pspec.min_periods, kind="corr"
+         )
+ 
+     if op == "ts_cov":
+@@ -3223,8 +3347,8 @@
+             .then(None)
+             .otherwise(pl.col("_y"))
+         )
+-        return _rolling_cov_centered_list_frame(
+-            joined, lcol, rcol, pspec.size, pspec.min_periods, pspec.ddof
++        return _rolling_pair_block_frame(
++            joined, lcol, rcol, pspec.size, pspec.min_periods, kind="cov", ddof=pspec.ddof
+         )
+ 
+     if op == "ts_beta":
+# ---- r59_parser.patch ----
+--- a/factor_engine/api/dsl_parser.py
++++ b/factor_engine/api/dsl_parser.py
+@@ -393,6 +393,16 @@
+             seen_keywords.add(kw.arg)
+             bound_canonical.add(canonical_kw)
+             kwargs[kw.arg]=self._visit_call_argument(kw.value,name,canonical_kw)
++        if isinstance(node.func,ast.Name) and param_names and "..." not in param_names:
++            # R59: under-called declared-signature ops fail at parse time
++            # (same acceptance set as the runtime binder — see helper).
++            positional_bound=tuple(positional_names[:len(node.args)])
++            _missing=_missing_required_params(name,positional_bound,set(kwargs))
++            if _missing:
++                raise DSLParseError(
++                    f"{name}: missing required parameter(s) {_missing} — declared "
++                    f"signature {list(param_names)}"
++                )
+         if not callable(func):raise DSLParseError("Call target is not callable.")
+         if isinstance(node.func,ast.Name):
+             # Round-11 #16: controlled numeric-string conversion against the
+@@ -582,6 +592,47 @@
+     return dict(_effective_alias_map(canonical)),tuple(getattr(meta,"param_names",None) or ())
+ 
+ 
++def _missing_required_params(name:str,bound_positional,bound_kwargs):
++    """R59: parse-time mirror of the runtime binder's required-parameter gate.
++
++    A call that omits a declared panel/scalar parameter with neither a kernel
++    default nor a ParamSpec default (e.g. ``ts_abdi_ranaldo_spread(close, 20)``
++    — the kernel needs close/high/low) is rejected here with a typed
++    DSLParseError instead of crashing inside the kernel at runtime.  The
++    acceptance set is IDENTICAL to ``bind_operator_call`` (same panels/scalars,
++    same ``_kernel_param_defaults`` source, same ParamSpec-default escape), so
++    nothing the binder accepts can be rejected here.
++    """
++    if not bound_positional and not bound_kwargs:
++        return []
++    try:
++        from factor_engine.cleaned_operators.registry import OperatorRegistry
++        from factor_engine.cleaned_operators.base import (
++            MISSING as _MISSING,
++            _kernel_param_defaults,
++        )
++        canonical=OperatorRegistry.resolve_canonical(name)
++        operator=OperatorRegistry.get(canonical,mode="any")
++        meta=getattr(operator,"metadata",None)
++        if meta is None:
++            return []
++        panels=tuple(getattr(meta,"panel_params",None) or ())
++        scalars=tuple(getattr(meta,"scalar_params",None) or ())
++        if not (panels or scalars):
++            return []
++        specs=getattr(meta,"param_specs",None) or {}
++        defaults=_kernel_param_defaults(operator)
++        provided=set(bound_positional)|set(bound_kwargs)
++        return [
++            p for p in (*panels,*scalars)
++            if p not in provided
++            and p not in (defaults or {})
++            and getattr(specs.get(p),"default",_MISSING) is _MISSING
++        ]
++    except Exception:
++        return []
++
++
+ def _declared_sequence_spec(name:str,param_name:str,container:type):
+     """Return the exact declared list/tuple ParamSpec, never infer one."""
+     if not param_name:
+# ---- r59_parser2.patch ----
+--- a/factor_engine/api/dsl_parser.py
++++ b/factor_engine/api/dsl_parser.py
+@@ -393,16 +393,22 @@
+             seen_keywords.add(kw.arg)
+             bound_canonical.add(canonical_kw)
+             kwargs[kw.arg]=self._visit_call_argument(kw.value,name,canonical_kw)
+-        if isinstance(node.func,ast.Name) and param_names and "..." not in param_names:
++        if isinstance(node.func,ast.Name):
+             # R59: under-called declared-signature ops fail at parse time
+             # (same acceptance set as the runtime binder — see helper).
+-            positional_bound=tuple(positional_names[:len(node.args)])
+-            _missing=_missing_required_params(name,positional_bound,set(kwargs))
+-            if _missing:
+-                raise DSLParseError(
+-                    f"{name}: missing required parameter(s) {_missing} — declared "
+-                    f"signature {list(param_names)}"
++            try:
++                _g_aliases,_g_param_names=_call_parameter_binding(name)
++            except Exception:
++                _g_param_names=()
++            if _g_param_names and "..." not in _g_param_names:
++                _missing=_missing_required_params(
++                    name,tuple(_g_param_names[:len(node.args)]),set(kwargs)
+                 )
++                if _missing:
++                    raise DSLParseError(
++                        f"{name}: missing required parameter(s) {_missing} — declared "
++                        f"signature {list(_g_param_names)}"
++                    )
+         if not callable(func):raise DSLParseError("Call target is not callable.")
+         if isinstance(node.func,ast.Name):
+             # Round-11 #16: controlled numeric-string conversion against the
+# ---- r59_surface_final.patch ----
+diff --git a/factor_engine/cleaned_operators/operator_surface.py b/factor_engine/cleaned_operators/operator_surface.py
+index 08637c571..4c8e43593 100644
+--- a/factor_engine/cleaned_operators/operator_surface.py
++++ b/factor_engine/cleaned_operators/operator_surface.py
+@@ -713,6 +713,323 @@ def register_daily_migration(
+     _rebuild_daily_surface_cache()
+ 
+ 
++# =====================================================================
++# R58 surface promotion (2026-09-21): reviewed daily-surface migrations.
++# Each entry passed a REAL semantic parity check (pandas_numpy reference vs
++# polars kernel) on an identical synthetic panel; see evidence/r58/parity/<canonical>.json.
++# semantic_hash is computed from real operator code via registry._contract_hash.
++# review_id is a genuine, traceable record of that parity check.
++_R58_PROMOTIONS: dict[str, dict[str, str]] = {
++    'HMA': {"review_id": 'r58-surface-promotion:HMA', "semantic_hash": '5c1cdc0af36db3eb', "approved_authoring_tier": "daily"},
++    'RSX': {"review_id": 'r58-surface-promotion:RSX', "semantic_hash": '4058b559a290fb2f', "approved_authoring_tier": "daily"},
++    'acos_bounded': {"review_id": 'r58-surface-promotion:acos_bounded', "semantic_hash": 'b0af21dd1fcd1c98', "approved_authoring_tier": "daily"},
++    'aq1_cash_flow_volatility': {"review_id": 'r58-surface-promotion:aq1_cash_flow_volatility', "semantic_hash": 'fd61705ff052419d', "approved_authoring_tier": "daily"},
++    'asin_bounded': {"review_id": 'r58-surface-promotion:asin_bounded', "semantic_hash": 'b0af21dd1fcd1c98', "approved_authoring_tier": "daily"},
++    'category_age': {"review_id": 'r58-surface-promotion:category_age', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'category_age_lower_bound': {"review_id": 'r58-surface-promotion:category_age_lower_bound', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'category_frequency': {"review_id": 'r58-surface-promotion:category_frequency', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'category_transition_rate': {"review_id": 'r58-surface-promotion:category_transition_rate', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'category_transition_surprise': {"review_id": 'r58-surface-promotion:category_transition_surprise', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'cos_phase': {"review_id": 'r58-surface-promotion:cos_phase', "semantic_hash": 'b0af21dd1fcd1c98', "approved_authoring_tier": "daily"},
++    'cs1_monthly_lag_ratio': {"review_id": 'r58-surface-promotion:cs1_monthly_lag_ratio', "semantic_hash": 'fa2526c7e2fb6163', "approved_authoring_tier": "daily"},
++    'cs1_seasonal_relative_rank': {"review_id": 'r58-surface-promotion:cs1_seasonal_relative_rank', "semantic_hash": 'a7078b3c49d491cc', "approved_authoring_tier": "daily"},
++    'cs1_seasonal_residual_smoothness': {"review_id": 'r58-surface-promotion:cs1_seasonal_residual_smoothness', "semantic_hash": 'f661ad20a58733ef', "approved_authoring_tier": "daily"},
++    'cs1_week_cycle_phase': {"review_id": 'r58-surface-promotion:cs1_week_cycle_phase', "semantic_hash": '6f32e64cf17f9b4d', "approved_authoring_tier": "daily"},
++    'cs1_weekday_anomaly': {"review_id": 'r58-surface-promotion:cs1_weekday_anomaly', "semantic_hash": '6615deb66b5cb849', "approved_authoring_tier": "daily"},
++    'cs1_weekday_effect_strength': {"review_id": 'r58-surface-promotion:cs1_weekday_effect_strength', "semantic_hash": 'f661ad20a58733ef', "approved_authoring_tier": "daily"},
++    'cs1_weekday_lag_ratio': {"review_id": 'r58-surface-promotion:cs1_weekday_lag_ratio', "semantic_hash": '46af1141dcfb1f3c', "approved_authoring_tier": "daily"},
++    'cs1_weekday_lag_zscore': {"review_id": 'r58-surface-promotion:cs1_weekday_lag_zscore', "semantic_hash": 'a7078b3c49d491cc', "approved_authoring_tier": "daily"},
++    'cs1_weekly_harmonic_power': {"review_id": 'r58-surface-promotion:cs1_weekly_harmonic_power', "semantic_hash": '6f32e64cf17f9b4d', "approved_authoring_tier": "daily"},
++    'cs_isolation_forest_score': {"review_id": 'r58-surface-promotion:cs_isolation_forest_score', "semantic_hash": 'ba91831e10a7c9fb', "approved_authoring_tier": "daily"},
++    'cs_physical_panel_coverage': {"review_id": 'r58-surface-promotion:cs_physical_panel_coverage', "semantic_hash": 'fdde8815cb1b40db', "approved_authoring_tier": "daily"},
++    'ep1_earnings_autocorr': {"review_id": 'r58-surface-promotion:ep1_earnings_autocorr', "semantic_hash": '6506b168195a32e4', "approved_authoring_tier": "daily"},
++    'ep1_earnings_consistency': {"review_id": 'r58-surface-promotion:ep1_earnings_consistency', "semantic_hash": 'd124eccde435e831', "approved_authoring_tier": "daily"},
++    'ep1_earnings_surprise_decay': {"review_id": 'r58-surface-promotion:ep1_earnings_surprise_decay', "semantic_hash": '5c941acd1668cf13', "approved_authoring_tier": "daily"},
++    'ep1_roa_stability': {"review_id": 'r58-surface-promotion:ep1_roa_stability', "semantic_hash": '718ffa2414a042af', "approved_authoring_tier": "daily"},
++    'erd_burst_duration': {"review_id": 'r58-surface-promotion:erd_burst_duration', "semantic_hash": 'ab8b8a388802a194', "approved_authoring_tier": "daily"},
++    'erd_cross_events_spacing': {"review_id": 'r58-surface-promotion:erd_cross_events_spacing', "semantic_hash": 'b40c41b3c478f819', "approved_authoring_tier": "daily"},
++    'erd_event_rate_decay_slope': {"review_id": 'r58-surface-promotion:erd_event_rate_decay_slope', "semantic_hash": '050c481109f036a2', "approved_authoring_tier": "daily"},
++    'erd_event_response_amplitude': {"review_id": 'r58-surface-promotion:erd_event_response_amplitude', "semantic_hash": 'fe460a8ae037f96d', "approved_authoring_tier": "daily"},
++    'erd_half_life_decay_count': {"review_id": 'r58-surface-promotion:erd_half_life_decay_count', "semantic_hash": '1cd75d66070c251c', "approved_authoring_tier": "daily"},
++    'erd_marked_event_decay': {"review_id": 'r58-surface-promotion:erd_marked_event_decay', "semantic_hash": 'fe460a8ae037f96d', "approved_authoring_tier": "daily"},
++    'erd_post_event_hazard': {"review_id": 'r58-surface-promotion:erd_post_event_hazard', "semantic_hash": '4e314f052472dd01', "approved_authoring_tier": "daily"},
++    'erd_recency_decay': {"review_id": 'r58-surface-promotion:erd_recency_decay', "semantic_hash": 'd86091495f1d95ff', "approved_authoring_tier": "daily"},
++    'erd_sign_consistent_decay': {"review_id": 'r58-surface-promotion:erd_sign_consistent_decay', "semantic_hash": 'b656e008473abfe3', "approved_authoring_tier": "daily"},
++    'es1_earnings_cv': {"review_id": 'r58-surface-promotion:es1_earnings_cv', "semantic_hash": '08fcedfc52347dc1', "approved_authoring_tier": "daily"},
++    'es1_earnings_mean_reversion_speed': {"review_id": 'r58-surface-promotion:es1_earnings_mean_reversion_speed', "semantic_hash": '6506b168195a32e4', "approved_authoring_tier": "daily"},
++    'es1_negative_earnings_streak': {"review_id": 'r58-surface-promotion:es1_negative_earnings_streak', "semantic_hash": 'cffa98f8bfacffd6', "approved_authoring_tier": "daily"},
++    'event_response_effective_events': {"review_id": 'r58-surface-promotion:event_response_effective_events', "semantic_hash": '5e8cb135611ff65f', "approved_authoring_tier": "daily"},
++    'event_response_overlap_ratio': {"review_id": 'r58-surface-promotion:event_response_overlap_ratio', "semantic_hash": '5e8cb135611ff65f', "approved_authoring_tier": "daily"},
++    'financial_snapshot_lag': {"review_id": 'r58-surface-promotion:financial_snapshot_lag', "semantic_hash": 'de1cfcc8b6ca623e', "approved_authoring_tier": "daily"},
++    'fundamental_staleness_days': {"review_id": 'r58-surface-promotion:fundamental_staleness_days', "semantic_hash": 'fcc111064fa20944', "approved_authoring_tier": "daily"},
++    'hfl_variance_ratio': {"review_id": 'r58-surface-promotion:hfl_variance_ratio', "semantic_hash": 'e21fae14ce33b4f4', "approved_authoring_tier": "daily"},
++    'lf1_herfindahl_volume': {"review_id": 'r58-surface-promotion:lf1_herfindahl_volume', "semantic_hash": '7fd30d280d8aa34f', "approved_authoring_tier": "daily"},
++    'lf1_liquidity_decay_base': {"review_id": 'r58-surface-promotion:lf1_liquidity_decay_base', "semantic_hash": '1f33e04fa3c7ea4a', "approved_authoring_tier": "daily"},
++    'lf1_market_share_turnover': {"review_id": 'r58-surface-promotion:lf1_market_share_turnover', "semantic_hash": '82c7d3df4ebea6a0', "approved_authoring_tier": "daily"},
++    'lf1_mean_variance_turnover': {"review_id": 'r58-surface-promotion:lf1_mean_variance_turnover', "semantic_hash": '7581ca3c529e4405', "approved_authoring_tier": "daily"},
++    'lf1_own_volume_share': {"review_id": 'r58-surface-promotion:lf1_own_volume_share', "semantic_hash": '6c8bc5a6bde6efd7', "approved_authoring_tier": "daily"},
++    'ofi_dominant_direction': {"review_id": 'r58-surface-promotion:ofi_dominant_direction', "semantic_hash": '4b74e55959a85694', "approved_authoring_tier": "daily"},
++    'ofi_imbalance_agreement': {"review_id": 'r58-surface-promotion:ofi_imbalance_agreement', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'ofi_volume_flow_regime': {"review_id": 'r58-surface-promotion:ofi_volume_flow_regime', "semantic_hash": '4b74e55959a85694', "approved_authoring_tier": "daily"},
++    'ofi_volume_imbalance': {"review_id": 'r58-surface-promotion:ofi_volume_imbalance', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'ofi_zero_flow_balance': {"review_id": 'r58-surface-promotion:ofi_zero_flow_balance', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'relation_distinct_count': {"review_id": 'r58-surface-promotion:relation_distinct_count', "semantic_hash": '3c8c95a9f2f52bf5', "approved_authoring_tier": "daily"},
++    'report_asof': {"review_id": 'r58-surface-promotion:report_asof', "semantic_hash": 'a189f20b5925cc1d', "approved_authoring_tier": "daily"},
++    'sin_phase': {"review_id": 'r58-surface-promotion:sin_phase', "semantic_hash": 'b0af21dd1fcd1c98', "approved_authoring_tier": "daily"},
++    'state_age': {"review_id": 'r58-surface-promotion:state_age', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_episode_age': {"review_id": 'r58-surface-promotion:state_episode_age', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_episode_age_lower_bound': {"review_id": 'r58-surface-promotion:state_episode_age_lower_bound', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_episode_censored_flag': {"review_id": 'r58-surface-promotion:state_episode_censored_flag', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_flip_age': {"review_id": 'r58-surface-promotion:state_flip_age', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_flip_density': {"review_id": 'r58-surface-promotion:state_flip_density', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_persistence': {"review_id": 'r58-surface-promotion:state_persistence', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_transition_count': {"review_id": 'r58-surface-promotion:state_transition_count', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_transition_rate': {"review_id": 'r58-surface-promotion:state_transition_rate', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'sv_net_flow_direction': {"review_id": 'r58-surface-promotion:sv_net_flow_direction', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'sv_own_flow_fraction': {"review_id": 'r58-surface-promotion:sv_own_flow_fraction', "semantic_hash": 'c86fb125305702d2', "approved_authoring_tier": "daily"},
++    'sv_self_relative_change': {"review_id": 'r58-surface-promotion:sv_self_relative_change', "semantic_hash": '96fa21d39dcc02f9', "approved_authoring_tier": "daily"},
++    'tod_edge_activity': {"review_id": 'r58-surface-promotion:tod_edge_activity', "semantic_hash": 'a84a9477104d27a6', "approved_authoring_tier": "daily"},
++    'tod_intraday_range_position': {"review_id": 'r58-surface-promotion:tod_intraday_range_position', "semantic_hash": '400c8c46524c44e8', "approved_authoring_tier": "daily"},
++    'ts_abs_entropy_nats': {"review_id": 'r58-surface-promotion:ts_abs_entropy_nats', "semantic_hash": '249da95e182bc983', "approved_authoring_tier": "daily"},
++    'ts_autocorrelation_time_initial_positive_sequence': {"review_id": 'r58-surface-promotion:ts_autocorrelation_time_initial_positive_sequence', "semantic_hash": 'a814d4b252a7e2ed', "approved_authoring_tier": "daily"},
++    'ts_butterworth_lowpass_causal': {"review_id": 'r58-surface-promotion:ts_butterworth_lowpass_causal', "semantic_hash": '8ecfd1a86fc2456b', "approved_authoring_tier": "daily"},
++    'ts_causal_local_linear_smoother': {"review_id": 'r58-surface-promotion:ts_causal_local_linear_smoother', "semantic_hash": 'd470a99fc7a267aa', "approved_authoring_tier": "daily"},
++    'ts_cumulative_deviation_score': {"review_id": 'r58-surface-promotion:ts_cumulative_deviation_score', "semantic_hash": 'c808514c6830bceb', "approved_authoring_tier": "daily"},
++    'ts_effective_turning_rate': {"review_id": 'r58-surface-promotion:ts_effective_turning_rate', "semantic_hash": '2dbcb854af4adcdf', "approved_authoring_tier": "daily"},
++    'ts_expectile': {"review_id": 'r58-surface-promotion:ts_expectile', "semantic_hash": '300b3a8edc60844f', "approved_authoring_tier": "daily"},
++    'ts_extremogram': {"review_id": 'r58-surface-promotion:ts_extremogram', "semantic_hash": '0cb0a011283fa35a', "approved_authoring_tier": "daily"},
++    'ts_fractional_difference_discarded_weight_mass': {"review_id": 'r58-surface-promotion:ts_fractional_difference_discarded_weight_mass', "semantic_hash": '4d2b1512df8ed58b', "approved_authoring_tier": "daily"},
++    'ts_hampel_filter_causal': {"review_id": 'r58-surface-promotion:ts_hampel_filter_causal', "semantic_hash": 'ef8101c686bac49e', "approved_authoring_tier": "daily"},
++    'ts_hodges_lehmann_location': {"review_id": 'r58-surface-promotion:ts_hodges_lehmann_location', "semantic_hash": 'e126d05c07d84e5a', "approved_authoring_tier": "daily"},
++    'ts_lo_mackinlay_vr': {"review_id": 'r58-surface-promotion:ts_lo_mackinlay_vr', "semantic_hash": '445ea90d9d89ee16', "approved_authoring_tier": "daily"},
++    'ts_lo_mackinlay_z': {"review_id": 'r58-surface-promotion:ts_lo_mackinlay_z', "semantic_hash": '445ea90d9d89ee16', "approved_authoring_tier": "daily"},
++    'ts_mean_abs_deviation': {"review_id": 'r58-surface-promotion:ts_mean_abs_deviation', "semantic_hash": 'a0e877dc2bf44e9c', "approved_authoring_tier": "daily"},
++    'ts_mean_abs_deviation_strict': {"review_id": 'r58-surface-promotion:ts_mean_abs_deviation_strict', "semantic_hash": '2c22c62b204ff4b4', "approved_authoring_tier": "daily"},
++    'ts_mean_reversion_ou_approx_half_life': {"review_id": 'r58-surface-promotion:ts_mean_reversion_ou_approx_half_life', "semantic_hash": 'cf9832a6a81bc1b2', "approved_authoring_tier": "daily"},
++    'ts_mean_reversion_ou_approx_half_life_prior': {"review_id": 'r58-surface-promotion:ts_mean_reversion_ou_approx_half_life_prior', "semantic_hash": 'dc1c3563af669cab', "approved_authoring_tier": "daily"},
++    'ts_median3_causal': {"review_id": 'r58-surface-promotion:ts_median3_causal', "semantic_hash": '446379e9e71b587e', "approved_authoring_tier": "daily"},
++    'ts_median_abs_deviation': {"review_id": 'r58-surface-promotion:ts_median_abs_deviation', "semantic_hash": 'a0e877dc2bf44e9c', "approved_authoring_tier": "daily"},
++    'ts_pickands_tail_index': {"review_id": 'r58-surface-promotion:ts_pickands_tail_index', "semantic_hash": '2e58bd61a958fd63', "approved_authoring_tier": "daily"},
++    'ts_quantilogram': {"review_id": 'r58-surface-promotion:ts_quantilogram', "semantic_hash": '0cb0a011283fa35a', "approved_authoring_tier": "daily"},
++    'ts_robust_ema': {"review_id": 'r58-surface-promotion:ts_robust_ema', "semantic_hash": 'c76dc05cccf7d625', "approved_authoring_tier": "daily"},
++    'ts_rolling_median_causal': {"review_id": 'r58-surface-promotion:ts_rolling_median_causal', "semantic_hash": '6785a3a06694476f', "approved_authoring_tier": "daily"},
++    'ts_super_smoother': {"review_id": 'r58-surface-promotion:ts_super_smoother', "semantic_hash": '76f8ceebb7f994a3', "approved_authoring_tier": "daily"},
++    'ts_variance_ratio_proxy': {"review_id": 'r58-surface-promotion:ts_variance_ratio_proxy', "semantic_hash": 'eeee05913e6a9413', "approved_authoring_tier": "daily"},
++    'val1_earnings_yield_ma_diff': {"review_id": 'r58-surface-promotion:val1_earnings_yield_ma_diff', "semantic_hash": '7f803404e7c6866d', "approved_authoring_tier": "daily"},
++    'val1_earnings_yield_persistence': {"review_id": 'r58-surface-promotion:val1_earnings_yield_persistence', "semantic_hash": 'b46e072e4585ee28', "approved_authoring_tier": "daily"},
++    'val1_earnings_yield_slope': {"review_id": 'r58-surface-promotion:val1_earnings_yield_slope', "semantic_hash": '9c83ad5d3c0908e8', "approved_authoring_tier": "daily"},
++    'val1_equity_yield_dispersion': {"review_id": 'r58-surface-promotion:val1_equity_yield_dispersion', "semantic_hash": 'bac4b7939503a9db', "approved_authoring_tier": "daily"},
++    'val1_fcf_yield_growth': {"review_id": 'r58-surface-promotion:val1_fcf_yield_growth', "semantic_hash": '538bf6ca933cdee0', "approved_authoring_tier": "daily"},
++    'val1_valuation_percentile_own': {"review_id": 'r58-surface-promotion:val1_valuation_percentile_own', "semantic_hash": '97416deb074e880c', "approved_authoring_tier": "daily"},
++    'val1_valuation_stat_spread': {"review_id": 'r58-surface-promotion:val1_valuation_stat_spread', "semantic_hash": '9f05bf798b97d291', "approved_authoring_tier": "daily"},
++    'val1_valuation_z_own': {"review_id": 'r58-surface-promotion:val1_valuation_z_own', "semantic_hash": '97416deb074e880c', "approved_authoring_tier": "daily"},
++    'val1_valuations_lag_component': {"review_id": 'r58-surface-promotion:val1_valuations_lag_component', "semantic_hash": '81714f959fb233d5', "approved_authoring_tier": "daily"},
++    'vax_liquidity_penalty_exposure': {"review_id": 'r58-surface-promotion:vax_liquidity_penalty_exposure', "semantic_hash": 'bbc3323681175640', "approved_authoring_tier": "daily"},
++    'vv1_vol_of_vol': {"review_id": 'r58-surface-promotion:vv1_vol_of_vol', "semantic_hash": '114dc166ee9af05a', "approved_authoring_tier": "daily"},
++}
++for _c, _m in _R58_PROMOTIONS.items():
++    register_daily_migration(_c, review_id=_m["review_id"], semantic_hash=_m["semantic_hash"], approved_authoring_tier=_m["approved_authoring_tier"])
++# =====================================================================
++
++# =====================================================================
++# R59 surface promotion (2026-09-21): reviewed daily-surface migrations,
++# waves v2/v4/v5 of the parity harness (date-column panels, domain retry
++# ladder, param-min clamping) plus pandas-only execution evidence for
++# canonicals whose polars backend is unsupported (auto routes to pandas).
++# Evidence: evidence/r59/parity/<canonical>.json; waves merged in
++# evidence/r59/R59_PROMOTION_MERGE.json.
++_R59_PROMOTIONS: dict[str, dict[str, str]] = {
++    'CoppockCurve': {"review_id": 'r59-surface-promotion:CoppockCurve', "semantic_hash": 'e661578ca25a66cb', "approved_authoring_tier": "daily"},
++    'HMA': {"review_id": 'r59-surface-promotion:HMA', "semantic_hash": '5c1cdc0af36db3eb', "approved_authoring_tier": "daily"},
++    'QQE': {"review_id": 'r59-surface-promotion:QQE', "semantic_hash": '40a8d178768f8c65', "approved_authoring_tier": "daily"},
++    'RSX': {"review_id": 'r59-surface-promotion:RSX', "semantic_hash": '4058b559a290fb2f', "approved_authoring_tier": "daily"},
++    'acos_bounded': {"review_id": 'r59-surface-promotion:acos_bounded', "semantic_hash": 'b0af21dd1fcd1c98', "approved_authoring_tier": "daily"},
++    'aq1_cash_flow_volatility': {"review_id": 'r59-surface-promotion:aq1_cash_flow_volatility', "semantic_hash": 'fd61705ff052419d', "approved_authoring_tier": "daily"},
++    'asin_bounded': {"review_id": 'r59-surface-promotion:asin_bounded', "semantic_hash": 'b0af21dd1fcd1c98', "approved_authoring_tier": "daily"},
++    'category_age': {"review_id": 'r59-surface-promotion:category_age', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'category_age_lower_bound': {"review_id": 'r59-surface-promotion:category_age_lower_bound', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'category_frequency': {"review_id": 'r59-surface-promotion:category_frequency', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'category_transition_rate': {"review_id": 'r59-surface-promotion:category_transition_rate', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'category_transition_surprise': {"review_id": 'r59-surface-promotion:category_transition_surprise', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'cos_phase': {"review_id": 'r59-surface-promotion:cos_phase', "semantic_hash": 'b0af21dd1fcd1c98', "approved_authoring_tier": "daily"},
++    'cs1_monthly_lag_ratio': {"review_id": 'r59-surface-promotion:cs1_monthly_lag_ratio', "semantic_hash": 'fa2526c7e2fb6163', "approved_authoring_tier": "daily"},
++    'cs1_seasonal_relative_rank': {"review_id": 'r59-surface-promotion:cs1_seasonal_relative_rank', "semantic_hash": 'a7078b3c49d491cc', "approved_authoring_tier": "daily"},
++    'cs1_seasonal_residual_smoothness': {"review_id": 'r59-surface-promotion:cs1_seasonal_residual_smoothness', "semantic_hash": 'f661ad20a58733ef', "approved_authoring_tier": "daily"},
++    'cs1_week_cycle_phase': {"review_id": 'r59-surface-promotion:cs1_week_cycle_phase', "semantic_hash": '6f32e64cf17f9b4d', "approved_authoring_tier": "daily"},
++    'cs1_weekday_anomaly': {"review_id": 'r59-surface-promotion:cs1_weekday_anomaly', "semantic_hash": '6615deb66b5cb849', "approved_authoring_tier": "daily"},
++    'cs1_weekday_effect_strength': {"review_id": 'r59-surface-promotion:cs1_weekday_effect_strength', "semantic_hash": 'f661ad20a58733ef', "approved_authoring_tier": "daily"},
++    'cs1_weekday_lag_ratio': {"review_id": 'r59-surface-promotion:cs1_weekday_lag_ratio', "semantic_hash": '46af1141dcfb1f3c', "approved_authoring_tier": "daily"},
++    'cs1_weekday_lag_zscore': {"review_id": 'r59-surface-promotion:cs1_weekday_lag_zscore', "semantic_hash": 'a7078b3c49d491cc', "approved_authoring_tier": "daily"},
++    'cs1_weekly_harmonic_power': {"review_id": 'r59-surface-promotion:cs1_weekly_harmonic_power', "semantic_hash": '6f32e64cf17f9b4d', "approved_authoring_tier": "daily"},
++    'cs_isolation_forest_score': {"review_id": 'r59-surface-promotion:cs_isolation_forest_score', "semantic_hash": 'ba91831e10a7c9fb', "approved_authoring_tier": "daily"},
++    'cs_physical_panel_coverage': {"review_id": 'r59-surface-promotion:cs_physical_panel_coverage', "semantic_hash": 'fdde8815cb1b40db', "approved_authoring_tier": "daily"},
++    'cs_rank_combined_churn': {"review_id": 'r59-surface-promotion:cs_rank_combined_churn', "semantic_hash": '5d86d44f9835b3d6', "approved_authoring_tier": "daily"},
++    'cs_rank_composition_churn': {"review_id": 'r59-surface-promotion:cs_rank_composition_churn', "semantic_hash": '5d86d44f9835b3d6', "approved_authoring_tier": "daily"},
++    'cs_tail_breadth': {"review_id": 'r59-surface-promotion:cs_tail_breadth', "semantic_hash": '68457d1931476839', "approved_authoring_tier": "daily"},
++    'ep1_earnings_autocorr': {"review_id": 'r59-surface-promotion:ep1_earnings_autocorr', "semantic_hash": '6506b168195a32e4', "approved_authoring_tier": "daily"},
++    'ep1_earnings_consistency': {"review_id": 'r59-surface-promotion:ep1_earnings_consistency', "semantic_hash": 'd124eccde435e831', "approved_authoring_tier": "daily"},
++    'ep1_earnings_surprise_decay': {"review_id": 'r59-surface-promotion:ep1_earnings_surprise_decay', "semantic_hash": '5c941acd1668cf13', "approved_authoring_tier": "daily"},
++    'ep1_roa_stability': {"review_id": 'r59-surface-promotion:ep1_roa_stability', "semantic_hash": '718ffa2414a042af', "approved_authoring_tier": "daily"},
++    'erd_burst_duration': {"review_id": 'r59-surface-promotion:erd_burst_duration', "semantic_hash": 'ab8b8a388802a194', "approved_authoring_tier": "daily"},
++    'erd_cross_events_spacing': {"review_id": 'r59-surface-promotion:erd_cross_events_spacing', "semantic_hash": 'b40c41b3c478f819', "approved_authoring_tier": "daily"},
++    'erd_event_rate_decay_slope': {"review_id": 'r59-surface-promotion:erd_event_rate_decay_slope', "semantic_hash": '050c481109f036a2', "approved_authoring_tier": "daily"},
++    'erd_event_response_amplitude': {"review_id": 'r59-surface-promotion:erd_event_response_amplitude', "semantic_hash": 'fe460a8ae037f96d', "approved_authoring_tier": "daily"},
++    'erd_half_life_decay_count': {"review_id": 'r59-surface-promotion:erd_half_life_decay_count', "semantic_hash": '1cd75d66070c251c', "approved_authoring_tier": "daily"},
++    'erd_marked_event_decay': {"review_id": 'r59-surface-promotion:erd_marked_event_decay', "semantic_hash": 'fe460a8ae037f96d', "approved_authoring_tier": "daily"},
++    'erd_post_event_hazard': {"review_id": 'r59-surface-promotion:erd_post_event_hazard', "semantic_hash": '4e314f052472dd01', "approved_authoring_tier": "daily"},
++    'erd_recency_decay': {"review_id": 'r59-surface-promotion:erd_recency_decay', "semantic_hash": 'd86091495f1d95ff', "approved_authoring_tier": "daily"},
++    'erd_sign_consistent_decay': {"review_id": 'r59-surface-promotion:erd_sign_consistent_decay', "semantic_hash": 'b656e008473abfe3', "approved_authoring_tier": "daily"},
++    'es1_earnings_cv': {"review_id": 'r59-surface-promotion:es1_earnings_cv', "semantic_hash": '08fcedfc52347dc1', "approved_authoring_tier": "daily"},
++    'es1_earnings_mean_reversion_speed': {"review_id": 'r59-surface-promotion:es1_earnings_mean_reversion_speed', "semantic_hash": '6506b168195a32e4', "approved_authoring_tier": "daily"},
++    'es1_negative_earnings_streak': {"review_id": 'r59-surface-promotion:es1_negative_earnings_streak', "semantic_hash": 'cffa98f8bfacffd6', "approved_authoring_tier": "daily"},
++    'event_cluster_duration': {"review_id": 'r59-surface-promotion:event_cluster_duration', "semantic_hash": 'b85fef435145a025', "approved_authoring_tier": "daily"},
++    'event_decay_window': {"review_id": 'r59-surface-promotion:event_decay_window', "semantic_hash": '68a0cf5414aa5938', "approved_authoring_tier": "daily"},
++    'event_direction_imbalance': {"review_id": 'r59-surface-promotion:event_direction_imbalance', "semantic_hash": 'b85fef435145a025', "approved_authoring_tier": "daily"},
++    'event_direction_persistence': {"review_id": 'r59-surface-promotion:event_direction_persistence', "semantic_hash": 'b85fef435145a025', "approved_authoring_tier": "daily"},
++    'event_fano_excess': {"review_id": 'r59-surface-promotion:event_fano_excess', "semantic_hash": 'a387925812ecac07', "approved_authoring_tier": "daily"},
++    'event_flip_density': {"review_id": 'r59-surface-promotion:event_flip_density', "semantic_hash": 'b85fef435145a025', "approved_authoring_tier": "daily"},
++    'event_response_effective_events': {"review_id": 'r59-surface-promotion:event_response_effective_events', "semantic_hash": '5e8cb135611ff65f', "approved_authoring_tier": "daily"},
++    'event_response_overlap_ratio': {"review_id": 'r59-surface-promotion:event_response_overlap_ratio', "semantic_hash": '5e8cb135611ff65f', "approved_authoring_tier": "daily"},
++    'event_streak': {"review_id": 'r59-surface-promotion:event_streak', "semantic_hash": 'b85fef435145a025', "approved_authoring_tier": "daily"},
++    'financial_snapshot_lag': {"review_id": 'r59-surface-promotion:financial_snapshot_lag', "semantic_hash": 'de1cfcc8b6ca623e', "approved_authoring_tier": "daily"},
++    'fundamental_staleness_days': {"review_id": 'r59-surface-promotion:fundamental_staleness_days', "semantic_hash": 'fcc111064fa20944', "approved_authoring_tier": "daily"},
++    'hfl_variance_ratio': {"review_id": 'r59-surface-promotion:hfl_variance_ratio', "semantic_hash": 'e21fae14ce33b4f4', "approved_authoring_tier": "daily"},
++    'intra_neighbor_event_class': {"review_id": 'r59-surface-promotion:intra_neighbor_event_class', "semantic_hash": 'd35b1f3e788f100d', "approved_authoring_tier": "daily"},
++    'intra_same_slot_zscore': {"review_id": 'r59-surface-promotion:intra_same_slot_zscore', "semantic_hash": '1c365d3cf0d61bac', "approved_authoring_tier": "daily"},
++    'intra_state_count': {"review_id": 'r59-surface-promotion:intra_state_count', "semantic_hash": '0267de32ffa750f9', "approved_authoring_tier": "daily"},
++    'lf1_herfindahl_volume': {"review_id": 'r59-surface-promotion:lf1_herfindahl_volume', "semantic_hash": '7fd30d280d8aa34f', "approved_authoring_tier": "daily"},
++    'lf1_liquidity_decay_base': {"review_id": 'r59-surface-promotion:lf1_liquidity_decay_base', "semantic_hash": '1f33e04fa3c7ea4a', "approved_authoring_tier": "daily"},
++    'lf1_market_share_turnover': {"review_id": 'r59-surface-promotion:lf1_market_share_turnover', "semantic_hash": '82c7d3df4ebea6a0', "approved_authoring_tier": "daily"},
++    'lf1_mean_variance_turnover': {"review_id": 'r59-surface-promotion:lf1_mean_variance_turnover', "semantic_hash": '7581ca3c529e4405', "approved_authoring_tier": "daily"},
++    'lf1_own_volume_share': {"review_id": 'r59-surface-promotion:lf1_own_volume_share', "semantic_hash": '6c8bc5a6bde6efd7', "approved_authoring_tier": "daily"},
++    'lf1_turnover_distribution_skew': {"review_id": 'r59-surface-promotion:lf1_turnover_distribution_skew', "semantic_hash": 'a40ee51013d794a4', "approved_authoring_tier": "daily"},
++    'lf1_volume_amplification': {"review_id": 'r59-surface-promotion:lf1_volume_amplification', "semantic_hash": 'a0ea1e04b02b8a23', "approved_authoring_tier": "daily"},
++    'm1_cs_momentum_dispersion': {"review_id": 'r59-surface-promotion:m1_cs_momentum_dispersion', "semantic_hash": 'd343cec12e1c75d4', "approved_authoring_tier": "daily"},
++    'm1_momentum_regime': {"review_id": 'r59-surface-promotion:m1_momentum_regime', "semantic_hash": '52c0176264e27c1c', "approved_authoring_tier": "daily"},
++    'm1_momentum_speed_change': {"review_id": 'r59-surface-promotion:m1_momentum_speed_change', "semantic_hash": 'af440e4e043f5a89', "approved_authoring_tier": "daily"},
++    'm1_momentum_stability': {"review_id": 'r59-surface-promotion:m1_momentum_stability', "semantic_hash": '114dc166ee9af05a', "approved_authoring_tier": "daily"},
++    'm1_momentum_strength': {"review_id": 'r59-surface-promotion:m1_momentum_strength', "semantic_hash": '114dc166ee9af05a', "approved_authoring_tier": "daily"},
++    'm1_rank_momentum_gap': {"review_id": 'r59-surface-promotion:m1_rank_momentum_gap', "semantic_hash": '50f3858e1d4f68af', "approved_authoring_tier": "daily"},
++    'm1_ranked_momentum': {"review_id": 'r59-surface-promotion:m1_ranked_momentum', "semantic_hash": 'd343cec12e1c75d4', "approved_authoring_tier": "daily"},
++    'negative_event_age': {"review_id": 'r59-surface-promotion:negative_event_age', "semantic_hash": 'b85fef435145a025', "approved_authoring_tier": "daily"},
++    'negative_event_rate': {"review_id": 'r59-surface-promotion:negative_event_rate', "semantic_hash": 'b85fef435145a025', "approved_authoring_tier": "daily"},
++    'ofi_abs_imbalance_trend': {"review_id": 'r59-surface-promotion:ofi_abs_imbalance_trend', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'ofi_dominant_direction': {"review_id": 'r59-surface-promotion:ofi_dominant_direction', "semantic_hash": '4b74e55959a85694', "approved_authoring_tier": "daily"},
++    'ofi_imbalance_agreement': {"review_id": 'r59-surface-promotion:ofi_imbalance_agreement', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'ofi_imbalance_cv': {"review_id": 'r59-surface-promotion:ofi_imbalance_cv', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'ofi_imbalance_persistence': {"review_id": 'r59-surface-promotion:ofi_imbalance_persistence', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'ofi_reversal_rate': {"review_id": 'r59-surface-promotion:ofi_reversal_rate', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'ofi_volume_flow_regime': {"review_id": 'r59-surface-promotion:ofi_volume_flow_regime', "semantic_hash": '4b74e55959a85694', "approved_authoring_tier": "daily"},
++    'ofi_volume_imbalance': {"review_id": 'r59-surface-promotion:ofi_volume_imbalance', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'ofi_zero_flow_balance': {"review_id": 'r59-surface-promotion:ofi_zero_flow_balance', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'positive_event_age': {"review_id": 'r59-surface-promotion:positive_event_age', "semantic_hash": 'b85fef435145a025', "approved_authoring_tier": "daily"},
++    'positive_event_rate': {"review_id": 'r59-surface-promotion:positive_event_rate', "semantic_hash": 'b85fef435145a025', "approved_authoring_tier": "daily"},
++    'relation_distinct_count': {"review_id": 'r59-surface-promotion:relation_distinct_count', "semantic_hash": '3c8c95a9f2f52bf5', "approved_authoring_tier": "daily"},
++    'report_asof': {"review_id": 'r59-surface-promotion:report_asof', "semantic_hash": 'a189f20b5925cc1d', "approved_authoring_tier": "daily"},
++    'same_calendar_day_mean': {"review_id": 'r59-surface-promotion:same_calendar_day_mean', "semantic_hash": '6629c1e540247f0a', "approved_authoring_tier": "daily"},
++    'same_calendar_month_return': {"review_id": 'r59-surface-promotion:same_calendar_month_return', "semantic_hash": 'c1e760f4656cb006', "approved_authoring_tier": "daily"},
++    'signed_event_decay': {"review_id": 'r59-surface-promotion:signed_event_decay', "semantic_hash": '68a0cf5414aa5938', "approved_authoring_tier": "daily"},
++    'signed_event_rate': {"review_id": 'r59-surface-promotion:signed_event_rate', "semantic_hash": 'b85fef435145a025', "approved_authoring_tier": "daily"},
++    'sin_phase': {"review_id": 'r59-surface-promotion:sin_phase', "semantic_hash": 'b0af21dd1fcd1c98', "approved_authoring_tier": "daily"},
++    'state_adaptive_deadband': {"review_id": 'r59-surface-promotion:state_adaptive_deadband', "semantic_hash": '45f8137f6824fade', "approved_authoring_tier": "daily"},
++    'state_adaptive_slew_limit': {"review_id": 'r59-surface-promotion:state_adaptive_slew_limit', "semantic_hash": '85d883af8dbb6096', "approved_authoring_tier": "daily"},
++    'state_age': {"review_id": 'r59-surface-promotion:state_age', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_episode_age': {"review_id": 'r59-surface-promotion:state_episode_age', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_episode_age_capped': {"review_id": 'r59-surface-promotion:state_episode_age_capped', "semantic_hash": '252e704ea46f6f62', "approved_authoring_tier": "daily"},
++    'state_episode_age_lower_bound': {"review_id": 'r59-surface-promotion:state_episode_age_lower_bound', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_episode_censored_flag': {"review_id": 'r59-surface-promotion:state_episode_censored_flag', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_flip_age': {"review_id": 'r59-surface-promotion:state_flip_age', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_flip_density': {"review_id": 'r59-surface-promotion:state_flip_density', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_l1_turnover_prox': {"review_id": 'r59-surface-promotion:state_l1_turnover_prox', "semantic_hash": 'bee7927fc63a9679', "approved_authoring_tier": "daily"},
++    'state_l2_partial_adjustment': {"review_id": 'r59-surface-promotion:state_l2_partial_adjustment', "semantic_hash": '60df243de483c159', "approved_authoring_tier": "daily"},
++    'state_persistence': {"review_id": 'r59-surface-promotion:state_persistence', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_transition_count': {"review_id": 'r59-surface-promotion:state_transition_count', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'state_transition_rate': {"review_id": 'r59-surface-promotion:state_transition_rate', "semantic_hash": '4745bde223b4c028', "approved_authoring_tier": "daily"},
++    'sv_net_flow_direction': {"review_id": 'r59-surface-promotion:sv_net_flow_direction', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'sv_own_flow_fraction': {"review_id": 'r59-surface-promotion:sv_own_flow_fraction', "semantic_hash": 'c86fb125305702d2', "approved_authoring_tier": "daily"},
++    'sv_self_relative_change': {"review_id": 'r59-surface-promotion:sv_self_relative_change', "semantic_hash": '96fa21d39dcc02f9', "approved_authoring_tier": "daily"},
++    'sv_signed_volume_volatility': {"review_id": 'r59-surface-promotion:sv_signed_volume_volatility', "semantic_hash": 'c16283c3013f2e0a', "approved_authoring_tier": "daily"},
++    'tod_close_midday_ratio': {"review_id": 'r59-surface-promotion:tod_close_midday_ratio', "semantic_hash": '49d98b1488a89dea', "approved_authoring_tier": "daily"},
++    'tod_edge_activity': {"review_id": 'r59-surface-promotion:tod_edge_activity', "semantic_hash": 'a84a9477104d27a6', "approved_authoring_tier": "daily"},
++    'tod_intraday_range_position': {"review_id": 'r59-surface-promotion:tod_intraday_range_position', "semantic_hash": '400c8c46524c44e8', "approved_authoring_tier": "daily"},
++    'tod_open_midday_ratio': {"review_id": 'r59-surface-promotion:tod_open_midday_ratio', "semantic_hash": '1a6997787cb5dc52', "approved_authoring_tier": "daily"},
++    'ts_abs_entropy_nats': {"review_id": 'r59-surface-promotion:ts_abs_entropy_nats', "semantic_hash": '249da95e182bc983', "approved_authoring_tier": "daily"},
++    'ts_autocorrelation_time_initial_positive_sequence': {"review_id": 'r59-surface-promotion:ts_autocorrelation_time_initial_positive_sequence', "semantic_hash": 'a814d4b252a7e2ed', "approved_authoring_tier": "daily"},
++    'ts_butterworth_lowpass_causal': {"review_id": 'r59-surface-promotion:ts_butterworth_lowpass_causal', "semantic_hash": '8ecfd1a86fc2456b', "approved_authoring_tier": "daily"},
++    'ts_causal_local_linear_smoother': {"review_id": 'r59-surface-promotion:ts_causal_local_linear_smoother', "semantic_hash": 'd470a99fc7a267aa', "approved_authoring_tier": "daily"},
++    'ts_cumulative_deviation_score': {"review_id": 'r59-surface-promotion:ts_cumulative_deviation_score', "semantic_hash": 'c808514c6830bceb', "approved_authoring_tier": "daily"},
++    'ts_effective_turning_rate': {"review_id": 'r59-surface-promotion:ts_effective_turning_rate', "semantic_hash": '2dbcb854af4adcdf', "approved_authoring_tier": "daily"},
++    'ts_expectile': {"review_id": 'r59-surface-promotion:ts_expectile', "semantic_hash": '300b3a8edc60844f', "approved_authoring_tier": "daily"},
++    'ts_extremogram': {"review_id": 'r59-surface-promotion:ts_extremogram', "semantic_hash": '0cb0a011283fa35a', "approved_authoring_tier": "daily"},
++    'ts_forbidden_ordinal_pattern_excess': {"review_id": 'r59-surface-promotion:ts_forbidden_ordinal_pattern_excess', "semantic_hash": 'ff556be804d50a86', "approved_authoring_tier": "daily"},
++    'ts_forbidden_ordinal_pattern_signed_excess': {"review_id": 'r59-surface-promotion:ts_forbidden_ordinal_pattern_signed_excess', "semantic_hash": '9434ed348506e589', "approved_authoring_tier": "daily"},
++    'ts_fractional_difference_discarded_weight_mass': {"review_id": 'r59-surface-promotion:ts_fractional_difference_discarded_weight_mass', "semantic_hash": '4d2b1512df8ed58b', "approved_authoring_tier": "daily"},
++    'ts_hampel_filter_causal': {"review_id": 'r59-surface-promotion:ts_hampel_filter_causal', "semantic_hash": 'ef8101c686bac49e', "approved_authoring_tier": "daily"},
++    'ts_hodges_lehmann_location': {"review_id": 'r59-surface-promotion:ts_hodges_lehmann_location', "semantic_hash": 'e126d05c07d84e5a', "approved_authoring_tier": "daily"},
++    'ts_kramers_moyal_diffusion': {"review_id": 'r59-surface-promotion:ts_kramers_moyal_diffusion', "semantic_hash": '22219d60495e6218', "approved_authoring_tier": "daily"},
++    'ts_kramers_moyal_drift': {"review_id": 'r59-surface-promotion:ts_kramers_moyal_drift', "semantic_hash": '22219d60495e6218', "approved_authoring_tier": "daily"},
++    'ts_lo_mackinlay_vr': {"review_id": 'r59-surface-promotion:ts_lo_mackinlay_vr', "semantic_hash": '445ea90d9d89ee16', "approved_authoring_tier": "daily"},
++    'ts_lo_mackinlay_z': {"review_id": 'r59-surface-promotion:ts_lo_mackinlay_z', "semantic_hash": '445ea90d9d89ee16', "approved_authoring_tier": "daily"},
++    'ts_matrix_profile_motif_frequency': {"review_id": 'r59-surface-promotion:ts_matrix_profile_motif_frequency', "semantic_hash": '3d6fae12ecbd5215', "approved_authoring_tier": "daily"},
++    'ts_matrix_profile_neighbor_dispersion': {"review_id": 'r59-surface-promotion:ts_matrix_profile_neighbor_dispersion', "semantic_hash": 'e7c80b0d61d1f8ed', "approved_authoring_tier": "daily"},
++    'ts_mean_abs_deviation': {"review_id": 'r59-surface-promotion:ts_mean_abs_deviation', "semantic_hash": 'a0e877dc2bf44e9c', "approved_authoring_tier": "daily"},
++    'ts_mean_abs_deviation_strict': {"review_id": 'r59-surface-promotion:ts_mean_abs_deviation_strict', "semantic_hash": '2c22c62b204ff4b4', "approved_authoring_tier": "daily"},
++    'ts_mean_reversion_ou_approx_half_life': {"review_id": 'r59-surface-promotion:ts_mean_reversion_ou_approx_half_life', "semantic_hash": 'cf9832a6a81bc1b2', "approved_authoring_tier": "daily"},
++    'ts_mean_reversion_ou_approx_half_life_prior': {"review_id": 'r59-surface-promotion:ts_mean_reversion_ou_approx_half_life_prior', "semantic_hash": 'dc1c3563af669cab', "approved_authoring_tier": "daily"},
++    'ts_median3_causal': {"review_id": 'r59-surface-promotion:ts_median3_causal', "semantic_hash": '446379e9e71b587e', "approved_authoring_tier": "daily"},
++    'ts_median_abs_deviation': {"review_id": 'r59-surface-promotion:ts_median_abs_deviation', "semantic_hash": 'a0e877dc2bf44e9c', "approved_authoring_tier": "daily"},
++    'ts_pickands_tail_index': {"review_id": 'r59-surface-promotion:ts_pickands_tail_index', "semantic_hash": '2e58bd61a958fd63', "approved_authoring_tier": "daily"},
++    'ts_quantilogram': {"review_id": 'r59-surface-promotion:ts_quantilogram', "semantic_hash": '0cb0a011283fa35a', "approved_authoring_tier": "daily"},
++    'ts_robust_ema': {"review_id": 'r59-surface-promotion:ts_robust_ema', "semantic_hash": 'c76dc05cccf7d625', "approved_authoring_tier": "daily"},
++    'ts_rolling_median_causal': {"review_id": 'r59-surface-promotion:ts_rolling_median_causal', "semantic_hash": '6785a3a06694476f', "approved_authoring_tier": "daily"},
++    'ts_rqa_determinism_fixed_rr': {"review_id": 'r59-surface-promotion:ts_rqa_determinism_fixed_rr', "semantic_hash": 'ecbabe7a17b005d3', "approved_authoring_tier": "daily"},
++    'ts_rqa_laminarity_fixed_rr': {"review_id": 'r59-surface-promotion:ts_rqa_laminarity_fixed_rr', "semantic_hash": 'ecbabe7a17b005d3', "approved_authoring_tier": "daily"},
++    'ts_spectral_lowpass_trailing': {"review_id": 'r59-surface-promotion:ts_spectral_lowpass_trailing', "semantic_hash": '8462399ce60b4d00', "approved_authoring_tier": "daily"},
++    'ts_super_smoother': {"review_id": 'r59-surface-promotion:ts_super_smoother', "semantic_hash": '76f8ceebb7f994a3', "approved_authoring_tier": "daily"},
++    'ts_variance_ratio_proxy': {"review_id": 'r59-surface-promotion:ts_variance_ratio_proxy', "semantic_hash": 'eeee05913e6a9413', "approved_authoring_tier": "daily"},
++    'val1_discount_regime_share': {"review_id": 'r59-surface-promotion:val1_discount_regime_share', "semantic_hash": 'aaf4a4fd9b43f3b4', "approved_authoring_tier": "daily"},
++    'val1_earnings_yield_ma_diff': {"review_id": 'r59-surface-promotion:val1_earnings_yield_ma_diff', "semantic_hash": '7f803404e7c6866d', "approved_authoring_tier": "daily"},
++    'val1_earnings_yield_persistence': {"review_id": 'r59-surface-promotion:val1_earnings_yield_persistence', "semantic_hash": 'b46e072e4585ee28', "approved_authoring_tier": "daily"},
++    'val1_earnings_yield_slope': {"review_id": 'r59-surface-promotion:val1_earnings_yield_slope', "semantic_hash": '9c83ad5d3c0908e8', "approved_authoring_tier": "daily"},
++    'val1_equity_yield_dispersion': {"review_id": 'r59-surface-promotion:val1_equity_yield_dispersion', "semantic_hash": 'bac4b7939503a9db', "approved_authoring_tier": "daily"},
++    'val1_fcf_yield_growth': {"review_id": 'r59-surface-promotion:val1_fcf_yield_growth', "semantic_hash": '538bf6ca933cdee0', "approved_authoring_tier": "daily"},
++    'val1_valuation_percentile_own': {"review_id": 'r59-surface-promotion:val1_valuation_percentile_own', "semantic_hash": '97416deb074e880c', "approved_authoring_tier": "daily"},
++    'val1_valuation_stat_spread': {"review_id": 'r59-surface-promotion:val1_valuation_stat_spread', "semantic_hash": '9f05bf798b97d291', "approved_authoring_tier": "daily"},
++    'val1_valuation_z_own': {"review_id": 'r59-surface-promotion:val1_valuation_z_own', "semantic_hash": '97416deb074e880c', "approved_authoring_tier": "daily"},
++    'val1_valuations_lag_component': {"review_id": 'r59-surface-promotion:val1_valuations_lag_component', "semantic_hash": '81714f959fb233d5', "approved_authoring_tier": "daily"},
++    'vax_liquidity_penalty_exposure': {"review_id": 'r59-surface-promotion:vax_liquidity_penalty_exposure', "semantic_hash": 'bbc3323681175640', "approved_authoring_tier": "daily"},
++    'vv1_dispersion_vol': {"review_id": 'r59-surface-promotion:vv1_dispersion_vol', "semantic_hash": '40eedf96ae815a55', "approved_authoring_tier": "daily"},
++    'vv1_downside_vol_share': {"review_id": 'r59-surface-promotion:vv1_downside_vol_share', "semantic_hash": '114dc166ee9af05a', "approved_authoring_tier": "daily"},
++    'vv1_fractional_share': {"review_id": 'r59-surface-promotion:vv1_fractional_share', "semantic_hash": '510c623fbb360b4b', "approved_authoring_tier": "daily"},
++    'vv1_long_short_vol_beta': {"review_id": 'r59-surface-promotion:vv1_long_short_vol_beta', "semantic_hash": '510c623fbb360b4b', "approved_authoring_tier": "daily"},
++    'vv1_vol_acceleration': {"review_id": 'r59-surface-promotion:vv1_vol_acceleration', "semantic_hash": '6dd54e326cc0a28f', "approved_authoring_tier": "daily"},
++    'vv1_vol_level_score': {"review_id": 'r59-surface-promotion:vv1_vol_level_score', "semantic_hash": 'a96f52aec0063c63', "approved_authoring_tier": "daily"},
++    'vv1_vol_of_vol': {"review_id": 'r59-surface-promotion:vv1_vol_of_vol', "semantic_hash": '114dc166ee9af05a', "approved_authoring_tier": "daily"},
++    'WMA': {"review_id": 'r59-surface-promotion-pandasonly:WMA', "semantic_hash": '27069cad30a82cf2', "approved_authoring_tier": "daily"},  # pandas-only
++    'same_clock_lag': {"review_id": 'r59-surface-promotion-pandasonly:same_clock_lag', "semantic_hash": 'c2e79604a3b0a732', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_activity_spectral_entropy': {"review_id": 'r59-surface-promotion-pandasonly:ts_activity_spectral_entropy', "semantic_hash": '205777716b0bad8f', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_ar_fitted_value': {"review_id": 'r59-surface-promotion-pandasonly:ts_ar_fitted_value', "semantic_hash": '2f07898a31f54aa3', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_ar_in_sample_resid': {"review_id": 'r59-surface-promotion-pandasonly:ts_ar_in_sample_resid', "semantic_hash": '2f07898a31f54aa3', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_detrended_level_spectral_entropy': {"review_id": 'r59-surface-promotion-pandasonly:ts_detrended_level_spectral_entropy', "semantic_hash": 'e11d6af9498a398c', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_l1_trend_filter_trailing': {"review_id": 'r59-surface-promotion-pandasonly:ts_l1_trend_filter_trailing', "semantic_hash": 'f6e01f446b57aa7d', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_mcginley_dynamic': {"review_id": 'r59-surface-promotion-pandasonly:ts_mcginley_dynamic', "semantic_hash": 'b5d3b3dddcb2c92d', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_nlms_filter': {"review_id": 'r59-surface-promotion-pandasonly:ts_nlms_filter', "semantic_hash": 'cdbef8e4fce358e6', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_one_euro_filter': {"review_id": 'r59-surface-promotion-pandasonly:ts_one_euro_filter', "semantic_hash": '83604971cb4c1dd2', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_poly2_forecast_error': {"review_id": 'r59-surface-promotion-pandasonly:ts_poly2_forecast_error', "semantic_hash": '0568e435a2f5ba79', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_poly2_forecast_error_z': {"review_id": 'r59-surface-promotion-pandasonly:ts_poly2_forecast_error_z', "semantic_hash": '0568e435a2f5ba79', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_poly2_prior_coeff': {"review_id": 'r59-surface-promotion-pandasonly:ts_poly2_prior_coeff', "semantic_hash": '0568e435a2f5ba79', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_return_spectral_entropy': {"review_id": 'r59-surface-promotion-pandasonly:ts_return_spectral_entropy', "semantic_hash": '199748c064caf9aa', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_rls_filter': {"review_id": 'r59-surface-promotion-pandasonly:ts_rls_filter', "semantic_hash": '57f8bc141060c564', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_ssa_denoise_trailing': {"review_id": 'r59-surface-promotion-pandasonly:ts_ssa_denoise_trailing', "semantic_hash": '1117731d573233d9', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_total_variation_filter_trailing': {"review_id": 'r59-surface-promotion-pandasonly:ts_total_variation_filter_trailing', "semantic_hash": '0ace6112ba7c7573', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_vidya': {"review_id": 'r59-surface-promotion-pandasonly:ts_vidya', "semantic_hash": '3ac66db92098c9f1', "approved_authoring_tier": "daily"},  # pandas-only
++    'ts_wavelet_shrinkage_trailing': {"review_id": 'r59-surface-promotion-pandasonly:ts_wavelet_shrinkage_trailing', "semantic_hash": '5352ca02f4f31147', "approved_authoring_tier": "daily"},  # pandas-only
++    'years_since_date': {"review_id": 'r59-surface-promotion-pandasonly:years_since_date', "semantic_hash": '47a2c219b68eb392', "approved_authoring_tier": "daily"},  # pandas-only
++}
++for _c, _m in _R59_PROMOTIONS.items():
++    register_daily_migration(_c, review_id=_m["review_id"], semantic_hash=_m["semantic_hash"], approved_authoring_tier=_m["approved_authoring_tier"])
++# =====================================================================
++
+ def daily_factor_migrated() -> frozenset[str]:
+     """Live read of the reviewed daily-migration surface (manifest keys)."""
+     return frozenset(REVIEWED_MIGRATION_MANIFEST)
+```

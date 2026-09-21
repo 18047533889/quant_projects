@@ -1,0 +1,19 @@
+{
+ "canonical": "acos_bounded",
+ "review_id": "r58-surface-promotion:acos_bounded",
+ "semantic_hash": "b0af21dd1fcd1c98",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {},
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 280,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

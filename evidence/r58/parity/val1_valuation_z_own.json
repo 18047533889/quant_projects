@@ -1,0 +1,22 @@
+{
+ "canonical": "val1_valuation_z_own",
+ "review_id": "r58-surface-promotion:val1_valuation_z_own",
+ "semantic_hash": "97416deb074e880c",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "history_window": 60,
+  "min_periods": 10
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 998,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

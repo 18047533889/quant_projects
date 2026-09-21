@@ -1,0 +1,23 @@
+{
+ "canonical": "ts_mean_reversion_ou_approx_half_life_prior",
+ "review_id": "r59-surface-promotion:ts_mean_reversion_ou_approx_half_life_prior",
+ "semantic_hash": "dc1c3563af669cab",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {
+  "window": 120,
+  "min_periods": 20
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 962,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v1"
+}

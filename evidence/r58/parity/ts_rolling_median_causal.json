@@ -1,0 +1,22 @@
+{
+ "canonical": "ts_rolling_median_causal",
+ "review_id": "r58-surface-promotion:ts_rolling_median_causal",
+ "semantic_hash": "6785a3a06694476f",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "window": 5,
+  "min_periods": 3
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1171,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

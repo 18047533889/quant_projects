@@ -1,0 +1,4943 @@
+{
+ "parity": {
+  "HMA": {
+   "canonical": "HMA",
+   "status": "PASS",
+   "reason": "",
+   "hash": "5c1cdc0af36db3eb",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 111,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "rounding": "floor"
+   }
+  },
+  "RSX": {
+   "canonical": "RSX",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4058b559a290fb2f",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "length": 20
+   }
+  },
+  "acos_bounded": {
+   "canonical": "acos_bounded",
+   "status": "PASS",
+   "reason": "",
+   "hash": "b0af21dd1fcd1c98",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 280,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "aq1_cash_flow_volatility": {
+   "canonical": "aq1_cash_flow_volatility",
+   "status": "PASS",
+   "reason": "",
+   "hash": "fd61705ff052419d",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1165,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 8,
+    "min_periods": 4
+   }
+  },
+  "asin_bounded": {
+   "canonical": "asin_bounded",
+   "status": "PASS",
+   "reason": "",
+   "hash": "b0af21dd1fcd1c98",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 280,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "category_age": {
+   "canonical": "category_age",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "category_age_lower_bound": {
+   "canonical": "category_age_lower_bound",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "category_frequency": {
+   "canonical": "category_frequency",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "category_transition_rate": {
+   "canonical": "category_transition_rate",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "category_transition_surprise": {
+   "canonical": "category_transition_surprise",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "cos_phase": {
+   "canonical": "cos_phase",
+   "status": "PASS",
+   "reason": "",
+   "hash": "b0af21dd1fcd1c98",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "cs1_monthly_lag_ratio": {
+   "canonical": "cs1_monthly_lag_ratio",
+   "status": "PASS",
+   "reason": "",
+   "hash": "fa2526c7e2fb6163",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 835,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "cs1_seasonal_relative_rank": {
+   "canonical": "cs1_seasonal_relative_rank",
+   "status": "PASS",
+   "reason": "",
+   "hash": "a7078b3c49d491cc",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1061,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "cs1_seasonal_residual_smoothness": {
+   "canonical": "cs1_seasonal_residual_smoothness",
+   "status": "PASS",
+   "reason": "",
+   "hash": "f661ad20a58733ef",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1066,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "cs1_week_cycle_phase": {
+   "canonical": "cs1_week_cycle_phase",
+   "status": "PASS",
+   "reason": "",
+   "hash": "6f32e64cf17f9b4d",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1128,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "cs1_weekday_anomaly": {
+   "canonical": "cs1_weekday_anomaly",
+   "status": "PASS",
+   "reason": "",
+   "hash": "6615deb66b5cb849",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1076,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "cs1_weekday_effect_strength": {
+   "canonical": "cs1_weekday_effect_strength",
+   "status": "PASS",
+   "reason": "",
+   "hash": "f661ad20a58733ef",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1108,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "cs1_weekday_lag_ratio": {
+   "canonical": "cs1_weekday_lag_ratio",
+   "status": "PASS",
+   "reason": "",
+   "hash": "46af1141dcfb1f3c",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 961,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "cs1_weekday_lag_zscore": {
+   "canonical": "cs1_weekday_lag_zscore",
+   "status": "PASS",
+   "reason": "",
+   "hash": "a7078b3c49d491cc",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1061,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "cs1_weekly_harmonic_power": {
+   "canonical": "cs1_weekly_harmonic_power",
+   "status": "PASS",
+   "reason": "",
+   "hash": "6f32e64cf17f9b4d",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1083,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "cs_isolation_forest_score": {
+   "canonical": "cs_isolation_forest_score",
+   "status": "PASS",
+   "reason": "",
+   "hash": "ba91831e10a7c9fb",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 490,
+   "maxdiff": 0.0,
+   "params": {
+    "n_trees": 100,
+    "contamination": 0.1,
+    "random_seed": 42
+   }
+  },
+  "cs_physical_panel_coverage": {
+   "canonical": "cs_physical_panel_coverage",
+   "status": "PASS",
+   "reason": "",
+   "hash": "fdde8815cb1b40db",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1200,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "ep1_earnings_autocorr": {
+   "canonical": "ep1_earnings_autocorr",
+   "status": "PASS",
+   "reason": "",
+   "hash": "6506b168195a32e4",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1165,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 8,
+    "min_periods": 4
+   }
+  },
+  "ep1_earnings_consistency": {
+   "canonical": "ep1_earnings_consistency",
+   "status": "PASS",
+   "reason": "",
+   "hash": "d124eccde435e831",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1179,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 8,
+    "min_periods": 3
+   }
+  },
+  "ep1_earnings_surprise_decay": {
+   "canonical": "ep1_earnings_surprise_decay",
+   "status": "PASS",
+   "reason": "",
+   "hash": "5c941acd1668cf13",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1158,
+   "maxdiff": 0.0,
+   "params": {
+    "half_life": 6.0,
+    "min_periods": 4
+   }
+  },
+  "ep1_roa_stability": {
+   "canonical": "ep1_roa_stability",
+   "status": "PASS",
+   "reason": "",
+   "hash": "718ffa2414a042af",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1165,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 8,
+    "min_periods": 4
+   }
+  },
+  "erd_burst_duration": {
+   "canonical": "erd_burst_duration",
+   "status": "PASS",
+   "reason": "",
+   "hash": "ab8b8a388802a194",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "erd_cross_events_spacing": {
+   "canonical": "erd_cross_events_spacing",
+   "status": "PASS",
+   "reason": "",
+   "hash": "b40c41b3c478f819",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 890,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "erd_event_rate_decay_slope": {
+   "canonical": "erd_event_rate_decay_slope",
+   "status": "PASS",
+   "reason": "",
+   "hash": "050c481109f036a2",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 10,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "erd_event_response_amplitude": {
+   "canonical": "erd_event_response_amplitude",
+   "status": "PASS",
+   "reason": "",
+   "hash": "fe460a8ae037f96d",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1190,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "erd_half_life_decay_count": {
+   "canonical": "erd_half_life_decay_count",
+   "status": "PASS",
+   "reason": "",
+   "hash": "1cd75d66070c251c",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1190,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "erd_marked_event_decay": {
+   "canonical": "erd_marked_event_decay",
+   "status": "PASS",
+   "reason": "",
+   "hash": "fe460a8ae037f96d",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1190,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "erd_post_event_hazard": {
+   "canonical": "erd_post_event_hazard",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4e314f052472dd01",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 890,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "erd_recency_decay": {
+   "canonical": "erd_recency_decay",
+   "status": "PASS",
+   "reason": "",
+   "hash": "d86091495f1d95ff",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1200,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "erd_sign_consistent_decay": {
+   "canonical": "erd_sign_consistent_decay",
+   "status": "PASS",
+   "reason": "",
+   "hash": "b656e008473abfe3",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1190,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "es1_earnings_cv": {
+   "canonical": "es1_earnings_cv",
+   "status": "PASS",
+   "reason": "",
+   "hash": "08fcedfc52347dc1",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1068,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 8,
+    "min_periods": 4
+   }
+  },
+  "es1_earnings_mean_reversion_speed": {
+   "canonical": "es1_earnings_mean_reversion_speed",
+   "status": "PASS",
+   "reason": "",
+   "hash": "6506b168195a32e4",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1068,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 8,
+    "min_periods": 4
+   }
+  },
+  "es1_negative_earnings_streak": {
+   "canonical": "es1_negative_earnings_streak",
+   "status": "PASS",
+   "reason": "",
+   "hash": "cffa98f8bfacffd6",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "event_response_effective_events": {
+   "canonical": "event_response_effective_events",
+   "status": "PASS",
+   "reason": "",
+   "hash": "5e8cb135611ff65f",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 907,
+   "maxdiff": 0.0,
+   "params": {
+    "history_window": 20,
+    "horizon": 20,
+    "refractory": 3
+   }
+  },
+  "event_response_overlap_ratio": {
+   "canonical": "event_response_overlap_ratio",
+   "status": "PASS",
+   "reason": "",
+   "hash": "5e8cb135611ff65f",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 907,
+   "maxdiff": 0.0,
+   "params": {
+    "history_window": 20,
+    "horizon": 20,
+    "refractory": 3
+   }
+  },
+  "financial_snapshot_lag": {
+   "canonical": "financial_snapshot_lag",
+   "status": "PASS",
+   "reason": "",
+   "hash": "de1cfcc8b6ca623e",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1190,
+   "maxdiff": 0.0,
+   "params": {
+    "lag": 1
+   }
+  },
+  "fundamental_staleness_days": {
+   "canonical": "fundamental_staleness_days",
+   "status": "PASS",
+   "reason": "",
+   "hash": "fcc111064fa20944",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "hfl_variance_ratio": {
+   "canonical": "hfl_variance_ratio",
+   "status": "PASS",
+   "reason": "",
+   "hash": "e21fae14ce33b4f4",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1113,
+   "maxdiff": 0.0,
+   "params": {
+    "k": 3,
+    "window": 20
+   }
+  },
+  "lf1_herfindahl_volume": {
+   "canonical": "lf1_herfindahl_volume",
+   "status": "PASS",
+   "reason": "",
+   "hash": "7fd30d280d8aa34f",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 556,
+   "maxdiff": 0.0,
+   "params": {
+    "min_breadth": 2
+   }
+  },
+  "lf1_liquidity_decay_base": {
+   "canonical": "lf1_liquidity_decay_base",
+   "status": "PASS",
+   "reason": "",
+   "hash": "1f33e04fa3c7ea4a",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1200,
+   "maxdiff": 0.0,
+   "params": {
+    "decay_scale": 2.0,
+    "window": 20
+   }
+  },
+  "lf1_market_share_turnover": {
+   "canonical": "lf1_market_share_turnover",
+   "status": "PASS",
+   "reason": "",
+   "hash": "82c7d3df4ebea6a0",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 556,
+   "maxdiff": 0.0,
+   "params": {
+    "min_breadth": 2
+   }
+  },
+  "lf1_mean_variance_turnover": {
+   "canonical": "lf1_mean_variance_turnover",
+   "status": "PASS",
+   "reason": "",
+   "hash": "7581ca3c529e4405",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1170,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 2
+   }
+  },
+  "lf1_own_volume_share": {
+   "canonical": "lf1_own_volume_share",
+   "status": "PASS",
+   "reason": "",
+   "hash": "6c8bc5a6bde6efd7",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1070,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 2
+   }
+  },
+  "ofi_dominant_direction": {
+   "canonical": "ofi_dominant_direction",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4b74e55959a85694",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1190,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 2,
+    "threshold": 0.5
+   }
+  },
+  "ofi_imbalance_agreement": {
+   "canonical": "ofi_imbalance_agreement",
+   "status": "PASS",
+   "reason": "",
+   "hash": "c16283c3013f2e0a",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1190,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 2
+   }
+  },
+  "ofi_volume_flow_regime": {
+   "canonical": "ofi_volume_flow_regime",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4b74e55959a85694",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1190,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 2,
+    "threshold": 0.5
+   }
+  },
+  "ofi_volume_imbalance": {
+   "canonical": "ofi_volume_imbalance",
+   "status": "PASS",
+   "reason": "",
+   "hash": "c16283c3013f2e0a",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1088,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 2
+   }
+  },
+  "ofi_zero_flow_balance": {
+   "canonical": "ofi_zero_flow_balance",
+   "status": "PASS",
+   "reason": "",
+   "hash": "c16283c3013f2e0a",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1190,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 2
+   }
+  },
+  "relation_distinct_count": {
+   "canonical": "relation_distinct_count",
+   "status": "PASS",
+   "reason": "",
+   "hash": "3c8c95a9f2f52bf5",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1200,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "report_asof": {
+   "canonical": "report_asof",
+   "status": "PASS",
+   "reason": "",
+   "hash": "a189f20b5925cc1d",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1200,
+   "maxdiff": 0.0,
+   "params": {
+    "max_lookback": 20
+   }
+  },
+  "report_benford_js_divergence": {
+   "canonical": "report_benford_js_divergence",
+   "status": "PASS",
+   "reason": "",
+   "hash": "26b259e797a66831",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1102,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 60
+   }
+  },
+  "sin_phase": {
+   "canonical": "sin_phase",
+   "status": "PASS",
+   "reason": "",
+   "hash": "b0af21dd1fcd1c98",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "state_age": {
+   "canonical": "state_age",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "state_episode_age": {
+   "canonical": "state_episode_age",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "state_episode_age_lower_bound": {
+   "canonical": "state_episode_age_lower_bound",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "state_episode_censored_flag": {
+   "canonical": "state_episode_censored_flag",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "state_flip_age": {
+   "canonical": "state_flip_age",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "state_flip_density": {
+   "canonical": "state_flip_density",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "state_persistence": {
+   "canonical": "state_persistence",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "state_transition_count": {
+   "canonical": "state_transition_count",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "state_transition_rate": {
+   "canonical": "state_transition_rate",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4745bde223b4c028",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 152,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "sv_net_flow_direction": {
+   "canonical": "sv_net_flow_direction",
+   "status": "PASS",
+   "reason": "",
+   "hash": "c16283c3013f2e0a",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1190,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 2
+   }
+  },
+  "sv_own_flow_fraction": {
+   "canonical": "sv_own_flow_fraction",
+   "status": "PASS",
+   "reason": "",
+   "hash": "c86fb125305702d2",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1070,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 2
+   }
+  },
+  "sv_self_relative_change": {
+   "canonical": "sv_self_relative_change",
+   "status": "PASS",
+   "reason": "",
+   "hash": "96fa21d39dcc02f9",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1078,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "tod_edge_activity": {
+   "canonical": "tod_edge_activity",
+   "status": "PASS",
+   "reason": "",
+   "hash": "a84a9477104d27a6",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1190,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "tod_intraday_range_position": {
+   "canonical": "tod_intraday_range_position",
+   "status": "PASS",
+   "reason": "",
+   "hash": "400c8c46524c44e8",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1088,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 2
+   }
+  },
+  "ts_abs_entropy_nats": {
+   "canonical": "ts_abs_entropy_nats",
+   "status": "PASS",
+   "reason": "",
+   "hash": "249da95e182bc983",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1200,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 1
+   }
+  },
+  "ts_autocorrelation_time_initial_positive_sequence": {
+   "canonical": "ts_autocorrelation_time_initial_positive_sequence",
+   "status": "PASS",
+   "reason": "",
+   "hash": "a814d4b252a7e2ed",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 905,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 120,
+    "max_lag": 20
+   }
+  },
+  "ts_betti_1_max_persistence": {
+   "canonical": "ts_betti_1_max_persistence",
+   "status": "PASS",
+   "reason": "",
+   "hash": "bd9e821e4d9993bf",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1144,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "tau": 1,
+    "embedding_dim": 3
+   }
+  },
+  "ts_butterworth_lowpass_causal": {
+   "canonical": "ts_butterworth_lowpass_causal",
+   "status": "PASS",
+   "reason": "",
+   "hash": "8ecfd1a86fc2456b",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "params": {
+    "cutoff_period": 20,
+    "order": 2
+   }
+  },
+  "ts_causal_local_linear_smoother": {
+   "canonical": "ts_causal_local_linear_smoother",
+   "status": "PASS",
+   "reason": "",
+   "hash": "d470a99fc7a267aa",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1102,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 10
+   }
+  },
+  "ts_change_point_probability": {
+   "canonical": "ts_change_point_probability",
+   "status": "PASS",
+   "reason": "",
+   "hash": "889730ee0b49e664",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 444,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 120,
+    "transition_prob": 0.05
+   }
+  },
+  "ts_cumulative_deviation_score": {
+   "canonical": "ts_cumulative_deviation_score",
+   "status": "PASS",
+   "reason": "",
+   "hash": "c808514c6830bceb",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 745,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 5
+   }
+  },
+  "ts_cusum_vol_break_score": {
+   "canonical": "ts_cusum_vol_break_score",
+   "status": "PASS",
+   "reason": "",
+   "hash": "70e228a624a8b7a7",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 444,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 60,
+    "min_periods": 10
+   }
+  },
+  "ts_effective_turning_rate": {
+   "canonical": "ts_effective_turning_rate",
+   "status": "PASS",
+   "reason": "",
+   "hash": "2dbcb854af4adcdf",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 905,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "epsilon": 0.0,
+    "min_periods": 2
+   }
+  },
+  "ts_expectile": {
+   "canonical": "ts_expectile",
+   "status": "PASS",
+   "reason": "",
+   "hash": "300b3a8edc60844f",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 890,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 60,
+    "tau": 0.1,
+    "n_min": 3
+   }
+  },
+  "ts_extremal_dependence_decay": {
+   "canonical": "ts_extremal_dependence_decay",
+   "status": "PASS",
+   "reason": "",
+   "hash": "ca2bbcba2699928a",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 261,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 120,
+    "quantile": 0.1,
+    "side": "lower",
+    "max_lag": 5,
+    "fixed_threshold": false
+   }
+  },
+  "ts_extremogram": {
+   "canonical": "ts_extremogram",
+   "status": "PASS",
+   "reason": "",
+   "hash": "0cb0a011283fa35a",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1155,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 120,
+    "quantile": 0.1,
+    "lag": 1,
+    "side": "lower",
+    "fixed_threshold": false
+   }
+  },
+  "ts_fractional_difference_discarded_weight_mass": {
+   "canonical": "ts_fractional_difference_discarded_weight_mass",
+   "status": "PASS",
+   "reason": "",
+   "hash": "4d2b1512df8ed58b",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1200,
+   "maxdiff": 0.0,
+   "params": {
+    "fd": 0.4,
+    "cutoff": 20
+   }
+  },
+  "ts_hampel_filter_causal": {
+   "canonical": "ts_hampel_filter_causal",
+   "status": "PASS",
+   "reason": "",
+   "hash": "ef8101c686bac49e",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "n_sigma": 3.0,
+    "replacement": "clip",
+    "scale_floor": 1e-10
+   }
+  },
+  "ts_hodges_lehmann_location": {
+   "canonical": "ts_hodges_lehmann_location",
+   "status": "PASS",
+   "reason": "",
+   "hash": "e126d05c07d84e5a",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 999,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 2
+   }
+  },
+  "ts_kalman_innovation_z": {
+   "canonical": "ts_kalman_innovation_z",
+   "status": "PASS",
+   "reason": "",
+   "hash": "c96880b5a29e53c5",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1088,
+   "maxdiff": 0.0,
+   "params": {
+    "q": 0.0001,
+    "r": 1.0,
+    "scale_mode": "absolute"
+   }
+  },
+  "ts_kalman_level": {
+   "canonical": "ts_kalman_level",
+   "status": "PASS",
+   "reason": "",
+   "hash": "c96880b5a29e53c5",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1200,
+   "maxdiff": 0.0,
+   "params": {
+    "q": 0.0001,
+    "r": 1.0,
+    "scale_mode": "absolute"
+   }
+  },
+  "ts_kalman_trend": {
+   "canonical": "ts_kalman_trend",
+   "status": "PASS",
+   "reason": "",
+   "hash": "361ca31000cfe8e2",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1200,
+   "maxdiff": 0.0,
+   "params": {
+    "q_level": 1e-05,
+    "q_trend": 1e-05,
+    "r": 1.0,
+    "scale_mode": "absolute"
+   }
+  },
+  "ts_lo_mackinlay_vr": {
+   "canonical": "ts_lo_mackinlay_vr",
+   "status": "PASS",
+   "reason": "",
+   "hash": "445ea90d9d89ee16",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 444,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 60,
+    "min_periods": 10,
+    "q": 5
+   }
+  },
+  "ts_lo_mackinlay_z": {
+   "canonical": "ts_lo_mackinlay_z",
+   "status": "PASS",
+   "reason": "",
+   "hash": "445ea90d9d89ee16",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 444,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 60,
+    "min_periods": 10,
+    "q": 5
+   }
+  },
+  "ts_lz_complexity": {
+   "canonical": "ts_lz_complexity",
+   "status": "PASS",
+   "reason": "",
+   "hash": "2c87f316b4802a9b",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 241,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 200,
+    "bins": 8
+   }
+  },
+  "ts_mean_abs_deviation": {
+   "canonical": "ts_mean_abs_deviation",
+   "status": "PASS",
+   "reason": "",
+   "hash": "a0e877dc2bf44e9c",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1200,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "ts_mean_abs_deviation_strict": {
+   "canonical": "ts_mean_abs_deviation_strict",
+   "status": "PASS",
+   "reason": "",
+   "hash": "2c22c62b204ff4b4",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 260,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "ts_mean_reversion_ou_approx_half_life": {
+   "canonical": "ts_mean_reversion_ou_approx_half_life",
+   "status": "PASS",
+   "reason": "",
+   "hash": "cf9832a6a81bc1b2",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 972,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 120,
+    "min_periods": 20
+   }
+  },
+  "ts_mean_reversion_ou_approx_half_life_prior": {
+   "canonical": "ts_mean_reversion_ou_approx_half_life_prior",
+   "status": "PASS",
+   "reason": "",
+   "hash": "dc1c3563af669cab",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 962,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 120,
+    "min_periods": 20
+   }
+  },
+  "ts_median3_causal": {
+   "canonical": "ts_median3_causal",
+   "status": "PASS",
+   "reason": "",
+   "hash": "446379e9e71b587e",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 925,
+   "maxdiff": 0.0,
+   "params": {}
+  },
+  "ts_median_abs_deviation": {
+   "canonical": "ts_median_abs_deviation",
+   "status": "PASS",
+   "reason": "",
+   "hash": "a0e877dc2bf44e9c",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1200,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20
+   }
+  },
+  "ts_multiscale_entropy_slope": {
+   "canonical": "ts_multiscale_entropy_slope",
+   "status": "PASS",
+   "reason": "",
+   "hash": "13f0e28562a1273e",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 241,
+   "maxdiff": 0.0,
+   "params": {
+    "max_scale": 5,
+    "window": 300
+   }
+  },
+  "ts_persistence_birth_dispersion": {
+   "canonical": "ts_persistence_birth_dispersion",
+   "status": "PASS",
+   "reason": "",
+   "hash": "19d6a8678d831a37",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1146,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "tau": 2.0,
+    "dim": 2
+   }
+  },
+  "ts_persistence_diagram_shift": {
+   "canonical": "ts_persistence_diagram_shift",
+   "status": "PASS",
+   "reason": "",
+   "hash": "a7eb916e87b85f9f",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 944,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "tau": 1,
+    "embedding_dim": 3
+   }
+  },
+  "ts_pickands_tail_index": {
+   "canonical": "ts_pickands_tail_index",
+   "status": "PASS",
+   "reason": "",
+   "hash": "2e58bd61a958fd63",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 330,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "k": 3,
+    "side": "upper"
+   }
+  },
+  "ts_pseudocount_sample_entropy": {
+   "canonical": "ts_pseudocount_sample_entropy",
+   "status": "PASS",
+   "reason": "",
+   "hash": "e2a133d26f109726",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 320,
+   "maxdiff": 0.0,
+   "params": {
+    "m": 2,
+    "r": 0.2,
+    "window": 200
+   }
+  },
+  "ts_quantile_crossing_spectral_concentration": {
+   "canonical": "ts_quantile_crossing_spectral_concentration",
+   "status": "PASS",
+   "reason": "",
+   "hash": "f65d6b9ae06d0678",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 142,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 120,
+    "quantile": 0.1,
+    "side": "lower",
+    "fixed_threshold": false
+   }
+  },
+  "ts_quantilogram": {
+   "canonical": "ts_quantilogram",
+   "status": "PASS",
+   "reason": "",
+   "hash": "0cb0a011283fa35a",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1136,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 120,
+    "quantile": 0.1,
+    "lag": 1,
+    "side": "lower",
+    "fixed_threshold": false
+   }
+  },
+  "ts_regime_duration": {
+   "canonical": "ts_regime_duration",
+   "status": "PASS",
+   "reason": "",
+   "hash": "889730ee0b49e664",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 444,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 120,
+    "transition_prob": 0.05
+   }
+  },
+  "ts_robust_ema": {
+   "canonical": "ts_robust_ema",
+   "status": "PASS",
+   "reason": "",
+   "hash": "c76dc05cccf7d625",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1200,
+   "maxdiff": 0.0,
+   "params": {
+    "span": 20,
+    "clip_sigma": 3.0,
+    "warmup_window": 20,
+    "scale_floor": 1e-10
+   }
+  },
+  "ts_rolling_median_causal": {
+   "canonical": "ts_rolling_median_causal",
+   "status": "PASS",
+   "reason": "",
+   "hash": "6785a3a06694476f",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1171,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 5,
+    "min_periods": 3
+   }
+  },
+  "ts_super_smoother": {
+   "canonical": "ts_super_smoother",
+   "status": "PASS",
+   "reason": "",
+   "hash": "76f8ceebb7f994a3",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "params": {
+    "period": 10
+   }
+  },
+  "ts_turning_point_ratio": {
+   "canonical": "ts_turning_point_ratio",
+   "status": "PASS",
+   "reason": "",
+   "hash": "8ab23cd1adcd38f3",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 819,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 60
+   }
+  },
+  "ts_two_state_regime_probability": {
+   "canonical": "ts_two_state_regime_probability",
+   "status": "PASS",
+   "reason": "",
+   "hash": "889730ee0b49e664",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 444,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 120,
+    "transition_prob": 0.05
+   }
+  },
+  "ts_variance_ratio_proxy": {
+   "canonical": "ts_variance_ratio_proxy",
+   "status": "PASS",
+   "reason": "",
+   "hash": "eeee05913e6a9413",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 402,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 60,
+    "min_periods": 10,
+    "q": 5
+   }
+  },
+  "val1_earnings_yield_ma_diff": {
+   "canonical": "val1_earnings_yield_ma_diff",
+   "status": "PASS",
+   "reason": "",
+   "hash": "7f803404e7c6866d",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1058,
+   "maxdiff": 0.0,
+   "params": {
+    "baseline_window": 12,
+    "min_periods": 4
+   }
+  },
+  "val1_earnings_yield_persistence": {
+   "canonical": "val1_earnings_yield_persistence",
+   "status": "PASS",
+   "reason": "",
+   "hash": "b46e072e4585ee28",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1168,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 12,
+    "min_periods": 4
+   }
+  },
+  "val1_earnings_yield_slope": {
+   "canonical": "val1_earnings_yield_slope",
+   "status": "PASS",
+   "reason": "",
+   "hash": "9c83ad5d3c0908e8",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1058,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 12,
+    "min_periods": 5
+   }
+  },
+  "val1_equity_yield_dispersion": {
+   "canonical": "val1_equity_yield_dispersion",
+   "status": "PASS",
+   "reason": "",
+   "hash": "bac4b7939503a9db",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 490,
+   "maxdiff": 0.0,
+   "params": {
+    "min_breadth": 10
+   }
+  },
+  "val1_fcf_yield_growth": {
+   "canonical": "val1_fcf_yield_growth",
+   "status": "PASS",
+   "reason": "",
+   "hash": "538bf6ca933cdee0",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 999,
+   "maxdiff": 0.0,
+   "params": {
+    "min_periods": 2
+   }
+  },
+  "val1_valuation_percentile_own": {
+   "canonical": "val1_valuation_percentile_own",
+   "status": "PASS",
+   "reason": "",
+   "hash": "97416deb074e880c",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 998,
+   "maxdiff": 0.0,
+   "params": {
+    "history_window": 60,
+    "min_periods": 10
+   }
+  },
+  "val1_valuation_stat_spread": {
+   "canonical": "val1_valuation_stat_spread",
+   "status": "PASS",
+   "reason": "",
+   "hash": "9f05bf798b97d291",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 490,
+   "maxdiff": 0.0,
+   "params": {
+    "min_breadth": 10
+   }
+  },
+  "val1_valuation_z_own": {
+   "canonical": "val1_valuation_z_own",
+   "status": "PASS",
+   "reason": "",
+   "hash": "97416deb074e880c",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 998,
+   "maxdiff": 0.0,
+   "params": {
+    "history_window": 60,
+    "min_periods": 10
+   }
+  },
+  "val1_valuations_lag_component": {
+   "canonical": "val1_valuations_lag_component",
+   "status": "PASS",
+   "reason": "",
+   "hash": "81714f959fb233d5",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 996,
+   "maxdiff": 0.0,
+   "params": {
+    "fast_window": 5,
+    "slow_window": 20,
+    "min_periods": 4
+   }
+  },
+  "vax_liquidity_penalty_exposure": {
+   "canonical": "vax_liquidity_penalty_exposure",
+   "status": "PASS",
+   "reason": "",
+   "hash": "bbc3323681175640",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1170,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 2
+   }
+  },
+  "vv1_vol_of_vol": {
+   "canonical": "vv1_vol_of_vol",
+   "status": "PASS",
+   "reason": "",
+   "hash": "114dc166ee9af05a",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1190,
+   "maxdiff": 0.0,
+   "params": {
+    "window": 20,
+    "min_periods": 2
+   }
+  },
+  "cs_rank_combined_churn": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1150,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "cs_rank_combined_churn",
+   "params": {
+    "lag": 5,
+    "group": 0
+   },
+   "hash": "5d86d44f9835b3d6"
+  },
+  "cs_rank_composition_churn": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1150,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "cs_rank_composition_churn",
+   "params": {
+    "lag": 5,
+    "group": 0
+   },
+   "hash": "5d86d44f9835b3d6"
+  },
+  "cs_tail_breadth": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1200,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "cs_tail_breadth",
+   "params": {
+    "group": 0,
+    "quantile": 0.1,
+    "side": "top"
+   },
+   "hash": "68457d1931476839"
+  },
+  "event_cluster_duration": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 144,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "event_cluster_duration",
+   "params": {
+    "window": 20
+   },
+   "hash": "b85fef435145a025"
+  },
+  "event_decay_window": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "event_decay_window",
+   "params": {
+    "window": 20,
+    "halflife": 20
+   },
+   "hash": "68a0cf5414aa5938"
+  },
+  "event_direction_imbalance": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "event_direction_imbalance",
+   "params": {
+    "window": 20
+   },
+   "hash": "b85fef435145a025"
+  },
+  "event_direction_persistence": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "event_direction_persistence",
+   "params": {
+    "window": 20
+   },
+   "hash": "b85fef435145a025"
+  },
+  "event_fano_excess": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 210,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "event_fano_excess",
+   "params": {
+    "window": 240,
+    "block": 20
+   },
+   "hash": "a387925812ecac07"
+  },
+  "event_flip_density": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "event_flip_density",
+   "params": {
+    "window": 20
+   },
+   "hash": "b85fef435145a025"
+  },
+  "event_streak": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "event_streak",
+   "params": {
+    "window": 20
+   },
+   "hash": "b85fef435145a025"
+  },
+  "lf1_turnover_distribution_skew": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 519,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "lf1_turnover_distribution_skew",
+   "params": {
+    "min_breadth": 3
+   },
+   "hash": "a40ee51013d794a4"
+  },
+  "m1_cs_momentum_dispersion": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1180,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "m1_cs_momentum_dispersion",
+   "params": {
+    "window": 20,
+    "min_periods": 3,
+    "min_breadth": 3
+   },
+   "hash": "d343cec12e1c75d4"
+  },
+  "m1_momentum_regime": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1165,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "m1_momentum_regime",
+   "params": {
+    "window": 20,
+    "threshold": 0.5,
+    "min_periods": 4
+   },
+   "hash": "52c0176264e27c1c"
+  },
+  "m1_momentum_stability": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1165,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "m1_momentum_stability",
+   "params": {
+    "window": 20,
+    "min_periods": 4
+   },
+   "hash": "114dc166ee9af05a"
+  },
+  "m1_momentum_strength": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1165,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "m1_momentum_strength",
+   "params": {
+    "window": 20,
+    "min_periods": 4
+   },
+   "hash": "114dc166ee9af05a"
+  },
+  "m1_ranked_momentum": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1176,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "m1_ranked_momentum",
+   "params": {
+    "window": 20,
+    "min_periods": 3,
+    "min_breadth": 3
+   },
+   "hash": "d343cec12e1c75d4"
+  },
+  "negative_event_age": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "negative_event_age",
+   "params": {
+    "window": 20
+   },
+   "hash": "b85fef435145a025"
+  },
+  "negative_event_rate": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "negative_event_rate",
+   "params": {
+    "window": 20
+   },
+   "hash": "b85fef435145a025"
+  },
+  "ofi_abs_imbalance_trend": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1176,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ofi_abs_imbalance_trend",
+   "params": {
+    "window": 20,
+    "min_periods": 3
+   },
+   "hash": "c16283c3013f2e0a"
+  },
+  "ofi_imbalance_cv": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1176,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ofi_imbalance_cv",
+   "params": {
+    "window": 20,
+    "min_periods": 3
+   },
+   "hash": "c16283c3013f2e0a"
+  },
+  "ofi_imbalance_persistence": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1078,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ofi_imbalance_persistence",
+   "params": {
+    "window": 20,
+    "min_periods": 3
+   },
+   "hash": "c16283c3013f2e0a"
+  },
+  "ofi_reversal_rate": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1176,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ofi_reversal_rate",
+   "params": {
+    "window": 20,
+    "min_periods": 3
+   },
+   "hash": "c16283c3013f2e0a"
+  },
+  "positive_event_age": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "positive_event_age",
+   "params": {
+    "window": 20
+   },
+   "hash": "b85fef435145a025"
+  },
+  "positive_event_rate": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "positive_event_rate",
+   "params": {
+    "window": 20
+   },
+   "hash": "b85fef435145a025"
+  },
+  "signed_event_decay": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "signed_event_decay",
+   "params": {
+    "window": 20,
+    "halflife": 20
+   },
+   "hash": "68a0cf5414aa5938"
+  },
+  "signed_event_rate": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "signed_event_rate",
+   "params": {
+    "window": 20
+   },
+   "hash": "b85fef435145a025"
+  },
+  "sv_signed_volume_volatility": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1176,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "sv_signed_volume_volatility",
+   "params": {
+    "window": 20,
+    "min_periods": 3
+   },
+   "hash": "c16283c3013f2e0a"
+  },
+  "ts_bds_statistic": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 52,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_bds_statistic",
+   "params": {
+    "window": 30,
+    "embedding_dim": 3,
+    "distance_multiplier": 0.5
+   },
+   "hash": "6c785c1fc1fcb55f"
+  },
+  "ts_dmd_level_dominant_growth_rate": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 671,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_dmd_level_dominant_growth_rate",
+   "params": {
+    "window": 20,
+    "rank": 1,
+    "dim": 3,
+    "delay": 1
+   },
+   "hash": "ffb8145527340c1a"
+  },
+  "ts_dmd_return_dominant_growth_rate": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 671,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_dmd_return_dominant_growth_rate",
+   "params": {
+    "window": 20,
+    "rank": 1,
+    "dim": 3,
+    "delay": 1
+   },
+   "hash": "ba9cbd119c6c64f3"
+  },
+  "ts_garch_next_vol_forecast": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 10,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_garch_next_vol_forecast",
+   "params": {
+    "window": 120
+   },
+   "hash": "12698d986e4f0dfe"
+  },
+  "ts_garch_persistence": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 10,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_garch_persistence",
+   "params": {
+    "window": 120
+   },
+   "hash": "66d290f6c9d49aa7"
+  },
+  "ts_garch_standardized_shock": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 10,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_garch_standardized_shock",
+   "params": {
+    "window": 120
+   },
+   "hash": "66d290f6c9d49aa7"
+  },
+  "ts_garch_vol_surprise": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 10,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_garch_vol_surprise",
+   "params": {
+    "window": 120
+   },
+   "hash": "66d290f6c9d49aa7"
+  },
+  "ts_gjr_garch_vol_forecast": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 10,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_gjr_garch_vol_forecast",
+   "params": {
+    "window": 120
+   },
+   "hash": "12698d986e4f0dfe"
+  },
+  "ts_gjr_leverage": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 10,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_gjr_leverage",
+   "params": {
+    "window": 120
+   },
+   "hash": "66d290f6c9d49aa7"
+  },
+  "ts_har_from_return_forecast_error_z": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 260,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_har_from_return_forecast_error_z",
+   "params": {
+    "window": 120
+   },
+   "hash": "b7455d4050f05281"
+  },
+  "ts_har_from_return_next_vol": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 270,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_har_from_return_next_vol",
+   "params": {
+    "window": 120
+   },
+   "hash": "06f198dab17121a8"
+  },
+  "ts_har_rv_forecast_error_z": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 260,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_har_rv_forecast_error_z",
+   "params": {
+    "window": 120
+   },
+   "hash": "04eb0bd49e099abb"
+  },
+  "ts_har_rv_next_var_forecast": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 270,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_har_rv_next_var_forecast",
+   "params": {
+    "window": 120
+   },
+   "hash": "fa7fae287bd2f4ab"
+  },
+  "ts_har_rv_next_vol_forecast": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 270,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_har_rv_next_vol_forecast",
+   "params": {
+    "window": 120
+   },
+   "hash": "553f69abf3b7d519"
+  },
+  "ts_rqa_determinism_fixed_rr": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 251,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_rqa_determinism_fixed_rr",
+   "params": {
+    "window": 20,
+    "dim": 3,
+    "delay": 1,
+    "target_rr": 0.05,
+    "min_line": 3,
+    "min_periods": 4,
+    "theiler": 3
+   },
+   "hash": "ecbabe7a17b005d3"
+  },
+  "ts_rqa_laminarity_fixed_rr": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 251,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "ts_rqa_laminarity_fixed_rr",
+   "params": {
+    "window": 20,
+    "dim": 3,
+    "delay": 1,
+    "target_rr": 0.05,
+    "min_line": 3,
+    "min_periods": 4,
+    "theiler": 3
+   },
+   "hash": "ecbabe7a17b005d3"
+  },
+  "vv1_downside_vol_share": {
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "finite": 1110,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "canonical": "vv1_downside_vol_share",
+   "params": {
+    "window": 20,
+    "min_periods": 4
+   },
+   "hash": "114dc166ee9af05a"
+  },
+  "QQE": {
+   "finite": 945,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "QQE",
+   "params": {
+    "length": 20,
+    "smooth": 2.0,
+    "output": "line"
+   },
+   "hash": "40a8d178768f8c65"
+  },
+  "intra_neighbor_event_class": {
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "intra_neighbor_event_class",
+   "params": {
+    "radius": 1,
+    "isolated_code": 1,
+    "clustered_code": 2,
+    "session_tz": "Asia/Shanghai"
+   },
+   "hash": "d35b1f3e788f100d"
+  },
+  "intra_same_slot_zscore": {
+   "finite": 998,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "intra_same_slot_zscore",
+   "params": {
+    "history_days": 20,
+    "ddof": 1,
+    "min_history": 10,
+    "session_tz": "Asia/Shanghai"
+   },
+   "hash": "1c365d3cf0d61bac"
+  },
+  "intra_state_count": {
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "intra_state_count",
+   "params": {
+    "window_days": 1,
+    "session_tz": "Asia/Shanghai"
+   },
+   "hash": "0267de32ffa750f9"
+  },
+  "intraday_realized_power_variation": {
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "intraday_realized_power_variation",
+   "params": {
+    "order": 4.0,
+    "sampling": 1,
+    "session_tz": "Asia/Shanghai"
+   },
+   "hash": "5f41094c376d8142"
+  },
+  "m1_momentum_speed_change": {
+   "finite": 1078,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "m1_momentum_speed_change",
+   "params": {
+    "fast_window": 5,
+    "slow_window": 20,
+    "min_periods": 3
+   },
+   "hash": "af440e4e043f5a89"
+  },
+  "m1_rank_momentum_gap": {
+   "finite": 1176,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "m1_rank_momentum_gap",
+   "params": {
+    "fast_window": 5,
+    "slow_window": 20,
+    "min_periods": 3,
+    "min_breadth": 3
+   },
+   "hash": "50f3858e1d4f68af"
+  },
+  "panel_rolling_pca_explained_ratio": {
+   "finite": 4800,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    600,
+    10
+   ],
+   "pl_shape": [
+    600,
+    10
+   ],
+   "canonical": "panel_rolling_pca_explained_ratio",
+   "params": {
+    "window": 120,
+    "n_components": 5
+   },
+   "hash": "393b64e935826655"
+  },
+  "panel_rolling_pca_loading": {
+   "finite": 4800,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    600,
+    10
+   ],
+   "pl_shape": [
+    600,
+    10
+   ],
+   "canonical": "panel_rolling_pca_loading",
+   "params": {
+    "window": 120,
+    "component": 0
+   },
+   "hash": "4223132dc0423d09"
+  },
+  "panel_rolling_pca_resid": {
+   "finite": 4382,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    600,
+    10
+   ],
+   "pl_shape": [
+    600,
+    10
+   ],
+   "canonical": "panel_rolling_pca_resid",
+   "params": {
+    "window": 120,
+    "n_components": 5
+   },
+   "hash": "393b64e935826655"
+  },
+  "panel_rolling_pca_resid_momentum": {
+   "finite": 4699,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    600,
+    10
+   ],
+   "pl_shape": [
+    600,
+    10
+   ],
+   "canonical": "panel_rolling_pca_resid_momentum",
+   "params": {
+    "window": 120,
+    "n_components": 5
+   },
+   "hash": "393b64e935826655"
+  },
+  "panel_rolling_pca_resid_vol": {
+   "finite": 4699,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    600,
+    10
+   ],
+   "pl_shape": [
+    600,
+    10
+   ],
+   "canonical": "panel_rolling_pca_resid_vol",
+   "params": {
+    "window": 120,
+    "n_components": 5
+   },
+   "hash": "393b64e935826655"
+  },
+  "same_calendar_day_mean": {
+   "finite": 1191,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "same_calendar_day_mean",
+   "params": {
+    "window": 60
+   },
+   "hash": "6629c1e540247f0a"
+  },
+  "same_calendar_month_return": {
+   "finite": 3068,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    600,
+    10
+   ],
+   "pl_shape": [
+    600,
+    10
+   ],
+   "canonical": "same_calendar_month_return",
+   "params": {
+    "year_lag": 1
+   },
+   "hash": "c1e760f4656cb006"
+  },
+  "state_adaptive_deadband": {
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "state_adaptive_deadband",
+   "params": {
+    "band_mult": 1.0,
+    "scale_window": 20,
+    "scale_method": "mad_delta"
+   },
+   "hash": "45f8137f6824fade"
+  },
+  "state_adaptive_slew_limit": {
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "state_adaptive_slew_limit",
+   "params": {
+    "slew_mult": 1.0,
+    "scale_window": 20,
+    "scale_method": "mad_delta"
+   },
+   "hash": "85d883af8dbb6096"
+  },
+  "state_l1_turnover_prox": {
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "state_l1_turnover_prox",
+   "params": {
+    "lambda_turnover": 1.0
+   },
+   "hash": "bee7927fc63a9679"
+  },
+  "state_l2_partial_adjustment": {
+   "finite": 1098,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "state_l2_partial_adjustment",
+   "params": {
+    "lambda_smooth": 1.0
+   },
+   "hash": "60df243de483c159"
+  },
+  "ts_fisher_information_shift": {
+   "finite": 4210,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    600,
+    10
+   ],
+   "pl_shape": [
+    600,
+    10
+   ],
+   "canonical": "ts_fisher_information_shift",
+   "params": {
+    "recent_window": 60,
+    "prior_window": 120
+   },
+   "hash": "9c23c58a176ace59"
+  },
+  "ts_forbidden_ordinal_pattern_excess": {
+   "finite": 821,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "ts_forbidden_ordinal_pattern_excess",
+   "params": {
+    "window": 20,
+    "order": 3,
+    "delay": 1,
+    "min_embeddings": 8
+   },
+   "hash": "ff556be804d50a86"
+  },
+  "ts_forbidden_ordinal_pattern_signed_excess": {
+   "finite": 821,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "ts_forbidden_ordinal_pattern_signed_excess",
+   "params": {
+    "window": 20,
+    "order": 3,
+    "delay": 1,
+    "min_embeddings": 8
+   },
+   "hash": "9434ed348506e589"
+  },
+  "ts_kramers_moyal_diffusion": {
+   "finite": 675,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "ts_kramers_moyal_diffusion",
+   "params": {
+    "window": 60,
+    "bins": 8,
+    "lag": 1,
+    "min_bin_count": 5
+   },
+   "hash": "22219d60495e6218"
+  },
+  "ts_kramers_moyal_drift": {
+   "finite": 675,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "ts_kramers_moyal_drift",
+   "params": {
+    "window": 60,
+    "bins": 8,
+    "lag": 1,
+    "min_bin_count": 5
+   },
+   "hash": "22219d60495e6218"
+  },
+  "ts_matrix_profile_motif_frequency": {
+   "finite": 281,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "ts_matrix_profile_motif_frequency",
+   "params": {
+    "window": 20,
+    "subsequence_length": 10,
+    "history": 20
+   },
+   "hash": "3d6fae12ecbd5215"
+  },
+  "ts_matrix_profile_neighbor_dispersion": {
+   "finite": 281,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "ts_matrix_profile_neighbor_dispersion",
+   "params": {
+    "window": 20,
+    "subsequence_length": 10,
+    "history": 20
+   },
+   "hash": "e7c80b0d61d1f8ed"
+  },
+  "ts_roll_effective_spread": {
+   "finite": 1122,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "ts_roll_effective_spread",
+   "params": {
+    "window": 20,
+    "min_periods": 4
+   },
+   "hash": "49a080889dbb0f87"
+  },
+  "val1_discount_regime_share": {
+   "finite": 500,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "val1_discount_regime_share",
+   "params": {
+    "history_window": 40,
+    "min_periods": 10,
+    "min_breadth": 10
+   },
+   "hash": "aaf4a4fd9b43f3b4"
+  },
+  "vv1_fractional_share": {
+   "finite": 1132,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "vv1_fractional_share",
+   "params": {
+    "short_window": 5,
+    "long_window": 20,
+    "min_periods": 3
+   },
+   "hash": "510c623fbb360b4b"
+  },
+  "vv1_long_short_vol_beta": {
+   "finite": 1121,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "vv1_long_short_vol_beta",
+   "params": {
+    "short_window": 5,
+    "long_window": 20,
+    "min_periods": 3
+   },
+   "hash": "510c623fbb360b4b"
+  },
+  "vv1_vol_level_score": {
+   "finite": 1161,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "vv1_vol_level_score",
+   "params": {
+    "short_window": 5,
+    "history_window": 20,
+    "min_periods": 3
+   },
+   "hash": "a96f52aec0063c63"
+  },
+  "CoppockCurve": {
+   "finite": 52,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "CoppockCurve",
+   "params": {
+    "roc_mode": "pct",
+    "roc1": 10,
+    "roc2": 20,
+    "wma_window": 10
+   },
+   "hash": "e661578ca25a66cb"
+  },
+  "event_hawkes_branching_ratio_proxy": {
+   "finite": 1136,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "event_hawkes_branching_ratio_proxy",
+   "params": {
+    "window": 20,
+    "max_lag": 3,
+    "min_events": 3
+   },
+   "hash": "80b2d4647af98877"
+  },
+  "lf1_volume_amplification": {
+   "finite": 888,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "lf1_volume_amplification",
+   "params": {
+    "min_periods": 3,
+    "ba_window": 10
+   },
+   "hash": "a0ea1e04b02b8a23"
+  },
+  "state_episode_age_capped": {
+   "finite": 159,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "state_episode_age_capped",
+   "params": {
+    "window": 20,
+    "max_cap": 10
+   },
+   "hash": "252e704ea46f6f62"
+  },
+  "tod_close_midday_ratio": {
+   "finite": 926,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "tod_close_midday_ratio",
+   "params": {
+    "close_rows": 10,
+    "middle_rows": 10
+   },
+   "hash": "49d98b1488a89dea"
+  },
+  "tod_open_midday_ratio": {
+   "finite": 926,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "tod_open_midday_ratio",
+   "params": {
+    "open_rows": 10,
+    "middle_rows": 10
+   },
+   "hash": "1a6997787cb5dc52"
+  },
+  "ts_dfa_hurst": {
+   "finite": 3850,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    512,
+    10
+   ],
+   "pl_shape": [
+    512,
+    10
+   ],
+   "canonical": "ts_dfa_hurst",
+   "params": {
+    "window": 250,
+    "min_scale": 4,
+    "max_scale": 32
+   },
+   "hash": "7f7f053e00a33519"
+  },
+  "ts_rolling_sr_gaussian_mean_shift_score": {
+   "finite": 201,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "ts_rolling_sr_gaussian_mean_shift_score",
+   "params": {
+    "window": 20,
+    "shift_sigma": 2.0,
+    "side": "up",
+    "baseline_window": 10
+   },
+   "hash": "434d8a4f9f9c40db"
+  },
+  "ts_spectral_low_frequency_ratio": {
+   "finite": 3850,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    512,
+    10
+   ],
+   "pl_shape": [
+    512,
+    10
+   ],
+   "canonical": "ts_spectral_low_frequency_ratio",
+   "params": {
+    "window": 128
+   },
+   "hash": "844845bead06444d"
+  },
+  "ts_spectral_lowpass_trailing": {
+   "finite": 159,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "ts_spectral_lowpass_trailing",
+   "params": {
+    "window": 20,
+    "cutoff_freq": 10
+   },
+   "hash": "8462399ce60b4d00"
+  },
+  "ts_wavelet_energy_slope": {
+   "finite": 3850,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    512,
+    10
+   ],
+   "pl_shape": [
+    512,
+    10
+   ],
+   "canonical": "ts_wavelet_energy_slope",
+   "params": {
+    "window": 128
+   },
+   "hash": "bea08d05cf36cf02"
+  },
+  "ts_wavelet_entropy": {
+   "finite": 3850,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    512,
+    10
+   ],
+   "pl_shape": [
+    512,
+    10
+   ],
+   "canonical": "ts_wavelet_entropy",
+   "params": {
+    "window": 128
+   },
+   "hash": "bea08d05cf36cf02"
+  },
+  "ts_wavelet_high_frequency_ratio": {
+   "finite": 3850,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    512,
+    10
+   ],
+   "pl_shape": [
+    512,
+    10
+   ],
+   "canonical": "ts_wavelet_high_frequency_ratio",
+   "params": {
+    "window": 128
+   },
+   "hash": "bea08d05cf36cf02"
+  },
+  "ts_wavelet_low_frequency_ratio": {
+   "finite": 3850,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    512,
+    10
+   ],
+   "pl_shape": [
+    512,
+    10
+   ],
+   "canonical": "ts_wavelet_low_frequency_ratio",
+   "params": {
+    "window": 128
+   },
+   "hash": "bea08d05cf36cf02"
+  },
+  "vv1_dispersion_vol": {
+   "finite": 1180,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "vv1_dispersion_vol",
+   "params": {
+    "min_breadth": 3,
+    "vol_window": 10
+   },
+   "hash": "40eedf96ae815a55"
+  },
+  "vv1_vol_acceleration": {
+   "finite": 1176,
+   "maxdiff": 0.0,
+   "status": "PASS",
+   "reason": "",
+   "pd_shape": [
+    120,
+    10
+   ],
+   "pl_shape": [
+    120,
+    10
+   ],
+   "canonical": "vv1_vol_acceleration",
+   "params": {
+    "min_periods": 3,
+    "vol_window": 10,
+    "accel_window": 10
+   },
+   "hash": "6dd54e326cc0a28f"
+  }
+ },
+ "pandas_only": [
+  {
+   "canonical": "OBV",
+   "params": {},
+   "status": "ERR",
+   "reason": "TypeError: pd_obv() missing 1 required positional argument: 'volume'",
+   "attempts": [
+    "TypeError: pd_obv() missing 1 required positional argument: 'volume'",
+    "TypeError: pd_obv() missing 1 required positional argument: 'volume'",
+    "TypeError: pd_obv() missing 1 required positional argument: 'volume'"
+   ]
+  },
+  {
+   "canonical": "WMA",
+   "params": {
+    "window": 10
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 1199,
+   "status": "EXEC_OK",
+   "hash": "27069cad30a82cf2"
+  },
+  {
+   "canonical": "circulating_cap_ratio_change",
+   "params": {},
+   "status": "ERR",
+   "reason": "OperatorParameterError: circulating_cap_ratio_change: missing required parameters ['total_capital']",
+   "attempts": [
+    "OperatorParameterError: circulating_cap_ratio_change: missing required parameters ['total_capital']",
+    "OperatorParameterError: circulating_cap_ratio_change: missing required parameters ['total_capital']",
+    "OperatorParameterError: circulating_cap_ratio_change: missing required parameters ['total_capital']"
+   ]
+  },
+  {
+   "canonical": "cs_multi_ridge_resid",
+   "params": {
+    "add_intercept": true
+   },
+   "status": "ERR",
+   "reason": "TypeError: _cs_multi_ridge_resid() missing 1 required positional argument: 'x1'",
+   "attempts": [
+    "TypeError: _cs_multi_ridge_resid() missing 1 required positional argument: 'x1'",
+    "TypeError: _cs_multi_ridge_resid() missing 1 required positional argument: 'x1'",
+    "TypeError: _cs_multi_ridge_resid() missing 1 required positional argument: 'x1'"
+   ]
+  },
+  {
+   "canonical": "cs_trimmed_ols_resid",
+   "params": {
+    "trim_ratio": 0.1,
+    "add_intercept": true
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: cs_trimmed_ols_resid: missing required parameters ['x']",
+   "attempts": [
+    "OperatorParameterError: cs_trimmed_ols_resid: missing required parameters ['x']",
+    "OperatorParameterError: cs_trimmed_ols_resid: missing required parameters ['x']",
+    "OperatorParameterError: cs_trimmed_ols_resid: missing required parameters ['x']"
+   ]
+  },
+  {
+   "canonical": "fin_mean_abs_deviation",
+   "params": {
+    "periods": 8
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: fin_mean_abs_deviation: missing required parameters ['period_id']",
+   "attempts": [
+    "OperatorParameterError: fin_mean_abs_deviation: missing required parameters ['period_id']",
+    "OperatorParameterError: fin_mean_abs_deviation: missing required parameters ['period_id']",
+    "OperatorParameterError: fin_mean_abs_deviation: missing required parameters ['period_id']"
+   ]
+  },
+  {
+   "canonical": "fin_ttm",
+   "params": {
+    "periods_per_year": 4,
+    "flow_type": "AnnualFlow"
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: fin_ttm: missing required parameters ['period_id']",
+   "attempts": [
+    "OperatorParameterError: fin_ttm: missing required parameters ['period_id']",
+    "OperatorParameterError: fin_ttm: missing required parameters ['period_id']",
+    "OperatorParameterError: fin_ttm: missing required parameters ['period_id']"
+   ]
+  },
+  {
+   "canonical": "fiscal_acceleration",
+   "params": {
+    "lag": 1,
+    "periods": 8,
+    "min_periods": 3,
+    "require_consecutive": true,
+    "revision_policy": "latest_available"
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: fiscal_acceleration: missing required parameters ['period_id']",
+   "attempts": [
+    "OperatorParameterError: fiscal_acceleration: missing required parameters ['period_id']",
+    "OperatorParameterError: fiscal_acceleration: missing required parameters ['period_id']",
+    "OperatorParameterError: fiscal_acceleration: missing required parameters ['period_id']"
+   ]
+  },
+  {
+   "canonical": "fiscal_capital_stock",
+   "params": {},
+   "status": "ERR",
+   "reason": "TypeError: pd_fiscal_capital_stock() missing 1 required positional argument: 'period_id'",
+   "attempts": [
+    "TypeError: pd_fiscal_capital_stock() missing 1 required positional argument: 'period_id'",
+    "TypeError: pd_fiscal_capital_stock() missing 1 required positional argument: 'period_id'",
+    "TypeError: pd_fiscal_capital_stock() missing 1 required positional argument: 'period_id'"
+   ]
+  },
+  {
+   "canonical": "fiscal_logit_score",
+   "params": {},
+   "status": "ERR",
+   "reason": "TypeError: pd_fiscal_logit_score() missing 1 required positional argument: 'period_id'",
+   "attempts": [
+    "TypeError: pd_fiscal_logit_score() missing 1 required positional argument: 'period_id'",
+    "TypeError: pd_fiscal_logit_score() missing 1 required positional argument: 'period_id'",
+    "TypeError: pd_fiscal_logit_score() missing 1 required positional argument: 'period_id'"
+   ]
+  },
+  {
+   "canonical": "fiscal_pct_change",
+   "params": {
+    "lag": 1,
+    "periods": 8,
+    "min_periods": 2,
+    "require_consecutive": true,
+    "revision_policy": "latest_available"
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: fiscal_pct_change: missing required parameters ['period_id']",
+   "attempts": [
+    "OperatorParameterError: fiscal_pct_change: missing required parameters ['period_id']",
+    "OperatorParameterError: fiscal_pct_change: missing required parameters ['period_id']",
+    "OperatorParameterError: fiscal_pct_change: missing required parameters ['period_id']"
+   ]
+  },
+  {
+   "canonical": "fiscal_rolling_std",
+   "params": {
+    "periods": 8,
+    "min_periods": 3,
+    "ddof": 1,
+    "require_consecutive": true,
+    "revision_policy": "latest_available"
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: fiscal_rolling_std: missing required parameters ['period_id']",
+   "attempts": [
+    "OperatorParameterError: fiscal_rolling_std: missing required parameters ['period_id']",
+    "OperatorParameterError: fiscal_rolling_std: missing required parameters ['period_id']",
+    "OperatorParameterError: fiscal_rolling_std: missing required parameters ['period_id']"
+   ]
+  },
+  {
+   "canonical": "industry_fiscal_resid",
+   "params": {
+    "periods": 12
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: industry_fiscal_resid: missing required parameters ['period_id', 'industry', 'x1', 'x2', 'x3', '",
+   "attempts": [
+    "OperatorParameterError: industry_fiscal_resid: missing required parameters ['period_id', 'industry', 'x1', 'x2', 'x3', '",
+    "OperatorParameterError: industry_fiscal_resid: missing required parameters ['period_id', 'industry', 'x1', 'x2', 'x3', '",
+    "OperatorParameterError: industry_fiscal_resid: missing required parameters ['period_id', 'industry', 'x1', 'x2', 'x3', '"
+   ]
+  },
+  {
+   "canonical": "intra_functional_motif_score",
+   "params": {},
+   "status": "ERR",
+   "reason": "TypeError: IntraFunctionalMotifScore._calculate_series() missing 1 required positional argument: 'volume'",
+   "attempts": [
+    "TypeError: IntraFunctionalMotifScore._calculate_series() missing 1 required positional argument: 'volume'",
+    "TypeError: IntraFunctionalMotifScore._calculate_series() missing 1 required positional argument: 'volume'",
+    "TypeError: IntraFunctionalMotifScore._calculate_series() missing 1 required positional argument: 'volume'"
+   ]
+  },
+  {
+   "canonical": "intra_kalman_latent_price",
+   "params": {},
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 0,
+   "status": "ALL_NAN",
+   "hash": "b0aa7c5eb1a0b3bb"
+  },
+  {
+   "canonical": "intra_market_profile_corr_ex_self",
+   "params": {},
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 0,
+   "status": "ALL_NAN",
+   "hash": "875b53433f827937"
+  },
+  {
+   "canonical": "intra_price_peak_ridge_valley_state",
+   "params": {},
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 0,
+   "status": "ALL_NAN",
+   "hash": "373981cc05fa9aa1"
+  },
+  {
+   "canonical": "intra_smart_money_fcm_score",
+   "params": {},
+   "status": "ERR",
+   "reason": "TypeError: IntraSmartMoneyFcmScore._calculate_series() missing 3 required positional arguments: 'volume', 'high', and 'l",
+   "attempts": [
+    "TypeError: IntraSmartMoneyFcmScore._calculate_series() missing 3 required positional arguments: 'volume', 'high', and 'l",
+    "TypeError: IntraSmartMoneyFcmScore._calculate_series() missing 3 required positional arguments: 'volume', 'high', and 'l",
+    "TypeError: IntraSmartMoneyFcmScore._calculate_series() missing 3 required positional arguments: 'volume', 'high', and 'l"
+   ]
+  },
+  {
+   "canonical": "intra_state_space_volume_components",
+   "params": {},
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 0,
+   "status": "ALL_NAN",
+   "hash": "875b53433f827937"
+  },
+  {
+   "canonical": "intra_visibility_graph_features",
+   "params": {},
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 0,
+   "status": "ALL_NAN",
+   "hash": "b0aa7c5eb1a0b3bb"
+  },
+  {
+   "canonical": "intra_volume_peak_ridge_valley_state",
+   "params": {},
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 0,
+   "status": "ALL_NAN",
+   "hash": "d4eb40a818214dad"
+  },
+  {
+   "canonical": "intraday_value_at_extreme_state",
+   "params": {},
+   "status": "ERR",
+   "reason": "TypeError: IntradayValueAtExtremeState._calculate_series() missing 1 required positional argument: 'volume'",
+   "attempts": [
+    "TypeError: IntradayValueAtExtremeState._calculate_series() missing 1 required positional argument: 'volume'",
+    "TypeError: IntradayValueAtExtremeState._calculate_series() missing 1 required positional argument: 'volume'",
+    "TypeError: IntradayValueAtExtremeState._calculate_series() missing 1 required positional argument: 'volume'"
+   ]
+  },
+  {
+   "canonical": "laborforce_efficiency",
+   "params": {},
+   "status": "ERR",
+   "reason": "TypeError: pd_laborforce_efficiency() missing 2 required positional arguments: 'employees' and 'period_id'",
+   "attempts": [
+    "TypeError: pd_laborforce_efficiency() missing 2 required positional arguments: 'employees' and 'period_id'",
+    "TypeError: pd_laborforce_efficiency() missing 2 required positional arguments: 'employees' and 'period_id'",
+    "TypeError: pd_laborforce_efficiency() missing 2 required positional arguments: 'employees' and 'period_id'"
+   ]
+  },
+  {
+   "canonical": "relation_jaccard",
+   "params": {
+    "periods": 1,
+    "revision_policy": "latest_available"
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: relation_jaccard: missing required parameters ['snapshot_id']",
+   "attempts": [
+    "OperatorParameterError: relation_jaccard: missing required parameters ['snapshot_id']",
+    "OperatorParameterError: relation_jaccard: missing required parameters ['snapshot_id']",
+    "OperatorParameterError: relation_jaccard: missing required parameters ['snapshot_id']"
+   ]
+  },
+  {
+   "canonical": "same_clock_lag",
+   "params": {
+    "lag": 1,
+    "clock_unit": "minute_of_day"
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 1088,
+   "status": "EXEC_OK",
+   "hash": "c2e79604a3b0a732"
+  },
+  {
+   "canonical": "ts_activity_clock_lagged_value_prior",
+   "params": {
+    "budget": 1.0,
+    "scale_window": 20,
+    "max_lookback": 60
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: ts_activity_clock_lagged_value_prior: missing required parameters ['activity']",
+   "attempts": [
+    "OperatorParameterError: ts_activity_clock_lagged_value_prior: missing required parameters ['activity']",
+    "OperatorParameterError: ts_activity_clock_lagged_value_prior: missing required parameters ['activity']",
+    "OperatorParameterError: ts_activity_clock_lagged_value_prior: missing required parameters ['activity']"
+   ]
+  },
+  {
+   "canonical": "ts_activity_spectral_entropy",
+   "params": {
+    "window": 20,
+    "input_kind": "NonNegativeActivity"
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "status": "EXEC_OK",
+   "hash": "205777716b0bad8f"
+  },
+  {
+   "canonical": "ts_ar_fitted_value",
+   "params": {
+    "window": 20,
+    "warmup_policy": "expanding"
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 1064,
+   "status": "EXEC_OK",
+   "hash": "2f07898a31f54aa3"
+  },
+  {
+   "canonical": "ts_ar_in_sample_resid",
+   "params": {
+    "window": 20,
+    "warmup_policy": "expanding"
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 975,
+   "status": "EXEC_OK",
+   "hash": "2f07898a31f54aa3"
+  },
+  {
+   "canonical": "ts_detrended_level_spectral_entropy",
+   "params": {
+    "window": 20,
+    "input_kind": "PriceContinuous"
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "status": "EXEC_OK",
+   "hash": "e11d6af9498a398c"
+  },
+  {
+   "canonical": "ts_huber_regression_in_sample_resid",
+   "params": {
+    "window": 20,
+    "min_periods": 20
+   },
+   "status": "ERR",
+   "reason": "TypeError: TsHuberRegressionInSampleResid._calculate_series() missing 1 required positional argument: 'x'",
+   "attempts": [
+    "TypeError: TsHuberRegressionInSampleResid._calculate_series() missing 1 required positional argument: 'x'",
+    "TypeError: TsHuberRegressionInSampleResid._calculate_series() missing 1 required positional argument: 'x'",
+    "TypeError: TsHuberRegressionInSampleResid._calculate_series() missing 1 required positional argument: 'x'"
+   ]
+  },
+  {
+   "canonical": "ts_huber_regression_predictive_resid",
+   "params": {
+    "window": 20,
+    "min_periods": 20
+   },
+   "status": "ERR",
+   "reason": "TypeError: TsHuberRegressionPredictiveResid._calculate_series() missing 1 required positional argument: 'x'",
+   "attempts": [
+    "TypeError: TsHuberRegressionPredictiveResid._calculate_series() missing 1 required positional argument: 'x'",
+    "TypeError: TsHuberRegressionPredictiveResid._calculate_series() missing 1 required positional argument: 'x'",
+    "TypeError: TsHuberRegressionPredictiveResid._calculate_series() missing 1 required positional argument: 'x'"
+   ]
+  },
+  {
+   "canonical": "ts_l1_trend_filter_trailing",
+   "params": {
+    "window": 30,
+    "lambda_l1": 0.1
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 1172,
+   "status": "EXEC_OK",
+   "hash": "f6e01f446b57aa7d"
+  },
+  {
+   "canonical": "ts_mcginley_dynamic",
+   "params": {
+    "window": 20
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "status": "EXEC_OK",
+   "hash": "b5d3b3dddcb2c92d"
+  },
+  {
+   "canonical": "ts_nlms_filter",
+   "params": {},
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 737,
+   "status": "EXEC_OK",
+   "hash": "cdbef8e4fce358e6"
+  },
+  {
+   "canonical": "ts_one_euro_filter",
+   "params": {},
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 1098,
+   "status": "EXEC_OK",
+   "hash": "83604971cb4c1dd2"
+  },
+  {
+   "canonical": "ts_poly2_forecast_error",
+   "params": {
+    "d": 20
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 916,
+   "status": "EXEC_OK",
+   "hash": "0568e435a2f5ba79"
+  },
+  {
+   "canonical": "ts_poly2_forecast_error_z",
+   "params": {
+    "d": 20
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 916,
+   "status": "EXEC_OK",
+   "hash": "0568e435a2f5ba79"
+  },
+  {
+   "canonical": "ts_poly2_prior_coeff",
+   "params": {
+    "d": 20
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 1000,
+   "status": "EXEC_OK",
+   "hash": "0568e435a2f5ba79"
+  },
+  {
+   "canonical": "ts_quantile_regression_coeff_prior",
+   "params": {
+    "window": 20,
+    "min_periods": 20
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: ts_quantile_regression_coeff_prior: missing required parameters ['x']",
+   "attempts": [
+    "OperatorParameterError: ts_quantile_regression_coeff_prior: missing required parameters ['x']",
+    "OperatorParameterError: ts_quantile_regression_coeff_prior: missing required parameters ['x']",
+    "OperatorParameterError: ts_quantile_regression_coeff_prior: missing required parameters ['x']"
+   ]
+  },
+  {
+   "canonical": "ts_resistance_log_slope",
+   "params": {
+    "left_window": 20,
+    "right_window": 20,
+    "history_window": 20
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: ts_resistance_log_slope.points [runtime]: points must be an integer, not DataFrame (            ",
+   "attempts": [
+    "OperatorParameterError: ts_resistance_log_slope: missing required parameters ['points']",
+    "OperatorParameterError: ts_resistance_log_slope.points [runtime]: points must be an integer, not DataFrame (            ",
+    "OperatorParameterError: ts_resistance_log_slope.points [runtime]: points must be an integer, not DataFrame (            "
+   ]
+  },
+  {
+   "canonical": "ts_return_spectral_entropy",
+   "params": {
+    "window": 20,
+    "input_kind": "ReturnDecimal"
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 159,
+   "status": "EXEC_OK",
+   "hash": "199748c064caf9aa"
+  },
+  {
+   "canonical": "ts_ridge_regression_in_sample_resid",
+   "params": {
+    "window": 20,
+    "min_periods": 20
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: ts_ridge_regression_in_sample_resid.alpha [runtime]: alpha must be a real number, not DataFrame ",
+   "attempts": [
+    "TypeError: TsRidgeRegressionInSampleResid._calculate_series() missing 1 required positional argument: 'x'",
+    "OperatorParameterError: ts_ridge_regression_in_sample_resid.alpha [runtime]: alpha must be a real number, not DataFrame ",
+    "OperatorParameterError: ts_ridge_regression_in_sample_resid.alpha [runtime]: alpha must be a real number, not DataFrame "
+   ]
+  },
+  {
+   "canonical": "ts_ridge_regression_predictive_resid",
+   "params": {
+    "window": 20,
+    "min_periods": 20
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: ts_ridge_regression_predictive_resid.alpha [runtime]: alpha must be a real number, not DataFrame",
+   "attempts": [
+    "TypeError: TsRidgeRegressionPredictiveResid._calculate_series() missing 1 required positional argument: 'x'",
+    "OperatorParameterError: ts_ridge_regression_predictive_resid.alpha [runtime]: alpha must be a real number, not DataFrame",
+    "OperatorParameterError: ts_ridge_regression_predictive_resid.alpha [runtime]: alpha must be a real number, not DataFrame"
+   ]
+  },
+  {
+   "canonical": "ts_rls_filter",
+   "params": {},
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 737,
+   "status": "EXEC_OK",
+   "hash": "57f8bc141060c564"
+  },
+  {
+   "canonical": "ts_ssa_denoise_trailing",
+   "params": {
+    "window": 20,
+    "n_components": 3
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 1161,
+   "status": "EXEC_OK",
+   "hash": "1117731d573233d9"
+  },
+  {
+   "canonical": "ts_support_log_slope",
+   "params": {
+    "left_window": 20,
+    "right_window": 20,
+    "history_window": 20
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: ts_support_log_slope.points [runtime]: points must be an integer, not DataFrame (               ",
+   "attempts": [
+    "OperatorParameterError: ts_support_log_slope: missing required parameters ['points']",
+    "OperatorParameterError: ts_support_log_slope.points [runtime]: points must be an integer, not DataFrame (               ",
+    "OperatorParameterError: ts_support_log_slope.points [runtime]: points must be an integer, not DataFrame (               "
+   ]
+  },
+  {
+   "canonical": "ts_total_variation_filter_trailing",
+   "params": {
+    "window": 20,
+    "lambda_tv": 0.1
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 1182,
+   "status": "EXEC_OK",
+   "hash": "0ace6112ba7c7573"
+  },
+  {
+   "canonical": "ts_turnover_cost_entropy_vol_scaled",
+   "params": {
+    "window": 60
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: ts_turnover_cost_entropy_vol_scaled: missing required parameters ['turnover']",
+   "attempts": [
+    "OperatorParameterError: ts_turnover_cost_entropy_vol_scaled: missing required parameters ['turnover']",
+    "OperatorParameterError: ts_turnover_cost_entropy_vol_scaled: missing required parameters ['turnover']",
+    "OperatorParameterError: ts_turnover_cost_entropy_vol_scaled: missing required parameters ['turnover']"
+   ]
+  },
+  {
+   "canonical": "ts_turnover_old_mass",
+   "params": {
+    "window": 60
+   },
+   "status": "ERR",
+   "reason": "OperatorParameterError: ts_turnover_old_mass: missing required parameters ['turnover']",
+   "attempts": [
+    "OperatorParameterError: ts_turnover_old_mass: missing required parameters ['turnover']",
+    "OperatorParameterError: ts_turnover_old_mass: missing required parameters ['turnover']",
+    "OperatorParameterError: ts_turnover_old_mass: missing required parameters ['turnover']"
+   ]
+  },
+  {
+   "canonical": "ts_vidya",
+   "params": {
+    "window": 20
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 68,
+   "status": "EXEC_OK",
+   "hash": "3ac66db92098c9f1"
+  },
+  {
+   "canonical": "ts_wavelet_shrinkage_trailing",
+   "params": {
+    "window": 20,
+    "threshold": 0.5
+   },
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 1182,
+   "status": "EXEC_OK",
+   "hash": "5352ca02f4f31147"
+  },
+  {
+   "canonical": "valuation_pcf_gap_positive",
+   "params": {},
+   "status": "ERR",
+   "reason": "OperatorParameterError: valuation_pcf_gap_positive: missing required parameters ['pcf_ratio2']",
+   "attempts": [
+    "OperatorParameterError: valuation_pcf_gap_positive: missing required parameters ['pcf_ratio2']",
+    "OperatorParameterError: valuation_pcf_gap_positive: missing required parameters ['pcf_ratio2']",
+    "OperatorParameterError: valuation_pcf_gap_positive: missing required parameters ['pcf_ratio2']"
+   ]
+  },
+  {
+   "canonical": "valuation_pcf_gap_signed_log",
+   "params": {},
+   "status": "ERR",
+   "reason": "OperatorParameterError: valuation_pcf_gap_signed_log: missing required parameters ['pcf_ratio2']",
+   "attempts": [
+    "OperatorParameterError: valuation_pcf_gap_signed_log: missing required parameters ['pcf_ratio2']",
+    "OperatorParameterError: valuation_pcf_gap_signed_log: missing required parameters ['pcf_ratio2']",
+    "OperatorParameterError: valuation_pcf_gap_signed_log: missing required parameters ['pcf_ratio2']"
+   ]
+  },
+  {
+   "canonical": "valuation_pe_gap_positive",
+   "params": {},
+   "status": "ERR",
+   "reason": "OperatorParameterError: valuation_pe_gap_positive: missing required parameters ['pe_ratio_lyr']",
+   "attempts": [
+    "OperatorParameterError: valuation_pe_gap_positive: missing required parameters ['pe_ratio_lyr']",
+    "OperatorParameterError: valuation_pe_gap_positive: missing required parameters ['pe_ratio_lyr']",
+    "OperatorParameterError: valuation_pe_gap_positive: missing required parameters ['pe_ratio_lyr']"
+   ]
+  },
+  {
+   "canonical": "valuation_pe_gap_signed_log",
+   "params": {},
+   "status": "ERR",
+   "reason": "OperatorParameterError: valuation_pe_gap_signed_log: missing required parameters ['pe_ratio_lyr']",
+   "attempts": [
+    "OperatorParameterError: valuation_pe_gap_signed_log: missing required parameters ['pe_ratio_lyr']",
+    "OperatorParameterError: valuation_pe_gap_signed_log: missing required parameters ['pe_ratio_lyr']",
+    "OperatorParameterError: valuation_pe_gap_signed_log: missing required parameters ['pe_ratio_lyr']"
+   ]
+  },
+  {
+   "canonical": "years_since_date",
+   "params": {},
+   "shape": [
+    120,
+    10
+   ],
+   "finite": 1098,
+   "status": "EXEC_OK",
+   "hash": "47a2c219b68eb392"
+  }
+ ]
+}

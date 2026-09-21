@@ -1,0 +1,23 @@
+{
+ "canonical": "cs_isolation_forest_score",
+ "review_id": "r58-surface-promotion:cs_isolation_forest_score",
+ "semantic_hash": "ba91831e10a7c9fb",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "n_trees": 100,
+  "contamination": 0.1,
+  "random_seed": 42
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 490,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

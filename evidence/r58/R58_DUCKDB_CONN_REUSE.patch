@@ -1,0 +1,390 @@
+diff --git a/factor_engine/backend/sql_pushdown/duckdb_capabilities.py b/factor_engine/backend/sql_pushdown/duckdb_capabilities.py
+index 40e3fb1f1..5ebfe6465 100644
+--- a/factor_engine/backend/sql_pushdown/duckdb_capabilities.py
++++ b/factor_engine/backend/sql_pushdown/duckdb_capabilities.py
+@@ -54,9 +54,15 @@ def probe_duckdb_capabilities(con=None) -> DuckdbCapabilityReport:
+             report.features[name] = "unsupported"
+         return report
+ 
++    # R58: when no connection is supplied, borrow one from the shared pool
++    # instead of duckdb.connect() per probe (was ~10-18 ms fixed cost each).
++    _handle = None
+     if con is None:
+-        con = duckdb.connect(":memory:")
+-        owns = True
++        from factor_engine.backend.sql_pushdown.duckdb_connection_pool import (
++            get_shared_duckdb_pool,
++        )
++        _handle = get_shared_duckdb_pool().acquire()
++        con = _handle.connection
+     try:
+         row = con.execute("SELECT version()").fetchone()
+         report.version = str(row[0]) if row else ""
+@@ -71,8 +77,8 @@ def probe_duckdb_capabilities(con=None) -> DuckdbCapabilityReport:
+             report.features[name] = "unsupported"
+             report.errors.append(f"{name}: {exc}")
+ 
+-    if owns:
+-        con.close()
++    if _handle is not None:
++        _handle.release()
+     return report
+ 
+ 
+diff --git a/factor_engine/backend/sql_pushdown/duckdb_connection_pool.py b/factor_engine/backend/sql_pushdown/duckdb_connection_pool.py
+new file mode 100644
+index 000000000..d701e8f63
+--- /dev/null
++++ b/factor_engine/backend/sql_pushdown/duckdb_connection_pool.py
+@@ -0,0 +1,148 @@
++# -*- coding: utf-8 -*-
++"""R58: thread-safe DuckDB connection pool + per-connection prepared-statement reuse.
++
++Why this exists
++---------------
++Several SQL-pushdown code paths called ``duckdb.connect()`` on *every* invocation:
++
++* ``factor_engine/backend/sql_pushdown/sql_registry.py`` (capability probe)
++* ``factor_engine/backend/sql_pushdown/duckdb_capabilities.py`` (capability probe)
++* ``factor_engine/scripts/calibrate_backend_costs.py`` (per-call backend cost)
++* ``data_access/core/engine.py:_execute_scoped_sql_arrow_locked`` (every scoped
++  SQL pushdown — the real engine hot path, owned by the shared ``data_access``
++  package and out of scope for this patch).
++
++A fresh ``:memory:`` DuckDB connection pays a fixed ~10–18 ms catalog/init cost
++each time.  That fixed cost dominated ``duckdb_sql`` single-call latency
++(measured ~18 ms/call → ~9000 ms/M vs ~600 ms/M for the polars backends).
++
++Design
++------
++* A process-wide pool of in-memory DuckDB connections.  ``acquire``/``release``
++  are guarded by a ``Condition`` so a connection is handed to exactly one caller
++  at a time (DuckDB connections are **not** thread-safe).
++* Every pooled connection owns its **own** ``DuckDBPreparedStatementCache``
++  instance.  A prepared plan (relation) is therefore *never* shared across
++  connections — this is what prevents batch multi-factor landing from aliasing
++  results between factors / parameter domains / tables.  The cache key is the
++  normalised SQL text (which embeds the table identity and the query shape); the
++  per-connection scoping provides the "which connection" dimension.
++* The prepared-statement cache is reused via the existing
++  ``duckdb_prepared_statement_cache`` API — no parallel implementation.
++"""
++from __future__ import annotations
++
++import threading
++import time
++from typing import Any
++
++from factor_engine.runtime.multibackend.duckdb_prepared_statement_cache import (
++    DuckDBPreparedStatementCache,
++)
++
++
++class DuckDBConnectionHandle:
++    """A checked-out connection plus its private prepared-statement cache."""
++
++    def __init__(self, pool: "DuckDBConnectionPool", conn: Any, cache: Any) -> None:
++        self._pool = pool
++        self._conn = conn
++        self._cache = cache
++        self._released = False
++
++    def __enter__(self) -> "DuckDBConnectionHandle":
++        return self
++
++    def __exit__(self, *exc: Any) -> None:
++        self.release()
++
++    @property
++    def connection(self) -> Any:
++        return self._conn
++
++    def register(self, name: str, obj: Any) -> None:
++        self._conn.register(name, obj)
++
++    def unregister(self, name: str) -> None:
++        try:
++            self._conn.unregister(name)
++        except Exception:  # noqa: BLE001 - best-effort cleanup
++            pass
++
++    def execute(self, sql: str, params: list[Any] | None = None) -> Any:
++        """Execute ``sql`` through this connection's prepared-statement cache."""
++        return self._cache.execute(self._conn, sql, params)
++
++    def fetch_arrow_table(self, sql: str, params: list[Any] | None = None) -> Any:
++        result = self.execute(sql, params)
++        if hasattr(result, "to_arrow_table"):
++            return result.to_arrow_table()
++        return result  # already an arrow table
++
++    def release(self) -> None:
++        if not self._released:
++            self._released = True
++            self._pool._return(self._conn, self._cache)
++
++
++class DuckDBConnectionPool:
++    """Bounded, thread-safe pool of ``:memory:`` DuckDB connections."""
++
++    def __init__(self, max_size: int = 16, conn_factory=None) -> None:
++        self._max_size = int(max_size) if max_size and max_size > 0 else 16
++        self._factory = conn_factory or self._default_factory
++        self._free: list[tuple[Any, Any]] = []
++        self._created = 0
++        self._cond = threading.Condition(threading.RLock())
++
++    @staticmethod
++    def _default_factory() -> Any:
++        import duckdb
++
++        return duckdb.connect(":memory:")
++
++    def acquire(self, timeout: float = 60.0) -> DuckDBConnectionHandle:
++        deadline = time.monotonic() + float(timeout)
++        with self._cond:
++            while True:
++                if self._free:
++                    conn, cache = self._free.pop()
++                    return DuckDBConnectionHandle(self, conn, cache)
++                if self._created < self._max_size:
++                    conn = self._factory()
++                    cache = DuckDBPreparedStatementCache()
++                    self._created += 1
++                    return DuckDBConnectionHandle(self, conn, cache)
++                remaining = deadline - time.monotonic()
++                if remaining <= 0:
++                    raise RuntimeError("DuckDBConnectionPool exhausted")
++                self._cond.wait(remaining)
++
++    def _return(self, conn: Any, cache: Any) -> None:
++        with self._cond:
++            self._free.append((conn, cache))
++            self._cond.notify()
++
++    def close_all(self) -> None:
++        with self._cond:
++            for conn, _ in self._free:
++                try:
++                    conn.close()
++                except Exception:  # noqa: BLE001
++                    pass
++            self._free.clear()
++            self._created = 0
++
++
++_shared_pool: DuckDBConnectionPool | None = None
++_shared_pool_lock = threading.Lock()
++
++
++def get_shared_duckdb_pool() -> DuckDBConnectionPool:
++    """Return the process-wide DuckDB connection pool (thread-safe singleton)."""
++    global _shared_pool
++    if _shared_pool is None:
++        with _shared_pool_lock:
++            if _shared_pool is None:
++                _shared_pool = DuckDBConnectionPool()
++    return _shared_pool
+diff --git a/factor_engine/backend/sql_pushdown/sql_registry.py b/factor_engine/backend/sql_pushdown/sql_registry.py
+index 1644c941c..f6bbaba62 100644
+--- a/factor_engine/backend/sql_pushdown/sql_registry.py
++++ b/factor_engine/backend/sql_pushdown/sql_registry.py
+@@ -255,14 +255,21 @@ def _resolve_capability_path(plan: PlanNode, *, dialect: str) -> bool:
+         if compiled is None:
+             return False
+         query = compiled.query.replace("{{test_panel}}", "test_panel")
+-        con = duckdb.connect()
+-        try:
++        # R58: reuse a pooled DuckDB connection instead of duckdb.connect() per
++        # probe call (was ~10-18 ms fixed cost each, which dominated capability
++        # probing when run per-operator in the SQL->polars parity fixture).
++        from factor_engine.backend.sql_pushdown.duckdb_connection_pool import (
++            get_shared_duckdb_pool,
++        )
++        with get_shared_duckdb_pool().acquire() as handle:
+             # Seed the ``test_panel`` relation the probe's compiled query
+-            # references — the probe creates its OWN connection, so the fixture's
+-            # ``con.register("test_panel", ...)`` is not in scope here.  Without
+-            # this seed every probe fails at execution with "table not found",
+-            # making the capability probe vacuously False for ALL operators.
+-            con.register(
++            # references — the probe used to create its OWN connection, so the
++            # fixture's ``con.register("test_panel", ...)`` was not in scope.
++            # Without this seed every probe fails at execution with
++            # "table not found", making the capability probe vacuously False
++            # for ALL operators.  The pooled handle re-seeds on every call
++            # (register overwrites), so concurrent probes never alias.
++            handle.register(
+                 "test_panel",
+                 pd.DataFrame(
+                     [
+@@ -277,12 +284,10 @@ def _resolve_capability_path(plan: PlanNode, *, dialect: str) -> bool:
+                     ]
+                 ),
+             )
+-            arrow_raw = con.execute(query).arrow()
++            arrow_raw = handle.execute(query).arrow()
+             arrow = arrow_raw.read_all() if hasattr(arrow_raw, "read_all") else arrow_raw
+             lf = pl.from_arrow(arrow)
+             return "value" in lf.columns and lf.height > 0
+-        finally:
+-            con.close()
+     except Exception:
+         return False
+ 
+diff --git a/factor_engine/runtime/multibackend/duckdb_prepared_statement_cache.py b/factor_engine/runtime/multibackend/duckdb_prepared_statement_cache.py
+index eebf6075e..0e945d6b4 100644
+--- a/factor_engine/runtime/multibackend/duckdb_prepared_statement_cache.py
++++ b/factor_engine/runtime/multibackend/duckdb_prepared_statement_cache.py
+@@ -93,66 +93,58 @@ class DuckDBPreparedStatementCache:
+         params = params or []
+         start_ms = time.monotonic() * 1000.0
+ 
+-        # 计算 SQL template hash（忽略参数值）
++        # Normalise the SQL template hash (ignores parameter values).
+         sql_hash = self._compute_sql_hash(sql)
+ 
+         with self._lock:
+             self._metrics.total_queries += 1
+-
+-            # 缓存命中：复用 prepared statement
+-            if sql_hash in self._cache:
+-                prepared = self._cache[sql_hash]
++            cached = sql_hash in self._cache
++            if cached:
+                 self._metrics.cache_hits += 1
+-
+-                # LRU: 移到队列末尾
+-                self._cache_order.remove(sql_hash)
+-                self._cache_order.append(sql_hash)
+-
+-                # 绑定参数并执行
++            else:
++                self._metrics.cache_misses += 1
++
++            # Cache hit: reuse the prepared plan.  ``self._cache`` is bound to a
++            # single DuckDB connection (see ``duckdb_connection_pool``), so the
++            # stored relation is only ever executed on the connection that built
++            # it — never shared across connections / threads.
++            if cached:
++                relation = self._cache[sql_hash]
+                 try:
+                     if params:
+-                        result = prepared.execute(params)
+-                    else:
+-                        result = prepared.execute()
+-                    return result
+-                except Exception as exc:
++                        return conn.execute(sql, params)
++                    return relation.execute()
++                except Exception as exc:  # noqa: BLE001
+                     _logger.warning(
+-                        "prepared statement execution failed: %s; fallback to direct",
+-                        exc,
++                        "prepared reuse failed: %s; fallback to direct", exc
+                     )
+-                    # Fallback: 直接执行
+                     return conn.execute(sql, params)
+ 
+-            # 缓存未命中：prepare 新 statement
+-            self._metrics.cache_misses += 1
++            # Cache miss: build / execute.
++            # DuckDB 1.x removed ``Connection.prepare``; the equivalent
++            # "prepare once, execute many" is ``Connection.sql(sql)`` (a reusable
++            # relation) for parameter-less queries, and
++            # ``Connection.execute(sql, params)`` for parameterised ones
++            # (DuckDB caches the plan per connection internally).
+             try:
+-                prepared = conn.prepare(sql)
+-                self._cache[sql_hash] = prepared
+-                self._cache_order.append(sql_hash)
+-
+-                # LRU eviction
+-                if len(self._cache) > self.cache_size:
+-                    oldest = self._cache_order.pop(0)
+-                    self._cache.pop(oldest, None)
+-
+-                prepare_time_ms = (time.monotonic() * 1000.0) - start_ms
+-                self._metrics.total_prepare_time_ms += prepare_time_ms
+-
+-                # 执行 prepared statement
+                 if params:
+-                    result = prepared.execute(params)
++                    result = conn.execute(sql, params)
+                 else:
+-                    result = prepared.execute()
+-
+-                _logger.debug(
+-                    "prepared statement cached: %s (prepare time: %.2f ms)",
+-                    sql_hash[:8], prepare_time_ms,
+-                )
+-
++                    relation = conn.sql(sql)
++                    result = relation.execute()
++                    self._cache[sql_hash] = relation
++                    self._cache_order.append(sql_hash)
++                    # LRU eviction.
++                    if len(self._cache) > self.cache_size:
++                        oldest = self._cache_order.pop(0)
++                        self._cache.pop(oldest, None)
++                prepare_time_ms = (time.monotonic() * 1000.0) - start_ms
++                self._metrics.total_prepare_time_ms += prepare_time_ms
+                 return result
+-            except Exception as exc:
+-                _logger.error("prepare statement failed: %s; fallback to direct", exc)
+-                # Fallback: 直接执行（不 prepare）
++            except Exception as exc:  # noqa: BLE001
++                _logger.error(
++                    "prepare statement failed: %s; fallback to direct", exc
++                )
+                 return conn.execute(sql, params)
+ 
+     def execute_batch(
+diff --git a/factor_engine/scripts/calibrate_backend_costs.py b/factor_engine/scripts/calibrate_backend_costs.py
+index 6bb1759f2..e1a4ee937 100644
+--- a/factor_engine/scripts/calibrate_backend_costs.py
++++ b/factor_engine/scripts/calibrate_backend_costs.py
+@@ -151,8 +151,24 @@ def _polars_long_case(canonical: str, rows: int):
+     return run, max(rows, instruments)
+ 
+ 
++# R58: one pooled DuckDB connection + its prepared-statement cache is reused for
++# the entire calibration run (calibration is a single-threaded one-shot script).
++# This removes the per-call duckdb.connect() fixed cost (~10-18 ms) that used to
++# inflate the duckdb_sql backend-cost measurement to ~9000 ms/M.
++_CALIB_DUCKDB_HANDLE = None
++
++
++def _get_calib_duckdb_handle():
++    global _CALIB_DUCKDB_HANDLE
++    if _CALIB_DUCKDB_HANDLE is None:
++        from factor_engine.backend.sql_pushdown.duckdb_connection_pool import (
++            get_shared_duckdb_pool,
++        )
++        _CALIB_DUCKDB_HANDLE = get_shared_duckdb_pool().acquire()
++    return _CALIB_DUCKDB_HANDLE
++
++
+ def _duckdb_case(canonical: str, rows: int):
+-    import duckdb
+     from factor_engine.backend.fastpath_plan_probe import ProbeSchemaBuilder
+     from factor_engine.backend.sql_pushdown.emitter import SqlDialect, compile_plan_to_sql
+ 
+@@ -176,12 +192,11 @@ def _duckdb_case(canonical: str, rows: int):
+     sql = str(compiled.query or "").replace(f"{{{{{dataset}}}}}", dataset)
+ 
+     def run():
+-        con = duckdb.connect()
+-        try:
+-            con.register(dataset, table)
+-            return con.execute(sql).fetch_arrow_table()
+-        finally:
+-            con.close()
++        # R58: reuse a single pooled connection; re-register the dataset view on
++        # every case so different canonicals never alias on the shared connection.
++        handle = _get_calib_duckdb_handle()
++        handle.register(dataset, table)
++        return handle.execute(sql).to_arrow_table()
+ 
+     return run, len(table)
+ 

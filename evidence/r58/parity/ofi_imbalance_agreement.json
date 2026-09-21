@@ -1,0 +1,22 @@
+{
+ "canonical": "ofi_imbalance_agreement",
+ "review_id": "r58-surface-promotion:ofi_imbalance_agreement",
+ "semantic_hash": "c16283c3013f2e0a",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "window": 20,
+  "min_periods": 2
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1190,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

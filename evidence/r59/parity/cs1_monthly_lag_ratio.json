@@ -1,0 +1,20 @@
+{
+ "canonical": "cs1_monthly_lag_ratio",
+ "review_id": "r59-surface-promotion:cs1_monthly_lag_ratio",
+ "semantic_hash": "fa2526c7e2fb6163",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {},
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 835,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v1"
+}

@@ -1,0 +1,23 @@
+{
+ "canonical": "ts_persistence_birth_dispersion",
+ "review_id": "r58-surface-promotion:ts_persistence_birth_dispersion",
+ "semantic_hash": "19d6a8678d831a37",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "window": 20,
+  "tau": 2.0,
+  "dim": 2
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1146,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

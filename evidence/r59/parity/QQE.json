@@ -1,0 +1,24 @@
+{
+ "canonical": "QQE",
+ "review_id": "r59-surface-promotion:QQE",
+ "semantic_hash": "40a8d178768f8c65",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {
+  "length": 20,
+  "smooth": 2.0,
+  "output": "line"
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 945,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v4"
+}

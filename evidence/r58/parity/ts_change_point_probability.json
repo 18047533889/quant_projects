@@ -1,0 +1,22 @@
+{
+ "canonical": "ts_change_point_probability",
+ "review_id": "r58-surface-promotion:ts_change_point_probability",
+ "semantic_hash": "889730ee0b49e664",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "window": 120,
+  "transition_prob": 0.05
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 444,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

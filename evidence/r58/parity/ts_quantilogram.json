@@ -1,0 +1,25 @@
+{
+ "canonical": "ts_quantilogram",
+ "review_id": "r58-surface-promotion:ts_quantilogram",
+ "semantic_hash": "0cb0a011283fa35a",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "window": 120,
+  "quantile": 0.1,
+  "lag": 1,
+  "side": "lower",
+  "fixed_threshold": false
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1136,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

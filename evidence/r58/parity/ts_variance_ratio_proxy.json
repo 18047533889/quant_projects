@@ -1,0 +1,23 @@
+{
+ "canonical": "ts_variance_ratio_proxy",
+ "review_id": "r58-surface-promotion:ts_variance_ratio_proxy",
+ "semantic_hash": "eeee05913e6a9413",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "window": 60,
+  "min_periods": 10,
+  "q": 5
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 402,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

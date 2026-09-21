@@ -1,0 +1,23 @@
+{
+ "canonical": "val1_earnings_yield_ma_diff",
+ "review_id": "r59-surface-promotion:val1_earnings_yield_ma_diff",
+ "semantic_hash": "7f803404e7c6866d",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {
+  "baseline_window": 12,
+  "min_periods": 4
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1058,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v1"
+}

@@ -1,0 +1,23 @@
+{
+ "canonical": "panel_rolling_pca_resid_momentum",
+ "review_id": "r59-surface-promotion:panel_rolling_pca_resid_momentum",
+ "semantic_hash": "393b64e935826655",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (bdate index carried as date column, NaN-injected, T=120/1024,N=10)",
+ "parity_params": {
+  "window": 120,
+  "n_components": 5
+ },
+ "pandas_shape": [
+  600,
+  10
+ ],
+ "polars_shape": [
+  600,
+  10
+ ],
+ "finite_values": 4699,
+ "max_abs_diff": 0.0,
+ "result": "PASS",
+ "wave": "v4"
+}

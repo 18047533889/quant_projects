@@ -1,0 +1,19 @@
+{
+ "canonical": "es1_negative_earnings_streak",
+ "review_id": "r58-surface-promotion:es1_negative_earnings_streak",
+ "semantic_hash": "cffa98f8bfacffd6",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {},
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 1098,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

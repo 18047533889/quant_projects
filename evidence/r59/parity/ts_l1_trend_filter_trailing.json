@@ -1,0 +1,19 @@
+{
+ "canonical": "ts_l1_trend_filter_trailing",
+ "review_id": "r59-surface-promotion-pandasonly:ts_l1_trend_filter_trailing",
+ "semantic_hash": "f6e01f446b57aa7d",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas-kernel execution evidence on synth panel (polars backend unsupported for this canonical; the auto router falls back to the pandas_numpy backend at runtime). NOT a pandas-vs-polars parity check.",
+ "parity_params": {
+  "window": 30,
+  "lambda_l1": 0.1
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": null,
+ "finite_values": 1172,
+ "max_abs_diff": null,
+ "result": "EXEC_OK"
+}

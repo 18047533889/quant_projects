@@ -1,0 +1,21 @@
+{
+ "canonical": "ts_turning_point_ratio",
+ "review_id": "r58-surface-promotion:ts_turning_point_ratio",
+ "semantic_hash": "8ab23cd1adcd38f3",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas_numpy reference vs polars kernel, identical synth panel (T=120,N=10, NaN-injected)",
+ "parity_params": {
+  "window": 60
+ },
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": [
+  120,
+  10
+ ],
+ "finite_values": 819,
+ "max_abs_diff": 0.0,
+ "result": "PASS"
+}

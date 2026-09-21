@@ -1,0 +1,16 @@
+{
+ "canonical": "years_since_date",
+ "review_id": "r59-surface-promotion-pandasonly:years_since_date",
+ "semantic_hash": "47a2c219b68eb392",
+ "approved_authoring_tier": "daily",
+ "parity_method": "pandas-kernel execution evidence on synth panel (polars backend unsupported for this canonical; the auto router falls back to the pandas_numpy backend at runtime). NOT a pandas-vs-polars parity check.",
+ "parity_params": {},
+ "pandas_shape": [
+  120,
+  10
+ ],
+ "polars_shape": null,
+ "finite_values": 1098,
+ "max_abs_diff": null,
+ "result": "EXEC_OK"
+}
