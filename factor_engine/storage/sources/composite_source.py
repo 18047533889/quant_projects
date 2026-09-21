@@ -270,6 +270,51 @@ class CompositeDataSource(DataSource):
         self._snapshot_manifest: tuple[tuple[str, SnapshotState], ...] | None = None
         self._validate_join_policy()
 
+    def time_range(self) -> tuple[str | None, str | None] | None:
+        """组合源的聚合读取边界（warm-up / full-history 解析权威）。
+
+        ``extract_source_date_bounds`` 优先调用本方法，因此组合源必须回报
+        子源真正遵守的边界。任一子源未声明边界 → 该方向无界，整源无界：
+        绝不用兄弟源的边界去「补」出一段并不存在、也读不到的历史。
+
+        为什么必须暴露：``LongTableDataSource`` 只在构造时从 ``inner`` 复制
+        ``start_date`` / ``end_date``。组合源不暴露它们时，``long_table``
+        包装后的 ``engine.data_source.start_date`` 为 ``None`` —— 于是
+        ``_auto_warmup_run_window`` 在 ``requested_start is None`` 处提前返回，
+        ``warmup_bars=0`` 且不产生任何日志：预热既不加载也不裁剪，
+        ``min_periods=1`` 的内核会在请求首日吐出窗口尚未满足的早期值。
+        """
+        starts: list[str] = []
+        ends: list[str] = []
+        for source in self.sources.values():
+            probe = getattr(source, "time_range", None)
+            rng = probe() if callable(probe) else (
+                getattr(source, "start_date", None),
+                getattr(source, "end_date", None),
+            )
+            if not rng or len(rng) < 2:
+                return None
+            start, end = rng[0], rng[1]
+            if start is None or end is None:
+                return None
+            starts.append(str(start))
+            ends.append(str(end))
+        if not starts:
+            return None
+        return (min(starts), max(ends))
+
+    @property
+    def start_date(self) -> str | None:
+        """聚合起始边界（见 :meth:`time_range`）。"""
+        rng = self.time_range()
+        return None if rng is None else rng[0]
+
+    @property
+    def end_date(self) -> str | None:
+        """聚合结束边界（见 :meth:`time_range`）。"""
+        rng = self.time_range()
+        return None if rng is None else rng[1]
+
     def execution_spec(self) -> dict[str, Any] | None:
         """返回可重建（``storage.factory.build_data_source``）的 canonical 配置。
 

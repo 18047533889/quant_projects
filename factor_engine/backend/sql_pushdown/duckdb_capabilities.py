@@ -54,9 +54,15 @@ def probe_duckdb_capabilities(con=None) -> DuckdbCapabilityReport:
             report.features[name] = "unsupported"
         return report
 
+    # R58: when no connection is supplied, borrow one from the shared pool
+    # instead of duckdb.connect() per probe (was ~10-18 ms fixed cost each).
+    _handle = None
     if con is None:
-        con = duckdb.connect(":memory:")
-        owns = True
+        from factor_engine.backend.sql_pushdown.duckdb_connection_pool import (
+            get_shared_duckdb_pool,
+        )
+        _handle = get_shared_duckdb_pool().acquire()
+        con = _handle.connection
     try:
         row = con.execute("SELECT version()").fetchone()
         report.version = str(row[0]) if row else ""
@@ -71,8 +77,8 @@ def probe_duckdb_capabilities(con=None) -> DuckdbCapabilityReport:
             report.features[name] = "unsupported"
             report.errors.append(f"{name}: {exc}")
 
-    if owns:
-        con.close()
+    if _handle is not None:
+        _handle.release()
     return report
 
 

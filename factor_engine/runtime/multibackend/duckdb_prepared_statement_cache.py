@@ -93,66 +93,58 @@ class DuckDBPreparedStatementCache:
         params = params or []
         start_ms = time.monotonic() * 1000.0
 
-        # 计算 SQL template hash（忽略参数值）
+        # Normalise the SQL template hash (ignores parameter values).
         sql_hash = self._compute_sql_hash(sql)
 
         with self._lock:
             self._metrics.total_queries += 1
-
-            # 缓存命中：复用 prepared statement
-            if sql_hash in self._cache:
-                prepared = self._cache[sql_hash]
+            cached = sql_hash in self._cache
+            if cached:
                 self._metrics.cache_hits += 1
+            else:
+                self._metrics.cache_misses += 1
 
-                # LRU: 移到队列末尾
-                self._cache_order.remove(sql_hash)
-                self._cache_order.append(sql_hash)
-
-                # 绑定参数并执行
+            # Cache hit: reuse the prepared plan.  ``self._cache`` is bound to a
+            # single DuckDB connection (see ``duckdb_connection_pool``), so the
+            # stored relation is only ever executed on the connection that built
+            # it — never shared across connections / threads.
+            if cached:
+                relation = self._cache[sql_hash]
                 try:
                     if params:
-                        result = prepared.execute(params)
-                    else:
-                        result = prepared.execute()
-                    return result
-                except Exception as exc:
+                        return conn.execute(sql, params)
+                    return relation.execute()
+                except Exception as exc:  # noqa: BLE001
                     _logger.warning(
-                        "prepared statement execution failed: %s; fallback to direct",
-                        exc,
+                        "prepared reuse failed: %s; fallback to direct", exc
                     )
-                    # Fallback: 直接执行
                     return conn.execute(sql, params)
 
-            # 缓存未命中：prepare 新 statement
-            self._metrics.cache_misses += 1
+            # Cache miss: build / execute.
+            # DuckDB 1.x removed ``Connection.prepare``; the equivalent
+            # "prepare once, execute many" is ``Connection.sql(sql)`` (a reusable
+            # relation) for parameter-less queries, and
+            # ``Connection.execute(sql, params)`` for parameterised ones
+            # (DuckDB caches the plan per connection internally).
             try:
-                prepared = conn.prepare(sql)
-                self._cache[sql_hash] = prepared
-                self._cache_order.append(sql_hash)
-
-                # LRU eviction
-                if len(self._cache) > self.cache_size:
-                    oldest = self._cache_order.pop(0)
-                    self._cache.pop(oldest, None)
-
+                if params:
+                    result = conn.execute(sql, params)
+                else:
+                    relation = conn.sql(sql)
+                    result = relation.execute()
+                    self._cache[sql_hash] = relation
+                    self._cache_order.append(sql_hash)
+                    # LRU eviction.
+                    if len(self._cache) > self.cache_size:
+                        oldest = self._cache_order.pop(0)
+                        self._cache.pop(oldest, None)
                 prepare_time_ms = (time.monotonic() * 1000.0) - start_ms
                 self._metrics.total_prepare_time_ms += prepare_time_ms
-
-                # 执行 prepared statement
-                if params:
-                    result = prepared.execute(params)
-                else:
-                    result = prepared.execute()
-
-                _logger.debug(
-                    "prepared statement cached: %s (prepare time: %.2f ms)",
-                    sql_hash[:8], prepare_time_ms,
-                )
-
                 return result
-            except Exception as exc:
-                _logger.error("prepare statement failed: %s; fallback to direct", exc)
-                # Fallback: 直接执行（不 prepare）
+            except Exception as exc:  # noqa: BLE001
+                _logger.error(
+                    "prepare statement failed: %s; fallback to direct", exc
+                )
                 return conn.execute(sql, params)
 
     def execute_batch(

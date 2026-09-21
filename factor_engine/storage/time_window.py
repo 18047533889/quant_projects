@@ -606,3 +606,117 @@ def narrow_data_source_for_window(
         end_date=end_date,
         intraday=intraday,
     )
+
+
+def rebase_data_source_window(
+    source: DataSource,
+    *,
+    start_date: str | pd.Timestamp | None = None,
+    end_date: str | pd.Timestamp | None = None,
+    bar_freq: str | None = None,
+) -> DataSource:
+    """在**精确**边界上重建数据源链（覆盖，而非求交）。
+
+    预热必须把读取区间向前扩展。``narrow_data_source_for_window`` 刻意求交
+    （start 取 ``max``、end 取 ``min``），因此把预热窗口交给它会被静默夹回请求
+    区间，历史一行都读不到——这正是 ``min_periods=1`` 的内核会在请求首日泄漏
+    未成熟值的原因。
+
+    与求交不同，本函数直接设定边界，并递归穿过 long_table / composite 包装，
+    让叶子源真正移动。仅用于 warm-up / full-history 这类"扩展"语义。
+
+    参数:
+        source: 待重建的数据源
+        start_date: 精确起始边界（可选）
+        end_date: 精确结束边界（可选）
+        bar_freq: bar 频率字符串（可选）
+
+    返回:
+        DataSource
+    """
+    from factor_engine.cleaned_operators.operator_policy import bars_per_day
+
+    resolved_bar_freq = bar_freq or getattr(source, "bar_freq", None)
+    if resolved_bar_freq is None:
+        inner = getattr(source, "inner", None) or getattr(source, "_inner", None)
+        if inner is not None:
+            resolved_bar_freq = getattr(inner, "bar_freq", None)
+
+    start_s = _bound_for_io(start_date, resolved_bar_freq)
+    end_s = _bound_for_io(end_date, resolved_bar_freq)
+    if start_s is None and end_s is None:
+        return source
+
+    from .composite_source import CompositeDataSource
+    from .data_access_source import DataAccessSource
+    from .kline_parquet_source import KlineParquetSource
+    from .long_table_source import LongTableDataSource
+    from .parquet_source import ParquetSource
+
+    child = getattr(source, "inner", None) or getattr(source, "_inner", None)
+
+    # 长表只是列布局适配：下推到内层后原样重包装，否则内层边界不会移动。
+    if isinstance(source, LongTableDataSource):
+        if child is None:
+            return source
+        return LongTableDataSource(
+            rebase_data_source_window(
+                child,
+                start_date=start_date,
+                end_date=end_date,
+                bar_freq=resolved_bar_freq,
+            )
+        )
+
+    if isinstance(source, CompositeDataSource):
+        return CompositeDataSource(
+            anchor_source=source.anchor_source,
+            anchor_column=source.anchor_column,
+            sources={
+                name: rebase_data_source_window(
+                    sub,
+                    start_date=start_date,
+                    end_date=end_date,
+                    bar_freq=resolved_bar_freq,
+                )
+                for name, sub in source.sources.items()
+            },
+            joins=source.joins,
+            aliases=source.aliases,
+            allow_unqualified_anchor_columns=source.allow_unqualified_anchor_columns,
+        )
+
+    if isinstance(source, DataAccessSource):
+        contract_names = (
+            "dataset", "fields", "instrument_filter", "normalize_timestamp",
+            "timestamp_unit", "read_auto", "params", "semantic_filters",
+            "read_mode", "strict_unknown_fields", "run_mode", "production",
+            "enforce_mining_gate", "snapshot_now_only", "mining_coverage_threshold",
+            "pit_enforce", "snapshot_only", "snapshot_valid_at", "snapshot_created_at",
+        )
+        contracts = {name: getattr(source, name) for name in contract_names}
+        return DataAccessSource(**contracts, start_date=start_s, end_date=end_s)
+
+    if isinstance(source, KlineParquetSource):
+        return replace(source, start_date=start_s, end_date=end_s)
+
+    if isinstance(source, ParquetSource):
+        return type(source)(
+            root=source.root,
+            timestamp_column=source.timestamp_column,
+            instrument_column=source.instrument_column,
+            fields=source.fields,
+            max_files=source.max_files,
+            timestamp_unit=source.timestamp_unit,
+            start_date=start_s,
+            end_date=end_s,
+            recursive=source.recursive,
+        )
+
+    # 未识别的包装：保留它，用窗口层精确施加边界（窗口层只做过滤，不夹回）。
+    return WindowedDataSource(
+        source,
+        start_date=start_s,
+        end_date=end_s,
+        intraday=bars_per_day(resolved_bar_freq) > 1,
+    )

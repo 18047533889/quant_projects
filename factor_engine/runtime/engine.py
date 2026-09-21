@@ -3842,11 +3842,104 @@ class FactorEngine:
             # 日内源保留 timestamp 精度（不按 normalize 截断）
             if s_bpd > 1:
                 trim_start = pd.Timestamp(run_window.requested_start)
+            # R58c (2026-09-21): immature-value guard.  L = rows the loaded
+            # frame actually provides before the requested start; W = the
+            # factor's declared finite history rows (execution contract).
+            # Rows whose sample count is below the declared window are NaN.
+            # With a full warm-up load this is a no-op (L >= W-1), so
+            # existing bit-exact outputs are unchanged.
+            _pre_warmup_rows = None
+            try:
+                _idx0 = result.index.get_level_values(0)
+                _pre_warmup_rows = int((_idx0 < trim_start).sum())
+            except Exception:
+                _pre_warmup_rows = None
             result = slice_series_time_window(
                 result,
                 start=trim_start,
                 end=trim_end,
             )
+            if _pre_warmup_rows is not None:
+                try:
+                    from factor_engine.runtime.execution_contract import (
+                        factor_history_requirement as _fhr,
+                    )
+                    _req = _fhr(getattr(analysis, "ir", None))
+                    _declared = int(getattr(_req, "rows", 0) or 0)
+                    _full_hist = bool(getattr(_req, "is_full_history", False))
+                except Exception:
+                    _declared, _full_hist = 0, False
+                _blank = (
+                    _declared - 1 - _pre_warmup_rows
+                    if not _full_hist and _declared > 0
+                    else 0
+                )
+                if _blank > 0:
+                    try:
+                        _dates = (
+                            result.index.get_level_values(0)
+                            .drop_duplicates()
+                            .sort_values()
+                        )
+                        if _blank < len(_dates):
+                            _cutoff = _dates[_blank]
+                            _mask = (
+                                result.index.get_level_values(0) < _cutoff
+                            )
+                            result = result.mask(_mask)
+                            logger.info(
+                                "R58c immature-value guard: factor '%s' "
+                                "declared=%d pre_rows=%d -> blanked %d dates",
+                                factor.name, _declared, _pre_warmup_rows,
+                                _blank,
+                            )
+                    except Exception:
+                        logger.warning(
+                            "R58c immature-value guard failed for factor '%s'",
+                            factor.name, exc_info=True,
+                        )
+
+        elif run_window is None:
+            # R58d (2026-09-21): no auto-warmup path.  Enforce the same
+            # immature-value invariant with L=0 when the result head is
+            # provably the source frame head (result min date == source
+            # start_date); a filtered result whose frame held real
+            # pre-history must not be touched.
+            try:
+                from factor_engine.runtime.execution_contract import (
+                    factor_history_requirement as _fhr0,
+                )
+                _req0 = _fhr0(getattr(analysis, "ir", None))
+                _declared0 = int(getattr(_req0, "rows", 0) or 0)
+                _full0 = bool(getattr(_req0, "is_full_history", False))
+                _src_start = getattr(
+                    engine_to_use.data_source, "start_date", None
+                )
+                if (
+                    not _full0
+                    and _declared0 > 1
+                    and _src_start is not None
+                    and len(result) > 0
+                ):
+                    _dates0 = (
+                        result.index.get_level_values(0)
+                        .drop_duplicates()
+                        .sort_values()
+                    )
+                    if len(_dates0) > _declared0 and _dates0[0] == pd.Timestamp(_src_start):
+                        _cutoff0 = _dates0[_declared0 - 1]
+                        _mask0 = result.index.get_level_values(0) < _cutoff0
+                        result = result.mask(_mask0)
+                        logger.info(
+                            "R58d immature-value guard (no-warmup): factor "
+                            "'%s' declared=%d -> blanked %d dates",
+                            factor.name, _declared0, _declared0 - 1,
+                        )
+            except Exception:
+                logger.warning(
+                    "R58d immature-value guard failed for factor '%s'",
+                    factor.name, exc_info=True,
+                )
 
         from factor_engine.runtime.perf_config import PerfConfig
         from factor_engine.runtime.result_budget import enforce_result_budget

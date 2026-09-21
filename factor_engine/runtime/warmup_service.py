@@ -228,7 +228,10 @@ def _switch_engine_to_window(
         or run_window.actual_load_start == run_window.requested_start
     ):
         return engine
-    from factor_engine.storage.time_window import narrow_data_source_for_window
+    from factor_engine.storage.time_window import (
+        narrow_data_source_for_window,
+        rebase_data_source_window,
+    )
 
     from factor_engine.storage.sources.data_access_source import DataAccessSource
 
@@ -250,7 +253,11 @@ def _switch_engine_to_window(
             end_date=run_window.actual_load_end,
         )
     else:
-        narrowed = narrow_data_source_for_window(
+        # 预热/full-history 是**扩展**语义：必须重设边界。
+        # ``narrow_data_source_for_window`` 会求交，把扩展后的窗口夹回请求
+        # 区间，历史一行都读不到（long_table / composite 等包装形态正因此
+        # 长期拿不到预热数据）。
+        narrowed = rebase_data_source_window(
             engine.data_source,
             start_date=run_window.actual_load_start,
             end_date=run_window.actual_load_end,

@@ -1183,7 +1183,23 @@ def land_missing_factors(factors, *, batch_size=8, backend_name="polars_long", f
         except Exception as wave_error:
             if len(wave) == 1:
                 detail = landing_failure_reason(wave_error)
-                capability_error = (isinstance(wave_error, NotImplementedError)
+                # A *plan-binding* error is backend-specific, not a property of
+                # the factor.  ``ts_regression_slope(y, <non-column expr>, w)``
+                # is rejected by the polars/sql window heuristic ("window 必须
+                # 为整数 literal") yet lands correctly on the pandas bridge; the
+                # same holds for other positionally-ambiguous windows.  Without
+                # this, a solvable factor is written off as permanently
+                # "unavailable" after the first backend fails.
+                try:
+                    from factor_engine.backend.plan_params import PlanParamError
+                    plan_binding_error = isinstance(wave_error, PlanParamError)
+                except Exception:
+                    plan_binding_error = False
+                if not plan_binding_error:
+                    plan_binding_error = type(wave_error).__name__ in {
+                        "PlanParamError", "WindowSpecError", "PairWindowSpecError"}
+                capability_error = (plan_binding_error
+                    or isinstance(wave_error, NotImplementedError)
                     or (isinstance(wave_error, AttributeError)
                         and "has no attribute 'scan_polars_long'" in detail)) or any(
                     word in detail.lower() for word in ("unsupported", "not supported", "not implemented", "emitter", "capability"))
@@ -1249,8 +1265,18 @@ def evaluate_factor_batch(
     evaluator=evaluate_report_arrays,
     batch_size=8,
     backend="auto",
+    direction_map=None,
 ):
-    """Evaluate factor matrices in bounded QuantEvaluator tiles."""
+    """Evaluate factor matrices in bounded QuantEvaluator tiles.
+
+    ``direction_map`` is an optional ``{page_name: +1|-1}`` override that forces
+    the evaluation direction for the named factors.  The report convention is
+    that every factor is presented in the direction whose full-window RankIC is
+    non-negative ("负则加负号"), so a caller that just saw a negative mean IC
+    re-evaluates that factor here with the opposite direction instead of
+    sign-patching the artifact afterwards.  Every factor of a tile must appear
+    in the map: a partially specified tile would silently mix conventions.
+    """
     import numpy as np
     import pandas as pd
     from factor_engine.reporting.quant_evaluator_adapter import evaluate_report_batch
@@ -1302,6 +1328,12 @@ def evaluate_factor_batch(
         signal_eligible = np.isfinite(signal_prices) & (signal_prices > 0)
         values = np.where(signal_eligible[:, :, None], values, np.nan)
         train_periods = int((pd.DatetimeIndex(dates) <= pd.Timestamp(EVAL_END)).sum())
+        forced = None
+        if direction_map:
+            absent = [name for name in tile_names if name not in direction_map]
+            if absent:
+                raise ValueError(f"direction_map misses {sorted(absent)[:3]} of this tile")
+            forced = tuple(int(direction_map[name]) for name in tile_names)
         result = evaluator(
             values,
             labels.values.astype(np.float64),
@@ -1312,6 +1344,7 @@ def evaluate_factor_batch(
             min_assets=20,
             min_ic_periods=20,
             direction_training_periods=train_periods,
+            **({"fixed_directions": forced} if forced is not None else {}),
         )
         for name, factor_result in result.factors.items():
             ic = getattr(factor_result, "rank_ic_series", None)
@@ -2266,9 +2299,24 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
 
         if report_result is None or report_dates is None:
             raise ValueError("canonical QuantEvaluator result is required for full report rendering")
+        import numpy as np
         import pandas as pd
         dates = pd.DatetimeIndex(report_dates)
         ic_series = pd.Series(report_result.rank_ic_series, index=dates)
+        # "回测交易日" is the number of sessions that actually carry a RankIC.
+        # QE's valid_return_periods counts long-short periods instead, and it is
+        # zero whenever the long-short legs are unavailable, which used to print
+        # "回测交易日 0 天" for a factor with ten years of valid IC.
+        valid_ic_days = int(np.isfinite(np.asarray(report_result.rank_ic_series, dtype=float)).sum())
+        quantile_nav_matrix = np.asarray(report_result.quantile_nav, dtype=float)
+        long_short_curve = np.asarray(report_result.long_short_nav_aligned, dtype=float)
+        filled_groups = [g + 1 for g in range(quantile_nav_matrix.shape[1])
+                         if np.isfinite(quantile_nav_matrix[:, g]).any()]
+        total_groups = int(quantile_nav_matrix.shape[1])
+        ls_available = bool(np.isfinite(long_short_curve).any())
+        quantile_note = (f"{len(filled_groups)}/{total_groups} 组有成员（"
+                         + ("、".join(f"G{g}" for g in filled_groups) if filled_groups else "无")
+                         + "）" + ("；多空组合可用" if ls_available else "；多空组合不可用"))
         decile_navs = {
             "dates": dates.tolist(),
             **{
@@ -2293,7 +2341,13 @@ def stage_page_inject(factor, eval_result, *, report_result=None, report_dates=N
             "ls_winrate": report_result.win_rate,
             "g10_annual": report_result.top_quantile_annualized_return,
             "g1_annual": report_result.bottom_quantile_annualized_return,
-            "n_periods": report_result.valid_return_periods,
+            "n_periods": valid_ic_days,
+            "quantile_note": quantile_note,
+            "ls_notice": "" if ls_available else (
+                "多空组合不可用：该因子的截面取值过少，十分层两端存在空组，无法构造多空收益。"
+                "这不代表方向未翻正——本页 RankIC 与分层净值都按翻正口径给出。"),
+            "decile_notice": "" if filled_groups else (
+                "十分层净值不可用：该因子的截面取值过少，没有任何一组存在成员。"),
             "ic": ic_series,
             "decile_navs": decile_navs,
         }

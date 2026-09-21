@@ -116,6 +116,9 @@ MIGRATION_TABLE: tuple[OperatorMigrationRecord, ...] = (
 # § 统计 / 回归（statistics_regression.py）
 # ---------------------------------------------------------------------------
 OperatorRegistry.register_alias("acf", "ACF")
+# 挖掘侧习惯写法 safe_log → canonical log（2026-09-21：本轮新挖批次 1 个候选
+# 使用 safe_log，落地时 DSLUnknownOperatorError；语义按用户口径与 log 一致）。
+OperatorRegistry.register_alias("safe_log", "log")
 OperatorRegistry.register_alias("mode", "Mode")
 OperatorRegistry.register_alias("percentile", "ts_quantile")
 # ---------------------------------------------------------------------------

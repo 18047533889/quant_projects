@@ -24,6 +24,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import warnings
+
 import numpy as np
 
 from factor_engine.planner.logical_plan import PlanNode
@@ -817,6 +819,607 @@ def _rolling_recovery_fraction_expr(w: int) -> pl.Expr:
     return pl.col(_VAL).rolling_map(_fn, window_size=w, min_samples=1).over(_INST, order_by=_TS)
 
 
+
+# =====================================================================
+# R59 fast-path: per-instrument block lowering for rolling_map kernels.
+#
+# The ``rolling_map`` tier costs one Python call per (row, window) per
+# instrument; on a real 25x500 panel a single ts_quantile factor spent
+# 585 s inside this dispatch loop (R84 microbench), ts_skew 162 s,
+# ts_median_abs_deviation 111 s. The kernels below keep the exact
+# per-window formulas of the pandas authorities but evaluate them
+# vectorized: ONE Python call per (op, instrument) over a head-padded
+# sliding-window matrix (row i = chronological window of length w ending
+# at row i; NaN padding reproduces the shorter edge windows of
+# ``rolling_map``). Non-finite inputs are masked to NaN first, matching
+# the isfinite filters of the pandas references. Parity harness and
+# before/after numbers: evidence/r59/.
+# =====================================================================
+def _rolling_block_frame(
+    inner: pl.LazyFrame,
+    w: int,
+    fn,
+) -> pl.LazyFrame:
+    """Per-instrument block evaluation of ``fn(sw) -> (rows,)``.
+
+    ``sw`` has shape (rows, w), chronological, head-NaN-padded. Returns the
+    compiled frame keyed (ts, inst) with the lowered ``_VAL`` column (same
+    contract as the corr/cov list-frame paths).
+    """
+    w = max(int(w), 1)
+
+    def _one(rec: dict) -> list:
+        vals = np.asarray(rec["__blk_vals"], dtype=np.float64)
+        if vals.size == 0:
+            return []
+        padded = np.concatenate([np.full(w - 1, np.nan), vals])
+        sw = np.lib.stride_tricks.sliding_window_view(padded, w)
+        return fn(sw).tolist()
+
+    packed = (
+        inner.sort([_INST, _TS])
+        .group_by(_INST, maintain_order=True)
+        .agg(pl.col(_TS), pl.col(_VAL).alias("__blk_vals"))
+        .with_columns(
+            pl.struct("__blk_vals")
+            .map_elements(_one, return_dtype=pl.List(pl.Float64))
+            .alias("__blk_out")
+        )
+        .explode(_TS, "__blk_out")
+    )
+    return packed.select(_TS, _INST, pl.col("__blk_out").alias(_VAL))
+
+
+def _np_mask_finite(sw: np.ndarray) -> np.ndarray:
+    return np.where(np.isfinite(sw), sw, np.nan)
+
+def _np_linear_decay():
+    """Age-slot-anchored linear-decay weighted mean (R16-070 semantics).
+
+    Weights 1..w anchored to FULL-window slots; a NaN/Inf hole keeps its slot
+    weight position but drops out of both numerator and denominator. On the
+    head-padded sliding matrix the data columns of edge rows sit exactly at
+    slots (w-L+1)..w, matching the reference's ``weights[-L:]`` anchor.
+    """
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        valid = np.isfinite(sw)
+        wgt = np.arange(1, sw.shape[1] + 1, dtype=np.float64)[None, :]
+        den = (valid * wgt).sum(axis=1)
+        num = (np.where(valid, sw, 0.0) * wgt).sum(axis=1)
+        out = np.where(den > 0, num / np.where(den > 0, den, 1.0), np.nan)
+        return out
+    return _fn
+
+
+def _np_ofi_persistence(min_periods: int):
+    """lag-1 Pearson corr of the COMPACTED finite slice (x=vals[:-1], y=vals[1:]).
+
+    Fully vectorized via active-pair prefix sums: a consecutive-finite pair
+    (p, c) participates in the consuming window of row t iff ``c <= t`` and
+    ``p >= t - w + 1``, i.e. t in [c, p + w - 1].  All Pearson terms are
+    additive over pairs, so a +1/-1 difference array over that interval gives
+    exact per-window aggregates in O(n).  Gates: >= max(mp, 3) finite values
+    in the window and the CURRENT row finite (former rolling_map semantics).
+    """
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        rows, w = sw.shape
+        x = sw[:, -1]                      # chronological series (last col = current row)
+        finite = np.isfinite(x)
+        # per-window finite count: cs[t] - cs[t-w]
+        cs = np.concatenate([[0.0], np.cumsum(finite.astype(np.float64))])
+        lo = np.maximum(np.arange(rows) + 1 - w, 0)
+        cntfin = cs[np.arange(rows) + 1] - cs[lo]
+        floor = max(float(min_periods), 3.0)
+        base_nan = (~finite) | (cntfin < floor)
+
+        fidx = np.flatnonzero(finite)
+        k = fidx.size
+        out = np.full(rows, np.nan)
+        if k >= 2:
+            v = x[fidx]
+            p_idx, c_idx = fidx[:-1], fidx[1:]
+            xv, yv = v[:-1], v[1:]
+            start = c_idx
+            end = np.minimum(p_idx + (w - 1), rows - 1)
+            valid_pair = start <= end
+            start, end = start[valid_pair], end[valid_pair]
+            xv, yv = xv[valid_pair], yv[valid_pair]
+            m = start.size
+            if m:
+                add = np.zeros(rows + 1)
+                n_ = np.zeros(rows + 1)
+                sx_ = np.zeros(rows + 1)
+                sy_ = np.zeros(rows + 1)
+                sxx = np.zeros(rows + 1)
+                syy = np.zeros(rows + 1)
+                sxy = np.zeros(rows + 1)
+                for arr, vals_ in ((add, np.ones(m)), (n_, np.ones(m)), (sx_, xv), (sy_, yv),
+                                   (sxx, xv * xv), (syy, yv * yv), (sxy, xv * yv)):
+                    np.add.at(arr, start, vals_)
+                    np.add.at(arr, end + 1, -vals_)
+                cadd = np.cumsum(add)[:rows]
+                cn = np.cumsum(n_)[:rows]
+                csx = np.cumsum(sx_)[:rows]
+                csy = np.cumsum(sy_)[:rows]
+                csxx = np.cumsum(sxx)[:rows]
+                csyy = np.cumsum(syy)[:rows]
+                csxy = np.cumsum(sxy)[:rows]
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    num = cn * csxy - csx * csy
+                    dx = cn * csxx - csx * csx
+                    dy = cn * csyy - csy * csy
+                    den = np.sqrt(np.maximum(dx, 0.0) * np.maximum(dy, 0.0))
+                    r = np.where(den > 0, num / np.where(den > 0, den, 1.0), np.nan)
+                r = np.where((cn >= 2) & (dx > 0) & (dy > 0), r, np.nan)
+                out = np.where(base_nan, np.nan, r)
+        return out
+    return _fn
+
+
+def _np_ofi_reversal(min_periods: int):
+    """mean(sign[t] != sign[t-1]) over the COMPACTED finite slice pairs.
+
+    Vectorized with the same active-pair prefix sums as the persistence
+    kernel: pair (p, c) is active for consuming rows t in [c, p + w - 1].
+    Gates: >= 2 finite values in the window and the physical window length
+    >= min_periods (former rolling_map min_samples on NaN-carrying values).
+    """
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        rows, w = sw.shape
+        x = sw[:, -1]
+        finite = np.isfinite(x)
+        cs = np.concatenate([[0.0], np.cumsum(finite.astype(np.float64))])
+        lo = np.maximum(np.arange(rows) + 1 - w, 0)
+        cntfin = cs[np.arange(rows) + 1] - cs[lo]
+        base_nan = cntfin < 2
+
+        fidx = np.flatnonzero(finite)
+        k = fidx.size
+        out = np.full(rows, np.nan)
+        if k >= 2:
+            v = np.sign(x[fidx])
+            p_idx, c_idx = fidx[:-1], fidx[1:]
+            ind = (v[1:] != v[:-1]).astype(np.float64)
+            start = c_idx
+            end = np.minimum(p_idx + (w - 1), rows - 1)
+            ok = start <= end
+            start, end, ind = start[ok], end[ok], ind[ok]
+            add = np.zeros(rows + 1)
+            addw = np.zeros(rows + 1)
+            np.add.at(add, start, 1.0)
+            np.add.at(add, end + 1, -1.0)
+            np.add.at(addw, start, ind)
+            np.add.at(addw, end + 1, -ind)
+            cn = np.cumsum(add)[:rows]
+            cw = np.cumsum(addw)[:rows]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                r = np.where(cn > 0, cw / np.where(cn > 0, cn, 1.0), np.nan)
+            # rolling_map min_samples counts non-NULL samples and the lowered
+            # child emits null for non-finite values -> the effective mp gate
+            # is on the FINITE count (verified against the pandas authority).
+            gate = (cntfin >= max(float(min_periods), 2.0)) & (cn >= 1)
+            out = np.where(base_nan | ~gate, np.nan, r)
+        return out
+    return _fn
+
+
+def _np_m1_momentum_strength(min_periods: int):
+    """|PI(1+r) - 1| / std(r, ddof=1) over the COMPACTED finite slice.
+
+    NaN slots contribute a factor of exactly 1.0 to the product, which is
+    identical to dropping them (compaction). std <= 1e-12 -> 0.0 only when
+    total == 0 exactly (pandas contract); else NaN.
+    """
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        valid = np.isfinite(sw)
+        rows, w = sw.shape
+        cnt = valid.sum(axis=1)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            # sequential slot-order product: multiplying the NaN slots by an
+            # exact 1.0 keeps bit-for-bit parity with the compacted
+            # ``np.prod(1.0 + vals)`` of the pandas reference (pairwise
+            # reduction along axis would reorder and break the total == 0.0
+            # exact-zero emission contract).
+            total = np.ones(rows, dtype=np.float64)
+            for j in range(w):
+                total *= np.where(valid[:, j], 1.0 + sw[:, j], 1.0)
+            total = total - 1.0
+            rstd = np.nanstd(np.where(valid, sw, np.nan), axis=1, ddof=1)
+        den_ok = np.isfinite(rstd) & (rstd > 1e-12)
+        out = np.where(den_ok, np.abs(total) / np.where(den_ok, rstd, 1.0), np.nan)
+        zero_case = (total == 0.0) & (cnt >= int(min_periods))
+        out = np.where(~den_ok & zero_case, 0.0, out)
+        out = np.where(cnt < int(min_periods), np.nan, out)
+        return out
+    return _fn
+
+
+def _np_m1_speed_change(fast_window: int, min_periods: int):
+    """mom(fast) - mom(slow); the fast window is the trailing ``fw`` columns
+    of the slow padded window. Gates: current row finite, cnt_slow >= mp,
+    cnt_fast >= 2."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        valid = np.isfinite(sw)
+        rows, w = sw.shape
+        fw = max(int(fast_window), 1)
+        fvalid = valid[:, -fw:]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            total_slow = np.ones(rows, dtype=np.float64)
+            for j in range(w):
+                total_slow *= np.where(valid[:, j], 1.0 + sw[:, j], 1.0)
+            total_slow = total_slow - 1.0
+            total_fast = np.ones(rows, dtype=np.float64)
+            for j in range(w - fw, w):
+                total_fast *= np.where(fvalid[:, j - (w - fw)], 1.0 + sw[:, j], 1.0)
+            total_fast = total_fast - 1.0
+        cnt_slow = valid.sum(axis=1)
+        cnt_fast = fvalid.sum(axis=1)
+        out = total_fast - total_slow
+        out = np.where(~valid[:, -1], np.nan, out)
+        out = np.where((cnt_slow < int(min_periods)) | (cnt_fast < 2), np.nan, out)
+        return out
+    return _fn
+
+
+
+
+def _np_roll_median_ad(scale: float, min_periods: int):
+    """Median Absolute Deviation over finite window values (pandas authority)."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        m = _np_mask_finite(sw)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            med = np.nanmedian(m, axis=1)
+            dev = np.abs(m - med[:, None])
+            out = np.nanmedian(dev, axis=1) * float(scale)
+        n = np.isfinite(m).sum(axis=1)
+        out[n < min_periods] = np.nan
+        return out
+    return _fn
+
+
+def _np_roll_mean_ad(min_periods: int = 1):
+    """Mean Absolute Deviation over finite window values."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        m = _np_mask_finite(sw)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            mu = np.nanmean(m, axis=1)
+            dev = np.abs(m - mu[:, None])
+            out = np.nanmean(dev, axis=1)
+        n = np.isfinite(m).sum(axis=1)
+        out[n < min_periods] = np.nan
+        return out
+    return _fn
+
+
+def _np_roll_product(min_periods: int = 1):
+    """Rolling product matching the _stable_product pandas authority:
+    NaN rows are skipped, any Inf poisons the window, a zero window yields 0,
+    the sign is the true product sign, and overflow maps to NaN.  Implemented
+    with a vectorized frexp mantissa/exponent decomposition (no log
+    cancellation, no intermediate overflow)."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        finite = np.isfinite(sw)
+        has_inf = np.any(np.isinf(sw), axis=1)
+        has_zero = np.any((sw == 0.0) & finite, axis=1)
+        n = finite.sum(axis=1)
+        # frexp decomposition with neutral 1.0 for skipped (non-finite) rows
+        m, e = np.frexp(np.where(finite, sw, 1.0))
+        mant = np.prod(m, axis=1)
+        m2, e2 = np.frexp(mant)
+        # prod = (prod m_i) * 2**(sum e_i) = m2 * 2**(sum e_i + e2)
+        expo = e.sum(axis=1) + e2
+        with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+            out = np.ldexp(m2, expo)
+        out[expo > 1023] = np.nan
+        out[~np.isfinite(out)] = np.nan
+        out[has_inf] = np.nan
+        out[has_zero & ~has_inf] = 0.0
+        out[n < min_periods] = np.nan
+        return out
+    return _fn
+
+
+def _np_roll_argext(pick: str):
+    """Rolling distance to the window extreme (0 = current bar; ties pick the
+    most recent occurrence; an all-invalid window is NULL)."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            if pick == "max":
+                extreme = np.nanmax(sw, axis=1)
+            else:
+                extreme = np.nanmin(sw, axis=1)
+        finite = np.isfinite(sw)
+        eq = (sw == extreme[:, None]) & finite
+        has = eq.any(axis=1)
+        age = eq[:, ::-1].argmax(axis=1).astype(np.float64)
+        out = np.where(has, age, np.nan)
+        out[~finite.any(axis=1)] = np.nan
+        return out
+    return _fn
+
+
+def _np_roll_time_slope(min_periods: int = 2):
+    """OLS slope on within-window physical positions of the valid cells
+    (gap-compressed re-centering identical to the pandas reference)."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        finite = np.isfinite(sw)
+        n = finite.sum(axis=1).astype(np.float64)
+        idx = np.arange(sw.shape[1], dtype=np.float64)
+        vf = np.where(finite, sw, 0.0)
+        st = (finite * idx).sum(axis=1)
+        stt = (finite * (idx * idx)).sum(axis=1)
+        sy = vf.sum(axis=1)
+        sty = (vf * idx).sum(axis=1)
+        denom = n * stt - st * st
+        num = n * sty - st * sy
+        out = np.where(np.abs(denom) > 0.0, num / np.where(denom == 0.0, 1.0, denom), np.nan)
+        out[n < min_periods] = np.nan
+        return out
+    return _fn
+
+
+def _np_roll_monotonicity(min_periods: int):
+    """Kendall-style (C-D)/(C+D) over finite pairs in chronological order,
+    ties skipped — identical to the former O(n^2) per-window loop."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        rows, w = sw.shape
+        finite = np.isfinite(sw)
+        n = finite.sum(axis=1)
+        out = np.full(rows, np.nan)
+        iu = np.triu(np.ones((w, w), dtype=bool), k=1)
+        chunk = max(1, int(2_000_000 // max(w * w, 1)))
+        with np.errstate(invalid="ignore"):
+            for s0 in range(0, rows, chunk):
+                s1 = min(rows, s0 + chunk)
+                v = np.where(finite[s0:s1], sw[s0:s1], np.nan)
+                d = v[:, :, None] - v[:, None, :]
+                good = finite[s0:s1, :, None] & finite[s0:s1, None, :] & iu
+                # d[i,j] = v[i]-v[j]; pair (i,j) is concordant (C) when the
+                # LATER value is larger, i.e. d < 0 (mirrors the pandas
+                # reference where val_diff = v[j]-v[i] > 0 with j > i).
+                c = np.count_nonzero((d < 0) & good, axis=(1, 2)).astype(np.float64)
+                dd = np.count_nonzero((d > 0) & good, axis=(1, 2)).astype(np.float64)
+                tot = c + dd
+                out[s0:s1] = np.where(tot > 0, (c - dd) / np.where(tot == 0, 1.0, tot), np.nan)
+        out[n < min_periods] = np.nan
+        return out
+    return _fn
+
+
+def _np_trailing_gather(sw: np.ndarray):
+    """Gather the trailing contiguous finite run of each window row.
+
+    Returns (values, run_len): values[i, k] = run element k (NaN beyond the
+    run); run_len[i] = length of the finite run ending at the last column.
+    Matches the pandas ``_trailing_contiguous`` authority (a non-finite
+    current row yields an empty run).
+    """
+    rows, w = sw.shape
+    idx = np.arange(w)
+    valid = np.isfinite(sw)
+    last_bad = np.where(~valid, idx, -1)
+    last_bad = np.maximum.accumulate(last_bad, axis=1)
+    run = (w - 1 - last_bad[:, -1]).astype(np.int64)
+    start = (w - run).astype(np.int64)
+    pos = start[:, None] + idx[None, :]
+    within = idx[None, :] < run[:, None]
+    pos = np.where(within, pos, 0)
+    vals = np.take_along_axis(sw, np.clip(pos, 0, w - 1), axis=1)
+    vals = np.where(within, vals, np.nan)
+    return vals, run
+
+
+def _np_roll_turning_point_ratio():
+    """Direction-reversal ratio over the trailing contiguous segment."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        vals, run = _np_trailing_gather(sw)
+        with np.errstate(invalid="ignore"):
+            d = np.diff(vals, axis=1)
+            prod = d[:, 1:] * d[:, :-1]
+            turns = np.count_nonzero(prod < 0, axis=1).astype(np.float64)
+        denom = (run - 2).astype(np.float64)
+        out = np.where(denom > 0, turns / np.where(denom == 0, 1.0, denom), np.nan)
+        out[run < 4] = np.nan
+        return out
+    return _fn
+
+
+def _np_roll_endpoint_deviation(min_periods: int):
+    """(x_t - OLS prediction) / residual std over the trailing contiguous
+    segment; centered two-pass moments keep price-scale precision."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        rows, w = sw.shape
+        vals, run = _np_trailing_gather(sw)
+        idx = np.arange(w, dtype=np.float64)
+        kmask = idx[None, :] < run[:, None]
+        n = run.astype(np.float64)
+        sx = np.where(kmask, idx, 0.0).sum(axis=1)
+        sy = np.where(np.isfinite(vals), vals, 0.0).sum(axis=1)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            xbar = sx / np.maximum(n, 1.0)
+            ybar = sy / np.maximum(n, 1.0)
+            xc = np.where(kmask, idx[None, :] - xbar[:, None], 0.0)
+            yc = np.where(np.isfinite(vals), vals - ybar[:, None], 0.0)
+            sxxc = (xc * xc).sum(axis=1)
+            sxyc = (xc * yc).sum(axis=1)
+            syyc = (yc * yc).sum(axis=1)
+            b = np.where(sxxc > 0, sxyc / np.where(sxxc == 0, 1.0, sxxc), 0.0)
+            a = ybar - b * xbar
+            resid2 = syyc - 2.0 * b * sxyc + b * b * sxxc
+            sigma = np.sqrt(np.maximum(resid2, 0.0) / np.maximum(n, 1.0))
+            x_hat = a + b * (n - 1.0)
+            last = vals[np.arange(rows), np.maximum(run - 1, 0)]
+            num = last - x_hat
+            out = num / np.where(np.abs(sigma) >= _EPS_TINY, sigma, 1.0)
+            out = np.where(
+                np.abs(sigma) < _EPS_TINY,
+                np.where(np.abs(num) < _EPS_TINY, 0.0, np.nan),
+                out,
+            )
+        out[run < min_periods] = np.nan
+        return out
+    return _fn
+
+
+def _np_roll_vol_shift(min_periods: int):
+    """log(second-half std / first-half std) with the physical-midpoint split
+    of the trailing contiguous segment (no gap compression)."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        rows, w = sw.shape
+        vals, run = _np_trailing_gather(sw)
+        seg = np.where(np.isfinite(vals), vals, np.nan)
+        # physical window length of each row (edge rows have shorter windows,
+        # exactly like the rolling_map reference): n_i = min(i+1, w)
+        n_phys = np.minimum(np.arange(rows) + 1, w).astype(np.float64)
+        mid = n_phys // 2
+        gap = n_phys - run
+        first_len = np.minimum(np.maximum(mid - gap, 0), run).astype(np.int64)
+        idx = np.arange(w)
+        m1 = idx[None, :] < first_len[:, None]
+        m2 = (idx[None, :] >= first_len[:, None]) & (idx[None, :] < run[:, None])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            def _std(mask):
+                cnt = mask.sum(axis=1).astype(np.float64)
+                ssum = np.where(mask, seg, 0.0).sum(axis=1)
+                mu = np.where(cnt > 0, ssum / np.maximum(cnt, 1.0), 0.0)
+                dev2 = np.where(mask, (seg - mu[:, None]) ** 2, 0.0).sum(axis=1)
+                return np.sqrt(np.maximum(dev2, 0.0) / np.maximum(cnt, 1.0)), cnt
+
+            sd1, n1 = _std(m1)
+            sd2, n2 = _std(m2)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            out = np.log(sd2 / sd1)
+        out[(n1 < 2) | (n2 < 2)] = np.nan
+        out[(sd1 <= 0) | (sd2 <= 0)] = np.nan
+        out[run < min_periods] = np.nan
+        return out
+    return _fn
+
+
+def _np_roll_running_peak(sw: np.ndarray):
+    """Running peak within each window row, reset to -inf at non-finite rows."""
+    rows, w = sw.shape
+    valid = np.isfinite(sw)
+    peak = np.full(rows, -np.inf)
+    pk = np.full((rows, w), -np.inf)
+    for j in range(w):
+        vj = valid[:, j]
+        xj = np.where(vj, sw[:, j], -np.inf)
+        peak = np.maximum(peak, xj)
+        pk[:, j] = peak
+        peak = np.where(vj, peak, -np.inf)
+    return valid, pk
+
+
+def _np_roll_under_water():
+    """Fraction of valid window rows below the running peak (current row must
+    be finite; the peak never crosses a gap)."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        valid, pk = _np_roll_running_peak(sw)
+        under = valid & (sw < pk)
+        cnt = under.sum(axis=1)
+        denom = valid.sum(axis=1).astype(np.float64)
+        out = cnt / np.maximum(denom, 1.0)
+        out[(~valid.any(axis=1)) | (~valid[:, -1])] = np.nan
+        return out
+    return _fn
+
+
+def _np_roll_drawdown_duration():
+    """Count of consecutive trailing rows below the running peak."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        rows, w = sw.shape
+        valid, pk = _np_roll_running_peak(sw)
+        under = valid & (sw < pk)
+        # streak = trailing run of `under` ending at the current row:
+        # distance from the last row that is NOT under (break point).
+        idx = np.arange(w)
+        last_break = np.where(~under, idx, -1).max(axis=1)
+        out = (w - 1 - last_break).astype(np.float64)
+        out[(~valid.any(axis=1)) | (~valid[:, -1])] = np.nan
+        return out
+    return _fn
+
+
+def _np_roll_recovery_fraction():
+    """Peak-trough recovery progress clip((x_t - T)/(P - T + eps), 0, 1) over
+    the trailing contiguous segment (most recent peak anchor)."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        w = sw.shape[1]
+        vals, run = _np_trailing_gather(sw)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            p = np.nanmax(vals, axis=1)
+        eqp = (vals == p[:, None]) & np.isfinite(vals)
+        # k_star = steps from the ROW end (padded array); the peak row position
+        # is therefore (w-1) - k_star directly (NOT run-1-k_star — the segment
+        # sits at the tail of the padded row).
+        k_star = eqp[:, ::-1].argmax(axis=1)
+        idx = np.arange(w)
+        g_star = np.maximum(w - 1 - k_star, 0)
+        tmask = idx[None, :] >= g_star[:, None]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            t = np.min(np.where(tmask & np.isfinite(vals), vals, np.inf), axis=1)
+        last = sw[:, -1]
+        all_pos = np.all((vals > 0) | ~np.isfinite(vals), axis=1)
+        with np.errstate(invalid="ignore"):
+            out = (last - t) / (p - t + _EPS_TINY)
+            out = np.clip(np.where((p - t) <= _EPS_TINY, 1.0, out), 0.0, 1.0)
+        out[~all_pos] = np.nan
+        out[run < 2] = np.nan
+        return out
+    return _fn
+
+
+def _np_roll_kurt():
+    """Unbiased Fisher excess kurtosis over FULL finite windows (the active
+    StableTsKurt authority); partial or non-finite windows are NaN."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        finite = np.isfinite(sw)
+        full = finite.all(axis=1)
+        cnt = finite.sum(axis=1).astype(np.float64)
+        v = np.where(finite, sw, 0.0)
+        mean = v.sum(axis=1) / np.maximum(cnt, 1.0)
+        centered = np.where(finite, sw - mean[:, None], 0.0)
+        second = (centered * centered).sum(axis=1)
+        fourth = (centered ** 4).sum(axis=1)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            biased = cnt * fourth / np.where(second > 0, second * second, 1.0) - 3.0
+            out = ((cnt - 1.0) / ((cnt - 2.0) * (cnt - 3.0))) * ((cnt + 1.0) * biased + 6.0)
+        out[~full] = np.nan
+        out[second <= 0] = np.nan
+        return out
+    return _fn
+
+
+def _np_roll_quantile_range(lo: float, hi: float, min_periods: int):
+    """Rolling (q_hi - q_lo) spread of the magnitude-normalized finite window
+    (identical to robust_stats._quantile_spread)."""
+    def _fn(sw: np.ndarray) -> np.ndarray:
+        m = _np_mask_finite(sw)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            mag = np.nanmax(np.abs(m), axis=1)
+            unit = m / np.where(mag == 0, 1.0, mag)[:, None]
+            qh = np.nanquantile(unit, hi, axis=1)
+            ql = np.nanquantile(unit, lo, axis=1)
+            out = (qh - ql) * np.where(mag == 0, 0.0, mag)
+        n = np.isfinite(m).sum(axis=1)
+        out = np.where(np.isfinite(out), out, np.nan)
+        out[n < min_periods] = np.nan
+        out[mag == 0] = 0.0
+        return out
+    return _fn
+
+
 def _ts_sharpe_min_periods(w: int) -> int:
     """ts_sharpe 最小有效样本数：max(2, w//3)。"""
     return max(2, w // 3)
@@ -1224,6 +1827,130 @@ def _rolling_cov_centered_list_frame(
     value = ((pl.col("__cov_cross") / (pl.col("__cov_n") - ddof)) * pl.col("__cov_xscale")) * pl.col("__cov_yscale")
     value = pl.when((pl.col("__cov_xscale") == 0.0) | (pl.col("__cov_yscale") == 0.0)).then(0.0).otherwise(value)
     return staged.select(_TS, _INST, pl.when(ready).then(value).otherwise(None).alias(_VAL))
+
+
+def _np_pair_windows(xs: np.ndarray, ys: np.ndarray, w: int):
+    """Head-NaN-padded sliding windows of two instrument series (chronological)."""
+    px = np.concatenate([np.full(w - 1, np.nan), xs])
+    py = np.concatenate([np.full(w - 1, np.nan), ys])
+    out = np.full(xs.size, np.nan)
+    return (
+        np.lib.stride_tricks.sliding_window_view(px, w),
+        np.lib.stride_tricks.sliding_window_view(py, w),
+        out,
+    )
+
+
+def _np_pair_corr(w: int, mp: int):
+    """Vectorized twin of ``_rolling_corr_centered_list_frame``: x0-anchored,
+    pairwise-finite, per-window two-pass centering (same operation order as
+    the list-frame path, evaluated once per instrument instead of per row)."""
+    def _one(xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
+        swx, swy, out = _np_pair_windows(xs, ys, w)
+        if out.size == 0:
+            return out
+        pair = np.isfinite(swx) & np.isfinite(swy)
+        n = pair.sum(axis=1)
+        rows_idx = np.arange(out.size)
+        has = n > 0
+        # anchor = NEWEST pair-valid position (list-order first element)
+        last = w - 1 - pair[:, ::-1].argmax(axis=1)
+        safe_last = np.maximum(last, 0)
+        x0 = np.where(has, swx[rows_idx, safe_last], 0.0)
+        y0 = np.where(has, swy[rows_idx, safe_last], 0.0)
+        xo = np.where(pair, swx - x0[:, None], 0.0)
+        yo = np.where(pair, swy - y0[:, None], 0.0)
+        xmean = xo.sum(axis=1) / np.maximum(n, 1)
+        ymean = yo.sum(axis=1) / np.maximum(n, 1)
+        xc = np.where(pair, xo - xmean[:, None], 0.0)
+        yc = np.where(pair, yo - ymean[:, None], 0.0)
+        ssx = (xc * xc).sum(axis=1)
+        ssy = (yc * yc).sum(axis=1)
+        cross = (xc * yc).sum(axis=1)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            val = cross / np.sqrt(ssx * ssy)
+        out[:] = np.where((n >= mp) & (ssx > 0) & (ssy > 0), val, np.nan)
+        out[~has] = np.nan
+        return out
+    return _one
+
+
+def _np_pair_cov(w: int, mp: int, ddof: int):
+    """Vectorized twin of ``_rolling_cov_centered_list_frame`` (normalized
+    offsets, ddof-corrected, zero-scale windows map to 0.0)."""
+    def _one(xs: np.ndarray, ys: np.ndarray) -> np.ndarray:
+        swx, swy, out = _np_pair_windows(xs, ys, w)
+        if out.size == 0:
+            return out
+        pair = np.isfinite(swx) & np.isfinite(swy)
+        n = pair.sum(axis=1)
+        rows_idx = np.arange(out.size)
+        has = n > 0
+        last = w - 1 - pair[:, ::-1].argmax(axis=1)
+        safe_last = np.maximum(last, 0)
+        x0 = np.where(has, swx[rows_idx, safe_last], 0.0)
+        y0 = np.where(has, swy[rows_idx, safe_last], 0.0)
+        xo = np.where(pair, swx - x0[:, None], 0.0)
+        yo = np.where(pair, swy - y0[:, None], 0.0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            xscale = np.nanmax(np.where(pair, np.abs(swx - x0[:, None]), np.nan), axis=1)
+            yscale = np.nanmax(np.where(pair, np.abs(swy - y0[:, None]), np.nan), axis=1)
+        xscale = np.nan_to_num(xscale, nan=0.0)
+        yscale = np.nan_to_num(yscale, nan=0.0)
+        xn = np.where(pair, xo / np.where(xscale > 0, xscale, 1.0)[:, None], 0.0)
+        yn = np.where(pair, yo / np.where(yscale > 0, yscale, 1.0)[:, None], 0.0)
+        xmean = xn.sum(axis=1) / np.maximum(n, 1)
+        ymean = yn.sum(axis=1) / np.maximum(n, 1)
+        xc = np.where(pair, xn - xmean[:, None], 0.0)
+        yc = np.where(pair, yn - ymean[:, None], 0.0)
+        cross = (xc * yc).sum(axis=1)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            val = (cross / np.maximum(n - ddof, 1)) * xscale * yscale
+        val = np.where((xscale == 0.0) | (yscale == 0.0), 0.0, val)
+        out[:] = np.where((n >= mp) & (n > ddof), val, np.nan)
+        out[~has] = np.nan
+        return out
+    return _one
+
+
+def _rolling_pair_block_frame(
+    inner: pl.LazyFrame,
+    x: pl.Expr,
+    y: pl.Expr,
+    window: int,
+    min_periods: int,
+    *,
+    kind: str,
+    ddof: int = 0,
+) -> pl.LazyFrame:
+    """R59: per-instrument block evaluation of pairwise rolling corr/cov.
+
+    Same semantics as the list-frame paths (which remain available) but with
+    ONE Python call per instrument instead of O(w)-column list machinery per
+    row; on a real 25x500 panel this cuts a ts_corr factor from ~52 s to
+    single-digit seconds.
+    """
+    w = max(int(window), 1)
+    mp = max(int(min_periods), 1)
+    fn = _np_pair_corr(w, mp) if kind == "corr" else _np_pair_cov(w, mp, ddof)
+    staged = inner.with_columns(x.alias("__pb_x"), y.alias("__pb_y"))
+    packed = (
+        staged.sort([_INST, _TS])
+        .group_by(_INST, maintain_order=True)
+        .agg(pl.col(_TS), pl.col("__pb_x"), pl.col("__pb_y"))
+        .with_columns(
+            pl.struct("__pb_x", "__pb_y")
+            .map_elements(
+                lambda rec: fn(np.asarray(rec["__pb_x"], dtype=np.float64),
+                               np.asarray(rec["__pb_y"], dtype=np.float64)).tolist(),
+                return_dtype=pl.List(pl.Float64),
+            )
+            .alias("__pb_out")
+        )
+        .explode(_TS, "__pb_out")
+    )
+    return packed.select(_TS, _INST, pl.col("__pb_out").alias(_VAL))
 
 
 def _ewm_binary_map_groups(joined: pl.LazyFrame, span: int, *, corr: bool) -> pl.LazyFrame:
@@ -2187,9 +2914,9 @@ def _try_ts_pair_from_base_columns(
         if w == 2:
             expr = _rolling_corr_centered_expr(lcol, rcol, w, mp).over(_INST, order_by=_TS)
         else:
-            return _rolling_corr_centered_list_frame(base, lcol, rcol, w, mp)
+            return _rolling_pair_block_frame(base, lcol, rcol, w, mp, kind="corr")
     elif op == "ts_cov":
-        return _rolling_cov_centered_list_frame(base, lcol, rcol, w, mp, ddof)
+        return _rolling_pair_block_frame(base, lcol, rcol, w, mp, kind="cov", ddof=ddof)
     elif op == "ts_beta":
         expr = polars_ts_beta_expr(
             lcol, rcol, window=w, min_periods=mp, ddof=ddof
@@ -2782,8 +3509,8 @@ def _compile_polars_impl(
                 lcol, rcol, pspec.size, pspec.min_periods
             ).over(_INST, order_by=_TS)
             return joined.with_columns(corr.alias(_VAL)).select(_TS, _INST, _VAL)
-        return _rolling_corr_centered_list_frame(
-            joined, lcol, rcol, pspec.size, pspec.min_periods
+        return _rolling_pair_block_frame(
+            joined, lcol, rcol, pspec.size, pspec.min_periods, kind="corr"
         )
 
     if op == "ts_cov":
@@ -2811,8 +3538,8 @@ def _compile_polars_impl(
             .then(None)
             .otherwise(pl.col("_y"))
         )
-        return _rolling_cov_centered_list_frame(
-            joined, lcol, rcol, pspec.size, pspec.min_periods, pspec.ddof
+        return _rolling_pair_block_frame(
+            joined, lcol, rcol, pspec.size, pspec.min_periods, kind="cov", ddof=pspec.ddof
         )
 
     if op == "ts_beta":
@@ -4207,7 +4934,9 @@ def _compile_polars_impl(
         if inner is None:
             return None
         w = _window_int(node)
-        return inner.with_columns(_rolling_linear_decay_expr(w).alias(_VAL))
+        # R60: block-frame lowering of the age-slot-anchored linear-decay
+        # weighted mean (formerly rolling_map per row).
+        return _rolling_block_frame(inner, w, _np_linear_decay())
 
     if op == "ts_mad":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -4216,13 +4945,7 @@ def _compile_polars_impl(
         spec = _window_spec(node)
         mp = spec.min_periods if node.attrs.get("min_periods") is not None else spec.size
         scale = _float_attr(node, "scale", default=1.0)
-        return inner.with_columns(
-            _rolling_median_abs_dev_expr(
-                spec.size,
-                min_periods=mp,
-                scale=scale,
-            ).alias(_VAL)
-        )
+        return _rolling_block_frame(inner, spec.size, _np_roll_median_ad(scale, mp))
 
     if op == "ts_quantile":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -4233,7 +4956,15 @@ def _compile_polars_impl(
         pos_p = _literal_value(node, 1)
         if pos_p is not None:
             p = pos_p
-        return inner.with_columns(_rolling_quantile_expr(w, p).alias(_VAL))
+        # R59: native rolling_quantile (linear interpolation) — verified
+        # bit-for-bit against the pandas rolling quantile authority.
+        return inner.with_columns(
+            pl.col(_VAL)
+            .fill_nan(None)
+            .rolling_quantile(p, interpolation="linear", window_size=w, min_samples=1)
+            .over(_INST, order_by=_TS)
+            .alias(_VAL)
+        )
 
     if op == "ts_product":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -4241,51 +4972,58 @@ def _compile_polars_impl(
             return None
         spec = _window_spec(node)
         mp = spec.min_periods if node.attrs.get("min_periods") is not None else spec.size
-        return inner.with_columns(
-            _rolling_product_expr(spec.size, min_periods=mp).alias(_VAL)
-        )
+        return _rolling_block_frame(inner, spec.size, _np_roll_product(mp))
 
     if op == "ts_median_abs_deviation":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
-        return inner.with_columns(_rolling_median_abs_dev_expr(w).alias(_VAL))
+        return _rolling_block_frame(inner, w, _np_roll_median_ad(1.0, 1))
 
     if op == "ts_mean_abs_deviation":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
-        return inner.with_columns(_rolling_mean_abs_dev_expr(w).alias(_VAL))
+        return _rolling_block_frame(inner, w, _np_roll_mean_ad(1))
 
     if op == "ts_skew":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
-        return inner.with_columns(_rolling_skew_expr(w).alias(_VAL))
+        # R59: native rolling_skew (bias=False) — matches pandas rolling
+        # skew (G1) to 1.4e-15; min_samples=3 mirrors the pandas <3 gate.
+        # pandas .skew() is NaN on a zero-variance window — gate on std>0.
+        _skew = pl.col(_VAL).fill_nan(None).rolling_skew(w, bias=False, min_samples=3)
+        _sd = pl.col(_VAL).fill_nan(None).rolling_std(w, min_samples=2)
+        return inner.with_columns(
+            pl.when(_sd.is_not_null() & (_sd > 0.0)).then(_skew).otherwise(None)
+            .over(_INST, order_by=_TS)
+            .alias(_VAL)
+        )
 
     if op == "ts_argmax":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
-        return inner.with_columns(_rolling_argext_expr(w, pick="max").alias(_VAL))
+        return _rolling_block_frame(inner, w, _np_roll_argext("max"))
 
     if op == "ts_argmin":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
-        return inner.with_columns(_rolling_argext_expr(w, pick="min").alias(_VAL))
+        return _rolling_block_frame(inner, w, _np_roll_argext("min"))
 
     if op in {"Slope", "ts_time_slope"}:
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node)
-        return inner.with_columns(_rolling_time_slope_expr(w).alias(_VAL))
+        return _rolling_block_frame(inner, w, _np_roll_time_slope(2))
 
     if op == "ts_regression_slope":
         if len(node.inputs) < 2:
@@ -4426,29 +5164,7 @@ def _compile_polars_impl(
         w = _window_int(node, default=20)
         if w < 4:
             raise ValueError("ts_kurt window must be >= 4")
-
-        def _kurt(arr: np.ndarray) -> float:
-            # Match the active StableTsKurt authority: full finite windows,
-            # unbiased Fisher excess kurtosis, and NaN for zero variance.
-            values = np.asarray(arr, dtype=np.float64)
-            if len(values) < w or not np.isfinite(values).all():
-                return np.nan
-            count = len(values)
-            centered = values - float(np.mean(values))
-            second = float(np.sum(centered * centered))
-            if second <= 0.0:
-                return np.nan
-            fourth = float(np.sum(centered ** 4))
-            biased_excess = count * fourth / (second * second) - 3.0
-            return float(
-                (count - 1)
-                / ((count - 2) * (count - 3))
-                * ((count + 1) * biased_excess + 6.0)
-            )
-
-        return inner.with_columns(
-            pl.col(_VAL).rolling_map(_kurt, window_size=w, min_samples=w).over(_INST, order_by=_TS).alias(_VAL)
-        )
+        return _rolling_block_frame(inner, w, _np_roll_kurt())
 
     if op == "ts_moment":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -4831,12 +5547,7 @@ def _compile_polars_impl(
             if node.inputs[4].op == "literal":
                 raw_mp = node.inputs[4].attrs.get("value")
         mp=_auto_min_periods(w,None if raw_mp is None else strict_integer(raw_mp,"min_periods",minimum=1))
-        def spread(values):
-            arr=np.asarray(values,dtype=float)
-            finite=arr[np.isfinite(arr)]
-            return _quantile_spread(finite,lo,hi) if len(finite)>=mp else np.nan
-        expr=pl.col(_VAL).rolling_map(spread,window_size=w,min_samples=1).over(_INST,order_by=_TS)
-        return inner.with_columns(expr.alias(_VAL))
+        return _rolling_block_frame(inner, w, _np_roll_quantile_range(lo, hi, mp))
 
     if op == "ts_quantile_skew":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -4956,18 +5667,14 @@ def _compile_polars_impl(
             return None
         w = _window_int(node, default=20)
         mp = _int_attr(node, "min_periods", input_index=1, default=3)
-        return inner.with_columns(
-            _rolling_monotonicity_expr(w, min_periods=max(3, mp)).alias(_VAL)
-        )
+        return _rolling_block_frame(inner, w, _np_roll_monotonicity(max(3, mp)))
 
     if op == "ts_turning_point_ratio":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = _window_int(node, default=60)
-        return inner.with_columns(
-            _rolling_turning_point_ratio_expr(w).alias(_VAL)
-        )
+        return _rolling_block_frame(inner, w, _np_roll_turning_point_ratio())
 
     if op == "ts_endpoint_deviation":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -4975,9 +5682,7 @@ def _compile_polars_impl(
             return None
         w = _window_int(node, default=20)
         mp = _int_attr(node, "min_periods", input_index=1, default=3)
-        return inner.with_columns(
-            _rolling_endpoint_deviation_expr(w, min_periods=max(3, mp)).alias(_VAL)
-        )
+        return _rolling_block_frame(inner, w, _np_roll_endpoint_deviation(max(3, mp)))
 
     if op == "ts_vol_shift_score":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
@@ -4985,36 +5690,28 @@ def _compile_polars_impl(
             return None
         w = _window_int(node, default=20)
         mp = _int_attr(node, "min_periods", input_index=1, default=5)
-        return inner.with_columns(
-            _rolling_vol_shift_score_expr(w, min_periods=max(4, mp)).alias(_VAL)
-        )
+        return _rolling_block_frame(inner, w, _np_roll_vol_shift(max(4, mp)))
 
     if op == "ts_time_under_water":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = max(_window_int(node, default=20), 2)
-        return inner.with_columns(
-            _rolling_time_under_water_expr(w).alias(_VAL)
-        )
+        return _rolling_block_frame(inner, w, _np_roll_under_water())
 
     if op == "ts_current_drawdown_duration":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = max(_window_int(node, default=20), 2)
-        return inner.with_columns(
-            _rolling_drawdown_duration_expr(w).alias(_VAL)
-        )
+        return _rolling_block_frame(inner, w, _np_roll_drawdown_duration())
 
     if op == "ts_recovery_fraction":
         inner = _compile_child(node, 0, base, parent_op=op, ctx=ctx, memo=memo)
         if inner is None:
             return None
         w = max(_window_int(node, default=60), 2)
-        return inner.with_columns(
-            _rolling_recovery_fraction_expr(w).alias(_VAL)
-        )
+        return _rolling_block_frame(inner, w, _np_roll_recovery_fraction())
 
     # =====================================================================
     # wave3 flow/momentum/quality window family (2026-09-08) — pure native
@@ -5085,37 +5782,10 @@ def _compile_polars_impl(
             return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
         if op == "ofi_imbalance_persistence":
-            # lag-1 Pearson correlation of the COMPACTED finite slice
-            # (x = vals[:-1], y = vals[1:] after dropping non-finite rows).
-            # NaN rows shift the pairing (compacted), which rolling_corr over
-            # raw rows cannot express — use rolling_map (python_rolling tier).
-            def _persistence_fn(arr: np.ndarray) -> float:
-                arr = np.asarray(arr, dtype=np.float64)
-                vals = arr[np.isfinite(arr)]
-                if vals.size < mp or vals.size < 3:
-                    # pandas: x=vals[:-1], y=vals[1:] need >= 2 points each;
-                    # with mp >= 3 the mp gate already covers size < 3, but a
-                    # zero-size window still fails closed here.
-                    return np.nan
-                x = vals[:-1]
-                y = vals[1:]
-                sx = float(np.std(x))
-                sy = float(np.std(y))
-                if sx <= 0 or sy <= 0:
-                    return np.nan
-                return float(np.corrcoef(x, y)[0, 1])
-
-            # pandas kernel also gates on the CURRENT row being finite.
-            expr = (
-                pl.when(v_finite.is_null())
-                .then(None)
-                .otherwise(
-                    pl.col(_VAL)
-                    .rolling_map(_persistence_fn, window_size=w, min_samples=mp)
-                    .over(_INST, order_by=_TS)
-                )
-            )
-            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+            # R60: block-frame lowering (formerly rolling_map per row). The
+            # kernel keeps the COMPACTED finite-slice lag-1 corr semantics and
+            # applies the current-row-finite gate internally.
+            return _rolling_block_frame(inner, w, _np_ofi_persistence(mp))
 
         if op == "ofi_abs_imbalance_trend":
             # sign(sv)*|sv|/(|sv|+1e-12) regressed on the COMPACTED finite-slice
@@ -5173,26 +5843,8 @@ def _compile_polars_impl(
             return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
         if op == "ofi_reversal_rate":
-            # mean(sign[t] != sign[t-1]) over the COMPACTED finite slice
-            # pairs.  A pair's window membership depends on the partner row's
-            # position relative to the CONSUMING window start (pairs may span
-            # NaN gaps), so a pure per-row rolling flag cannot express it
-            # exactly — use rolling_map over the window slice (same tier as
-            # ts_product / WMA: POLARS_LONG_PYTHON_ROLLING, not native).
-            def _reversal_fn(arr: np.ndarray) -> float:
-                arr = np.asarray(arr, dtype=np.float64)
-                valid = arr[np.isfinite(arr)]
-                if valid.size < 2:
-                    return np.nan
-                signs = np.sign(valid)
-                return float(np.mean(signs[1:] != signs[:-1]))
-
-            expr = (
-                pl.col(_VAL)
-                .rolling_map(_reversal_fn, window_size=w, min_samples=mp)
-                .over(_INST, order_by=_TS)
-            )
-            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+            # R60: block-frame lowering (formerly rolling_map per row).
+            return _rolling_block_frame(inner, w, _np_ofi_reversal(mp))
 
         if op == "sv_net_flow_direction":
             # mean(sign(sv) * |sv|/mean|sv|).  mean|sv| is a per-window
@@ -5250,24 +5902,11 @@ def _compile_polars_impl(
             return float(np.prod(1.0 + vals) - 1.0)
 
         if op == "m1_momentum_strength":
-            # |Π(1+r) - 1| / std(r, ddof=1) over the COMPACTED finite slice.
-            # Π(1+r) can go NEGATIVE (r < -1), so log-space summation is not
-            # exact — use rolling_map (python_rolling tier).  std <= 1e-12:
-            # total == 0 -> 0.0, else NaN (pandas contract).
-            total = (
-                pl.col(_VAL)
-                .rolling_map(_compound_total, window_size=w, min_samples=1)
-                .over(_INST, order_by=_TS)
-            )
-            rstd = v_finite.rolling_std(window_size=w, min_samples=1, ddof=1).over(_INST, order_by=_TS)
-            expr = gate.when(rstd.is_null() | (rstd <= 1e-12)).then(None).otherwise(
-                total.abs() / rstd
-            )
-            # pandas: std <= 1e-12 emits 0.0 only when total == 0 exactly.
-            expr = pl.when(rstd.is_null() | (rstd <= 1e-12)).then(
-                pl.when((total == 0.0) & (cnt >= mp)).then(0.0).otherwise(None)
-            ).otherwise(expr)
-            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+            # R60: block-frame lowering (formerly rolling_map for the compound
+            # total). The whole pandas contract — |PI(1+r)-1| / std(r, ddof=1)
+            # with the std<=1e-12 zero-emission rule — is evaluated in one
+            # vectorized kernel per instrument.
+            return _rolling_block_frame(inner, w, _np_m1_momentum_strength(mp))
 
         if op == "m1_momentum_stability":
             # mean(r > 0) over the finite slice (zeros count as non-positive).
@@ -5277,37 +5916,21 @@ def _compile_polars_impl(
             return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
 
         if op == "m1_momentum_speed_change":
-            # mom(fast) - mom(slow), mom = Π(1+r) - 1 over each own window;
-            # slow requires >= mp finite rows, fast requires >= 2; current row
-            # finite.  fast_window/slow_window arrive as ATTRS (analyzer
-            # normalizes the positional args into named params).
-            fw = _int_attr(node, "fast_window", input_index=1, default=5)
-            sw = _int_attr(node, "slow_window", input_index=2, default=20)
+            # R60 fix: _literal_value(input_index) reads inputs[index+1] — the
+            # historical 1/2 here read (slow, missing) and made every positional
+            # call raise fast_window >= slow_window.
+            fw = _int_attr(node, "fast_window", input_index=0, default=5)
+            sw = _int_attr(node, "slow_window", input_index=1, default=20)
             if fw >= sw:
                 from factor_engine.backend.plan_params import PlanParamError
 
                 raise PlanParamError(
                     "m1_momentum_speed_change: fast_window must be < slow_window"
                 )
-            total_slow = (
-                pl.col(_VAL)
-                .rolling_map(_compound_total, window_size=sw, min_samples=1)
-                .over(_INST, order_by=_TS)
-            )
-            cnt_slow = v_finite.is_not_null().cast(pl.Float64).rolling_sum(window_size=sw, min_samples=1).over(_INST, order_by=_TS)
-            total_fast = (
-                pl.col(_VAL)
-                .rolling_map(_compound_total, window_size=fw, min_samples=1)
-                .over(_INST, order_by=_TS)
-            )
-            cnt_fast = v_finite.is_not_null().cast(pl.Float64).rolling_sum(window_size=fw, min_samples=1).over(_INST, order_by=_TS)
-            expr = (
-                pl.when(v_finite.is_null()).then(None)
-                .when(cnt_slow.is_null() | (cnt_slow < mp)).then(None)
-                .when(cnt_fast.is_null() | (cnt_fast < 2)).then(None)
-                .otherwise(total_fast - total_slow)
-            )
-            return inner.with_columns(expr.alias(_VAL)).select(_TS, _INST, _VAL)
+            # R60: block-frame lowering (formerly TWO rolling_map passes). The
+            # fast window is the trailing ``fw`` columns of the slow padded
+            # window, so one kernel pass covers both compound totals.
+            return _rolling_block_frame(inner, sw, _np_m1_speed_change(fw, mp))
 
         if op == "m1_volume_adjusted_momentum":
             if len(node.inputs) < 2:

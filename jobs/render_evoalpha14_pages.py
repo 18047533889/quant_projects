@@ -262,17 +262,29 @@ def plot_decile_nav(decile_data, name):
     dates = pd.to_datetime(decile_data["dates"])
     fig, ax = plt.subplots(figsize=(9, 4))
     colors = plt.cm.RdYlGn_r(np.linspace(0.05, 0.95, 10))
+    drawn, empty = [], []
     for k in range(1, 11):
         gkey = f"G{k}"
         g = decile_data.get(gkey)
-        if g is None or len(g) != len(dates):
+        # A group that holds no member on any day (a discrete cross-section
+        # spread over fewer than ten buckets) has no wealth curve at all.
+        # Plotting an all-NaN line would only add a legend entry and hide the
+        # real defect, so record it and say it in the title instead.
+        if g is None or len(g) != len(dates) or not np.isfinite(np.asarray(g, dtype=float)).any():
+            empty.append(k)
             continue
         lw = 1.3 if k == 10 else 0.9
         ax.plot(dates, g, color=colors[k - 1], linewidth=lw, label=f"G{k}", alpha=0.85)
-    if "LS" in decile_data and len(decile_data["LS"]) == len(dates):
-        ax.plot(dates, decile_data["LS"], color="#7c3aed", linewidth=2.0, label="多空（总敞口100%）")
+        drawn.append(k)
+    if not drawn:
+        plt.close(fig)
+        return ""
+    ls = decile_data.get("LS")
+    if ls is not None and len(ls) == len(dates) and np.isfinite(np.asarray(ls, dtype=float)).any():
+        ax.plot(dates, ls, color="#7c3aed", linewidth=2.0, label="多空（总敞口100%）")
     ax.axhline(1.0, color="gray", linewidth=0.7, linestyle="--", alpha=0.7)
-    ax.set_title(f"{name} — 十分层净值曲线 (G1~G10)", fontsize=10, color=FG)
+    suffix = "" if not empty else "；空缺 " + ",".join(f"G{k}" for k in empty) + "（该截面取值过少，分组为空）"
+    ax.set_title(f"{name} — 十分层净值曲线 (G1~G10){suffix}", fontsize=10, color=FG)
     ax.set_xlabel("日期"); ax.set_ylabel("净值")
     ax.legend(fontsize=7, loc="upper left", ncol=5)
     ax.grid(True, alpha=0.3)
@@ -288,13 +300,20 @@ def plot_long_short_nav(decile_data, name):
     ls = decile_data.get("LS", [])
     if len(ls) != len(dates):
         return ""
+    ls = np.asarray(ls, dtype=float)
+    # No long-short series means there is nothing to draw here.  Drawing only
+    # G1 (the short leg after a flip) produced a falling curve under a
+    # "多空净值曲线" title, which reads as an un-flipped factor; return "" so the
+    # caller emits an explicit unavailable notice instead.
+    if not np.isfinite(ls).any():
+        return ""
     fig, ax = plt.subplots(figsize=(9, 3.5))
     ax.plot(dates, ls, color="#7c3aed", linewidth=1.5, label="多空（总敞口100%）")
-    g10 = decile_data.get("G10", [])
-    g1 = decile_data.get("G1", [])
-    if len(g10) == len(dates):
+    g10 = np.asarray(decile_data.get("G10", []), dtype=float)
+    g1 = np.asarray(decile_data.get("G1", []), dtype=float)
+    if len(g10) == len(dates) and np.isfinite(g10).any():
         ax.plot(dates, g10, color="#16a34a", linewidth=1, label="G10（满仓买入参考）", alpha=0.7)
-    if len(g1) == len(dates):
+    if len(g1) == len(dates) and np.isfinite(g1).any():
         ax.plot(dates, g1, color="#dc2626", linewidth=1, label="G1（满仓买入参考，非做空收益）", alpha=0.7)
     ax.axhline(1.0, color="gray", linewidth=0.8, linestyle="--")
     ax.set_title(f"{name} — 多空净值曲线", fontsize=9, color=FG)
@@ -635,7 +654,29 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
         explanations = dict(OP_DOC, neg="neg(x)：逐元素取负；方向处理必须只执行一次。",
             col="col(name)：读取明确指定的数据列，字段来源与单位见上表。",
             safe_div_null="safe_div_null(a,b)：安全除法；无效分母按该算子空值策略处理，不能当作零收益。")
-        lis = "".join(f'<li><code style="color:#7c3aed">{esc(op)}</code> — <span style="color:#475569">{esc(explanations.get(op, "算子详细释义尚待注册表/实现核验，不推测参数和空值语义。"))}</span></li>' for op in used)
+        from factor_engine.api.operator_glossary import (
+            operator_explanation_text,
+            operator_tier,
+        )
+        lis = ""
+        for op in used:
+            doc_text = None
+            tier = None
+            try:
+                doc_text = operator_explanation_text(op)
+                tier = operator_tier(op)
+            except Exception:
+                doc_text = None
+            if doc_text:
+                note = (
+                    f'<span style="color:#94a3b8;font-size:0.72rem">（释义来源：{esc(tier)}）</span>'
+                    if tier and tier not in ("explicit", "extended") else ""
+                )
+                lis += f'<li><code style="color:#7c3aed">{esc(op)}</code> — <span style="color:#475569">{esc(doc_text)}</span>{note}</li>'
+            elif op in explanations:
+                lis += f'<li><code style="color:#7c3aed">{esc(op)}</code> — <span style="color:#475569">{esc(explanations[op])}</span></li>'
+            else:
+                lis += f'<li><code style="color:#7c3aed">{esc(op)}</code> — <span style="color:#475569">{esc("算子详细释义尚待注册表/实现核验，不推测参数和空值语义。")}</span></li>'
         op_rows = f'<ol style="padding-left:18px;margin:8px 0">{lis}</ol>'
     formula_steps_html = (
         '<div class="card">\n<h2>🔍 公式逐行拆解（算子释义）</h2>\n' + op_rows + '</div>\n'
@@ -730,9 +771,12 @@ def build_html(page, note, dsl_text, dsl_note, req_cols, base, opt_meta, gate, r
         if charts["svg_ts"] else "")
 
     monthly_img = chart_img_or_notice(charts.get("monthly"), "月度 IC 数据不足")
-    decile_img = chart_img_or_notice(charts.get("decile"), "十分层数据不足")
-    ls_img = chart_img_or_notice(charts.get("ls"), "多空数据不足")
+    decile_img = chart_img_or_notice(charts.get("decile"),
+                                     base.get("decile_notice") or "十分层数据不足")
+    ls_img = chart_img_or_notice(charts.get("ls"), base.get("ls_notice") or "多空数据不足")
     dist_img = chart_img_or_notice(charts.get("dist"), "RankIC 分布数据不足")
+    quantile_row = (f'<tr><td>分层可用性</td><td>{esc(base["quantile_note"])}</td></tr>\n'
+                    if base.get("quantile_note") else "")
 
     return f'''<!DOCTYPE html>
 <html lang="zh-CN">
@@ -844,7 +888,7 @@ img {{ border-radius:8px }}
 <tr><td>因子名称</td><td><code>{esc(page)}</code></td></tr>
 <tr><td>回测区间</td><td>{report_start} ~ {report_end}</td></tr>
 <tr><td>回测交易日</td><td>{base["n_periods"]} 天</td></tr>
-<tr><td>已翻转</td><td>否</td></tr>
+{quantile_row}<tr><td>已翻转</td><td>否</td></tr>
 <tr><td>评估库</td><td><code>quant_evaluator</code></td></tr>
 <tr><td>Mean RankIC</td><td class="{pcls(base["mean_rankic"])}">{fmt_num(base["mean_rankic"], signed=True)}</td></tr>
 <tr><td>RankIC 标准差</td><td>{fmt_num(base["std_rankic"])}</td></tr>

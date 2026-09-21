@@ -66,14 +66,20 @@ class ProbeSchemaBuilder:
         n_instruments: int = 4,
     ) -> Any:
         """构造 typed Polars LazyFrame 供 full-plan compile/collect 探测。"""
+        import datetime as _dt
+
         import polars as pl
 
         specs = cls.from_plan(plan, time_column=time_column, instrument_column=instrument_column)
         insts = [chr(ord("A") + i) for i in range(n_instruments)]
+        # ``2024-01-{d+2}`` overflows January past d=29 (default n_rows=32
+        # already did), producing an unparseable date; offset a real date.
+        _base = _dt.date(2024, 1, 2)
         ts_values: list[str] = []
         inst_values: list[str] = []
         for d in range(max(1, n_rows // n_instruments)):
-            ts_values.extend([f"2024-01-{d + 2:02d}T00:00:00"] * n_instruments)
+            stamp = (_base + _dt.timedelta(days=d)).isoformat() + "T00:00:00"
+            ts_values.extend([stamp] * n_instruments)
             inst_values.extend(insts)
         n_rows = len(ts_values)
         data: dict[str, pl.Series] = {
@@ -106,16 +112,21 @@ class ProbeSchemaBuilder:
         n_instruments: int = 4,
     ) -> Any:
         """构造 DuckDB 内存探测表（Arrow/pandas）。"""
+        import datetime as _dt
+
         import pandas as pd
 
         specs = cls.from_plan(plan, time_column=time_column, instrument_column=instrument_column)
         insts = [chr(ord("A") + i) for i in range(n_instruments)]
         rows: list[dict[str, Any]] = []
         idx = 0
+        # Same January-overflow defect as the polars probe: use a real date.
+        _base = _dt.date(2024, 1, 2)
         for d in range(max(1, n_rows // n_instruments)):
+            _stamp = pd.Timestamp(_base + _dt.timedelta(days=d))
             for inst in insts:
                 row: dict[str, Any] = {
-                    time_column: pd.Timestamp(f"2024-01-{d + 2:02d}"),
+                    time_column: _stamp,
                     instrument_column: inst,
                 }
                 for spec in specs:
@@ -126,7 +137,7 @@ class ProbeSchemaBuilder:
                     elif spec.dtype == "int64":
                         row[spec.name] = (idx % 5) + 1
                     elif spec.dtype == "datetime":
-                        row[spec.name] = pd.Timestamp(f"2024-01-{d + 2:02d}")
+                        row[spec.name] = _stamp
                     else:
                         row[spec.name] = float("nan") if idx % 11 == 0 else float((idx % 7) + 1)
                 rows.append(row)

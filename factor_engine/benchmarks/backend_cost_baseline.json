@@ -1,0 +1,1155 @@
+{
+  "schema_version": 2,
+  "generated_by": "calibrate_backend_costs.py",
+  "generated_at": "2026-09-21T04:19:36.950567+00:00",
+  "provenance": {
+    "measured": true,
+    "implementation_hash": "bf52bf2089c28752fbcef90be1d4555008917a345db63963bfc20a8e41e69493",
+    "runtime_family": {
+      "python": "3.12",
+      "numpy": "2.5",
+      "pandas": "3.0",
+      "polars": "1.44",
+      "duckdb": "1.5",
+      "pyarrow": "25.0",
+      "os": "Linux",
+      "architecture": "x86_64",
+      "cpu_model": "x86_64",
+      "effective_cores": "32",
+      "ram_gb": "92.3",
+      "storage_class": "ssd"
+    },
+    "backend_versions": {
+      "pandas_numpy": "3.0.5",
+      "polars_panel": "1.44.1",
+      "polars_long": "1.44.1",
+      "duckdb_sql": "1.5.5"
+    },
+    "engine_identity": "factor_engine==0.3.1@5c6197b217ae",
+    "cpu_model": "x86_64",
+    "ram_gb": 92.3,
+    "rows": [
+      {
+        "requested_rows": 2000,
+        "dates": 96,
+        "instruments": 44
+      }
+    ],
+    "columns": [
+      44
+    ],
+    "window_distribution": {
+      "source": "fixture positional args + window-like kwargs",
+      "histogram": {
+        "1": 6,
+        "20": 41,
+        "3": 4,
+        "5": 16
+      }
+    },
+    "null_rate": 0.0,
+    "group_cardinality": 1,
+    "requested_rows": [
+      2000
+    ],
+    "repeats": 2,
+    "surface": "daily (agent-usable)",
+    "canonical_count": 23,
+    "note": "deployment-host steady-state p50 calibration over the agent-usable daily surface; rerun after hardware/runtime changes"
+  },
+  "operators": {
+    "donchian_mid": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 525.662524,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 2.220398
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2226.456558,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 9.404553
+          }
+        ]
+      },
+      "polars_long": {
+        "error": "OperatorParameterError: donchian_mid: multiple values for parameter 'window'"
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 4505.720707,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 8.921327
+          }
+        ]
+      }
+    },
+    "donchian_position": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 557.760298,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 2.35598
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 3926.617424,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 16.586032
+          }
+        ]
+      },
+      "polars_long": {
+        "error": "OperatorParameterError: donchian_position: multiple values for parameter 'window'"
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 4755.144949,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 9.415187
+          }
+        ]
+      }
+    },
+    "efficiency_ratio": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 329.348485,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 1.391168
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2362.159209,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 9.97776
+          }
+        ]
+      },
+      "polars_long": {
+        "error": "OperatorParameterError: efficiency_ratio: multiple values for parameter 'window'"
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 5309.560101,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 10.512929
+          }
+        ]
+      }
+    },
+    "price_impact": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 302.560724,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 1.278017
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 1558.400095,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 6.582682
+          }
+        ]
+      },
+      "polars_long": {
+        "error": "OperatorParameterError: price_impact: multiple values for parameter 'window'"
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2979.79697,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 5.899998
+          }
+        ]
+      }
+    },
+    "ts_corr": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 22305.505563,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 94.218456
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 50522.83866,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 213.40847
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 5208.6285,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 10.417257
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2774.032828,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 5.492585
+          }
+        ]
+      }
+    },
+    "ts_cov": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 22189.691051,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 93.729255
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 54052.441525,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 228.317513
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 5051.20825,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 10.102417
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 3131.506818,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 6.200384
+          }
+        ]
+      }
+    },
+    "ts_decay_linear": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 3202.955374,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 13.529284
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 22273.839725,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 94.084699
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 21196.566,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 42.393132
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 3243.45303,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 6.422037
+          }
+        ]
+      }
+    },
+    "ts_delay": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 43.648082,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 0.184369
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 245.161932,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 1.035564
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 469.95575,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 0.939912
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2351.651768,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 4.65627
+          }
+        ]
+      }
+    },
+    "ts_delta": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 64.889205,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 0.274092
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 302.450639,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 1.277551
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 413.34,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 0.82668
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 1943.12096,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 3.847379
+          }
+        ]
+      }
+    },
+    "ts_ema": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 146.994792,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 0.620906
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 934.524503,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 3.947431
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 497.135,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 0.99427
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 32314.489141,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 63.982688
+          }
+        ]
+      }
+    },
+    "ts_kurt": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 12447.441051,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 52.577991
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 13955.414181,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 58.947669
+          }
+        ]
+      },
+      "polars_long": {
+        "error": "ValueError: ts_kurt window must be >= 4"
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2773.320707,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 5.491175
+          }
+        ]
+      }
+    },
+    "ts_mad": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 25216.797112,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 106.515751
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 25540.995384,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 107.885165
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 58486.161,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 116.972322
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2595.442172,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 5.138975
+          }
+        ]
+      }
+    },
+    "ts_max": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 213.245265,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 0.900748
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 590.92803,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 2.49608
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 464.9585,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 0.929917
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2203.769697,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 4.363464
+          }
+        ]
+      }
+    },
+    "ts_mean": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 238.037405,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 1.00547
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 525.759588,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 2.220808
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 429.6695,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 0.859339
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2129.716162,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 4.216838
+          }
+        ]
+      }
+    },
+    "ts_median": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 577.074337,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 2.437562
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 574.130563,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 2.425127
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 470.871,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 0.941742
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2142.637626,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 4.242422
+          }
+        ]
+      }
+    },
+    "ts_min": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 223.815459,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 0.945396
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 617.439986,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 2.608067
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 436.8545,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 0.873709
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2229.486111,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 4.414383
+          }
+        ]
+      }
+    },
+    "ts_product": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 8520.109848,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 35.988944
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 8898.423651,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 37.586942
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 23827.92425,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 47.655848
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2855.954545,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 5.65479
+          }
+        ]
+      }
+    },
+    "ts_quantile": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 460.892874,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 1.946811
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 324590.9565,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 649.181913
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2508.591414,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 4.967011
+          }
+        ]
+      }
+    },
+    "ts_rank": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 490.712003,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 2.072767
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 844.66572,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 3.567868
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 1064.668,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 2.129336
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2924.371717,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 5.790256
+          }
+        ]
+      }
+    },
+    "ts_skew": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 19085.071851,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 80.615343
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 513.140388,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 2.167505
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 80749.64975,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 161.4993
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2432.265404,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 4.815886
+          }
+        ]
+      }
+    },
+    "ts_std": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 12199.082031,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 51.528923
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 445.115767,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 1.880169
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2185.8395,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 4.371679
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2536.969192,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 5.023199
+          }
+        ]
+      }
+    },
+    "ts_sum": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 240.654474,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 1.016525
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 446.274503,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 1.885064
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 404.30525,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 0.808611
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2384.918434,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 4.722138
+          }
+        ]
+      }
+    },
+    "ts_zscore": {
+      "pandas_numpy": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 1039.616004,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 4.391338
+          }
+        ]
+      },
+      "polars_panel": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 5305.208807,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 4224,
+            "p50_ms": 22.409202
+          }
+        ]
+      },
+      "polars_long": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 1530.889,
+        "memory_factor": 1.0,
+        "requires_conversion": true,
+        "samples": [
+          {
+            "rows": 2000,
+            "p50_ms": 3.061778
+          }
+        ]
+      },
+      "duckdb_sql": {
+        "fixed_overhead_ms": 0.0,
+        "per_million_rows_ms": 2984.107576,
+        "memory_factor": 1.0,
+        "requires_conversion": false,
+        "samples": [
+          {
+            "rows": 1980,
+            "p50_ms": 5.908533
+          }
+        ]
+      }
+    }
+  }
+}

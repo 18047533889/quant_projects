@@ -146,6 +146,19 @@ def field(
             raise KeyError(f"unknown field {name!r}{qualifier}")
         return col(name)
     check_mining_gate(spec, for_mining=for_mining, field_name=name)
+    # R58 (2026-09-21): adjusted-only gate. The factor engine must only
+    # read back-adjusted OHLCV; the unadjusted StockDailyBar exposes RAW
+    # open/high/low/close/vwap that must never be accepted as a factor
+    # input (the back-adjusted StockDailyBarAdj is the authoritative price
+    # basis). Limit prices (RAW_OFFICIAL_LIMIT) and Factor/Volume/amount/
+    # ret stay permitted.
+    if table == "StockDailyBar" and getattr(spec, "price_basis", None) == "RAW":
+        raise ValueError(
+            f"field({name!r}, table='StockDailyBar') resolves to an UNADJUSTED "
+            f"price column (price_basis=RAW). Factor inputs must use the "
+            f"back-adjusted table: field({name!r}) or "
+            f"field({name!r}, table='StockDailyBarAdj')."
+        )
     if table is None and spec.table in {"StockDailyBarAdj", "StockDailyBar"}:
         transport = spec.name
     else:

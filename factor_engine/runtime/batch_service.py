@@ -1244,7 +1244,107 @@ def _batch_source_bars_per_day(engine: Any) -> int:
         return 1
 
 
-def _trim_batch_result(result: Any, run_window: Any, *, bars_per_day: int) -> Any:
+def _per_factor_declared_rows(analyses: Any) -> dict:
+    """R58: per-factor finite history rows from the execution-contract authority.
+
+    Same authority engine.run uses for its immature-value guard, so batch and
+    single-run paths blank identical head rows.  Full-history (recursive)
+    operators are omitted — they never get a row-count guard.
+    """
+    try:
+        from factor_engine.runtime.execution_contract import factor_history_requirement
+    except Exception:
+        return {}
+    out: dict = {}
+    for _name, _an in (analyses or {}).items():
+        try:
+            _req = factor_history_requirement(getattr(_an, "ir", None))
+            if not getattr(_req, "is_full_history", False):
+                _rows = int(getattr(_req, "rows", 0) or 0)
+                if _rows > 0:
+                    out[_name] = _rows
+        except Exception:
+            continue
+    return out
+
+
+def _apply_declared_guard(result: Any, declared_rows: int, pre_rows, factor_name: str = "") -> Any:
+    """Blank the first (declared_rows - 1 - pre_rows) distinct dates of a result.
+
+    Mirrors engine.run's R58c rule: output row i holds pre_rows+i+1 samples, so
+    rows with fewer than declared_rows samples are immature.  With a full
+    warm-up load this is a no-op.  Mirrors the engine's no-op-on-overflow
+    behaviour when every date would be blanked.
+    """
+    if result is None or not declared_rows or declared_rows <= 0 or pre_rows is None:
+        return result
+    blank = int(declared_rows) - 1 - int(pre_rows)
+    if blank <= 0:
+        return result
+    try:
+        dates = result.index.get_level_values(0).drop_duplicates().sort_values()
+        if blank < len(dates):
+            cutoff = dates[blank]
+            mask = result.index.get_level_values(0) < cutoff
+            result = result.mask(mask)
+            logger.info(
+                "R58 immature-value guard (batch): factor '%s' declared=%d "
+                "pre_rows=%s -> blanked %d dates",
+                factor_name, int(declared_rows), int(pre_rows), blank,
+            )
+    except Exception:
+        logger.warning(
+            "R58 batch immature-value guard failed for factor '%s'",
+            factor_name, exc_info=True,
+        )
+    return result
+
+
+def _finalize_batch_factor_result(
+    result: Any,
+    *,
+    run_window: Any,
+    declared_rows: int,
+    source_start: Any,
+    factor_name: str,
+    bars_per_day: int,
+) -> Any:
+    """Trim + immature-value guard for one batch factor result.
+
+    With a run window: trim (with guard, pre_rows from the slice offsets).
+    Without one (auto_warmup=False): mirror engine.run's R58d — guard only
+    when the result head is provably the source frame head.
+    """
+    if run_window is not None:
+        return _trim_batch_result(
+            result, run_window, bars_per_day=bars_per_day,
+            declared_rows=declared_rows, factor_name=factor_name,
+        )
+    if result is None or not declared_rows or declared_rows <= 1 or source_start is None:
+        return result
+    try:
+        import pandas as pd
+
+        dates = result.index.get_level_values(0).drop_duplicates().sort_values()
+        if len(dates) > declared_rows and dates[0] == pd.Timestamp(source_start):
+            cutoff = dates[declared_rows - 1]
+            mask = result.index.get_level_values(0) < cutoff
+            result = result.mask(mask)
+            logger.info(
+                "R58 immature-value guard (batch, no-warmup): factor '%s' "
+                "declared=%d -> blanked %d dates",
+                factor_name, int(declared_rows), int(declared_rows) - 1,
+            )
+    except Exception:
+        logger.warning(
+            "R58 batch no-window guard failed for factor '%s'",
+            factor_name, exc_info=True,
+        )
+    return result
+
+
+def _trim_batch_result(result: Any, run_window: Any, *, bars_per_day: int,
+                       declared_rows: int = 0, factor_name: str = "") -> Any:
     """按因子请求区间裁剪批跑输出（与 ``run`` 的 warmup trim 对齐）。
 
     R39-P0-PERF-017：native backend 若已在终端结果上挂 ``_output_slice``（位置
@@ -1266,10 +1366,18 @@ def _trim_batch_result(result: Any, run_window: Any, *, bars_per_day: int) -> An
     # Backend 已切好视图 —— 不再重切（PERF-017）。
     carried = carried_output_slice(result)
     if carried is not None:
-        return result
+        # Backend already sliced positionally: its start_offset IS the
+        # number of pre-request rows (pre_rows) in the computation frame.
+        return _apply_declared_guard(
+            result, declared_rows, getattr(carried, "start_offset", None),
+            factor_name,
+        )
     out_slice = compute_output_slice(result, run_window, bars_per_day=bars_per_day)
     if out_slice is not None:
-        return apply_output_slice(result, out_slice)
+        trimmed = apply_output_slice(result, out_slice)
+        return _apply_declared_guard(
+            trimmed, declared_rows, out_slice.start_offset, factor_name
+        )
     import pandas as pd
 
     from factor_engine.storage.time_window import slice_series_time_window
@@ -1283,7 +1391,16 @@ def _trim_batch_result(result: Any, run_window: Any, *, bars_per_day: int) -> An
     if bars_per_day > 1:
         # 日内源保留 timestamp 精度（不按 normalize 截断）
         trim_start = pd.Timestamp(run_window.requested_start)
-    return slice_series_time_window(result, start=trim_start, end=trim_end)
+    _pre_rows = None
+    try:
+        _idx0 = result.index.get_level_values(0)
+        _pre_rows = int((_idx0 < trim_start).sum())
+    except Exception:
+        _pre_rows = None
+    trimmed = slice_series_time_window(result, start=trim_start, end=trim_end)
+    if _pre_rows is None:
+        return trimmed
+    return _apply_declared_guard(trimmed, declared_rows, _pre_rows, factor_name)
 
 
 def _maybe_prepare_batch_warmup(
@@ -1506,6 +1623,7 @@ def _execute_run_many_scheduler(
     perf: PerfConfig,
     engine_to_use: "FactorEngine",
     per_windows: dict[str, Any],
+    per_declared: dict | None = None,
     input_report: Any,
     run_mode: str | None,
     source_bars_per_day: int,
@@ -1841,10 +1959,14 @@ def _execute_run_many_scheduler(
             physical_optimization=physical_by_factor.get(task.factor_name),
             physical_root_id=task.factor_name,
         )
-        if per_windows and task.factor_name in per_windows:
-            result = _trim_batch_result(
-                result, per_windows[task.factor_name], bars_per_day=source_bars_per_day
-            )
+        result = _finalize_batch_factor_result(
+            result,
+            run_window=per_windows.get(task.factor_name) if per_windows else None,
+            declared_rows=(per_declared or {}).get(task.factor_name, 0),
+            source_start=getattr(engine_to_use.data_source, "start_date", None),
+            factor_name=task.factor_name,
+            bars_per_day=source_bars_per_day,
+        )
         with paths_lock:
             backend_paths[task.factor_name] = path
         return result
@@ -2205,6 +2327,7 @@ def execute_run_many(
     # PIT 审计在编译期做（assert_pit_safe 是纯审计、不改计划），与执行解耦，
     # 因此 production 的 pit_enforce 不再让 run_many 退化为逐因子 run()。
     # batch warmup：跨因子合并共享加载窗口，一次读数，各因子独立 trim。
+    per_declared = _per_factor_declared_rows(analyses)
     engine_to_use, per_windows = _maybe_prepare_batch_warmup(
         engine,
         factors,
@@ -2248,6 +2371,7 @@ def execute_run_many(
             perf=perf,
             engine_to_use=engine_to_use,
             per_windows=per_windows,
+            per_declared=per_declared,
             input_report=input_report,
             run_mode=run_mode,
             source_bars_per_day=source_bars_per_day,
@@ -2277,10 +2401,14 @@ def execute_run_many(
             engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
             factor_name=fp.factor_name, factor_id=fp.factor_name,
         )
-        if per_windows and fp.factor_name in per_windows:
-            result = _trim_batch_result(
-                result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
-            )
+        result = _finalize_batch_factor_result(
+            result,
+            run_window=per_windows.get(fp.factor_name) if per_windows else None,
+            declared_rows=(per_declared or {}).get(fp.factor_name, 0),
+            source_start=getattr(engine_to_use.data_source, "start_date", None),
+            factor_name=fp.factor_name,
+            bars_per_day=source_bars_per_day,
+        )
         return result, path
 
     with routing_execution_scope(perf), _cse_release_scope(ctx, dag.shared_nodes):
@@ -2418,6 +2546,7 @@ def execute_run_many_iter(
             market=market,
             strict=True,
         )
+    per_declared = _per_factor_declared_rows(analyses)
     engine_to_use, per_windows = _maybe_prepare_batch_warmup(
         engine,
         factors,
@@ -2489,10 +2618,14 @@ def execute_run_many_iter(
                     physical_optimization=physical_by_factor.get(fp.factor_name),
                     physical_root_id=fp.factor_name,
                 )
-                if per_windows and fp.factor_name in per_windows:
-                    result = _trim_batch_result(
-                        result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
-                    )
+                result = _finalize_batch_factor_result(
+                    result,
+                    run_window=per_windows.get(fp.factor_name) if per_windows else None,
+                    declared_rows=(per_declared or {}).get(fp.factor_name, 0),
+                    source_start=getattr(engine_to_use.data_source, "start_date", None),
+                    factor_name=fp.factor_name,
+                    bars_per_day=source_bars_per_day,
+                )
                 seen.add(fp.factor_name)
                 _release_consumed_sids(ctx, fp.root)
                 yield fp.factor_name, result, path
@@ -2506,10 +2639,14 @@ def execute_run_many_iter(
                 physical_optimization=physical_by_factor.get(fp.factor_name),
                 physical_root_id=fp.factor_name,
             )
-            if per_windows and fp.factor_name in per_windows:
-                result = _trim_batch_result(
-                    result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
-                )
+            result = _finalize_batch_factor_result(
+                result,
+                run_window=per_windows.get(fp.factor_name) if per_windows else None,
+                declared_rows=(per_declared or {}).get(fp.factor_name, 0),
+                source_start=getattr(engine_to_use.data_source, "start_date", None),
+                factor_name=fp.factor_name,
+                bars_per_day=source_bars_per_day,
+            )
             _release_consumed_sids(ctx, fp.root)
             yield fp.factor_name, result, path
 
@@ -2644,6 +2781,7 @@ def execute_run_many_parallel(
             market=market,
             strict=True,
         )
+    per_declared = _per_factor_declared_rows(analyses)
     engine_to_use, per_windows = _maybe_prepare_batch_warmup(
         engine,
         factors,
@@ -2693,6 +2831,7 @@ def execute_run_many_parallel(
                 perf=perf,
                 engine_to_use=engine_to_use,
                 per_windows=per_windows,
+                per_declared=per_declared,
                 input_report=input_report,
                 run_mode=run_mode,
                 source_bars_per_day=source_bars_per_day,
@@ -2732,10 +2871,14 @@ def execute_run_many_parallel(
             engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
             factor_name=fp.factor_name, factor_id=fp.factor_name,
         )
-        if per_windows and fp.factor_name in per_windows:
-            result = _trim_batch_result(
-                result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
-            )
+        result = _finalize_batch_factor_result(
+            result,
+            run_window=per_windows.get(fp.factor_name) if per_windows else None,
+            declared_rows=(per_declared or {}).get(fp.factor_name, 0),
+            source_start=getattr(engine_to_use.data_source, "start_date", None),
+            factor_name=fp.factor_name,
+            bars_per_day=source_bars_per_day,
+        )
         return fp.factor_name, result, path
 
     _enter_scope = (lambda: resource_scope.__enter__()) if resource_scope is not None else (lambda: None)
@@ -2765,10 +2908,14 @@ def execute_run_many_parallel(
                             engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
                             factor_name=fp.factor_name, factor_id=fp.factor_name,
                         )
-                        if per_windows and fp.factor_name in per_windows:
-                            result = _trim_batch_result(
-                                result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
-                            )
+                        result = _finalize_batch_factor_result(
+                            result,
+                            run_window=per_windows.get(fp.factor_name) if per_windows else None,
+                            declared_rows=(per_declared or {}).get(fp.factor_name, 0),
+                            source_start=getattr(engine_to_use.data_source, "start_date", None),
+                            factor_name=fp.factor_name,
+                            bars_per_day=source_bars_per_day,
+                        )
                         _handle_result(result_policy, sink, results, fp.factor_name, result, path, backend_paths)
                 else:
                     # R27-166/249：as_completed → 立即 sink/release，不再等整层
@@ -2790,10 +2937,14 @@ def execute_run_many_parallel(
                         engine_to_use.backend, fp.root, ctx, run_mode=run_mode,
                         factor_name=fp.factor_name, factor_id=fp.factor_name,
                     )
-                    if per_windows and fp.factor_name in per_windows:
-                        result = _trim_batch_result(
-                            result, per_windows[fp.factor_name], bars_per_day=source_bars_per_day
-                        )
+                    result = _finalize_batch_factor_result(
+                        result,
+                        run_window=per_windows.get(fp.factor_name) if per_windows else None,
+                        declared_rows=(per_declared or {}).get(fp.factor_name, 0),
+                        source_start=getattr(engine_to_use.data_source, "start_date", None),
+                        factor_name=fp.factor_name,
+                        bars_per_day=source_bars_per_day,
+                    )
                     _handle_result(result_policy, sink, results, fp.factor_name, result, path, backend_paths)
                     _release_consumed_sids(ctx, fp.root)
     finally:

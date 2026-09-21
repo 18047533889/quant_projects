@@ -145,12 +145,37 @@ def _nan_dispatch(*args:Any,**kwargs:Any):
     return math.nan
 
 
+def _guarded_source_col(table, field, *args, **kwargs):
+    from factor_engine.api.source_ref import source_col
+    # R58 (2026-09-21): adjusted-only gate for the LQTP ``source_col`` surface.
+    # Reject unadjusted A-share OHLCV (price_basis == "RAW") read from
+    # StockDailyBar; the back-adjusted StockDailyBarAdj is the authoritative
+    # price basis. Limit prices (RAW_OFFICIAL_LIMIT) and Factor/Volume/
+    # amount/ret remain permitted.
+    if str(table) == "StockDailyBar":
+        try:
+            from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+            spec = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").get(
+                str(field), table="StockDailyBar", strict=False)
+            if spec is not None and getattr(spec, "price_basis", None) == "RAW":
+                raise LQTPCompatibilityError(
+                    f"StockDailyBar.{field} is an UNADJUSTED price column "
+                    f"(price_basis=RAW) and must not be read by the factor "
+                    f"engine. Use StockDailyBarAdj.{field} (back-adjusted) instead."
+                )
+        except LQTPCompatibilityError:
+            raise
+        except Exception:
+            pass
+    return source_col(table, field, *args, **kwargs)
+
+
 def augment_dsl_allowlist(allow:dict[str,Callable[...,Any]],*,surface:str)->dict[str,Callable[...,Any]]:
     if surface not in {"daily","compat","compat_research","research","all","lqtp"}:return allow
     from factor_engine.cleaned_operators.production_tiers import LQTP_COMPAT_PARSE_CANONICALS
     from factor_engine.cleaned_operators.registry import OperatorRegistry
     from factor_engine.api.source_ref import source_col
-    out=dict(allow);out.update({"source_col":source_col,"sma":_sma_dispatch,"safe_log":_safe_log_dispatch,"nullif_zero":_nullif_zero_dispatch,"clean":_clean_dispatch,"momentum":_momentum_dispatch,"market_ret":_market_ret_dispatch,"historical_var":_historical_var_dispatch,"historical_cvar":_historical_cvar_dispatch,"rolling_beta_to_market":_rolling_beta_dispatch,"fp_beta":_rolling_beta_dispatch,"downside_beta":_downside_beta_dispatch,"tail_beta":_tail_beta_dispatch,"residual_momentum_capm":_residual_momentum_dispatch,"coskewness_to_market":_market_three_arg_dispatch("coskewness_to_market"),"idio_vol":_market_three_arg_dispatch("idio_vol"),"idio_skew":_market_three_arg_dispatch("idio_skew"),"real_turnover_rate":_real_turnover_rate_dispatch,"asof":_asof_dispatch,"financial_lag":_financial_lag_dispatch,"lag":_financial_lag_dispatch,"intermediate":_intermediate_dispatch,"minute_at":_minute_at_dispatch,"minute_range":_minute_range_dispatch,"minute_resample":_minute_resample_dispatch,"minute_bar":_minute_bar_dispatch,"is_nan":_factory("is_nan"),"where":_factory("where"),"ewm_cov":_factory("ewm_cov"),"nan":_nan_dispatch,"null":_nan_dispatch})
+    out=dict(allow);out.update({"source_col":_guarded_source_col,"sma":_sma_dispatch,"safe_log":_safe_log_dispatch,"nullif_zero":_nullif_zero_dispatch,"clean":_clean_dispatch,"momentum":_momentum_dispatch,"market_ret":_market_ret_dispatch,"historical_var":_historical_var_dispatch,"historical_cvar":_historical_cvar_dispatch,"rolling_beta_to_market":_rolling_beta_dispatch,"fp_beta":_rolling_beta_dispatch,"downside_beta":_downside_beta_dispatch,"tail_beta":_tail_beta_dispatch,"residual_momentum_capm":_residual_momentum_dispatch,"coskewness_to_market":_market_three_arg_dispatch("coskewness_to_market"),"idio_vol":_market_three_arg_dispatch("idio_vol"),"idio_skew":_market_three_arg_dispatch("idio_skew"),"real_turnover_rate":_real_turnover_rate_dispatch,"asof":_asof_dispatch,"financial_lag":_financial_lag_dispatch,"lag":_financial_lag_dispatch,"intermediate":_intermediate_dispatch,"minute_at":_minute_at_dispatch,"minute_range":_minute_range_dispatch,"minute_resample":_minute_resample_dispatch,"minute_bar":_minute_bar_dispatch,"is_nan":_factory("is_nan"),"where":_factory("where"),"ewm_cov":_factory("ewm_cov"),"nan":_nan_dispatch,"null":_nan_dispatch})
     for external,canonical in _EXACT_COMPAT.items():
         if OperatorRegistry.get(canonical) is not None:out.setdefault(external,_factory(canonical))
     for name in _AMBIGUOUS_EXTERNAL_NAMES:out[name]=_ambiguous_dispatch(name)

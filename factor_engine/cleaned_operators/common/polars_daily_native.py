@@ -312,6 +312,35 @@ class TSRankNative(SeriesOperator):
         )
 
 
+# ---------------------------------------------------------------------------
+# R57 backend-coverage batch 5 — explicit execution-kind declaration.
+# The registered polars slot for `ts_rank` is this genuine pl.Expr kernel
+# (rolling_rank / rolling_sum over columns).  It previously carried no
+# _physical_spec, so canonical_polars_kind(production_mode=True) failed closed
+# to UNSUPPORTED and the operator never reached the production polars lane.
+# ---------------------------------------------------------------------------
+TSRankNative._physical_spec = PhysicalImplementationSpec(
+    canonical="ts_rank",
+    backend="polars",
+    execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+    materializes_full_panel=True,
+    supports_nulls=True,
+    supports_nan=True,
+    supports_inf=True,
+    implementation_source_hash="common.polars_daily_native:TSRankNative:v1",
+    emitter_identity="polars_expr:ts_rank",
+    kernel_identity="common.polars_daily_native:TSRankNative",
+    parameter_domain_hash="ts_rank:declared:v1",
+    semantic_contract_hash="ts_rank:polars_native_expr:v1",
+    notes=(
+        "Genuine polars expression kernel (pl.Expr rolling_rank / rolling_sum "
+        "over columns, no pandas round-trip); runtime marshal probe on the real "
+        "daily panel records 0 pl.DataFrame.to_pandas calls. Eager panel API "
+        "only: no lazy/streaming or production-parity claim."
+    ),
+)
+
+
 @register_operator(
     name="ts_sharpe",
     category="time_series",

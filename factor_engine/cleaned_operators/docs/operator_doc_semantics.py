@@ -813,9 +813,152 @@ def _fallback(name: str, description: str, category: str) -> OpDoc:
     ) else f"{cat_zh}算子 `{name}`"
     return OpDoc(
         desc + "。",
-        f"在 {cat_zh} 语义下对 panel 输入执行 `{name}`；具体边界条件（min_periods、NaN）以实现代码为准。",
+        f"该算子在手写释义表与算子注册表 ``OperatorRegistry.catalog()`` 中都没有"
+        f"登记语义（{cat_zh}类别）。补齐方式：在 "
+        f"``cleaned_operators/docs/operator_doc_extended.py`` 增加显式条目，"
+        f"或在算子 ``@register_operator(...)`` 处补 ``description``。"
+        f"在此之前不对其参数与空值语义作任何推测。",
         rf"\mathrm{{{name}}}(X)",
     )
+
+
+_PATTERN_RESOLVERS = (
+    _ts_rolling,
+    _elementwise,
+    _cum_shift,
+    _cross_sectional_row,
+    _group_prefix,
+    _stat_test,
+    _window_prefix,
+    _m_prefix,
+    _fill_clean,
+)
+
+#: ``OperatorRegistry.catalog()`` 快照（首次查询时构建；注册表未 bootstrapped
+#: 时保持为空，绝不伪造条目）。
+_CATALOG_CACHE: dict[str, dict] | None = None
+_ALIAS_CACHE: dict[str, str] | None = None
+
+
+def _catalog_snapshot() -> tuple[dict[str, dict], dict[str, str]]:
+    """返回 (canonical → 注册表条目, 任意名字 → canonical)。
+
+    注册表是算子语义的权威声明处（``description`` / ``param_names`` /
+    ``aliases`` / ``status`` / ``backends`` 都在里面）。未成功 bootstrap 时
+    返回空映射 —— 调用方随后走 ``_fallback``，不猜测。
+    """
+    global _CATALOG_CACHE, _ALIAS_CACHE
+    if _CATALOG_CACHE is not None:
+        return _CATALOG_CACHE, _ALIAS_CACHE or {}
+    catalog: dict[str, dict] = {}
+    alias_map: dict[str, str] = {}
+    try:
+        from factor_engine.cleaned_operators import REGISTRY_BOOTSTRAP
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+        REGISTRY_BOOTSTRAP.ensure_ready(include_research=True)
+        catalog = dict(OperatorRegistry.catalog())
+        for canonical, entry in catalog.items():
+            alias_map.setdefault(str(canonical), str(canonical))
+            for alias in (entry.get("aliases") or ()):
+                alias_map.setdefault(str(alias), str(canonical))
+    except Exception:  # pragma: no cover - 注册表不可用时保持保守
+        catalog, alias_map = {}, {}
+    _CATALOG_CACHE, _ALIAS_CACHE = catalog, alias_map
+    return catalog, alias_map
+
+
+def _name_candidates(name: str) -> list[str]:
+    """把输入名解析成按优先级排列的候选键。
+
+    顺序：原名 → 注册表 canonical（权威别名声明）→ 扩展表的 ``intra_`` /
+    ``intraday_`` 前缀归一。只做**等价改写**，不做模糊匹配。
+    """
+    text = str(name or "").strip()
+    candidates: list[str] = [text] if text else []
+    _, alias_map = _catalog_snapshot()
+    canonical = alias_map.get(text)
+    if canonical and canonical not in candidates:
+        candidates.append(canonical)
+    try:
+        from factor_engine.cleaned_operators.docs.operator_doc_extended import (
+            normalize_extended_name,
+        )
+
+        for probe in (text, canonical):
+            if not probe:
+                continue
+            normalized = normalize_extended_name(probe)
+            if normalized and normalized not in candidates:
+                candidates.append(normalized)
+    except Exception:  # pragma: no cover
+        pass
+    return candidates
+
+
+def _registry_entry(name: str) -> tuple[str, dict] | None:
+    catalog, alias_map = _catalog_snapshot()
+    for candidate in _name_candidates(name):
+        canonical = alias_map.get(candidate, candidate)
+        entry = catalog.get(canonical)
+        if entry:
+            return canonical, entry
+    return None
+
+
+def _registry_doc(canonical: str, entry: dict, *, alias_of: str | None = None) -> OpDoc:
+    """用注册表事实组装释义（含义取自注册表 description，不额外编造公式）。"""
+    params = [str(p) for p in (entry.get("param_names") or ())]
+    backends = [str(b) for b in (entry.get("backends") or ())]
+    status = str(entry.get("status") or "")
+    description = str(entry.get("description") or "").strip()
+    meaning = description or f"注册表算子 `{canonical}`（未登记中文说明）。"
+    detail = []
+    if params:
+        detail.append("参数：" + "、".join(params))
+    if status:
+        detail.append("状态：" + status)
+    if backends:
+        detail.append("后端：" + ", ".join(backends))
+    if alias_of:
+        detail.append(f"别名等价：`{alias_of}`")
+    compute = (
+        "注册表口径：" + meaning.rstrip("。")
+        + ("；" + "；".join(detail) if detail else "")
+        + "。逐条数学定义未在手写登记表中展开，边界条件（min_periods / NaN 传播）以实现为准。"
+    )
+    latex = rf"\mathrm{{{canonical}}}(\,\ldots\,)"
+    return OpDoc(meaning if meaning.endswith("。") else meaning + "。", compute, latex)
+
+
+def operator_doc_tier(name: str) -> str:
+    """释义来源层级：explicit > extended > batch > pattern > registry > fallback。
+
+    报告页用它标注"这条释义是从哪来的"，避免把注册表描述误当成逐条数学证明。
+    """
+    from factor_engine.cleaned_operators.docs._operator_doc_batch import BATCH_DOCS
+
+    try:
+        from factor_engine.cleaned_operators.docs.operator_doc_extended import (
+            EXTENDED_DOCS,
+        )
+    except Exception:  # pragma: no cover
+        EXTENDED_DOCS = {}
+
+    for candidate in _name_candidates(name):
+        if candidate in _EXPLICIT:
+            return "explicit"
+        if candidate in EXTENDED_DOCS:
+            return "extended"
+        if candidate in BATCH_DOCS:
+            return "batch"
+        for resolver in _PATTERN_RESOLVERS:
+            try:
+                if resolver(candidate) is not None:
+                    return "pattern:" + resolver.__name__
+            except Exception:
+                continue
+    return "registry" if _registry_entry(name) is not None else "fallback"
 
 
 def get_operator_doc(
@@ -824,25 +967,85 @@ def get_operator_doc(
     description: str = "",
     category: str = "other",
 ) -> OpDoc:
-    """返回算子的含义、计算说明与 LaTeX 公式。"""
+    """返回算子的含义、计算说明与 LaTeX 公式。
+
+    解析顺序（逐层收窄，绝不猜测数学）：
+
+    1. ``_EXPLICIT``：手写精讲条目（含义 / 算法 / LaTeX 三者齐备）。
+    2. ``operator_doc_extended.EXTENDED_DOCS``：日内聚合族与零星缺口的补登记。
+    3. ``_operator_doc_batch.BATCH_DOCS``：批量语义条目。
+    4. 模式推断（``_ts_rolling`` / ``_elementwise`` / ...）。
+    5. **注册表 description**：来自 ``OperatorRegistry.catalog()``，是工程侧
+       登记的中文口径（含参数、后端、状态）；数学细节标注"以实现为准"。
+    6. ``_fallback``：仍无任何登记时给出类别占位，并显式说明未登记。
+
+    每一层都会先做**等价名字归一**（注册表别名如 ``TS_MEAN`` → ``ts_mean``，
+    以及 ``intra_X`` ↔ ``intraday_X``）。
+    """
     from factor_engine.cleaned_operators.docs._operator_doc_batch import BATCH_DOCS
 
-    if name in _EXPLICIT:
-        return _EXPLICIT[name]
-    if name in BATCH_DOCS:
-        return BATCH_DOCS[name]
-    for fn in (
-        _ts_rolling,
-        _elementwise,
-        _cum_shift,
-        _cross_sectional_row,
-        _group_prefix,
-        _stat_test,
-        _window_prefix,
-        _m_prefix,
-        _fill_clean,
-    ):
-        doc = fn(name)
+    try:
+        from factor_engine.cleaned_operators.docs.operator_doc_extended import (
+            EXTENDED_DOCS,
+        )
+    except Exception:  # pragma: no cover
+        EXTENDED_DOCS = {}
+
+    original = str(name or "").strip()
+    candidates = _name_candidates(original)
+
+    for candidate in candidates:
+        if candidate in _EXPLICIT:
+            return _EXPLICIT[candidate]
+
+    for candidate in candidates:
+        doc = EXTENDED_DOCS.get(candidate)
         if doc is not None:
             return doc
-    return _fallback(name, description, category)
+
+    for candidate in candidates:
+        doc = BATCH_DOCS.get(candidate)
+        if doc is not None:
+            return doc
+
+    for candidate in candidates:
+        for resolver in _PATTERN_RESOLVERS:
+            try:
+                doc = resolver(candidate)
+            except Exception:
+                continue
+            if doc is not None:
+                return doc
+
+    resolved = _registry_entry(original)
+    if resolved is not None:
+        canonical, entry = resolved
+        return _registry_doc(
+            canonical, entry,
+            alias_of=original if original != canonical else None,
+        )
+
+    return _fallback(original, description, category)
+
+
+def audit_operator_docs(names=None) -> dict:
+    """统计释义覆盖分层，供报告/CI 核对"每个算子都有释义"。
+
+    ``names`` 为空时审计 DSL 全表面（``build_dsl_allowlist(surface="all")``）。
+    返回 ``{"total": n, "tiers": {...}, "fallback": [names]}``。
+    """
+    import collections
+
+    if names is None:
+        from factor_engine.api.operator_registry import build_dsl_allowlist
+
+        names = sorted(build_dsl_allowlist(surface="all"))
+    names = list(names)
+    tiers: collections.Counter[str] = collections.Counter()
+    fallback: list[str] = []
+    for item in names:
+        tier = operator_doc_tier(item)
+        tiers[tier] += 1
+        if tier == "fallback":
+            fallback.append(item)
+    return {"total": len(names), "tiers": dict(tiers), "fallback": fallback}

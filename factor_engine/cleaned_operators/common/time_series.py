@@ -2812,6 +2812,61 @@ class TSSkewnessPolars(SeriesOperator):
             for c in cols
         ])
 
+
+# ---------------------------------------------------------------------------
+# R57 backend-coverage batch 5 — explicit execution-kind declarations.
+# Both classes are registered *before* this block, so their `_physical_spec` is
+# attached here (a dynamic-class factory would have the same ordering issue).
+#
+#   ts_skew         — genuine pl.Expr kernel (`rolling_skew`), i.e.
+#                     POLARS_NATIVE_EXPR.
+#   ts_decay_linear — a NumPy weighted-mean callback executed inside a polars
+#                     `rolling_map` over fully materialized Polars columns, i.e.
+#                     a per-column NumPy kernel (POLARS_NUMPY_KERNEL), NOT a
+#                     plain expression.  The earlier batch-4 worklist note
+#                     grouped it with the expression kernels; that was wrong.
+#
+# Neither slot carried a _physical_spec, so canonical_polars_kind(
+# production_mode=True) failed closed to UNSUPPORTED.
+# ---------------------------------------------------------------------------
+_BATCH5_NOTE_EXPR = (
+    "Genuine polars expression kernel (pl.Expr over columns, no pandas round-trip); "
+    "runtime marshal probe on the real daily panel records 0 pl.DataFrame.to_pandas "
+    "calls. Eager panel API only: no lazy/streaming or production-parity claim."
+)
+_BATCH5_NOTE_NUMPY = (
+    "Per-column NumPy weighted-mean callback executed inside a polars `rolling_map` "
+    "over fully materialized Polars columns; no pandas round-trip (runtime marshal "
+    "probe records 0 pl.DataFrame.to_pandas calls). Eager panel API only: no "
+    "lazy/streaming or production-parity claim."
+)
+
+
+def _batch5_spec(canonical: str, kernel: str, kind: ExecutionKind) -> PhysicalImplementationSpec:
+    """Explicit execution-kind contract for the batch-5 declarations."""
+    return PhysicalImplementationSpec(
+        canonical=canonical,
+        backend="polars",
+        execution_kind=kind,
+        materializes_full_panel=True,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash=f"common.time_series:{kernel}:v1",
+        emitter_identity=f"polars_expr:{canonical}",
+        kernel_identity=f"common.time_series:{kernel}",
+        parameter_domain_hash=f"{canonical}:declared:v1",
+        semantic_contract_hash=f"{canonical}:{kind.value}:v1",
+        notes=(_BATCH5_NOTE_EXPR if kind == ExecutionKind.POLARS_NATIVE_EXPR
+               else _BATCH5_NOTE_NUMPY),
+    )
+
+
+TSSkewnessPolars._physical_spec = _batch5_spec(
+    "ts_skew", "TSSkewnessPolars", ExecutionKind.POLARS_NATIVE_EXPR)
+TSDecayLinearPolars._physical_spec = _batch5_spec(
+    "ts_decay_linear", "TSDecayLinearPolars", ExecutionKind.POLARS_NUMPY_KERNEL)
+
 # aliases: TS_SKEW
 
 

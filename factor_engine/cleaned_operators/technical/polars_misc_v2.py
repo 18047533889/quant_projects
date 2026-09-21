@@ -466,6 +466,8 @@ _BATCH4_SPECS: dict[str, PhysicalImplementationSpec] = {
         ("ts_channel_position", "PolarsMiscV2_ts_channel_position"),
         ("ts_breakout_high", "PolarsMiscV2_ts_breakout_high"),
         ("ichimoku_tenkan", "PolarsMiscV2_ichimoku_tenkan"),
+        # batch 5 addition
+        ("yang_zhang_vol", "PolarsMiscV2_yang_zhang_vol"),
     )
 }
 

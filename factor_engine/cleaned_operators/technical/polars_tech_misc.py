@@ -587,6 +587,11 @@ _NATIVE_SPECS: dict[str, PhysicalImplementationSpec] = {
     for _c, _k in (
         ("efficiency_ratio", "PolarsTechMisc_efficiency_ratio"),        ("KeltnerPosition", "PolarsTechMisc_KeltnerPosition"),
         ("bollinger_pct_b", "PolarsTechMisc_bollinger_pct_b"),
+        # batch 5 additions
+        ("donchian_upper", "PolarsTechMisc_donchian_upper"),
+        ("donchian_lower", "PolarsTechMisc_donchian_lower"),
+        ("donchian_mid", "PolarsTechMisc_donchian_mid"),
+        ("donchian_position", "PolarsTechMisc_donchian_position"),
 
     )
 }

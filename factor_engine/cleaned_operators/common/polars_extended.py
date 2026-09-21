@@ -220,8 +220,15 @@ _BATCH4_NATIVE_SPECS: dict[str, PhysicalImplementationSpec] = {
     for _c, _k in (
         ("minimum", "MinimumPolars"),
         ("maximum", "MaximumPolars"),
+        # batch-5 additions: TSMedianPolars / PowerPolars are declared above this
+        # table, so their spec is attached to the class right after it is built.
+        ("ts_median", "TSMedianPolars"),
+        ("power", "PowerPolars"),
     )
 }
+
+TSMedianPolars._physical_spec = _BATCH4_NATIVE_SPECS["ts_median"]
+PowerPolars._physical_spec = _BATCH4_NATIVE_SPECS["power"]
 
 
 @register_operator(name="minimum", category="math", business_category="elementwise_math", canonical="minimum", source="factor_dsl_polars")

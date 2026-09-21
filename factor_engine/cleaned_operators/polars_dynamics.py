@@ -65,6 +65,22 @@ def _rebuild(base: pl.DataFrame, data: dict[str, np.ndarray]) -> pl.DataFrame:
     )
 
 
+# ---------------------------------------------------------------------------
+# R57 backend-coverage batch 5.
+# The `_mk` factory builds a PhysicalImplementationSpec only for canonicals that
+# match one of its family branches.  The three canonicals below are served by
+# this same per-instrument NumPy-over-Polars-columns plumbing but fall outside
+# every branch, so `physical_spec` stayed ``None`` and the polars slot failed
+# closed to UNSUPPORTED.  Map each to the shared NumPy kernel it actually runs
+# so the source digest can be taken over the owning module.
+# ---------------------------------------------------------------------------
+_BATCH5_DYNAMICS_KERNELS: dict[str, str] = {
+    "ts_markov_persistence": "markov_dynamics._state_dynamics_series",
+    "report_filing_delay_surprise": "report_timing._delay_surprise_series",
+    "ts_transfer_entropy_peak_strength": "advanced_information._te_peak_window",
+}
+
+
 def _mk(canonical: str, description: str, params: list[str], fn):
     metadata = OperatorMetadata(
         name=canonical,
@@ -188,6 +204,43 @@ def _mk(canonical: str, description: str, params: list[str], fn):
             notes=("Eager fully materialized Polars columns feed the shared NumPy "
                    "state-dynamics kernel and a per-column equilibrium evaluator; "
                    "no pandas conversion, lazy execution, streaming, or GPU path."),
+        )
+    elif canonical in _BATCH5_DYNAMICS_KERNELS:
+        # Batch 5: no family branch above matched, so this slot had no spec and
+        # failed closed.  The kernel is the shared per-instrument NumPy kernel
+        # run over fully materialized Polars columns (_col -> kernel -> _rebuild)
+        # with no pandas panel conversion, hence POLARS_NUMPY_KERNEL.
+        import factor_engine.cleaned_operators.advanced_information as _adv_mod
+        import factor_engine.cleaned_operators.markov_dynamics as _markov_mod
+        import factor_engine.cleaned_operators.report_timing as _timing_mod
+
+        _owner = {
+            "ts_markov_persistence": _markov_mod,
+            "report_filing_delay_surprise": _timing_mod,
+            "ts_transfer_entropy_peak_strength": _adv_mod,
+        }[canonical]
+        source_hash = hashlib.sha256(
+            Path(_owner.__file__).read_bytes() + Path(__file__).read_bytes()
+        ).hexdigest()
+        physical_spec = PhysicalImplementationSpec(
+            canonical=canonical,
+            backend="polars",
+            execution_kind=ExecutionKind.POLARS_NUMPY_KERNEL,
+            supports_lazy=False,
+            supports_streaming=False,
+            materializes_full_panel=True,
+            supports_nulls=True,
+            supports_nan=True,
+            supports_inf=True,
+            implementation_source_hash=source_hash,
+            emitter_identity="polars_dynamics._col:_rebuild:v1",
+            kernel_identity=_BATCH5_DYNAMICS_KERNELS[canonical],
+            parameter_domain_hash=f"{canonical}:declared:v1",
+            semantic_contract_hash=f"{canonical}:polars_numpy_kernel:v1",
+            notes=("Per-instrument shared NumPy CPU kernel over fully materialized "
+                   "Polars columns (Series.to_numpy -> kernel -> pl.Series); no "
+                   "pandas-panel conversion, lazy execution, streaming, or GPU "
+                   "claim. Eager panel API only."),
         )
 
     def _calculate_series(self, *args, **kwargs):

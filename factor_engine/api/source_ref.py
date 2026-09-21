@@ -471,6 +471,25 @@ def is_source_ref(name: str) -> bool: return decode_source_ref(name) is not None
 
 def source_col(table: str, field: str, *param_items: Any, dialect: str = "lqtp",
                dialect_version: str = "2026-07-19", **params: Any):
+    # R58b (2026-09-21): adjusted-only gate at the central choke point.
+    # Every user-facing surface (field(), DSL source_col, lqtp allowlist)
+    # funnels through here, so the unadjusted-price rejection must live here
+    # too: a direct call to source_ref.source_col('StockDailyBar', 'close')
+    # previously bypassed the per-surface guards (verified empirically).
+    if str(table) == "StockDailyBar":
+        try:
+            from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+            _raw_spec = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").get(
+                str(field), table="StockDailyBar", strict=False)
+        except Exception:
+            _raw_spec = None
+        if _raw_spec is not None and getattr(_raw_spec, "price_basis", None) == "RAW":
+            raise ValueError(
+                f"source_col('StockDailyBar', {field!r}) is an UNADJUSTED price "
+                f"column (price_basis=RAW) and must not be read by the factor "
+                f"engine. Use source_col('StockDailyBarAdj', {field!r}) "
+                f"(back-adjusted) instead."
+            )
     if len(param_items)%2: raise ValueError("source_col parameters must be key/value pairs")
     # Review-8 #470: a parameter given twice (positional + keyword, or twice
     # positionally) must be rejected — "the last one wins" silently corrupts the

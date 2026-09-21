@@ -86,6 +86,29 @@ def _native_source_col(*items: Any) -> Any:
     if table_spec is None:
         raise ValueError(f"source_col unknown table {table!r}")
     FIELD_REGISTRY.require(field_name, table=table_spec.name)
+    # R58 (2026-09-21): adjusted-only gate for the native research DSL surface.
+    # Reject unadjusted A-share OHLCV (price_basis == "RAW") read from
+    # StockDailyBar; the back-adjusted StockDailyBarAdj is the authoritative
+    # price basis. Limit prices (RAW_OFFICIAL_LIMIT) and Factor/Volume/
+    # amount/ret remain permitted. Mirrors the guard in
+    # lqtp_compat._guarded_source_col so the policy holds on every surface,
+    # including the native research surface used by ``source_col`` here.
+    if str(table_spec.name) == "StockDailyBar":
+        try:
+            from factor_engine.fields.market_registry import MULTI_MARKET_FIELD_REGISTRY
+            _spec = MULTI_MARKET_FIELD_REGISTRY.registry_for("ashare").get(
+                str(field_name), table="StockDailyBar", strict=False)
+            if _spec is not None and getattr(_spec, "price_basis", None) == "RAW":
+                raise ValueError(
+                    f"source_col('StockDailyBar', {field_name!r}) is an UNADJUSTED "
+                    f"price column (price_basis=RAW) and must not be read by the "
+                    f"factor engine. Use source_col('StockDailyBarAdj', {field_name!r}) "
+                    f"(back-adjusted) instead."
+                )
+        except ValueError:
+            raise
+        except Exception:
+            pass
     required = set(table_spec.required_parameters)
     if table_spec.name == "IndexDailyBar":
         required.add("index")
@@ -370,6 +393,22 @@ class _ExprBuilder:
             seen_keywords.add(kw.arg)
             bound_canonical.add(canonical_kw)
             kwargs[kw.arg]=self._visit_call_argument(kw.value,name,canonical_kw)
+        if isinstance(node.func,ast.Name):
+            # R59: under-called declared-signature ops fail at parse time
+            # (same acceptance set as the runtime binder — see helper).
+            try:
+                _g_aliases,_g_param_names=_call_parameter_binding(name)
+            except Exception:
+                _g_param_names=()
+            if _g_param_names and "..." not in _g_param_names:
+                _missing=_missing_required_params(
+                    name,tuple(_g_param_names[:len(node.args)]),set(kwargs)
+                )
+                if _missing:
+                    raise DSLParseError(
+                        f"{name}: missing required parameter(s) {_missing} — declared "
+                        f"signature {list(_g_param_names)}"
+                    )
         if not callable(func):raise DSLParseError("Call target is not callable.")
         if isinstance(node.func,ast.Name):
             # Round-11 #16: controlled numeric-string conversion against the
@@ -557,6 +596,47 @@ def _call_parameter_binding(name:str)->tuple[dict[str,str],tuple[str,...]]:
     if meta is None:
         raise DSLParseError(f"Operator metadata unavailable for {name!r}; cannot verify parameter binding.")
     return dict(_effective_alias_map(canonical)),tuple(getattr(meta,"param_names",None) or ())
+
+
+def _missing_required_params(name:str,bound_positional,bound_kwargs):
+    """R59: parse-time mirror of the runtime binder's required-parameter gate.
+
+    A call that omits a declared panel/scalar parameter with neither a kernel
+    default nor a ParamSpec default (e.g. ``ts_abdi_ranaldo_spread(close, 20)``
+    — the kernel needs close/high/low) is rejected here with a typed
+    DSLParseError instead of crashing inside the kernel at runtime.  The
+    acceptance set is IDENTICAL to ``bind_operator_call`` (same panels/scalars,
+    same ``_kernel_param_defaults`` source, same ParamSpec-default escape), so
+    nothing the binder accepts can be rejected here.
+    """
+    if not bound_positional and not bound_kwargs:
+        return []
+    try:
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+        from factor_engine.cleaned_operators.base import (
+            MISSING as _MISSING,
+            _kernel_param_defaults,
+        )
+        canonical=OperatorRegistry.resolve_canonical(name)
+        operator=OperatorRegistry.get(canonical,mode="any")
+        meta=getattr(operator,"metadata",None)
+        if meta is None:
+            return []
+        panels=tuple(getattr(meta,"panel_params",None) or ())
+        scalars=tuple(getattr(meta,"scalar_params",None) or ())
+        if not (panels or scalars):
+            return []
+        specs=getattr(meta,"param_specs",None) or {}
+        defaults=_kernel_param_defaults(operator)
+        provided=set(bound_positional)|set(bound_kwargs)
+        return [
+            p for p in (*panels,*scalars)
+            if p not in provided
+            and p not in (defaults or {})
+            and getattr(specs.get(p),"default",_MISSING) is _MISSING
+        ]
+    except Exception:
+        return []
 
 
 def _declared_sequence_spec(name:str,param_name:str,container:type):

@@ -11832,8 +11832,11 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             )
 
         if op == "m1_momentum_speed_change":
-            fw = _int_attr(node, "fast_window", default=5)
-            sw = _int_attr(node, "slow_window", default=20)
+            # R60 fix: read positional literals too (fast_window=inputs[1],
+            # slow_window=inputs[2]); the attr-only form silently ignored
+            # user-supplied windows and fell back to the defaults.
+            fw = _int_attr(node, "fast_window", input_index=0, default=5)
+            sw = _int_attr(node, "slow_window", input_index=1, default=20)
             if fw >= sw:
                 from factor_engine.backend.plan_params import PlanParamError
 

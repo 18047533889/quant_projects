@@ -255,14 +255,21 @@ def _resolve_capability_path(plan: PlanNode, *, dialect: str) -> bool:
         if compiled is None:
             return False
         query = compiled.query.replace("{{test_panel}}", "test_panel")
-        con = duckdb.connect()
-        try:
+        # R58: reuse a pooled DuckDB connection instead of duckdb.connect() per
+        # probe call (was ~10-18 ms fixed cost each, which dominated capability
+        # probing when run per-operator in the SQL->polars parity fixture).
+        from factor_engine.backend.sql_pushdown.duckdb_connection_pool import (
+            get_shared_duckdb_pool,
+        )
+        with get_shared_duckdb_pool().acquire() as handle:
             # Seed the ``test_panel`` relation the probe's compiled query
-            # references — the probe creates its OWN connection, so the fixture's
-            # ``con.register("test_panel", ...)`` is not in scope here.  Without
-            # this seed every probe fails at execution with "table not found",
-            # making the capability probe vacuously False for ALL operators.
-            con.register(
+            # references — the probe used to create its OWN connection, so the
+            # fixture's ``con.register("test_panel", ...)`` was not in scope.
+            # Without this seed every probe fails at execution with
+            # "table not found", making the capability probe vacuously False
+            # for ALL operators.  The pooled handle re-seeds on every call
+            # (register overwrites), so concurrent probes never alias.
+            handle.register(
                 "test_panel",
                 pd.DataFrame(
                     [
@@ -277,12 +284,10 @@ def _resolve_capability_path(plan: PlanNode, *, dialect: str) -> bool:
                     ]
                 ),
             )
-            arrow_raw = con.execute(query).arrow()
+            arrow_raw = handle.execute(query).arrow()
             arrow = arrow_raw.read_all() if hasattr(arrow_raw, "read_all") else arrow_raw
             lf = pl.from_arrow(arrow)
             return "value" in lf.columns and lf.height > 0
-        finally:
-            con.close()
     except Exception:
         return False
 

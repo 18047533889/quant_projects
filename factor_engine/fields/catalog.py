@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import enum
 
+from .glossary import FIELD_DESCRIPTIONS, TABLE_FIELD_DESCRIPTIONS
+
 from .spec import FieldSpec, TableSpec
 from .units import (
     UNIT_BASIS_POINT,
@@ -336,7 +338,7 @@ def _f(
     source_unit=None,
     aliases=(),
     role="feature",
-    description="",
+    description=None,
     adjustment=None,
     temporal_model=None,
     cardinality=None,
@@ -350,6 +352,10 @@ def _f(
     semantic_kind=None,
     metadata=None,
 ):
+    if description is None:
+        description = TABLE_FIELD_DESCRIPTIONS.get(
+            f"{table}.{name}"
+        ) or FIELD_DESCRIPTIONS.get(name, "")
     table_spec = _TABLE_BY_NAME[table]
     role = validate_field_role(role)
     # R17-014: table-level required parameters (IndustrySource / IndexSymbol /

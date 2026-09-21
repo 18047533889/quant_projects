@@ -254,6 +254,10 @@ _NATIVE_SPECS: dict[str, PhysicalImplementationSpec] = {
         ("intra_same_slot_momentum", "IntradayPolarsFull_intra_same_slot_momentum"),
         ("intra_entropy", "IntradayPolarsFull_intra_entropy"),
         ("intra_segment_return", "IntradayPolarsFull_intra_segment_return"),
+        # batch 5: declared only after the ``_vwap_valid`` mask fix above; the
+        # batch-4 attempt was pruned because the kernel diverged ~0.2% from the
+        # pandas reference.
+        ("intra_vwap_reversion_speed", "IntradayPolarsFull_intra_vwap_reversion_speed"),
 
     )
 }
@@ -576,6 +580,23 @@ def _vwap_reversion_speed(close: pl.DataFrame, amount: pl.DataFrame, volume: pl.
         .join(_melt(amount, "amount"), on=["ts", "instrument"], how="left")
         .join(_melt(volume, "volume"), on=["ts", "instrument"], how="left")
     )
+    # WINDOW-SEMANTICS PARITY (pandas reference `vwap_path._vwap_valid`): a minute
+    # counts only when close, amount AND volume are all finite AND volume > 0.
+    # The shared `_cum_vwap_long` helper filters on `close` finiteness alone, so
+    # zero-volume / non-finite-amount bars stayed in the deviation sequence and
+    # shifted the AR(1) beta by ~0.2% relative on the real minute panel (batch-4
+    # finding, root-caused in batch 5).  The full mask must be applied HERE,
+    # before the cumulative sums: `_cum_vwap_long` is shared by kernels whose own
+    # pandas references use a different validity rule, so it is not the place.
+    _valid = (
+        pl.col("close").is_finite()
+        & pl.col("amount").is_finite()
+        & pl.col("volume").is_finite()
+        & (pl.col("volume") > 0)
+    )
+    long = long.filter(_valid)
+    # pandas reference gate: ``if valid.sum() < 5: return nan``.
+    n_valid = long.group_by(["date", "instrument"]).agg(pl.len().alias("n_valid"))
     long = _cum_vwap_long(long).filter(pl.col("cum_vwap").is_not_null())
     long = long.sort(["date", "instrument", "ts"]).with_columns(
         (pl.col("close") / pl.col("cum_vwap") - 1.0).alias("d")
@@ -590,14 +611,20 @@ def _vwap_reversion_speed(close: pl.DataFrame, amount: pl.DataFrame, volume: pl.
         (pl.col("dprev") * pl.col("dprev")).sum().alias("sdp2"),
     ).with_columns(
         pl.col("n").cast(pl.Float64).alias("nf")
+    ).join(n_valid, on=["date", "instrument"], how="left").with_columns(
+        # pandas guards on ``np.std(dprev) <= _EPS`` — a POPULATION std, not a
+        # variance floor; port the same quantity so the NaN masks agree.
+        ((pl.col("sdp2") - pl.col("sdp") * pl.col("sdp") / pl.col("nf")) / pl.col("nf"))
+        .clip(lower_bound=0.0).sqrt().alias("sd_prev")
     ).with_columns(
         ((pl.col("nf") * (pl.col("sdpd") - pl.col("sd") * pl.col("sdp") / pl.col("nf")))
          / ((pl.col("nf") - 1.0) * (pl.col("sdp2") - pl.col("sdp") * pl.col("sdp") / pl.col("nf")))).alias("beta")
     )
     out = g.with_columns(
         pl.when(
-            (pl.col("n") >= 3)
-            & ((pl.col("sdp2") - pl.col("sdp") * pl.col("sdp") / pl.col("nf")) / pl.col("nf") > _EPS)
+            (pl.col("n_valid") >= 5)
+            & (pl.col("n") >= 3)
+            & (pl.col("sd_prev") > _EPS)
         ).then(pl.col("beta")).otherwise(None).alias("v")
     )
     return _pivot(out, "v")

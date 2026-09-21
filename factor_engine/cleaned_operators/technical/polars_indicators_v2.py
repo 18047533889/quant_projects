@@ -531,6 +531,8 @@ _BATCH4_SPECS: dict[str, PhysicalImplementationSpec] = {
         ("DMI_minus", "PolarsIndicatorsV2_DMI_minus"),
         ("PPO", "PolarsIndicatorsV2_PPO"),
         ("PPO_hist", "PolarsIndicatorsV2_PPO_hist"),
+        # batch 5 addition
+        ("DEMA", "PolarsIndicatorsV2_DEMA"),
     )
 }
 

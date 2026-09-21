@@ -6,6 +6,7 @@ and records the selected source in its manifest.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -17,6 +18,30 @@ import numpy as np
 PROJECT = Path("/home/sunhaiwei/quant_projects")
 FULL_WINDOW_START = pd.Timestamp("2016-01-04")
 FULL_WINDOW_END = pd.Timestamp("2026-08-27")
+
+# There is **no warm-up requirement on the left edge at all**.  A factor is
+# judged from its own first usable value onwards: whatever lookback a windowed
+# operator needs (``ts_delta(x, 1)`` needs one bar, ``ts_std(x, 60)`` needs
+# sixty) simply delays the first usable cross-section, and that delay is never
+# a defect.  The earlier rule required a value on FULL_WINDOW_START itself —
+# the very first day of the panel — which is impossible for any factor with a
+# lookback, and it mislabelled 26 candidates of the 2026-09-16 new-mining batch
+# as "unavailable".  A fixed allowance (260d) was a stopgap; this replaces it
+# with the actual rule: no left-edge requirement whatsoever.
+#
+# Two things still make a matrix unusable, and neither is about warm-up:
+#   * it stops early  — a genuine landing gap.  The t+2 return convention makes
+#     the final sessions unusable by design, so one calendar week of slack.
+#   * too few usable sessions — the RankIC would be noise.  This is a
+#     statistical floor, not a warm-up bound, and the default is deliberately
+#     low (about one quarter).  Measured on the 2026-09-16 new-mining batch:
+#     every one of the 83 matrices this pipeline landed itself has 2363-2588
+#     usable sessions, so the floor blocks nothing real and moving it from 250
+#     to 60 changed the verdict of exactly zero factors.  It exists only to
+#     stop a landing that produced almost nothing from being evaluated as if it
+#     had.  Set FACTOR_REPORT_MIN_USABLE_DAYS=0 to disable it entirely and
+#     accept any factor with a usable value through the end of the window.
+MIN_USABLE_DAYS = int(os.environ.get("FACTOR_REPORT_MIN_USABLE_DAYS", "60"))
 
 # The first directory is canonical.  The remaining directories are legacy
 # landing locations.  They are accepted only after an actual date-coverage
@@ -81,20 +106,29 @@ def resolve_raw_matrix(page: str) -> MatrixSource:
             candidates.append(MatrixSource(page, path, directory, None, None, None, None, 0, False,
                                            f"cannot read parquet index: {type(exc).__name__}"))
             continue
-        # Allow only a brief warm-up before the first usable cross-section,
-        # but require usable values through the last requested date.
-        full = bool(valid_start is not None and valid_end is not None
-                    and start <= FULL_WINDOW_START
-                    and valid_start <= FULL_WINDOW_START
-                    # The t+2 return convention makes the final two to three
-                    # signal dates unusable by design; this is not a landing
-                    # gap.  Anything older than one calendar week is.
+        # No left-edge (warm-up) requirement: the factor's usable history starts
+        # wherever its own operators allow, and that is fine.
+        #
+        # A *leading gap* is a different failure and is still caught: if the
+        # matrix itself begins later than the panel (a landing that did not cover
+        # the whole window) and then stays empty for a long stretch, the landing
+        # is broken, not "warming up".  Landing from the factor's own first
+        # usable value is explicitly allowed (gap ≈ 0).
+        leading_gap = bool(
+            start is not None and valid_start is not None
+            and start > FULL_WINDOW_START
+            and (valid_start - start) > pd.Timedelta(days=200))
+        full = bool(valid_end is not None
+                    and not leading_gap
                     and valid_end >= FULL_WINDOW_END - pd.Timedelta(days=7)
-                    and valid_days >= 1800)
+                    and valid_days >= MIN_USABLE_DAYS)
         reason = None if full else (
-            f"requires usable history from {FULL_WINDOW_START.date()}; "
-            f"index={start}..{end}, usable={valid_start}..{valid_end}, "
-            f"usable_days={valid_days}")
+            (f"index starts {start} (panel starts {FULL_WINDOW_START.date()}) "
+             f"but the first usable value is {valid_start} — broken landing, not warm-up; "
+             if leading_gap else "")
+            + f"usable={valid_start}..{valid_end}, usable_days={valid_days}; "
+            f"requires usable values through {FULL_WINDOW_END.date()} (-7d t+2 slack) "
+            f"and >= {MIN_USABLE_DAYS} usable sessions (no warm-up requirement)")
         candidates.append(MatrixSource(page, path, directory, start, end,
                                        valid_start, valid_end, valid_days, full, reason))
     if not candidates:
