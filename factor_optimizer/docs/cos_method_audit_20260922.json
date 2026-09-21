@@ -1,0 +1,2918 @@
+{
+  "provenance": {
+    "sources": [
+      {
+        "factor": "alphasage_20260909062020_09e3f39d",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/alphasage_20260909062020_09e3f39d.parquet",
+        "etag": "827388f64f3269ab2ac4f2b3a0a3c6c2",
+        "sha256": "2c65a6650c4ff082b820ada904649520352491ca9630cba0b95dc12cc9e127f3",
+        "downloaded_bytes": 4127982
+      },
+      {
+        "factor": "alphasage_20260909062020_1a8fff63",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/alphasage_20260909062020_1a8fff63.parquet",
+        "etag": "ac00407ca424f298eedfbc889c6df122",
+        "sha256": "63762c41936428086d51b9ffca62c9a369914ada02619790d2019ed24e83f35c",
+        "downloaded_bytes": 3033074
+      },
+      {
+        "factor": "alphasage_20260909062020_20fcde8b",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/alphasage_20260909062020_20fcde8b.parquet",
+        "etag": "0b26ee3263013173cdba6ff166826931",
+        "sha256": "6fab8d05223383de58c48936187280452dfe242540673ddef50f9aba7d07de89",
+        "downloaded_bytes": 3311464
+      }
+    ],
+    "days": 500,
+    "assets": 512,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "selection": "first bounded object keys; assets selected on TRAIN coverage only",
+    "limitations": "research replay; no upstream PIT or investability certification; recipe lineage not loaded"
+  },
+  "counts": {
+    "requires_additional_inputs_or_control": 33,
+    "executed": 159
+  },
+  "methods": [
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "ABANDON",
+      "parameters": {},
+      "status": "requires_additional_inputs_or_control",
+      "reason": "ABANDON has no executable value-level mapping"
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 3,
+        "window": 3
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.99,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.0002033668085164248
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 5,
+        "window": 5
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9833333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00019356917042242535
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 8,
+        "window": 8
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9733333333333334,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00016951190113861483
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 10,
+        "window": 10
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9666666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00011750698101268632
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 13,
+        "window": 13
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9566666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00009571922228434932
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 20,
+        "window": 20
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9333333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00008304213059475029
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 3,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00013863172082575781
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 5,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00013152718523445664
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 8,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.000091178043978723
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 10,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00007262988603812453
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 13,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00002043327552791805
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 20,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.00004213742205135193
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.20629947401590026
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00013863172082575781
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.12944943670387585
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00013152718523445664
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.08299595679532877
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.000091178043978723
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.06696700846319258
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00007262988603812453
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.051922485660828535
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00002043327552791805
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 8,
+        "period_fast": 2,
+        "period_slow": 24,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.97,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00013311877391126138
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 10,
+        "period_fast": 2,
+        "period_slow": 30,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9633333333333334,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00011619048710036098
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 13,
+        "period_fast": 2,
+        "period_slow": 39,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9533333333333334,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00006234233626356854
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 20,
+        "period_fast": 2,
+        "period_slow": 60,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.93,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00004212489258182756
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.053621575878972906
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00013877838899758476
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.019248918293159143
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00013091790949417505
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.007511775869928892
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00009843091920279445
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.004806454073100579
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00007893578186949402
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0028435908208181383
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00002902240603216969
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0012012527662230554
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.000009962334598394936
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": false
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00017263195434419278
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": true
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00013152718523445664
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "INDUSTRY_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "industry",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "INDUSTRY_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": false
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0014213759846983284
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": true
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00006060892979968613
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "LOW_DOF_INTERACTION",
+      "parameters": {
+        "interaction_degree": 1,
+        "doe_reduction": 0.7
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "LOW_DOF_INTERACTION requires FactorEngine DSL recompilation"
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "flag",
+        "freshness_window": 5
+      },
+      "transform": "missing_indicator",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 0,
+      "paired_retention": 0,
+      "train_mean_ic_delta": null
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "fill",
+        "freshness_window": 5
+      },
+      "transform": "forward_fill",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "drop",
+        "freshness_window": 5
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "drop mode is row-selection, not a value Series primitive"
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "NO_OP_RAW",
+      "parameters": {
+        "keep_raw": true
+      },
+      "transform": "raw",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "OPERATOR_SWAP",
+      "parameters": {
+        "target_family": "delay",
+        "aggressiveness": "conservative"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "OPERATOR_SWAP requires FactorEngine DSL recompilation"
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "cross_sectional",
+        "tie_method": "average"
+      },
+      "transform": "cs_rank",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "cross_sectional",
+        "tie_method": "min"
+      },
+      "transform": "cs_rank",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "average"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "time-series rank lacks a registry window parameter"
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "min"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "time-series rank lacks a registry window parameter"
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "REPRESENTATION_ZSCORE",
+      "parameters": {
+        "zscore_axis": "cross_sectional",
+        "cap": 3
+      },
+      "transform": "capped_zscore",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 5.790815516114806e-7
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "REPRESENTATION_ZSCORE",
+      "parameters": {
+        "zscore_axis": "ts",
+        "cap": 3
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "time-series zscore lacks a registry window parameter"
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "ROBUST_OUTLIER",
+      "parameters": {
+        "lower_quantile": 0.01,
+        "upper_quantile": 0.99
+      },
+      "transform": "cs_winsor",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 2.0126275300917927e-7
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "mad",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "mad",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "iqr",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "iqr",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "std",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "std",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "SIGN_ORIENTATION",
+      "parameters": {
+        "direction": "keep"
+      },
+      "transform": "sign",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "SIGN_ORIENTATION",
+      "parameters": {
+        "direction": "flip"
+      },
+      "transform": "sign",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.004081463472627413
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "SIZE_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "size",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "SIZE_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "STYLE_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "style_multi",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "STYLE_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "TAIL_HINGE",
+      "parameters": {
+        "hinge": "top",
+        "hinge_value": 0
+      },
+      "transform": "tail_hinge",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "TAIL_HINGE",
+      "parameters": {
+        "hinge": "bottom",
+        "hinge_value": 0
+      },
+      "transform": "tail_hinge",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 0,
+      "paired_retention": 0,
+      "train_mean_ic_delta": null
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "top"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.000010018086173804142
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "bottom"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.000016926743863138512
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "both"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.000006908762229803922
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": false
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.002660087487929087
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": true
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0041420724024271
+    },
+    {
+      "factor": "alphasage_20260909062020_09e3f39d",
+      "family": "WINDOW_REFINEMENT",
+      "parameters": {
+        "window_mode": "shorter",
+        "scale": 0.7
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "WINDOW_REFINEMENT requires FactorEngine DSL recompilation"
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "ABANDON",
+      "parameters": {},
+      "status": "requires_additional_inputs_or_control",
+      "reason": "ABANDON has no executable value-level mapping"
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 3,
+        "window": 3
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.99,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 5,
+        "window": 5
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9833333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 8,
+        "window": 8
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9733333333333334,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 10,
+        "window": 10
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9666666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 13,
+        "window": 13
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9566666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 20,
+        "window": 20
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9333333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 3,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 5,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 8,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 10,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 13,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 20,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.20629947401590026
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.12944943670387585
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.08299595679532877
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.06696700846319258
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.051922485660828535
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 8,
+        "period_fast": 2,
+        "period_slow": 24,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.97,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 10,
+        "period_fast": 2,
+        "period_slow": 30,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9633333333333334,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 13,
+        "period_fast": 2,
+        "period_slow": 39,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9533333333333334,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 20,
+        "period_fast": 2,
+        "period_slow": 60,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.93,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.053621575878972906
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.019248918293159143
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.007511775869928892
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.004806454073100579
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0028435908208181383
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0012012527662230554
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": false
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": true
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "INDUSTRY_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "industry",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "INDUSTRY_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": false
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.002347342917548905
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": true
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.002347342917548905
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "LOW_DOF_INTERACTION",
+      "parameters": {
+        "interaction_degree": 1,
+        "doe_reduction": 0.7
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "LOW_DOF_INTERACTION requires FactorEngine DSL recompilation"
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "flag",
+        "freshness_window": 5
+      },
+      "transform": "missing_indicator",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 0,
+      "paired_retention": 0,
+      "train_mean_ic_delta": null
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "fill",
+        "freshness_window": 5
+      },
+      "transform": "forward_fill",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "drop",
+        "freshness_window": 5
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "drop mode is row-selection, not a value Series primitive"
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "NO_OP_RAW",
+      "parameters": {
+        "keep_raw": true
+      },
+      "transform": "raw",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "OPERATOR_SWAP",
+      "parameters": {
+        "target_family": "delay",
+        "aggressiveness": "conservative"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "OPERATOR_SWAP requires FactorEngine DSL recompilation"
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "cross_sectional",
+        "tie_method": "average"
+      },
+      "transform": "cs_rank",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "cross_sectional",
+        "tie_method": "min"
+      },
+      "transform": "cs_rank",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "average"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "time-series rank lacks a registry window parameter"
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "min"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "time-series rank lacks a registry window parameter"
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "REPRESENTATION_ZSCORE",
+      "parameters": {
+        "zscore_axis": "cross_sectional",
+        "cap": 3
+      },
+      "transform": "capped_zscore",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "REPRESENTATION_ZSCORE",
+      "parameters": {
+        "zscore_axis": "ts",
+        "cap": 3
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "time-series zscore lacks a registry window parameter"
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "ROBUST_OUTLIER",
+      "parameters": {
+        "lower_quantile": 0.01,
+        "upper_quantile": 0.99
+      },
+      "transform": "cs_winsor",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 0,
+      "paired_retention": 0,
+      "train_mean_ic_delta": null
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "mad",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "mad",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "iqr",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "iqr",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "std",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "std",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "SIGN_ORIENTATION",
+      "parameters": {
+        "direction": "keep"
+      },
+      "transform": "sign",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "SIGN_ORIENTATION",
+      "parameters": {
+        "direction": "flip"
+      },
+      "transform": "sign",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.002347342917548905
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "SIZE_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "size",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "SIZE_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "STYLE_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "style_multi",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "STYLE_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "TAIL_HINGE",
+      "parameters": {
+        "hinge": "top",
+        "hinge_value": 0
+      },
+      "transform": "tail_hinge",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "TAIL_HINGE",
+      "parameters": {
+        "hinge": "bottom",
+        "hinge_value": 0
+      },
+      "transform": "tail_hinge",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 0,
+      "paired_retention": 0,
+      "train_mean_ic_delta": null
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "top"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 0,
+      "paired_retention": 0,
+      "train_mean_ic_delta": null
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "bottom"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "both"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 0,
+      "paired_retention": 0,
+      "train_mean_ic_delta": null
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": false
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": true
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_1a8fff63",
+      "family": "WINDOW_REFINEMENT",
+      "parameters": {
+        "window_mode": "shorter",
+        "scale": 0.7
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "WINDOW_REFINEMENT requires FactorEngine DSL recompilation"
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "ABANDON",
+      "parameters": {},
+      "status": "requires_additional_inputs_or_control",
+      "reason": "ABANDON has no executable value-level mapping"
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 3,
+        "window": 3
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.99,
+      "valid_ic_days": 12,
+      "paired_retention": 0.9230769230769231,
+      "train_mean_ic_delta": -0.013025082894932705
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 5,
+        "window": 5
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9833333333333333,
+      "valid_ic_days": 12,
+      "paired_retention": 0.9230769230769231,
+      "train_mean_ic_delta": -0.018234380016459308
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 8,
+        "window": 8
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9733333333333334,
+      "valid_ic_days": 12,
+      "paired_retention": 0.9230769230769231,
+      "train_mean_ic_delta": -0.01892700554852571
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 10,
+        "window": 10
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9666666666666667,
+      "valid_ic_days": 12,
+      "paired_retention": 0.9230769230769231,
+      "train_mean_ic_delta": -0.01675845937656574
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 13,
+        "window": 13
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9566666666666667,
+      "valid_ic_days": 12,
+      "paired_retention": 0.9230769230769231,
+      "train_mean_ic_delta": -0.011545480759642285
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 20,
+        "window": 20
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9333333333333333,
+      "valid_ic_days": 12,
+      "paired_retention": 0.9230769230769231,
+      "train_mean_ic_delta": -0.01256173302127564
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 3,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006493562984906365
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 5,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006559071646136559
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 8,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006604563632473524
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 10,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.00660734346016118
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 13,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.00660739213597698
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 20,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006607369412846029
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.20629947401590026
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006493562984906365
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.12944943670387585
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006559071646136559
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.08299595679532877
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006604563632473524
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.06696700846319258
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.00660734346016118
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.051922485660828535
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.00660739213597698
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 8,
+        "period_fast": 2,
+        "period_slow": 24,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.97,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006484921002272595
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 10,
+        "period_fast": 2,
+        "period_slow": 30,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9633333333333334,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.015797369750299422
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 13,
+        "period_fast": 2,
+        "period_slow": 39,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9533333333333334,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.01578470485141604
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 20,
+        "period_fast": 2,
+        "period_slow": 60,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.93,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.015589299295506679
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.053621575878972906
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006493562984906365
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.019248918293159143
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006559071646136559
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.007511775869928892
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.00661263431077883
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.004806454073100579
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0066262471393854
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0028435908208181383
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006604202964493226
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0012012527662230554
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006599683027037662
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": false
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006248468385496254
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": true
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006559071646136559
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "INDUSTRY_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "industry",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "INDUSTRY_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": false
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.05508287284223122
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": true
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.05508287284223122
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "LOW_DOF_INTERACTION",
+      "parameters": {
+        "interaction_degree": 1,
+        "doe_reduction": 0.7
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "LOW_DOF_INTERACTION requires FactorEngine DSL recompilation"
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "flag",
+        "freshness_window": 5
+      },
+      "transform": "missing_indicator",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 0,
+      "paired_retention": 0,
+      "train_mean_ic_delta": null
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "fill",
+        "freshness_window": 5
+      },
+      "transform": "forward_fill",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "drop",
+        "freshness_window": 5
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "drop mode is row-selection, not a value Series primitive"
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "NO_OP_RAW",
+      "parameters": {
+        "keep_raw": true
+      },
+      "transform": "raw",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "OPERATOR_SWAP",
+      "parameters": {
+        "target_family": "delay",
+        "aggressiveness": "conservative"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "OPERATOR_SWAP requires FactorEngine DSL recompilation"
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "cross_sectional",
+        "tie_method": "average"
+      },
+      "transform": "cs_rank",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "cross_sectional",
+        "tie_method": "min"
+      },
+      "transform": "cs_rank",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "average"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "time-series rank lacks a registry window parameter"
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "min"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "time-series rank lacks a registry window parameter"
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "REPRESENTATION_ZSCORE",
+      "parameters": {
+        "zscore_axis": "cross_sectional",
+        "cap": 3
+      },
+      "transform": "capped_zscore",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -2.3476928892729667e-7
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "REPRESENTATION_ZSCORE",
+      "parameters": {
+        "zscore_axis": "ts",
+        "cap": 3
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "time-series zscore lacks a registry window parameter"
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "ROBUST_OUTLIER",
+      "parameters": {
+        "lower_quantile": 0.01,
+        "upper_quantile": 0.99
+      },
+      "transform": "cs_winsor",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 1,
+      "paired_retention": 0.07692307692307693,
+      "train_mean_ic_delta": -0.000066498385114723
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "mad",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "mad",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "iqr",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "iqr",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "std",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "std",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "SIGN_ORIENTATION",
+      "parameters": {
+        "direction": "keep"
+      },
+      "transform": "sign",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "SIGN_ORIENTATION",
+      "parameters": {
+        "direction": "flip"
+      },
+      "transform": "sign",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.05508287284223122
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "SIZE_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "size",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "SIZE_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "STYLE_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "style_multi",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "STYLE_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "TAIL_HINGE",
+      "parameters": {
+        "hinge": "top",
+        "hinge_value": 0
+      },
+      "transform": "tail_hinge",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "TAIL_HINGE",
+      "parameters": {
+        "hinge": "bottom",
+        "hinge_value": 0
+      },
+      "transform": "tail_hinge",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 0,
+      "paired_retention": 0,
+      "train_mean_ic_delta": null
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "top"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 0,
+      "paired_retention": 0,
+      "train_mean_ic_delta": null
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "bottom"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "both"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 0,
+      "paired_retention": 0,
+      "train_mean_ic_delta": null
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": false
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": true
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 13,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0
+    },
+    {
+      "factor": "alphasage_20260909062020_20fcde8b",
+      "family": "WINDOW_REFINEMENT",
+      "parameters": {
+        "window_mode": "shorter",
+        "scale": 0.7
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "WINDOW_REFINEMENT requires FactorEngine DSL recompilation"
+    }
+  ]
+}
