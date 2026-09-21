@@ -36,7 +36,8 @@ class BatchOptimizationConfig:
     seed: int = 20260921
     natural_time_scale: float = 10.
     families: tuple[str, ...] = ()
-    maximum_candidates: int = 64
+    maximum_candidates: int = 128
+    compose_smoothing_sign: bool = True
 
     def __post_init__(self):
         for name in ("train_fraction", "validation_fraction",
@@ -61,8 +62,10 @@ class BatchOptimizationConfig:
             raise ValueError("minimum_assets must be at least 3")
         if (isinstance(self.minimum_improvement, bool) or isinstance(self.natural_time_scale, bool)
                 or not math.isfinite(self.minimum_improvement) or self.minimum_improvement < 0
-                or not math.isfinite(self.natural_time_scale) or self.natural_time_scale < 1):
+                or not math.isfinite(self.natural_time_scale) or not 1 <= self.natural_time_scale <= 10000):
             raise ValueError("invalid gain or natural time scale")
+        if type(self.compose_smoothing_sign) is not bool:
+            raise ValueError("compose_smoothing_sign must be a strict bool")
         if isinstance(self.families, (str, bytes)) or any(
                 not isinstance(name, str) or not name.strip() for name in self.families):
             raise ValueError("families must be a sequence of nonempty family names")
@@ -92,6 +95,30 @@ class FactorOptimizationResult:
     validation_lower_bound: float | None
     candidates: tuple[Mapping[str, Any], ...]
     reason: str
+    validation_candidate_identity: str | None = None
+    validation_coverage: float | None = None
+
+
+@dataclass(frozen=True)
+class OrientedRepairPlan:
+    """Frozen sign after a temporal repair; both decisions are chosen on TRAIN."""
+    base: Any
+    multiplier: int = -1
+
+    def __post_init__(self):
+        if type(self.multiplier) is not int or self.multiplier not in (-1, 1):
+            raise ValueError("orientation multiplier must be +1 or -1")
+
+    @property
+    def family(self):
+        return self.base.family
+
+    @property
+    def identity(self):
+        return hashlib.sha256(f"oriented-repair.v1:{self.base.identity}:{self.multiplier}".encode()).hexdigest()
+
+    def execute(self, values, *, allow_research=False):
+        return self.multiplier * self.base.execute(values, allow_research=allow_research)
 
 
 @dataclass(frozen=True)
@@ -150,13 +177,17 @@ def _pair_ic(raw, candidate, batch, labels, indices, config):
     common = available & np.isfinite(b)
     retention = float(common.sum() / max(1, available.sum()))
     time_axis = AxisRef("time", batch.time_axis.dtype, len(idx), batch.time_axis.values[idx])
-    pair = np.stack((a, b), axis=-1)
-    validity = np.repeat(common[:, :, None], 2, axis=2)
-    factors = FactorBatch(("RAW", "CANDIDATE"), time_axis, batch.asset_axis, pair, validity=validity)
+    # Third series anchors valid-day coverage to RAW's original universe.
+    # A candidate must not improve by silently dropping difficult/constant days.
+    pair = np.stack((a, b, a), axis=-1)
+    validity = np.stack((common, common, available), axis=-1)
+    factors = FactorBatch(("RAW", "CANDIDATE", "RAW_FULL"), time_axis, batch.asset_axis, pair, validity=validity)
     result = evaluate(factors, target, metrics=["rank_ic_series"], backend="cpu",
                       metric_parameters={"rank_ic_series": {"min_assets": config.minimum_assets}})
     ic = np.asarray(result.artifacts["rank_ic_series"].values)
-    good = np.isfinite(ic).all(axis=1)
+    good = np.isfinite(ic[:, :2]).all(axis=1)
+    day_retention = float(good.sum() / max(1, np.isfinite(ic[:, 2]).sum()))
+    retention = min(retention, day_retention)
     # Retain the full timeline: invalid days remain NaN for block resampling.
     diff = ic[:, 1] - ic[:, 0]
     return diff, good, retention
@@ -183,6 +214,10 @@ def _specs(config):
         elif family == "MISSINGNESS_FRESHNESS":
             choices = [dict(prior, mode="flag")]
             choices += [dict(prior, mode="fill", freshness_window=w) for w in (1, 3, 5)]
+        elif family == "TAIL_HINGE":
+            choices = [dict(prior, hinge=side) for side in ("top", "bottom")]
+        elif family == "TAIL_SATURATION":
+            choices = [dict(prior, saturate=side) for side in ("top", "bottom", "both")]
         else:
             choices = [prior]
         specs.extend((family, p) for p in choices)
@@ -257,12 +292,20 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
         if not config.families or "CAUSAL_SMOOTHING" in config.families:
             proposals += [(p.family, dict(p.parameters), p) for p in compile_admissible_smoothing_grid(
                 natural_time_scale=config.natural_time_scale, training_context_ref=train_ref)]
+        compose = config.compose_smoothing_sign and (
+            not config.families or "SIGN_ORIENTATION" in config.families)
+        # Adjacent signs reuse one materialization, without caching the grid.
+        proposals = [(f, p, plan, sign)
+                     for f, p, plan in proposals
+                     for sign in ((1, -1) if compose and f in {
+                         "CAUSAL_SMOOTHING", "DECAY_REFINEMENT"} else (1,))]
         if len(proposals) > config.maximum_candidates:
             raise ValueError("candidate budget is too small for admitted smoothing grid")
         raw_plan = compile_value_repair("NO_OP_RAW", {"keep_raw": True},
                                        natural_time_scale=config.natural_time_scale,
                                        training_context_ref=train_ref)
         chosen, train_gain, lower = raw_plan, None, None
+        validation_identity, validation_coverage = None, None
         status, reason, records = "raw_retained", "no robust TRAIN improvement", []
         try:
             _, raw_good, _ = _pair_ic(prefix, prefix, batch, labels, split.train_indices, config)
@@ -270,13 +313,23 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
                 status, reason = "invalid_raw", "insufficient valid RAW training IC"
             else:
                 best = None
-                for family, params, precompiled in proposals:
-                    record = {"family": family, "parameters": dict(params)}
+                last_base_identity, last_base_values = None, None
+                for family, params, precompiled, orientation in proposals:
+                    record = {"family": family, "parameters": dict(params), "orientation": orientation}
                     try:
                         plan = precompiled or compile_value_repair(family, params,
                             natural_time_scale=config.natural_time_scale, training_context_ref=train_ref)
-                        values = np.asarray(plan.execute(frame, allow_research=True), dtype=float).reshape(prefix.shape)
+                        record["transform"] = plan.transform
+                        if plan.identity != last_base_identity:
+                            base_values = np.asarray(plan.execute(
+                                frame, allow_research=True), dtype=float).reshape(prefix.shape)
+                            last_base_identity, last_base_values = plan.identity, base_values
+                        values = last_base_values if orientation == 1 else -last_base_values
+                        if orientation == -1:
+                            plan = OrientedRepairPlan(plan)
+                        record["plan_identity"] = plan.identity
                         delta, good, coverage = _pair_ic(prefix, values, batch, labels, split.train_indices, config)
+                        record.update(coverage=coverage, valid_train_days=int(good.sum()))
                         if coverage < config.minimum_coverage or good.sum() < config.minimum_train_days:
                             raise ValueError("insufficient common coverage or training IC")
                         chunks = np.array_split(delta, 3)
@@ -295,8 +348,10 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
                     records.append(MappingProxyType(record))
                 if best is not None:
                     gain, _, winner, values = best
+                    validation_identity = winner.identity
                     train_gain = gain
                     delta, good, coverage = _pair_ic(prefix, values, batch, labels, split.validation_indices, config)
+                    validation_coverage = coverage
                     if coverage >= config.minimum_coverage and good.sum() >= config.minimum_validation_days:
                         lower = _lower_bound(delta, config, labels.horizon)
                     if lower is not None and lower > 0 and lower >= config.minimum_improvement:
@@ -315,7 +370,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
         outputs.append(out)
         results[factor_id] = FactorOptimizationResult(
             factor_id, status, chosen.family, chosen.identity, chosen, train_gain, lower,
-            tuple(records), reason)
+            tuple(records), reason, validation_identity, validation_coverage)
     values = np.stack(outputs, axis=-1)
     optimized = FactorBatch(batch.factor_ids, batch.time_axis, batch.asset_axis,
                             values, validity=np.isfinite(values),
@@ -324,4 +379,4 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False):
 
 
 __all__ = ["BatchOptimizationConfig", "AutomaticTimeSplit", "FactorOptimizationResult",
-           "BatchOptimizationResult", "automatic_time_split", "optimize_factor_batch"]
+           "BatchOptimizationResult", "OrientedRepairPlan", "automatic_time_split", "optimize_factor_batch"]

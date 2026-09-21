@@ -37,7 +37,7 @@ class ValueRepairPlan:
     parameters: Tuple[Tuple[str, object], ...]
     training_context_ref: str
     natural_time_scale: float
-    mapping_version: str = "value-repair.v2"
+    mapping_version: str = "value-repair.v3"
 
     @property
     def identity(self) -> str:

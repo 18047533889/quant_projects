@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import duckdb
 import numpy as np
 import pandas as pd
-import pyarrow.parquet as pq
+from data_access import get_store
+from data_access.read.query_budget import QueryBudget
 
 from factor_optimizer.research_batch import optimize_factor_batch
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
@@ -23,30 +23,33 @@ N_DAYS, N_ASSETS = 500, 64
 
 
 def _index_name(path: Path) -> str:
-    names = pq.ParquetFile(path).schema_arrow.names
+    names = _column_names(path)
     for name in ("timestamp", "date"):
         if name in names:
             return name
     raise ValueError(f"{path}: no date index column")
 
 
-def _choose_assets(paths: list[Path]) -> list[str]:
+def _column_names(path: Path) -> list[str]:
+    # Metadata-only projection, still subject to DataAccess authorization.
+    return get_store().read_uri(str(path), limit=0, result="arrow",
+        query_budget=QueryBudget(max_scan_files=1, max_result_bytes=1024*1024)).to_arrow().column_names
+
+
+def _choose_assets(paths: list[Path], train_dates: pd.DatetimeIndex) -> list[str]:
     common = None
     for path in paths:
-        names = {x for x in pq.ParquetFile(path).schema_arrow.names
+        names = {x for x in _column_names(path)
                  if x.endswith((".SZ", ".SH"))}
         common = names if common is None else common & names
     candidates = sorted(common or ())[:600]
     scores = {asset: [] for asset in candidates}
     for path in paths:
-        pf = pq.ParquetFile(path)
-        start = max(0, pf.metadata.num_rows - N_DAYS)
-        # Universe eligibility is fixed from the chronological TRAIN-like
-        # prefix only; validation/test coverage never selects an asset.
-        table = pf.read(columns=candidates).slice(start, 300)
+        # Align exact TRAIN dates, not row positions in differently dated files.
+        table = _load_factor(path, candidates).reindex(train_dates)
         for asset in candidates:
             scores[asset].append(float(np.isfinite(
-                table[asset].to_numpy(zero_copy_only=False)).mean()))
+                table[asset].to_numpy()).mean()))
     ranked = sorted(candidates,
                     key=lambda a: (min(scores[a]), sum(scores[a]), a),
                     reverse=True)
@@ -58,7 +61,9 @@ def _choose_assets(paths: list[Path]) -> list[str]:
 
 def _load_factor(path: Path, assets: list[str]) -> pd.DataFrame:
     index = _index_name(path)
-    frame = pq.read_table(path, columns=[*assets, index]).to_pandas()
+    frame = get_store().read_uri(str(path), columns=[*assets, index],
+        result="arrow", query_budget=QueryBudget(
+            max_scan_files=1, max_rows=20000, max_result_bytes=128*1024*1024)).to_pandas()
     if index in frame.columns:
         frame = frame.set_index(index)
     elif frame.index.name != index:
@@ -73,32 +78,38 @@ def _load_vwap(start: pd.Timestamp, end: pd.Timestamp,
              if start <= pd.Timestamp(p.stem) <= end]
     if not files:
         raise FileNotFoundError("no StockDailyBarAdj files in bounded interval")
-    file_sql = ",".join("'" + str(p).replace("'", "''") + "'" for p in files)
-    marks = ",".join("?" for _ in assets)
-    sql = f"""SELECT TradeDate date, Symbol asset, AdjVwap vwap
-              FROM read_parquet([{file_sql}])
-              WHERE Symbol IN ({marks}) ORDER BY date, asset"""
-    with duckdb.connect() as con:
-        rows = con.execute(sql, assets).df()
+    # The registered dataset owns partition pruning, filtering and governance.
+    # ASHARE_PARQUET_ROOT must point to the same configured mirror as DAILY_ADJ.
+    rows = get_store().read("ashare_stock_daily_adj",
+        columns=["TradeDate", "Symbol", "AdjVwap"], time_range=(start, end),
+        instrument_filter=assets, result="arrow",
+        query_budget=QueryBudget(max_scan_files=600, max_rows=600*len(assets),
+                                 max_result_bytes=32*1024*1024)).to_pandas()
+    rows = rows.rename(columns={"TradeDate": "date", "Symbol": "asset", "AdjVwap": "vwap"})
     out = rows.pivot(index="date", columns="asset", values="vwap")
     out.index = pd.to_datetime(out.index).normalize()
     return out.reindex(columns=assets).sort_index()
 
 
-def main() -> int:
+def load_sample():
+    """Read a bounded sample; select assets using the final aligned TRAIN dates."""
     paths = [FACTOR_ROOT / f"{name}.parquet" for name in FACTORS]
-    assets = _choose_assets(paths)
-    panels = [_load_factor(path, assets) for path in paths]
+    # Calendar alignment requires only index columns, not factor/label values.
+    panels = [_load_factor(path, []) for path in paths]
     dates = panels[0].index
     for panel in panels[1:]:
         dates = dates.intersection(panel.index)
     candidate_dates = dates[-(N_DAYS + 10):]
-    vwap = _load_vwap(candidate_dates.min(), dates.max(), assets)
-    eligible = dates[dates.isin(vwap.index)]
-    positions = np.asarray([vwap.index.get_loc(d) for d in eligible])
-    eligible = eligible[positions + 2 < len(vwap.index)][-N_DAYS:]
+    calendar = pd.DatetimeIndex([pd.Timestamp(p.stem) for p in sorted(DAILY_ADJ.glob("*.parquet"))
+                                if candidate_dates.min() <= pd.Timestamp(p.stem) <= dates.max()])
+    eligible = dates[dates.isin(calendar)]
+    positions = np.asarray([calendar.get_loc(d) for d in eligible])
+    eligible = eligible[positions + 2 < len(calendar)][-N_DAYS:]
     if len(eligible) != N_DAYS:
         raise RuntimeError(f"expected {N_DAYS} eligible dates, got {len(eligible)}")
+    assets = _choose_assets(paths, eligible[:int(N_DAYS * .6)])
+    panels = [_load_factor(path, assets) for path in paths]
+    vwap = _load_vwap(candidate_dates.min(), dates.max(), assets).reindex(calendar)
     positions = np.asarray([vwap.index.get_loc(d) for d in eligible])
     entry = tuple(vwap.index[positions + 1].to_numpy(dtype="datetime64[ns]"))
     end = tuple(vwap.index[positions + 2].to_numpy(dtype="datetime64[ns]"))
@@ -123,13 +134,19 @@ def main() -> int:
         calendar_ref="StockDailyBarAdj trading dates",
         metadata={"timing": "close(t); entry AdjVwap(t+1); exit AdjVwap(t+2)"},
     )
-    result = optimize_factor_batch(batch, target, allow_research=True)
-    summary = {
-        "inputs": {"factor_paths": [str(p) for p in paths],
+    inputs = {"factor_paths": [str(p) for p in paths],
                    "label_source": target.source_ref,
                    "date_span": [str(eligible[0].date()), str(eligible[-1].date())],
-                   "days": len(eligible), "assets": len(assets)},
-        "asset_selection": "joint coverage on first 300 rows of the fixed recent-500 window only",
+                   "days": len(eligible), "assets": len(assets)}
+    return batch, target, inputs
+
+
+def main() -> int:
+    batch, target, inputs = load_sample()
+    result = optimize_factor_batch(batch, target, allow_research=True)
+    summary = {
+        "inputs": inputs,
+        "asset_selection": "joint coverage on the exact first 300 aligned TRAIN dates",
         "provenance_limit": "research replay of existing matrices; upstream factor-build PIT is not re-certified",
         "split_sizes": {"train": len(result.split.train_indices),
                         "validation": len(result.split.validation_indices),
@@ -139,6 +156,8 @@ def main() -> int:
                            "selected_family": item.selected_family,
                            "train_gain": item.train_gain,
                            "validation_lower_bound": item.validation_lower_bound,
+                           "validation_candidate_identity": item.validation_candidate_identity,
+                           "validation_coverage": item.validation_coverage,
                            "reason": item.reason,
                            "candidate_count": len(item.candidates),
                            "families": {

@@ -10,7 +10,7 @@ import pandas as pd
 import math
 import numbers
 
-from .cross_sectional import cs_rank, cs_zscore
+from .cross_sectional import cs_rank
 
 
 def _finite_number(value) -> bool:
@@ -59,7 +59,8 @@ def rank_shape(values: pd.DataFrame, *, center: float, power: float,
 def capped_zscore(values: pd.DataFrame, *, cap: float) -> pd.Series:
     if not _finite_number(cap) or cap <= 0:
         raise ValueError("cap must be finite and positive")
-    return _per_date(values, lambda x: np.clip(cs_zscore(x, ddof=1), -cap, cap))
+    # Scale before mean/std to avoid finite extremes overflowing into zeros.
+    return robust_scale(values, scale="std", center="mean").clip(-cap, cap)
 
 
 def tail_hinge(values: pd.DataFrame, *, hinge: str, hinge_value: float) -> pd.Series:

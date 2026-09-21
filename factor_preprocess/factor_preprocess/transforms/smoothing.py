@@ -282,6 +282,7 @@ def kama(
         # use_current=False (default) preserves the module's causal contract:
         # output at t uses only strictly-past observations (<= t-1).
         lagged = series.to_numpy() if use_current else series.shift(1).to_numpy()
+        lagged = np.where(np.isfinite(lagged), lagged, np.nan)
         n = len(lagged)
         out = np.full(n, np.nan)
 
@@ -311,11 +312,11 @@ def kama(
             direction[i] = abs(b - a)
         with np.errstate(divide="ignore", invalid="ignore"):
             # Flat price (volatility == 0) -> ER = 0 -> slowest sc -> KAMA holds.
-            efficiency = np.where(
-                (volatility > 0) & ~np.isnan(volatility) & ~np.isnan(direction),
-                direction / volatility,
-                0.0,
-            )
+            valid_er = np.isfinite(volatility) & np.isfinite(direction)
+            efficiency = np.full(n, np.nan)
+            efficiency[valid_er & (volatility == 0)] = 0.
+            active = valid_er & (volatility > 0)
+            efficiency[active] = direction[active] / volatility[active]
 
         # Seed KAMA from the first valid value (after warmup).
         sc = (efficiency * (fast_sc - slow_sc) + slow_sc) ** 2

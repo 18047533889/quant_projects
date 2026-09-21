@@ -1,4 +1,74 @@
-# 优化库自动研究入口与方法公式（2026-09-21，第二轮）
+# 优化库自动研究入口与方法公式（2026-09-22 更新）
+
+## 逐方法复核更新
+
+本轮在原有入口上修复 KAMA 缺失窗口状态、极大有限值标准化、
+候选常量日遗漏覆盖率检查，以及真实示例按行号选择训练资产的问题。
+新增自动方向与平滑组合、双侧尾部搜索和逐方法数据审查工具。
+下面 2026-09-21 的回放数字保留为历史证据；最新结果见
+[逐方法复核报告](METHOD_AUDIT_20260922.md)。
+
+默认候选上限由 64 改为 128，默认完整网格为 95 条（含明确不适用的候选）。
+每个有足够 RAW 证据的因子逐条记录 transform、orientation、覆盖率及有效训练日数。
+真实执行错误保留原因；不会跳过失败后仍声称全方法执行成功。
+
+当允许 SIGN_ORIENTATION 和平滑/衰减族时，新增复合方案：
+
+$$f'_{t,i}=s\,S_\theta(f)_{t,i},\qquad s\in\{-1,+1\}.$$
+
+方向 s 与平滑参数 θ 都在 TRAIN 选择，VALIDATION 只检验一个冻结赢家。
+配置 compose_smoothing_sign=False 可禁用组合；显式 families 不包含
+SIGN_ORIENTATION 时不额外翻转。所有组合计入 maximum_candidates，
+预算不足明确拒绝，不静默截断，也不在验证集更换方向。
+
+尾部自动搜索现在包含 hinge 的 top/bottom，以及 saturation 的 top/bottom/both。
+形态幂、标准化或排名运行成功，不等于 Rank IC 必然提升。
+
+覆盖率同时约束有效单元与有效 IC 日期：
+
+$$C=\min\left(\frac{N_{\text{共同有效单元}}}{N_{\text{RAW有效单元}}},
+\frac{N_{\text{共同有效IC日}}}{N_{\text{RAW原始截面有效IC日}}}\right)\ge0.90.$$
+
+RAW 原始截面单独作为日期覆盖率基准，避免候选丢掉难预测日期、
+或变成常量而 IC 无定义后仍显示“100%覆盖”。TRAIN 与 VALIDATION 均检查。
+validation_candidate_identity 和 validation_coverage 记录真正验证的候选；
+即使最终回退 RAW，也能追踪是哪一个方案未通过。
+
+KAMA 在 ER 窗口有 NaN/inf 时，保留已建立的历史状态，完整有限窗口恢复后再递推。
+窗口内值不变（有效波动为 0）与窗口无效（缺失）不再混为一谈。
+注意这仍可能延续陈旧状态；不是具有自动时效淘汰的生产信号。
+ZSCORE 使用先缩放再计算均值/样本标准差，数学口径不变，
+但不再把 [-1e308,0,1e308] 因方差溢出错误变成全 0。
+执行映射版本提升为 smoothing-repair.v2 / value-repair.v3，旧身份不能代表新数值语义。
+
+真实示例先对齐交易日及标签窗口，再用最终 TRAIN 的日期选择资产，
+不再假设各 parquet 文件最后 500 行代表相同区间。
+
+逐方法审查覆盖全部 27 个准入平滑参数，不再每种方法只测第一组。
+自动搜索将同一平滑计划的正负方向相邻执行，共享一个落值数组，
+但仍逐方向计算配对指标；只保留最近的底层数组，不缓存整个候选网格。
+400×64、4 个衰减计划、5 次重复的局部 A/B 中，数组含 NaN 逐元素完全一致，
+中位变换时间 0.28090s → 0.13876s（约 2.02 倍）。
+这仅是落值阶段，不代表包括数据读取和 QE 评分的全流程提速。
+
+真实审查示例统一使用 DataAccess：因子使用受授权的 read_uri，
+行情使用 ashare_stock_daily_adj 的列、时间和股票过滤，并限制扫描/返回预算。
+在 server-c 对已有镜像做研究回放的命令如下（不下载或更新正式数据）：
+
+```bash
+DATA_ACCESS_SKIP_COS_MIRROR=1 \
+DATA_ACCESS_READ_URI_ROOTS=/home/sunhaiwei/quant_projects/weekly_backtest_output/factor_matrices_all \
+ASHARE_PARQUET_ROOT=/home/sunhaiwei/cos_data \
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+.venv/bin/python factor_optimizer/examples/method_audit.py
+```
+
+这次本地镜像回放不等于已完成 COS 平铺候选池读取或上游 PIT 认证。
+
+该工具即使遇到 RAW 的 IC 无效，也会执行每种可数值运行的方法，
+检查原始行对齐、资产顺序不变性和截断未来后的前缀一致性。
+逐方法分数仅在 TRAIN 作诊断，另由正式自动入口验证唯一赢家，不把验证集用于挑方法。
+缺暴露或 DSL 的方法明确报告所缺输入，不宣称已完成数值效果验证。
 
 ## 本轮变化
 

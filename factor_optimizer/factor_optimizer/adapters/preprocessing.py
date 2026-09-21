@@ -27,7 +27,7 @@ class SmoothingRepairPlan:
     parameters: Tuple[Tuple[str, object], ...]
     training_context_ref: str
     natural_time_scale: float
-    mapping_version: str = "smoothing-repair.v1"
+    mapping_version: str = "smoothing-repair.v2"
 
     @property
     def identity(self) -> str:

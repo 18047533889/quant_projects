@@ -4937,7 +4937,7 @@ Stateless value-repair primitives used by research repair plans.
 
 ### tail_hinge
 
-[实际实现](../factor_preprocess/transforms/repair_shapes.py#L65)。
+[实际实现](../factor_preprocess/transforms/repair_shapes.py#L66)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -4947,7 +4947,7 @@ Stateless value-repair primitives used by research repair plans.
 
 ### tail_saturation
 
-[实际实现](../factor_preprocess/transforms/repair_shapes.py#L76)。
+[实际实现](../factor_preprocess/transforms/repair_shapes.py#L77)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -4957,7 +4957,7 @@ Stateless value-repair primitives used by research repair plans.
 
 ### robust_scale
 
-[实际实现](../factor_preprocess/transforms/repair_shapes.py#L91)。
+[实际实现](../factor_preprocess/transforms/repair_shapes.py#L92)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -5055,7 +5055,7 @@ Kaufman Adaptive Moving Average (KAMA), built recursively forward only.
 
 ### one_sided_iir_lowpass
 
-[实际实现](../factor_preprocess/transforms/smoothing.py#L341)。
+[实际实现](../factor_preprocess/transforms/smoothing.py#L342)。
 
 One-pole IIR low-pass filter applied forward only.
 
@@ -5065,7 +5065,7 @@ One-pole IIR low-pass filter applied forward only.
 
 ### kalman_local_level
 
-[实际实现](../factor_preprocess/transforms/smoothing.py#L403)。
+[实际实现](../factor_preprocess/transforms/smoothing.py#L404)。
 
 One-sided Kalman local-level smoother.
 
@@ -5216,9 +5216,9 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/transforms/event_decay.py` | `f384f17802b5ed0c0b6de29bc21c2addc0b64d4d9f1f75de6773d738842ba13d` |
 | `factor_preprocess/transforms/freshness.py` | `cb62293004c74338f715e75a91f849a4b2b3b4d6f11d2d258ddfcbcf3b97e69a` |
 | `factor_preprocess/transforms/missingness.py` | `42dcbf19613e38f7be1e18283ca4a67e208332b88a6a0fe625b6a86c0724ea4d` |
-| `factor_preprocess/transforms/repair_shapes.py` | `a96b932705a8be2ca13a3fb2db959093be8053d6a61e6c2f0d8f719971bfc70c` |
+| `factor_preprocess/transforms/repair_shapes.py` | `dccea81e1c00e68e144f530eb103e7c217677cc1ae82c5bd5b3ee12695cacea5` |
 | `factor_preprocess/transforms/rolling.py` | `e7b9cc19a0e32c62b2f2d1d216e998ed49c72a3579404efd735f25f1c04e288b` |
-| `factor_preprocess/transforms/smoothing.py` | `5e908acfa31095262483c9c0e9987cf4fc2fe46744e8d7111a6ca543b4341dd6` |
+| `factor_preprocess/transforms/smoothing.py` | `5a8acbd7530a05945c00a21ab306e3ff1c1bb3c5e10babf051a9ed36f374697f` |
 | `factor_preprocess/transforms/treatment_variants.py` | `5d3a3dd9c7c0e014be750edcf9e37c628113acd17d8ec3dc09076e13aa3b2b4b` |
 | `factor_preprocess/transforms/volatility.py` | `5361592b9fc419a82fb6201b9bf0ce68ff81c48adc4f34762af411bd6e4b5d12` |
 

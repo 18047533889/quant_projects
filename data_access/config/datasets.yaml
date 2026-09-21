@@ -73,6 +73,14 @@ ashare_stock_daily_adj:
   glob: "**/*.parquet"
   time_column: TradeDate
   instrument_column: Symbol
+  # Daily adjusted bars are partitioned by trading date, just like minute bars.
+  # Prune before scan admission; row filtering alone still scans every file.
+  partitioning:
+    time:
+      source: filename
+      field: TradeDate
+      frequency: daily
+      pattern: "{date}.parquet"
   # 工程生成的后复权表: AdjX = 原始X × Factor; Volume 原始值; 带目标收益 TargetVwapReturnH01/H05/H10/H20
   schema:
     TradeDate: date

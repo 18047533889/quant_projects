@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**70 个 Python 模块、899 个公开函数/类/方法定义**。
+扫描实际包目录：**70 个 Python 模块、903 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -57,7 +57,7 @@
 | [factor_optimizer/policy/repair_registry.py](../factor_optimizer/policy/repair_registry.py) | 38 | Versioned repair-family registry + diagnosis-specific repair policy (R61-FI-034). |
 | [factor_optimizer/ports/__init__.py](../factor_optimizer/ports/__init__.py) | 0 | Ports: narrow consumer-side contracts FO binds other packages through. |
 | [factor_optimizer/ports/factor_intelligence.py](../factor_optimizer/ports/factor_intelligence.py) | 29 | Factor Intelligence provider port (R61-FI-014 / plan §20 E6, matrix E6). |
-| [factor_optimizer/research_batch.py](../factor_optimizer/research_batch.py) | 6 | Bounded research batch optimization with automatic chronological splitting. |
+| [factor_optimizer/research_batch.py](../factor_optimizer/research_batch.py) | 10 | Bounded research batch optimization with automatic chronological splitting. |
 | [factor_optimizer/search/__init__.py](../factor_optimizer/search/__init__.py) | 0 | Search orchestration for factor mutation optimization. |
 | [factor_optimizer/search/categorical_strategy.py](../factor_optimizer/search/categorical_strategy.py) | 10 | Categorical search strategy (TPE-style) for treatment auto-optimization. |
 | [factor_optimizer/search/conditional_search.py](../factor_optimizer/search/conditional_search.py) | 24 | Hierarchical conditional search over (repair-family, parameters) (R61-FI-035). |
@@ -402,7 +402,7 @@ Immutable resolved kernel arguments and training-context provenance.
 | `parameters` | `Tuple[Tuple[str, object], ...]` | `必填/未声明默认` |
 | `training_context_ref` | `str` | `必填/未声明默认` |
 | `natural_time_scale` | `float` | `必填/未声明默认` |
-| `mapping_version` | `str` | `'smoothing-repair.v1'` |
+| `mapping_version` | `str` | `'smoothing-repair.v2'` |
 
 ### SmoothingRepairPlan.identity
 
@@ -607,7 +607,7 @@ A valid registry candidate has no exact executable value primitive.
 | `parameters` | `Tuple[Tuple[str, object], ...]` | `必填/未声明默认` |
 | `training_context_ref` | `str` | `必填/未声明默认` |
 | `natural_time_scale` | `float` | `必填/未声明默认` |
-| `mapping_version` | `str` | `'value-repair.v2'` |
+| `mapping_version` | `str` | `'value-repair.v3'` |
 
 ### ValueRepairPlan.identity
 
@@ -6348,7 +6348,7 @@ Explicit unknown-factor view set for providers that don't raise.
 
 Bounded research batch optimization with automatic chronological splitting.
 
-显式导出（含重导出）：`BatchOptimizationConfig`、`AutomaticTimeSplit`、`FactorOptimizationResult`、`BatchOptimizationResult`、`automatic_time_split`、`optimize_factor_batch`。
+显式导出（含重导出）：`BatchOptimizationConfig`、`AutomaticTimeSplit`、`FactorOptimizationResult`、`BatchOptimizationResult`、`OrientedRepairPlan`、`automatic_time_split`、`optimize_factor_batch`。
 
 ### BatchOptimizationConfig
 
@@ -6376,11 +6376,12 @@ Conservative defaults; callers need not choose calendar cutoffs.
 | `seed` | `int` | `20260921` |
 | `natural_time_scale` | `float` | `10.0` |
 | `families` | `tuple[str, ...]` | `()` |
-| `maximum_candidates` | `int` | `64` |
+| `maximum_candidates` | `int` | `128` |
+| `compose_smoothing_sign` | `bool` | `True` |
 
 ### AutomaticTimeSplit
 
-[实际实现](../factor_optimizer/research_batch.py#L75)。
+[实际实现](../factor_optimizer/research_batch.py#L78)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6397,7 +6398,7 @@ Conservative defaults; callers need not choose calendar cutoffs.
 
 ### FactorOptimizationResult
 
-[实际实现](../factor_optimizer/research_batch.py#L85)。
+[实际实现](../factor_optimizer/research_batch.py#L88)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6414,10 +6415,49 @@ Conservative defaults; callers need not choose calendar cutoffs.
 | `validation_lower_bound` | `float \| None` | `必填/未声明默认` |
 | `candidates` | `tuple[Mapping[str, Any], ...]` | `必填/未声明默认` |
 | `reason` | `str` | `必填/未声明默认` |
+| `validation_candidate_identity` | `str \| None` | `None` |
+| `validation_coverage` | `float \| None` | `None` |
+
+### OrientedRepairPlan
+
+[实际实现](../factor_optimizer/research_batch.py#L103)。
+
+Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
+
+本类声明字段（继承字段见基类；实际限制仍需合同校验）：
+
+| 字段 | 类型 | 默认值/值 |
+|---|---|---|
+| `base` | `Any` | `必填/未声明默认` |
+| `multiplier` | `int` | `-1` |
+
+### OrientedRepairPlan.family
+
+[实际实现](../factor_optimizer/research_batch.py#L113)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self)`。
+
+### OrientedRepairPlan.identity
+
+[实际实现](../factor_optimizer/research_batch.py#L117)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self)`。
+
+### OrientedRepairPlan.execute
+
+[实际实现](../factor_optimizer/research_batch.py#L120)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self, values, *, allow_research=False)`。
 
 ### BatchOptimizationResult
 
-[实际实现](../factor_optimizer/research_batch.py#L98)。
+[实际实现](../factor_optimizer/research_batch.py#L125)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6433,7 +6473,7 @@ Conservative defaults; callers need not choose calendar cutoffs.
 
 ### automatic_time_split
 
-[实际实现](../factor_optimizer/research_batch.py#L106)。
+[实际实现](../factor_optimizer/research_batch.py#L133)。
 
 60/20/20 in time, warmup, and purge real label windows at boundaries.
 
@@ -6441,7 +6481,7 @@ Conservative defaults; callers need not choose calendar cutoffs.
 
 ### optimize_factor_batch
 
-[实际实现](../factor_optimizer/research_batch.py#L212)。
+[实际实现](../factor_optimizer/research_batch.py#L247)。
 
 Optimize aligned QE contracts automatically, preserving every input ID.
 
@@ -10206,9 +10246,9 @@ Import seen records from dictionaries.
 | `factor_optimizer/adapters/factor_assets.py` | `6a2ad44b43710199fd6eed901de2974fb8a66314f525be016c2f4796bf8af6d4` |
 | `factor_optimizer/adapters/factor_engine.py` | `924ecf37167dfba994e803f88c66ab6bac83586b3452c00b4535c35fbf87d2f0` |
 | `factor_optimizer/adapters/fitness.py` | `4486884657f730c65064fe6e1aebc7555a515fbc3cba41c71c1bf8c9e4c48ce5` |
-| `factor_optimizer/adapters/preprocessing.py` | `dd159b0c87f36dffc4c116005078b1b0863396563c77ffc7dec3b4ac6decd1d3` |
+| `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
-| `factor_optimizer/adapters/repair_execution.py` | `51c99eea78bda1a934b44c274fb35fa8af65e5e5473d9b17f8f8c1e4fabb05d7` |
+| `factor_optimizer/adapters/repair_execution.py` | `260fad479637ff715f6cbd93e552aab338670727b9600746ec0e1aa7e1481466` |
 | `factor_optimizer/capabilities.py` | `efb1fbf1b54b1b14f128ffe63c74f54f7a22f99a409a0761aac67fc1b6e3ed28` |
 | `factor_optimizer/complexity/__init__.py` | `79c8daf01ef8071b77eb7cbb8df4ae45fc9e2d4a4349f35d402a12f79936e696` |
 | `factor_optimizer/complexity/budget.py` | `d797ada6f52d0ccab3820450fb12e8f84f3f3dbb4e9f1e53f64eb5bb21a3469d` |
@@ -10248,7 +10288,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/policy/repair_registry.py` | `1f337900eec0750622901a2f26f0bb19ad5bae248399c62546b3ede85b998545` |
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
-| `factor_optimizer/research_batch.py` | `9d8ff67a0b375e1d73ec9e2597d74cd19a37432eb1c7cb3fee9c5b434f32e7c6` |
+| `factor_optimizer/research_batch.py` | `f05d9fa37676c5bf34a18f760e0d5f392b947f45dff4ad576ddf0dc4bbd2a919` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |
 | `factor_optimizer/search/conditional_search.py` | `4b6dfeceacd797ad16f2406d0cd8c5cc1a4146c59c65c611f875356ce7251731` |
