@@ -1,0 +1,4 @@
+#!/bin/sh
+# No background synchronization: inspect every outgoing update synchronously.
+unset PUSH_BOTH_ROOT PUSH_BOTH_CACHE
+exec python3 /home/sunhaiwei/quant_projects/scripts/check_push_scope.py "$@"

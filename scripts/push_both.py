@@ -65,8 +65,8 @@ def verify_remote(repo: Path, remote: str, owner: str, name: str) -> None:
 
 
 def verify_push_remote(repo: Path, remote: str, owner: str, name: str) -> None:
-    url = git(repo, "remote", "get-url", "--push", remote)
-    if remote_identity(url) != ("github.com", owner, name):
+    urls = git(repo, "remote", "get-url", "--push", "--all", remote).splitlines()
+    if len(urls) != 1 or remote_identity(urls[0]) != ("github.com", owner, name):
         raise SyncError(f"unexpected {remote} push target; expected github.com/{owner}/{name}")
 
 
@@ -172,48 +172,43 @@ def _gh_api(method: str, path: str, token: str, body: dict | None = None,
     raise last if last else SyncError(f"GitHub API {method} {path} failed")
 
 
-def publish_root_via_pr(root_sha: str, token: str) -> dict:
-    """Root goes to main ONLY through a PR: push a sync branch -> open PR -> squash-merge.
+def validate_publication(repo: Path, root: Path, source: str, target: str,
+                         commit: str, ref: str = "refs/heads/main", *, env=None) -> str:
+    """Independent final-boundary check; commit messages are never trusted."""
+    if ref != "refs/heads/main":
+        raise SyncError("publication is restricted to refs/heads/main")
+    if commit and set(commit) == {"0"}:
+        raise SyncError("publication must not delete main")
+    host, owner, name = remote_identity(target)
+    if (host, owner, name) == ("github.com", ROOT_OWNER, "quant_projects"):
+        expected = git(root, "rev-parse", f"{source}^{{tree}}")
+    elif host == "github.com" and owner == ORG and name in REPOS:
+        expected = source_tree(root, source, name)
+        entries = set(git(root, "ls-tree", "--name-only", expected).splitlines())
+        nested = entries.intersection(set(REPOS) - {name})
+        if nested:
+            raise SyncError(f"nested sibling libraries in {name}: {', '.join(sorted(nested))}")
+    else:
+        raise SyncError("publication target is outside the fixed repository mapping")
+    actual = git(repo, "rev-parse", f"{commit}^{{tree}}", env=env)
+    if actual != expected:
+        raise SyncError(f"publication tree mismatch for {owner}/{name}; "
+                        "refusing whole-project or wrong-library upload")
+    return expected
 
-    The branch carries ONE commit whose parent is the current remote main and whose
-    tree equals local HEAD's tree.  (Pushing the local commit itself would conflict:
-    the first squash-merge already rewrote remote main's history.)  Local main is
-    never rewritten; local-vs-remote parity is enforced at the tree level.
-    """
-    owner, name = ROOT_OWNER, "quant_projects"
-    api = f"repos/{owner}/{name}"
-    local_tree = git(ROOT, "rev-parse", f"{root_sha}^{{tree}}")
-    # current remote main = parent of the sync commit
-    git(ROOT, "fetch", "--quiet", "origin", "main")
-    parent = git(ROOT, "rev-parse", "FETCH_HEAD^{commit}")
-    parent_tree = git(ROOT, "rev-parse", "FETCH_HEAD^{tree}")
-    if parent_tree == local_tree:
-        return {"skipped": "remote main already carries the local tree", "remoteMain": parent}
-    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    env = object_env(ROOT)
-    commit = run(["git", "-C", str(ROOT), "-c", "user.name=Sun Haiwei", "-c",
-                  "user.email=sunhaiwei@users.noreply.github.com", "commit-tree", local_tree,
-                  "-p", parent,
-                  "-m", f"push quant_projects from local main {root_sha} at {stamp}"], env=env)
-    branch = f"push/{commit[:10]}"
-    git(ROOT, "push", "origin", f"{commit}:refs/heads/{branch}")
-    pr = _gh_api("POST", f"{api}/pulls", token, {
-        "title": f"push quant_projects {commit[:10]}",
-        "head": branch, "base": "main",
-        "body": f"Automated publication of local main {root_sha} "
-                f"(tree {local_tree}) by push_both.py"})
-    number = pr.get("number")
-    if not number:
-        raise SyncError(f"PR creation returned no number: {sanitize(str(pr))[:200]}")
-    merged = _gh_api("PUT", f"{api}/pulls/{number}/merge", token, {"merge_method": "squash"})
-    if not merged.get("merged"):
-        raise SyncError(f"PR #{number} not merged: {sanitize(str(merged))[:200]}")
-    try:
-        _gh_api("DELETE", f"{api}/git/refs/heads/{branch}", token)
-    except SyncError:
-        pass
-    return {"pr": number, "branch": branch, "syncCommit": commit,
-            "remoteParent": parent, "tree": local_tree}
+
+def publish_root_direct(root_sha: str) -> dict:
+    """Ordinary main push only; remote divergence is never overwritten."""
+    verify_remote(ROOT, "origin", ROOT_OWNER, "quant_projects")
+    verify_push_remote(ROOT, "origin", ROOT_OWNER, "quant_projects")
+    target = git(ROOT, "remote", "get-url", "--push", "origin")
+    tree = validate_publication(ROOT, ROOT, root_sha, target, root_sha)
+    git(ROOT, "push", "origin", f"{root_sha}:refs/heads/main")
+    git(ROOT, "fetch", "--quiet", target, "main")
+    remote = git(ROOT, "rev-parse", "FETCH_HEAD^{commit}")
+    if remote != root_sha or git(ROOT, "rev-parse", "FETCH_HEAD^{tree}") != tree:
+        raise SyncError("root main post-push verification failed")
+    return {"remoteMain": remote, "tree": tree}
 
 
 def assert_root_state(expected_sha: str | None, *, allow_dirty: bool) -> tuple[str, bool]:
@@ -263,6 +258,8 @@ def _main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--allow-dirty-committed", action="store_true",
+                    help="publish committed main only; leave all uncommitted work untouched")
     ns = ap.parse_args(argv)
     result = {"dryRun": ns.dry_run, "rootSHA": None, "mirrors": [], "success": False}
     log_dir = ROOT / "logs"
@@ -271,13 +268,14 @@ def _main(argv=None) -> int:
     try:
         probe_log_dir(log_dir)
         repos = select_only(ns.only)
-        root_sha, dirty = assert_root_state(None, allow_dirty=ns.dry_run)
+        root_sha, dirty = assert_root_state(None, allow_dirty=ns.dry_run or ns.allow_dirty_committed)
         if dirty:
-            result["warning"] = "root working tree is dirty; dry-run uses committed main only"
-            print("WARNING: root is dirty; preview uses committed main only", file=sys.stderr)
+            result["warning"] = "root working tree is dirty; publishing/previewing committed main only"
+            print("WARNING: uncommitted work is excluded; using committed main only", file=sys.stderr)
         result["rootSHA"] = root_sha
         if not ns.only:
             verify_remote(ROOT, "origin", ROOT_OWNER, "quant_projects")
+            verify_push_remote(ROOT, "origin", ROOT_OWNER, "quant_projects")
         anchor = git(ROOT, "remote", "get-url", "hkust-org")
         anchor_host, anchor_owner, _ = remote_identity(anchor)
         if (anchor_host, anchor_owner) != ("github.com", ORG):
@@ -296,6 +294,10 @@ def _main(argv=None) -> int:
             parent = git(cache, "rev-parse", "FETCH_HEAD^{commit}", env=env)
             parent_tree = git(cache, "rev-parse", "FETCH_HEAD^{tree}", env=env)
             tree = source_tree(ROOT, root_sha, name)
+            # Reject a contaminated subtree before any remote is written.
+            probe = git(ROOT, "ls-tree", "--name-only", tree).splitlines()
+            if set(probe).intersection(set(REPOS) - {name}):
+                raise SyncError(f"nested sibling libraries in {name}")
             counts, changes = preview(cache, parent, tree, env)
             unchanged = trees_unchanged(tree, parent_tree)
             entry = {"name": name, "sourceTree": tree, "remoteParent": parent,
@@ -315,25 +317,26 @@ def _main(argv=None) -> int:
             return 0
 
         # Fetching every mirror can take time. Refuse if another task changed root meanwhile.
-        assert_root_state(root_sha, allow_dirty=False)
-        # Root is published via PR branch -> squash-merge into main (never direct push).
+        assert_root_state(root_sha, allow_dirty=ns.allow_dirty_committed)
+        # Root and mirrors go directly to main; never create branches or PRs.
         root_publication = None
         if not ns.only:
             verify_push_remote(ROOT, "origin", ROOT_OWNER, "quant_projects")
-            root_publication = publish_root_via_pr(root_sha, _origin_token())
-            result["rootPR"] = root_publication
-            # merge may change the remote tip; verify remote main carries our tree
+            root_publication = publish_root_direct(root_sha)
+            result["rootPublication"] = root_publication
+            # Verify the remote main still carries the frozen source tree.
             git(ROOT, "fetch", "--quiet", "origin", "main")
             remote_main = git(ROOT, "rev-parse", "FETCH_HEAD^{commit}")
             remote_tree = git(ROOT, "rev-parse", "FETCH_HEAD^{tree}")
             local_tree = git(ROOT, "rev-parse", "HEAD^{tree}")
             if remote_tree != local_tree:
                 raise SyncError(
-                    f"post-PR verification failed: remote main tree {remote_tree[:10]} "
+                    f"post-push verification failed: remote main tree {remote_tree[:10]} "
                     f"!= local tree {local_tree[:10]}")
             result["remoteMainAfterPR"] = remote_main
         # Only after root succeeds do mirrors publish immutable commit IDs.
         for cache, name, tree, parent, entry, auth_url in plans:
+            assert_root_state(root_sha, allow_dirty=ns.allow_dirty_committed)
             if entry["status"] == "unchanged":
                 remote_commit, remote_tree = refresh_unchanged(cache, auth_url, tree, env)
                 entry.update(mirrorCommit=remote_commit, verifiedRemoteTree=remote_tree)
@@ -342,6 +345,7 @@ def _main(argv=None) -> int:
             commit = run(["git", "-C", str(cache), "-c", "user.name=Sun Haiwei", "-c",
                           "user.email=sunhaiwei@users.noreply.github.com", "commit-tree", tree,
                           "-p", parent, "-m", f"sync {name} from quant_projects {root_sha} at {stamp}"], env=env)
+            validate_publication(cache, ROOT, root_sha, auth_url, commit, env=env)
             git(cache, "push", auth_url, f"{commit}:refs/heads/main", env=env)
             git(cache, "fetch", "--quiet", auth_url, "main", env=env)
             remote_commit = git(cache, "rev-parse", "FETCH_HEAD^{commit}", env=env)
