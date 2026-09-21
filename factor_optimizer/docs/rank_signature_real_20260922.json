@@ -1,0 +1,45 @@
+{
+  "factor": "weekly_db5616cd85a477b3",
+  "factor_uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d/weekly_db5616cd85a477b3.parquet",
+  "factor_sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+  "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+  "expression": "ts_delta(col('valuation.a_cap'), 20)",
+  "signature_status": "known",
+  "signature_cs_rank": false,
+  "days": 500,
+  "assets": 256,
+  "date_span": [
+    "2024-08-02",
+    "2026-08-25"
+  ],
+  "bootstrap_draws": 99,
+  "status": "raw_retained",
+  "selected_family": "NO_OP_RAW",
+  "train_gain": null,
+  "validation_lower_bound": null,
+  "baseline": {
+    "operations": [
+      "winsor",
+      "cs_rank"
+    ],
+    "omissions": [
+      "neutralization_missing_exposures"
+    ],
+    "accepted": true,
+    "reason": "no_substantial_training_degradation",
+    "coverage": 1.0,
+    "valid_days": 267,
+    "upper_bound": 0.002050934682814894,
+    "maximum_loss": 0.01
+  },
+  "joint": {
+    "objective": "joint",
+    "cost_rate": 0.001,
+    "policy": "joint.v1",
+    "baseline_unavailable": "missing or nonfinite joint metrics cannot be imputed"
+  },
+  "candidate_count": 94,
+  "rank_candidates": 0,
+  "test_evaluated": false,
+  "limitations": "source-declared lineage and content binding, not upstream PIT certification; no neutralization exposures; no TEST score"
+}

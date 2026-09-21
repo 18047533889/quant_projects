@@ -51,6 +51,34 @@ def test_unknown_lineage_is_not_assumed_untreated():
     np.testing.assert_array_equal(plan.execute(frame(), allow_research=True), frame().value)
 
 
+def test_unknown_step_does_not_erase_confirmed_rank_deduplication():
+    lineage = TransformLineage((
+        TransformStep('CS_RANK:pct', 'representation', 'rank'),
+        TransformStep('UNKNOWN:custom', 'representation', 'custom'),
+    ))
+    plan = compile_plan(lineage)
+    assert plan.operations == ()
+    assert 'lineage_unknown' in plan.omissions
+    assert 'cs_rank_already_present' in plan.omissions
+
+
+def test_partial_rank_evidence_suppresses_rank_search_without_inventing_baseline():
+    from factor_preprocess.contracts.treatment_lineage import ExistingTreatmentSignature
+    from factor_optimizer.research_batch import optimize_factor_batch, BatchOptimizationConfig
+    batch, labels = fixture()
+    signature = ExistingTreatmentSignature(cs_rank=True, status='incomplete')
+    result = optimize_factor_batch(batch, labels, allow_research=True,
+        config=BatchOptimizationConfig(selection_objective='rank_ic',
+            families=('REPRESENTATION_RANK',), bootstrap_draws=99),
+        lineages={'good': signature})
+    item = result.factors['good']
+    assert item.candidates == ()
+    assert item.selected_family == 'NO_OP_RAW'
+    assert item.baseline_diagnostics['operations'] == ()
+    assert 'lineage_unknown' in item.baseline_diagnostics['omissions']
+    np.testing.assert_array_equal(result.optimized.values, batch.values)
+
+
 def test_exposure_availability_is_checked_before_neutralization():
     plan = compile_plan(TransformLineage(), exposure_columns=('size',))
     exposures = frame()[['date', 'asset_id']].assign(size=np.arange(5), available_time=2)

@@ -100,6 +100,12 @@ def test_conditional_rank_is_not_final_output_rank(declared_source):
     bound = read(declared_source)
     assert bound.contains_cs_rank
     assert not bound.output_is_cs_rank
+    from factor_optimizer.research_baseline import compile_baseline
+    assert bound.treatment_signature.cs_rank
+    assert bound.treatment_signature.is_unknown_or_incomplete
+    plan = compile_baseline(bound.treatment_signature, training_context_ref='source')
+    assert plan.operations == ()
+    assert 'cs_rank_already_present' in plan.omissions
 
 
 def test_rank_inside_column_string_is_not_an_operator(declared_source):

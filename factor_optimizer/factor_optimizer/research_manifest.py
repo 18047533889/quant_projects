@@ -19,6 +19,20 @@ class BoundResearchFactor:
     output_is_cs_rank: bool
     lineage: object
 
+    @property
+    def treatment_signature(self):
+        """Carry positive rank evidence even when full DSL lineage is unknown.
+
+        A rank inside a branch vetoes duplicate ranking; it does not prove that
+        the whole output is ranked or that all treatments are understood.
+        """
+        from factor_preprocess.contracts.treatment_lineage import (
+            ExistingTreatmentSignature, build_signature_from_lineage,
+        )
+        if self.lineage is not None:
+            return build_signature_from_lineage(self.lineage)
+        return ExistingTreatmentSignature(cs_rank=self.contains_cs_rank, status='incomplete')
+
 
 def _declared_lineage(expression):
     """Recognize a deliberately narrow complete source-declared value grammar.

@@ -13,7 +13,7 @@ import math
 import numpy as np
 
 from factor_preprocess.contracts.treatment_lineage import (
-    TransformLineage, build_signature_from_lineage,
+    TransformLineage, ExistingTreatmentSignature, build_signature_from_lineage,
 )
 
 
@@ -107,6 +107,9 @@ def compile_baseline(lineage, *, training_context_ref, exposure_columns=(), mini
 
     Exposure absence is explicit. Rank after OLS does not certify exact linear
     neutrality. Caller-supplied availability is checked, not PIT provenance.
+    Accept an ordered TransformLineage or an ExistingTreatmentSignature.
+    Incomplete signatures veto confirmed duplicate rank without authorizing
+    baseline operations or pretending to be a complete sequential pipeline.
     """
     if not isinstance(training_context_ref, str) or not training_context_ref.strip():
         raise ValueError('training_context_ref is required')
@@ -118,11 +121,15 @@ def compile_baseline(lineage, *, training_context_ref, exposure_columns=(), mini
     if (len(set(columns)) != len(columns) or any(not isinstance(c, str) or not c
             or c in {'date', 'asset_id', 'available_time'} for c in columns)):
         raise ValueError('exposure_columns must be unique numeric exposure names')
-    if lineage is not None and not isinstance(lineage, TransformLineage):
-        raise TypeError('lineage must be TransformLineage or None')
-    signature = None if lineage is None else build_signature_from_lineage(lineage)
+    if lineage is not None and not isinstance(lineage, (TransformLineage, ExistingTreatmentSignature)):
+        raise TypeError('lineage must be TransformLineage, ExistingTreatmentSignature or None')
+    signature = (lineage if isinstance(lineage, ExistingTreatmentSignature) else
+                 None if lineage is None else build_signature_from_lineage(lineage))
     if signature is None or signature.is_unknown_or_incomplete:
-        return BaselinePlan((), ('lineage_unknown',), columns, training_context_ref, minimum_assets)
+        omissions = ('lineage_unknown',)
+        if signature is not None and signature.cs_rank:
+            omissions += ('cs_rank_already_present',)
+        return BaselinePlan((), omissions, columns, training_context_ref, minimum_assets)
     operations, omissions = [], []
     if signature.winsor:
         omissions.append('winsor_already_present')

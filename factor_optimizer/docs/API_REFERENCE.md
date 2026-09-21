@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**77 个 Python 模块、937 个公开函数/类/方法定义**。
+扫描实际包目录：**77 个 Python 模块、938 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -64,7 +64,7 @@
 | [factor_optimizer/research_diagnostics.py](../factor_optimizer/research_diagnostics.py) | 1 | TRAIN-only multi-dimensional research diagnosis using QE metric authorities. |
 | [factor_optimizer/research_final_report.py](../factor_optimizer/research_final_report.py) | 3 | Authority-side final research reporting; never called by candidate search. |
 | [factor_optimizer/research_fitness.py](../factor_optimizer/research_fitness.py) | 10 | QE-owned research portfolio metrics and joint paired selection policy. |
-| [factor_optimizer/research_manifest.py](../factor_optimizer/research_manifest.py) | 2 | Bind declared COS factor values to their exact research landing record. |
+| [factor_optimizer/research_manifest.py](../factor_optimizer/research_manifest.py) | 3 | Bind declared COS factor values to their exact research landing record. |
 | [factor_optimizer/search/__init__.py](../factor_optimizer/search/__init__.py) | 0 | Search orchestration for factor mutation optimization. |
 | [factor_optimizer/search/categorical_strategy.py](../factor_optimizer/search/categorical_strategy.py) | 10 | Categorical search strategy (TPE-style) for treatment auto-optimization. |
 | [factor_optimizer/search/conditional_search.py](../factor_optimizer/search/conditional_search.py) | 24 | Hierarchical conditional search over (repair-family, parameters) (R61-FI-035). |
@@ -6477,7 +6477,7 @@ Frozen winsor -> OLS -> rank recipe; do not repeat historical CS rank.
 
 ### assess_baseline_training
 
-[实际实现](../factor_optimizer/research_baseline.py#L143)。
+[实际实现](../factor_optimizer/research_baseline.py#L150)。
 
 Reject material TRAIN RankIC loss with a paired moving-block upper bound.
 
@@ -6830,9 +6830,17 @@ Bind declared COS factor values to their exact research landing record.
 | `output_is_cs_rank` | `bool` | `必填/未声明默认` |
 | `lineage` | `object` | `必填/未声明默认` |
 
+### BoundResearchFactor.treatment_signature
+
+[实际实现](../factor_optimizer/research_manifest.py#L23)。
+
+Carry positive rank evidence even when full DSL lineage is unknown.
+
+参数：`(self)`。
+
 ### read_bound_factor
 
-[实际实现](../factor_optimizer/research_manifest.py#L83)。
+[实际实现](../factor_optimizer/research_manifest.py#L97)。
 
 Read declared datasets through DataAccess; enforce URI, bytes and SHA256.
 
@@ -10640,13 +10648,13 @@ Import seen records from dictionaries.
 | `factor_optimizer/policy/repair_registry.py` | `1f337900eec0750622901a2f26f0bb19ad5bae248399c62546b3ede85b998545` |
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
-| `factor_optimizer/research_baseline.py` | `3eee6b3b915c7a93df09b61ea7d5b8eaba7b662abf36201b565be048f1c0dfc0` |
+| `factor_optimizer/research_baseline.py` | `4b1a1defd136693361ca4adc3d8a416a80912b400bcb6d5af6b3df707ad81905` |
 | `factor_optimizer/research_batch.py` | `88efcb0cfb4274397a29d7c0603dc1d237aca22de25001ad25bb568a6c4b1ce5` |
 | `factor_optimizer/research_decay.py` | `1355b74f2ca32c7f819357880214580502eeff1df9d09593c601ed14d7fb71b0` |
 | `factor_optimizer/research_diagnostics.py` | `6353a8fcf0777f751b14f255e77930de89696972a99ae5ba4f63ea66beef104f` |
 | `factor_optimizer/research_final_report.py` | `58ec87ceff4f1994388e884b4aa7f32f71120c6eff41c3d9f624203ad6f077c9` |
 | `factor_optimizer/research_fitness.py` | `8d1174abfe3cd22c0e76276a88d713fc55fc2a1574169a408c23499bf6c1581f` |
-| `factor_optimizer/research_manifest.py` | `5098274c402cf69b3c90cfb0fdb37b50fe945db89ac74066ec757270bd120a17` |
+| `factor_optimizer/research_manifest.py` | `5c92761458c47ff82aa68819341860744d3f146c974318172f28697b0f89a161` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |
 | `factor_optimizer/search/conditional_search.py` | `4b6dfeceacd797ad16f2406d0cd8c5cc1a4146c59c65c611f875356ce7251731` |

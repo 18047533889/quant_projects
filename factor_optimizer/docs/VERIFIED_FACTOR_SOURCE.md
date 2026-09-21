@@ -60,7 +60,7 @@ lineage 采用保守识别，仅接受 col、有限数值常量、加减乘除/�
     # batch 必须由 bound.factor.table 中的同一份因子值对齐构建。
     result = optimize_factor_batch(
         batch, labels,
-        lineages={bound.factor_id: bound.lineage},
+        lineages={bound.factor_id: bound.treatment_signature},
         allow_research=True,
     )
 
@@ -68,6 +68,35 @@ lineage 采用保守识别，仅接受 col、有限数值常量、加减乘除/�
 已有排名时不再次添加。中性化仍需要真实且时点可用的暴露，
 没有暴露不会伪造；所有变化仍受 TRAIN 退化检查和 VALIDATION 确认。
 接口不自动证明调用者任意组装的 batch 仍来自该对象，不能挂名别的矩阵。
+
+### 不完整公式中的正向排名证据
+
+`bound.lineage` 仍仅表示已识别的完整顺序流程；复杂分支返回 None。
+推荐向自动优化器传 `bound.treatment_signature`：已识别流程沿用完整签名，
+未识别流程返回 incomplete 签名，但保留语法树中已确认的 rank/cs_rank 存在。
+这不会伪造分支的执行顺序，也不等于 output_is_cs_rank。
+
+基础处理遇到 incomplete/unknown 签名仍不添加任何默认处理；如果其中
+cs_rank=True，则记录 cs_rank_already_present，并从候选搜索删除
+REPRESENTATION_RANK。同样，顺序处理记录中出现“已知排名 + 未知步骤”
+也不能抹去已知排名。其他明确允许的研究修复仍可评估，未知公式不被标成
+“已确认未预处理”。这项禁止重复排名的规则是用户约束，不代表内部排名
+与输出排名在数学上等价。
+
+2026-09-22 补充验证：三个先失败后通过的用例覆盖未知步骤不能抹掉已知
+排名、不完整签名实际阻止排名候选、真实绑定接口返回的分支排名证据进入
+基础处理决策。两库全套 1772 passed、1 xfailed、16 warnings（135.90 秒）。
+另行确认 ts_rank 不被当作截面排名；未知完整性状态仍保留。
+根测试仍有同一批 14 项收集错误（56.48 秒），未计入通过。
+
+另选真实 weekly_db5616cd85a477b3，表达式
+ts_delta(col('valuation.a_cap'), 20)，由 DataAccess 读取并核对来源清单、
+SHA256 和字节数。500 日 × 256 股票，TRAIN 覆盖选择资产，
+bootstrap_draws=99，固定 10bps 成本。新签名入口正确产生 winsor / cs_rank，
+基础 TRAIN IC 退化检查通过，94 个搜索候选中没有重复排名候选。
+然而联合指标含缺失或非有限值，未产生可确认赢家，最终保留 RAW；
+这不是收益改善证据。没有提供历史暴露，也没有读取 TEST 指标。
+详情见 [真实签名入口回放](rank_signature_real_20260922.json)。
 
 ## 依赖与安装
 
