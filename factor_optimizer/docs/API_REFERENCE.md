@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**67 个 Python 模块、882 个公开函数/类/方法定义**。
+扫描实际包目录：**68 个 Python 模块、887 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -15,6 +15,7 @@
 | [factor_optimizer/adapters/factor_assets.py](../factor_optimizer/adapters/factor_assets.py) | 18 | FA factor-intelligence provider adapters (R61-FI-014 / plan §20 E6, matrix E6). |
 | [factor_optimizer/adapters/factor_engine.py](../factor_optimizer/adapters/factor_engine.py) | 7 | FactorEngineAdapter: protocol for FE integration (optional dependency). |
 | [factor_optimizer/adapters/fitness.py](../factor_optimizer/adapters/fitness.py) | 2 | Fitness adapter: dimension/desirability mapping for generalized treatment decisions. |
+| [factor_optimizer/adapters/preprocessing.py](../factor_optimizer/adapters/preprocessing.py) | 5 | Versioned research bridge from smoothing proposals to real FP kernels. |
 | [factor_optimizer/adapters/quant_evaluator.py](../factor_optimizer/adapters/quant_evaluator.py) | 14 | QuantEvaluatorAdapter: protocol for QE integration (optional dependency). |
 | [factor_optimizer/capabilities.py](../factor_optimizer/capabilities.py) | 5 | Truthful runtime capability metadata for factor_optimizer. |
 | [factor_optimizer/complexity/__init__.py](../factor_optimizer/complexity/__init__.py) | 0 | Complexity estimation and budget tracking. |
@@ -371,6 +372,63 @@ True when the FA dimension's raw value is lower-is-better.
 参数：`(dimension: str)`。
 
 返回类型：`bool`。
+
+## factor_optimizer/adapters/preprocessing.py
+
+Versioned research bridge from smoothing proposals to real FP kernels.
+
+### IneligibleSmoothingRepair
+
+[实际实现](../factor_optimizer/adapters/preprocessing.py#L17)。
+
+A proposed repair cannot bind to the current FP execution authority.
+
+基类：`ValueError`。
+
+### SmoothingRepairPlan
+
+[实际实现](../factor_optimizer/adapters/preprocessing.py#L22)。
+
+Immutable resolved kernel arguments and training-context provenance.
+
+本类声明字段（继承字段见基类；实际限制仍需合同校验）：
+
+| 字段 | 类型 | 默认值/值 |
+|---|---|---|
+| `family` | `str` | `必填/未声明默认` |
+| `transform` | `str` | `必填/未声明默认` |
+| `parameters` | `Tuple[Tuple[str, object], ...]` | `必填/未声明默认` |
+| `training_context_ref` | `str` | `必填/未声明默认` |
+| `natural_time_scale` | `float` | `必填/未声明默认` |
+| `mapping_version` | `str` | `'smoothing-repair.v1'` |
+
+### SmoothingRepairPlan.identity
+
+[实际实现](../factor_optimizer/adapters/preprocessing.py#L33)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self)`。
+
+返回类型：`str`。
+
+### SmoothingRepairPlan.execute
+
+[实际实现](../factor_optimizer/adapters/preprocessing.py#L39)。
+
+Delegate a long asset_id/date/value panel to FP; retain its lag/NaNs.
+
+参数：`(self, values, *, allow_research: bool=False)`。
+
+### compile_smoothing_repair
+
+[实际实现](../factor_optimizer/adapters/preprocessing.py#L52)。
+
+Resolve a supported conditional candidate to FP parameters.
+
+参数：`(family: str, parameters: Mapping[str, object], *, natural_time_scale: float, training_context_ref: str)`。
+
+返回类型：`SmoothingRepairPlan`。
 
 ## factor_optimizer/adapters/quant_evaluator.py
 
@@ -9244,7 +9302,7 @@ Tiered (funnel) evaluation for factor auto-treatment optimization.
 
 ### IssuedTierJob
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L26)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L27)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -9260,7 +9318,7 @@ Tiered (funnel) evaluation for factor auto-treatment optimization.
 
 ### TierEvaluationOutcome
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L42)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L43)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -9279,7 +9337,7 @@ Tiered (funnel) evaluation for factor auto-treatment optimization.
 
 ### EvaluationTier
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L64)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L65)。
 
 A single stage in the evaluation funnel.
 
@@ -9294,7 +9352,7 @@ A single stage in the evaluation funnel.
 
 ### TieredEvaluationPolicy
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L119)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L120)。
 
 Frozen policy describing an ordered evaluation funnel.
 
@@ -9306,7 +9364,7 @@ Frozen policy describing an ordered evaluation funnel.
 
 ### TieredEvaluationPolicy.first_tier
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L171)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L172)。
 
 The cheapest screening tier every candidate enters at.
 
@@ -9316,7 +9374,7 @@ The cheapest screening tier every candidate enters at.
 
 ### TieredEvaluationPolicy.full_tier
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L176)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L177)。
 
 The final tier (full backtest), reached only by survivors.
 
@@ -9326,7 +9384,7 @@ The final tier (full backtest), reached only by survivors.
 
 ### TieredEvaluationPolicy.tier_names
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L181)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L182)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -9336,7 +9394,7 @@ The final tier (full backtest), reached only by survivors.
 
 ### TieredEvaluationPolicy.tier_index
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L184)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L185)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -9346,7 +9404,7 @@ The final tier (full backtest), reached only by survivors.
 
 ### TieredEvaluationPolicy.to_dict
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L190)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L191)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -9356,7 +9414,7 @@ The final tier (full backtest), reached only by survivors.
 
 ### TieredEvaluationPolicy.from_dict
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L196)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L197)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -9366,13 +9424,13 @@ The final tier (full backtest), reached only by survivors.
 
 ### TieredEvaluationScheduler
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L207)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L208)。
 
 Routes each candidate through the funnel, pruning non-survivors.
 
 ### TieredEvaluationScheduler.__init__
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L223)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L224)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -9382,7 +9440,7 @@ Routes each candidate through the funnel, pruning non-survivors.
 
 ### TieredEvaluationScheduler.policy
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L242)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L243)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -9392,7 +9450,7 @@ Routes each candidate through the funnel, pruning non-survivors.
 
 ### TieredEvaluationScheduler.initial_tier
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L245)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L246)。
 
 The tier every candidate starts at (the cheapest).
 
@@ -9402,7 +9460,7 @@ The tier every candidate starts at (the cheapest).
 
 ### TieredEvaluationScheduler.fidelity_for
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L249)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L250)。
 
 The fidelity threshold of the tier *candidate_id* currently runs at.
 
@@ -9412,7 +9470,7 @@ The fidelity threshold of the tier *candidate_id* currently runs at.
 
 ### TieredEvaluationScheduler.tier_name_for
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L254)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L255)。
 
 The name of the tier *candidate_id* currently runs at.
 
@@ -9422,7 +9480,7 @@ The name of the tier *candidate_id* currently runs at.
 
 ### TieredEvaluationScheduler.tier_for
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L258)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L259)。
 
 The tier *candidate_id* currently occupies.
 
@@ -9432,7 +9490,7 @@ The tier *candidate_id* currently occupies.
 
 ### TieredEvaluationScheduler.is_pruned
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L277)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L278)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -9442,7 +9500,7 @@ The tier *candidate_id* currently occupies.
 
 ### TieredEvaluationScheduler.is_completed
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L280)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L281)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -9452,7 +9510,7 @@ The tier *candidate_id* currently occupies.
 
 ### TieredEvaluationScheduler.issue
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L283)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L284)。
 
 Issue the only outcome-capable job for a candidate's current tier.
 
@@ -9462,7 +9520,7 @@ Issue the only outcome-capable job for a candidate's current tier.
 
 ### TieredEvaluationScheduler.advance
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L299)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L300)。
 
 Apply an outcome bound to an actually issued job and attempt.
 
@@ -9472,7 +9530,7 @@ Apply an outcome bound to an actually issued job and attempt.
 
 ### TieredEvaluationScheduler.promote_count
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L368)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L369)。
 
 Number of consecutive successful evaluations recorded at a tier.
 
@@ -9482,7 +9540,7 @@ Number of consecutive successful evaluations recorded at a tier.
 
 ### TieredEvaluationScheduler.to_dict
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L374)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L375)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -9492,7 +9550,7 @@ Number of consecutive successful evaluations recorded at a tier.
 
 ### TieredEvaluationScheduler.from_dict
 
-[实际实现](../factor_optimizer/search/tiered_evaluation.py#L388)。
+[实际实现](../factor_optimizer/search/tiered_evaluation.py#L389)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -9974,6 +10032,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/adapters/factor_assets.py` | `6a2ad44b43710199fd6eed901de2974fb8a66314f525be016c2f4796bf8af6d4` |
 | `factor_optimizer/adapters/factor_engine.py` | `924ecf37167dfba994e803f88c66ab6bac83586b3452c00b4535c35fbf87d2f0` |
 | `factor_optimizer/adapters/fitness.py` | `4486884657f730c65064fe6e1aebc7555a515fbc3cba41c71c1bf8c9e4c48ce5` |
+| `factor_optimizer/adapters/preprocessing.py` | `fd88226eb1de42a28455965abc1c601d7598e1b92f53ef0569600a3cd216f89b` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
 | `factor_optimizer/capabilities.py` | `efb1fbf1b54b1b14f128ffe63c74f54f7a22f99a409a0761aac67fc1b6e3ed28` |
 | `factor_optimizer/complexity/__init__.py` | `79c8daf01ef8071b77eb7cbb8df4ae45fc9e2d4a4349f35d402a12f79936e696` |
@@ -10011,7 +10070,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/policy/__init__.py` | `ddba38b9e34581d134c45902fd04db8e8fc540fd5b2438e4a3a46e3753888caf` |
 | `factor_optimizer/policy/decisions.py` | `832c06ae174ab078f518a9ee8237efe89cd88849c2f42e48e250dc6b676d16d3` |
 | `factor_optimizer/policy/repair.py` | `193d142a9cd970b4e9a055fe60642d09514145868107cb25e039f956a9501570` |
-| `factor_optimizer/policy/repair_registry.py` | `f05d9a14ea306062ccdb70a02836f90a8a3cb35acb594e1bd6d43de072437428` |
+| `factor_optimizer/policy/repair_registry.py` | `1f337900eec0750622901a2f26f0bb19ad5bae248399c62546b3ede85b998545` |
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
@@ -10029,8 +10088,8 @@ Import seen records from dictionaries.
 | `factor_optimizer/search/runner.py` | `b7e0a5b19c29005e73d6c3b5083a5552a8fe3cd497c13a23e2562faaeeebc13a` |
 | `factor_optimizer/search/statistical_consumption.py` | `a72535f6b06ba50a8996c35c606851980bd7f578e456eaa9b76a4a9bcc3c747b` |
 | `factor_optimizer/search/strategies.py` | `9507b9bc3f72c25fcee43a966781d936fcecf25325be7dd572e56cd451972cc2` |
-| `factor_optimizer/search/supervised_parameter.py` | `ab546bdfe7363e4a39be8e545374bba1fe41063fb84644241dfa6e6507bba536` |
-| `factor_optimizer/search/tiered_evaluation.py` | `1f2738c929372b7aa9a025f5ae04ebc71e1e977ca13160ab54411697979637fc` |
+| `factor_optimizer/search/supervised_parameter.py` | `becb5018c82a3c522d8641530ca94ba39c7e3a9d2467ced68e3ae57e4b9a797c` |
+| `factor_optimizer/search/tiered_evaluation.py` | `649bce9eef0084762dae3244a894872e7eabcdeb3a277381c480fb17b563a8c8` |
 | `factor_optimizer/search/treatment_decision.py` | `7073d47030e31fb8b66848c748960ed24da7dcc8452fb0082750a3aa98a0a29e` |
 | `factor_optimizer/search/uncertainty_winner.py` | `3b78c7c867a84cb81d30c134abe2cfe5833ff9ddf99141c862c6fd03a7c7d77b` |
 | `factor_optimizer/search/winner_selector.py` | `12a8815f3953e80b9bacf96c1fe2855e655637fe9e2306ed8eb5149c793efc01` |

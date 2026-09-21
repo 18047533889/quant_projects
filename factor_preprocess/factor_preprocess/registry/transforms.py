@@ -1394,7 +1394,7 @@ def create_default_registry() -> TransformRegistry:
     for _name, _sid, _stage, _cost, _dom in [
         ("ewma", "SMOOTH:ewma", "temporal", "per_asset_recursive", {"halflife": (3.0, 60.0)}),
         ("kama", "SMOOTH:kama", "temporal", "per_asset_recursive",
-         {"er_window": (5.0, 30.0), "fast_span": (2.0, 10.0), "slow_span": (20.0, 60.0)}),
+         {"period_er": (5.0, 30.0), "period_fast": (2.0, 10.0), "period_slow": (20.0, 60.0)}),
         ("one_sided_iir_lowpass", "SMOOTH:one_sided_iir_lowpass", "temporal", "per_asset_recursive", {"alpha": (0.05, 0.5)}),
         ("kalman_local_level", "SMOOTH:kalman_local_level", "temporal", "per_asset_recursive",
          {"process_noise": (0.001, 0.1), "measurement_noise": (0.1, 1.0)}),

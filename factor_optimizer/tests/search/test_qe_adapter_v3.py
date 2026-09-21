@@ -2,12 +2,12 @@ import numpy as np
 import pytest
 
 
-def _fixtures(factor_ids=("a", "b", "c")):
+def _fixtures(factor_ids=("a", "b", "c"), *, n=32):
     from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
     from quant_evaluator.contracts.label_bundle import LabelBundle
 
     rng = np.random.default_rng(41)
-    t, n = 36, 12
+    t = 36
     values = rng.normal(size=(t, n, len(factor_ids)))
     labels = rng.normal(size=(t, n))
     batch = FactorBatch(
@@ -207,3 +207,16 @@ def test_real_public_adapter_cuda_batch_path():
         assert metric["rank_ic"]["observation_count"] > 0
         assert metric["rank_ic"]["metric_version"]
     assert adapter.get_evidence(result["evaluation_id"])["requested_backend"] == "cuda"
+
+
+def test_cuda_and_cpu_both_reject_ic_below_default_asset_support():
+    pytest.importorskip("cupy")
+    from factor_optimizer.adapters.quant_evaluator import InMemoryEvidenceStore, create_qe_adapter
+
+    batch, labels = _fixtures(("small",), n=12)
+    adapter = create_qe_adapter(evidence_store=InMemoryEvidenceStore())
+    for backend in ("cpu", "cuda"):
+        result = adapter.evaluate(batch, labels, metrics=["rank_ic"], backend=backend)
+        metric = result["metrics"]["rank_ic"]
+        assert metric["observation_count"] == 0
+        assert not metric["valid"]

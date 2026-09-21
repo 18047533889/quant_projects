@@ -146,7 +146,7 @@ class FeOperatorExecutor:
     unavailable at call time (never deleted — plan §26 F3).
     """
 
-    _PARAM_ALIASES = {"max_lag": "max_periods"}
+    _PARAM_ALIASES = {"max_lag": "max_periods", "min_observations": "min_obs"}
 
     def __init__(self, canonical: str, fallback: Optional[Callable] = None, *, allow_research_fallback: bool = False):
         self.canonical = canonical
@@ -210,9 +210,15 @@ class FeOperatorExecutor:
             if effective in scalar_kw:
                 raise TypeError(f"parameter {effective!r} supplied more than once")
             scalar_kw[effective] = value
-        self.effective_parameters = dict(scalar_kw)
         # expose frame: kwargs['exposures'] is the exposure long frame.
         exposures = call_args.get("exposures")
+
+        if self.canonical == "cs_neutralize" and self.fallback is not None:
+            # Preserve the declared FP default even when the caller omits it.
+            support = inspect.signature(self.fallback).parameters.get("min_observations")
+            if support is not None:
+                scalar_kw.setdefault("min_obs", support.default)
+        self.effective_parameters = dict(scalar_kw)
 
         panel = _long_to_wide(values, value_col, time_col, asset_col)
         if exposures is not None:
@@ -220,6 +226,10 @@ class FeOperatorExecutor:
             # multiple value columns (e1, e2, ...). Build one panel per
             # exposure column so FE receives exposure panels in column order.
             exp_value_cols = call_args.get("exposure_cols")
+            if exp_value_cols is None and self.canonical == "cs_neutralize" and self.fallback is not None:
+                # Public FP OLS accepts an exposure frame, not exposure_cols.
+                # Match its declared convention: every non-identity column.
+                exp_value_cols = [c for c in exposures.columns if c not in {time_col, asset_col}]
             if not exp_value_cols:
                 raise ValueError("exposure_cols must explicitly identify exposure columns")
             unknown = set(exp_value_cols).difference(exposures.columns)
@@ -234,8 +244,15 @@ class FeOperatorExecutor:
                 for item in exp_panels
             ):
                 raise ValueError("exposures must exactly match the factor time/asset axes")
-            inspect.signature(self._op.calculate).bind(panel, *exp_panels, **scalar_kw)
-            out = self._op.calculate(panel, *exp_panels, **scalar_kw)
+            if self.canonical == "cs_neutralize":
+                # FE's canonical call is (y, exposures, group, weight, ...).
+                # Splatting panels makes the second exposure become a group
+                # and can create singleton regressions / all-NaN residuals.
+                inspect.signature(self._op.calculate).bind(panel, exposures=tuple(exp_panels), **scalar_kw)
+                out = self._op.calculate(panel, exposures=tuple(exp_panels), **scalar_kw)
+            else:
+                inspect.signature(self._op.calculate).bind(panel, *exp_panels, **scalar_kw)
+                out = self._op.calculate(panel, *exp_panels, **scalar_kw)
         else:
             inspect.signature(self._op.calculate).bind(panel, **scalar_kw)
             out = self._op.calculate(panel, **scalar_kw)

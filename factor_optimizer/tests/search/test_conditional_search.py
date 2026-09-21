@@ -59,7 +59,7 @@ def test_tree_binds_family_parameter_domains():
     assert causal.parameter_names == ("method", "natural_time_scale_relative")
     method = causal.parameters[0]
     assert method.kind == "choice"
-    assert set(method.choices) == {"EWMA", "KAMA", "IIR", "Kalman"}
+    assert set(method.choices) == {"EWMA", "KAMA", "IIR", "Kalman", "SMA"}
 
     u = _family(tree, "U_SHAPE_REPAIR")
     assert u.parameter_names == ("center", "power", "asymmetry")

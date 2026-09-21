@@ -291,6 +291,32 @@ def test_ols_neutralize_fe_backed_matches_fp_kernel():
     )
 
 
+@needs_fe
+def test_ols_adapter_honors_explicit_minimum_observations():
+    dates = pd.date_range("2024-01-01", periods=2)
+    cols = list("ABCDE")
+    values = _long(np.array([[1., 4., 2., 8., 3.]] * 2), dates, cols)
+    exposures = _long(np.array([[1., 2., 3., 4., 5.]] * 2), dates, cols).rename(columns={"value": "size"})
+    out = _adapter_call("cs_neutralize", values, exposures=exposures,
+                        exposure_cols=("size",), min_observations=10)
+    assert out.isna().all(), "FP minimum support must not be swallowed by FE **kwargs"
+
+
+@needs_fe
+def test_public_ols_registry_call_accepts_its_declared_exposure_frame():
+    from factor_preprocess.neutralization import ols_neutralize
+    rng = np.random.default_rng(20260921)
+    dates = pd.date_range("2024-01-01", periods=3)
+    cols = [f"A{i}" for i in range(12)]
+    values = _long(rng.normal(size=(3, 12)), dates, cols)
+    exposures = _long(rng.normal(size=(3, 12)), dates, cols).rename(columns={"value": "size"})
+    exposures["beta"] = rng.normal(size=len(exposures))
+    actual = get_default_registry().get_execution("ols_neutralize")(values, exposures)
+    expected = ols_neutralize(values, exposures)
+    assert actual.notna().all()
+    np.testing.assert_allclose(actual, expected, **_OLS_TOL)
+
+
 # ---------------------------------------------------------------------------
 # Routing / metadata contract (registry view)
 # ---------------------------------------------------------------------------

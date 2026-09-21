@@ -233,7 +233,7 @@ TreatmentEligibilityEngine 读取训练集 FactorProfileArtifact 和 ExistingTre
 - 已做行业中性化会剪掉重复 industry/dual neutralization；
 - 候选名称最终必须在 canonical registry 可解析。
 
-搜索范围包括 SMA/EWMA 约 3–60、event decay 1–5、freshness max lag 1–20、winsor 下界 0.5%–5% 和上界 95%–99.5%。当前 KAMA 搜索参数名 er_window、fast_span、slow_span 与执行签名 period_er、period_fast、period_slow 不同，集成层必须显式映射。
+搜索范围包括 SMA/EWMA 约 3–60、event decay 1–5、freshness max lag 1–20、winsor 下界 0.5%–5% 和上界 95%–99.5%。KAMA 搜索及注册域已统一为执行签名 period_er、period_fast、period_slow，窗口采样必须保持整数。缩减平滑强度时 IIR alpha 与 Kalman process_noise 提高下界，其他时间窗口/measurement_noise 降低上界；不能一律降低增益，反而增加迟滞。
 
 ## 12. FeatureBundle 与模型表示
 

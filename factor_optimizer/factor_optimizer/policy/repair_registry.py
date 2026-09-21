@@ -386,7 +386,7 @@ _REPAIR_FAMILY_DECLARATIONS: Tuple[RepairFamilyDeclaration, ...] = (
         ),
         owner=ExecutionDomain.FP,
         parameter_schema=_schema(
-            ("method", "choice:EWMA|KAMA|IIR|Kalman"),
+            ("method", "choice:EWMA|KAMA|IIR|Kalman|SMA"),
             ("natural_time_scale_relative", "float:0.1:2.0"),
         ),
         parameter_prior=_prior(method="EWMA", natural_time_scale_relative=0.5),

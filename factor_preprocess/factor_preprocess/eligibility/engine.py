@@ -66,7 +66,7 @@ _FAMILY_TO_TRANSFORMS: Dict[TreatmentFamily, Dict[str, Dict[str, Tuple[float, fl
     TreatmentFamily.SMOOTHING: {
         "trailing_sma": {"window": (3.0, 60.0)},
         "ewma": {"halflife": (3.0, 60.0)},
-        "kama": {"er_window": (5.0, 30.0), "fast_span": (2.0, 10.0), "slow_span": (20.0, 60.0)},
+        "kama": {"period_er": (5.0, 30.0), "period_fast": (2.0, 10.0), "period_slow": (20.0, 60.0)},
         "one_sided_iir_lowpass": {"alpha": (0.05, 0.5)},
         "kalman_local_level": {"process_noise": (0.001, 0.1), "measurement_noise": (0.1, 1.0)},
         "trailing_median": {"window": (3.0, 30.0)},
@@ -232,10 +232,17 @@ class TreatmentEligibilityEngine:
     def _halve_ranges(
         self, params: Dict[str, Tuple[float, float]]
     ) -> Dict[str, Tuple[float, float]]:
-        """Halve the upper bound of each parameter range (trim budget)."""
+        """Restrict smoothing strength, respecting inverse-response parameters.
+
+        Smaller alpha or process noise makes IIR/Kalman SLOWER, not faster.
+        Keep the faster endpoint and remove the slower half for these gains.
+        """
         out: Dict[str, Tuple[float, float]] = {}
         for key, (lo, hi) in params.items():
-            out[key] = (lo, max(lo, hi * 0.5))
+            if key in {"alpha", "process_noise"}:
+                out[key] = (min(hi, lo * 2), hi)
+            else:
+                out[key] = (lo, max(lo, hi * 0.5))
         return out
 
     def _neutralization_transforms(

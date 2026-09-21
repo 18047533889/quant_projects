@@ -19,6 +19,7 @@ search data.
 """
 
 from dataclasses import asdict, dataclass, field
+import math
 from typing import Any, Dict, List, Optional, Tuple
 
 
@@ -91,7 +92,7 @@ class EvaluationTier:
             raise ValueError(
                 f"tier '{self.name}' cost_multiplier must be a number"
             )
-        if not self.cost_multiplier > 0:
+        if not math.isfinite(self.cost_multiplier) or not self.cost_multiplier > 0:
             raise ValueError(
                 f"tier '{self.name}' cost_multiplier must be > 0, got "
                 f"{self.cost_multiplier!r}"

@@ -36,7 +36,7 @@ class FrozenSupervisedParameter:
     state_hash: str = ""
 
     def __post_init__(self):
-        if self.repair_family not in {"U_SHAPE_REPAIR", "TAIL_SATURATION", "TAIL_HINGE"}:
+        if self.repair_family not in {"U_SHAPE_REPAIR", "INVERTED_U_REPAIR", "TAIL_SATURATION", "TAIL_HINGE"}:
             raise ValueError("unsupported supervised repair family")
         if isinstance(self.value, bool):
             raise TypeError("selected value must not be a bool")
@@ -85,7 +85,7 @@ def fit_supervised_parameter(*, parent_factor_id: str, repair_family: str,
                for v in scores.values()):
         raise ValueError("all training objective values must be finite")
     # Stable tie-break: closest to the simplest baseline, then lower value.
-    baseline = 0.5 if repair_family == "U_SHAPE_REPAIR" else max(grid)
+    baseline = 0.5 if repair_family in {"U_SHAPE_REPAIR", "INVERTED_U_REPAIR"} else max(grid)
     selected = min(grid, key=lambda value: (-float(scores[value]), abs(value - baseline), value))
     return FrozenSupervisedParameter(
         parent_factor_id, repair_family, parameter_name, selected, grid,
