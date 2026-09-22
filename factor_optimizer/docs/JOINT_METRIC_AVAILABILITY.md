@@ -16,6 +16,31 @@ summarize 新增 JointMetricsUnavailable（仍为 ValueError 子类，兼容旧�
 - insufficient_observations：少于 20 行；
 - missing_observations：存在不可填补的非有限观测；
 - undefined_ratios：计算后的指标非有限，metrics 明确列出指标名。
+- unsupported_label_accounting：paired_series 不支持非单期或重叠标签的组合记账；
+  必须提供相应持仓批次记账实现，不能直接把跨期标签当每日收益。
+
+### 2026-09-22 逐方法审计补充修复
+
+审计入口 examples/method_audit.py 曾捕获全部 ValueError：即使组合实现故障，
+也会记录 executed / unavailable，导致命令行无法把这类错误计入失败退出码。
+新增注入错误的回归先复现 2 failed：普通 ValueError 被吞掉，且不可用原因无结构化字段。
+现在仅捕获 JointMetricsUnavailable；普通计算异常由外层记录 failed，
+命令行既有的 failed 计数会使退出码为 1。已知证据不足继续执行后续方法，
+同时记录 joint_metrics_code 和 joint_metrics_unavailable，不虚报经济改善。
+
+收紧检查还暴露旧合成测试把单位方差正态分数当成日收益；SMA(13) 的组合收益
+触发非法资本尺度检查。该测试现用同一随机样本的 0.01 倍作为收益，
+并非放宽生产资本门槛。形状、缺失模式、随机种子和方法覆盖保持不变。
+
+本轮修复后定向回归 42 passed；再增加跨期/重叠标签分类测试并重新生成
+FO/FP API 文档后，合并全量回归 1891 passed、1 xfailed、16 warnings（99.68 秒）。
+预期失败仍是明确禁止生产使用的非因果 HP 滤波。
+两只真实 COS 因子的 500 日 × 256 资产回放结果见
+[本轮结构化证据](runtime_review_real_20260922.json)：130 个方法案例中，
+114 executed、16 requires_additional_inputs_or_control、0 failed。
+前者包含因果平滑、分层衰减、U/倒 U 修复、排名/标准化等；后者没有被
+伪装为已验证的方法。自动选择一只 INVERTED_U_REPAIR，另一只保留 RAW，
+TEST 未评分。KAMA 内核提速证据见预处理库对应性能文档，不能外推为全流程提速。
 
 错误的数组形状、非法资本尺度/负换手仍是普通 ValueError，不伪装成证据不足。
 三个时间段均须具有可用夏普，任何一段不可用则 worst_block_sharpe 不可用；

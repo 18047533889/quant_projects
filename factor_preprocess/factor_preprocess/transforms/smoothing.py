@@ -294,22 +294,19 @@ def kama(
         step = np.abs(lagged - np.roll(lagged, 1))  # |x[i] - x[i-1]|
         step[0] = np.nan
         volatility = np.full(n, np.nan)
-        for i in range(n):
-            if i - period_er + 1 < 1 or np.isnan(step[i]):
-                continue
-            window = step[i - period_er + 1 : i + 1]
-            if np.any(np.isnan(window)):
-                continue
-            volatility[i] = window.sum()
+        if n >= period_er:
+            # sliding_window_view is a view, so this removes the Python loop
+            # without materialising the n-by-period_er window matrix. NumPy's
+            # sum deliberately propagates NaN like the scalar incomplete check.
+            step_windows = np.lib.stride_tricks.sliding_window_view(
+                step, period_er
+            )
+            volatility[period_er - 1 :] = step_windows.sum(axis=-1)
         direction = np.full(n, np.nan)
-        for i in range(n):
-            if i - period_er < 0:
-                continue
-            a = lagged[i - period_er]
-            b = lagged[i]
-            if np.isnan(a) or np.isnan(b):
-                continue
-            direction[i] = abs(b - a)
+        if n > period_er:
+            direction[period_er:] = np.abs(
+                lagged[period_er:] - lagged[:-period_er]
+            )
         with np.errstate(divide="ignore", invalid="ignore"):
             # Flat price (volatility == 0) -> ER = 0 -> slowest sc -> KAMA holds.
             valid_er = np.isfinite(volatility) & np.isfinite(direction)

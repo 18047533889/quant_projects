@@ -6817,7 +6817,7 @@ QE metric inputs share signal availability, never ex-post label membership.
 
 ### compare_joint
 
-[实际实现](../factor_optimizer/research_fitness.py#L184)。
+[实际实现](../factor_optimizer/research_fitness.py#L186)。
 
 Recompute all nonlinear metrics within each shared moving-block draw.
 
@@ -10670,7 +10670,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
 | `factor_optimizer/research_diagnostics.py` | `26c82a50b2edcaa4eff8911da11a4fcd52fbad2f5235148202a300d396ced23d` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |
-| `factor_optimizer/research_fitness.py` | `648da31773112b74e4bbf89b18ed14e5a0daa7f45e68fa39625089b8de0bb975` |
+| `factor_optimizer/research_fitness.py` | `375d6ef9902f7245675fdd14b0be6d8b8041c1f16cf4fa64c3863c584c345fc3` |
 | `factor_optimizer/research_manifest.py` | `3fd7d09903279223dfff281fdf2ed4f835d0258e715c6dd53ebfaca0cf1bd1dc` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |

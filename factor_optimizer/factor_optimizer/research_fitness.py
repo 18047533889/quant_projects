@@ -130,11 +130,13 @@ def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, 
     from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
     from quant_evaluator.metrics.ic import compute_daily_ic
     if labels.horizon != 1:
-        raise ValueError('joint portfolio selection requires single-bar labels')
+        raise JointMetricsUnavailable('unsupported_label_accounting',
+                                      'joint portfolio selection requires single-bar labels')
     idx = np.asarray(indices)
     target = _subset_labels(labels, indices)
     if any(target.label_end_time[i] > target.label_start_time[i+1] for i in range(len(idx)-1)):
-        raise ValueError('overlapping labels require cohort portfolio accounting')
+        raise JointMetricsUnavailable('unsupported_label_accounting',
+                                      'overlapping labels require cohort portfolio accounting')
     a, b = raw[idx], candidate[idx]
     common = np.isfinite(a) & np.isfinite(b)
     a, b = np.where(common, a, np.nan), np.where(common, b, np.nan)

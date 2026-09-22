@@ -53,6 +53,19 @@ class LabelBundle:
             raise ValueError("price_convention cannot be empty")
         if self.values is None:
             raise ValueError("values cannot be None")
+        if isinstance(self.horizon, (bool, np.bool_)) or not isinstance(
+            self.horizon, (int, np.integer)
+        ):
+            raise ValueError(f"horizon must be a positive integer, got {self.horizon!r}")
+        if isinstance(self.execution_delay, (bool, np.bool_)) or not isinstance(
+            self.execution_delay, (int, np.integer)
+        ):
+            raise ValueError(
+                "execution_delay must be a nonnegative integer, "
+                f"got {self.execution_delay!r}"
+            )
+        object.__setattr__(self, "horizon", int(self.horizon))
+        object.__setattr__(self, "execution_delay", int(self.execution_delay))
         if self.horizon <= 0:
             raise ValueError(f"horizon must be positive, got {self.horizon}")
         if self.execution_delay < 0:

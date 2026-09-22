@@ -343,6 +343,9 @@ class ProbePortfolioArtifact:
     provenance: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        dtype = np.asarray(self.values).dtype
+        if dtype.kind not in "iuf":
+            raise ValueError("ProbePortfolioArtifact values must have a real numeric dtype")
         values = _freeze_array(self.values, "values")
         if values.ndim != 2:
             raise ValueError(

@@ -4,6 +4,7 @@
 
 - [统一计算口径与 CogAlpha 审查取舍](docs/METRIC_CONVENTIONS.md)：公式、样本、时钟、成本、缺失、阈值迁移。
 - [全部注册指标逐项计算手册](docs/METRIC_REFERENCE.md)：164 个指标的数学公式、中文符号解释、样本/缺失规则与默认参数；源码仅作核对链接，以此目录为准，不以本页历史“51/60 项”计数为准。
+- [公开运行能力与输入/输出契约](docs/PUBLIC_RUNTIME_CAPABILITIES.md)：三个曾被旧表误标的统计指标、序列制品、轴坐标、组合与回撤两阶段调用范例。
 - 更新校验：`python quant_evaluator/scripts/build_metric_reference.py --check`。
 
 本次 IC/ICIR 默认统一至少 20 个有效配对/日；缺失权重不再按部分资产求和报告低换手。历史结果需要重算，不能只改版本标签。
@@ -20,7 +21,7 @@
 
 ## 它是什么 / 不是什么
 
-**做什么：** 对 (FactorBatch, LabelBundle) 算 51 个已注册指标（27 个可立即计算）、
+**做什么：** 对 (FactorBatch, LabelBundle) 计算注册指标并返回类型化证据；
 支持分片/分层/切分绑定评估、流式与并行批量评估、tear-sheet 报告、缓存与预算控制。
 
 **不做什么：** 不算因子值（factor_engine 做）、不自己造标签时序（所有时序由调用方显式提供，
@@ -66,15 +67,20 @@ bundle: EvaluationBundle = evaluate(
 - **LabelBundle** — 显式前向标签；时序全部由调用方提供；默认 `price_convention="vwap_to_vwap"`；
   `__post_init__` 强制校验严格递增 + 因果链。
 - **FactorBatch** — `(时间 × 资产 × 因子)` 3D 因子值 + validity。
-- **EvaluationBundle** — `metric_values` / `diagnostics` / `grouped_metrics`（多因子时逐因子值在
-  `grouped_metrics[factor_id]`）/ `series_refs` / `split_ref` / `config_hash` / `warnings`。
+- **EvaluationBundle** — 标量可通过 `get_metric(metric_id, factor_id)` 查询；序列/向量/矩阵必须从
+  `bundle.artifacts[metric_id].values` 读取，不能在 `metric_values` 中寻找。另含
+  `diagnostics` / `grouped_metrics` / `split_ref` / `config_hash` / `warnings`。
 - **SealedSplitRef** — 可选 sealed train/valid/test 切分绑定。
 
-## 指标全景（51 个已注册，27 个可算）
+## 指标全景
 
-> 权威清单：`docs/METRIC_REGISTRY_COVERAGE.csv`（60 行 = 33 已注册 + 27 NOT_IMPLEMENTED 占位）。
-> **澄清：** "60+" = 51 个已注册 + 占位（如 sector_exposure / sharpe_ratio / long_short_returns /
-> pairwise_correlation / fdr / capacity / liquidity 等**未实现**，不可直接请求）。
+> 权威注册清单与公式是 `docs/METRIC_REFERENCE.md`，运行层声明与实测证据分列在
+> `docs/METRIC_CAPABILITY_MATRIX.csv`。`docs/METRIC_REGISTRY_COVERAGE.csv` 是旧版 60 项迁移表，
+> 仅供追溯，不能用其中的 `NOT_IMPLEMENTED` 判断当前运行能力。
+>
+> 公开 CPU 实测已确认 `hac_tstat`、`block_bootstrap_ci` 和
+> `benjamini_hochberg_correction` 可计算；完整输入和读取方式见
+> [公开运行能力与输入/输出契约](docs/PUBLIC_RUNTIME_CAPABILITIES.md)。
 
 ### IC 族（19）
 | metric | 说明 |
@@ -115,10 +121,11 @@ bundle: EvaluationBundle = evaluate(
 ### 集中度族（2） / 稳定性族（3）
 `hhi_concentration`、`hhi_effective_n`；`ic_stability`、`coverage_stability`、`rank_stability`。
 
-### 未注册但存在的 kernel（别直接请求，会抛 InvalidContractError）
+### 是否可请求必须以当前注册表为准
 `metrics/interactions/`（pairwise / conditional / substitution / complementarity）、
 `metrics/stats/`（协整 / Granger / regime / 结构突变）、
-`sector_exposure` / `sharpe_ratio` / `long_short_returns` / `fdr` / `capacity` / `liquidity` 等。
+以及历史迁移表中的占位名称不能据文件路径或旧状态推断能力。调用前用当前注册表/参考手册核对；
+`sharpe_ratio`、`long_short_returns` 等组合指标已经注册，但必须提供其类型化组合输入。
 
 - **注意 min_periods 门限**：quantile_spread=20、hac_*=30、half_life=60、block_bootstrap=60、
   factor_turnover_rate=30 —— 不足抛 `InvalidContractError`。

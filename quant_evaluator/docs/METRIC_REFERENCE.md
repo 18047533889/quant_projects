@@ -5614,7 +5614,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.robustness._contiguous_sample` | `2363c7c4f334782505bc0d65e8c301e5c0121025d0c1c28651f6d751aade1e15` |
 | `quant_evaluator.metrics.robustness._validate_bootstrap_policy` | `dcf9a3b7b26abcb8225b32304b88cd5a1d7e28515b9f6196940a39cf914a8903` |
 | `quant_evaluator.metrics.robustness._validate_hac_policy` | `570d3d84faf7cad3e2f4487fcbe15e720f808d12f84ff21e453cd8bf8064f2f3` |
-| `quant_evaluator.metrics.robustness.compute_block_bootstrap_ci` | `e32ba162d8933455a5bb7f2da6948c1c3b4346b73df98857795742a4f0a6a615` |
+| `quant_evaluator.metrics.robustness.compute_block_bootstrap_ci` | `70690a295aa60e5668eca596f273f038437a3c17300da91182d32f6c8a6e7234` |
 | `quant_evaluator.metrics.robustness.compute_hac_tstat` | `0efc235981a2937e80b431e494f4a308ae24965612511b6aeef9e111f095ecdc` |
 | `quant_evaluator.metrics.robustness.compute_hac_variance` | `48f6545852f5228d681caf534938deeeeba50baf7d99f46000685f3e34596824` |
 | `quant_evaluator.metrics.robustness.compute_subsample_ic` | `a360bcd41a10fdad30b2cf37d948fe1b10a1881d1fcf122d173f3802af0411be` |

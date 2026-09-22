@@ -14,7 +14,7 @@ from factor_optimizer.research_batch import (
     BatchOptimizationConfig, automatic_time_split, _pair_ic, optimize_factor_batch,
 )
 from factor_optimizer.research_fitness import (
-    paired_series, summarize, joint_utility, passes_floors,
+    paired_series, summarize, joint_utility, passes_floors, JointMetricsUnavailable,
 )
 
 
@@ -113,8 +113,9 @@ def audit_methods(batch, labels):
                                train_raw_metrics=mr, train_candidate_metrics=mc,
                                joint_utility_delta=joint_utility(mc)-joint_utility(mr),
                                passes_raw_relative_floors=passes_floors(mr, mc))
-                except ValueError as exc:
-                    row.update(joint_metrics_status="unavailable", joint_metrics_reason=str(exc))
+                except JointMetricsUnavailable as exc:
+                    row.update(joint_metrics_status="unavailable", joint_metrics_reason=str(exc),
+                               joint_metrics_code=exc.code, joint_metrics_unavailable=exc.metrics)
             except IneligibleValueRepair as exc:
                 row.update(status="requires_additional_inputs_or_control", reason=str(exc))
             except Exception as exc:

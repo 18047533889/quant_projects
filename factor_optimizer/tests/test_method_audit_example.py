@@ -30,7 +30,8 @@ def test_method_audit_executes_every_numeric_family_and_marks_missing_inputs():
     ta = AxisRef("time", "int", t, np.arange(t))
     aa = AxisRef("asset", "str", a, np.array([f"a{i}" for i in range(a)]))
     batch = FactorBatch(("probe",), ta, aa, values)
-    labels = LabelBundle("probe", rng.normal(size=(t,a)), 1, decision_time=tuple(range(t)),
+    # Daily returns, not unit-variance scores that can imply loss below -100%.
+    labels = LabelBundle("probe", rng.normal(0, .01, size=(t,a)), 1, decision_time=tuple(range(t)),
                          label_start_time=tuple(range(1,t+1)), label_end_time=tuple(range(2,t+2)), asset_axis=aa)
     rows = audit.audit_methods(batch, labels)
     assert not [r for r in rows if r["status"] == "failed"]

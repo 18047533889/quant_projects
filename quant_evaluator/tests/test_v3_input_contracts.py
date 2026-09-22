@@ -66,6 +66,19 @@ def test_label_validity_requires_boolean_dtype(validity):
         labels(validity=validity)
 
 
+@pytest.mark.parametrize("field,value", [
+    ("horizon", True),
+    ("horizon", 1.5),
+    ("horizon", np.nan),
+    ("execution_delay", False),
+    ("execution_delay", 0.5),
+    ("execution_delay", np.nan),
+])
+def test_label_period_fields_require_real_integers(field, value):
+    with pytest.raises(ValueError, match=field):
+        labels(**{field: value})
+
+
 def test_label_identity_covers_clocks_basis_and_axes():
     original = labels(asset_axis=factors().asset_axis)
     assert original.content_hash != replace(original, price_convention='close_to_close').content_hash

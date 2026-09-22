@@ -21,6 +21,8 @@ class HoldingReturnPanel:
 
     def __post_init__(self):
         values = np.asarray(self.values)
+        if values.dtype.kind not in "iuf":
+            raise ValueError("HoldingReturnPanel values must have a real numeric dtype")
         if values.shape != (self.time_axis.size, self.asset_axis.size):
             raise ValueError("HoldingReturnPanel requires named (time, asset) axes")
         if self.time_axis.values is None or self.asset_axis.values is None:
@@ -33,6 +35,9 @@ class HoldingReturnPanel:
 
     @classmethod
     def from_prices(cls, prices, *, time_axis, asset_axis, source_ref, price_basis):
+        dtype = np.asarray(prices).dtype
+        if dtype.kind not in "iuf":
+            raise ValueError("HoldingReturnPanel prices must have a real numeric dtype")
         prices = np.asarray(prices, dtype=np.float64)
         if prices.shape != (time_axis.size, asset_axis.size):
             raise ValueError("Price panel does not match named axes")

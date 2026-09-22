@@ -318,19 +318,29 @@ def compute_block_bootstrap_ci(
         n = len(valid_ic)
         num_blocks = (n + block_length - 1) // block_length
 
-        bootstrap_means = np.full(num_bootstrap, np.nan, dtype=np.float64)
-
-        for b in range(num_bootstrap):
-            # Sample blocks with replacement (local Generator)
-            block_starts = shared_starts[b]
-
-            # Reconstruct bootstrap sample
-            bootstrap_sample = []
-            for start in block_starts:
-                bootstrap_sample.extend(valid_ic[start:start + block_length])
-
-            bootstrap_sample = np.array(bootstrap_sample[:n])  # Trim to original length
-            bootstrap_means[b] = np.mean(bootstrap_sample)
+        # Build draws in bounded batches.  The flattened indices retain the
+        # legacy block-by-block sample order before ``np.mean``; this matters
+        # for finite inputs with strong floating-point cancellation.  The
+        # bound caps each temporary index/value matrix at one million elements
+        # (including the untrimmed final block) instead of materialising the
+        # full B x T draw tensor. A single padded draw larger than the bound
+        # is still processed alone (one complete draw is the minimum batch).
+        max_draw_elements = 1_000_000
+        padded_draw_length = num_blocks * block_length
+        draws_per_batch = max(
+            1,
+            min(num_bootstrap, max_draw_elements // padded_draw_length),
+        )
+        offsets = np.arange(block_length, dtype=np.int64)
+        bootstrap_means = np.empty(num_bootstrap, dtype=np.float64)
+        for first in range(0, num_bootstrap, draws_per_batch):
+            last = min(first + draws_per_batch, num_bootstrap)
+            draw_indices = (
+                shared_starts[first:last, :, None] + offsets[None, None, :]
+            ).reshape(last - first, -1)[:, :n]
+            bootstrap_means[first:last] = np.mean(
+                valid_ic[draw_indices], axis=1
+            )
 
         # Compute percentiles
         ci_lower[f] = np.percentile(bootstrap_means, lower_percentile)
