@@ -1,0 +1,83 @@
+{
+  "cold_start": {
+    "runs": [
+      {
+        "mode": "old",
+        "seconds": 47.071689050000714,
+        "implementations": 4191,
+        "identity_sha256": "4808c3c7ad65c7189e9bba3c5a2e72fd99193521070dc9747383b033dc20ce27",
+        "cache": "CacheInfo(hits=0, misses=0, maxsize=512, currsize=0)"
+      },
+      {
+        "mode": "new",
+        "seconds": 35.24466379699879,
+        "implementations": 4191,
+        "identity_sha256": "4808c3c7ad65c7189e9bba3c5a2e72fd99193521070dc9747383b033dc20ce27",
+        "cache": "CacheInfo(hits=1789, misses=121, maxsize=512, currsize=35)"
+      },
+      {
+        "mode": "new",
+        "seconds": 35.0208505139999,
+        "implementations": 4191,
+        "identity_sha256": "4808c3c7ad65c7189e9bba3c5a2e72fd99193521070dc9747383b033dc20ce27",
+        "cache": "CacheInfo(hits=1789, misses=121, maxsize=512, currsize=35)"
+      },
+      {
+        "mode": "old",
+        "seconds": 47.49197635599921,
+        "implementations": 4191,
+        "identity_sha256": "4808c3c7ad65c7189e9bba3c5a2e72fd99193521070dc9747383b033dc20ce27",
+        "cache": "CacheInfo(hits=0, misses=0, maxsize=512, currsize=0)"
+      }
+    ],
+    "medians": {
+      "old": 47.281832702999964,
+      "new": 35.13275715549935
+    },
+    "identical_identities": true
+  },
+  "real_factor": {
+    "runs": [
+      {
+        "mode": "old",
+        "seconds": 58.71820374300296,
+        "output_and_records_sha256": "8efbd1e82b2e89b3979f5ccebc62e5ce1615a937f18188b738388cd17b6bfd29",
+        "candidates": 103,
+        "test_evaluated": false,
+        "source_sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d"
+      },
+      {
+        "mode": "new",
+        "seconds": 46.28899130499849,
+        "output_and_records_sha256": "8efbd1e82b2e89b3979f5ccebc62e5ce1615a937f18188b738388cd17b6bfd29",
+        "candidates": 103,
+        "test_evaluated": false,
+        "source_sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d"
+      },
+      {
+        "mode": "new",
+        "seconds": 45.36323325000194,
+        "output_and_records_sha256": "8efbd1e82b2e89b3979f5ccebc62e5ce1615a937f18188b738388cd17b6bfd29",
+        "candidates": 103,
+        "test_evaluated": false,
+        "source_sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d"
+      },
+      {
+        "mode": "old",
+        "seconds": 58.37322808599856,
+        "output_and_records_sha256": "8efbd1e82b2e89b3979f5ccebc62e5ce1615a937f18188b738388cd17b6bfd29",
+        "candidates": 103,
+        "test_evaluated": false,
+        "source_sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d"
+      }
+    ],
+    "medians": {
+      "old": 58.54571591450076,
+      "new": 45.826112277500215
+    },
+    "identical_outputs": true
+  },
+  "test_partition_evaluated": false,
+  "baseline_commit": "b283590b7",
+  "limitation": "Shared server-c working tree includes other AI's uncommitted registry changes; identical workspace used in all paired trials. No clean-release or global-optimum performance claim."
+}

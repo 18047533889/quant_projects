@@ -665,7 +665,8 @@ def _freeze_value_unbounded(value: Any) -> str:
             return "fn(" + "|".join(parts) + ")"
         if inspect.isclass(value):
             try:
-                source = inspect.getsource(value)
+                from factor_engine.backend.class_source_cache import class_source
+                source = class_source(value)
             except (OSError, TypeError):
                 source = ""
             return (
