@@ -11,6 +11,9 @@ warmup/purge 后 TRAIN 索引；此前使用前 300 日覆盖率，而实际 TRA
 
 ## 已有真实证据
 
+最新冷启动提速见 [初始化证据复用 A/B](OVERLAY_SNAPSHOT_PERFORMANCE.md)：
+固定真实样本的四次独立进程中，候选/输出/认证标记摘要相同，计时中位数减少约 14.4%。
+
 新批量入口支持指定清单与受限对象大小，已有三因子 64 资产回放及
 195 个方法案例，见 [COS 清单采样](COS_MANIFEST_SAMPLING.md)。默认示例仍兼容旧清单。
 后续新增 [低覆盖隔离](COS_COVERAGE_ISOLATION.md)，避免个别低覆盖因子使合格因子无法执行。

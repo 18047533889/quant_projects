@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 
-def _per_gate_verified(canonical: str) -> dict[str, bool]:
+def _per_gate_verified(canonical: str, *, payload=None) -> dict[str, bool]:
     """Return each gate's OWN independent evidence record from the payloads.
 
     P0-18: the semantic / temporal / source-contract certificates must each be
@@ -36,7 +36,8 @@ def _per_gate_verified(canonical: str) -> dict[str, bool]:
     try:
         from factor_engine.backend.factor_operator_evidence import load_factor_operator_evidence
 
-        payload = load_factor_operator_evidence() or {}
+        if payload is None:
+            payload = load_factor_operator_evidence() or {}
         operators = payload.get("operators")
         if isinstance(operators, dict):
             record = operators.get(canonical)
@@ -106,6 +107,16 @@ def apply_evidence_certification_overlay() -> None:
     except Exception:
         primitive_valid = False
 
+    # One read per overlay, not per operator. This snapshot is local to this
+    # invocation: the next overlay reloads changed/missing evidence. Physical
+    # admission and each independent gate remain checked below.
+    try:
+        from factor_engine.backend.factor_operator_evidence import load_factor_operator_evidence
+
+        gate_payload = load_factor_operator_evidence() or {}
+    except Exception:
+        gate_payload = {}
+
     for canonical in sorted(factor_production_targets()):
         catalog = OperatorRegistry._catalog.get(canonical, {})
         meta = catalog.setdefault("backend_meta", {}).setdefault("pandas_numpy", {})
@@ -128,7 +139,7 @@ def apply_evidence_certification_overlay() -> None:
         # P0-18: bind each gate's OWN independent evidence.  Implementation
         # evidence (``certified``) is required but never sufficient for the
         # semantic/temporal/source gates; each needs its own payload record.
-        per_gate = _per_gate_verified(canonical)
+        per_gate = _per_gate_verified(canonical, payload=gate_payload)
         for _key in (
             "semantic_golden_verified",
             "temporal_prefix_verified",
