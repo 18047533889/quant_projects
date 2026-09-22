@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
@@ -17,6 +18,7 @@ from data_access.store import DataAccessStore
 from data_access.cos.research import read_declared_cos_object
 from factor_optimizer.research_diagnostics import diagnose_training_batch
 from factor_optimizer.research_manifest import read_bound_factor
+from factor_optimizer.research_batch import automatic_time_split
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 
@@ -116,7 +118,12 @@ def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False):
     dates = dates[positions + 2 < len(calendar)][-500:]
     if len(dates) != 500:
         raise ValueError("need 500 aligned trading dates with full label endpoints")
-    assets = choose_assets(panels, dates[:300], n_assets)
+    pos = calendar.get_indexer(dates)
+    # Split metadata only: no return values or TEST scores are read for selection.
+    selection_split = automatic_time_split(SimpleNamespace(
+        decision_time=tuple(dates.to_numpy(dtype="datetime64[ns]")),
+        label_end_time=tuple(calendar[pos+2].to_numpy(dtype="datetime64[ns]"))))
+    assets = choose_assets(panels, dates[list(selection_split.train_indices)], n_assets)
     prices = _load_vwap(calendar.min(), calendar.max(), assets).reindex(calendar)
     pos = calendar.get_indexer(dates)
     vwap = prices.to_numpy()
@@ -134,6 +141,8 @@ def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False):
         validity=np.isfinite(y), asset_axis=aa, source_ref="data_access:ashare_stock_daily_adj:AdjVwap",
         calendar_ref=str(DAILY_ADJ))
     provenance = {"sources": sources, "days": len(times), "assets": len(assets),
+        "asset_selection_split": selection_split.identity,
+        "asset_selection_train_days": len(selection_split.train_indices),
         "date_span": [str(dates.min().date()), str(dates.max().date())],
         "selection": "first eligible bound manifest factor IDs; assets selected on TRAIN coverage only",
         "limitations": "source-declared lineage; no upstream PIT or investability certification"}

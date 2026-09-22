@@ -3,6 +3,12 @@
 本清单区分代码能力、合成验收和真实运行证据，不是“全部完成”声明。
 正式路径 /home/sunhaiwei/quant_projects；下文已更新时序表示分支的真实复验结果。
 
+后续补充：[成交量因子谱系审查](VOLUME_LINEAGE_AUDIT_20260922.md) 已识别第三只
+真实 COS 因子的声明处理步骤。COS 示例资产筛选现复用优化器的
+warmup/purge 后 TRAIN 索引；此前使用前 300 日覆盖率，而实际 TRAIN 为 267 日，
+未读取 TEST，但不应将此前资产筛选描述为严格使用同一份 TRAIN。
+最新复验见 [资产筛选边界](COS_TRAIN_UNIVERSE_20260922.md)。
+
 ## 已有真实证据
 
 - DataAccess 读取绑定清单与因子 SHA256，排除质量阻断项；公开批量示例
