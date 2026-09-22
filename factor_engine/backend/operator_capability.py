@@ -1047,10 +1047,20 @@ def production_eligible_backends(
     return tuple(eligible)
 
 
-def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
+def capability_for(
+    canonical: str,
+    backend: BackendName,
+    *,
+    production_mode: bool = True,
+) -> BackendCapability:
     """Get capability record for canonical×backend.
 
     FE-BE-P0-002: Returns unified BackendCapability with enum types.
+
+    R63: ``production_mode=False`` (research) additionally infers the polars
+    ``execution_kind`` from the live registered slot when the registry
+    backend_meta omits an explicit declaration.  The default (True) stays
+    fail-closed: no explicit spec -> ExecutionKind.UNSUPPORTED.
     """
     from factor_engine.backend.operator_cost import default_backend_speedup
     from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
@@ -1151,12 +1161,43 @@ def capability_for(canonical: str, backend: BackendName) -> BackendCapability:
         "polars_native_expr": ExecutionKind.POLARS_NATIVE_EXPR,
         "polars_numpy_kernel": ExecutionKind.POLARS_NUMPY_KERNEL,
         "polars_pandas_delegate": ExecutionKind.POLARS_PANDAS_DELEGATE,
+        # R63: align with the registry's actual execution_kind vocabulary
+        # (overhaul/cleanup.py + polars_gap_coverage.py).  Before this the
+        # ~1800 slots stamped with these strings resolved to
+        # ExecutionKind.UNSUPPORTED and auto batch admission rejected every
+        # plan containing them ("unsupported backend assignment").
+        "expression_native": ExecutionKind.POLARS_NATIVE_EXPR,
+        "polars_eager_native": ExecutionKind.POLARS_NATIVE_EXPR,
+        "polars_udf_pandas_delegate": ExecutionKind.POLARS_PANDAS_DELEGATE,
         "duckdb_native_sql": ExecutionKind.DUCKDB_NATIVE_SQL,
         "clickhouse_native_sql": ExecutionKind.CLICKHOUSE_NATIVE_SQL,
         "numba_cpu_kernel": ExecutionKind.NUMBA_CPU_KERNEL,
         "q_native": ExecutionKind.Q_NATIVE,
     }
     exec_kind = execution_kind_map.get(execution_kind_str, ExecutionKind.UNSUPPORTED)
+    if (
+        backend == "polars"
+        and exec_kind == ExecutionKind.UNSUPPORTED
+        and not production_mode
+        and "execution_kind" not in backend_meta
+    ):
+        # R63: research-mode inference — the polars slot may have a real native
+        # emission path (polars_expr_emitter) even without an explicit
+        # execution_kind declaration.  Classify from the live slot; production
+        # mode keeps the fail-closed UNSUPPORTED default.
+        from factor_engine.backend.polars_backend_kind import (
+            PolarsImplementationKind,
+            canonical_polars_kind,
+        )
+
+        _inferred = canonical_polars_kind(canon, production_mode=False)
+        exec_kind = {
+            PolarsImplementationKind.POLARS_NATIVE: ExecutionKind.POLARS_NATIVE_EXPR,
+            PolarsImplementationKind.POLARS_UDF_PANDAS_DELEGATE: (
+                ExecutionKind.POLARS_PANDAS_DELEGATE
+            ),
+            PolarsImplementationKind.PANDAS_REFERENCE: ExecutionKind.DELEGATE_PANDAS,
+        }.get(_inferred, ExecutionKind.UNSUPPORTED)
 
     return BackendCapability(
         canonical=canon,

@@ -942,6 +942,18 @@ def _execute_ready_single_region_plan(
                 node_id=node.node_id,
             )
 
+        lowered_root = lower(output_id)
+        # R63: a region whose materialised output lowers to a bare scalar
+        # constant has no panel spine for any backend executor (the polars
+        # long path needs ts/inst, pandas broadcast needs an index). A constant
+        # is its own result: hand it to the transfer layer unchanged instead of
+        # forcing a backend to "execute" it.
+        _lv = (getattr(lowered_root, "attrs", None) or {}).get("value")
+        if lowered_root.op == "literal" and isinstance(
+            _lv, (bool, int, float, complex, str, bytes)
+        ):
+            outputs[region_id] = _lv
+            continue
         selected = _physical_backend_for_region(backend, region.backend)
         actual_labels[region_id] = str(
             getattr(selected, "runtime_backend_label", "") or region.backend.value
@@ -951,7 +963,7 @@ def _execute_ready_single_region_plan(
         # again through the Hybrid "auto" label.
         outputs[region_id] = _execute_fixed_backend(
             selected,
-            lower(output_id),
+            lowered_root,
             ctx,
             backend_label=actual_labels[region_id],
         )

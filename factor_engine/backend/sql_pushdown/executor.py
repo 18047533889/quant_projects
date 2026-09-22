@@ -56,6 +56,28 @@ def _ensure_data_access() -> None:
     ensure_data_access_importable()
 
 
+class SqlVolumeDerivedNotInlined(RuntimeError):
+    """R63: subtree reads logical volume on the adjusted-volume anchor.
+
+    The SQL view layer is a raw physical projection and cannot inline the
+    catalog-derived transform volume = Volume / Factor yet.  Executing
+    such a subtree would compute on raw share volume -- a units error with
+    no NaN-mask signal.  Research falls back to the corrected pandas and
+    polars paths; production fails closed.
+    """
+
+
+_SQL_ANCHOR_VOLUME_DERIVED_DATASETS = frozenset({"ashare_stock_daily_adj"})
+
+
+def _sql_volume_derived_blocked(compiled, dataset):
+    """True when the compiled SQL reads logical volume on the anchor."""
+    if str(dataset or "") not in _SQL_ANCHOR_VOLUME_DERIVED_DATASETS:
+        return False
+    refs = getattr(compiled, "referenced_columns", None) or ()
+    return "volume" in {str(ref) for ref in refs}
+
+
 def _sql_fallback_allowed(exc: BaseException, ctx: ExecutionContext) -> bool:
     """Phase 5 R11：SQL pushdown 失败是否允许回退 Python/Polars。
 
@@ -389,12 +411,11 @@ def _execute_duckdb_table(
     data_source: Any | None = None,
     query_budget: Any | None = None,
 ):
-    """通过 data_access store 在 DuckDB 上执行 SQL，返回 Arrow 表。
-
-    OPT-01: 添加 DuckDB 超时保护（防止失控查询）
-    OPT-02: 集成查询计划缓存
-    OPT-03: 应用并行执行配置
-    """
+    if _sql_volume_derived_blocked(compiled, getattr(pctx, "dataset", None)):
+        raise SqlVolumeDerivedNotInlined(
+            "SQL plane cannot inline the Volume / Factor derived transform "
+            f"on {pctx.dataset!r}; refusing a volume-reading subtree on raw volume"
+        )
     _ensure_data_access()
     from data_access import get_store
     from data_access.read.query_budget import QueryBudget
@@ -629,14 +650,11 @@ def _execute_clickhouse_table(
     *,
     query_budget: Any | None = None,
 ):
-    """在 ClickHouse 上执行 SQL，返回查询结果表（带资源预算）。
-
-    R21-061..063: unlike the old ``execute_query(config, sql)`` (which had no
-    budget), the ClickHouse path now carries QueryBudget-derived settings so
-    switching backend cannot bypass resource governance.
-
-    OPT-03: 使用连接池避免每次查询创建新连接（节省 20-50ms）。
-    """
+    if _sql_volume_derived_blocked(compiled, getattr(pctx, "dataset", None)):
+        raise SqlVolumeDerivedNotInlined(
+            "SQL plane cannot inline the Volume / Factor derived transform "
+            f"on {pctx.dataset!r}; refusing a volume-reading subtree on raw volume"
+        )
     _ensure_data_access()
     import uuid
 

@@ -958,7 +958,9 @@ class PhysicalBatchGlobalOptimizer:
                 kernel_signature=kernel_signature,
             ))
         if supports_polars(op, mode=mode):
-            capability = capability_for(op, "polars")
+            capability = capability_for(
+                op, "polars", production_mode=mode == "production"
+            )
             is_delegate = canonical_polars_is_delegate(
                 op, production_mode=mode == "production"
             )

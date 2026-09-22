@@ -247,6 +247,168 @@ def _rqa_stats_window_fixed_rr(
     return summary
 
 
+# ---------------------------------------------------------------------------
+# R63 batch-5: vectorised fixed-recurrence-rate DET/LAM.  Two replacements
+# keep the loop kernel's exact semantics at numpy speed:
+#
+# * ``_r63_sparse_run_sums`` replaces the Python run-length walks of
+#   ``_rqa_line_statistics``.  At a fixed recurrence rate the recurrence
+#   matrix is sparse (RR ~ target_rr), so the maximal True-runs along every
+#   line are extracted once from ``flatnonzero`` (C order already enumerates
+#   (row, line, position) lexicographically) and chained by a "same run"
+#  差分 test; ``bincount`` then sums the lengths of runs >= min_line per
+#   outer row.  All quantities are exact integers.
+# * ``_r63_fixed_rr_series`` reproduces ``_rqa_fixed_rr_series`` row-for-row:
+#   same trailing contiguous finite run, same 0.8*window sample gate, same
+#   phase-space distances (upper triangle only, sqrt of the same summed
+#   squares), epsilon = the k-th-smallest eligible distance via one
+#   ``np.partition`` per distinct run length (per-row k resolved by sorting
+#   only the k_max-prefix), same symmetric recurrence matrix.  Every float
+#   entering a comparison is the value the loop kernel produced, so outputs
+#   match bitwise.  The loop kernel is kept as the semantic reference.
+# ---------------------------------------------------------------------------
+def _r63_sparse_run_sums(A: np.ndarray, min_line: int) -> np.ndarray:
+    """Per-outer-row sums of maximal True-run lengths >= ``min_line``.
+
+    ``A`` is boolean (ns, L, P); runs run along the last axis (the line
+    positions) and sums are reported per outer row (one recurrence matrix).
+    """
+    ns, L, P = A.shape
+    idx = np.flatnonzero(A.reshape(ns, -1))
+    if idx.size == 0:
+        return np.zeros(ns, dtype=np.int64)
+    LP = L * P
+    outer = idx // LP
+    lin = (idx % LP) // P
+    pos = idx % P
+    same = np.empty(idx.size, dtype=bool)
+    same[0] = False
+    same[1:] = (
+        (outer[1:] == outer[:-1])
+        & (lin[1:] == lin[:-1])
+        & (pos[1:] == pos[:-1] + 1)
+    )
+    first = ~same                      # entry starts a new maximal run
+    run_id = np.cumsum(first)          # 1-based run number per entry
+    rlen = np.bincount(run_id)         # run lengths (index 0 unused)
+    run_len = rlen[1:]
+    run_outer = outer[first]
+    good = run_len >= min_line
+    if not good.any():
+        return np.zeros(ns, dtype=np.int64)
+    sums = np.bincount(
+        run_outer[good], weights=run_len[good].astype(np.float64), minlength=ns
+    )
+    return sums.astype(np.int64)
+
+
+def _r63_fixed_rr_series(
+    x2d: np.ndarray, window: int, dim: int, delay: int, target_rr: float,
+    min_line: int, min_periods: int, key: str, theiler: int | None = None,
+) -> np.ndarray:
+    rows, cols = x2d.shape
+    w = max(2, int(window))
+    d = max(1, int(dim))
+    dl = max(1, int(delay))
+    if d * dl > 4:
+        raise ValueError("dimension*delay must be <= 4 (embedding support)")
+    ml = max(2, int(min_line))
+    th = max(0, (d - 1) * dl if theiler is None else int(theiler))
+    rr = float(target_rr)
+    if not np.isfinite(rr) or not (0.0 < rr < 1.0):
+        raise ValueError("target_rr must be in (0, 1)")
+    mp = max(4, int(min_periods))
+    min_eff = max(mp, int(np.ceil(0.8 * w)))
+    lag = (d - 1) * dl
+    out = np.full((rows, cols), np.nan, dtype=float)
+    rrng = np.arange(rows, dtype=np.int64)
+    for c in range(cols):
+        col = x2d[:, c]
+        fin = np.isfinite(col)
+        # trailing contiguous finite run ending at the current row (P0-03)
+        last_bad = np.maximum.accumulate(np.where(fin, -1, rrng))
+        start = np.maximum(np.maximum(0, rrng - w + 1), last_bad + 1)
+        size = rrng + 1 - start
+        okr = (size >= min_eff) & fin
+        rsel = np.flatnonzero(okr)
+        if rsel.size == 0:
+            continue
+        Mn = size[rsel] - lag
+        Mmax = int(Mn.max())
+        if Mmax < 4:
+            continue
+        # rows whose phase space or eligible-pair count is too small stay NaN
+        iu, ju = np.triu_indices(Mmax, k=1)
+        timep = (ju - iu) > th
+        nel_of_M: dict[int, int] = {}
+        keep = np.zeros(rsel.size, dtype=bool)
+        nel = np.zeros(rsel.size, dtype=np.int64)
+        for M in np.unique(Mn):
+            if M < 4:
+                continue
+            nM = int(((ju < M) & timep).sum())
+            if nM < 4:
+                continue
+            keep |= Mn == M
+            nel_of_M[int(M)] = nM
+        nel[keep] = [nel_of_M[int(M)] for M in Mn[keep]]
+        rsel = rsel[keep]
+        Mn = Mn[keep]
+        nel = nel[keep]
+        if rsel.size == 0:
+            continue
+        k = np.maximum(1, np.minimum(nel, np.ceil(rr * nel).astype(np.int64)))
+        kmax = int(k.max())
+        npairs = iu.size
+        pair_i = np.broadcast_to(iu, (rsel.size, npairs))
+        pair_j = np.broadcast_to(ju, (rsel.size, npairs))
+        rows_idx = np.arange(rsel.size)[:, None]
+        # row chunks bound the (rows, pairs, dim) temporary
+        CH = max(1, int(3_000_000 // max(npairs * d, 1)))
+        for c0 in range(0, rsel.size, CH):
+            rs = rsel[c0 : c0 + CH]
+            mn = Mn[c0 : c0 + CH]
+            kk = k[c0 : c0 + CH]
+            ns = rs.size
+            off = start[rs][:, None, None] + np.arange(Mmax)[None, :, None] + (
+                dl * np.arange(d)[None, None, :]
+            )
+            Pc = col[np.clip(off, 0, rows - 1)]            # (ns, Mmax, d)
+            if d == 1:
+                diff = Pc[:, iu, 0] - Pc[:, ju, 0]
+                d2 = diff * diff
+            else:
+                diff = Pc[:, iu, :] - Pc[:, ju, :]
+                d2 = (diff * diff).sum(axis=-1)
+            pvalid = timep[None, :] & (ju[None, :] < mn[:, None])
+            d2 = np.where(pvalid, d2, np.inf)
+            part = np.partition(d2, kmax - 1, axis=1)[:, :kmax]
+            part.sort(axis=1)
+            eps2 = np.take_along_axis(part, (kk - 1)[:, None], axis=1)[:, 0]
+            np.sqrt(d2, out=d2)
+            eps = np.sqrt(eps2)
+            Rup = (d2 <= eps[:, None]) & pvalid
+            n_rec = 2 * Rup.sum(axis=1)
+            # diagonal lines of the upper triangle: line (ju-iu-1), position iu
+            diag = np.zeros((ns, Mmax - 1, Mmax), dtype=bool)
+            diag[rows_idx[:ns], (ju - iu)[None, :] - 1, iu[None, :]] = Rup
+            det_sum = _r63_sparse_run_sums(diag, ml)
+            # R is symmetric: vertical runs of column j == horizontal runs of row j
+            Rfull = np.zeros((ns, Mmax, Mmax), dtype=bool)
+            Rfull[rows_idx[:ns], pair_i[:ns], pair_j[:ns]] = Rup
+            Rfull[rows_idx[:ns], pair_j[:ns], pair_i[:ns]] |= Rup
+            lam_sum = _r63_sparse_run_sums(Rfull, ml)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                if key == "determinism":
+                    val = np.where(det_sum > 0, (2.0 * det_sum) / n_rec, 0.0)
+                else:
+                    val = np.where(lam_sum > 0, (1.0 * lam_sum) / n_rec, 0.0)
+            gate = (n_rec > 0) & (ml < mn)
+            val = np.where(gate, val, np.nan)
+            out[rs, c] = np.where(np.isfinite(val), val, np.nan)
+    return out
+
+
 def _rqa_stats_window(
     v: np.ndarray,
     dim: int,
@@ -408,7 +570,9 @@ def _ts_rqa_determinism_fixed_rr(
     min_periods: int = 10,
     theiler: int | None = None,
 ) -> pd.DataFrame:
-    out = _rqa_fixed_rr_series(
+    # R63: batched kernel (bitwise-identical); _rqa_fixed_rr_series above is
+    # kept as the semantic reference.
+    out = _r63_fixed_rr_series(
         x.to_numpy(dtype=float), window, dim, delay, target_rr,
         min_line, min_periods, "determinism", theiler,
     )
@@ -425,7 +589,9 @@ def _ts_rqa_laminarity_fixed_rr(
     min_periods: int = 10,
     theiler: int | None = None,
 ) -> pd.DataFrame:
-    out = _rqa_fixed_rr_series(
+    # R63: batched kernel (bitwise-identical); _rqa_fixed_rr_series above is
+    # kept as the semantic reference.
+    out = _r63_fixed_rr_series(
         x.to_numpy(dtype=float), window, dim, delay, target_rr,
         min_line, min_periods, "laminarity", theiler,
     )

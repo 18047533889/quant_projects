@@ -49,6 +49,7 @@ import numpy as np
 import pandas as pd
 
 from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
+from factor_engine.cleaned_operators.microstructure import intraday_agg_vec as _iav
 from factor_engine.runtime.session_calendar import EXCHANGE_CERTIFIED, SessionCalendar
 from factor_engine.runtime.session_panel import (
     AxisMismatchError,
@@ -214,6 +215,7 @@ def _daily_agg(
     session_tz: str | None = None,
     source_timezone: str | None = None,
     mode: str = "research",
+    vec: Callable[[], Any] | None = None,
 ) -> pd.DataFrame:
     """Apply fn(panel) per (instrument, session-local trade date).
 
@@ -224,6 +226,11 @@ def _daily_agg(
     run fail（重新抛出，不得吞成 NaN）；``mode="production"`` 时 duplicate
     official slot / off-grid 超阈值 → hard DQ fail。``market`` is required
     (R40 #242).
+
+    R63: ``vec`` (optional) is a batched official-grid kernel
+    ``(intraday_agg_vec._Batch) -> (D, C)`` taking precedence over the
+    per-(instrument, day) scalar loop in research mode; production mode keeps
+    the scalar loop (SessionPanel DQ hard-fail semantics).
     """
     _d = _declared_calendar(market, bar_freq) if str(market or "").strip() \
         else default_ashare_calendar(bar_freq="1min")
@@ -232,6 +239,14 @@ def _daily_agg(
     )
     cal = _d
     tz = session_tz or _DEFAULT_SESSION_TZ
+    if vec is not None and str(mode).strip().lower() != "production":
+        from factor_engine.cleaned_operators.microstructure.intraday_agg_vec import (
+            batch_daily_agg,
+        )
+
+        _fast = batch_daily_agg(frame, cal, tz, vec)
+        if _fast is not None:
+            return _fast
     out: dict[str, pd.Series] = {}
     for inst in frame.columns:
         col = frame[inst]
@@ -465,6 +480,7 @@ class IntraSegmentReturn(SeriesOperator):
             close,
             lambda panel: _seg_return(panel, segment, endpoint_policy),
             session_tz=session_tz,
+            vec=lambda _b: _iav.vec_seg_return(_b, segment, endpoint_policy),
         )
 
 
@@ -519,6 +535,7 @@ def _make_seg_share(unit: str):
             lambda p: _seg_volume_share(p, segment),
             session_tz=session_tz,
             market=market,
+            vec=lambda _b: _iav.vec_seg_volume_share(_b, segment),
         )
     return _calculate_series
 
@@ -653,6 +670,7 @@ class IntraSegmentRealizedVol(SeriesOperator):
         return _daily_agg(
             close, lambda panel: _seg_realized_vol(panel, segment),
             session_tz=session_tz,
+            vec=lambda _b: _iav.vec_seg_realized_vol(_b, segment),
         )
 
 
@@ -687,7 +705,7 @@ class IntraRealizedVariance(SeriesOperator):
 
 
     def _calculate_series(self, close, **_):
-        return _daily_agg(close, _rv)
+        return _daily_agg(close, _rv, vec=_iav.vec_rv)
 
 
 def _semivariance(panel: SessionPanel, side: str) -> float:
@@ -727,7 +745,10 @@ class IntraRealizedSemivariance(SeriesOperator):
     def _calculate_series(self, close, side="down", **_):
         if side not in ("up", "down"):
             raise ValueError("intra_realized_semivariance requires side in {'up', 'down'}")
-        return _daily_agg(close, lambda panel: _semivariance(panel, side))
+        return _daily_agg(
+            close, lambda panel: _semivariance(panel, side),
+            vec=lambda _b: _iav.vec_semivariance(_b, side),
+        )
 
 
 def _bipower(panel: SessionPanel) -> float:
@@ -759,7 +780,7 @@ class IntraBipowerVariation(SeriesOperator):
 
 
     def _calculate_series(self, close, **_):
-        return _daily_agg(close, _bipower)
+        return _daily_agg(close, _bipower, vec=_iav.vec_bipower)
 
 
 def _jump_ratio(panel: SessionPanel) -> float:
@@ -789,7 +810,7 @@ class IntraJumpRatio(SeriesOperator):
 
 
     def _calculate_series(self, close, **_):
-        return _daily_agg(close, _jump_ratio)
+        return _daily_agg(close, _jump_ratio, vec=_iav.vec_jump_ratio)
 
 
 # ---------------------------------------------------------------------------
@@ -833,7 +854,7 @@ class IntraPathEfficiency(SeriesOperator):
 
 
     def _calculate_series(self, close, **_):
-        return _daily_agg(close, _path_efficiency)
+        return _daily_agg(close, _path_efficiency, vec=_iav.vec_path_efficiency)
 
 
 def _position_of(panel: SessionPanel, *, low: bool) -> float:
@@ -870,7 +891,10 @@ class IntraHighTime(SeriesOperator):
 
 
     def _calculate_series(self, high, **_):
-        return _daily_agg(high, lambda panel: _position_of(panel, low=False))
+        return _daily_agg(
+            high, lambda panel: _position_of(panel, low=False),
+            vec=lambda _b: _iav.vec_position_of(_b, low=False),
+        )
 
 
 @register_operator(
@@ -892,7 +916,10 @@ class IntraLowTime(SeriesOperator):
 
 
     def _calculate_series(self, low, **_):
-        return _daily_agg(low, lambda panel: _position_of(panel, low=True))
+        return _daily_agg(
+            low, lambda panel: _position_of(panel, low=True),
+            vec=lambda _b: _iav.vec_position_of(_b, low=True),
+        )
 
 
 def _vwap_above_ratio(pc: SessionPanel, pa: SessionPanel, pv: SessionPanel) -> float:
@@ -1008,7 +1035,7 @@ class IntraConcentration(SeriesOperator):
 
 
     def _calculate_series(self, value, **_):
-        return _daily_agg(value, _concentration)
+        return _daily_agg(value, _concentration, vec=_iav.vec_concentration)
 
 
 def _entropy(panel: SessionPanel, normalize: bool = True) -> float:
@@ -1050,7 +1077,10 @@ class IntraEntropy(SeriesOperator):
     }
 
     def _calculate_series(self, value, normalize=True, **_):
-        return _daily_agg(value, lambda panel: _entropy(panel, bool(normalize)))
+        return _daily_agg(
+            value, lambda panel: _entropy(panel, bool(normalize)),
+            vec=lambda _b: _iav.vec_entropy(_b, bool(normalize)),
+        )
 
 
 def _signed_imbalance_proxy(pc: SessionPanel, pv: SessionPanel) -> float:
@@ -1239,7 +1269,10 @@ class IntraExtremeBarReturn(SeriesOperator):
     def _calculate_series(self, close, side="max", **_):
         if side not in ("max", "min"):
             raise ValueError("side must be 'max' or 'min'")
-        return _daily_agg(close, lambda panel: _extreme_bar_return(panel, side))
+        return _daily_agg(
+            close, lambda panel: _extreme_bar_return(panel, side),
+            vec=lambda _b: _iav.vec_extreme_bar_return(_b, side),
+        )
 
 
 def _lunch_gap_return(
@@ -1332,11 +1365,14 @@ def _broadcast_daily_limits(panel: SessionPanel, limit_series: pd.Series | None)
     return np.full(panel.n_slots, value)
 
 
-def _daily_limit_agg(frame, limits, fn, *, side: str) -> pd.DataFrame:
+def _daily_limit_agg(frame, limits, fn, *, side: str, vec=None) -> pd.DataFrame:
     """Bind daily security limits by label, never by the first panel column.
 
     A Series explicitly denotes a common daily limit; a DataFrame denotes
     security-specific limits and absent securities remain unknown.
+
+    R63: ``vec=(kind, transition)`` routes to the batched official-grid limit
+    kernels (``intraday_agg_vec.batch_limit_agg``) with identical semantics.
     """
     if side not in {"up", "down"}:
         raise ValueError("side must be 'up' or 'down'")
@@ -1351,6 +1387,15 @@ def _daily_limit_agg(frame, limits, fn, *, side: str) -> pd.DataFrame:
         not limit_frame.columns.is_unique or not limit_frame.index.is_unique
     )):
         raise ValueError("daily limits require unique instrument and date labels")
+    if vec is not None:
+        from factor_engine.cleaned_operators.microstructure.intraday_agg_vec import (
+            batch_limit_agg,
+        )
+
+        _fast = batch_limit_agg(frame, limit_frame, vec[0], side, vec[1],
+                                series_limits=isinstance(limits, pd.Series))
+        if _fast is not None:
+            return _fast
     out = {}
     for inst in frame.columns:
         limit_series = None
@@ -1439,7 +1484,8 @@ class IntraLimitFirstHitTime(SeriesOperator):
         touch = high if (side == "up" and high is not None) else (low if (side == "down" and low is not None) else close)
         limit_panel = high_limit if side == "up" else low_limit
         return _daily_limit_agg(touch, limit_panel,
-                               lambda pc, limit: _limit_first_hit_time(pc, limit, side), side=side)
+                               lambda pc, limit: _limit_first_hit_time(pc, limit, side), side=side,
+                               vec=("first_hit", None))
 
 
 def _limit_duration(pc: SessionPanel, limit_v: np.ndarray, side: str) -> float:
@@ -1477,7 +1523,8 @@ class IntraLimitDuration(SeriesOperator):
     def _calculate_series(self, close, high_limit=None, low_limit=None, side="up", **_):
         limit_panel = high_limit if side == "up" else low_limit
         return _daily_limit_agg(close, limit_panel,
-                               lambda pc, limit: _limit_duration(pc, limit, side), side=side)
+                               lambda pc, limit: _limit_duration(pc, limit, side), side=side,
+                               vec=("duration", None))
 
 
 def _limit_reopen_count(pc: SessionPanel, limit_v: np.ndarray, side: str, transition: str) -> float:
@@ -1527,7 +1574,8 @@ class IntraLimitReopenCount(SeriesOperator):
             raise ValueError("transition must be 'open' or 'reseal'")
         limit_panel = high_limit if side == "up" else low_limit
         return _daily_limit_agg(close, limit_panel,
-                               lambda pc, limit: _limit_reopen_count(pc, limit, side, transition), side=side)
+                               lambda pc, limit: _limit_reopen_count(pc, limit, side, transition), side=side,
+                               vec=("reopen", transition))
 
 
 # ---------------------------------------------------------------------------

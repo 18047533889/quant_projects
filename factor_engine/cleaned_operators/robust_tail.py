@@ -87,6 +87,41 @@ def _r62_quantile(V: np.ndarray, fin: np.ndarray, q: float) -> np.ndarray:
         return X[rr, li] * (1.0 - frac) + X[rr, hi] * frac
 
 
+# ---------------------------------------------------------------------------
+# R63 batch-5: batched trailing-window quantiles for the quantile-moment
+# operators.  ``_r63_window_quantiles`` reproduces ``map_rolling``'s window
+# (``xv[max(0, r-w+1) : r+1, c]``, NaN-padded head) for every row at once via
+# ``sliding_window_view`` and takes all requested quantiles off ONE shared
+# per-window sort, using exactly the ``_r62_quantile`` 'linear' recipe over the
+# finite values (non-finite slots padded +inf sort past every finite value).
+# The ``_has_spread`` gate statistics (finite-window std ddof=0, NaN-safe, and
+# the finite count) come back alongside so the caller applies the identical
+# gates.  The per-window ``_fn`` closures above are kept as semantic reference.
+# ---------------------------------------------------------------------------
+def _r63_window_quantiles(xv: np.ndarray, w: int, qs) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    rows, cols = xv.shape
+    padded = np.concatenate([np.full((w - 1, cols), np.nan), xv], axis=0)
+    V = np.lib.stride_tricks.sliding_window_view(padded, w, axis=0)
+    V = V.reshape(rows * cols, w)
+    fin = np.isfinite(V)
+    cnt = fin.sum(axis=1)
+    Xs = np.sort(np.where(fin, V, np.inf), axis=1)
+    rr = np.arange(rows * cols)
+    out = np.empty((len(qs), rows * cols), dtype=float)
+    for k, q in enumerate(qs):
+        pos = q * (cnt - 1)
+        li = np.clip(np.floor(pos).astype(np.int64), 0, w - 1)
+        hi = np.clip(np.ceil(pos).astype(np.int64), 0, w - 1)
+        frac = pos - li
+        with np.errstate(invalid="ignore"):
+            out[k] = Xs[rr, li] * (1.0 - frac) + Xs[rr, hi] * frac
+    c = np.maximum(cnt, 1)
+    mean = np.where(fin, V, 0.0).sum(axis=1) / c
+    dev = np.where(fin, V - mean[:, None], 0.0)
+    std = np.sqrt((dev * dev).sum(axis=1) / c)
+    return out, std, cnt
+
+
 @register_operator(
     name="ts_lower_partial_moment",
     category="time_series_risk",
@@ -275,7 +310,16 @@ class TsQuantileSkew(SeriesOperator):
                 return np.nan
             return float((q_hi + q_lo - 2.0 * q_mid_v) / denom)
 
-        return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
+        # R63: one shared per-window sort serves every quantile; the _fn above
+        # is kept as the semantic reference.
+        xv = x.to_numpy(dtype=float)
+        rows, cols = xv.shape
+        Q, std, cnt = _r63_window_quantiles(xv, w, (ql, qm, qh))
+        denom = Q[2] - Q[0]
+        ok = (cnt >= mp) & (std >= 1e-12) & np.isfinite(denom) & (np.abs(denom) >= 1e-12)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            val = (Q[2] + Q[0] - 2.0 * Q[1]) / denom
+        return frame_like(x, np.where(ok, val, np.nan).reshape(rows, cols))
 
 
 @register_operator(
@@ -323,7 +367,17 @@ class TsQuantileKurtosis(SeriesOperator):
             outer_spread = float(np.quantile(valid, o_hi) - np.quantile(valid, o_lo))
             return float(outer_spread / inner_spread)
 
-        return frame_like(x, map_rolling(x.to_numpy(dtype=float), w, _fn))
+        # R63: one shared per-window sort serves every quantile; the _fn above
+        # is kept as the semantic reference.
+        xv = x.to_numpy(dtype=float)
+        rows, cols = xv.shape
+        Q, std, cnt = _r63_window_quantiles(xv, w, (i_hi, i_lo, o_hi, o_lo))
+        inner_spread = Q[0] - Q[1]
+        outer_spread = Q[2] - Q[3]
+        ok = (cnt >= mp) & (std >= 1e-12) & np.isfinite(inner_spread) & (np.abs(inner_spread) >= 1e-12)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            val = outer_spread / inner_spread
+        return frame_like(x, np.where(ok, val, np.nan).reshape(rows, cols))
 
 
 @register_operator(

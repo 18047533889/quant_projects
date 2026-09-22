@@ -3016,6 +3016,27 @@ class DataAccessSource(DataSource):
         """
         self.refresh_snapshot()
         physical, output_names = self._resolve_columns(columns)
+        # R63 LQTP adjusted-volume parity: the eager path (``load_columns`` ->
+        # ``_normalize_contract_columns``) divides bare ``volume`` by the
+        # same-read physical ``Factor`` (functions.yaml: volume = Volume / Factor,
+        # adjusted volume). The lazy long scan skipped that transform, so every
+        # volume-based factor executed on the polars long path silently read raw
+        # share volume (units off by the cumulative adjustment factor) while the
+        # pandas reference divided it -- an auto-vs-pandas equivalence break with
+        # NO NaN-mask signal (masks stay identical, values are uniformly wrong).
+        # Scan the raw physical Factor in the same read and apply the identical
+        # division at the scan boundary.
+        _lqtp_out: str | None = None
+        if (
+            str(self.dataset) == "ashare_stock_daily_adj"
+            and "volume" in columns
+            and self.fields.get("volume", "Volume") == "Volume"
+        ):
+            if "Factor" in physical:
+                _lqtp_out = output_names.get("Factor", "Factor")
+            else:
+                physical = list(physical) + ["Factor"]
+                _lqtp_out = "Factor"
         store = _get_store()
         ds = store.get_dataset(self.dataset)
         frequency = self._detect_source_frequency(ds)
@@ -3054,6 +3075,17 @@ class DataAccessSource(DataSource):
                 lf = lf.with_columns(expressions)
         except ImportError:
             pass
+        if _lqtp_out is not None:
+            import polars as _pl
+
+            lf = lf.with_columns(
+                (
+                    _pl.col("volume").cast(_pl.Float64)
+                    / _pl.col(_lqtp_out).cast(_pl.Float64).replace(0.0, None)
+                ).alias("volume")
+            )
+            if _lqtp_out not in columns:
+                lf = lf.drop(_lqtp_out)
         # Scan-boundary ordering contract (P0-10): re-assert after the scale step.
         return enforce_source_ordering(
             lf,

@@ -110,6 +110,81 @@ def _rolling_returns(returns: np.ndarray, window: int, fn: Callable[[np.ndarray]
     return out
 
 
+def _rolling_medrv_vec(returns: np.ndarray, window: int) -> np.ndarray:
+    """Vectorized trailing-window MedRV — matrix form of
+    ``_rolling_returns(returns, window, _medrv)`` with identical semantics.
+
+    Per (row, column): any inf anywhere in the trailing window [max(0,r-w+1), r]
+    fails closed (NaN, including the leading segment); the non-finite slots of a
+    valid window must form a leading prefix (session warm-up) — the estimator
+    runs on [first finite slot in window, r] and any interior NaN fails closed;
+    fewer than 5 finite values -> NaN; zero window magnitude -> NaN.  Triple
+    medians are computed on raw |x| (median commutes with division by the
+    positive window magnitude), accumulated via an inclusive longdouble prefix
+    sum — all terms non-negative, so the window difference has no catastrophic
+    cancellation and 1e-300-scale squares do not underflow to zero.  The
+    degree-two statistic is restored exactly like ``_variance_from_normalized``
+    (longdouble, NaN on overflow or underflow-to-zero), elementwise.
+    ``window`` must already be validated by ``strict_int_param``.
+    """
+    rows, cols = returns.shape
+    out = np.full((rows, cols), np.nan, dtype=float)
+    if rows < _MIN_FINITE:
+        return out
+    X = np.asarray(returns, dtype=float)
+    ld = np.longdouble
+    row_idx = np.arange(rows)[:, None]
+    rc_idx = np.broadcast_to(row_idx, (rows, cols))
+    i0 = np.maximum(row_idx - (window - 1), 0)  # (rows, 1) window start
+    isfin = np.isfinite(X)
+    # first finite slot at or after the window start, per column (rows = none)
+    next_fin = np.minimum.accumulate(np.where(isfin, rc_idx, rows)[::-1], axis=0)[::-1]
+    seg_start = next_fin[i0[:, 0]]  # (rows, cols)
+    n_seg = rc_idx - seg_start + 1
+    # last non-finite slot <= r per column (-1 if none); a valid window has it
+    # strictly before the segment start (non-finites form a leading prefix)
+    last_bad = np.maximum.accumulate(np.where(isfin, -1, rc_idx), axis=0)
+    # any inf inside the trailing window [i0, r] fails closed (leading too)
+    last_inf = np.maximum.accumulate(np.where(np.isinf(X), rc_idx, -1), axis=0)
+    # window magnitude: max |x| over finite slots in [i0, r]; slots before the
+    # run start are non-finite -> -inf, so this equals the segment max
+    mag_m = np.where(isfin, np.abs(X), -np.inf)
+    cum_max = np.maximum.accumulate(mag_m, axis=0)
+    if rows >= window:
+        sw_max = np.lib.stride_tricks.sliding_window_view(mag_m, window, axis=0)
+        mag = np.vstack([cum_max[: window - 1], sw_max.max(axis=-1)])
+    else:
+        mag = cum_max
+    # median of each consecutive |x| triple (triple starting at j ends at j+2);
+    # a triple touching any non-finite slot contributes exactly 0
+    tri = np.sort(
+        np.lib.stride_tricks.sliding_window_view(np.abs(X), 3, axis=0), axis=-1
+    )[..., 1]
+    tri_ok = isfin[2:] & isfin[1:-1] & isfin[:-2]
+    s3 = np.where(tri_ok, tri.astype(ld) ** 2, ld(0.0))
+    p_inc = np.cumsum(s3, axis=0)  # inclusive prefix of squared medians
+    zero_row = np.zeros((1, cols), dtype=ld)
+    p_pad = np.vstack([zero_row, p_inc])  # p_pad[j] = sum(s3[:j])
+    # p_end[r] = sum(s3[:r-1]) = sum of triples starting at <= r-2
+    p_end = np.vstack([zero_row, zero_row, p_inc])
+    sum3 = p_end - np.take_along_axis(p_pad, np.clip(seg_start, 0, p_pad.shape[0] - 1), axis=0)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        n_ratio = n_seg / (n_seg - 2)
+    restored = ld(_MEDRV_CONST) * ld(n_ratio) * sum3
+    tiny = ld(np.nextafter(0.0, 1.0))
+    fmax = np.finfo(float).max
+    ok = (
+        (last_bad < seg_start)
+        & (last_inf < i0)
+        & (n_seg >= _MIN_FINITE)
+        & (mag > 0.0)
+        & np.isfinite(restored)
+        & (restored <= fmax)
+        & ~((restored > 0.0) & (restored < tiny))
+    )
+    return np.where(ok, restored, np.nan).astype(float)
+
+
 def _variance_from_normalized(value: float, magnitude: float) -> float:
     """Restore a degree-two statistic without emitting overflow/underflow zeros."""
     restored = np.longdouble(value) * np.longdouble(magnitude) ** 2
@@ -193,7 +268,7 @@ class IntradayMedRV(SeriesOperator):
         self, returns: pd.DataFrame, window: int = 240, **_: Any
     ) -> pd.DataFrame:
         w = strict_int_param(window, "window", lower=_MIN_FINITE)
-        return frame_like(returns, _rolling_returns(returns.to_numpy(dtype=float), w, _medrv))
+        return frame_like(returns, _rolling_medrv_vec(returns.to_numpy(dtype=float), w))
 
 
 @register_operator(

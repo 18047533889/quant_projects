@@ -181,6 +181,43 @@ def _degree_entropy_from_degrees(k_deg: np.ndarray) -> float:
     return -float(np.sum(probabilities * np.log(probabilities)))
 
 
+def _hvg_stats_fast(v: np.ndarray, key: str) -> dict[str, float]:
+    """Degree-only fast path for ``degree_entropy`` / ``asymmetry``.
+
+    R63: ``_hvg_stats`` always builds the full edge set and the O(n^3)
+    clustering / motif enumeration, so a degree-only statistic paid for
+    combinatorics it never read (the R63 speed gate measured
+    ``ts_hvg_forward_backward_asymmetry`` at ~340ms on a 750-row panel).
+    The values below are computed by exactly the same expressions as their
+    ``_hvg_stats`` branches -- only the unrelated statistics are skipped --
+    so results stay bit-identical.
+    """
+    n = v.shape[0]
+    if n < 4:
+        return {}
+    k_in, k_out = _hvg_directed_degrees(v)
+    k_deg = k_in + k_out
+    if key == "degree_entropy":
+        return {"degree_entropy": _degree_entropy_from_degrees(k_deg)}
+    assert key == "asymmetry"
+    alpha = 0.5
+    support = np.unique(np.concatenate((k_in, k_out)))
+    p_in = np.zeros(support.size)
+    p_out = np.zeros(support.size)
+    for idx, k in enumerate(support):
+        p_in[idx] = float(np.sum(k_in == k))
+        p_out[idx] = float(np.sum(k_out == k))
+    n_in = float(p_in.sum())
+    n_out = float(p_out.sum())
+    if n_in <= 0.0 or n_out <= 0.0:
+        asymmetry = np.nan
+    else:
+        q_in = (p_in + alpha) / (n_in + alpha * support.size)
+        q_out = (p_out + alpha) / (n_out + alpha * support.size)
+        asymmetry = 0.5 * (_kl(q_in, q_out) + _kl(q_out, q_in))
+    return {"asymmetry": asymmetry}
+
+
 def _hvg_stats(v: np.ndarray) -> dict[str, float]:
     """All HVG statistics for one window.  ``v`` must be finite and contiguous."""
     n = v.shape[0]
@@ -316,12 +353,13 @@ def _hvg_series(
             # emitting a number from a degenerate graph.
             if chunk.shape[0] == 0 or v.size / chunk.shape[0] < mcf:
                 continue
-            if key == "degree_entropy":
-                k_in, k_out = _hvg_directed_degrees(v)
-                val = _degree_entropy_from_degrees(k_in + k_out)
+            if key in ("degree_entropy", "asymmetry"):
+                # R63: degree-only fast path (bit-identical values, skips the
+                # clustering / motif combinatorics this key never reads).
+                stats = _hvg_stats_fast(v, key)
             else:
                 stats = _hvg_stats(v)
-                val = stats.get(key, np.nan)
+            val = stats.get(key, np.nan)
             if np.isfinite(val):
                 out[r, c] = float(val)
     return out

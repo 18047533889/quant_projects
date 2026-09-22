@@ -67,6 +67,13 @@ class PolarsBackend(PandasBackend):
     - 可选 ``FACTOR_ENGINE_POLARS_EXPR`` 整树表达式编译快路径。
     """
 
+    #: R63: declare the honest runtime label.  Without this the base-class
+    #: default ("pandas_numpy") leaked into the P2 plan-vs-executor identity
+    #: assert and every planner region routed to POLARS_PANEL was rejected
+    #: ("plan routed region to 'polars_panel' but the selected executor
+    #: declares runtime_backend_label='pandas_numpy'").
+    runtime_backend_label = "polars_panel"
+
     def __init__(self, use_lazy: bool | None = None) -> None:
         """初始化 Polars 后端。
 
