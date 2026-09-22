@@ -11,6 +11,9 @@ warmup/purge 后 TRAIN 索引；此前使用前 300 日覆盖率，而实际 TRA
 
 ## 已有真实证据
 
+COS 入口现支持 [--audit-methods](COS_METHOD_AUDIT_CLI.md)，逐方法检查并对执行失败
+返回非零状态；另已加入下跌冲击不对称因子的真实回放证据。
+
 新增 [逐因子候选预算隔离](BATCH_CANDIDATE_BUDGET_20260922.md)：TRAIN 诊断
 扩展超预算时保留该因子 RAW，其他因子继续，不截断候选或扩大预算。
 

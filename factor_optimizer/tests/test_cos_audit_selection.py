@@ -118,6 +118,40 @@ def test_cli_exposes_bounded_manifest_sampling():
     assert "--manifest" in result.stdout
     assert "--factors" in result.stdout
     assert "--max-factor-mib" in result.stdout
+    assert "--audit-methods" in result.stdout
+
+
+@pytest.mark.parametrize('failed', [False, True])
+def test_cli_method_audit_reports_cases_and_fails_on_broken_method(monkeypatch, capsys, failed):
+    import sys
+    import json
+    from types import SimpleNamespace
+    batch, labels = object(), object()
+    rows = [{'family': 'SMA', 'status': 'executed'},
+            {'family': 'OLS', 'status': 'requires_additional_inputs_or_control'}]
+    if failed:
+        rows.append({'family': 'EWMA', 'status': 'failed', 'reason': 'broken'})
+    calls = []
+    def audit(b, y):
+        assert b is batch and y is labels
+        calls.append(True)
+        return rows
+    monkeypatch.setitem(sys.modules, 'method_audit', SimpleNamespace(audit_methods=audit))
+    monkeypatch.setattr(example, 'load_cos_sample', lambda **k: (batch, labels, {}, {}))
+    monkeypatch.setattr(example, 'diagnose_training_batch', lambda *a: {})
+    monkeypatch.setattr(sys, 'argv', ['cos_batch_audit.py', '--audit-methods'])
+    if failed:
+        with pytest.raises(SystemExit) as exc:
+            example.main()
+        assert exc.value.code == 1
+    else:
+        example.main()
+    report = json.loads(capsys.readouterr().out)
+    assert calls == [True]
+    assert report['methods'] == rows
+    assert report['method_status_counts']['executed'] == 1
+    assert report['method_audit_partition'] == 'TRAIN only'
+    assert report['test_evaluated'] is False
 
 
 def test_larger_factors_are_opt_in_and_total_download_is_bounded():

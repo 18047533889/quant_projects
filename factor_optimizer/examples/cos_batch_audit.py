@@ -200,6 +200,8 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--optimize", action="store_true", help="also run frozen TRAIN/VALIDATION selection")
+    parser.add_argument("--audit-methods", action="store_true",
+                        help="exercise every method on TRAIN; report missing inputs and fail on execution errors")
     parser.add_argument("--manifest", default=None, help="exact in-pool landing_manifest.json COS URI")
     parser.add_argument("--factors", type=int, default=2, help="deterministic factor sample, 1..16")
     parser.add_argument("--assets", type=int, default=256, help="TRAIN-covered asset count")
@@ -214,6 +216,12 @@ def main():
         coverage_policy=args.coverage_policy)
     report = {"inputs": provenance, "test_evaluated": False,
               "diagnostics": diagnose_training_batch(batch, labels)}
+    if args.audit_methods:
+        from collections import Counter
+        from method_audit import audit_methods
+        methods = audit_methods(batch, labels)
+        report.update(methods=methods, method_audit_partition="TRAIN only",
+                      method_status_counts=dict(Counter(row['status'] for row in methods)))
     if args.optimize:
         from factor_optimizer.research_batch import optimize_factor_batch
         result = optimize_factor_batch(batch, labels, allow_research=True, lineages=lineages)
@@ -228,6 +236,8 @@ def main():
         } for name, r in result.factors.items()}
         report["selection_objective"] = "joint.v1: Sharpe, RankICIR, RankIC, drawdown, worst-block Sharpe, turnover"
     print(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False))
+    if args.audit_methods and report['method_status_counts'].get('failed', 0):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
