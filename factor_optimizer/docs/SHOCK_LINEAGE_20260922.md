@@ -1,5 +1,8 @@
 # 下跌冲击复合因子的处理谱系修复
 
+后续更新：[缩尾退化后保留有效排名](WINSOR_BASELINE_FALLBACK.md) 已定位稀疏日
+被缩尾抹平并补充 TRAIN 回退；下文为谱系修复时的历史对照。
+
 ## 问题与证据
 
 此前真实 COS 因子 downside_shock_accumulation_asym 能被读取、逐方法回放，

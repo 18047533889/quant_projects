@@ -428,7 +428,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                            'reason': 'no_eligible_baseline_operations'}
         baseline_values, baseline_active = prefix, False
         neutralization_attempt = None
-        for _ in range(2):
+        winsorization_attempt = None
+        for _ in range(3):
             if not baseline_plan.operations:
                 break
             try:
@@ -441,19 +442,29 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                     break
             except Exception as exc:
                 baseline_record.update(reason=f'baseline_unavailable: {type(exc).__name__}: {exc}')
-            if 'neutralize' not in baseline_plan.operations:
+            if 'neutralize' in baseline_plan.operations:
+                neutralization_attempt = dict(baseline_record)
+                removed, omission = 'neutralize', 'neutralization_train_rejected'
+            elif 'winsor' in baseline_plan.operations and 'cs_rank' in baseline_plan.operations:
+                # Sparse signals can become constant after clipping. Evaluate
+                # rank alone with the same TRAIN gates, rather than discarding
+                # it together with the rejected clipping step.
+                winsorization_attempt = dict(baseline_record)
+                removed, omission = 'winsor', 'winsor_train_rejected'
+            else:
                 break
             # TRAIN-only fallback: an unavailable/degraded OLS must not silently
             # discard independently usable winsor/rank. No VALIDATION retry.
-            neutralization_attempt = dict(baseline_record)
             baseline_plan = replace(baseline_plan,
-                operations=tuple(op for op in baseline_plan.operations if op != 'neutralize'),
-                omissions=baseline_plan.omissions + ('neutralization_train_rejected',))
+                operations=tuple(op for op in baseline_plan.operations if op != removed),
+                omissions=baseline_plan.omissions + (omission,))
             baseline_record = {'operations': baseline_plan.operations,
                                'omissions': baseline_plan.omissions, 'accepted': False,
                                'reason': 'no_eligible_baseline_operations'}
         if neutralization_attempt is not None:
             baseline_record['neutralization_attempt'] = neutralization_attempt
+        if winsorization_attempt is not None:
+            baseline_record['winsorization_attempt'] = winsorization_attempt
         search_frame = frame.copy()
         search_frame['value'] = baseline_values.ravel()
         diagnostic_values = raw.copy()

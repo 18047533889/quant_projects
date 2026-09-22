@@ -1,0 +1,91 @@
+{
+  "winsor": {
+    "assessment": {
+      "accepted": false,
+      "coverage": 0.9962546816479401,
+      "valid_days": 266,
+      "upper_bound": 0.000005647583697941631,
+      "maximum_loss": 0.01,
+      "reason": "joint_training_metrics_unavailable",
+      "joint_policy": "joint.v1",
+      "joint_raw": {
+        "rank_ic": 0.0401136362336079,
+        "rank_icir": 0.3076613719876431,
+        "sharpe": 2.021734132956801,
+        "max_drawdown": 0.005353463832821204,
+        "turnover": 0.023780953419875635,
+        "worst_block_sharpe": 1.752505930364298
+      },
+      "joint_unavailable_reason": "missing or nonfinite joint metrics cannot be imputed"
+    },
+    "invalid_dates": [
+      "2024-09-30T00:00:00.000000000"
+    ],
+    "invalid_rows": [
+      {
+        "raw_unique": 3,
+        "candidate_unique": 1,
+        "nonzero": 2
+      }
+    ]
+  },
+  "cs_rank": {
+    "assessment": {
+      "accepted": true,
+      "coverage": 1,
+      "valid_days": 267,
+      "upper_bound": 0,
+      "maximum_loss": 0.01,
+      "reason": "no_substantial_training_degradation",
+      "joint_policy": "joint.v1",
+      "joint_raw": {
+        "rank_ic": 0.0401136362336079,
+        "rank_icir": 0.3076613719876431,
+        "sharpe": 2.021734132956801,
+        "max_drawdown": 0.005353463832821204,
+        "turnover": 0.023780953419875635,
+        "worst_block_sharpe": 1.752505930364298
+      },
+      "joint_candidate": {
+        "rank_ic": 0.0401136362336079,
+        "rank_icir": 0.3076613719876431,
+        "sharpe": 2.021734132956801,
+        "max_drawdown": 0.005353463832821204,
+        "turnover": 0.023780953419875635,
+        "worst_block_sharpe": 1.752505930364298
+      }
+    },
+    "invalid_dates": [],
+    "invalid_rows": []
+  },
+  "winsor+cs_rank": {
+    "assessment": {
+      "accepted": false,
+      "coverage": 0.9962546816479401,
+      "valid_days": 266,
+      "upper_bound": 0.000005647583697941631,
+      "maximum_loss": 0.01,
+      "reason": "joint_training_metrics_unavailable",
+      "joint_policy": "joint.v1",
+      "joint_raw": {
+        "rank_ic": 0.0401136362336079,
+        "rank_icir": 0.3076613719876431,
+        "sharpe": 2.021734132956801,
+        "max_drawdown": 0.005353463832821204,
+        "turnover": 0.023780953419875635,
+        "worst_block_sharpe": 1.752505930364298
+      },
+      "joint_unavailable_reason": "missing or nonfinite joint metrics cannot be imputed"
+    },
+    "invalid_dates": [
+      "2024-09-30T00:00:00.000000000"
+    ],
+    "invalid_rows": [
+      {
+        "raw_unique": 3,
+        "candidate_unique": 1,
+        "nonzero": 2
+      }
+    ]
+  }
+}

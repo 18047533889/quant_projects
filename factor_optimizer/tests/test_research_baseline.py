@@ -291,3 +291,40 @@ def test_unavailable_training_neutralization_keeps_other_baseline_steps():
     assert selected.baseline_diagnostics['accepted']
     assert result.optimized.values.min() >= 0
     assert result.optimized.values.max() <= 1
+
+
+@pytest.mark.parametrize('missing_exposures', [False, True])
+def test_degenerate_winsor_keeps_independently_valid_rank(missing_exposures):
+    from dataclasses import replace
+    from quant_evaluator.contracts.factor_batch import AxisRef
+    from factor_optimizer.research_batch import optimize_factor_batch, BatchOptimizationConfig
+    batch, labels = fixture()
+    rng = np.random.default_rng(844)
+    x = rng.normal(size=(240, 256))
+    x[70] = 0.
+    x[70, -2:] = [1., 2.]
+    y = .001*x + rng.normal(0, .01, x.shape)
+    axis = AxisRef('asset', 'str', 256, np.array([f'a{i}' for i in range(256)]))
+    batch = replace(batch, asset_axis=axis, values=x[:, :, None])
+    labels = replace(labels, asset_axis=axis, values=y)
+    config = BatchOptimizationConfig(families=('SIGN_ORIENTATION',), bootstrap_draws=99)
+    result = optimize_factor_batch(batch, labels, allow_research=True, config=config,
+        lineages={'good': TransformLineage()},
+        exposure_columns=('size',) if missing_exposures else ())
+    selected = result.factors['good']
+    assert selected.baseline_diagnostics['accepted']
+    assert selected.baseline_diagnostics['operations'] == ('cs_rank',)
+    assert 'winsor_train_rejected' in selected.baseline_diagnostics['omissions']
+    assert selected.baseline_diagnostics['winsorization_attempt']['reason'] == 'joint_training_metrics_unavailable'
+    assert selected.training_diagnostics['input_stage'] == 'accepted_baseline'
+    assert selected.selected_family == 'BASELINE'
+    assert selected.plan.baseline.operations == ('cs_rank',)
+    assert np.unique(result.optimized.values[70, :, 0]).size == 3
+    if missing_exposures:
+        assert not selected.baseline_diagnostics['neutralization_attempt']['accepted']
+    poisoned = y.copy()
+    poisoned[result.split.test_start:] = np.nan
+    other = optimize_factor_batch(batch, replace(labels, values=poisoned), allow_research=True,
+        config=config, lineages={'good': TransformLineage()},
+        exposure_columns=('size',) if missing_exposures else ())
+    assert other.factors['good'].plan_identity == selected.plan_identity
