@@ -106,10 +106,22 @@ def _declared_lineage(expression):
         if name == "col":
             return (len(args) == 1 and isinstance(args[0], ast.Constant)
                     and isinstance(args[0].value, str) and bool(args[0].value))
-        if name in {"ts_delta", "ts_sum"}:
+        if name in {"ts_delta", "ts_sum", "ts_pct"}:
             return len(args) == 2 and feature(args[0]) and window(args[1]) is not None
+        if name == 'ts_delay':
+            lag = scalar(args[1]) if len(args) == 2 else None
+            return type(lag) is int and 0 <= lag <= 10000 and feature(args[0])
+        if name == 'ts_std':
+            period = window(args[1]) if len(args) == 2 else None
+            return period is not None and period >= 2 and feature(args[0])
+        if name == 'flex_max':
+            # Positive integer scalars mean rolling windows in FE, not clipping.
+            # Admit only the verified nonpositive scalar pointwise form here.
+            bound = scalar(args[1]) if len(args) == 2 else None
+            return bound is not None and bound <= 0 and feature(args[0])
         arity = {"add": 2, "subtract": 2, "multiply": 2, "divide": 2,
-                 "safe_div_null": 2, "neg": 1, "abs": 1, "gt": 2}.get(name)
+                 "safe_div_null": 2, "neg": 1, "abs": 1, "gt": 2,
+                 "lt": 2, "maximum": 2, "where": 3}.get(name)
         return arity is not None and len(args) == arity and all(feature(a) for a in args)
     try:
         return TransformLineage(tuple(reversed(steps))) if feature(root) else None

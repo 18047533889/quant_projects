@@ -1,5 +1,8 @@
 # COS 逐方法自动审查与下跌冲击因子复验
 
+后续更新：该因子的谱系识别已补齐，见 [真实接线对照](SHOCK_LINEAGE_20260922.md)。
+下文 lineage_unknown 为本轮历史结果；修复后基础方案因训练指标缺失被拒绝，尚非经济准入完成。
+
 ## 一条命令运行
 
 在 server-c /home/sunhaiwei/quant_projects 使用已有 DataAccess 配置：
