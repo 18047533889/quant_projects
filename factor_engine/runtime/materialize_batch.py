@@ -305,9 +305,10 @@ def _canonical_context_value(value: Any) -> Any:
             "set" if isinstance(value, set) else "frozenset",
             tuple(sorted(encoded, key=repr)),
         )
-    raise ValueError(
-        f"WriteContext contains unsupported mutable/opaque value {type(value).__name__}"
-    )
+    # R66: opaque objects (e.g. FactorDependencyEdge inside full factor
+    # definitions) previously poisoned every batch materialize.  Fall back to
+    # a deterministic repr so receipt identity stays stable per object state.
+    return ("repr", repr(value))
 
 
 def _resolve_batch_contexts(
