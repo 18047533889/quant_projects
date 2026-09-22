@@ -34,7 +34,14 @@ def portfolio_series(values, returns, *, cost_rate=.001, empty_leg_policy='signa
     values, returns = np.asarray(values, float), np.asarray(returns, float)
     if values.ndim != 2 or returns.shape != values.shape:
         raise ValueError('matching (time, asset) panels required')
-    if isinstance(cost_rate, bool) or not math.isfinite(cost_rate) or cost_rate < 0:
+    try:
+        invalid_cost = (isinstance(cost_rate, (bool, np.bool_))
+                        or not np.isscalar(cost_rate)
+                        or np.iscomplexobj(cost_rate)
+                        or not math.isfinite(cost_rate) or cost_rate < 0)
+    except (TypeError, ValueError):
+        invalid_cost = True
+    if invalid_cost:
         raise ValueError('cost_rate must be finite and nonnegative')
     if empty_leg_policy not in ('signal_cash', 'unavailable'):
         raise ValueError('empty_leg_policy must be signal_cash or unavailable')
@@ -62,6 +69,16 @@ def summarize(series, *, periods_per_year=252):
     from quant_evaluator.metrics.ic_summary import compute_icir
     from quant_evaluator.metrics.portfolio_stats import compute_sharpe_ratio, compute_maximum_drawdown
     a = np.asarray(series, dtype=float)
+    try:
+        invalid_periods = (isinstance(periods_per_year, (bool, np.bool_))
+                           or not np.isscalar(periods_per_year)
+                           or np.iscomplexobj(periods_per_year)
+                           or not math.isfinite(periods_per_year)
+                           or periods_per_year <= 0)
+    except (TypeError, ValueError):
+        invalid_periods = True
+    if invalid_periods:
+        raise ValueError('periods_per_year must be finite and positive')
     if a.ndim != 2 or a.shape[1] != 3:
         raise ValueError('at least 20 aligned metric observations are required')
     if len(a) < 20:
@@ -133,6 +150,10 @@ def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, 
         raise JointMetricsUnavailable('unsupported_label_accounting',
                                       'joint portfolio selection requires single-bar labels')
     idx = np.asarray(indices)
+    if (idx.ndim != 1 or not len(idx) or idx.dtype.kind not in 'iu'
+            or np.any(idx < 0) or np.any(idx >= len(labels.values))
+            or np.any(idx[1:] <= idx[:-1])):
+        raise ValueError('indices must be a nonempty, strictly increasing integer vector in range')
     target = _subset_labels(labels, indices)
     if any(target.label_end_time[i] > target.label_start_time[i+1] for i in range(len(idx)-1)):
         raise JointMetricsUnavailable('unsupported_label_accounting',

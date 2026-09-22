@@ -153,7 +153,7 @@ def main() -> int:
     result = optimize_factor_batch(batch, target, allow_research=True)
     summary = {
         "inputs": inputs,
-        "asset_selection": "joint coverage on the exact first 300 aligned TRAIN dates",
+        "asset_selection": "joint coverage on the exact purged TRAIN dates identified by asset_selection_split",
         "provenance_limit": "research replay of existing matrices; upstream factor-build PIT is not re-certified",
         "split_sizes": {"train": len(result.split.train_indices),
                         "validation": len(result.split.validation_indices),

@@ -51,6 +51,11 @@ q_{(i)}=\min\left(1,\min_{j\ge i}{m p_{(j)}\over j}\right).
 （`min_periods=30`、`max_lag=5`、Bartlett kernel），再返回每个因子的 BH 校正 p 值；拒绝掩码和发现数
 属于底层策略诊断，不是该标量指标的公开值。
 
+底层 BH、Bonferroni、Holm 和 Šidák 的 p 值输入必须是实概率：复数输入直接拒绝，
+不能通过丢弃虚部参与检验。对实数数组先以原精度检查有限值是否落在 [0, 1]，
+再转为 float64 计算；例如 longdouble 略大于 1 的值不会因舍入成 1 而被接受。
+NaN 和正负无穷仍按原有规则作为缺失检验排除，不改变有效检验数的既有口径。
+
 ```python
 request = EvaluationRequest(
     factor_batch,

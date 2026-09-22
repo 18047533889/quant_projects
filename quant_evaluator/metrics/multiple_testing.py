@@ -32,7 +32,12 @@ def _validate_p_values(p_values: np.ndarray) -> np.ndarray:
 
     Returns the flattened array (a read view) for processing.
     """
-    p = np.asarray(p_values, dtype=np.float64)
+    raw = np.asarray(p_values)
+    if np.iscomplexobj(raw):
+        raise ValueError("p_values must be real probabilities, not complex values")
+    # Check real numeric inputs before float64 conversion: an invalid
+    # longdouble just above one must not round down to an admissible one.
+    p = raw if raw.dtype.kind in "biuf" else np.asarray(raw, dtype=np.float64)
     if p.size == 0:
         raise ValueError(
             "p_values must be non-empty; got an empty array "
@@ -48,7 +53,7 @@ def _validate_p_values(p_values: np.ndarray) -> np.ndarray:
             f"(first at flat index {first_idx}: "
             f"{p.ravel()[first_idx]!r}); these are not valid p-values"
         )
-    return p
+    return np.asarray(p, dtype=np.float64)
 
 
 def _validate_alpha(alpha: float) -> float:

@@ -76,11 +76,18 @@ class BatchOptimizationConfig:
             raise ValueError("invalid gain or natural time scale")
         if type(self.compose_smoothing_sign) is not bool:
             raise ValueError("compose_smoothing_sign must be a strict bool")
-        if isinstance(self.families, (str, bytes)) or any(
-                not isinstance(name, str) or not name.strip() for name in self.families):
+        if isinstance(self.families, (str, bytes)):
             raise ValueError("families must be a sequence of nonempty family names")
-        object.__setattr__(self, "families", tuple(self.families))
-        if len(set(self.families)) != len(self.families):
+        try:
+            families = tuple(self.families)
+        except TypeError as exc:
+            raise ValueError(
+                "families must be a sequence of nonempty family names"
+            ) from exc
+        if any(not isinstance(name, str) or not name.strip() for name in families):
+            raise ValueError("families must be a sequence of nonempty family names")
+        object.__setattr__(self, "families", families)
+        if len(set(families)) != len(families):
             raise ValueError("families must be unique")
 
 

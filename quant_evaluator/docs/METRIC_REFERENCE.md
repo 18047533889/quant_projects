@@ -294,7 +294,7 @@ q_{(i)}=\min\!\left(1,\min_{j\ge i}\frac{m}{j}p_{(j)}\right)
 |---|---|
 | `alpha` | `0.05` |
 
-实现核对：[函数定义](../metrics/multiple_testing.py#L114)；`quant_evaluator.metrics.multiple_testing.benjamini_hochberg_correction`。
+实现核对：[函数定义](../metrics/multiple_testing.py#L119)；`quant_evaluator.metrics.multiple_testing.benjamini_hochberg_correction`。
 
 <a id="metric-beta_exposure"></a>
 ## beta_exposure — Beta Exposure
@@ -408,7 +408,7 @@ $`m`$ 按实现中的有效 p 值集合计数；非有限输入保持 NaN。输�
 |---|---|
 | `alpha` | `0.05` |
 
-实现核对：[函数定义](../metrics/multiple_testing.py#L67)；`quant_evaluator.metrics.multiple_testing.bonferroni_correction`。
+实现核对：[函数定义](../metrics/multiple_testing.py#L72)；`quant_evaluator.metrics.multiple_testing.bonferroni_correction`。
 
 <a id="metric-bottom_quantile_cliff"></a>
 ## bottom_quantile_cliff — Bottom Quantile Cliff
@@ -1339,7 +1339,7 @@ q_{(i)}=\min\left(1,\max_{j\le i}(m-j+1)p_{(j)}\right)
 |---|---|
 | `alpha` | `0.05` |
 
-实现核对：[函数定义](../metrics/multiple_testing.py#L195)；`quant_evaluator.metrics.multiple_testing.holm_bonferroni_correction`。
+实现核对：[函数定义](../metrics/multiple_testing.py#L200)；`quant_evaluator.metrics.multiple_testing.holm_bonferroni_correction`。
 
 <a id="metric-ic_autocorr_lag1"></a>
 ## ic_autocorr_lag1 — IC Autocorrelation (Lag 1)
@@ -4034,7 +4034,7 @@ m=\#\{p_i\ finite\},\quad \alpha_S=1-(1-\alpha)^{1/m},\quad p_i'=\min\{1,1-(1-p_
 |---|---|
 | `alpha` | `0.05` |
 
-实现核对：[函数定义](../metrics/multiple_testing.py#L278)；`quant_evaluator.metrics.multiple_testing.sidak_correction`。
+实现核对：[函数定义](../metrics/multiple_testing.py#L283)；`quant_evaluator.metrics.multiple_testing.sidak_correction`。
 
 <a id="metric-size_exposure"></a>
 ## size_exposure — Size Exposure
@@ -5403,7 +5403,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.ic_summary.compute_icir](../metrics/ic_summary.py#L17)
 - [quant_evaluator.metrics.label_panel.normalize_label_panel](../metrics/label_panel.py#L11)
 - [quant_evaluator.metrics.long_only._matrix](../metrics/long_only.py#L8)
-- [quant_evaluator.metrics.multiple_testing._validate_alpha](../metrics/multiple_testing.py#L54)
+- [quant_evaluator.metrics.multiple_testing._validate_alpha](../metrics/multiple_testing.py#L59)
 - [quant_evaluator.metrics.multiple_testing._validate_p_values](../metrics/multiple_testing.py#L27)
 - [quant_evaluator.metrics.portfolio_stats._validate_missing_return_policy](../metrics/portfolio_stats.py#L162)
 - [quant_evaluator.metrics.portfolio_stats.equal_gross_long_short_returns](../metrics/portfolio_stats.py#L114)
@@ -5529,7 +5529,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.long_only.compute_relative_max_drawdown` | `3ea3a1ed78b1e833901facca869a1faaa1709d7675cf1dcb20fdcde92ea1d622` |
 | `quant_evaluator.metrics.long_only.compute_tracking_error` | `bc70bdaf7f2052cf2c1dfc4ecac43bb6a826eec37c28aac6bf3e875099f7797d` |
 | `quant_evaluator.metrics.multiple_testing._validate_alpha` | `353731ccf5bb186d1336d57cd1f2f3d27da29977fe7c2604be93a79b7d370767` |
-| `quant_evaluator.metrics.multiple_testing._validate_p_values` | `7ba7985e00eb9fbe0eb83727613948ba5fc710c9b8812f62e0bbe646957f7f89` |
+| `quant_evaluator.metrics.multiple_testing._validate_p_values` | `3b200301d2ede20ba5a1214a1923bd34165241823975ca9185cdd42288fda480` |
 | `quant_evaluator.metrics.multiple_testing.benjamini_hochberg_correction` | `077d7dc917113c445528beb558548deda10ba33bfde52ddd0ba5689794762014` |
 | `quant_evaluator.metrics.multiple_testing.bonferroni_correction` | `8cd5bf9dd42eedd0eacbe4cd287855a606ab9f3850eec57a9850866972f8b5f4` |
 | `quant_evaluator.metrics.multiple_testing.holm_bonferroni_correction` | `4c39def08b3e93ab31466b51aedf9355d3bd88eb1545cbc415d899b170574bc4` |

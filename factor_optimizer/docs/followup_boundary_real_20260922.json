@@ -1,0 +1,30 @@
+{
+  "method_status_counts": {
+    "requires_additional_inputs_or_control": 16,
+    "executed": 114
+  },
+  "test_evaluated": false,
+  "automatic": {
+    "weekly_4cbd7ca6dccc61dc": {
+      "status": "improved",
+      "family": "INVERTED_U_REPAIR",
+      "gain": 0.1969564892146704,
+      "lower_bound": 0.11790883480968672
+    },
+    "weekly_db5616cd85a477b3": {
+      "status": "raw_retained",
+      "family": "NO_OP_RAW",
+      "gain": 0.11165439682022438,
+      "lower_bound": null
+    }
+  },
+  "source_hashes": {
+    "weekly_4cbd7ca6dccc61dc": "35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59",
+    "weekly_db5616cd85a477b3": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d"
+  },
+  "shape": [
+    500,
+    256
+  ],
+  "train_days": 267
+}

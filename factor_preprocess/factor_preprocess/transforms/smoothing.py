@@ -69,17 +69,25 @@ def trailing_sma(
         min_periods = window
 
     _check_sort(values, asset_col, time_col)
-    result = _verified_series(values)
-    for positions in values.groupby(asset_col, sort=False).indices.values():
-        positions = list(positions)
-        result.iloc[positions] = (
-            values.iloc[positions][value_col]
-            .shift(1)
-            .rolling(window=window, min_periods=min_periods)
-            .mean()
-            .to_numpy()
-        )
-    return result
+    # Use a positional index while grouping so duplicate input index labels do
+    # not affect alignment. GroupBy.rolling emits rows in group order; scatter
+    # its positional level back to the original row order before restoring the
+    # caller's index.
+    keys = values[asset_col].reset_index(drop=True)
+    if not keys.notna().any():
+        return _verified_series(values)
+    lagged = values[value_col].reset_index(drop=True).groupby(
+        keys, sort=False, observed=True
+    ).shift(1)
+    rolled = lagged.groupby(keys, sort=False, observed=True).rolling(
+        window=window, min_periods=min_periods
+    ).mean()
+
+    result = np.full(len(values), np.nan, dtype=float)
+    if len(rolled):
+        positions = rolled.index.get_level_values(-1).to_numpy()
+        result[positions] = rolled.to_numpy()
+    return pd.Series(result, index=values.index)
 
 
 def trailing_median(
