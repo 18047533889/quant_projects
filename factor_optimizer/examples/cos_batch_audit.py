@@ -221,6 +221,7 @@ def main():
             "status": r.status, "selected_family": r.selected_family,
             "train_gain": r.train_gain, "validation_lower_bound": r.validation_lower_bound,
             "reason": r.reason, "plan_identity": r.plan_identity,
+            "candidate_budget": dict(r.training_diagnostics['candidate_budget']),
             "baseline_diagnostics": dict(r.baseline_diagnostics),
             "joint_diagnostics": dict(r.joint_diagnostics),
             "candidates": [dict(c) for c in r.candidates],

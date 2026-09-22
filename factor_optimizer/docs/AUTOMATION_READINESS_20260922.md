@@ -11,6 +11,9 @@ warmup/purge 后 TRAIN 索引；此前使用前 300 日覆盖率，而实际 TRA
 
 ## 已有真实证据
 
+新增 [逐因子候选预算隔离](BATCH_CANDIDATE_BUDGET_20260922.md)：TRAIN 诊断
+扩展超预算时保留该因子 RAW，其他因子继续，不截断候选或扩大预算。
+
 参数试算修复与默认跳过语义见
 [FactorEngine 参数检查](https://github.com/HKUST-QUANT-SOCIETY/factor_engine/blob/main/docs/PARAMETER_EFFECTIVENESS_PROBES.md)。
 真实窗口 20/21 对照见 parameter_probe_real_20260922.json；仅确认输出有变化，不表示收益更优。

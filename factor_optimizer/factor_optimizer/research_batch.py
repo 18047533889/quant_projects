@@ -325,7 +325,11 @@ def _specs(config):
         else:
             choices = [prior]
         specs.extend((family, p) for p in choices)
-    if len(specs) > config.maximum_candidates:
+    compose = config.compose_smoothing_sign and (
+        not config.families or 'SIGN_ORIENTATION' in config.families)
+    declared_count = sum(2 if compose and family in {'CAUSAL_SMOOTHING', 'DECAY_REFINEMENT'}
+                         else 1 for family, _ in specs)
+    if declared_count > config.maximum_candidates:
         raise ValueError("candidate budget is too small for declared families")
     return specs
 
@@ -359,6 +363,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     Missing DSL/exposures are explicit ineligible candidate records.
     Default joint.v1 compares costed Sharpe, ICIR, IC, drawdown, stability and
     turnover. Explicit selection_objective='rank_ic' reproduces legacy scoring.
+    Invalid declared budgets fail before processing; per-factor proposal overflow
+    retains RAW with budget_exceeded_raw_retained, without truncation or validation.
     """
     if allow_research is not True:
         raise ValueError("explicit allow_research=True is required; not production admission")
@@ -521,8 +527,10 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                      for f, p, plan in proposals
                      for sign in ((1, -1) if compose and f in {
                          "CAUSAL_SMOOTHING", "DECAY_REFINEMENT"} else (1,))]
-        if len(proposals) > config.maximum_candidates:
-            raise ValueError("candidate budget is too small for admitted smoothing grid")
+        budget_exceeded = len(proposals) > config.maximum_candidates
+        diagnosis['candidate_budget'] = {
+            'required': len(proposals), 'maximum': config.maximum_candidates,
+            'status': 'exceeded' if budget_exceeded else 'admitted', 'evaluated': 0}
         raw_plan = compile_value_repair("NO_OP_RAW", {"keep_raw": True},
                                        natural_time_scale=config.natural_time_scale,
                                        training_context_ref=train_ref)
@@ -536,6 +544,9 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
         status, reason, records = "raw_retained", "no robust TRAIN improvement", []
         materialization_error = None
         try:
+            if budget_exceeded:
+                raise ValueError(f"TRAIN candidate budget exceeded: required {len(proposals)}, "
+                                 f"maximum {config.maximum_candidates}; no partial search")
             _, raw_good, _ = _pair_ic(prefix, prefix, batch, labels, split.train_indices, config,
                                       reference_cache=train_ic_cache)
             if raw_good.sum() < config.minimum_train_days:
@@ -680,7 +691,11 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                     reason = "frozen selection preserved; post-validation values unavailable"
         except Exception as exc:
             chosen, out, status = raw_plan, raw, "error_raw_retained"
+            if budget_exceeded:
+                status = 'budget_exceeded_raw_retained'
             reason = f"{type(exc).__name__}: {exc}"
+        diagnosis['candidate_budget']['evaluated'] = sum(
+            record['status'] == 'train_evaluated' for record in records)
         outputs.append(out)
         results[factor_id] = FactorOptimizationResult(
             factor_id, status, chosen.family, chosen.identity, chosen, train_gain, lower,

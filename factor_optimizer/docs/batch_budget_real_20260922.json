@@ -1,0 +1,2707 @@
+{
+  "inputs": {
+    "sources": [
+      {
+        "factor": "weekly_4cbd7ca6dccc61dc",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59/weekly_4cbd7ca6dccc61dc.parquet",
+        "etag": "91da3ad8a2d54f3f35911e231bfcffa8",
+        "sha256": "35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59",
+        "downloaded_bytes": 5400494,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "ts_delta(col('valuation.free_cap'), 20)"
+      },
+      {
+        "factor": "weekly_db5616cd85a477b3",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d/weekly_db5616cd85a477b3.parquet",
+        "etag": "5efb1f8070196661daabeb563740dff0",
+        "sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+        "downloaded_bytes": 3828456,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "ts_delta(col('valuation.a_cap'), 20)"
+      }
+    ],
+    "days": 500,
+    "assets": 256,
+    "coverage_policy": "isolate",
+    "retained_factor_ids": [
+      "weekly_4cbd7ca6dccc61dc",
+      "weekly_db5616cd85a477b3"
+    ],
+    "quarantined_factors": [],
+    "train_eligible_assets": {
+      "weekly_4cbd7ca6dccc61dc": 5071,
+      "weekly_db5616cd85a477b3": 5071
+    },
+    "manifest_uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/metadata/00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66/landing_manifest.json",
+    "max_factor_bytes": 8388608,
+    "max_batch_factor_bytes": 134217728,
+    "asset_selection_split": "3e268f1bac7b452f741f0b934f2a0edcf88a677aa982bf2391340da25c0da9e9",
+    "asset_selection_train_days": 267,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "selection": "first eligible bound manifest factor IDs; assets selected on TRAIN coverage only",
+    "limitations": "source-declared lineage; no upstream PIT or investability certification"
+  },
+  "test_evaluated": false,
+  "method_status_counts": {
+    "requires_additional_inputs_or_control": 16,
+    "executed": 114
+  },
+  "methods": [
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "ABANDON",
+      "parameters": {},
+      "status": "requires_additional_inputs_or_control",
+      "reason": "ABANDON has no executable value-level mapping"
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 3,
+        "window": 3
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.99,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0009266861474153778,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.048238162207089236,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 5,
+        "window": 5
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9833333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.0005237362744713306,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.08473143506753597,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 8,
+        "window": 8
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9733333333333334,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.0015183894186916705,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.09269316216455126,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 10,
+        "window": 10
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9666666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.00029223698235233535,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.14600638942474675,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 13,
+        "window": 13
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9566666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0019268658173251215,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.23877032370962098,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 20,
+        "window": 20
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9333333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.003830262233814877,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.5528306905572242,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 3,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.002057660928188694,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.5855403394643126,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 5,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.004213597456984197,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.5472347593929971,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 8,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.004234768313919194,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.6461113544224821,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 10,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0052548228815430574,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.6334103525399093,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 13,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.005145561868066898,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.6226782132432194,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 20,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.00637147444207262,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.5073604377707474,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.20629947401590026
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.002057660928188694,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.5855403394643126,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.12944943670387585
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.004213597456984197,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.5472347593929971,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.08299595679532877
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.004235200961801623,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.6461143299584209,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.06696700846319258
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0052548228815430574,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.6334103525399093,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.051922485660828535
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.005145561868066898,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.6226782132432194,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 8,
+        "period_fast": 2,
+        "period_slow": 24,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.97,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0017322097784064215,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.5246544667559156,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 10,
+        "period_fast": 2,
+        "period_slow": 30,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9633333333333334,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0015330033470559686,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.5065112131461746,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 13,
+        "period_fast": 2,
+        "period_slow": 39,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9533333333333334,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0030843419972488417,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.5462892046719781,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 20,
+        "period_fast": 2,
+        "period_slow": 60,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.93,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.002800157855052681,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.5533493228382148,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.053621575878972906
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.002062336369549401,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.5855793672488847,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.019248918293159143
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.004233754273867419,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.5448394532109835,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.007511775869928892
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.004350423532691598,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.6176281717286896,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.004806454073100579
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0055686287023221405,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.6500137068339908,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0028435908208181383
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.00534395795125686,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.6214032975831544,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0012012527662230554
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006394274800473842,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.46210047218833566,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "half_lives": [
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10
+        ]
+      },
+      "transform": "layered_decay",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.00256054423896284,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.37641651462929115,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": false
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0017187089376883196,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.563885900155711,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": true
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.004213597456984197,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.5472347593929971,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "INDUSTRY_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "industry",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "INDUSTRY_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": false
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.01532628430947168,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.19282211720903264,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": true
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.015470505657230797,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.1978289899679242,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "LOW_DOF_INTERACTION",
+      "parameters": {
+        "interaction_degree": 1,
+        "doe_reduction": 0.7
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "LOW_DOF_INTERACTION requires FactorEngine DSL recompilation"
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "flag",
+        "freshness_window": 5
+      },
+      "transform": "missing_indicator",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 0,
+      "paired_retention": 0,
+      "train_mean_ic_delta": null,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "missing or nonfinite joint metrics cannot be imputed"
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "fill",
+        "freshness_window": 5
+      },
+      "transform": "forward_fill",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "drop",
+        "freshness_window": 5
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "drop mode is row-selection, not a value Series primitive"
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "NO_OP_RAW",
+      "parameters": {
+        "keep_raw": true
+      },
+      "transform": "raw",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "OPERATOR_SWAP",
+      "parameters": {
+        "target_family": "delay",
+        "aggressiveness": "conservative"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "OPERATOR_SWAP requires FactorEngine DSL recompilation"
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "cross_sectional",
+        "tie_method": "average",
+        "window": 20
+      },
+      "transform": "cs_rank",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "cross_sectional",
+        "tie_method": "min",
+        "window": 20
+      },
+      "transform": "cs_rank",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "average",
+        "window": 20
+      },
+      "transform": "ts_rank_history",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9333333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.002674824849289501,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.26679983787681716,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "min",
+        "window": 20
+      },
+      "transform": "ts_rank_history",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9333333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.002535080647244447,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "joint metrics unavailable, including zero-variance ratios"
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "REPRESENTATION_ZSCORE",
+      "parameters": {
+        "zscore_axis": "cross_sectional",
+        "cap": 3,
+        "window": 20
+      },
+      "transform": "capped_zscore",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.0000016445932434768188,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.000015940181127938047,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "REPRESENTATION_ZSCORE",
+      "parameters": {
+        "zscore_axis": "ts",
+        "cap": 3,
+        "window": 20
+      },
+      "transform": "ts_zscore_history",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.33654947916666667,
+      "valid_ic_days": 267,
+      "paired_retention": 0.3516502808988764,
+      "train_mean_ic_delta": 0.006417763531339382,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.10358668950116695,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "ROBUST_OUTLIER",
+      "parameters": {
+        "lower_quantile": 0.01,
+        "upper_quantile": 0.99
+      },
+      "transform": "cs_winsor",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.00000897812368204507,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.00008280085394535286,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "mad",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "mad",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "iqr",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "iqr",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "std",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "std",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "SIGN_ORIENTATION",
+      "parameters": {
+        "direction": "keep"
+      },
+      "transform": "sign",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "SIGN_ORIENTATION",
+      "parameters": {
+        "direction": "flip"
+      },
+      "transform": "sign",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.0073957988438974834,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.12642487883542886,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "SIZE_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "size",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "SIZE_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "STYLE_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "style_multi",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "STYLE_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "TAIL_HINGE",
+      "parameters": {
+        "hinge": "top",
+        "hinge_value": 0
+      },
+      "transform": "tail_hinge",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.005633158799238688,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "joint metrics unavailable, including zero-variance ratios"
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "TAIL_HINGE",
+      "parameters": {
+        "hinge": "bottom",
+        "hinge_value": 0
+      },
+      "transform": "tail_hinge",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.009357149186346612,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.12427306906904373,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "top"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.000009990696694425792,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.00006642152062130702,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "bottom"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.000425362175529945,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.025713706625386246,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "both"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.00043564254469568973,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.025781151681726955,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": false
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.007930485465574197,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "joint metrics unavailable, including zero-variance ratios"
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": true
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.008074706813333313,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "joint metrics unavailable, including zero-variance ratios"
+    },
+    {
+      "factor": "weekly_4cbd7ca6dccc61dc",
+      "family": "WINDOW_REFINEMENT",
+      "parameters": {
+        "window_mode": "shorter",
+        "scale": 0.7
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "WINDOW_REFINEMENT requires FactorEngine DSL recompilation"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "ABANDON",
+      "parameters": {},
+      "status": "requires_additional_inputs_or_control",
+      "reason": "ABANDON has no executable value-level mapping"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 3,
+        "window": 3
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.99,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0012592531803483908,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.015360994025974184,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 5,
+        "window": 5
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9833333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0032370571397120954,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.04689949575578867,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 8,
+        "window": 8
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9733333333333334,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.004636662601192524,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.06431141782364727,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 10,
+        "window": 10
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9666666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.006474134446893695,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.07829020933028308,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 13,
+        "window": 13
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9566666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0046227730357518764,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.05272672844287368,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "min_periods": 20,
+        "window": 20
+      },
+      "transform": "trailing_sma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9333333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.002667010514551428,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.03349132092283669,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 3,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.004886730689218768,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.04276570917497724,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 5,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00551959889404058,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.04930305768250415,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 8,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.006131385599097906,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05704682858904997,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 10,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.005818205503690695,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05561910310134821,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 13,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.0057895158416269785,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05466129094239208,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "halflife": 20,
+        "min_periods": 1
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.005741586628626085,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05480678604735556,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.20629947401590026
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.004886730689218768,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.04276570917497724,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.12944943670387585
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00551959889404058,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.04930305768250415,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.08299595679532877
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.006131385599097906,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05704682858904997,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.06696700846319258
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.005818205503690695,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05561910310134821,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "alpha": 0.051922485660828535
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.0057895158416269785,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05466129094239208,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 8,
+        "period_fast": 2,
+        "period_slow": 24,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.97,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.006427294739862207,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05630367330315755,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 10,
+        "period_fast": 2,
+        "period_slow": 30,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9633333333333334,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.006052691757027359,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05301393479631861,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 13,
+        "period_fast": 2,
+        "period_slow": 39,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9533333333333334,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.006664516616440091,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05905195621995879,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "period_er": 20,
+        "period_fast": 2,
+        "period_slow": 60,
+        "use_current": false
+      },
+      "transform": "kama",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.93,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.006774069909167247,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05820247242111276,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.053621575878972906
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.004886698991716925,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.042765447470335616,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.019248918293159143
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.005518455403344683,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.04929330277925831,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.007511775869928892
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.006104845492900068,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05679696337935941,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.004806454073100579
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.005808550415324812,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05553437936692801,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0028435908208181383
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.005785841979499218,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05462973258982656,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "CAUSAL_SMOOTHING",
+      "parameters": {
+        "measurement_noise": 1,
+        "process_noise": 0.0012012527662230554
+      },
+      "transform": "kalman_local_level",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.005640662360119879,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.05378933731902952,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "half_lives": [
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10,
+          3,
+          10
+        ]
+      },
+      "transform": "layered_decay",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.005234151400725471,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.04773375844912553,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": false
+      },
+      "transform": "one_sided_iir_lowpass",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.005654231108244418,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.04907712184233837,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "DECAY_REFINEMENT",
+      "parameters": {
+        "decay": 0.5,
+        "half_life_relative": true
+      },
+      "transform": "ewma",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9966666666666667,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00551959889404058,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.04930305768250415,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "INDUSTRY_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "industry",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "INDUSTRY_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": false
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00892428633211982,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.07285560032733762,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "INVERTED_U_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": true
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.008829025903211897,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.07217820702620997,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "LOW_DOF_INTERACTION",
+      "parameters": {
+        "interaction_degree": 1,
+        "doe_reduction": 0.7
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "LOW_DOF_INTERACTION requires FactorEngine DSL recompilation"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "flag",
+        "freshness_window": 5
+      },
+      "transform": "missing_indicator",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 0,
+      "paired_retention": 0,
+      "train_mean_ic_delta": null,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "missing or nonfinite joint metrics cannot be imputed"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "fill",
+        "freshness_window": 5
+      },
+      "transform": "forward_fill",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "MISSINGNESS_FRESHNESS",
+      "parameters": {
+        "mode": "drop",
+        "freshness_window": 5
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "drop mode is row-selection, not a value Series primitive"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "NO_OP_RAW",
+      "parameters": {
+        "keep_raw": true
+      },
+      "transform": "raw",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "OPERATOR_SWAP",
+      "parameters": {
+        "target_family": "delay",
+        "aggressiveness": "conservative"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "OPERATOR_SWAP requires FactorEngine DSL recompilation"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "cross_sectional",
+        "tie_method": "average",
+        "window": 20
+      },
+      "transform": "cs_rank",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "cross_sectional",
+        "tie_method": "min",
+        "window": 20
+      },
+      "transform": "cs_rank",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "average",
+        "window": 20
+      },
+      "transform": "ts_rank_history",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9333333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": -0.0022260415891840668,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.03974429067508828,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "REPRESENTATION_RANK",
+      "parameters": {
+        "rank_axis": "ts",
+        "tie_method": "min",
+        "window": 20
+      },
+      "transform": "ts_rank_history",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.9333333333333333,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.0008206479124885256,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "joint metrics unavailable, including zero-variance ratios"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "REPRESENTATION_ZSCORE",
+      "parameters": {
+        "zscore_axis": "cross_sectional",
+        "cap": 3,
+        "window": 20
+      },
+      "transform": "capped_zscore",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.0000019670171079103337,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.00001660930810687411,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "REPRESENTATION_ZSCORE",
+      "parameters": {
+        "zscore_axis": "ts",
+        "cap": 3,
+        "window": 20
+      },
+      "transform": "ts_zscore_history",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 0.0856640625,
+      "valid_ic_days": 209,
+      "paired_retention": 0.09268199906367042,
+      "train_mean_ic_delta": 0.00798025008555474,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "missing or nonfinite joint metrics cannot be imputed"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "ROBUST_OUTLIER",
+      "parameters": {
+        "lower_quantile": 0.01,
+        "upper_quantile": 0.99
+      },
+      "transform": "cs_winsor",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.0007288186339670841,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.01392160782349705,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "mad",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "mad",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "iqr",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "iqr",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "std",
+        "center": "mean"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "ROBUST_SCALE",
+      "parameters": {
+        "scale": "std",
+        "center": "median"
+      },
+      "transform": "robust_scale",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "SIGN_ORIENTATION",
+      "parameters": {
+        "direction": "keep"
+      },
+      "transform": "sign",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "SIGN_ORIENTATION",
+      "parameters": {
+        "direction": "flip"
+      },
+      "transform": "sign",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.012064378677235671,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": 0.10239602323565317,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "SIZE_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "size",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "SIZE_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "STYLE_NEUTRALIZATION",
+      "parameters": {
+        "exposure_set": "style_multi",
+        "method": "ols"
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "STYLE_NEUTRALIZATION requires an external exposure panel"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "TAIL_HINGE",
+      "parameters": {
+        "hinge": "top",
+        "hinge_value": 0
+      },
+      "transform": "tail_hinge",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.0008667715946659969,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "joint metrics unavailable, including zero-variance ratios"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "TAIL_HINGE",
+      "parameters": {
+        "hinge": "bottom",
+        "hinge_value": 0
+      },
+      "transform": "tail_hinge",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 260,
+      "paired_retention": 0.9737827715355806,
+      "train_mean_ic_delta": 0.004754916991324571,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "missing or nonfinite joint metrics cannot be imputed"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "top"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.000007557731383538735,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.0009369822096936264,
+      "passes_raw_relative_floors": true
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "bottom"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.00027218409993777287,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "available",
+      "joint_utility_delta": -0.6365464503564169,
+      "passes_raw_relative_floors": false
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "TAIL_SATURATION",
+      "parameters": {
+        "saturation_quantile": 0.97,
+        "saturate": "both"
+      },
+      "transform": "tail_saturation",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 180,
+      "paired_retention": 0.6741573033707865,
+      "train_mean_ic_delta": -0.0004339839235797813,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "missing or nonfinite joint metrics cannot be imputed"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": false
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.003140092345115852,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "joint metrics unavailable, including zero-variance ratios"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "U_SHAPE_REPAIR",
+      "parameters": {
+        "center": 0.35,
+        "power": 2,
+        "asymmetry": true
+      },
+      "transform": "rank_shape",
+      "status": "executed",
+      "prefix_invariant": true,
+      "asset_permutation_invariant": true,
+      "finite_fraction": 1,
+      "valid_ic_days": 267,
+      "paired_retention": 1,
+      "train_mean_ic_delta": 0.003235352774023772,
+      "research_cost_rate": 0.001,
+      "empty_leg_policy": "signal_cash",
+      "joint_metrics_status": "unavailable",
+      "joint_metrics_reason": "joint metrics unavailable, including zero-variance ratios"
+    },
+    {
+      "factor": "weekly_db5616cd85a477b3",
+      "family": "WINDOW_REFINEMENT",
+      "parameters": {
+        "window_mode": "shorter",
+        "scale": 0.7
+      },
+      "status": "requires_additional_inputs_or_control",
+      "reason": "WINDOW_REFINEMENT requires FactorEngine DSL recompilation"
+    }
+  ],
+  "automatic": {
+    "weekly_4cbd7ca6dccc61dc": {
+      "status": "improved",
+      "selected_family": "INVERTED_U_REPAIR",
+      "reason": "TRAIN winner passed held-out paired block bound",
+      "budget": {
+        "required": 103,
+        "maximum": 128,
+        "status": "admitted",
+        "evaluated": 18
+      },
+      "train_gain": 0.1969564892146704,
+      "validation_lower_bound": 0.11790883480968672
+    },
+    "weekly_db5616cd85a477b3": {
+      "status": "raw_retained",
+      "selected_family": "NO_OP_RAW",
+      "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+      "budget": {
+        "required": 103,
+        "maximum": 128,
+        "status": "admitted",
+        "evaluated": 73
+      },
+      "train_gain": 0.11165439682022438,
+      "validation_lower_bound": null
+    }
+  },
+  "budget90": {
+    "weekly_4cbd7ca6dccc61dc": {
+      "status": "budget_exceeded_raw_retained",
+      "selected_family": "NO_OP_RAW",
+      "reason": "ValueError: TRAIN candidate budget exceeded: required 103, maximum 90; no partial search",
+      "budget": {
+        "required": 103,
+        "maximum": 90,
+        "status": "exceeded",
+        "evaluated": 0
+      },
+      "train_gain": null,
+      "validation_lower_bound": null
+    },
+    "weekly_db5616cd85a477b3": {
+      "status": "budget_exceeded_raw_retained",
+      "selected_family": "NO_OP_RAW",
+      "reason": "ValueError: TRAIN candidate budget exceeded: required 103, maximum 90; no partial search",
+      "budget": {
+        "required": 103,
+        "maximum": 90,
+        "status": "exceeded",
+        "evaluated": 0
+      },
+      "train_gain": null,
+      "validation_lower_bound": null
+    }
+  }
+}

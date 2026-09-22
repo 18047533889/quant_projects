@@ -6658,7 +6658,7 @@ At most two IC references, private to one factor's TRAIN search.
 
 ### optimize_factor_batch
 
-[实际实现](../factor_optimizer/research_batch.py#L351)。
+[实际实现](../factor_optimizer/research_batch.py#L355)。
 
 Optimize aligned QE contracts automatically, preserving every input ID.
 
@@ -10650,7 +10650,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
-| `factor_optimizer/research_batch.py` | `ff4f2ab4eee757ddd372125ec7a61025805ea6c1755138aca919feabe01a5bfb` |
+| `factor_optimizer/research_batch.py` | `1fd1bf2a172ffb55c42db350fc1b6161042f9a8267d7cfe61dc64d060f02bcc5` |
 | `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
 | `factor_optimizer/research_diagnostics.py` | `26c82a50b2edcaa4eff8911da11a4fcd52fbad2f5235148202a300d396ced23d` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |
