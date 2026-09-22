@@ -390,6 +390,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     )
     from factor_optimizer.research_fitness import (
         paired_series, summarize, joint_utility, passes_floors, compare_joint, RawSeriesCache,
+        JointMetricsUnavailable,
     )
     from factor_optimizer.adapters.repair_execution import compile_value_repair
     from factor_optimizer.adapters.preprocessing import compile_admissible_smoothing_grid
@@ -661,15 +662,25 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                                 split.validation_indices, minimum_assets=config.minimum_assets,
                                 cost_rate=config.research_cost_rate,
                                 empty_leg_policy=config.research_empty_leg_policy)
-                            mr, mc = summarize(ar), summarize(ac)
-                            joint_record.update(validation_raw=mr, validation_candidate=mc)
-                            if passes_floors(mr, mc):
-                                comparison = compare_joint(ar, ac, config)
-                                joint_record['comparison_status'] = comparison.status.value
-                                if comparison.difference_interval is not None:
-                                    lower = comparison.difference_interval[0]
-                            else:
-                                joint_record['comparison_status'] = 'DEGRADATION_FLOOR_FAILED'
+                            metric_role = 'raw'
+                            try:
+                                mr = summarize(ar)
+                                joint_record['validation_raw'] = mr
+                                metric_role = 'candidate'
+                                mc = summarize(ac)
+                                joint_record['validation_candidate'] = mc
+                                if passes_floors(mr, mc):
+                                    metric_role = 'bootstrap'
+                                    comparison = compare_joint(ar, ac, config)
+                                    joint_record['comparison_status'] = comparison.status.value
+                                    if comparison.difference_interval is not None:
+                                        lower = comparison.difference_interval[0]
+                                else:
+                                    joint_record['comparison_status'] = 'DEGRADATION_FLOOR_FAILED'
+                            except JointMetricsUnavailable as exc:
+                                joint_record.update(comparison_status='METRICS_UNAVAILABLE',
+                                    unavailable_code=exc.code, unavailable_reason=str(exc),
+                                    unavailable_metrics=exc.metrics, unavailable_role=metric_role)
                         else:
                             lower = _lower_bound(delta, config, labels.horizon)
                     baseline_only = winner.family == 'BASELINE'

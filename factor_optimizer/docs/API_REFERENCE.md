@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**77 个 Python 模块、938 个公开函数/类/方法定义**。
+扫描实际包目录：**77 个 Python 模块、940 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -63,7 +63,7 @@
 | [factor_optimizer/research_decay.py](../factor_optimizer/research_decay.py) | 1 | TRAIN-only twenty-layer stale-signal decay, not holding-period PnL. |
 | [factor_optimizer/research_diagnostics.py](../factor_optimizer/research_diagnostics.py) | 1 | TRAIN-only multi-dimensional research diagnosis using QE metric authorities. |
 | [factor_optimizer/research_final_report.py](../factor_optimizer/research_final_report.py) | 3 | Authority-side final research reporting; never called by candidate search. |
-| [factor_optimizer/research_fitness.py](../factor_optimizer/research_fitness.py) | 10 | QE-owned research portfolio metrics and joint paired selection policy. |
+| [factor_optimizer/research_fitness.py](../factor_optimizer/research_fitness.py) | 12 | QE-owned research portfolio metrics and joint paired selection policy. |
 | [factor_optimizer/research_manifest.py](../factor_optimizer/research_manifest.py) | 3 | Bind declared COS factor values to their exact research landing record. |
 | [factor_optimizer/search/__init__.py](../factor_optimizer/search/__init__.py) | 0 | Search orchestration for factor mutation optimization. |
 | [factor_optimizer/search/categorical_strategy.py](../factor_optimizer/search/categorical_strategy.py) | 10 | Categorical search strategy (TPE-style) for treatment auto-optimization. |
@@ -6729,9 +6729,25 @@ Read the authority store once; persist TEST and separate description.
 
 QE-owned research portfolio metrics and joint paired selection policy.
 
-### portfolio_series
+### JointMetricsUnavailable
 
 [实际实现](../factor_optimizer/research_fitness.py#L13)。
+
+Expected evidence insufficiency, distinct from malformed inputs or bugs.
+
+基类：`ValueError`。
+
+### JointMetricsUnavailable.__init__
+
+[实际实现](../factor_optimizer/research_fitness.py#L16)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self, code, message, *, metrics=())`。
+
+### portfolio_series
+
+[实际实现](../factor_optimizer/research_fitness.py#L22)。
 
 Top/bottom quintiles, gross-one equal stock weights, signal-only membership.
 
@@ -6739,7 +6755,7 @@ Top/bottom quintiles, gross-one equal stock weights, signal-only membership.
 
 ### summarize
 
-[实际实现](../factor_optimizer/research_fitness.py#L51)。
+[实际实现](../factor_optimizer/research_fitness.py#L60)。
 
 Summarize aligned columns [RankIC, net portfolio return, full turnover].
 
@@ -6747,7 +6763,7 @@ Summarize aligned columns [RankIC, net portfolio return, full turnover].
 
 ### joint_utility
 
-[实际实现](../factor_optimizer/research_fitness.py#L77)。
+[实际实现](../factor_optimizer/research_fitness.py#L94)。
 
 Prespecified bounded research utility; never fitted to VALIDATION/TEST.
 
@@ -6755,7 +6771,7 @@ Prespecified bounded research utility; never fitted to VALIDATION/TEST.
 
 ### passes_floors
 
-[实际实现](../factor_optimizer/research_fitness.py#L84)。
+[实际实现](../factor_optimizer/research_fitness.py#L101)。
 
 Hard raw-relative guards prevent one metric buying material damage.
 
@@ -6763,13 +6779,13 @@ Hard raw-relative guards prevent one metric buying material damage.
 
 ### RawSeriesCache
 
-[实际实现](../factor_optimizer/research_fitness.py#L94)。
+[实际实现](../factor_optimizer/research_fitness.py#L111)。
 
 One-entry RAW evidence cache; returned arrays never alias stored state.
 
 ### RawSeriesCache.__init__
 
-[实际实现](../factor_optimizer/research_fitness.py#L97)。
+[实际实现](../factor_optimizer/research_fitness.py#L114)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6777,7 +6793,7 @@ One-entry RAW evidence cache; returned arrays never alias stored state.
 
 ### RawSeriesCache.get
 
-[实际实现](../factor_optimizer/research_fitness.py#L101)。
+[实际实现](../factor_optimizer/research_fitness.py#L118)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6785,7 +6801,7 @@ One-entry RAW evidence cache; returned arrays never alias stored state.
 
 ### RawSeriesCache.put
 
-[实际实现](../factor_optimizer/research_fitness.py#L104)。
+[实际实现](../factor_optimizer/research_fitness.py#L121)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6793,7 +6809,7 @@ One-entry RAW evidence cache; returned arrays never alias stored state.
 
 ### paired_series
 
-[实际实现](../factor_optimizer/research_fitness.py#L108)。
+[实际实现](../factor_optimizer/research_fitness.py#L125)。
 
 QE metric inputs share signal availability, never ex-post label membership.
 
@@ -6801,7 +6817,7 @@ QE metric inputs share signal availability, never ex-post label membership.
 
 ### compare_joint
 
-[实际实现](../factor_optimizer/research_fitness.py#L167)。
+[实际实现](../factor_optimizer/research_fitness.py#L184)。
 
 Recompute all nonlinear metrics within each shared moving-block draw.
 
@@ -10650,11 +10666,11 @@ Import seen records from dictionaries.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
-| `factor_optimizer/research_batch.py` | `076a5d1a07149ea2a243181a0cd22acee5f95038af60d0cee787cd8acc89708b` |
+| `factor_optimizer/research_batch.py` | `355b036c340ca0cde4f82cb4b3f83d64f5e4a75f1a470aa64220a517be3a9e2f` |
 | `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
 | `factor_optimizer/research_diagnostics.py` | `26c82a50b2edcaa4eff8911da11a4fcd52fbad2f5235148202a300d396ced23d` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |
-| `factor_optimizer/research_fitness.py` | `4ff5f341a903b477850dfcbfb14aad4188b2703cc8ea45f1b7bf0df316317d5c` |
+| `factor_optimizer/research_fitness.py` | `648da31773112b74e4bbf89b18ed14e5a0daa7f45e68fa39625089b8de0bb975` |
 | `factor_optimizer/research_manifest.py` | `3fd7d09903279223dfff281fdf2ed4f835d0258e715c6dd53ebfaca0cf1bd1dc` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |

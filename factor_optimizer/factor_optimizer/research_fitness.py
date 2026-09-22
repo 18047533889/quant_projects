@@ -10,6 +10,15 @@ import math
 import numpy as np
 
 
+class JointMetricsUnavailable(ValueError):
+    """Expected evidence insufficiency, distinct from malformed inputs or bugs."""
+
+    def __init__(self, code, message, *, metrics=()):
+        super().__init__(message)
+        self.code = code
+        self.metrics = tuple(metrics)
+
+
 def portfolio_series(values, returns, *, cost_rate=.001, empty_leg_policy='signal_cash'):
     """Top/bottom quintiles, gross-one equal stock weights, signal-only membership.
 
@@ -53,10 +62,14 @@ def summarize(series, *, periods_per_year=252):
     from quant_evaluator.metrics.ic_summary import compute_icir
     from quant_evaluator.metrics.portfolio_stats import compute_sharpe_ratio, compute_maximum_drawdown
     a = np.asarray(series, dtype=float)
-    if a.ndim != 2 or a.shape[1] != 3 or len(a) < 20:
+    if a.ndim != 2 or a.shape[1] != 3:
         raise ValueError('at least 20 aligned metric observations are required')
+    if len(a) < 20:
+        raise JointMetricsUnavailable('insufficient_observations',
+                                      'at least 20 aligned metric observations are required')
     if not np.isfinite(a).all():
-        raise ValueError('missing or nonfinite joint metrics cannot be imputed')
+        raise JointMetricsUnavailable('missing_observations',
+                                      'missing or nonfinite joint metrics cannot be imputed')
     if np.any(a[:, 1] < -1) or np.any(a[:, 2] < 0):
         raise ValueError('invalid return capital scale or turnover')
     sharpe = lambda x: float(compute_sharpe_ratio(x, periods_per_year=periods_per_year,
@@ -67,10 +80,14 @@ def summarize(series, *, periods_per_year=252):
         'sharpe': sharpe(a[:, 1]),
         'max_drawdown': float(compute_maximum_drawdown(a[:, 1])[0]),
         'turnover': float(a[:, 2].mean()),
-        'worst_block_sharpe': min(sharpe(x) for x in np.array_split(a[:, 1], 3)),
+        # Python min can ignore a later NaN. Every chronological block must
+        # supply a defined ratio; never certify stability from a subset.
+        'worst_block_sharpe': float(np.min([sharpe(x) for x in np.array_split(a[:, 1], 3)])),
     }
-    if not all(math.isfinite(v) for v in metrics.values()):
-        raise ValueError('joint metrics unavailable, including zero-variance ratios')
+    unavailable = tuple(k for k, v in metrics.items() if not math.isfinite(v))
+    if unavailable:
+        raise JointMetricsUnavailable('undefined_ratios',
+            'joint metrics unavailable, including zero-variance ratios', metrics=unavailable)
     return metrics
 
 
