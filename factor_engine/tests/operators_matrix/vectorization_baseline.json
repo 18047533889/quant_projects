@@ -1,0 +1,152 @@
+{
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/common/cross_sectional.py": {
+  "hits": [
+   "range-len-loop:L1644",
+   "range-len-loop:L1307",
+   "range-len-loop:L1676"
+  ],
+  "ops": [
+   "cs_count"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/common/group_polars.py": {
+  "hits": [
+   "range-len-loop:L81"
+  ],
+  "ops": [
+   "group_count"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/common/information_rank_native.py": {
+  "hits": [
+   "range-len-loop:L46"
+  ],
+  "ops": [
+   "report_benford_js_divergence"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/common/polars_extended.py": {
+  "hits": [
+   "range-len-loop:L609",
+   "range-len-loop:L633"
+  ],
+  "ops": [
+   "log10"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/common/robust_stats_native.py": {
+  "hits": [
+   "range-len-loop:L46"
+  ],
+  "ops": [
+   "ts_quantile_range"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/common/shift_cum.py": {
+  "hits": [
+   "range-len-loop:L79"
+  ],
+  "ops": [
+   "ts_positive_streak"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/downside_risk.py": {
+  "hits": [
+   "range-len-loop:L257",
+   "range-len-loop:L321"
+  ],
+  "ops": [
+   "ts_best_lag_corr_excess"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/filter_smooth.py": {
+  "hits": [
+   "range-len-loop:L149"
+  ],
+  "ops": [
+   "ts_butterworth_lowpass_causal"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/fundamental/expectation_v2.py": {
+  "hits": [
+   "range-len-loop:L226"
+  ],
+  "ops": [
+   "fin_actual_expectation_divergence"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/fundamental/transforms_repairs_v2.py": {
+  "hits": [
+   "range-len-loop:L221"
+  ],
+  "ops": [
+   "fin_days_since_update"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/gather_ext.py": {
+  "hits": [
+   "range-len-loop:L460"
+  ],
+  "ops": [
+   "cs_weighted_percentile_rank"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/intraday/overnight.py": {
+  "hits": [
+   "range-len-loop:L231"
+  ],
+  "ops": [
+   "ts_gap_fill_ratio"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/marked_event.py": {
+  "hits": [
+   "range-len-loop:L288"
+  ],
+  "ops": [
+   "event_interval_mark_coupling"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/price_volume/polars_liquidity_v2.py": {
+  "hits": [
+   "range-len-loop:L316"
+  ],
+  "ops": [
+   "ChaikinOscillator"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/price_volume/structure_patterns_extra_v2.py": {
+  "hits": [
+   "range-len-loop:L91"
+  ],
+  "ops": [
+   "pattern_123_bear"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/shareholder/churn_network.py": {
+  "hits": [
+   "range-len-loop:L632",
+   "range-len-loop:L676"
+  ],
+  "ops": [
+   "holder_class_entropy"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/technical/denoise_filter.py": {
+  "hits": [
+   "range-len-loop:L313",
+   "range-len-loop:L391"
+  ],
+  "ops": [
+   "ts_l1_trend_filter_trailing"
+  ]
+ },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/technical/polars_signal.py": {
+  "hits": [
+   "range-len-loop:L823"
+  ],
+  "ops": [
+   "RSI_WILDER"
+  ]
+ }
+}
