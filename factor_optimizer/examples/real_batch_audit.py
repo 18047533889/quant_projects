@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 from data_access import get_store
 from data_access.read.query_budget import QueryBudget
 
-from factor_optimizer.research_batch import optimize_factor_batch
+from factor_optimizer.research_batch import optimize_factor_batch, automatic_time_split
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 
@@ -107,7 +108,11 @@ def load_sample():
     eligible = eligible[positions + 2 < len(calendar)][-N_DAYS:]
     if len(eligible) != N_DAYS:
         raise RuntimeError(f"expected {N_DAYS} eligible dates, got {len(eligible)}")
-    assets = _choose_assets(paths, eligible[:int(N_DAYS * .6)])
+    selected_positions = calendar.get_indexer(eligible)
+    selection_split = automatic_time_split(SimpleNamespace(
+        decision_time=tuple(eligible.to_numpy(dtype="datetime64[ns]")),
+        label_end_time=tuple(calendar[selected_positions+2].to_numpy(dtype="datetime64[ns]"))))
+    assets = _choose_assets(paths, eligible[list(selection_split.train_indices)])
     panels = [_load_factor(path, assets) for path in paths]
     vwap = _load_vwap(candidate_dates.min(), dates.max(), assets).reindex(calendar)
     positions = np.asarray([vwap.index.get_loc(d) for d in eligible])
@@ -135,6 +140,8 @@ def load_sample():
         metadata={"timing": "close(t); entry AdjVwap(t+1); exit AdjVwap(t+2)"},
     )
     inputs = {"factor_paths": [str(p) for p in paths],
+                   "asset_selection_split": selection_split.identity,
+                   "asset_selection_train_days": len(selection_split.train_indices),
                    "label_source": target.source_ref,
                    "date_span": [str(eligible[0].date()), str(eligible[-1].date())],
                    "days": len(eligible), "assets": len(assets)}

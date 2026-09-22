@@ -1,0 +1,194 @@
+{
+  "probe": {
+    "factor": "weekly_b1258507388baa03",
+    "sha256": "5c0c529ba6a79690dee1a426c790abfd676fb44123b934eda73225b9c86e343e",
+    "groups": {
+      "high": [
+        "000096.SZ",
+        "000429.SZ",
+        "000617.SZ",
+        "000695.SZ"
+      ],
+      "partial": [
+        "000006.SZ",
+        "000027.SZ",
+        "000039.SZ",
+        "000042.SZ"
+      ],
+      "zero": [
+        "000001.SZ",
+        "000002.SZ",
+        "000004.SZ",
+        "000005.SZ"
+      ]
+    },
+    "read_span": [
+      "2023-08-21 00:00:00",
+      "2025-10-27 00:00:00"
+    ],
+    "assets": {
+      "000096.SZ": {
+        "stored_factor_train_coverage": 1,
+        "current_input_high_coverage": 1,
+        "current_complete_252_high_windows": 1,
+        "current_efficiency_valid": 1,
+        "current_expected_factor_valid": 1,
+        "mask_disagreements": 0
+      },
+      "000429.SZ": {
+        "stored_factor_train_coverage": 1,
+        "current_input_high_coverage": 1,
+        "current_complete_252_high_windows": 1,
+        "current_efficiency_valid": 1,
+        "current_expected_factor_valid": 1,
+        "mask_disagreements": 0
+      },
+      "000617.SZ": {
+        "stored_factor_train_coverage": 0.9438202247191011,
+        "current_input_high_coverage": 1,
+        "current_complete_252_high_windows": 1,
+        "current_efficiency_valid": 1,
+        "current_expected_factor_valid": 1,
+        "mask_disagreements": 15
+      },
+      "000695.SZ": {
+        "stored_factor_train_coverage": 0.9438202247191011,
+        "current_input_high_coverage": 1,
+        "current_complete_252_high_windows": 1,
+        "current_efficiency_valid": 1,
+        "current_expected_factor_valid": 1,
+        "mask_disagreements": 15
+      },
+      "000006.SZ": {
+        "stored_factor_train_coverage": 0.003745318352059925,
+        "current_input_high_coverage": 1,
+        "current_complete_252_high_windows": 1,
+        "current_efficiency_valid": 1,
+        "current_expected_factor_valid": 1,
+        "mask_disagreements": 266
+      },
+      "000027.SZ": {
+        "stored_factor_train_coverage": 0.550561797752809,
+        "current_input_high_coverage": 1,
+        "current_complete_252_high_windows": 1,
+        "current_efficiency_valid": 1,
+        "current_expected_factor_valid": 1,
+        "mask_disagreements": 120
+      },
+      "000039.SZ": {
+        "stored_factor_train_coverage": 0.2209737827715356,
+        "current_input_high_coverage": 1,
+        "current_complete_252_high_windows": 1,
+        "current_efficiency_valid": 1,
+        "current_expected_factor_valid": 1,
+        "mask_disagreements": 208
+      },
+      "000042.SZ": {
+        "stored_factor_train_coverage": 0.23595505617977527,
+        "current_input_high_coverage": 1,
+        "current_complete_252_high_windows": 1,
+        "current_efficiency_valid": 1,
+        "current_expected_factor_valid": 1,
+        "mask_disagreements": 204
+      },
+      "000001.SZ": {
+        "stored_factor_train_coverage": 0,
+        "current_input_high_coverage": 1,
+        "current_complete_252_high_windows": 1,
+        "current_efficiency_valid": 1,
+        "current_expected_factor_valid": 1,
+        "mask_disagreements": 267
+      },
+      "000002.SZ": {
+        "stored_factor_train_coverage": 0,
+        "current_input_high_coverage": 1,
+        "current_complete_252_high_windows": 1,
+        "current_efficiency_valid": 1,
+        "current_expected_factor_valid": 1,
+        "mask_disagreements": 267
+      },
+      "000004.SZ": {
+        "stored_factor_train_coverage": 0,
+        "current_input_high_coverage": 1,
+        "current_complete_252_high_windows": 1,
+        "current_efficiency_valid": 1,
+        "current_expected_factor_valid": 1,
+        "mask_disagreements": 267
+      },
+      "000005.SZ": {
+        "stored_factor_train_coverage": 0,
+        "current_input_high_coverage": 0.3111954459203036,
+        "current_complete_252_high_windows": 0,
+        "current_efficiency_valid": 0,
+        "current_expected_factor_valid": 0,
+        "mask_disagreements": 0
+      }
+    },
+    "pandas_operator": "factor_engine.cleaned_operators.price_volume.technical_extensions.Production_ts_days_since_high",
+    "pandas_finite_matches_expected": true,
+    "polars_operator": "factor_engine.cleaned_operators.technical.polars_misc_v2.PolarsMiscV2_ts_days_since_high",
+    "pandas_polars_equal": true,
+    "pandas_polars_mask_equal": true,
+    "pandas_engine_finite_cells": 3025,
+    "cuda_engine_error": "ValueError:Unsupported backend type: cuda"
+  },
+  "source_metadata": {
+    "top_keys": [
+      "factors",
+      "errors",
+      "per_factor_isolation_v1",
+      "last_batch"
+    ],
+    "record": {
+      "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/5c0c529ba6a79690dee1a426c790abfd676fb44123b934eda73225b9c86e343e/weekly_b1258507388baa03.parquet",
+      "sha256": "5c0c529ba6a79690dee1a426c790abfd676fb44123b934eda73225b9c86e343e",
+      "bytes": 11138026,
+      "verified": true,
+      "formula_sha256": "45bd9371df9401b461631a8f0e49ae72b300a13966d784678924b175c5501d86",
+      "execution_repair_revision": "20260914-source-dependency-cpu-floor-pit-native-dq-v2",
+      "fe_dsl": "multiply(rank(neg(ts_days_since_high(col('AdjHigh'), 252))), rank(efficiency_ratio(col('AdjClose'), 20)))",
+      "source_python": null,
+      "status": "evaluated_optimization_pending",
+      "completed_at": "2026-09-20 13:44:18",
+      "requested_backend": "auto",
+      "batch_size": 1,
+      "upload_seconds": 2.693356883013621,
+      "evaluation_attempts": 1,
+      "matrix_quality": {
+        "rows": 2588,
+        "assets": 5461,
+        "duplicate_dates": 0,
+        "duplicate_assets": 0,
+        "finite_cells": 894302,
+        "total_cells": 14133068,
+        "days_with_cross_section_variation": 2335,
+        "start": "2016-01-04 00:00:00",
+        "end": "2026-08-27 00:00:00"
+      },
+      "evaluation_outputs": [
+        {
+          "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/evaluations/weekly_b1258507388baa03/artifacts/a4e9277f9534dc4e11cde2c86b65ef4f70a61669a415d73e45691c5252a0b3b8/weekly_b1258507388baa03.npz",
+          "sha256": "a4e9277f9534dc4e11cde2c86b65ef4f70a61669a415d73e45691c5252a0b3b8",
+          "bytes": 417113,
+          "verified": true
+        },
+        {
+          "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/evaluations/weekly_b1258507388baa03/dc8644fe262d91e288b51424296f668765d2fa37af82022c555a905d7d8d948f/report_manifest.json",
+          "sha256": "dc8644fe262d91e288b51424296f668765d2fa37af82022c555a905d7d8d948f",
+          "bytes": 2530,
+          "verified": true
+        }
+      ],
+      "evaluated_at": "2026-09-20 13:47:26",
+      "backend_used": [
+        "cuda"
+      ]
+    }
+  },
+  "interpretation": {
+    "backend_used_is_evaluation_backend": true,
+    "current_source_is_not_historical_snapshot": true,
+    "full_expression_cuda_comparison_completed": false,
+    "test_evaluated": false
+  }
+}

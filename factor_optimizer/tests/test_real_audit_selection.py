@@ -33,3 +33,32 @@ def test_real_sample_reader_respects_dataaccess_path_authorization(tmp_path, mon
                   "a.SZ": [1., 2.]}).to_parquet(path, index=False)
     with pytest.raises(ValidationError, match="白名单"):
         example._load_factor(path, ["a.SZ"])
+
+def test_full_sample_uses_optimizer_training_split(tmp_path, monkeypatch):
+    # Regression: the loader passed the unpurged first 60%, including warmup,
+    # to asset selection, so it chose b instead of the better TRAIN-covered a.
+    from factor_optimizer.research_batch import automatic_time_split
+    monkeypatch.setenv("DATA_ACCESS_READ_URI_ROOTS", str(tmp_path))
+    monkeypatch.setattr(example, "FACTOR_ROOT", tmp_path)
+    monkeypatch.setattr(example, "FACTORS", ("factor",))
+    monkeypatch.setattr(example, "N_ASSETS", 1)
+    calendar = pd.bdate_range("2022-01-03", periods=510)
+    dates = calendar[-502:-2]
+    panel = pd.DataFrame({"a.SZ": np.ones(510), "b.SZ": np.ones(510)}, index=calendar)
+    panel.index.name = "date"
+    panel.loc[dates[:30], "a.SZ"] = np.nan
+    panel.loc[dates[50:53], "b.SZ"] = np.nan
+    panel.to_parquet(tmp_path / "factor.parquet")
+    class CalendarMirror:
+        def glob(self, pattern):
+            return [Path(str(d.date()) + ".parquet") for d in calendar]
+        def __truediv__(self, name):
+            return tmp_path / name
+    monkeypatch.setattr(example, "DAILY_ADJ", CalendarMirror())
+    monkeypatch.setattr(example, "_load_vwap",
+        lambda start, end, assets: pd.DataFrame(100., index=calendar, columns=assets))
+    batch, labels, inputs = example.load_sample()
+    assert list(batch.asset_axis.values) == ["a.SZ"]
+    split = automatic_time_split(labels)
+    assert inputs["asset_selection_split"] == split.identity
+    assert inputs["asset_selection_train_days"] == len(split.train_indices) == 267
