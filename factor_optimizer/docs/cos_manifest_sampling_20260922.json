@@ -1,0 +1,575 @@
+{
+  "inputs": {
+    "sources": [
+      {
+        "factor": "volume_state_persistence",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/b53888213fe77c90f14e1ed9eaa817751c2d9c4525ec1db5e30968a2c14f7b19/volume_state_persistence.parquet",
+        "etag": "e12c21299e1383210f74da6ace302dec",
+        "sha256": "b53888213fe77c90f14e1ed9eaa817751c2d9c4525ec1db5e30968a2c14f7b19",
+        "downloaded_bytes": 10146498,
+        "manifest_sha256": "35e3558548de591e9dda003ad236ff4846051b73628c1d980c7cf3f9cb73067e",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "fillna_const(divide(ts_sum(gt(col('Volume'), ts_ema(col('Volume'), 20)), 20), 20), 0.5)"
+      },
+      {
+        "factor": "weekly_b1258507388baa03",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/5c0c529ba6a79690dee1a426c790abfd676fb44123b934eda73225b9c86e343e/weekly_b1258507388baa03.parquet",
+        "etag": "5d00cf201435f4357c5cf79b7685ad7e",
+        "sha256": "5c0c529ba6a79690dee1a426c790abfd676fb44123b934eda73225b9c86e343e",
+        "downloaded_bytes": 11138026,
+        "manifest_sha256": "35e3558548de591e9dda003ad236ff4846051b73628c1d980c7cf3f9cb73067e",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "multiply(rank(neg(ts_days_since_high(col('AdjHigh'), 252))), rank(efficiency_ratio(col('AdjClose'), 20)))"
+      },
+      {
+        "factor": "weekly_da68888feb0a6a1a",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/f0a1d0f61beeb22ddca92b9e2a1908ecd828cc7405dbeeb5ab934bdf8af42f78/weekly_da68888feb0a6a1a.parquet",
+        "etag": "1a7c77d4a8aa17eb61275923b302efec",
+        "sha256": "f0a1d0f61beeb22ddca92b9e2a1908ecd828cc7405dbeeb5ab934bdf8af42f78",
+        "downloaded_bytes": 11137461,
+        "manifest_sha256": "35e3558548de591e9dda003ad236ff4846051b73628c1d980c7cf3f9cb73067e",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "multiply(rank(neg(ts_days_since_high(col('AdjHigh'), 252))), rank(volume_zscore(col('Volume'), 20)))"
+      }
+    ],
+    "days": 500,
+    "assets": 64,
+    "manifest_uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/metadata/35e3558548de591e9dda003ad236ff4846051b73628c1d980c7cf3f9cb73067e/landing_manifest.json",
+    "max_factor_bytes": 16777216,
+    "max_batch_factor_bytes": 134217728,
+    "asset_selection_split": "3e268f1bac7b452f741f0b934f2a0edcf88a677aa982bf2391340da25c0da9e9",
+    "asset_selection_train_days": 267,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "selection": "first eligible bound manifest factor IDs; assets selected on TRAIN coverage only",
+    "limitations": "source-declared lineage; no upstream PIT or investability certification"
+  },
+  "test_evaluated": false,
+  "diagnostics": {
+    "volume_state_persistence": {
+      "selection_portfolio": {
+        "status": "available",
+        "metrics": {
+          "rank_ic": -0.006223682527953789,
+          "rank_icir": -0.031218882037772136,
+          "sharpe": -0.16855674876550356,
+          "max_drawdown": 0.10803999464663844,
+          "turnover": 0.3168257663247874,
+          "worst_block_sharpe": -2.1252605753894054
+        },
+        "reason": null,
+        "periods_per_year": 252,
+        "cost_rate": 0.001,
+        "empty_leg_policy": "signal_cash",
+        "semantics": "costed gross-one stock-equal top/bottom quintiles"
+      },
+      "issues": [
+        {
+          "code": "negative_rank_ic",
+          "families": [
+            "SIGN_ORIENTATION"
+          ],
+          "value": -0.006223682527953786,
+          "threshold": 0.0
+        },
+        {
+          "code": "unstable_ic_direction",
+          "families": [],
+          "value": [
+            0.005805787135232376,
+            -0.010380894622155128,
+            -0.014095940096938608
+          ]
+        },
+        {
+          "code": "negative_worst_block",
+          "families": [],
+          "value": -2.1252605753894054
+        }
+      ],
+      "layer_decay": {
+        "partition": "TRAIN",
+        "status": "unavailable",
+        "lags": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          15,
+          20
+        ],
+        "layers": [],
+        "proposed_half_lives": [],
+        "full_notional_turnover": 0.3168257663247874,
+        "high_turnover": false,
+        "common_days": 0,
+        "coverage": 0.0,
+        "turnover_policy": "signal_cash",
+        "turnover_unavailable_reason": null,
+        "reason": "insufficient complete twenty-layer history"
+      },
+      "partition": "TRAIN",
+      "train_days": 267,
+      "periods_per_year": 252,
+      "rank_ic": -0.006223682527953786,
+      "rank_icir": -0.031218882037772136,
+      "rank_ic_valid_days": 267,
+      "fold_rank_ic": [
+        0.005805787135232376,
+        -0.010380894622155128,
+        -0.014095940096938608
+      ],
+      "complete_quantile_days": 0,
+      "quantile_coverage": 0.0,
+      "minimum_bin_count": 0,
+      "quantile_mean_returns": null,
+      "u_contrast": null,
+      "proposed_shape_family": null,
+      "proposed_center": null,
+      "long_short_sharpe": null,
+      "long_short_max_drawdown": null,
+      "portfolio_semantics": "gross-one top/bottom 5% diagnostic spread; no costs or tradability",
+      "portfolio_unavailable_reason": "insufficient complete 20-bin days"
+    },
+    "weekly_b1258507388baa03": {
+      "selection_portfolio": {
+        "status": "available",
+        "metrics": {
+          "rank_ic": -0.021504189333581798,
+          "rank_icir": -0.10090978793876484,
+          "sharpe": -3.142361508546213,
+          "max_drawdown": 0.27056810263541436,
+          "turnover": 0.5747599349211463,
+          "worst_block_sharpe": -4.7698613555458085
+        },
+        "reason": null,
+        "periods_per_year": 252,
+        "cost_rate": 0.001,
+        "empty_leg_policy": "signal_cash",
+        "semantics": "costed gross-one stock-equal top/bottom quintiles"
+      },
+      "issues": [
+        {
+          "code": "high_turnover",
+          "families": [
+            "CAUSAL_SMOOTHING",
+            "DECAY_REFINEMENT"
+          ],
+          "value": 0.5747599349211463,
+          "threshold": 0.5
+        },
+        {
+          "code": "negative_rank_ic",
+          "families": [
+            "SIGN_ORIENTATION"
+          ],
+          "value": -0.021504189333581808,
+          "threshold": 0.0
+        },
+        {
+          "code": "negative_worst_block",
+          "families": [],
+          "value": -4.7698613555458085
+        }
+      ],
+      "layer_decay": {
+        "partition": "TRAIN",
+        "status": "unavailable",
+        "lags": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          15,
+          20
+        ],
+        "layers": [],
+        "proposed_half_lives": [],
+        "full_notional_turnover": 0.5747599349211463,
+        "high_turnover": true,
+        "common_days": 0,
+        "coverage": 0.0,
+        "turnover_policy": "signal_cash",
+        "turnover_unavailable_reason": null,
+        "reason": "insufficient complete twenty-layer history"
+      },
+      "partition": "TRAIN",
+      "train_days": 267,
+      "periods_per_year": 252,
+      "rank_ic": -0.021504189333581808,
+      "rank_icir": -0.10090978793876484,
+      "rank_ic_valid_days": 267,
+      "fold_rank_ic": [
+        -0.02393726734790017,
+        -0.008312567276425084,
+        -0.03226273337642014
+      ],
+      "complete_quantile_days": 0,
+      "quantile_coverage": 0.0,
+      "minimum_bin_count": 0,
+      "quantile_mean_returns": null,
+      "u_contrast": null,
+      "proposed_shape_family": null,
+      "proposed_center": null,
+      "long_short_sharpe": null,
+      "long_short_max_drawdown": null,
+      "portfolio_semantics": "gross-one top/bottom 5% diagnostic spread; no costs or tradability",
+      "portfolio_unavailable_reason": "insufficient complete 20-bin days"
+    },
+    "weekly_da68888feb0a6a1a": {
+      "selection_portfolio": {
+        "status": "available",
+        "metrics": {
+          "rank_ic": -0.009802598320108718,
+          "rank_icir": -0.044786178866305176,
+          "sharpe": -2.2469830899073355,
+          "max_drawdown": 0.25258252769689504,
+          "turnover": 0.8163640720675405,
+          "worst_block_sharpe": -5.241474445411555
+        },
+        "reason": null,
+        "periods_per_year": 252,
+        "cost_rate": 0.001,
+        "empty_leg_policy": "signal_cash",
+        "semantics": "costed gross-one stock-equal top/bottom quintiles"
+      },
+      "issues": [
+        {
+          "code": "high_turnover",
+          "families": [
+            "CAUSAL_SMOOTHING",
+            "DECAY_REFINEMENT"
+          ],
+          "value": 0.8163640720675405,
+          "threshold": 0.5
+        },
+        {
+          "code": "negative_rank_ic",
+          "families": [
+            "SIGN_ORIENTATION"
+          ],
+          "value": -0.009802598320108723,
+          "threshold": 0.0
+        },
+        {
+          "code": "unstable_ic_direction",
+          "families": [],
+          "value": [
+            0.013352513986621373,
+            -0.01274821475838829,
+            -0.030012094188559248
+          ]
+        },
+        {
+          "code": "negative_worst_block",
+          "families": [],
+          "value": -5.241474445411555
+        }
+      ],
+      "layer_decay": {
+        "partition": "TRAIN",
+        "status": "unavailable",
+        "lags": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          15,
+          20
+        ],
+        "layers": [],
+        "proposed_half_lives": [],
+        "full_notional_turnover": 0.8163640720675405,
+        "high_turnover": true,
+        "common_days": 0,
+        "coverage": 0.0,
+        "turnover_policy": "signal_cash",
+        "turnover_unavailable_reason": null,
+        "reason": "insufficient complete twenty-layer history"
+      },
+      "partition": "TRAIN",
+      "train_days": 267,
+      "periods_per_year": 252,
+      "rank_ic": -0.009802598320108723,
+      "rank_icir": -0.044786178866305176,
+      "rank_ic_valid_days": 267,
+      "fold_rank_ic": [
+        0.013352513986621373,
+        -0.01274821475838829,
+        -0.030012094188559248
+      ],
+      "complete_quantile_days": 0,
+      "quantile_coverage": 0.0,
+      "minimum_bin_count": 0,
+      "quantile_mean_returns": null,
+      "u_contrast": null,
+      "proposed_shape_family": null,
+      "proposed_center": null,
+      "long_short_sharpe": null,
+      "long_short_max_drawdown": null,
+      "portfolio_semantics": "gross-one top/bottom 5% diagnostic spread; no costs or tradability",
+      "portfolio_unavailable_reason": "insufficient complete 20-bin days"
+    }
+  },
+  "automatic": {
+    "volume_state_persistence": {
+      "status": "raw_retained",
+      "selected_family": "NO_OP_RAW",
+      "train_gain": 0.647006786621624,
+      "validation_lower_bound": null,
+      "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+      "plan_identity": "d8eb4d22602fd842f44685887784dbb02c0111f3be9f7382511190a02933eb2f",
+      "baseline_diagnostics": {
+        "operations": [
+          "winsor",
+          "cs_rank"
+        ],
+        "omissions": [
+          "neutralization_missing_exposures"
+        ],
+        "accepted": true,
+        "reason": "no_substantial_training_degradation",
+        "coverage": 1.0,
+        "valid_days": 267,
+        "upper_bound": -0.0,
+        "maximum_loss": 0.01,
+        "joint_policy": "joint.v1",
+        "joint_raw": {
+          "rank_ic": -0.006223682527953789,
+          "rank_icir": -0.031218882037772136,
+          "sharpe": -0.16855674876550356,
+          "max_drawdown": 0.10803999464663844,
+          "turnover": 0.3168257663247874,
+          "worst_block_sharpe": -2.1252605753894054
+        },
+        "joint_candidate": {
+          "rank_ic": -0.006223682527953789,
+          "rank_icir": -0.031218882037772136,
+          "sharpe": -0.16855674876550356,
+          "max_drawdown": 0.10803999464663844,
+          "turnover": 0.3168257663247874,
+          "worst_block_sharpe": -2.1252605753894054
+        }
+      },
+      "joint_diagnostics": {
+        "objective": "joint",
+        "empty_leg_policy": "signal_cash",
+        "cost_rate": 0.001,
+        "policy": "joint.v1",
+        "baseline_train_raw": {
+          "rank_ic": -0.006223682527953789,
+          "rank_icir": -0.031218882037772136,
+          "sharpe": -0.16855674876550356,
+          "max_drawdown": 0.10803999464663844,
+          "turnover": 0.3168257663247874,
+          "worst_block_sharpe": -2.1252605753894054
+        },
+        "baseline_train_candidate": {
+          "rank_ic": -0.006223682527953789,
+          "rank_icir": -0.031218882037772136,
+          "sharpe": -0.16855674876550356,
+          "max_drawdown": 0.10803999464663844,
+          "turnover": 0.3168257663247874,
+          "worst_block_sharpe": -2.1252605753894054
+        },
+        "validation_raw": {
+          "rank_ic": -0.015255477022402333,
+          "rank_icir": -0.08438164629188102,
+          "sharpe": -0.14104587478123734,
+          "max_drawdown": 0.06396246092919332,
+          "turnover": 0.3372818599672918,
+          "worst_block_sharpe": -3.1130178066493333
+        },
+        "validation_candidate": {
+          "rank_ic": 0.0027649415992051494,
+          "rank_icir": 0.016130458923328844,
+          "sharpe": 0.14926180363275357,
+          "max_drawdown": 0.057913755367346734,
+          "turnover": 0.09595559080095162,
+          "worst_block_sharpe": -3.8011667173281336
+        },
+        "comparison_status": "DEGRADATION_FLOOR_FAILED"
+      },
+      "candidate_count": 103,
+      "candidate_families": {
+        "ABANDON": 1,
+        "DECAY_REFINEMENT": 8,
+        "INDUSTRY_NEUTRALIZATION": 1,
+        "INVERTED_U_REPAIR": 6,
+        "LOW_DOF_INTERACTION": 1,
+        "MISSINGNESS_FRESHNESS": 4,
+        "OPERATOR_SWAP": 1,
+        "REPRESENTATION_RANK": 6,
+        "REPRESENTATION_ZSCORE": 4,
+        "ROBUST_OUTLIER": 1,
+        "ROBUST_SCALE": 1,
+        "SIGN_ORIENTATION": 1,
+        "SIZE_NEUTRALIZATION": 1,
+        "STYLE_NEUTRALIZATION": 1,
+        "TAIL_HINGE": 2,
+        "TAIL_SATURATION": 3,
+        "U_SHAPE_REPAIR": 6,
+        "WINDOW_REFINEMENT": 1,
+        "CAUSAL_SMOOTHING": 54
+      }
+    },
+    "weekly_b1258507388baa03": {
+      "status": "raw_retained",
+      "selected_family": "NO_OP_RAW",
+      "train_gain": 1.2146452343867158,
+      "validation_lower_bound": -0.6244872414717851,
+      "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+      "plan_identity": "3c08b8c22d6d3583f1a02211cc8b0cdd0cd0e1520224e9e24215f41605cda4ca",
+      "baseline_diagnostics": {
+        "operations": [],
+        "omissions": [
+          "lineage_unknown",
+          "cs_rank_already_present"
+        ],
+        "accepted": false,
+        "reason": "no_eligible_baseline_operations"
+      },
+      "joint_diagnostics": {
+        "objective": "joint",
+        "empty_leg_policy": "signal_cash",
+        "cost_rate": 0.001,
+        "policy": "joint.v1",
+        "validation_raw": {
+          "rank_ic": -0.00907233675548929,
+          "rank_icir": -0.038137334932196176,
+          "sharpe": -2.5602031495352535,
+          "max_drawdown": 0.12125215893111296,
+          "turnover": 0.6257445589919816,
+          "worst_block_sharpe": -6.161528877772981
+        },
+        "validation_candidate": {
+          "rank_ic": 0.010062759398125003,
+          "rank_icir": 0.05068210208320594,
+          "sharpe": 0.3439537764186517,
+          "max_drawdown": 0.04856580888259101,
+          "turnover": 0.14855179185076092,
+          "worst_block_sharpe": -1.5645912114015403
+        },
+        "comparison_status": "TRADE_OFF"
+      },
+      "candidate_count": 103,
+      "candidate_families": {
+        "ABANDON": 1,
+        "DECAY_REFINEMENT": 8,
+        "INDUSTRY_NEUTRALIZATION": 1,
+        "INVERTED_U_REPAIR": 6,
+        "LOW_DOF_INTERACTION": 1,
+        "MISSINGNESS_FRESHNESS": 4,
+        "OPERATOR_SWAP": 1,
+        "REPRESENTATION_RANK": 6,
+        "REPRESENTATION_ZSCORE": 4,
+        "ROBUST_OUTLIER": 1,
+        "ROBUST_SCALE": 1,
+        "SIGN_ORIENTATION": 1,
+        "SIZE_NEUTRALIZATION": 1,
+        "STYLE_NEUTRALIZATION": 1,
+        "TAIL_HINGE": 2,
+        "TAIL_SATURATION": 3,
+        "U_SHAPE_REPAIR": 6,
+        "WINDOW_REFINEMENT": 1,
+        "CAUSAL_SMOOTHING": 54
+      }
+    },
+    "weekly_da68888feb0a6a1a": {
+      "status": "raw_retained",
+      "selected_family": "NO_OP_RAW",
+      "train_gain": 1.1669812930706671,
+      "validation_lower_bound": -0.10768983314448675,
+      "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+      "plan_identity": "06303ce0a99a340757f0f6e2f56006ff4dfe578f16568b6be293431c47c0cb2e",
+      "baseline_diagnostics": {
+        "operations": [],
+        "omissions": [
+          "lineage_unknown",
+          "cs_rank_already_present"
+        ],
+        "accepted": false,
+        "reason": "no_eligible_baseline_operations"
+      },
+      "joint_diagnostics": {
+        "objective": "joint",
+        "empty_leg_policy": "signal_cash",
+        "cost_rate": 0.001,
+        "policy": "joint.v1",
+        "validation_raw": {
+          "rank_ic": -0.03926640886238359,
+          "rank_icir": -0.1771975462777134,
+          "sharpe": -4.033930950823989,
+          "max_drawdown": 0.14103243688789574,
+          "turnover": 0.8386884306987398,
+          "worst_block_sharpe": -8.853288824643048
+        },
+        "validation_candidate": {
+          "rank_ic": 0.015589557904483367,
+          "rank_icir": 0.07016480702256096,
+          "sharpe": 0.9929469878318967,
+          "max_drawdown": 0.06933804284117655,
+          "turnover": 0.12760595647193584,
+          "worst_block_sharpe": -4.264896998466079
+        },
+        "comparison_status": "TRADE_OFF"
+      },
+      "candidate_count": 103,
+      "candidate_families": {
+        "ABANDON": 1,
+        "DECAY_REFINEMENT": 8,
+        "INDUSTRY_NEUTRALIZATION": 1,
+        "INVERTED_U_REPAIR": 6,
+        "LOW_DOF_INTERACTION": 1,
+        "MISSINGNESS_FRESHNESS": 4,
+        "OPERATOR_SWAP": 1,
+        "REPRESENTATION_RANK": 6,
+        "REPRESENTATION_ZSCORE": 4,
+        "ROBUST_OUTLIER": 1,
+        "ROBUST_SCALE": 1,
+        "SIGN_ORIENTATION": 1,
+        "SIZE_NEUTRALIZATION": 1,
+        "STYLE_NEUTRALIZATION": 1,
+        "TAIL_HINGE": 2,
+        "TAIL_SATURATION": 3,
+        "U_SHAPE_REPAIR": 6,
+        "WINDOW_REFINEMENT": 1,
+        "CAUSAL_SMOOTHING": 54
+      }
+    }
+  },
+  "selection_objective": "joint.v1: Sharpe, RankICIR, RankIC, drawdown, worst-block Sharpe, turnover",
+  "sampling_failure_256_assets": {
+    "status": "rejected",
+    "reason": "insufficient TRAIN-covered assets",
+    "eligible_90pct_per_factor": [
+      5081,
+      66,
+      66
+    ],
+    "coverage_threshold_unchanged": 0.9
+  }
+}

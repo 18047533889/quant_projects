@@ -81,3 +81,47 @@ def test_loaded_cos_universe_uses_purged_training_not_warmup(monkeypatch):
     assert len(split.train_indices) == 267
     assert provenance["asset_selection_split"] == split.identity
     assert provenance["asset_selection_train_days"] == 267
+
+def test_cli_exposes_bounded_manifest_sampling():
+    import subprocess
+    import sys
+    result = subprocess.run([sys.executable, str(Path(example.__file__)), "--help"],
+                            capture_output=True, text=True, check=True)
+    assert "--manifest" in result.stdout
+    assert "--factors" in result.stdout
+    assert "--max-factor-mib" in result.stdout
+
+
+def test_larger_factors_are_opt_in_and_total_download_is_bounded():
+    sha = "c" * 64
+    records = {f"f{i}": dict(uri=f"{example.POOL}/{sha}/f{i}.parquet", sha256=sha,
+                           bytes=48*1024**2, verified=True,
+                           status="evaluated_optimization_pending") for i in range(3)}
+    with pytest.raises(ValueError, match="eligible"):
+        example.select_manifest_records([{"factors": records}], 1)
+    selected = example.select_manifest_records([{"factors": records}], 2,
+                                               max_factor_bytes=64*1024**2)
+    assert [name for name, _ in selected] == ["f0", "f1"]
+    with pytest.raises(ValueError, match="batch"):
+        example.select_manifest_records([{"factors": records}], 3,
+                                        max_factor_bytes=64*1024**2)
+
+
+@pytest.mark.parametrize("uri", [
+    "cos://other/metadata/" + "a"*64 + "/landing_manifest.json",
+    example.MANIFEST + "/../landing_manifest.json",
+    example.MANIFEST + "/landing_manifest.json?token=secret",
+    "/tmp/landing_manifest.json",
+])
+def test_manifest_selection_rejects_out_of_pool_before_io(monkeypatch, uri):
+    def forbidden(*args, **kwargs):
+        pytest.fail("invalid manifest must not construct a data engine")
+    monkeypatch.setattr(example, "DuckDBEngine", forbidden)
+    with pytest.raises(ValueError, match="manifest"):
+        example.load_cos_sample(manifest_uri=uri)
+
+
+@pytest.mark.parametrize("cap", [True, 0, -1, 65*1024**2, 1.5])
+def test_factor_budget_cannot_exceed_existing_dataaccess_cap(cap):
+    with pytest.raises(ValueError, match="max_factor_bytes"):
+        example.select_manifest_records([{"factors": {}}], 1, max_factor_bytes=cap)
