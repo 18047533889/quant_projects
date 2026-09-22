@@ -77,8 +77,13 @@ def choose_assets(panels, train_dates, n_assets=512):
 
 
 def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
-                    manifest_uri=None, max_factor_bytes=8*1024**2):
+                    manifest_uri=None, max_factor_bytes=8*1024**2,
+                    coverage_policy="isolate"):
     _validate_sample_limits(n_factors, max_factor_bytes)
+    if coverage_policy not in {"isolate", "strict"}:
+        raise ValueError("coverage_policy must be isolate or strict")
+    if type(n_assets) is not int or n_assets < 1:
+        raise ValueError("n_assets must be a positive integer")
     manifest_uri = MANIFEST + "/landing_manifest.json" if manifest_uri is None else manifest_uri
     prefix = POOL.rsplit("/", 1)[0] + "/metadata/"
     if (not isinstance(manifest_uri, str) or not re.fullmatch(
@@ -140,7 +145,25 @@ def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
     selection_split = automatic_time_split(SimpleNamespace(
         decision_time=tuple(dates.to_numpy(dtype="datetime64[ns]")),
         label_end_time=tuple(calendar[pos+2].to_numpy(dtype="datetime64[ns]"))))
-    assets = choose_assets(panels, dates[list(selection_split.train_indices)], n_assets)
+    train_dates = dates[list(selection_split.train_indices)]
+    quarantined, retained, factor_coverage = [], [], {}
+    for factor_id, panel in zip(factor_ids, panels):
+        coverage = np.isfinite(panel.reindex(train_dates).to_numpy()).mean(axis=0)
+        eligible_count = int((coverage >= .90).sum())
+        factor_coverage[factor_id] = eligible_count
+        if coverage_policy == "isolate" and eligible_count < n_assets:
+            quarantined.append({"factor": factor_id, "eligible_assets": eligible_count,
+                                "required_assets": n_assets,
+                                "reason": "insufficient_training_coverage"})
+        else:
+            retained.append((factor_id, panel))
+    if not retained:
+        raise ValueError("all requested factors lack sufficient TRAIN-covered assets: "
+                         + json.dumps(quarantined, sort_keys=True))
+    factor_ids = tuple(name for name, _ in retained)
+    panels = [panel for _, panel in retained]
+    lineages = {name: lineages[name] for name in factor_ids}
+    assets = choose_assets(panels, train_dates, n_assets)
     prices = _load_vwap(calendar.min(), calendar.max(), assets).reindex(calendar)
     pos = calendar.get_indexer(dates)
     vwap = prices.to_numpy()
@@ -158,6 +181,10 @@ def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
         validity=np.isfinite(y), asset_axis=aa, source_ref="data_access:ashare_stock_daily_adj:AdjVwap",
         calendar_ref=str(DAILY_ADJ))
     provenance = {"sources": sources, "days": len(times), "assets": len(assets),
+        "coverage_policy": coverage_policy,
+        "retained_factor_ids": list(factor_ids),
+        "quarantined_factors": quarantined,
+        "train_eligible_assets": factor_coverage,
         "manifest_uri": manifest_uri,
         "max_factor_bytes": max_factor_bytes,
         "max_batch_factor_bytes": 128*1024**2,
@@ -176,12 +203,15 @@ def main():
     parser.add_argument("--manifest", default=None, help="exact in-pool landing_manifest.json COS URI")
     parser.add_argument("--factors", type=int, default=2, help="deterministic factor sample, 1..16")
     parser.add_argument("--assets", type=int, default=256, help="TRAIN-covered asset count")
+    parser.add_argument("--coverage-policy", choices=("isolate", "strict"), default="isolate",
+                        help="isolate individually low-coverage factors or reject the whole sample")
     parser.add_argument("--max-factor-mib", type=int, choices=range(1, 65), default=8,
                         help="per-factor admission cap; total factor objects capped at 128 MiB")
     args = parser.parse_args()
     batch, labels, provenance, lineages = load_cos_sample(
         n_factors=args.factors, n_assets=args.assets, include_lineages=True,
-        manifest_uri=args.manifest, max_factor_bytes=args.max_factor_mib*1024**2)
+        manifest_uri=args.manifest, max_factor_bytes=args.max_factor_mib*1024**2,
+        coverage_policy=args.coverage_policy)
     report = {"inputs": provenance, "test_evaluated": False,
               "diagnostics": diagnose_training_batch(batch, labels)}
     if args.optimize:

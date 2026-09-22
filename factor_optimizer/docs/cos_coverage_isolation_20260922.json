@@ -1,0 +1,241 @@
+{
+  "inputs": {
+    "sources": [
+      {
+        "factor": "volume_state_persistence",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/b53888213fe77c90f14e1ed9eaa817751c2d9c4525ec1db5e30968a2c14f7b19/volume_state_persistence.parquet",
+        "etag": "e12c21299e1383210f74da6ace302dec",
+        "sha256": "b53888213fe77c90f14e1ed9eaa817751c2d9c4525ec1db5e30968a2c14f7b19",
+        "downloaded_bytes": 10146498,
+        "manifest_sha256": "35e3558548de591e9dda003ad236ff4846051b73628c1d980c7cf3f9cb73067e",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "fillna_const(divide(ts_sum(gt(col('Volume'), ts_ema(col('Volume'), 20)), 20), 20), 0.5)"
+      },
+      {
+        "factor": "weekly_b1258507388baa03",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/5c0c529ba6a79690dee1a426c790abfd676fb44123b934eda73225b9c86e343e/weekly_b1258507388baa03.parquet",
+        "etag": "5d00cf201435f4357c5cf79b7685ad7e",
+        "sha256": "5c0c529ba6a79690dee1a426c790abfd676fb44123b934eda73225b9c86e343e",
+        "downloaded_bytes": 11138026,
+        "manifest_sha256": "35e3558548de591e9dda003ad236ff4846051b73628c1d980c7cf3f9cb73067e",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "multiply(rank(neg(ts_days_since_high(col('AdjHigh'), 252))), rank(efficiency_ratio(col('AdjClose'), 20)))"
+      },
+      {
+        "factor": "weekly_da68888feb0a6a1a",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/f0a1d0f61beeb22ddca92b9e2a1908ecd828cc7405dbeeb5ab934bdf8af42f78/weekly_da68888feb0a6a1a.parquet",
+        "etag": "1a7c77d4a8aa17eb61275923b302efec",
+        "sha256": "f0a1d0f61beeb22ddca92b9e2a1908ecd828cc7405dbeeb5ab934bdf8af42f78",
+        "downloaded_bytes": 11137461,
+        "manifest_sha256": "35e3558548de591e9dda003ad236ff4846051b73628c1d980c7cf3f9cb73067e",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "multiply(rank(neg(ts_days_since_high(col('AdjHigh'), 252))), rank(volume_zscore(col('Volume'), 20)))"
+      }
+    ],
+    "days": 500,
+    "assets": 256,
+    "coverage_policy": "isolate",
+    "retained_factor_ids": [
+      "volume_state_persistence"
+    ],
+    "quarantined_factors": [
+      {
+        "factor": "weekly_b1258507388baa03",
+        "eligible_assets": 66,
+        "required_assets": 256,
+        "reason": "insufficient_training_coverage"
+      },
+      {
+        "factor": "weekly_da68888feb0a6a1a",
+        "eligible_assets": 66,
+        "required_assets": 256,
+        "reason": "insufficient_training_coverage"
+      }
+    ],
+    "train_eligible_assets": {
+      "volume_state_persistence": 5081,
+      "weekly_b1258507388baa03": 66,
+      "weekly_da68888feb0a6a1a": 66
+    },
+    "manifest_uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/metadata/35e3558548de591e9dda003ad236ff4846051b73628c1d980c7cf3f9cb73067e/landing_manifest.json",
+    "max_factor_bytes": 16777216,
+    "max_batch_factor_bytes": 134217728,
+    "asset_selection_split": "3e268f1bac7b452f741f0b934f2a0edcf88a677aa982bf2391340da25c0da9e9",
+    "asset_selection_train_days": 267,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "selection": "first eligible bound manifest factor IDs; assets selected on TRAIN coverage only",
+    "limitations": "source-declared lineage; no upstream PIT or investability certification"
+  },
+  "test_evaluated": false,
+  "diagnostics": {
+    "volume_state_persistence": {
+      "selection_portfolio": {
+        "status": "available",
+        "metrics": {
+          "rank_ic": -0.035372179018154724,
+          "rank_icir": -0.2873701641852879,
+          "sharpe": -1.1449352239722292,
+          "max_drawdown": 0.21706197728762452,
+          "turnover": 0.2828611552301901,
+          "worst_block_sharpe": -2.8012823868011636
+        },
+        "reason": null,
+        "periods_per_year": 252,
+        "cost_rate": 0.001,
+        "empty_leg_policy": "signal_cash",
+        "semantics": "costed gross-one stock-equal top/bottom quintiles"
+      },
+      "issues": [
+        {
+          "code": "negative_rank_ic",
+          "families": [
+            "SIGN_ORIENTATION"
+          ],
+          "value": -0.035372179018154724,
+          "threshold": 0.0
+        },
+        {
+          "code": "negative_worst_block",
+          "families": [],
+          "value": -2.8012823868011636
+        }
+      ],
+      "layer_decay": {
+        "partition": "TRAIN",
+        "status": "unavailable",
+        "lags": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          15,
+          20
+        ],
+        "layers": [],
+        "proposed_half_lives": [],
+        "full_notional_turnover": 0.2828611552301901,
+        "high_turnover": false,
+        "common_days": 0,
+        "coverage": 0.0,
+        "turnover_policy": "signal_cash",
+        "turnover_unavailable_reason": null,
+        "reason": "insufficient complete twenty-layer history"
+      },
+      "partition": "TRAIN",
+      "train_days": 267,
+      "periods_per_year": 252,
+      "rank_ic": -0.035372179018154724,
+      "rank_icir": -0.2873701641852879,
+      "rank_ic_valid_days": 267,
+      "fold_rank_ic": [
+        -0.03142267347804592,
+        -0.04195782912779212,
+        -0.03273603444862615
+      ],
+      "complete_quantile_days": 0,
+      "quantile_coverage": 0.0,
+      "minimum_bin_count": 0,
+      "quantile_mean_returns": null,
+      "u_contrast": null,
+      "proposed_shape_family": null,
+      "proposed_center": null,
+      "long_short_sharpe": null,
+      "long_short_max_drawdown": null,
+      "portfolio_semantics": "gross-one top/bottom 5% diagnostic spread; no costs or tradability",
+      "portfolio_unavailable_reason": "insufficient complete 20-bin days"
+    }
+  },
+  "automatic": {
+    "volume_state_persistence": {
+      "status": "raw_retained",
+      "selected_family": "NO_OP_RAW",
+      "train_gain": 1.131438313515187,
+      "validation_lower_bound": null,
+      "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+      "plan_identity": "dcae64ec0f19b9d7efb06b62f52ae28f05996b992eae11cffe6dd63c9f6078d2",
+      "baseline_diagnostics": {
+        "operations": [
+          "winsor",
+          "cs_rank"
+        ],
+        "omissions": [
+          "neutralization_missing_exposures"
+        ],
+        "accepted": true,
+        "reason": "no_substantial_training_degradation",
+        "coverage": 1.0,
+        "valid_days": 267,
+        "upper_bound": 2.4092976277148847e-05,
+        "maximum_loss": 0.01,
+        "joint_policy": "joint.v1",
+        "joint_raw": {
+          "rank_ic": -0.035372179018154724,
+          "rank_icir": -0.2873701641852879,
+          "sharpe": -1.1449352239722292,
+          "max_drawdown": 0.21706197728762452,
+          "turnover": 0.2828611552301901,
+          "worst_block_sharpe": -2.8012823868011636
+        },
+        "joint_candidate": {
+          "rank_ic": -0.03537193705303205,
+          "rank_icir": -0.28737276998732797,
+          "sharpe": -1.1449352239722292,
+          "max_drawdown": 0.21706197728762452,
+          "turnover": 0.2828611552301901,
+          "worst_block_sharpe": -2.8012823868011636
+        }
+      },
+      "joint_diagnostics": {
+        "objective": "joint",
+        "empty_leg_policy": "signal_cash",
+        "cost_rate": 0.001,
+        "policy": "joint.v1",
+        "baseline_train_raw": {
+          "rank_ic": -0.035372179018154724,
+          "rank_icir": -0.2873701641852879,
+          "sharpe": -1.1449352239722292,
+          "max_drawdown": 0.21706197728762452,
+          "turnover": 0.2828611552301901,
+          "worst_block_sharpe": -2.8012823868011636
+        },
+        "baseline_train_candidate": {
+          "rank_ic": -0.03537193705303205,
+          "rank_icir": -0.28737276998732797,
+          "sharpe": -1.1449352239722292,
+          "max_drawdown": 0.21706197728762452,
+          "turnover": 0.2828611552301901,
+          "worst_block_sharpe": -2.8012823868011636
+        },
+        "validation_raw": {
+          "rank_ic": -0.009527641175939414,
+          "rank_icir": -0.0683020348694429,
+          "sharpe": 0.9920052714570715,
+          "max_drawdown": 0.038238608145259756,
+          "turnover": 0.2553628990858408,
+          "worst_block_sharpe": -1.1960033023843581
+        },
+        "validation_candidate": {
+          "rank_ic": 0.00950061371125415,
+          "rank_icir": 0.06811486988460454,
+          "sharpe": -1.1779486345185184,
+          "max_drawdown": 0.05809906018313636,
+          "turnover": 0.2618270585192601,
+          "worst_block_sharpe": -2.903357897030219
+        },
+        "comparison_status": "DEGRADATION_FLOOR_FAILED"
+      },
+      "candidate_count": 103
+    }
+  },
+  "selection_objective": "joint.v1: Sharpe, RankICIR, RankIC, drawdown, worst-block Sharpe, turnover"
+}

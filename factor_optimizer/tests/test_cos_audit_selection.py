@@ -45,7 +45,8 @@ def test_cos_universe_invalid_size_is_rejected(n_assets):
     with pytest.raises(ValueError, match="positive integer"):
         example.choose_assets([p], p.index, n_assets=n_assets)
 
-def test_loaded_cos_universe_uses_purged_training_not_warmup(monkeypatch):
+@pytest.mark.parametrize("coverage_case", ["single", "sparse", "future_missing", "all_missing"])
+def test_loaded_cos_universe_uses_purged_training_not_warmup(monkeypatch, coverage_case):
     # Defect: using the first 300 dates rewards warmup coverage and selects b,
     # although a has better coverage on the optimizer's actual training dates.
     from types import SimpleNamespace
@@ -63,19 +64,46 @@ def test_loaded_cos_universe_uses_purged_training_not_warmup(monkeypatch):
     sha = "a" * 64
     record = dict(uri=f"{example.POOL}/{sha}/test.parquet", sha256=sha,
                   bytes=100, verified=True, status="evaluated_optimization_pending")
+    records = {"test": record}
+    if coverage_case != "single":
+        records["sparse"] = dict(record, uri=f"{example.POOL}/{sha}/sparse.parquet")
     monkeypatch.setattr(example, "read_declared_cos_object",
-        lambda *a, **k: SimpleNamespace(table=pa.Table.from_pylist([{"factors": {"test": record}}])))
-    bound = SimpleNamespace(
-        factor=SimpleNamespace(table=pa.Table.from_pandas(panel), source_uri=record["uri"],
+        lambda *a, **k: SimpleNamespace(table=pa.Table.from_pylist([{"factors": records}])))
+    def bound_read(*args, **kwargs):
+        name = args[-1]
+        values = panel.copy()
+        if coverage_case == "all_missing" or (name == "sparse" and coverage_case == "sparse"):
+            values[["a.SZ", "b.SZ"]] = np.nan
+        elif name == "sparse" and coverage_case == "future_missing":
+            values.loc[values.timestamp >= dates[300], ["a.SZ", "b.SZ"]] = np.nan
+        return SimpleNamespace(
+        factor=SimpleNamespace(table=pa.Table.from_pandas(values), source_uri=records[name]["uri"],
                                source_etag="test", content_sha256=sha, downloaded_bytes=100),
         treatment_signature=TransformLineage(()), manifest_sha256="b"*64,
         source_status=record["status"], expression="col('Volume')")
-    monkeypatch.setattr(example, "read_bound_factor", lambda *a, **k: bound)
+    monkeypatch.setattr(example, "read_bound_factor", bound_read)
     monkeypatch.setattr(real_batch_audit, "DAILY_ADJ",
         SimpleNamespace(glob=lambda _: [Path(str(d.date()) + ".parquet") for d in calendar]))
     monkeypatch.setattr(real_batch_audit, "_load_vwap",
         lambda start, end, assets: pd.DataFrame(100., index=calendar, columns=assets))
-    batch, labels, provenance = example.load_cos_sample(n_factors=1, n_assets=1)
+    if coverage_case == "all_missing":
+        with pytest.raises(ValueError, match="all requested factors"):
+            example.load_cos_sample(n_factors=len(records), n_assets=1)
+        return
+    batch, labels, provenance, lineages = example.load_cos_sample(
+        n_factors=len(records), n_assets=1, include_lineages=True)
+    expected_ids = ("sparse", "test") if coverage_case == "future_missing" else ("test",)
+    assert batch.factor_ids == expected_ids
+    assert set(lineages) == set(expected_ids)
+    if coverage_case == "sparse":
+        assert provenance["quarantined_factors"] == [{"factor": "sparse",
+            "eligible_assets": 0, "required_assets": 1,
+            "reason": "insufficient_training_coverage"}]
+        assert len(provenance["sources"]) == 2
+        with pytest.raises(ValueError, match="TRAIN-covered"):
+            example.load_cos_sample(n_factors=2, n_assets=1, coverage_policy="strict")
+    elif coverage_case == "future_missing":
+        assert provenance["quarantined_factors"] == []
     assert list(batch.asset_axis.values) == ["a.SZ"]
     split = automatic_time_split(labels)
     assert len(split.train_indices) == 267

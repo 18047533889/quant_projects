@@ -1,5 +1,9 @@
 # 可指定 COS 清单的真实批量审查入口
 
+更新：默认已改为按 TRAIN 覆盖隔离不合格因子，见
+[覆盖隔离说明](COS_COVERAGE_ISOLATION.md)。下文的 256 资产整批拒绝为修复前历史，
+现在使用 --coverage-policy strict 可重现；默认继续处理合格因子，不降低门槛。
+
 ## 使用
 在 server-c /home/sunhaiwei/quant_projects 使用已有 DataAccess COS 配置：
 
