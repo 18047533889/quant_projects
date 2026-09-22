@@ -71,7 +71,7 @@ def test_update_time_role_is_ingestion_time_not_knowledge():
     # update_time is deliberately reused by name across the four financial
     # statements (and StockDailyBar), so the bare name is ambiguous; resolve
     # within the daily-bar table.
-    spec = FIELD_REGISTRY.get("update_time", table="StockDailyBar")
+    spec = FIELD_REGISTRY.get("update_time", table="StockDailyBarAdj")
     assert spec is not None
     assert spec.role == "ingestion_time"
     assert spec.mining_allowed is False  # freshness-only, never a mined feature
@@ -82,24 +82,11 @@ def test_price_fields_adjustment_status_declared():
     （backward multiplier）；复权表 StockDailyBarAdj 的 OHLCV/limit 声明
     BACKWARD_ADJUSTED price basis（权威口径）；未复权 StockDailyBar 仍声明 RAW。pre_close
     在复权表声明 BACKWARD_ADJUSTED / 未复权表声明 official-reference。"""
-    for logical, expected_status, expected_basis in (
-        ("open", "raw", "RAW"),
-        ("high", "raw", "RAW"),
-        ("low", "raw", "RAW"),
-        ("close", "raw", "RAW"),
-        ("vwap", "raw", "RAW"),
-        ("pre_close", "official_reference_pre_close", "OFFICIAL_REFERENCE_PRE_CLOSE"),
-        ("volume", "raw", None),
-    ):
-        # 未复权行情的 RAW 声明仍保留（Factor/Volume/上游 LQTP 用途）。
-        spec = FIELD_REGISTRY.get(logical, table="StockDailyBar")
-        assert spec is not None, logical
-        assert spec.adjustment is None, logical
-        assert spec.metadata.get("adjustment_status") == expected_status, logical
-        if expected_basis is None:
-            assert spec.price_basis is None or spec.price_basis == "RAW", logical
-        else:
-            assert spec.price_basis == expected_basis, logical
+    # R64: raw (unadjusted) tables are fail-closed - per-field RAW declarations
+    # were removed together with the raw table registrations.  Resolution on
+    # the raw table must fail; the *_adj authority table is the only surface.
+    for logical in ("open", "high", "low", "close", "vwap", "pre_close", "volume"):
+        assert FIELD_REGISTRY.get(logical, table="StockDailyBar") is None, logical
     # 复权权威口径：StockDailyBarAdj 同 logical 名声明 BACKWARD_ADJUSTED。
     for logical, source in (
         ("open", "AdjOpen"),
@@ -119,7 +106,7 @@ def test_price_fields_adjustment_status_declared():
 def test_factor_direction_is_verified_backward_multiplier():
     """R17-010: the A-share Factor contract is a VERIFIED backward cumulative
     multiplier (continuous_price = raw_price * Factor), not ``unverified``."""
-    spec = FIELD_REGISTRY.get("adj_factor", table="StockDailyBar")
+    spec = FIELD_REGISTRY.get("adj_factor", table="StockDailyBarAdj")
     assert spec is not None
     assert spec.metadata.get("direction") == "backward_multiplier"
     assert spec.metadata.get("note", "") == "continuous_price = raw_price * Factor (verified; R17-010)"

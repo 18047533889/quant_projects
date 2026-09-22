@@ -31,7 +31,21 @@ def _legacy_active(registry: FieldRegistry | None) -> FieldRegistry:
     return FIELD_REGISTRY
 
 
-def _resolve_in(active: FieldRegistry, value: Any, *, table: str | None, strict: bool) -> FieldSpec | None:
+_R64_ADJ_TABLE_ALIAS = {"StockDailyBar": "StockDailyBarAdj",
+                        "StockMinuteBar": "StockMinuteBarAdj"}
+
+
+def _r64_adj_table_name(t: str | None) -> str | None:
+    """R64: rewrite raw (unadjusted) table names onto the adj authority."""
+    if t is None:
+        return None
+    return _R64_ADJ_TABLE_ALIAS.get(t, t)
+
+
+def _resolve_in(
+    active: FieldRegistry, value: Any, *, table: str | None, strict: bool,
+    rewrite_table=None,
+) -> FieldSpec | None:
     """Shared decode+lookup against one explicit registry."""
     if table is None:
         table = getattr(value, "table", None)
@@ -49,8 +63,16 @@ def _resolve_in(active: FieldRegistry, value: Any, *, table: str | None, strict:
     except (ImportError, ValueError, TypeError):
         source = None
     if source is not None:
-        return active.get(source.field, table=source.table, strict=strict)
-    return active.get(name, table=table, strict=strict)
+        t = rewrite_table(source.table) if rewrite_table is not None else source.table
+        return active.get(source.field, table=t, strict=strict)
+    t = rewrite_table(table) if rewrite_table is not None else table
+    # R64_COMPOUND_REWRITE: decode may decline dotted refs; split them
+    # here so the raw->adj table rewrite still applies.
+    if rewrite_table is not None and isinstance(name, str) and "." in name:
+        _tbl, _sep, _fld = name.rpartition(".")
+        if _tbl and _fld:
+            return active.get(_fld, table=rewrite_table(_tbl), strict=strict)
+    return active.get(name, table=t, strict=strict)
 
 
 def resolve_field(
@@ -135,7 +157,10 @@ def resolve_market_field(
     from .market_registry import MULTI_MARKET_FIELD_REGISTRY
 
     reg = MULTI_MARKET_FIELD_REGISTRY.registry_for(market)
-    spec = _resolve_in(reg, value, table=table, strict=strict)
+    # R64: A-share raw (unadjusted) tables are fail-closed; references to
+    # them resolve onto the *_adj authority tables.  US tables stay raw.
+    rewrite = _r64_adj_table_name if market == "ashare" else None
+    spec = _resolve_in(reg, value, table=table, strict=strict, rewrite_table=rewrite)
     if spec is None:
         if strict:
             raise KeyError(

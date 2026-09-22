@@ -605,6 +605,29 @@ class DataAccessStore:
     def access_policy(self) -> Any:
         return self._access_policy
 
+    def _r64_forbidden_raw_datasets(self) -> set:
+        """R64: raw siblings of registered ``*_adj`` stock tables (fail-closed).
+
+        Platform decision (2026-09): the ``*_adj`` authority tables are the ONLY
+        factor data source — adjustment happens at generation, and FactorEngine
+        never divides volume by Factor.  The unadjusted siblings are derived
+        from the live registry (not hardcoded) and denied for reads.
+        """
+        try:
+            names = set(self._registry.names())
+        except Exception:
+            names = set()
+            try:
+                for _name in self._registry:
+                    names.add(_name)
+            except Exception:
+                return set()
+        out = set()
+        for name in names:
+            if isinstance(name, str) and name.endswith("_adj") and "stock" in name:
+                out.add(name[: -len("_adj")])
+        return out
+
     def authorize_dataset(
         self,
         dataset: str,
@@ -621,6 +644,20 @@ class DataAccessStore:
         R26-P0-005：优先消费当前 request-scoped 执行上下文的 authorizer/principal
         （HTTP 嵌套读自动继承），无上下文才回退 store 级（process 默认）。
         """
+        # R64: fail-closed ADJ-only lock — raw (unadjusted) A-share stock
+        # tables are forbidden for factor reads.  See _r64_forbidden_raw_datasets.
+        if (
+            dataset in self._r64_forbidden_raw_datasets()
+            and os.environ.get("FACTOR_ENGINE_ALLOW_RAW_TABLES") != "1"
+        ):
+            from data_access.core.exceptions import AccessDeniedError
+
+            raise AccessDeniedError(
+                f"R64: dataset '{dataset}' is an unadjusted A-share stock table "
+                "and is locked; reads must use the *_adj authority tables.  "
+                "Override: FACTOR_ENGINE_ALLOW_RAW_TABLES=1."
+            )
+
         from data_access.security.execution_context import (
             current_authorizer,
             current_principal,

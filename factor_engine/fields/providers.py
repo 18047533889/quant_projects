@@ -903,16 +903,17 @@ for _canon, _bar in (
         level_sensitive=True,
         notes="same backward AdjFactor as continuous_close; level-sensitive (R17-033/085)",
     )
-# ADJ_FIELD_MIGRATION: A-share raw vendor Volume is NOT a mineable factor input
-# (raw price-volume forbidden); the adjusted share count is continuous_volume_shares
-# (Volume / Factor on StockDailyBarAdj).  US raw Volume stays (US share count).
 _b(
-    "raw_volume_shares", "ashare", "ashare_raw_volume_unavailable",
-    physical=(), quality=_UNAVAILABLE, coverage=CoverageClass.UNKNOWN,
+    "raw_volume_shares", "ashare", "ashare_raw_volume",
+    dataset="ashare_stock_daily_adj",
+    physical=("StockDailyBarAdj.Volume",),
+    quality=_NATIVE, coverage=_FULL,
     source_unit=SHARES, canonical_unit=SHARES,
-    transform=_identity, temporal_model="unavailable",
-    notes="ADF_FIELD_MIGRATION: raw vendor Volume is forbidden for A-share factors; "
-          "use continuous_volume_shares = Volume / Factor (StockDailyBarAdj authority)",
+    transform=_identity, temporal_model="exact_daily", available_at="local_close",
+    source_certified=True,
+    notes="R64: the adj authority table serves raw share Volume (the platform "
+          "back-adjusts prices/amount at generation and keeps Volume raw). "
+          "FactorEngine never divides volume by Factor.",
 )
 _b(
     "raw_volume_shares", "us", "us_raw_volume",
@@ -923,21 +924,6 @@ _b(
     source_certified=True,
 )
 
-# --- continuous (backward-adjusted) volume: Volume / Factor (LQTP functions.yaml) ---
-_b(
-    "continuous_volume_shares", "ashare", "ashare_lqtp_volume",
-    dataset="ashare_stock_daily_adj",
-    physical=("StockDailyBarAdj.Volume", "StockDailyBarAdj.Factor"),
-    quality=_DERIVED, coverage=_FULL,
-    source_unit=SHARES, canonical_unit=SHARES,
-    transform=_div_two("StockDailyBarAdj.Volume", "StockDailyBarAdj.Factor"),
-    transform_description="Volume / Factor (LQTP functions.yaml adjusted volume; StockDailyBarAdj authority)",
-    temporal_model="exact_daily", available_at="local_close",
-    source_certified=True,
-    derived_expression="StockDailyBarAdj.Volume / StockDailyBarAdj.Factor",
-    notes="ADJ_FIELD_MIGRATION: reads StockDailyBarAdj.Volume / StockDailyBarAdj.Factor. "
-          "LQTP platform functions.yaml defines volume = Volume / Factor.",
-)
 _b(
     "continuous_volume_shares", "us", "us_continuous_volume",
     dataset="us_stock_daily", physical=("StockDailyBar.Volume",),

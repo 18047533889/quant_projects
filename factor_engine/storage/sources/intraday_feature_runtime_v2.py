@@ -60,7 +60,7 @@ def _session_segments(
     session_open: str,
     session_close: str,
 ) -> list[tuple[int, int]]:
-    if dataset == "ashare_stock_minute":
+    if dataset in ("ashare_stock_minute", "ashare_stock_minute_adj"):
         return [(_hm("09:30"), _hm("11:30")), (_hm("13:00"), _hm("15:00"))]
     start, stop = _hm(session_open), _hm(session_close)
     if stop <= start:
@@ -94,7 +94,7 @@ def _session_calendar(
         for start, stop in segments
     )
     return SessionCalendar(
-        market="CN" if dataset == "ashare_stock_minute" else "CUSTOM",
+        market="CN" if dataset in ("ashare_stock_minute", "ashare_stock_minute_adj") else "CUSTOM",
         segments=rendered,
         timestamp_convention=timestamp_convention,
     )
@@ -246,7 +246,7 @@ def _suspension_calendar_child(source: Any) -> Any:
     from .data_access_source import DataAccessSource
 
     return DataAccessSource(
-        dataset="ashare_stock_daily",
+        dataset="ashare_stock_daily_adj",
         start_date=getattr(inner, "start_date", None),
         end_date=getattr(inner, "end_date", None),
         instrument_filter=getattr(inner, "instrument_filter", None),
@@ -336,7 +336,7 @@ def _session_local_minute_frame(frame, dataset, *, naive_utc=False):
     if timestamps.dt.tz is None and naive_utc:
         timestamps = timestamps.dt.tz_localize("UTC")
     if timestamps.dt.tz is not None:
-        market = "ashare" if dataset == "ashare_stock_minute" else dataset.split("_", 1)[0]
+        market = "ashare" if dataset in ("ashare_stock_minute", "ashare_stock_minute_adj") else dataset.split("_", 1)[0]
         session = get_market_session(market)
         if session is None:
             raise ValueError(f"exchange timezone contract missing for {dataset}")
@@ -405,7 +405,7 @@ def _grouped_bars(
     # unexpected SEPARATELY, and quarantines non-suspended broken groups before
     # any session-aware feature is computed.
     suspended_groups: frozenset[tuple[pd.Timestamp, str]] | None = None
-    if dataset == "ashare_stock_minute":
+    if dataset in ("ashare_stock_minute", "ashare_stock_minute_adj"):
         from data_access.core.exceptions import ValidationError as SessionValidationError
         from data_access.read.session_calendar import get_market_session
 
@@ -465,7 +465,7 @@ def _grouped_bars(
         # R61-P0 #60: EXPECTED_SUSPENSION —— 该 (TradeDate, Symbol) 在停牌日历上，
         # 其分钟 bar 一律不进入 grouped → 下游对齐后为 NaN（不 abort）。
         if (
-            dataset == "ashare_stock_minute"
+            dataset in ("ashare_stock_minute", "ashare_stock_minute_adj")
             and suspended_groups is not None
             and (date_key, inst_key) in suspended_groups
         ):

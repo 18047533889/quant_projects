@@ -674,10 +674,12 @@ class LQTPLogicalDataSource(_Base):
             return self.inner.load_column(field)
 
         if table == "StockDailyBar":
-            # An explicit StockDailyBar SourceRef names the authoritative raw
-            # daily dataset. It must not inherit the adjusted anchor source:
-            # fields such as LowLimit/HighLimit exist only on the raw table.
-            dataset = "ashare_stock_daily"
+            # R64: every daily read comes from the back-adjusted authority
+            # table. StockDailyBar SourceRefs are served from
+            # ashare_stock_daily_adj with Adj* physical columns (AdjHighLimit /
+            # AdjLowLimit exist there; the raw table is locked by DataAccess).
+            dataset = "ashare_stock_daily_adj"
+            field = _daily_adj_field(field)
             child = self._child(dataset)
             series = child.load_column(field)
             self._record_dependency(
@@ -942,7 +944,7 @@ class LQTPLogicalDataSource(_Base):
         try:
             from data_access.cos_contract import get_cos_contract
 
-            contract = get_cos_contract("ashare_stock_minute")
+            contract = get_cos_contract("ashare_stock_minute_adj")
             declared = str(getattr(contract, "bar_timestamp_role", "") or "").lower()
             if declared in {"bar_start", "bar_end"}:
                 return declared
@@ -994,9 +996,9 @@ class LQTPLogicalDataSource(_Base):
                 )
                 handle = aggregate_minute_bundle(
                     _get_store(),
-                    "ashare_stock_minute",
+                    "ashare_stock_minute_adj",
                     [
-                        AggregationItem("Amount", spec, "_vwap_amount"),
+                        AggregationItem("AdjAmount", spec, "_vwap_amount"),
                         AggregationItem("Volume", spec, "_vwap_volume"),
                     ],
                     time_range=(
@@ -1018,7 +1020,7 @@ class LQTPLogicalDataSource(_Base):
                 )
                 vwap = pd.Series(out, index=idx, name="Vwap")
                 self._record_dependency(
-                    "ashare_stock_minute",
+                    "ashare_stock_minute_adj",
                     kind="minute_session",
                     field="Vwap",
                     transform=transform,
@@ -1089,7 +1091,7 @@ class LQTPLogicalDataSource(_Base):
                 )
                 table = aggregate_minute_to_daily(
                     _get_store(),
-                    "ashare_stock_minute",
+                    "ashare_stock_minute_adj",
                     field,
                     spec,
                     time_range=(getattr(self.inner, "start_date", None),
@@ -1103,7 +1105,7 @@ class LQTPLogicalDataSource(_Base):
                 )
                 daily = pd.Series(df["value"].to_numpy(), index=idx, name=field)
                 self._record_dependency(
-                    "ashare_stock_minute",
+                    "ashare_stock_minute_adj",
                     kind="minute_session",
                     field=field,
                     transform=transform,
@@ -1119,10 +1121,10 @@ class LQTPLogicalDataSource(_Base):
                     "minute %s pushdown 失败回退 pandas 路径: %s", transform, exc
                 )
 
-        src = self._child("ashare_stock_minute")
-        series = src.load_column(field)
+        src = self._child("ashare_stock_minute_adj")
+        series = src.load_column(_minute_adj_field(field))
         self._record_dependency(
-            "ashare_stock_minute",
+            "ashare_stock_minute_adj",
             kind="minute_session",
             snapshot_id=getattr(src, "data_snapshot_id", None),
             field=field,
@@ -1202,3 +1204,42 @@ class LQTPLogicalDataSource(_Base):
         # Round-7 WS-E #290: minute→daily exact alignment — a missing minute day
         # must not carry the previous day's intraday feature forward.
         return self._align_exact_by_instrument(self._anchor_index(), daily)
+
+_MINUTE_ADJ_FIELD_MAP = {
+    "Open": "AdjOpen",
+    "High": "AdjHigh",
+    "Low": "AdjLow",
+    "Close": "AdjClose",
+    "PreClose": "AdjPreClose",
+    "Amount": "AdjAmount",
+    "Vwap": "AdjVwap",
+}
+
+
+
+_DAILY_ADJ_FIELD_MAP = {
+    "Open": "AdjOpen",
+    "High": "AdjHigh",
+    "Low": "AdjLow",
+    "Close": "AdjClose",
+    "PreClose": "AdjPreClose",
+    "Amount": "AdjAmount",
+    "Vwap": "AdjVwap",
+    "HighLimit": "AdjHighLimit",
+    "LowLimit": "AdjLowLimit",
+}
+
+
+def _daily_adj_field(field: str) -> str:
+    """R64: daily SourceRef reads resolve to Adj* columns on the adj table."""
+    return _DAILY_ADJ_FIELD_MAP.get(str(field), str(field))
+
+
+def _minute_adj_field(field: str) -> str:
+    """R64: minute reads come from the adjusted minute table.
+
+    Price/amount fields resolve to Adj* physical columns (platform
+    back-adjusts at table generation); volume stays raw by design.
+    """
+    return _MINUTE_ADJ_FIELD_MAP.get(str(field), str(field))
+

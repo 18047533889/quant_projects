@@ -118,14 +118,11 @@ volume:
   economic_roles: [volume_traded]
   frequency_class: daily
   pit_class: panel_same_day
-  # LQTP 平台 functions.yaml：volume = Volume / Factor（后复权量）。生成的
-  # StockDailyBarAdj 表保持 Volume 原始值，Factor 列同表存在；derived_expression
-  # 使 bare ``volume`` 解析为 Volume / Factor（业界 LQTP/adjusted-volume 口径）。
-  # derived_from 指向复权表同表 Volume/Factor（ADJ_FIELD_MIGRATION：不再引用 raw 表）。
-  derived_expression: Volume / Factor
-  derived_from:
-    - ashare_stock_daily_adj.Volume
-    - ashare_stock_daily_adj.Factor
+  # R64 platform decision (user): the adj dataset IS the platform source of
+  # truth -- prices/amount are already back-adjusted (Adj*) at generation
+  # time and Volume stays raw share volume.  FactorEngine must NOT apply any
+  # adjustment transform of its own; adjustment happens only on the source
+  # generation side.
 
 amount:
   dataset: ashare_stock_daily_adj

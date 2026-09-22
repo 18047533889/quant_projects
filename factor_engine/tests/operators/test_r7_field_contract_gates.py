@@ -48,12 +48,12 @@ def test_mining_gate_source_level_raw_read_rejection():
     )
     from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
-    src = DataAccessSource(dataset="ashare_stock_daily", enforce_mining_gate=True)
+    src = DataAccessSource(dataset="ashare_stock_daily_adj", enforce_mining_gate=True)
     plan = NormalizedFieldPlan(logical_concept="idx", mining_allowed=False)
     with pytest.raises(FieldMiningGateError, match="mining_allowed=False"):
         src._enforce_field_contract_gates({"idx": plan})
     # Gate disabled (default) keeps the raw read working.
-    src2 = DataAccessSource(dataset="ashare_stock_daily")
+    src2 = DataAccessSource(dataset="ashare_stock_daily_adj")
     src2._enforce_field_contract_gates({"idx": plan})  # no raise
 
 
@@ -68,7 +68,7 @@ def test_current_snapshot_only_historical_backfill_rejected():
     from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
     src = DataAccessSource(
-        dataset="ashare_stock_daily",
+        dataset="ashare_stock_daily_adj",
         start_date="2020-01-01",
         enforce_mining_gate=True,
     )
@@ -84,7 +84,7 @@ def test_current_snapshot_only_allowed_with_snapshot_now_only():
     from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
     src = DataAccessSource(
-        dataset="ashare_stock_daily",
+        dataset="ashare_stock_daily_adj",
         start_date="2020-01-01",
         enforce_mining_gate=True,
         snapshot_now_only=True,
@@ -101,7 +101,7 @@ def test_current_snapshot_only_now_window_allowed():
 
     today = pd.Timestamp.now().strftime("%Y-%m-%d")
     src = DataAccessSource(
-        dataset="ashare_stock_daily", start_date=today, enforce_mining_gate=True
+        dataset="ashare_stock_daily_adj", start_date=today, enforce_mining_gate=True
     )
     plan = NormalizedFieldPlan(
         logical_concept="snap", current_snapshot_only=True, coverage="current_snapshot"
@@ -145,7 +145,7 @@ def test_four_layer_pit_source_preflight_rejects_field_layer():
     )
     from factor_engine.storage.sources.field_plan import NormalizedFieldPlan
 
-    src = DataAccessSource(dataset="ashare_stock_daily")
+    src = DataAccessSource(dataset="ashare_stock_daily_adj")
     plan = NormalizedFieldPlan(logical_concept="div", strict_pit_allowed=False)
     with pytest.raises(FourLayerPITError, match="field_pit_allowed"):
         src.assert_four_layer_pit({"div": plan})
@@ -201,7 +201,7 @@ def test_role_typo_fails_field_builder():
 
     # _f validates role before constructing a FieldSpec; a typo must raise.
     with pytest.raises(ValueError, match="unknown field role"):
-        _f("bad", "StockDailyBar", "Open", role="knowledge_tiem")
+        _f("bad", "StockDailyBarAdj", "AdjOpen", role="knowledge_tiem")
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +361,7 @@ def test_coverage_gate_source_level():
         HistoricalCoverageContract(field=field_name, coverage_ratio=0.4)
     )
     src = DataAccessSource(
-        dataset="ashare_stock_daily",
+        dataset="ashare_stock_daily_adj",
         start_date="2020-01-01",
         mining_coverage_threshold=0.7,
         strict_unknown_fields=True,
@@ -425,7 +425,7 @@ def test_missing_semantic_mapping():
 def test_source_dependency_hash_stable_and_identity_bound():
     from factor_engine.storage.sources.data_access_source import DataAccessSource
 
-    src = DataAccessSource(dataset="ashare_stock_daily")
+    src = DataAccessSource(dataset="ashare_stock_daily_adj")
     src._ensure_field_plans(["ret", "close"])
     h1 = src.source_dependency_hash()
     assert isinstance(h1, str) and len(h1) == 64
@@ -433,6 +433,6 @@ def test_source_dependency_hash_stable_and_identity_bound():
     assert h1 == src.source_dependency_hash()
 
     # A different plan set (different source identity) changes the hash.
-    src2 = DataAccessSource(dataset="ashare_stock_daily")
+    src2 = DataAccessSource(dataset="ashare_stock_daily_adj")
     src2._ensure_field_plans(["close"])
     assert src2.source_dependency_hash() != h1

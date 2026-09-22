@@ -1958,21 +1958,6 @@ class DataAccessSource(DataSource):
                 and plan.primary_physical
                 and (
                     not plan.is_derived
-                    # LQTP 复权量例外（2026-09-20 修复）：
-                    # ``ashare_stock_daily_adj`` 上 catalog 把 ``volume`` 登记为
-                    # derived（``transform='Volume / Factor'``），其派生值由
-                    # ``_normalize_contract_columns`` 在同批读到物理 ``Factor``
-                    # 之后计算（见该方法内的 LQTP 平台口径分支）。
-                    # 因此这里**必须**把读取列解析到 ``primary_physical``
-                    # （``Volume``）并登记 ``output_names``：否则下游适配器
-                    # ``arrow_table_to_multiindex_columns`` 会拿到逻辑名
-                    # ``volume``，而 Arrow 表里只有物理 ``Volume`` → KeyError，
-                    # 所有含成交量的因子在 auto/materialize 路径直接跑不通。
-                    # 其它 derived 字段仍保持原本的 fail-closed（Round-7 P0）。
-                    or (
-                        getattr(plan, "logical_concept", None) == "volume"
-                        and str(self.dataset) == "ashare_stock_daily_adj"
-                    )
                 )
             ):
                 src = plan.primary_physical
@@ -2498,34 +2483,6 @@ class DataAccessSource(DataSource):
         unit = self.timestamp_unit or options.get("timestamp_unit")
         return ds, normalize, unit
 
-    def _maybe_lqtp_factor_for(self, names: Iterable[str]) -> str | None:
-        """LQTP anchor ``volume`` requests need the Factor column in the same read.
-
-        Platform functions.yaml: ``volume = Volume / Factor``.  When a bare
-        ``volume`` is requested on the StockDailyBarAdj anchor, add the physical
-        ``Factor`` column to the read so ``_normalize_contract_columns`` can
-        apply the division.  Returns the physical factor column name, or None
-        when not applicable (already cached / different dataset / SourceRef).
-        ADJ_FIELD_MIGRATION: only the adj authority dataset is a factor source.
-        """
-        if not self.dataset or str(self.dataset) not in {
-            "ashare_stock_daily_adj",
-        }:
-            return None
-        if "volume" not in (list(names) or []):
-            return None
-        # Only when volume is not already cached (avoid re-reading Factor for
-        # cache hits) — and only on the anchor path (this method is called from
-        # load_columns with anchor logical names).
-        if "volume" in self._column_cache:
-            return None
-        # The explicit alias map may remap volume elsewhere; require the
-        # physical source to be Volume so the division is correct.
-        physical = self.fields.get("volume", "Volume")
-        if physical != "Volume":
-            return None
-        return "Factor"
-
     def load_columns(self, names: list[str]) -> dict[str, Any]:
         self.refresh_snapshot()
         with self._cache_lock:
@@ -2556,16 +2513,7 @@ class DataAccessSource(DataSource):
                         self._column_cache.move_to_end(name)
                 return {name: resolved[name] for name in names}
 
-        # LQTP 平台口径：StockDailyBar 裸 ``volume`` = Volume / Factor（后复权量）。
-        # ``_normalize_contract_columns`` 需要同一批读到 Factor 列才能做除法；若不
-        # 在 _resolve_columns 里追加 physical Factor，DataAccess 只拉 Volume、（除不
-        # 到）normalization 直接跳过 —— 复权量始终不生效。这里让 anchor 请求
-        # ``volume`` 时同批读 Factor（输出仍只暴露 volume 逻辑列，Factor 由
-        # normalization 消费后不进 ``_column_cache``）。
-        lqtp_extra_factor = self._maybe_lqtp_factor_for(names)
         physical, output_names = self._resolve_columns(needed)
-        if lqtp_extra_factor and lqtp_extra_factor not in physical:
-            physical = list(physical) + [lqtp_extra_factor]
         store = _get_store()
         ds, normalize, unit = self._adapter_options(store)
         # Freeze the actual representation for this request. Approved reads
@@ -2713,16 +2661,6 @@ class DataAccessSource(DataSource):
         # must use the semantic contract before caching a logical factor input;
         # otherwise A-share Return remains in 1/10000 units and silently
         # contaminates every downstream return-based operator.
-        if lqtp_extra_factor:
-            # The Arrow/lazy adapter renames physical columns to the requested
-            # logical alias. A simultaneous adj_factor request must not hide
-            # the physical Factor dependency from volume normalization.
-            factor_output = output_names.get(lqtp_extra_factor, lqtp_extra_factor)
-            if factor_output not in fetched:
-                raise FieldNormalizationError(
-                    "adjusted volume is missing its same-read Factor dependency"
-                )
-            fetched[lqtp_extra_factor] = fetched[factor_output]
         with self._cache_lock:
             if getattr(self, "_approved_content_digest", None) != request_approved_digest:
                 raise ApprovedSnapshotMismatch(
@@ -2765,10 +2703,6 @@ class DataAccessSource(DataSource):
         lazy 路径是 raw 单位、eager 是 decimal，parity bug）。FE FIELD_REGISTRY 覆盖的
         字段（``source == "registry"``）按 plan.scale 归一化（长尾兼容）。
 
-        LQTP platform surface（functions.yaml）：``volume = Volume / Factor``，
-        ``close/open/high/low/pre_close/vwap = raw * Factor``，``amount``、``ret``、
-        ``factor`` 原样。当前 FE 的 StockDailyBar anchor 全字段是 RAW 口径，bare
-        ``volume`` 必须先应用 /Factor 复权量，delta/rolling 系列才与平台一致。
 
         Production is fail-closed: a unit/scale failure raises instead of
         silently caching the raw vendor value (which would contaminate every
@@ -2819,20 +2753,6 @@ class DataAccessSource(DataSource):
                 ) from exc
             logger.warning("field normalization skipped for %s: %s", self.dataset, exc)
 
-        # LQTP 平台口径（functions.yaml）：StockDailyBar 裸 ``volume`` = Volume / Factor
-        # （后复权量）。Factor 物理列由 ``load_columns`` 的同批读取带进来（fetched 里
-        # 键为物理 ``Factor``）。这里只在复权 anchor ``ashare_stock_daily_adj``
-        # （复权表 Volume 保持原始值，后复权量 = Volume/Factor）且 fetched 同时含
-        # volume + Factor 时做除法，避免污染 registry/catalog 已调整路径。
-        # ADJ_FIELD_MIGRATION：未复权 ashare_stock_daily 不再是 factor 数据源。
-        if self.dataset in {"ashare_stock_daily_adj"} and "volume" in fetched and "Factor" in fetched:
-            fvol = fetched["volume"]
-            ffac = fetched["Factor"]
-            if isinstance(fvol, pd.Series) and isinstance(ffac, pd.Series):
-                if not fvol.index.equals(ffac.index):
-                    ffac = ffac.reindex(fvol.index)
-                fetched["volume"] = fvol / ffac.replace(0.0, float("nan"))
-                normalized.add("volume")
 
         # 兼容外部 DataAccess 契约：A 股 Return 已按 COS 收缩归一化，这里避免二次
         # 处理（上方 ``normalized`` 已覆盖 catalog 的字段直接跳过）。
@@ -3016,27 +2936,6 @@ class DataAccessSource(DataSource):
         """
         self.refresh_snapshot()
         physical, output_names = self._resolve_columns(columns)
-        # R63 LQTP adjusted-volume parity: the eager path (``load_columns`` ->
-        # ``_normalize_contract_columns``) divides bare ``volume`` by the
-        # same-read physical ``Factor`` (functions.yaml: volume = Volume / Factor,
-        # adjusted volume). The lazy long scan skipped that transform, so every
-        # volume-based factor executed on the polars long path silently read raw
-        # share volume (units off by the cumulative adjustment factor) while the
-        # pandas reference divided it -- an auto-vs-pandas equivalence break with
-        # NO NaN-mask signal (masks stay identical, values are uniformly wrong).
-        # Scan the raw physical Factor in the same read and apply the identical
-        # division at the scan boundary.
-        _lqtp_out: str | None = None
-        if (
-            str(self.dataset) == "ashare_stock_daily_adj"
-            and "volume" in columns
-            and self.fields.get("volume", "Volume") == "Volume"
-        ):
-            if "Factor" in physical:
-                _lqtp_out = output_names.get("Factor", "Factor")
-            else:
-                physical = list(physical) + ["Factor"]
-                _lqtp_out = "Factor"
         store = _get_store()
         ds = store.get_dataset(self.dataset)
         frequency = self._detect_source_frequency(ds)
@@ -3075,17 +2974,6 @@ class DataAccessSource(DataSource):
                 lf = lf.with_columns(expressions)
         except ImportError:
             pass
-        if _lqtp_out is not None:
-            import polars as _pl
-
-            lf = lf.with_columns(
-                (
-                    _pl.col("volume").cast(_pl.Float64)
-                    / _pl.col(_lqtp_out).cast(_pl.Float64).replace(0.0, None)
-                ).alias("volume")
-            )
-            if _lqtp_out not in columns:
-                lf = lf.drop(_lqtp_out)
         # Scan-boundary ordering contract (P0-10): re-assert after the scale step.
         return enforce_source_ordering(
             lf,

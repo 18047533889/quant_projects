@@ -283,20 +283,15 @@ _c("continuous_close", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
 _c("continuous_vwap", "price_volume", "price", LOCAL_PRICE_PER_SHARE,
   price_basis=PRICE_BASIS_CONTINUOUS, aliases=("vwap",), cross_market_comparable=False)
 
+# R64 platform decision: the adj tables are the only factor data source and
+# volume is served RAW (StockDailyBarAdj.Volume, unadjusted).  The derived
+# Volume/Factor concept was removed; the bare "volume" alias binds to the raw
+# share-volume series.
 _c("raw_volume_shares", "price_volume", "volume", SHARES,
-  cross_market_comparable=False,
-  description="Trade volume in shares. NEVER divided by any adjustment factor. "
-              "A-share: raw vendor volume is NOT a mineable factor input (ADJ_FIELD_MIGRATION).")
-
-# The platform LQTP manual (functions.yaml) defines ``volume = Volume / Factor``.
-# For FactorEngine the LQTP surface (dialect='lqtp') must therefore evaluate
-# ``volume`` on the ADJUSTED share series, not the raw vendor series.  The bare
-# ``volume`` alias binds to the adjusted series (A-share authority); ``raw_volume_shares``
-# remains the explicit raw series (A-share provider disabled).
-_c("continuous_volume_shares", "price_volume", "volume", SHARES,
-  aliases=("volume", "raw_volume_shares"), cross_market_comparable=False,
-  description="Backward-adjusted trade volume in shares = Volume / Factor (LQTP functions.yaml). "
-              "A: Volume/Factor; US: raw Volume (identity).")
+  aliases=("volume",), cross_market_comparable=False,
+  description="Trade volume in shares, served raw from the adj authority table. "
+              "R64: the platform never adjusts volume; FactorEngine must not "
+              "divide by Factor.  US: raw Volume (identity).")
 
 _c("amount_local", "price_volume", "amount", LOCAL_MONEY, aliases=("amount", "turnover_value"),
   market_local_only=True, cross_market_comparable=False,

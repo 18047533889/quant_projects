@@ -23,6 +23,9 @@ from .units import (
 )
 
 
+_R64_RAW_F_REMOVED = True
+
+
 def _table(
     name,
     dataset,
@@ -102,13 +105,10 @@ _ASHARE_FINANCIAL_META = {
 ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
     # R17-013: every production-readable table declares strict_pit_allowed
     # explicitly (never the UNKNOWN default); reason lives in metadata.
-    _table("StockDailyBar", "ashare_stock_daily", domain="price_volume",
-           strict_pit_allowed=True,
-           metadata={"pit_reason": "exact_daily D1 panel; PIT-safe"}),
     # ADJ_FIELD_MIGRATION（2026-08-28）：A 股行情权威口径 = 后复权生成表
     # StockDailyBarAdj / StockMinuteBarAdj（realizations.md §5.6）。物理列
-    # AdjX = X × Factor；Volume 原始值；Return 原样（bp）。未复权
-    # StockDailyBar 仅保留 Factor/Volume 用途。
+    # AdjX = X × Factor；Volume 原始值；Return 原样（bp）。未复权表已按 R64 决策
+    # 锁死（不注册逻辑表，物理读取在 DataAccess 层硬门禁拒绝）。
     _table("StockDailyBarAdj", "ashare_stock_daily_adj", domain="price_volume",
            aliases=("AdjustedBar",), strict_pit_allowed=True,
            metadata={"pit_reason": "exact_daily D1 back-adjusted panel; PIT-safe",
@@ -123,18 +123,6 @@ ASHARE_TABLE_SPECS: tuple[TableSpec, ...] = (
                   "pit_reason": "exact minute_session back-adjusted; PIT-safe",
                   "adjustment_status": "adjusted",
                   "raw_equivalent_table": "StockMinuteBar"},
-    ),
-    _table(
-        "StockMinuteBar", "ashare_stock_minute", time="QuoteTime",
-        domain="price_volume", frequency="minute", table_kind="minute_session",
-        join_policy="minute_session", timezone="Asia/Shanghai",
-        session_calendar="ashare", strict_pit_allowed=True,
-        # Round-7 WS-E #293: the A-share COS minute mirror labels the one-minute
-        # bar with its END timestamp (09:31 = the 09:30-09:31 bar, last 15:00).
-        # Declared here so the runtime session slotting never guesses from a
-        # 09:30/13:00 heuristic.
-        metadata={"bar_timestamp_role": "bar_end", "bar_timestamp_convention": "bar_end",
-                  "pit_reason": "exact minute_session; PIT-safe"},
     ),
     _table("StockValuationDaily", "ashare_stock_valuation_daily", domain="valuation",
            strict_pit_allowed=True,
@@ -405,40 +393,14 @@ def _f(
 
 
 ASHARE_FIELD_SPECS: tuple[FieldSpec, ...] = (
-    _f("trade_date", "StockDailyBar", "TradeDate", dtype="date", unit=UNIT_DATE, role="time", aliases=("date",)),
-    _f("symbol", "StockDailyBar", "Symbol", dtype="string", unit=UNIT_IDENTIFIER, role="instrument", aliases=("ticker",)),
-    # R17-010: the A-share COS contract VERIFIES Factor is a backward cumulative
+            # R17-010: the A-share COS contract VERIFIES Factor is a backward cumulative
     # multiplier (continuous_price = raw_price * Factor); raw OHLC/VWAP/limit are
     # RAW basis (unadjusted); continuous prices are exposed via canonical derived
     # concepts (continuous_close = Close * Factor).  "unverified" metadata is gone.
     # R17-012: price fields are CNY per share (dimension CNY/share), not a bare
     # CNY amount; scale_to_canonical stays 1.0 (CNY and CNY/share share the
     # numeric scale — the dimension is what differs).
-    _f("open", "StockDailyBar", "Open", unit=UNIT_CNY_PER_SHARE, price_basis="RAW",
-       metadata={"adjusted": False, "adjustment_status": "raw", "price_basis": "RAW"}),
-    _f("high", "StockDailyBar", "High", unit=UNIT_CNY_PER_SHARE, price_basis="RAW",
-       metadata={"adjusted": False, "adjustment_status": "raw", "price_basis": "RAW"}),
-    _f("low", "StockDailyBar", "Low", unit=UNIT_CNY_PER_SHARE, price_basis="RAW",
-       metadata={"adjusted": False, "adjustment_status": "raw", "price_basis": "RAW"}),
-    _f("close", "StockDailyBar", "Close", unit=UNIT_CNY_PER_SHARE, price_basis="RAW",
-       metadata={"adjusted": False, "adjustment_status": "raw", "price_basis": "RAW"}),
-    _f("pre_close", "StockDailyBar", "PreClose", unit=UNIT_CNY_PER_SHARE, aliases=("prev_close",),
-       price_basis="OFFICIAL_REFERENCE_PRE_CLOSE",
-       metadata={"adjusted": True, "adjustment_status": "official_reference_pre_close",
-                 "price_basis": "OFFICIAL_REFERENCE_PRE_CLOSE", "note": "R17-011 official reference pre-close; not lag(raw_close,1)"}),
-    _f("volume", "StockDailyBar", "Volume", unit=UNIT_SHARE, metadata={"adjusted": False, "adjustment_status": "raw"}),
-    _f("amount", "StockDailyBar", "Amount", unit=UNIT_CNY, aliases=("turnover_value",)),
-    _f("ret", "StockDailyBar", "Return", unit=UNIT_RATIO, source_unit=UNIT_BASIS_POINT, aliases=("return", "returns")),
-    _f("adj_factor", "StockDailyBar", "Factor", unit=UNIT_RATIO, aliases=("factor",),
-       metadata={"direction": "backward_multiplier",
-                 "note": "continuous_price = raw_price * Factor (verified; R17-010)"}),
-    _f("vwap", "StockDailyBar", "Vwap", unit=UNIT_CNY_PER_SHARE, price_basis="RAW",
-       metadata={"adjusted": False, "adjustment_status": "raw", "price_basis": "RAW"}),
-    _f("high_limit", "StockDailyBar", "HighLimit", unit=UNIT_CNY_PER_SHARE, price_basis="RAW_OFFICIAL_LIMIT",
-       metadata={"adjusted": False, "adjustment_status": "raw_official_limit", "price_basis": "RAW_OFFICIAL_LIMIT"}),
-    _f("low_limit", "StockDailyBar", "LowLimit", unit=UNIT_CNY_PER_SHARE, price_basis="RAW_OFFICIAL_LIMIT",
-       metadata={"adjusted": False, "adjustment_status": "raw_official_limit", "price_basis": "RAW_OFFICIAL_LIMIT"}),
-    # ---- StockDailyBarAdj 复权字段（权威口径；realizations.md §5.6） ----
+                                                    # ---- StockDailyBarAdj 复权字段（权威口径；realizations.md §5.6） ----
     # bare close/open/high/low/vwap/amount/high_limit/low_limit/pre_close 解析到
     # Adj*；price_basis=BACKWARD_ADJUSTED（后复权）。未复权物理列保留（StockDailyBar.*，
     # 仅供 Factor/Volume/LQTP 上游原始用途）。
@@ -492,12 +454,9 @@ ASHARE_FIELD_SPECS: tuple[FieldSpec, ...] = (
     _f("target_vwap_return_h05", "StockDailyBarAdj", "TargetVwapReturnH05", unit=UNIT_RATIO, aliases=("tvr_h05",), mining_allowed=False),
     _f("target_vwap_return_h10", "StockDailyBarAdj", "TargetVwapReturnH10", unit=UNIT_RATIO, aliases=("tvr_h10",), mining_allowed=False),
     _f("target_vwap_return_h20", "StockDailyBarAdj", "TargetVwapReturnH20", unit=UNIT_RATIO, aliases=("tvr_h20",), mining_allowed=False),
-    _f("is_suspend", "StockDailyBar", "IsSuspend", dtype="bool", unit=UNIT_BOOLEAN),
-    # UpdateTime is the vendor/pipeline write time to COS (freshness only), never a
+        # UpdateTime is the vendor/pipeline write time to COS (freshness only), never a
     # market/announcement/revision-knowable instant — role ingestion_time, not knowledge_time.
-    _f("update_time", "StockDailyBar", "UpdateTime", dtype="datetime", unit=UNIT_DATETIME, role="ingestion_time"),
-
-    _f("market_cap", "StockValuationDaily", "MarketCap", unit=UNIT_CNY, aliases=("mkt_cap",)),
+        _f("market_cap", "StockValuationDaily", "MarketCap", unit=UNIT_CNY, aliases=("mkt_cap",)),
     _f("circulating_market_cap", "StockValuationDaily", "CirculatingMarketCap", unit=UNIT_CNY, aliases=("float_market_cap",)),
     _f("pe_ratio", "StockValuationDaily", "PeRatio", aliases=("pe",)),
     _f("pb_ratio", "StockValuationDaily", "PbRatio", aliases=("pb",)),
@@ -625,15 +584,7 @@ ASHARE_FIELD_SPECS: tuple[FieldSpec, ...] = (
     # StockMinuteBar 字段目录（review §10.1）：source 层与字段层必须共享同一
     # 语义系统。分钟价格未复权，名称用 minute_* 避免与日线裸名冲突。
     # ----------------------------------------------------------------------
-    _f("quote_time", "StockMinuteBar", "QuoteTime", dtype="datetime", unit=UNIT_DATETIME, role="time", mining_allowed=False),
-    _f("minute_open", "StockMinuteBar", "Open", unit=UNIT_CNY, aliases=("m_open",), metadata={"adjusted": False, "adjustment_status": "unverified"}),
-    _f("minute_high", "StockMinuteBar", "High", unit=UNIT_CNY, aliases=("m_high",), metadata={"adjusted": False, "adjustment_status": "unverified"}),
-    _f("minute_low", "StockMinuteBar", "Low", unit=UNIT_CNY, aliases=("m_low",), metadata={"adjusted": False, "adjustment_status": "unverified"}),
-    _f("minute_close", "StockMinuteBar", "Close", unit=UNIT_CNY, aliases=("m_close",), metadata={"adjusted": False, "adjustment_status": "unverified"}),
-    _f("minute_volume", "StockMinuteBar", "Volume", unit=UNIT_SHARE, aliases=("m_volume",)),
-    _f("minute_amount", "StockMinuteBar", "Amount", unit=UNIT_CNY, aliases=("m_amount",)),
-    _f("minute_vwap", "StockMinuteBar", "Vwap", unit=UNIT_CNY, aliases=("m_vwap",), metadata={"adjusted": False, "adjustment_status": "unverified"}),
-    # ---- StockMinuteBarAdj 复权分钟字段（权威口径；realizations.md §5.6） ----
+                                    # ---- StockMinuteBarAdj 复权分钟字段（权威口径；realizations.md §5.6） ----
     _f("quote_time", "StockMinuteBarAdj", "QuoteTime", dtype="datetime", unit=UNIT_DATETIME, role="time", mining_allowed=False),
     _f("minute_open", "StockMinuteBarAdj", "AdjOpen", unit=UNIT_CNY_PER_SHARE, aliases=("m_open", "MinuteOpen"), price_basis="BACKWARD_ADJUSTED",
        metadata={"adjusted": True, "adjustment_status": "adjusted", "price_basis": "BACKWARD_ADJUSTED"}),
