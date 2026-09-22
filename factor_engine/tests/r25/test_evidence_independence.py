@@ -87,7 +87,7 @@ def test_output_domain_corr_is_neg_one_one():
     assert mapping["_r2"] == "continuous_signed"
 
 
-def test_injectivity_is_not_hardcoded_false():
+def test_injectivity_is_not_hardcoded_false(monkeypatch):
     # R25-040/172: parameter_injectivity_passed must come from a real probe.
     from factor_engine.mining.direct_use import build_direct_use_operator
 
@@ -98,4 +98,7 @@ def test_injectivity_is_not_hardcoded_false():
     # ts_rank's window genuinely changes the output on a 40-row fixture.
     from factor_engine.mining.direct_use import _probe_parameter_injectivity
 
+    monkeypatch.setenv("R64_PROBE_SAMPLE_GATE", "24000")
+    assert _probe_parameter_injectivity("ts_rank", op, ("window",), ("x",)) is False
+    monkeypatch.setenv("R64_PROBE_SAMPLE_GATE", "0")
     assert _probe_parameter_injectivity("ts_rank", op, ("window",), ("x",)) is True

@@ -2252,7 +2252,10 @@ def _causality_class(canonical: str) -> str:
 def _probe_parameter_injectivity(
     canonical: str, op: Any, searchable: tuple[str, ...], panel_params: Sequence[str] = ()
 ) -> bool:
-    """R25-040..042 / R25-172: real parameter-injectivity certificate.
+    """R25-040..042 / R25-172: bounded parameter-effectiveness probe.
+
+    The historical injectivity name does not prove mathematical injectivity,
+    correctness, profitability, or production admission from a finite fixture.
 
     For each searchable parameter, run the operator on a tiny synthetic panel
     at its default value and at one or two probe values; if the output is
@@ -2264,7 +2267,8 @@ def _probe_parameter_injectivity(
     proven") — a catch-into-False never grants a green flag (R25-134/135).
 
     R64: probe execution is bounded by the FULL-MATRIX sampling gate.  The probe
-    runs in "unit" mode (default) with a single default-vs-probe comparison per
+    runs only when explicitly enabled below the sampling gate; by default it
+    is skipped (False means not proven). Enabled probes compare values per
     parameter on a 40-row fixture — a fast, non-vacuous oracle that still gates
     live searches tightly.  Everything the probe needs (registry ``op``, panel
     params, scalar spec defaults) is read from already-mounted registry state,
@@ -2316,6 +2320,8 @@ def _probe_parameter_injectivity(
                 base_kwargs[name] = spec.default
         base_out = op.calculate(*panels, **base_kwargs)
         base_hash = _stable_output_hash(base_out)
+        if base_hash == "unhashable":
+            return False
         for name in searchable:
             probe_values = _injectivity_probe_values(name, defaults.get(name))
             changed = False
@@ -2326,7 +2332,8 @@ def _probe_parameter_injectivity(
                     probe_out = op.calculate(*panels, **kw)
                 except Exception:
                     continue  # this probe value not executable — try next
-                if _stable_output_hash(probe_out) != base_hash:
+                probe_hash = _stable_output_hash(probe_out)
+                if probe_hash != "unhashable" and probe_hash != base_hash:
                     changed = True
                     break
             if not changed:
@@ -2338,16 +2345,24 @@ def _probe_parameter_injectivity(
 
 
 def _stable_output_hash(out: Any) -> str:
-    """Deterministic NaN-aware digest of an operator output."""
+    """Shape-aware digest of float64-normalized numeric output, preserving NaNs."""
     import hashlib
 
     try:
         arr = np.asarray(out, dtype=float)
     except Exception:
         return "unhashable"
-    finite = np.nan_to_num(arr, nan=-1e30, posinf=1e30, neginf=-1e30)
+    # Keep missingness separate from values: no finite sentinel can represent
+    # NaN/Inf without colliding with a legitimate output. Normalize only NaN
+    # payload bits; preserve signed infinities, finite extremes and shape.
+    missing = np.isnan(arr)
+    values = np.where(missing, 0., arr)
     # SHA-1 used only for operator injectivity probe cache, not cryptographic security
-    return hashlib.sha1(np.ascontiguousarray(finite).tobytes(), usedforsecurity=False).hexdigest()
+    digest = hashlib.sha1(b"parameter-output.v2", usedforsecurity=False)
+    digest.update(repr(arr.shape).encode("ascii"))
+    digest.update(np.ascontiguousarray(missing).tobytes())
+    digest.update(np.ascontiguousarray(values).tobytes())
+    return digest.hexdigest()
 
 
 def _injectivity_probe_values(name: str, spec: Any) -> list[Any]:

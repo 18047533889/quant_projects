@@ -11,6 +11,10 @@ warmup/purge 后 TRAIN 索引；此前使用前 300 日覆盖率，而实际 TRA
 
 ## 已有真实证据
 
+参数试算修复与默认跳过语义见
+[FactorEngine 参数检查](https://github.com/HKUST-QUANT-SOCIETY/factor_engine/blob/main/docs/PARAMETER_EFFECTIVENESS_PROBES.md)。
+真实窗口 20/21 对照见 parameter_probe_real_20260922.json；仅确认输出有变化，不表示收益更优。
+
 最新冷启动提速见 [初始化证据复用 A/B](OVERLAY_SNAPSHOT_PERFORMANCE.md)：
 固定真实样本的四次独立进程中，候选/输出/认证标记摘要相同，计时中位数减少约 14.4%。
 

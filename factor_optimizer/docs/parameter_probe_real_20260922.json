@@ -1,0 +1,51 @@
+{
+  "inputs": {
+    "sources": [
+      {
+        "factor": "weekly_4cbd7ca6dccc61dc",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59/weekly_4cbd7ca6dccc61dc.parquet",
+        "etag": "91da3ad8a2d54f3f35911e231bfcffa8",
+        "sha256": "35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59",
+        "downloaded_bytes": 5400494,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "ts_delta(col('valuation.free_cap'), 20)"
+      }
+    ],
+    "days": 500,
+    "assets": 256,
+    "coverage_policy": "isolate",
+    "retained_factor_ids": [
+      "weekly_4cbd7ca6dccc61dc"
+    ],
+    "quarantined_factors": [],
+    "train_eligible_assets": {
+      "weekly_4cbd7ca6dccc61dc": 5071
+    },
+    "manifest_uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/metadata/00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66/landing_manifest.json",
+    "max_factor_bytes": 8388608,
+    "max_batch_factor_bytes": 134217728,
+    "asset_selection_split": "3e268f1bac7b452f741f0b934f2a0edcf88a677aa982bf2391340da25c0da9e9",
+    "asset_selection_train_days": 267,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "selection": "first eligible bound manifest factor IDs; assets selected on TRAIN coverage only",
+    "limitations": "source-declared lineage; no upstream PIT or investability certification"
+  },
+  "operator": "factor_engine.cleaned_operators.common.time_series.TSRank",
+  "windows": [
+    20,
+    21
+  ],
+  "train_days": 267,
+  "paired_finite_cells": 68352,
+  "changed_finite_cells": 67506,
+  "changed_missingness_cells": 0,
+  "legacy_digest_detects_effect": true,
+  "new_digest_detects_effect": true,
+  "default_disabled_result": false,
+  "explicit_probe_result": true,
+  "test_evaluated": false
+}
