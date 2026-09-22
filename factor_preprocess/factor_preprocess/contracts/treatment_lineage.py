@@ -340,6 +340,7 @@ _FE_DSL_SEMANTIC_MAP: Dict[str, str] = {
     # Missingness / freshness
     "forward_fill": "FILL:forward",
     "freshness_aware_fill": "FILL:freshness_aware",
+    "fillna_const": "FILL:constant",
     # Neutralization
     "ols_neutralize": "NEUTRAL:ols",
     "industry_neutral": "INDUSTRY_NEUTRAL:SW_L1",

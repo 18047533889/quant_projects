@@ -6841,7 +6841,7 @@ Carry positive rank evidence even when full DSL lineage is unknown.
 
 ### read_bound_factor
 
-[实际实现](../factor_optimizer/research_manifest.py#L97)。
+[实际实现](../factor_optimizer/research_manifest.py#L140)。
 
 Read declared datasets through DataAccess; enforce URI, bytes and SHA256.
 
@@ -10655,7 +10655,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/research_diagnostics.py` | `26c82a50b2edcaa4eff8911da11a4fcd52fbad2f5235148202a300d396ced23d` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |
 | `factor_optimizer/research_fitness.py` | `4ff5f341a903b477850dfcbfb14aad4188b2703cc8ea45f1b7bf0df316317d5c` |
-| `factor_optimizer/research_manifest.py` | `5c92761458c47ff82aa68819341860744d3f146c974318172f28697b0f89a161` |
+| `factor_optimizer/research_manifest.py` | `5120b1e591d7e98dc6be1005ed3d108a0c554e2b80377d55ade57139807ad78b` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |
 | `factor_optimizer/search/conditional_search.py` | `4b6dfeceacd797ad16f2406d0cd8c5cc1a4146c59c65c611f875356ce7251731` |

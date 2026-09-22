@@ -1,0 +1,152 @@
+{
+  "before": {
+    "factor": "volume_state_persistence",
+    "factor_uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/b53888213fe77c90f14e1ed9eaa817751c2d9c4525ec1db5e30968a2c14f7b19/volume_state_persistence.parquet",
+    "factor_sha256": "b53888213fe77c90f14e1ed9eaa817751c2d9c4525ec1db5e30968a2c14f7b19",
+    "manifest_sha256": "35e3558548de591e9dda003ad236ff4846051b73628c1d980c7cf3f9cb73067e",
+    "expression": "fillna_const(divide(ts_sum(gt(col('Volume'), ts_ema(col('Volume'), 20)), 20), 20), 0.5)",
+    "signature_status": "incomplete",
+    "signature_cs_rank": false,
+    "days": 500,
+    "assets": 256,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "bootstrap_draws": 99,
+    "status": "raw_retained",
+    "selected_family": "NO_OP_RAW",
+    "train_gain": 1.1314380083882696,
+    "validation_lower_bound": null,
+    "baseline": {
+      "operations": [],
+      "omissions": [
+        "lineage_unknown"
+      ],
+      "accepted": false,
+      "reason": "no_eligible_baseline_operations"
+    },
+    "joint": {
+      "objective": "joint",
+      "empty_leg_policy": "signal_cash",
+      "cost_rate": 0.001,
+      "policy": "joint.v1",
+      "validation_raw": {
+        "rank_ic": -0.009527641175939414,
+        "rank_icir": -0.0683020348694429,
+        "sharpe": 0.9920052714570715,
+        "max_drawdown": 0.038238608145259756,
+        "turnover": 0.2553628990858408,
+        "worst_block_sharpe": -1.1960033023843581
+      },
+      "validation_candidate": {
+        "rank_ic": 0.009527641175939414,
+        "rank_icir": 0.0683020348694429,
+        "sharpe": -1.1779486345185184,
+        "max_drawdown": 0.05809906018313636,
+        "turnover": 0.2618270585192601,
+        "worst_block_sharpe": -2.903357897030219
+      },
+      "comparison_status": "DEGRADATION_FLOOR_FAILED"
+    },
+    "candidate_count": 104,
+    "rank_candidates": 7,
+    "test_evaluated": false,
+    "limitations": "source-declared lineage and content binding, not upstream PIT certification; no neutralization exposures; no TEST score"
+  },
+  "after": {
+    "factor": "volume_state_persistence",
+    "factor_uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/b53888213fe77c90f14e1ed9eaa817751c2d9c4525ec1db5e30968a2c14f7b19/volume_state_persistence.parquet",
+    "factor_sha256": "b53888213fe77c90f14e1ed9eaa817751c2d9c4525ec1db5e30968a2c14f7b19",
+    "manifest_sha256": "35e3558548de591e9dda003ad236ff4846051b73628c1d980c7cf3f9cb73067e",
+    "expression": "fillna_const(divide(ts_sum(gt(col('Volume'), ts_ema(col('Volume'), 20)), 20), 20), 0.5)",
+    "signature_status": "known",
+    "signature_cs_rank": false,
+    "days": 500,
+    "assets": 256,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "bootstrap_draws": 99,
+    "status": "raw_retained",
+    "selected_family": "NO_OP_RAW",
+    "train_gain": 1.131438313515187,
+    "validation_lower_bound": null,
+    "baseline": {
+      "operations": [
+        "winsor",
+        "cs_rank"
+      ],
+      "omissions": [
+        "neutralization_missing_exposures"
+      ],
+      "accepted": true,
+      "reason": "no_substantial_training_degradation",
+      "coverage": 1,
+      "valid_days": 267,
+      "upper_bound": 0.00002301905435331899,
+      "maximum_loss": 0.01,
+      "joint_policy": "joint.v1",
+      "joint_raw": {
+        "rank_ic": -0.035372179018154724,
+        "rank_icir": -0.2873701641852879,
+        "sharpe": -1.1449352239722292,
+        "max_drawdown": 0.21706197728762452,
+        "turnover": 0.2828611552301901,
+        "worst_block_sharpe": -2.8012823868011636
+      },
+      "joint_candidate": {
+        "rank_ic": -0.03537193705303205,
+        "rank_icir": -0.28737276998732797,
+        "sharpe": -1.1449352239722292,
+        "max_drawdown": 0.21706197728762452,
+        "turnover": 0.2828611552301901,
+        "worst_block_sharpe": -2.8012823868011636
+      }
+    },
+    "joint": {
+      "objective": "joint",
+      "empty_leg_policy": "signal_cash",
+      "cost_rate": 0.001,
+      "policy": "joint.v1",
+      "baseline_train_raw": {
+        "rank_ic": -0.035372179018154724,
+        "rank_icir": -0.2873701641852879,
+        "sharpe": -1.1449352239722292,
+        "max_drawdown": 0.21706197728762452,
+        "turnover": 0.2828611552301901,
+        "worst_block_sharpe": -2.8012823868011636
+      },
+      "baseline_train_candidate": {
+        "rank_ic": -0.03537193705303205,
+        "rank_icir": -0.28737276998732797,
+        "sharpe": -1.1449352239722292,
+        "max_drawdown": 0.21706197728762452,
+        "turnover": 0.2828611552301901,
+        "worst_block_sharpe": -2.8012823868011636
+      },
+      "validation_raw": {
+        "rank_ic": -0.009527641175939414,
+        "rank_icir": -0.0683020348694429,
+        "sharpe": 0.9920052714570715,
+        "max_drawdown": 0.038238608145259756,
+        "turnover": 0.2553628990858408,
+        "worst_block_sharpe": -1.1960033023843581
+      },
+      "validation_candidate": {
+        "rank_ic": 0.00950061371125415,
+        "rank_icir": 0.06811486988460454,
+        "sharpe": -1.1779486345185184,
+        "max_drawdown": 0.05809906018313636,
+        "turnover": 0.2618270585192601,
+        "worst_block_sharpe": -2.903357897030219
+      },
+      "comparison_status": "DEGRADATION_FLOOR_FAILED"
+    },
+    "candidate_count": 103,
+    "rank_candidates": 6,
+    "test_evaluated": false,
+    "limitations": "source-declared lineage and content binding, not upstream PIT certification; no neutralization exposures; no TEST score"
+  }
+}

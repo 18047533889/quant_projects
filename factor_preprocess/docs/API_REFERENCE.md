@@ -1807,7 +1807,7 @@ Build an :class:`ExistingTreatmentSignature` from a TransformLineage.
 
 ### map_fe_dsl_to_semantic
 
-[实际实现](../factor_preprocess/contracts/treatment_lineage.py#L353)。
+[实际实现](../factor_preprocess/contracts/treatment_lineage.py#L354)。
 
 Map a known FE DSL transform name to a semantic ID.
 
@@ -5202,7 +5202,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/contracts/lineage_policy.py` | `4753ef544ad22c808ee6fb971d38b94fb625352bb0e32d053808845e85848cc0` |
 | `factor_preprocess/contracts/policy.py` | `cf43779e26d6a6cfc40ddd7e1aa1f9a4b37f0bb53071263611a572f9da3d0f5f` |
 | `factor_preprocess/contracts/state.py` | `06e1a99e68b64ff3156f7c3269a145c6a120fad5e76e29233ebed004f651e181` |
-| `factor_preprocess/contracts/treatment_lineage.py` | `ff2959d7c94a85d074be84fc0597261dcca21903f3459d65fc905f3895fda713` |
+| `factor_preprocess/contracts/treatment_lineage.py` | `5c2d7375d1330237d0e3135f82520af68e75f70eeb1863eba08dcfaeb88beee2` |
 | `factor_preprocess/contracts/treatment_recipe.py` | `3e0e68d11eeb519dc53a9dff373c737721e59222ec26b65df9a4d9bbe08c32c6` |
 | `factor_preprocess/contracts/treatment_spec.py` | `52decec3275815743bb29f12f84c8bdb2e52f5d78e577777f8d4b8358eafac6f` |
 | `factor_preprocess/eligibility/__init__.py` | `8518c047fb259bff9903eef05e374b97bde20a705e0350609ae96c5be09ca3dd` |

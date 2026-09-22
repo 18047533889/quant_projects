@@ -43,10 +43,49 @@ def _declared_lineage(expression):
     from factor_preprocess.contracts.treatment_lineage import TransformLineage, TransformStep
     root = ast.parse(expression, mode="eval").body
     steps = []
-    while isinstance(root, ast.Call) and isinstance(root.func, ast.Name) and root.func.id in {"rank", "cs_rank"}:
-        if len(root.args) != 1 or root.keywords:
+
+    def scalar(node):
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+            value = scalar(node.operand)
+            return (-value if isinstance(node.op, ast.USub) else value) if value is not None else None
+        if isinstance(node, ast.Constant):
+            value = node.value
+            if ((type(value) is int and value.bit_length() <= 64)
+                    or (type(value) is float and math.isfinite(value))):
+                return value
+        return None
+
+    def window(node):
+        value = scalar(node)
+        return value if type(value) is int and 1 <= value <= 10000 else None
+
+    def ema_parts(node):
+        if len(node.args) == 2 and not node.keywords:
+            value, span = node.args[0], window(node.args[1])
+        elif (len(node.args) == 1 and len(node.keywords) == 1
+              and node.keywords[0].arg == "span"):
+            value, span = node.args[0], window(node.keywords[0].value)
+        else:
             return None
-        steps.append(TransformStep("CS_RANK:pct", "representation", root.func.id))
+        return (value, span) if span is not None else None
+
+    while (isinstance(root, ast.Call) and isinstance(root.func, ast.Name)
+           and root.func.id in {"rank", "cs_rank", "fillna_const", "ts_ema"}):
+        name = root.func.id
+        if name in {"rank", "cs_rank"}:
+            if len(root.args) != 1 or root.keywords:
+                return None
+            steps.append(TransformStep("CS_RANK:pct", "representation", name))
+        elif name == "fillna_const":
+            if len(root.args) != 2 or root.keywords or scalar(root.args[1]) is None:
+                return None
+            steps.append(TransformStep("FILL:constant", "missingness", name,
+                                       {"value": scalar(root.args[1])}))
+        else:
+            parts = ema_parts(root)
+            if parts is None:
+                return None
+            steps.append(TransformStep("SMOOTH:ewma", "temporal", name, {"span": parts[1]}))
         root = root.args[0]
 
     def feature(node):
@@ -56,17 +95,21 @@ def _declared_lineage(expression):
                     or (type(v) is float and math.isfinite(v)))
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
             return feature(node.operand)
-        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name) or node.keywords:
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            return False
+        if node.func.id == "ts_ema":
+            parts = ema_parts(node)
+            return parts is not None and feature(parts[0])
+        if node.keywords:
             return False
         name, args = node.func.id, node.args
         if name == "col":
             return (len(args) == 1 and isinstance(args[0], ast.Constant)
                     and isinstance(args[0].value, str) and bool(args[0].value))
-        if name == "ts_delta":
-            return (len(args) == 2 and feature(args[0]) and isinstance(args[1], ast.Constant)
-                    and type(args[1].value) is int and 1 <= args[1].value <= 10000)
+        if name in {"ts_delta", "ts_sum"}:
+            return len(args) == 2 and feature(args[0]) and window(args[1]) is not None
         arity = {"add": 2, "subtract": 2, "multiply": 2, "divide": 2,
-                 "safe_div_null": 2, "neg": 1, "abs": 1}.get(name)
+                 "safe_div_null": 2, "neg": 1, "abs": 1, "gt": 2}.get(name)
         return arity is not None and len(args) == arity and all(feature(a) for a in args)
     try:
         return TransformLineage(tuple(reversed(steps))) if feature(root) else None
