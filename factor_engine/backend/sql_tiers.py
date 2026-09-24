@@ -114,6 +114,8 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "ge",
         "le",
         "ne",
+        "cross_above",
+        "cross_under",
         "and_",
         "or_",
         "not_",
@@ -178,6 +180,9 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "ts_mean_if",
         "ts_std_if",
         "ts_last_if",
+        "ts_min_if",
+        "ts_max_if",
+        "ts_quantile_if",
         "ts_days_since",
         "ts_true_streak",
         # R55 platform-audit P0: LQTP helpers promoted to daily — avg2(a,b) /
@@ -256,6 +261,15 @@ SQL_IMPLEMENTED_CANONICALS: frozenset[str] = frozenset(
         "EaseOfMovement",
         "CMF",
         "MFI",
+        # R67 (lowercase canonical = DSL name)
+        "kdj_k", "kdj_d", "kdj_j", "stoch_k", "stoch_d", "williams_r",
+        # R67 classic stochastic oscillators (technical/classic_oscillators_v1)
+        "KDJ_K",
+        "KDJ_D",
+        "KDJ_J",
+        "STOCH_K",
+        "STOCH_D",
+        "WILLIAMS_R",
         # candle geometry / return decomposition
         "candle_body",
         "candle_abs_body",
@@ -527,15 +541,6 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
 # emitter plus independent parity evidence exists.
 SQL_EXPLICIT_UNSUPPORTED_REASONS: dict[str, str] = {
     "ElderRay": "no SQL emitter branch",
-    "atr_pct": "no SQL emitter branch",
-    "atr_acceleration": "no SQL emitter branch",
-    "atr_zscore": "no SQL emitter branch",
-    "atr_percentile": "no SQL emitter branch",
-    "atr_short_long_ratio": "no SQL emitter branch",
-    "candle_body_strength": "no SQL emitter branch",
-    "candle_wick_balance": "no SQL emitter branch",
-    "candle_range_pct": "no SQL emitter branch",
-    "candle_pattern_count": "no SQL emitter branch",
     "ofi_abs_imbalance_trend": "finite-slice compaction cannot be expressed exactly by the current ROWS-frame emitter",
     "ofi_imbalance_persistence": "finite-slice compaction cannot be expressed exactly by the current ROWS-frame emitter",
     "ofi_reversal_rate": "finite-slice compaction cannot be expressed exactly by the current ROWS-frame emitter",
@@ -661,6 +666,21 @@ SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
     "candle_wick_balance",
     "candle_range_pct",
     "candle_pattern_count",
+    "donchian_width_pct",
+    "donchian_channel_position",
+    "donchian_breakout_up",
+    "donchian_breakout_down",
+    "sma_distance_pct",
+    "consolidation_pct",
+    "consolidation_range_pct",
+    "true_range_pct",
+    "true_range_surprise",
+    "true_range_zscore",
+    "ema_distance_pct",
+    "dema_distance_pct",
+    "tema_distance_pct",
+    "ma_slope_pct",
+    "ema_crossover",
 })
 
 # EWMA/Wilder 平滑族历史注记（2026-08-27 起不再从 SQL 白名单移除）：
@@ -967,6 +987,37 @@ SQL_RESEARCH_SPEED_CANDIDATES: frozenset[str] = frozenset(
         "scale",
     }
 )
+
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset(
+    {"cci", "bias", "psy", "trix"}
+)
+
+# 2026-09-24 R67-SQLCOV: Wilder-ATR family dimensionless derivatives now have
+# exact DuckDB emitter branches (backend/sql_pushdown/emitter.py, real-DuckDB
+# parity in factor_engine/tests/backend_parity/test_sql_pushdown_sqlcov_r67_parity.py).
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "atr_pct",
+    "atr_acceleration",
+    "atr_zscore",
+    "atr_percentile",
+    "atr_short_long_ratio",
+})
+
+# 2026-09-24 R67-SQLCOV: Keltner / rolling-VWAP / causal-Ichimoku family
+# dimensionless derivatives now have exact DuckDB emitter branches
+# (backend/sql_pushdown/emitter.py; real-DuckDB parity in
+# factor_engine/tests/backend_parity/test_sql_pushdown_sqlcov_r67_parity.py).
+SQL_IMPLEMENTED_CANONICALS = SQL_IMPLEMENTED_CANONICALS | frozenset({
+    "keltner_width_pct",
+    "keltner_compression",
+    "keltner_breakout_strength",
+    "vwap_distance_pct",
+    "vwap_slope_pct",
+    "vwap_premium_pct",
+    "chikou_distance_pct",
+    "senkou_span_causal_pct",
+    "tenkan_kijun_cross",
+})
 
 # 向后兼容
 SQL_CAPABLE_CANONICALS = SQL_IMPLEMENTED_CANONICALS

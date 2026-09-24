@@ -18,14 +18,14 @@ import threading
 from collections import OrderedDict
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 from factor_engine.cleaned_operators.registry import OperatorRegistry
 from factor_engine.planner.logical_plan import PlanNode
 
 FE_ROOT = Path(__file__).resolve().parents[2]
 # Bump whenever template-emitted SQL semantics change.
-_SQL_TEMPLATE_GENERATION = "2026-09-14-window-support-paired-samples-v2"
+_SQL_TEMPLATE_GENERATION = "2026-09-22-conditional-extrema-quantile-v3"
 
 
 
@@ -264,6 +264,7 @@ class SqlTemplate:
                 time_column=kw["time_column"],
                 instrument_column=kw["instrument_column"],
                 filt=kw.get("filt"),
+                column_mapping=kw.get("column_mapping"),
             )
         else:
             requested_shape = ""
@@ -276,6 +277,7 @@ class SqlTemplate:
             time_column=kw.get("time_column", "date"),
             instrument_column=kw.get("instrument_column", "instrument"),
             filt=kw.get("filt"),
+            column_mapping=kw.get("column_mapping"),
             dialect=kw.get("dialect", SqlDialect.DUCKDB),
         )
 
@@ -643,6 +645,20 @@ def _structural_use_counts(plan: PlanNode) -> dict[str, int]:
 
     walk(plan)
     return counts
+
+
+def _safe_value_expr(dialect: SqlDialect, column: str = "_v") -> str:
+    """``CASE`` that maps NULL / NaN / ±Inf to NULL (pandas-missing semantics).
+
+    Shared by the R67 classic-trend emitter branches (cci / psy) which must drop
+    non-finite observations exactly like the pandas ``rolling`` machinery.
+    """
+    isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+    isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+    return (
+        f"CASE WHEN {column} IS NOT NULL AND NOT {isnan_fn}({column}) "
+        f"AND NOT {isinf_fn}({column}) THEN {column} END"
+    )
 
 
 def _inst_window(
@@ -1701,6 +1717,40 @@ def _compare_binary_sql(op: str, left_sql: str, right_sql: str, *, dialect: SqlD
     return f"SELECT l.ts, l.inst, {expr} AS _v {anchor_join_sql(left_sql, right_sql)}"
 
 
+def _cross_binary_sql(op: str, left_sql: str, right_sql: str, *, dialect: SqlDialect) -> str:
+    """上穿/下穿 SQL：相邻行 LAG 比较；NULL/NaN/±Inf 或无前值 → NULL。
+
+    与 ``stateful.events.cross_event``（pandas 权威）及 Polars 原生表达式
+    逐位一致：第 0 行无前值 → NULL；当前行或前一行的任一输入非有限 →
+    NULL；否则输出事件指示 1.0 / 0.0。
+    """
+    from factor_engine.backend.long_alignment import anchor_join_sql
+
+    isnan_fn = "isNaN" if dialect == SqlDialect.CLICKHOUSE else "isnan"
+    isinf_fn = "isInfinite" if dialect == SqlDialect.CLICKHOUSE else "isinf"
+
+    def _finite(col: str) -> str:
+        return (
+            f"({col} IS NOT NULL AND NOT {isnan_fn}({col}) "
+            f"AND NOT {isinf_fn}({col}))"
+        )
+
+    over = "PARTITION BY l.inst ORDER BY l.ts"
+    prev_l = f"LAG(l._v, 1) OVER ({over})"
+    prev_r = f"LAG(r._v, 1) OVER ({over})"
+    valid = (
+        f"({_finite('l._v')} AND {_finite('r._v')} "
+        f"AND {_finite(prev_l)} AND {_finite(prev_r)})"
+    )
+    if op == "cross_above":
+        cur_sym, prev_sym = ">", "<="
+    else:
+        cur_sym, prev_sym = "<", ">="
+    crossed = f"((l._v {cur_sym} r._v) AND ({prev_l} {prev_sym} {prev_r}))"
+    expr = f"CASE WHEN NOT ({valid}) THEN NULL WHEN {crossed} THEN 1.0 ELSE 0.0 END"
+    return f"SELECT l.ts, l.inst, {expr} AS _v " + anchor_join_sql(left_sql, right_sql)
+
+
 def _rolling_ols_partition(w: int, *, prefix: str = "l") -> str:
     """滚动 OLS 窗口的 PARTITION/ORDER BY 子句。"""
     return (
@@ -2158,6 +2208,7 @@ def _duckdb_conditional_rolling_sql(
     min_periods: int,
     op: str,
     ddof: int = 1,
+    q: float = 0.5,
 ) -> str:
     if value_sql is None:
         joined = f"FROM ({condition_sql}) c"
@@ -2195,6 +2246,16 @@ def _duckdb_conditional_rolling_sql(
         fn = "STDDEV_POP" if ddof == 0 else "STDDEV_SAMP"
         aggregate = f"{fn}(CASE WHEN {selected} THEN x._v ELSE NULL END) OVER ({over})"
         required = max(min_periods, ddof + 1)
+    elif op in {"min", "max"}:
+        aggregate = f"{op.upper()}(CASE WHEN {selected} THEN x._v ELSE NULL END) OVER ({over})"
+        required = min_periods
+    elif op == "quantile":
+        # DuckDB quantile_cont matches numpy.quantile linear interpolation.
+        aggregate = (
+            f"quantile_cont(CASE WHEN {selected} THEN x._v ELSE NULL END, {q}) "
+            f"OVER ({over})"
+        )
+        required = min_periods
     else:  # pragma: no cover
         raise ValueError(op)
     return (
@@ -2883,7 +2944,10 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_ts_partition=inner.has_ts_partition,
         )
 
-    if op in {"ts_count_if", "ts_sum_if", "ts_mean_if", "ts_std_if"}:
+    if op in {
+        "ts_count_if", "ts_sum_if", "ts_mean_if", "ts_std_if",
+        "ts_min_if", "ts_max_if", "ts_quantile_if",
+    }:
         if dialect != SqlDialect.DUCKDB:
             return None
         if op == "ts_count_if":
@@ -2909,9 +2973,16 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             window = int(node.attrs.get("window", _raw_literal(node, 2, 3)))
             default_mp = 2 if op == "ts_std_if" else 1
             min_periods = int(
-                node.attrs.get("min_periods", _raw_literal(node, 3, default_mp))
+                node.attrs.get(
+                    "min_periods",
+                    _raw_literal(node, 4 if op == "ts_quantile_if" else 3, default_mp),
+                )
             )
             ddof = int(node.attrs.get("ddof", _raw_literal(node, 4, 1)))
+            q = float(node.attrs.get("q", _raw_literal(node, 3, 0.5))) if op == "ts_quantile_if" else 0.5
+            if op == "ts_quantile_if" and (not math.isfinite(q) or not 0.0 <= q <= 1.0):
+                # DuckDB accepts negative quantiles with different semantics.
+                return None
             sql = _duckdb_conditional_rolling_sql(
                 value.sql,
                 condition.sql,
@@ -2919,6 +2990,7 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 min_periods=min_periods,
                 op=op.removeprefix("ts_").removesuffix("_if"),
                 ddof=ddof,
+                q=q,
             )
         return _Layer(sql, has_inst_window=True)
 
@@ -5117,6 +5189,193 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             has_inst_window=True,
         )
 
+    if op in {"kdj_k", "kdj_d", "kdj_j", "stoch_k", "stoch_d", "williams_r"}:
+        # R67 classic stochastic oscillators
+        # (technical/classic_oscillators_v1).  Argument order is
+        # ``(close, high, low, window[, smooth])``.
+        if len(node.inputs) < 3:
+            return None
+        close = _compile_layer(node.inputs[0], dialect=dialect)
+        high = _compile_layer(node.inputs[1], dialect=dialect)
+        low = _compile_layer(node.inputs[2], dialect=dialect)
+        if close is None or high is None or low is None:
+            return None
+        _default_w = 14 if op == "WILLIAMS_R" else 9
+        w = max(_window_int(node, default=_default_w), 2)
+        # rolling LLV/HHV with min_periods=1 (textbook TDX / ts_min / ts_max)
+        llv = _inst_window(dialect, w, "MIN", low.sql, min_periods=1)
+        hhv = _inst_window(dialect, w, "MAX", high.sql, min_periods=1)
+        # RSV = 100*(close-LLV)/(HHV-LLV); a zero-range window (HHV==LLV, a
+        # one-price limit run) is pinned to 100, matching the pandas reference.
+        rsv_sql = (
+            f"SELECT c.ts, c.inst, "
+            f"CASE WHEN c._v IS NULL OR h._v IS NULL OR l._v IS NULL THEN NULL "
+            f"WHEN h._v = l._v THEN 100.0 "
+            f"ELSE 100.0 * (c._v - l._v) / (h._v - l._v) END AS _v "
+            f"FROM ({close.sql}) c "
+            f"INNER JOIN ({llv}) l USING (ts, inst) "
+            f"INNER JOIN ({hhv}) h USING (ts, inst)"
+        )
+        if op == "stoch_k":
+            return _Layer(rsv_sql, has_inst_window=True)
+        if op == "williams_r":
+            # %R == RSV - 100 (identical to -100*(HHV-close)/(HHV-LLV)).
+            return _Layer(
+                f"SELECT ts, inst, (_v - 100.0) AS _v FROM ({rsv_sql}) r",
+                has_inst_window=True,
+            )
+        if op == "stoch_d":
+            m = max(int(_literal_positional(node, 3, default=3) or 3), 1)
+            return _Layer(
+                _inst_window(dialect, m, "AVG", rsv_sql, min_periods=1),
+                has_inst_window=True,
+            )
+        # K = ewm(alpha=1/3, adjust=False, min_periods=1) of RSV (seed = RSV);
+        # D = the same smoothing applied to K; J = 3K - 2D.
+        k_sql = _ewm_adjust_false_sql(
+            rsv_sql, w, 1.0 / 3.0, dialect=dialect, min_periods=1
+        )
+        if op == "kdj_k":
+            return _Layer(k_sql, has_inst_window=True)
+        d_sql = _ewm_adjust_false_sql(
+            k_sql, w, 1.0 / 3.0, dialect=dialect, min_periods=1
+        )
+        if op == "kdj_d":
+            return _Layer(d_sql, has_inst_window=True)
+        return _Layer(
+            f"SELECT k.ts, k.inst, (3.0 * k._v - 2.0 * d._v) AS _v "
+            f"FROM ({k_sql}) k INNER JOIN ({d_sql}) d USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    # R67 classic trend oscillators: cci / bias / psy / trix
+    if op == "bias":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = max(_window_int(node, default=6), 1)
+        ma_sql = _inst_window(dialect, w, "AVG", inner.sql, min_periods=w)
+        return _Layer(
+            f"SELECT c.ts, c.inst, "
+            f"CASE WHEN m._v IS NULL OR m._v = 0 THEN NULL "
+            f"ELSE 100.0 * (c._v - m._v) / m._v END AS _v "
+            f"FROM ({inner.sql}) c LEFT JOIN ({ma_sql}) m USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op == "psy":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = max(_window_int(node, default=12), 1)
+        safe = _safe_value_expr(dialect)
+        cmp_sql = (
+            f"SELECT ts, inst, "
+            f"CASE WHEN cur IS NULL OR prv IS NULL THEN NULL "
+            f"WHEN cur > prv THEN 1.0 ELSE 0.0 END AS _v "
+            f"FROM ("
+            f"SELECT ts, inst, {safe} AS cur, "
+            f"LAG({safe}, 1) OVER (PARTITION BY inst ORDER BY ts) AS prv "
+            f"FROM ({inner.sql}) t0"
+            f") t1"
+        )
+        over = (
+            f"PARTITION BY inst ORDER BY ts "
+            f"ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN COUNT(_v) OVER ({over}) < {w} THEN NULL "
+            f"ELSE 100.0 * SUM(_v) OVER ({over}) / COUNT(_v) OVER ({over}) END AS _v "
+            f"FROM ({cmp_sql}) t2",
+            has_inst_window=True,
+        )
+
+    if op == "cci":
+        if len(node.inputs) < 3:
+            return None
+        high = _compile_layer(node.inputs[0], dialect=dialect)
+        low = _compile_layer(node.inputs[1], dialect=dialect)
+        close = _compile_layer(node.inputs[2], dialect=dialect)
+        if high is None or low is None or close is None:
+            return None
+        w = max(_window_int(node, default=14), 2)
+        safe = _safe_value_expr(dialect)
+        norm = (
+            lambda sql: f"SELECT ts, inst, {safe} AS _v FROM ({sql}) t"  # noqa: E731
+        )
+        tp_sql = (
+            f"SELECT h.ts, h.inst, (h._v + l._v + c._v) / 3.0 AS tp "
+            f"FROM ({norm(high.sql)}) h "
+            f"INNER JOIN ({norm(low.sql)}) l USING (ts, inst) "
+            f"INNER JOIN ({norm(close.sql)}) c USING (ts, inst)"
+        )
+        rn_sql = (
+            f"SELECT ts, inst, tp, "
+            f"ROW_NUMBER() OVER (PARTITION BY inst ORDER BY ts) AS rn "
+            f"FROM ({tp_sql}) a0"
+        )
+        over = (
+            f"PARTITION BY inst ORDER BY ts "
+            f"ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+        )
+        stat_sql = (
+            f"SELECT ts, inst, tp, rn, "
+            f"AVG(tp) OVER ({over}) AS ma, "
+            f"COUNT(tp) OVER ({over}) AS n, "
+            f"MAX(tp) OVER ({over}) AS tp_max, "
+            f"MIN(tp) OVER ({over}) AS tp_min "
+            f"FROM ({rn_sql}) a1"
+        )
+        # MAD_t = mean_i |tp_i - MA_t| over the same window: MA_t must be the
+        # CURRENT row's mean broadcast to every row of the frame, which a plain
+        # window aggregate cannot express (MA varies per row).  A positional
+        # self-join over the window yields the exact pairwise deviations.
+        dev_sql = (
+            f"SELECT b.ts AS ts, b.inst AS inst, b.ma AS ma, b.n AS n, b.tp AS tp, "
+            f"b.rn AS brn, i.rn AS irn, ABS(i.tp - b.ma) AS dev "
+            f"FROM ({stat_sql}) b "
+            f"JOIN ({stat_sql}) i "
+            f"ON i.inst = b.inst AND i.rn BETWEEN b.rn - {w - 1} AND b.rn"
+        )
+        mad_sql = (
+            f"SELECT ts, inst, mad FROM ("
+            f"SELECT ts, inst, brn, irn, "
+            f"SUM(dev) OVER (PARTITION BY inst, brn ORDER BY irn "
+            f"ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) / {w} AS mad "
+            f"FROM ({dev_sql}) d0"
+            f") d1 WHERE irn = brn"
+        )
+        return _Layer(
+            f"SELECT f.ts, f.inst, "
+            f"CASE WHEN f.n < {w} OR f.tp IS NULL OR f.ma IS NULL "
+            f"OR m.mad IS NULL OR m.mad = 0 "
+            f"OR f.tp_max = f.tp_min THEN NULL "
+            f"ELSE (f.tp - f.ma) / (0.015 * m.mad) END AS _v "
+            f"FROM ({stat_sql}) f LEFT JOIN ({mad_sql}) m USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op == "trix":
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = max(_window_int(node, default=12), 1)
+        e1 = _ema_span_over_inst(inner.sql, w, dialect=dialect, min_periods=w)
+        e2 = _ema_span_over_inst(e1, w, dialect=dialect, min_periods=w)
+        e3 = _ema_span_over_inst(e2, w, dialect=dialect, min_periods=w)
+        return _Layer(
+            f"SELECT ts, inst, "
+            f"CASE WHEN cur IS NULL OR prv IS NULL OR prv = 0 THEN NULL "
+            f"ELSE 100.0 * (cur - prv) / prv END AS _v "
+            f"FROM ("
+            f"SELECT ts, inst, _v AS cur, "
+            f"LAG(_v, 1) OVER (PARTITION BY inst ORDER BY ts) AS prv "
+            f"FROM ({e3}) t0"
+            f") t1",
+            has_inst_window=True,
+        )
+
     if op == "MACD_line":
         if len(node.inputs) < 1:
             return None
@@ -5222,6 +5481,238 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
         return _Layer(
             f"SELECT o.ts, o.inst, (o._v - g._v) AS _v "
             f"FROM ({osc}) o LEFT JOIN ({sig}) g USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op in {"candle_body_strength", "candle_wick_balance", "candle_range_pct",
+              "candle_pattern_count"}:
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 4:
+            return None
+        layers = [_compile_layer(child, dialect=dialect) for child in node.inputs[:4]]
+        if any(layer is None for layer in layers):
+            return None
+        open_layer, high_layer, low_layer, close_layer = layers
+        w = _window_int(node, default=4)
+        if w < 2:
+            return None
+        joined = (
+            f"SELECT o.ts, o.inst, o._v AS _o, h._v AS _h, l._v AS _l, c._v AS _c "
+            f"FROM ({open_layer.sql}) o JOIN ({high_layer.sql}) h USING (ts, inst) "
+            f"JOIN ({low_layer.sql}) l USING (ts, inst) "
+            f"JOIN ({close_layer.sql}) c USING (ts, inst)"
+        )
+        finite = "isfinite(_o) AND isfinite(_h) AND isfinite(_l) AND isfinite(_c)"
+        valid = (
+            f"{finite} AND _c > 0.0 AND _h > _l "
+            f"AND _h >= GREATEST(_o, _c) AND _l <= LEAST(_o, _c)"
+        )
+        if op == "candle_pattern_count":
+            pattern_valid = (
+                "_o IS NOT NULL AND _h IS NOT NULL AND _l IS NOT NULL AND _c IS NOT NULL "
+                "AND NOT isnan(_o) AND NOT isnan(_h) AND NOT isnan(_l) AND NOT isnan(_c) "
+                "AND _c > 0.0 AND _h > _l AND _h >= GREATEST(_o, _c) "
+                "AND _l <= LEAST(_o, _c)"
+            )
+            body_ratio = "ABS(_c - _o) / (_h - _l)"
+            upper_ratio = "(_h - GREATEST(_o, _c)) / (_h - _l)"
+            lower_ratio = "(LEAST(_o, _c) - _l) / (_h - _l)"
+            pattern = (
+                f"(isfinite({body_ratio}) AND isfinite({upper_ratio}) AND isfinite({lower_ratio}) AND ("
+                f"({body_ratio}) < 0.1 OR "
+                f"(({upper_ratio}) >= 0.7 AND ({lower_ratio}) <= 0.15) OR "
+                f"(({lower_ratio}) >= 0.7 AND ({upper_ratio}) <= 0.15)))"
+            )
+            over = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {w - 1} PRECEDING AND CURRENT ROW"
+            rows = (
+                "_o IS NOT NULL AND _h IS NOT NULL AND _l IS NOT NULL AND _c IS NOT NULL "
+                "AND NOT isnan(_o) AND NOT isnan(_h) AND NOT isnan(_l) AND NOT isnan(_c)"
+            )
+            num = f"SUM(CASE WHEN {pattern_valid} AND {pattern} THEN 1.0 WHEN {pattern_valid} THEN 0.0 END) OVER ({over})"
+            den = f"SUM(CASE WHEN {pattern_valid} THEN 1.0 ELSE 0.0 END) OVER ({over})"
+            row_count = f"SUM(CASE WHEN {rows} THEN 1 ELSE 0 END) OVER ({over})"
+            value = (
+                f"CASE WHEN {row_count} < {w} OR {den} <= 0.0 THEN NULL "
+                f"ELSE {num} / {den} END"
+            )
+            return _Layer(
+                f"SELECT ts, inst, {value} AS _v FROM ({joined}) j",
+                has_inst_window=True,
+            )
+        if op == "candle_body_strength":
+            value = "(_c - _o) / (_h - _l)"
+        elif op == "candle_wick_balance":
+            value = "((LEAST(_o, _c) - _l) - (_h - GREATEST(_o, _c))) / (_h - _l)"
+        else:
+            value = "(_h - _l) / _c"
+        geometry = f"SELECT ts, inst, CASE WHEN {valid} THEN {value} END AS _v FROM ({joined}) j"
+        return _Layer(
+            _inst_window(dialect, w, "AVG", geometry, min_periods=w),
+            has_inst_window=True,
+        )
+
+    if op in {"donchian_width_pct", "donchian_channel_position",
+              "donchian_breakout_up", "donchian_breakout_down"}:
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 3:
+            return None
+        high = _compile_layer(node.inputs[0], dialect=dialect)
+        low = _compile_layer(node.inputs[1], dialect=dialect)
+        close = _compile_layer(node.inputs[2], dialect=dialect)
+        if high is None or low is None or close is None:
+            return None
+        w = _window_int(node, default=20)
+        if w < 2:
+            return None
+        high_sql, low_sql = high.sql, low.sql
+        if op in {"donchian_breakout_up", "donchian_breakout_down"}:
+            high_sql = f"SELECT ts, inst, LAG(_v) OVER (PARTITION BY inst ORDER BY ts) AS _v FROM ({high_sql}) t"
+            low_sql = f"SELECT ts, inst, LAG(_v) OVER (PARTITION BY inst ORDER BY ts) AS _v FROM ({low_sql}) t"
+        upper = _inst_window(dialect, w, "MAX", high_sql, min_periods=w)
+        lower = _inst_window(dialect, w, "MIN", low_sql, min_periods=w)
+        joined = (
+            f"SELECT c.ts, c.inst, c._v AS _c, u._v AS _u, l._v AS _l "
+            f"FROM ({close.sql}) c JOIN ({upper}) u USING (ts, inst) "
+            f"JOIN ({lower}) l USING (ts, inst)"
+        )
+        valid = "isfinite(_c) AND _c > 0.0 AND isfinite(_u) AND isfinite(_l)"
+        if op == "donchian_width_pct":
+            value = f"CASE WHEN {valid} THEN (_u - _l) / _c END"
+        elif op == "donchian_channel_position":
+            value = f"CASE WHEN {valid} THEN (_c - _l) / NULLIF(_u - _l, 0.0) END"
+        elif op == "donchian_breakout_up":
+            value = f"CASE WHEN NOT COALESCE(({valid}), FALSE) THEN NULL WHEN _c >= _u THEN _c / _u - 1.0 ELSE 0.0 END"
+        else:
+            value = f"CASE WHEN NOT COALESCE(({valid}), FALSE) THEN NULL WHEN _c <= _l THEN _c / _l - 1.0 ELSE 0.0 END"
+        return _Layer(f"SELECT ts, inst, {value} AS _v FROM ({joined}) j", has_inst_window=True)
+
+    if op in {"sma_distance_pct", "consolidation_pct", "consolidation_range_pct"}:
+        if dialect != SqlDialect.DUCKDB or not node.inputs:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        if w < 2:
+            return None
+        positive = f"SELECT ts, inst, CASE WHEN isfinite(_v) AND _v > 0.0 THEN _v END AS _v FROM ({inner.sql}) t"
+        mean = _inst_window(dialect, w, "AVG", positive, min_periods=w)
+        if op == "sma_distance_pct":
+            return _Layer(
+                f"SELECT x.ts, x.inst, CASE WHEN isfinite(x._v) AND x._v > 0.0 "
+                f"THEN (x._v - m._v) / x._v END AS _v FROM ({inner.sql}) x "
+                f"JOIN ({mean}) m USING (ts, inst)",
+                has_inst_window=True,
+            )
+        if op == "consolidation_pct":
+            std = _inst_window(dialect, w, "STDDEV_SAMP", positive, min_periods=w)
+            return _Layer(
+                f"SELECT m.ts, m.inst, s._v / NULLIF(m._v, 0.0) AS _v "
+                f"FROM ({mean}) m JOIN ({std}) s USING (ts, inst)",
+                has_inst_window=True,
+            )
+        upper = _inst_window(dialect, w, "MAX", positive, min_periods=w)
+        lower = _inst_window(dialect, w, "MIN", positive, min_periods=w)
+        return _Layer(
+            f"SELECT x.ts, x.inst, CASE WHEN isfinite(x._v) AND x._v > 0.0 "
+            f"THEN (u._v - l._v) / x._v END AS _v FROM ({inner.sql}) x "
+            f"JOIN ({upper}) u USING (ts, inst) JOIN ({lower}) l USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op in {"true_range_pct", "true_range_surprise", "true_range_zscore"}:
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 3:
+            return None
+        high = _compile_layer(node.inputs[0], dialect=dialect)
+        low = _compile_layer(node.inputs[1], dialect=dialect)
+        close = _compile_layer(node.inputs[2], dialect=dialect)
+        if high is None or low is None or close is None:
+            return None
+        joined = (
+            f"SELECT h.ts, h.inst, h._v AS _h, l._v AS _l, c._v AS _c, "
+            f"LAG(c._v) OVER (PARTITION BY c.inst ORDER BY c.ts) AS _p "
+            f"FROM ({high.sql}) h JOIN ({low.sql}) l USING (ts, inst) "
+            f"JOIN ({close.sql}) c USING (ts, inst)"
+        )
+        value = (
+            "CASE WHEN _h IS NULL OR _l IS NULL OR _p IS NULL OR "
+            "isnan(_h) OR isnan(_l) OR isnan(_p) OR NOT (_p > 0.0) THEN NULL "
+            "ELSE GREATEST(_h - _l, ABS(_h - _p), ABS(_l - _p)) / _p END"
+        )
+        ratio = f"SELECT ts, inst, {value} AS _v FROM ({joined}) j"
+        if op == "true_range_pct":
+            return _Layer(ratio, has_inst_window=True)
+        w = _window_int(node, default=20)
+        if w < 2:
+            return None
+        mean = _inst_window(dialect, w, "AVG", ratio, min_periods=w)
+        if op == "true_range_surprise":
+            return _Layer(
+                f"SELECT x.ts, x.inst, x._v / NULLIF(m._v, 0.0) - 1.0 AS _v "
+                f"FROM ({ratio}) x JOIN ({mean}) m USING (ts, inst)",
+                has_inst_window=True,
+            )
+        std = _inst_window(dialect, w, "STDDEV_SAMP", ratio, min_periods=w)
+        return _Layer(
+            f"SELECT x.ts, x.inst, (x._v - m._v) / NULLIF(s._v, 0.0) AS _v "
+            f"FROM ({ratio}) x JOIN ({mean}) m USING (ts, inst) "
+            f"JOIN ({std}) s USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op in {"ema_distance_pct", "dema_distance_pct", "tema_distance_pct", "ma_slope_pct"}:
+        if dialect != SqlDialect.DUCKDB or not node.inputs:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        w = _window_int(node, default=20)
+        e1 = _ema_span_over_inst(inner.sql, w, dialect=dialect, min_periods=w)
+        ma = e1
+        if op in {"dema_distance_pct", "tema_distance_pct"}:
+            e2 = _ema_span_over_inst(e1, w, dialect=dialect, min_periods=w)
+            if op == "dema_distance_pct":
+                ma = (
+                    f"SELECT a.ts, a.inst, 2.0 * a._v - b._v AS _v "
+                    f"FROM ({e1}) a JOIN ({e2}) b USING (ts, inst)"
+                )
+            else:
+                e3 = _ema_span_over_inst(e2, w, dialect=dialect, min_periods=w)
+                ma = (
+                    f"SELECT a.ts, a.inst, 3.0 * a._v - 3.0 * b._v + c._v AS _v "
+                    f"FROM ({e1}) a JOIN ({e2}) b USING (ts, inst) "
+                    f"JOIN ({e3}) c USING (ts, inst)"
+                )
+        if op == "ma_slope_pct":
+            ma = (
+                f"SELECT ts, inst, _v - LAG(_v) OVER (PARTITION BY inst ORDER BY ts) AS _v "
+                f"FROM ({e1}) e"
+            )
+        close_valid = (
+            "x._v IS NOT NULL AND NOT isnan(x._v) AND x._v > 0.0"
+            if op == "ma_slope_pct" else "isfinite(x._v) AND x._v > 0.0"
+        )
+        return _Layer(
+            f"SELECT x.ts, x.inst, CASE WHEN {close_valid} "
+            f"THEN {'m._v / x._v' if op == 'ma_slope_pct' else '(x._v - m._v) / x._v'} END AS _v "
+            f"FROM ({inner.sql}) x JOIN ({ma}) m USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op == "ema_crossover":
+        if dialect != SqlDialect.DUCKDB or not node.inputs:
+            return None
+        inner = _compile_layer(node.inputs[0], dialect=dialect)
+        if inner is None:
+            return None
+        fast = _int_attr(node, "fast_window", input_index=0, default=5)
+        slow = _int_attr(node, "slow_window", input_index=1, default=20)
+        if fast >= slow:
+            return None
+        fast_sql = _ema_span_over_inst(inner.sql, fast, dialect=dialect, min_periods=fast)
+        slow_sql = _ema_span_over_inst(inner.sql, slow, dialect=dialect, min_periods=slow)
+        return _Layer(
+            f"SELECT x.ts, x.inst, CASE WHEN x._v IS NOT NULL AND NOT isnan(x._v) AND x._v > 0.0 "
+            f"THEN SIGN((f._v - s._v) / x._v) END AS _v FROM ({inner.sql}) x "
+            f"JOIN ({fast_sql}) f USING (ts, inst) JOIN ({slow_sql}) s USING (ts, inst)",
             has_inst_window=True,
         )
 
@@ -6578,43 +7069,52 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 f"ELSE {cnt} * {rv4} / (3 * POW({rv2}, 2) + 1e-12) END"
             )
         elif op == "ts_vol_of_vol":
-            wi = int(_literal_positional(node, 0, default=5) or 5)
-            wo = int(_literal_positional(node, 1, default=40) or 40)
+            wi = _int_attr(node, "inner_window", input_index=0, default=5)
+            wo = _int_attr(node, "outer_window", input_index=1, default=40)
+            mp = max(2, _int_attr(node, "min_periods", input_index=2, default=2))
+            if mp > wi or mp > wo:
+                return None
             sd = _dialect_fn(dialect, "stddev_pop")
-            inner = _inst_window(dialect, wi, sd, x_l.sql, min_periods=2)
+            inner = _inst_window(dialect, wi, sd, x_l.sql, min_periods=mp)
             logv = f"SELECT ts, inst, LN(_v + 1e-12) AS _v FROM ({inner}) _lv"
-            outer = _inst_window(dialect, wo, sd, logv, min_periods=2)
+            outer = _inst_window(dialect, wo, sd, logv, min_periods=mp)
             return _Layer(outer, has_inst_window=True)
         elif op == "ts_vol_acceleration":
-            wi = int(_literal_positional(node, 0, default=5) or 5)
-            la = max(1, int(_literal_positional(node, 1, default=5) or 5))
+            wi = _int_attr(node, "inner_window", input_index=0, default=5)
+            la = _int_attr(node, "lag", input_index=1, default=5)
+            mp = max(2, _int_attr(node, "min_periods", input_index=2, default=2))
             sd = _dialect_fn(dialect, "stddev_pop")
-            inner = _inst_window(dialect, wi, sd, x_l.sql, min_periods=2)
+            inner = _inst_window(dialect, wi, sd, x_l.sql, min_periods=mp)
             lagged = (
                 f"SELECT ts, inst, _v, LAG(_v, {la}) OVER (PARTITION BY inst ORDER BY ts) AS _p "
                 f"FROM ({inner}) _la"
             )
             expr = (
                 f"CASE WHEN _v IS NULL OR _p IS NULL THEN NULL "
-                f"ELSE LN((_v + 1e-12) / (_p + 1e-12)) END"
+                f"WHEN _v <= 1e-12 OR _p <= 1e-12 THEN NULL "
+                f"ELSE LN(_v / _p) END"
             )
             return _Layer(
                 f"SELECT ts, inst, {expr} AS _v FROM ({lagged}) _f",
                 has_inst_window=True,
             )
         else:  # ts_vol_term_structure
-            ws = int(_literal_positional(node, 0, default=5) or 5)
-            wl = int(_literal_positional(node, 1, default=40) or 40)
+            ws = _int_attr(node, "short_window", input_index=0, default=5)
+            wl = _int_attr(node, "long_window", input_index=1, default=40)
+            mp = max(2, _int_attr(node, "min_periods", input_index=2, default=2))
+            if ws >= wl:
+                return None
             sd = _dialect_fn(dialect, "stddev_pop")
-            over_s = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {ws - 1} PRECEDING AND CURRENT ROW"
-            over_l = f"PARTITION BY inst ORDER BY ts ROWS BETWEEN {wl - 1} PRECEDING AND CURRENT ROW"
+            short = _inst_window(dialect, ws, sd, x_l.sql, min_periods=mp)
+            long = _inst_window(dialect, wl, sd, x_l.sql, min_periods=mp)
             both = (
-                f"SELECT ts, inst, {sd}(_v) OVER ({over_s}) AS _s, {sd}(_v) OVER ({over_l}) AS _l, "
-                f"COUNT(_v) OVER ({over_s}) AS _cs FROM ({x_l.sql}) _b"
+                f"SELECT s.ts, s.inst, s._v AS _s, l._v AS _l "
+                f"FROM ({short}) s JOIN ({long}) l USING (ts, inst)"
             )
             expr = (
-                f"CASE WHEN _cs < 2 THEN NULL WHEN _s IS NULL OR _l IS NULL THEN NULL "
-                f"ELSE LN((_s + 1e-12) / (_l + 1e-12)) END"
+                f"CASE WHEN _s IS NULL OR _l IS NULL THEN NULL "
+                f"WHEN _s <= 1e-12 OR _l <= 1e-12 THEN NULL "
+                f"ELSE LN(_s / _l) END"
             )
             return _Layer(
                 f"SELECT ts, inst, {expr} AS _v FROM ({both}) _f",
@@ -8384,6 +8884,18 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
             _compare_binary_sql(op, left.sql, right.sql, dialect=dialect),
             has_inst_window=left.has_inst_window or right.has_inst_window,
             has_ts_partition=left.has_ts_partition or right.has_ts_partition,
+        )
+
+    if op in {"cross_above", "cross_under"}:
+        if len(node.inputs) != 2:
+            return None
+        left = _compile_layer(node.inputs[0], dialect=dialect)
+        right = _compile_layer(node.inputs[1], dialect=dialect)
+        if left is None or right is None:
+            return None
+        return _Layer(
+            _cross_binary_sql(op, left.sql, right.sql, dialect=dialect),
+            has_inst_window=True,
         )
 
     if op == "and_":
@@ -13117,6 +13629,304 @@ def _compile_layer_impl(node: PlanNode, *, dialect: SqlDialect) -> _Layer | None
                 has_inst_window=True,
             )
 
+    # R67-SQLCOV-ATR-FAMILY
+    # ------------------------------------------------------------------
+    # Wilder-ATR-family dimensionless derivatives (technical/indicators_v2).
+    # Every output is an exact causal transform of the Wilder ATR
+    # (``_atr_wilder_sql`` -> ``ewm(alpha=1/w, adjust=False, min_periods=w)``)
+    # and the pandas ``rolling`` machinery; no new smoothing is introduced.
+    # pandas reference (indicators_v2.py):
+    #   _wilder(x, w) = x.ewm(alpha=1/w, adjust=False, min_periods=w).mean()
+    #   atr_pct       = _wilder(_tr(h,l,c), w) / close.where(close > 0)
+    # ------------------------------------------------------------------
+    if op in {
+        "atr_pct",
+        "atr_acceleration",
+        "atr_zscore",
+        "atr_percentile",
+        "atr_short_long_ratio",
+    }:
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 3:
+            return None
+        high = _compile_layer(node.inputs[0], dialect=dialect)
+        low = _compile_layer(node.inputs[1], dialect=dialect)
+        close = _compile_layer(node.inputs[2], dialect=dialect)
+        if high is None or low is None or close is None:
+            return None
+
+        def _atr_pct_sql(w: int) -> str:
+            """pandas ``atr_pct`` == Wilder ATR / close.where(close > 0)."""
+            atr = _atr_wilder_sql(high.sql, low.sql, close.sql, w, dialect=dialect)
+            return (
+                f"SELECT a.ts, a.inst, "
+                f"CASE WHEN c._v IS NULL OR NOT (c._v > 0.0) THEN NULL "
+                f"WHEN a._v IS NULL THEN NULL "
+                f"ELSE a._v / c._v END AS _v "
+                f"FROM ({atr}) a LEFT JOIN ({close.sql}) c USING (ts, inst)"
+            )
+
+        if op == "atr_pct":
+            w = max(_window_int(node, default=14), 2)
+            return _Layer(_atr_pct_sql(w), has_inst_window=True)
+
+        if op == "atr_acceleration":
+            w = max(_window_int(node, default=14), 2)
+            ratio = _atr_pct_sql(w)
+            # pandas ``atr_pct(...).diff()`` == x_t - x_{t-1} per instrument.
+            return _Layer(
+                f"SELECT ts, inst, "
+                f"(_v - LAG(_v, 1) OVER (PARTITION BY inst ORDER BY ts)) AS _v "
+                f"FROM ({ratio}) t",
+                has_inst_window=True,
+            )
+
+        if op == "atr_short_long_ratio":
+            short_w = max(int(_literal_positional(node, 2, default=14) or 14), 2)
+            long_w = max(int(_literal_positional(node, 3, default=28) or 28), 2)
+            # pandas raises ValueError when short_window >= long_window; decline
+            # so the router falls back to the pandas reference (which raises).
+            if short_w >= long_w:
+                return None
+            short_sql = _atr_pct_sql(short_w)
+            long_sql = _atr_pct_sql(long_w)
+            # pandas masks a zero long ratio via ``.replace(0, np.nan)``.
+            return _Layer(
+                f"SELECT s.ts, s.inst, "
+                f"CASE WHEN s._v IS NULL OR l._v IS NULL OR l._v = 0 THEN NULL "
+                f"ELSE s._v / l._v END AS _v "
+                f"FROM ({short_sql}) s LEFT JOIN ({long_sql}) l USING (ts, inst)",
+                has_inst_window=True,
+            )
+
+        # atr_zscore / atr_percentile share (window, score_window).
+        w = max(_window_int(node, default=14), 2)
+        score_w = max(int(_literal_positional(node, 3, default=20) or 20), 2)
+        ratio = _atr_pct_sql(w)
+        if op == "atr_zscore":
+            # pandas: (ratio - ratio.rolling(sw, mp=sw).mean()) /
+            #          ratio.rolling(sw, mp=sw).std(ddof=1).replace(0, nan)
+            mean = _inst_window(dialect, score_w, "AVG", ratio, min_periods=score_w)
+            std = _inst_window(dialect, score_w, "STDDEV_SAMP", ratio, min_periods=score_w)
+            return _Layer(
+                f"SELECT r.ts, r.inst, "
+                f"CASE WHEN r._v IS NULL OR m._v IS NULL OR s._v IS NULL OR s._v = 0 "
+                f"THEN NULL ELSE (r._v - m._v) / s._v END AS _v "
+                f"FROM ({ratio}) r "
+                f"JOIN ({mean}) m USING (ts, inst) "
+                f"JOIN ({std}) s USING (ts, inst)",
+                has_inst_window=True,
+            )
+        # atr_percentile: pandas rolling(sw, min_periods=sw).rank(pct=True).
+        return _Layer(
+            _ts_pct_rank_sql(ratio, window=score_w, dialect=dialect, min_periods=score_w),
+            has_inst_window=True,
+        )
+
+    # R67-SQLCOV-KELTNER-VWAP-ICHIMOKU
+    # ------------------------------------------------------------------
+    # Dimensionless Keltner / rolling-VWAP / causal-Ichimoku derivatives
+    # (technical/indicators_v2).  Built ONLY from certified primitives:
+    #   _ema_span_over_inst -> pandas ewm(span=w, adjust=False, min_periods=w)
+    #   _atr_wilder_sql     -> _wilder(_tr(h,l,c), w)
+    #   _inst_window        -> pandas rolling(w, min_periods=w) aggregates
+    # ------------------------------------------------------------------
+    if op in {"keltner_width_pct", "keltner_compression", "keltner_breakout_strength"}:
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 3:
+            return None
+        high = _compile_layer(node.inputs[0], dialect=dialect)
+        low = _compile_layer(node.inputs[1], dialect=dialect)
+        close = _compile_layer(node.inputs[2], dialect=dialect)
+        if high is None or low is None or close is None:
+            return None
+        ema_w = max(int(_literal_positional(node, 2, default=20) or 20), 2)
+        atr_w = max(int(_literal_positional(node, 3, default=14) or 14), 2)
+        mult = float(_literal_positional(node, 4, default=2.0) or 2.0)
+        mid = _ema_span_over_inst(close.sql, ema_w, dialect=dialect, min_periods=ema_w)
+        atr = _atr_wilder_sql(high.sql, low.sql, close.sql, atr_w, dialect=dialect)
+        upper = (
+            f"SELECT ts, inst, (m._v + {mult} * a._v) AS _v "
+            f"FROM ({mid}) m JOIN ({atr}) a USING (ts, inst)"
+        )
+        lower = (
+            f"SELECT ts, inst, (m._v - {mult} * a._v) AS _v "
+            f"FROM ({mid}) m JOIN ({atr}) a USING (ts, inst)"
+        )
+        # pandas ``keltner_width_pct`` == (upper - lower) / mid.where(mid > 0).
+        width = (
+            f"SELECT u.ts, u.inst, "
+            f"CASE WHEN u._v IS NULL OR l._v IS NULL OR m._v IS NULL OR NOT (m._v > 0.0) "
+            f"THEN NULL ELSE (u._v - l._v) / m._v END AS _v "
+            f"FROM ({upper}) u JOIN ({lower}) l USING (ts, inst) "
+            f"JOIN ({mid}) m USING (ts, inst)"
+        )
+        if op == "keltner_width_pct":
+            return _Layer(width, has_inst_window=True)
+        if op == "keltner_compression":
+            score_w = max(int(_literal_positional(node, 5, default=20) or 20), 2)
+            return _Layer(
+                _ts_pct_rank_sql(width, window=score_w, dialect=dialect, min_periods=score_w),
+                has_inst_window=True,
+            )
+        # keltner_breakout_strength:
+        #   span = (u - l).replace(0, nan)
+        #   above = (close - u) where close > u else 0 ; NaN if close/u missing
+        #   below = (close - l) where close < l else 0 ; NaN if close/l missing
+        #   out = (above + below) / span
+        return _Layer(
+            f"SELECT c.ts, c.inst, "
+            f"CASE WHEN c._v IS NULL OR u._v IS NULL OR l._v IS NULL THEN NULL "
+            f"WHEN (u._v - l._v) = 0 THEN NULL "
+            f"ELSE ((CASE WHEN c._v > u._v THEN c._v - u._v ELSE 0.0 END) "
+            f"+ (CASE WHEN c._v < l._v THEN c._v - l._v ELSE 0.0 END)) "
+            f"/ (u._v - l._v) END AS _v "
+            f"FROM ({close.sql}) c JOIN ({upper}) u USING (ts, inst) "
+            f"JOIN ({lower}) l USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op in {"vwap_distance_pct", "vwap_slope_pct", "vwap_premium_pct"}:
+        if dialect != SqlDialect.DUCKDB:
+            return None
+        if op == "vwap_premium_pct":
+            if len(node.inputs) < 4:
+                return None
+            high = _compile_layer(node.inputs[0], dialect=dialect)
+            low = _compile_layer(node.inputs[1], dialect=dialect)
+            close = _compile_layer(node.inputs[2], dialect=dialect)
+            vol = _compile_layer(node.inputs[3], dialect=dialect)
+            if high is None or low is None or close is None or vol is None:
+                return None
+            w = max(int(_literal_positional(node, 3, default=20) or 20), 2)
+            # price = HLC3 typical price (NaN when any leg is missing).
+            base = (
+                "SELECT h.ts, h.inst, "
+                "CASE WHEN h._v IS NULL OR l._v IS NULL OR c._v IS NULL THEN NULL "
+                "ELSE (h._v + l._v + c._v) / 3.0 END AS _p, v._v AS _v "
+                f"FROM ({high.sql}) h JOIN ({low.sql}) l USING (ts, inst) "
+                f"JOIN ({close.sql}) c USING (ts, inst) JOIN ({vol.sql}) v USING (ts, inst)"
+            )
+        else:
+            if len(node.inputs) < 2:
+                return None
+            price = _compile_layer(node.inputs[0], dialect=dialect)
+            vol = _compile_layer(node.inputs[1], dialect=dialect)
+            if price is None or vol is None:
+                return None
+            w = max(int(_literal_positional(node, 1, default=20) or 20), 2)
+            base = (
+                f"SELECT p.ts, p.inst, p._v AS _p, v._v AS _v "
+                f"FROM ({price.sql}) p JOIN ({vol.sql}) v USING (ts, inst)"
+            )
+        # pandas ``_rolling_vwap_strict``: a bar contributes only when price AND
+        # volume are present and volume > 0; a window with valid-volume sum <= 0
+        # (or fewer than w valid bars) -> NaN (never 0/0 -> fake price).
+        valid = f"{_duckdb_valid('_p')} AND {_duckdb_valid('_v')} AND _v > 0.0"
+        num_inner = f"SELECT ts, inst, CASE WHEN {valid} THEN _p * _v END AS _v FROM ({base}) t"
+        den_inner = f"SELECT ts, inst, CASE WHEN {valid} THEN _v END AS _v FROM ({base}) t"
+        num = _inst_window(dialect, w, "SUM", num_inner, min_periods=w)
+        den = _inst_window(dialect, w, "SUM", den_inner, min_periods=w)
+        vwap = (
+            f"SELECT n.ts, n.inst, "
+            f"CASE WHEN d._v IS NULL OR NOT (d._v > 0.0) THEN NULL "
+            f"ELSE n._v / d._v END AS _v "
+            f"FROM ({num}) n JOIN ({den}) d USING (ts, inst)"
+        )
+        if op == "vwap_premium_pct":
+            # (close.where(close>0) - HLC3 VWAP) / close.where(close>0)
+            return _Layer(
+                f"SELECT b.ts, b.inst, "
+                f"CASE WHEN c._v IS NULL OR NOT (c._v > 0.0) THEN NULL "
+                f"WHEN v._v IS NULL THEN NULL ELSE (c._v - v._v) / c._v END AS _v "
+                f"FROM ({base}) b JOIN ({close.sql}) c USING (ts, inst) "
+                f"JOIN ({vwap}) v USING (ts, inst)",
+                has_inst_window=True,
+            )
+        if op == "vwap_distance_pct":
+            # (close.where(close>0) - vwap) / close.where(close>0)
+            return _Layer(
+                f"SELECT b.ts, b.inst, "
+                f"CASE WHEN b._p IS NULL OR NOT (b._p > 0.0) THEN NULL "
+                f"WHEN v._v IS NULL THEN NULL ELSE (b._p - v._v) / b._p END AS _v "
+                f"FROM ({base}) b JOIN ({vwap}) v USING (ts, inst)",
+                has_inst_window=True,
+            )
+        # vwap_slope_pct: rolling VWAP.diff() / close.where(close > 0)
+        diff = (
+            f"SELECT ts, inst, "
+            f"(_v - LAG(_v, 1) OVER (PARTITION BY inst ORDER BY ts)) AS _v "
+            f"FROM ({vwap}) t"
+        )
+        return _Layer(
+            f"SELECT b.ts, b.inst, "
+            f"CASE WHEN b._p IS NULL OR NOT (b._p > 0.0) THEN NULL "
+            f"WHEN d._v IS NULL THEN NULL ELSE d._v / b._p END AS _v "
+            f"FROM ({diff}) d JOIN ({base}) b USING (ts, inst)",
+            has_inst_window=True,
+        )
+
+    if op in {"chikou_distance_pct", "senkou_span_causal_pct", "tenkan_kijun_cross"}:
+        if dialect != SqlDialect.DUCKDB or len(node.inputs) < 3:
+            return None
+        high = _compile_layer(node.inputs[0], dialect=dialect)
+        low = _compile_layer(node.inputs[1], dialect=dialect)
+        close = _compile_layer(node.inputs[2], dialect=dialect)
+        if high is None or low is None or close is None:
+            return None
+
+        def _mid_line(w: int) -> str:
+            """Causal (Tenkan/Kijun/Senkou) midpoint = (max(high,w)+min(low,w))/2."""
+            hmax = _inst_window(dialect, w, "MAX", high.sql, min_periods=w)
+            lmin = _inst_window(dialect, w, "MIN", low.sql, min_periods=w)
+            return (
+                f"SELECT a.ts, a.inst, ((a._v + b._v) / 2.0) AS _v "
+                f"FROM ({hmax}) a LEFT JOIN ({lmin}) b USING (ts, inst)"
+            )
+
+        if op == "chikou_distance_pct":
+            kijun_w = max(int(_literal_positional(node, 2, default=26) or 26), 2)
+            kijun = _mid_line(kijun_w)
+            # (close.where(close>0) - kijun) / close.where(close>0)
+            return _Layer(
+                f"SELECT c.ts, c.inst, "
+                f"CASE WHEN c._v IS NULL OR NOT (c._v > 0.0) THEN NULL "
+                f"WHEN k._v IS NULL THEN NULL ELSE (c._v - k._v) / c._v END AS _v "
+                f"FROM ({close.sql}) c JOIN ({kijun}) k USING (ts, inst)",
+                has_inst_window=True,
+            )
+
+        tenkan_w = max(int(_literal_positional(node, 2, default=9) or 9), 2)
+        kijun_w = max(int(_literal_positional(node, 3, default=26) or 26), 2)
+        # pandas raises ValueError when tenkan_window >= kijun_window; decline so
+        # the router falls back to the pandas reference (which raises).
+        if tenkan_w >= kijun_w:
+            return None
+        tenkan = _mid_line(tenkan_w)
+        kijun = _mid_line(kijun_w)
+        if op == "tenkan_kijun_cross":
+            signed = (
+                f"SELECT c.ts, c.inst, "
+                f"CASE WHEN c._v IS NULL OR NOT (c._v > 0.0) THEN NULL "
+                f"ELSE (t._v - k._v) / c._v END AS _v "
+                f"FROM ({close.sql}) c JOIN ({tenkan}) t USING (ts, inst) "
+                f"JOIN ({kijun}) k USING (ts, inst)"
+            )
+            return _Layer(
+                f"SELECT ts, inst, CAST(SIGN(_v) AS DOUBLE) AS _v FROM ({signed}) d",
+                has_inst_window=True,
+            )
+        # senkou_span_causal_pct: ((tenkan + kijun)/2 - close) / close
+        mid = (
+            f"SELECT t.ts, t.inst, ((t._v + k._v) / 2.0) AS _v "
+            f"FROM ({tenkan}) t JOIN ({kijun}) k USING (ts, inst)"
+        )
+        return _Layer(
+            f"SELECT c.ts, c.inst, "
+            f"CASE WHEN c._v IS NULL OR NOT (c._v > 0.0) THEN NULL "
+            f"WHEN m._v IS NULL THEN NULL ELSE (m._v - c._v) / c._v END AS _v "
+            f"FROM ({close.sql}) c JOIN ({mid}) m USING (ts, inst)",
+            has_inst_window=True,
+        )
+
     return None
 
 
@@ -13191,6 +14001,7 @@ def _build_base_cte(
     time_column: str,
     instrument_column: str,
     columns: Sequence[str],
+    column_mapping: Mapping[str, str] | None,
     filt: SqlPushdownFilter | None,
     dialect: SqlDialect,
 ) -> str:
@@ -13199,7 +14010,17 @@ def _build_base_cte(
     注意：source_from 在调用前已由 compile_plan_to_sql 验证
     （通过 _duckdb_dataset_ref 或直接表名验证）。
     """
-    col_list = ", ".join(_quote_ident(c) for c in sorted(columns))
+    mapping = dict(column_mapping or {})
+    projections: list[str] = []
+    for logical in sorted(columns):
+        physical = str(mapping.get(logical, logical))
+        if physical == logical:
+            projections.append(_quote_ident(logical))
+        else:
+            projections.append(
+                f"{_quote_ident(physical)} AS {_quote_ident(logical)}"
+            )
+    col_list = ", ".join(projections)
     where = _build_filter_clause(filt, dialect=dialect)
     return (
         f"base AS (SELECT {_quote_ident(time_column)} AS ts, "
@@ -13243,6 +14064,7 @@ def _template_cache_key(
     time_column: str,
     instrument_column: str,
     filt: SqlPushdownFilter | None,
+    column_mapping: Mapping[str, str] | None = None,
 ) -> str:
     """模板缓存 key = 计划形状 + 编译上下文（dataset/table/轴/过滤）。
 
@@ -13262,6 +14084,7 @@ def _template_cache_key(
         "generation": _SQL_TEMPLATE_GENERATION, "dataset": dataset, "table": table,
         "time_column": time_column, "instrument_column": instrument_column,
         "filter": filt_sig, "dialect": getattr(dialect, "value", str(dialect)),
+        "column_mapping": sorted((str(k), str(v)) for k, v in (column_mapping or {}).items()),
     }
     encoded = json.dumps(context, sort_keys=True, separators=(",", ":"), default=str)
     ctx_hash = hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
@@ -13276,6 +14099,7 @@ def compile_plan_to_sql(
     time_column: str,
     instrument_column: str,
     filt: SqlPushdownFilter | None = None,
+    column_mapping: Mapping[str, str] | None = None,
     dialect: SqlDialect = SqlDialect.DUCKDB,
 ) -> CompiledSql | None:
     """将单因子逻辑计划编译为可执行 SQL。
@@ -13298,6 +14122,7 @@ def compile_plan_to_sql(
     tkey = _template_cache_key(
         plan, dialect, dataset=dataset, table=table,
         time_column=time_column, instrument_column=instrument_column, filt=filt,
+        column_mapping=column_mapping,
     )
     bkey = _literal_binding_key(plan)
     cached = _SQL_TEMPLATE_CACHE.get(tkey, bkey)
@@ -13354,6 +14179,7 @@ def compile_plan_to_sql(
         time_column=time_column,
         instrument_column=instrument_column,
         columns=sorted(cols),
+        column_mapping=column_mapping,
         filt=push_filter,
         dialect=dialect,
     )
@@ -13388,6 +14214,7 @@ def compile_plan_to_sql_template(
     time_column: str,
     instrument_column: str,
     filt: SqlPushdownFilter | None = None,
+    column_mapping: Mapping[str, str] | None = None,
     dialect: SqlDialect = SqlDialect.DUCKDB,
 ) -> SqlTemplate | None:
     """R40 #65/#217：返回 :class:`SqlTemplate`（模板 + 首个 literal binding）。
@@ -13398,12 +14225,14 @@ def compile_plan_to_sql_template(
     compiled = compile_plan_to_sql(
         plan, dataset=dataset, table=table, time_column=time_column,
         instrument_column=instrument_column, filt=filt, dialect=dialect,
+        column_mapping=column_mapping,
     )
     if compiled is None:
         return None
     tkey = _template_cache_key(
         plan, dialect, dataset=dataset, table=table,
         time_column=time_column, instrument_column=instrument_column, filt=filt,
+        column_mapping=column_mapping,
     )
     return SqlTemplate(shape_key=tkey, binding_key=_literal_binding_key(plan), compiled=compiled)
 
@@ -13428,6 +14257,7 @@ def compile_plans_batch_to_sql(
     time_column: str,
     instrument_column: str,
     filt: SqlPushdownFilter | None = None,
+    column_mapping: Mapping[str, str] | None = None,
     dialect: SqlDialect = SqlDialect.DUCKDB,
 ) -> BatchCompiledSql | None:
     """将多个 SQL 可编译子树合并为一条 WITH 查询（共享 base CTE）。
@@ -13448,6 +14278,7 @@ def compile_plans_batch_to_sql(
             time_column=time_column,
             instrument_column=instrument_column,
             filt=filt,
+            column_mapping=column_mapping,
             dialect=dialect,
         )
         if single is None:
@@ -13506,6 +14337,7 @@ def compile_plans_batch_to_sql(
         time_column=time_column,
         instrument_column=instrument_column,
         columns=sorted(cols),
+        column_mapping=column_mapping,
         filt=push_filter,
         dialect=dialect,
     )

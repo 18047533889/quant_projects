@@ -234,6 +234,9 @@ _LOAD_MODULES = (
     "factor_engine.cleaned_operators.multiscale_trend",
     "factor_engine.cleaned_operators.envelope",
     "factor_engine.cleaned_operators.crossing",
+    # R67 relation-cross: the basic boolean A-crosses-above / A-crosses-under
+    # events (pandas_numpy reference + Polars native expr + SQL emitter).
+    "factor_engine.cleaned_operators.relation_cross_v1",
     "factor_engine.cleaned_operators.extrema_divergence",
     "factor_engine.cleaned_operators.threshold_cycle",
     "factor_engine.cleaned_operators.state_episode_excursion",
@@ -301,6 +304,11 @@ _LOAD_MODULES = (
     "factor_engine.cleaned_operators.intraday.slice_profile",
     "factor_engine.cleaned_operators.intraday.limit_eod",
     "factor_engine.cleaned_operators.technical.new_indicators",
+    # R67: classic stochastic oscillators — KDJ (K/D/J), Stochastic %K/%D and
+    # Williams %R, none of which existed on the DSL surface (the legacy
+    # StochasticK/StochasticD/WilliamsR in technical/signal.py are unregistered
+    # by the dedupe/overhaul passes).
+    "factor_engine.cleaned_operators.technical.classic_oscillators_v1",
     "factor_engine.cleaned_operators.technical.chip_ops",
     "factor_engine.cleaned_operators.cross_section.panel_gap",
     "factor_engine.cleaned_operators.r47_policy_pack",
@@ -322,6 +330,14 @@ _LOAD_MODULES = (
     "factor_engine.cleaned_operators.wave1_valuation",
     "factor_engine.cleaned_operators.wave1_cs_momentum",
     "factor_engine.cleaned_operators.wave1_event_response",
+    # R67: classic trend oscillators absent from the DSL surface
+    # (CCI / BIAS / PSY / TRIX) — pandas reference + polars backend,
+    # daily-surface migration registered via register_daily_migration.
+    "factor_engine.cleaned_operators.technical.classic_trend_v1",
+    # R67: classic technical indicators v2 — Aroon (up/down/osc) / DPO / TSI /
+    # Ultimate Oscillator / Klinger / NVI / PVI / Mass Index / VR / EMV /
+    # DMA / BBI / Stochastic RSI / A-D Line.
+    "factor_engine.cleaned_operators.technical.classic_indicators_v2",
     "factor_engine.cleaned_operators.wave1_seasonal",
 )
 

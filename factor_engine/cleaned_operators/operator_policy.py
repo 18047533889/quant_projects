@@ -1349,6 +1349,9 @@ _STATEFUL_PACK_POLICIES = {
     # Module 2 — events
     "event_refractory": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     "cross_event": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    # R67 relation-cross primitives (identical first-bar / NaN contract as cross_event)
+    "cross_above": {"scope": "ts", "pit_safe": True, "min_periods": 1},
+    "cross_under": {"scope": "ts", "pit_safe": True, "min_periods": 1},
     # Module 3 — sequential / conditional memory
     "ts_cusum_pressure": {"scope": "ts", "pit_safe": True, "min_periods": 5},
     "ts_rank_if": {"scope": "ts", "pit_safe": True, "min_periods": 5},

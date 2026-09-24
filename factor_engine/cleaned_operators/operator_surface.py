@@ -57,7 +57,7 @@ _REGRESSION_MODEL_CANONICALS=frozenset({
 "ts_quantile_regression_slope","ts_ar_coefficient","ts_level_shift_score","ts_vol_shift_score",
 })
 _RELATION_EXPANSION_CANONICALS=frozenset({
-"relation_hhi","relation_entropy","relation_topk_sum","relation_rank_weighted_sum","relation_category_share","relation_peer_weighted_mean_ex_self","relation_entry_count","relation_exit_count","relation_weighted_change","index_member","index_weight_change","index_entry_exit_event","index_membership_age","event_cumulative_return_past","event_abnormal_return_past","fin_applicability_mask","calendar_day_diff","fin_announcement_lag","relation_distinct_count","relation_overlap_ratio","trading_day_diff",
+"relation_hhi","relation_entropy","relation_topk_sum","relation_rank_weighted_sum","relation_category_share","relation_peer_weighted_mean_ex_self","relation_entry_count","relation_exit_count","relation_weighted_change","index_member","index_weight_change","index_entry_exit_event","index_membership_age","event_cumulative_return_past","event_abnormal_return_past","fin_applicability_mask","calendar_day_diff","fin_announcement_lag","relation_distinct_count","relation_overlap_ratio","trading_day_diff","cross_above","cross_under",
 })
 EXTENDED_ONLY_CANONICALS=frozenset({
 "OBV",
@@ -1030,6 +1030,12 @@ for _c, _m in _R59_PROMOTIONS.items():
     register_daily_migration(_c, review_id=_m["review_id"], semantic_hash=_m["semantic_hash"], approved_authoring_tier=_m["approved_authoring_tier"])
 # =====================================================================
 
+# R67 relation-cross primitives (reviewed daily migration): the basic
+# boolean A-上穿-B / A-下穿-B events.  Semantics are copied verbatim from
+# ``stateful.events.cross_event`` (first bar / non-finite → NaN).
+register_daily_migration("cross_above", review_id="R67-cross-above", semantic_hash="r67-cross-above-v1")
+register_daily_migration("cross_under", review_id="R67-cross-under", semantic_hash="r67-cross-under-v1")
+
 def daily_factor_migrated() -> frozenset[str]:
     """Live read of the reviewed daily-migration surface (manifest keys)."""
     return frozenset(REVIEWED_MIGRATION_MANIFEST)
@@ -1219,3 +1225,25 @@ def surface_summary(canonicals:Iterable[str])->dict[str,int]:
     out={name:0 for name in ("daily","extended","research","unsafe","legacy","internal","unclassified")}
     for canonical in canonicals:out[classify_canonical(canonical)]+=1
     return out
+
+
+# ---------------------------------------------------------------------------
+# R67 (2026-09-24): classic trend oscillators absent from the DSL surface.
+# ``cci`` / ``bias`` / ``psy`` / ``trix`` are implemented in
+# ``cleaned_operators/technical/classic_trend_v1.py`` (pandas_numpy reference +
+# polars numpy kernel + DuckDB emitter branches) and are promoted to the daily
+# authoring surface here.
+# ---------------------------------------------------------------------------
+_R67_PROMOTIONS: dict[str, dict[str, str]] = {
+    "cci": {"review_id": "R67-cci", "semantic_hash": "r67-cci-v1"},
+    "bias": {"review_id": "R67-bias", "semantic_hash": "r67-bias-v1"},
+    "psy": {"review_id": "R67-psy", "semantic_hash": "r67-psy-v1"},
+    "trix": {"review_id": "R67-trix", "semantic_hash": "r67-trix-v1"},
+}
+for _r67_canonical, _r67_meta in _R67_PROMOTIONS.items():
+    register_daily_migration(
+        _r67_canonical,
+        review_id=_r67_meta["review_id"],
+        semantic_hash=_r67_meta["semantic_hash"],
+        approved_authoring_tier="daily",
+    )

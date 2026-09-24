@@ -326,3 +326,51 @@ OperatorRegistry.register_alias("intraday_return", "open_close_return")
 #   aliases.
 
 # dedupe 在 load_all() 全部模块加载后执行，见 cleaned_operators.__init__.load_all
+
+
+# ---------------------------------------------------------------------------
+# R67: 关系/比较类别名 —— WorldQuant Alpha101 与 factors.directory 的习惯写法
+# （greater/less 等），以及经典技术指标 DSL 名补全。
+# 逐个显式登记，不做家族循环（遵守本文件「no blanket alias bypass」约定）。
+# ---------------------------------------------------------------------------
+OperatorRegistry.register_alias("greater", "gt")
+OperatorRegistry.register_alias("greater_than", "gt")
+OperatorRegistry.register_alias("less", "lt")
+OperatorRegistry.register_alias("less_than", "lt")
+OperatorRegistry.register_alias("equal_to", "eq")
+OperatorRegistry.register_alias("not_equal", "ne")
+OperatorRegistry.register_alias("greater_equal", "ge")
+OperatorRegistry.register_alias("less_equal", "le")
+OperatorRegistry.register_alias("max_of", "maximum")
+OperatorRegistry.register_alias("min_of", "minimum")
+OperatorRegistry.register_alias("if_then_else", "where")
+
+# 经典技术指标：canonical 已存在但缺 DSL 名
+OperatorRegistry.register_alias("rsi", "RSI_WILDER")
+OperatorRegistry.register_alias("psar", "PSAR")
+OperatorRegistry.register_alias("ts_psar", "PSAR")
+# ts_rsi 原指向已退役的 canonical RSI；重定向到唯一存续实现
+OperatorRegistry.register_alias(
+    "ts_rsi", "RSI_WILDER", replace=True,
+    replacement_reason="RSI canonical retired; RSI_WILDER is the surviving implementation",
+)
+
+# ---------------------------------------------------------------------------
+# R67: KDJ / Stochastic / Williams %R DSL 名（canonical 见
+# technical/classic_oscillators_v1.py，逐个显式登记，不做家族循环）。
+# canonical 即小写 DSL 名（catalog() 以小写 canonical 为键）；此处只登记惯用别名。
+# ---------------------------------------------------------------------------
+OperatorRegistry.register_alias("kdj", "kdj_k")
+OperatorRegistry.register_alias("willr", "williams_r")
+OperatorRegistry.register_alias("williams_pct_r", "williams_r")
+OperatorRegistry.register_alias("stochastic_k", "stoch_k")
+OperatorRegistry.register_alias("stochastic_d", "stoch_d")
+
+
+# ---------------------------------------------------------------------------
+# R67 关系族：「A 上穿/下穿 B」最基础的布尔原语别名。
+# 逐个显式登记（遵守本文件「no blanket alias bypass」约定）。
+# ---------------------------------------------------------------------------
+OperatorRegistry.register_alias("crosses_above", "cross_above")
+OperatorRegistry.register_alias("crosses_under", "cross_under")
+OperatorRegistry.register_alias("cross_over", "cross_above")
