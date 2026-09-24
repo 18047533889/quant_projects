@@ -158,13 +158,16 @@ def _sample_entropy(vals: np.ndarray, m: int, r_scale: float, window: int) -> fl
     extendable_starts = n - m
 
     def _count(pattern_len: int) -> int:
-        count = 0
-        for i in range(extendable_starts - 1):
-            for j in range(i + 1, extendable_starts):
-                d = np.max(np.abs(finite[i : i + pattern_len] - finite[j : j + pattern_len]))
-                if d < r:
-                    count += 1
-        return count
+        # R66-perf: Chebyshev 模板距离的 O(n^2) 向量化——
+        # |x_{i+k} - x_{j+k}| 恰是 |x_i - x_j| 矩阵的 (k,k) 对角带，
+        # 逐带 elementwise max 即得全部模板距离；计数用整数恒等式
+        # (全矩阵命中数 - 对角线)/2 精确还原 i<j 的参考计数。
+        E = np.abs(finite[:, None] - finite[None, :])
+        s0 = extendable_starts
+        D = E[:s0, :s0]
+        for k in range(1, pattern_len):
+            D = np.maximum(D, E[k : k + s0, k : k + s0])
+        return (int(np.count_nonzero(D < r)) - s0) // 2
 
     b = _count(m)
     a = _count(m + 1)
@@ -193,13 +196,16 @@ def _pseudocount_sample_entropy(vals: np.ndarray, m: int, r_scale: float, window
     extendable_starts = n - m
 
     def _count(pattern_len: int) -> int:
-        count = 0
-        for i in range(extendable_starts - 1):
-            for j in range(i + 1, extendable_starts):
-                d = np.max(np.abs(finite[i : i + pattern_len] - finite[j : j + pattern_len]))
-                if d < r:
-                    count += 1
-        return count
+        # R66-perf: Chebyshev 模板距离的 O(n^2) 向量化——
+        # |x_{i+k} - x_{j+k}| 恰是 |x_i - x_j| 矩阵的 (k,k) 对角带，
+        # 逐带 elementwise max 即得全部模板距离；计数用整数恒等式
+        # (全矩阵命中数 - 对角线)/2 精确还原 i<j 的参考计数。
+        E = np.abs(finite[:, None] - finite[None, :])
+        s0 = extendable_starts
+        D = E[:s0, :s0]
+        for k in range(1, pattern_len):
+            D = np.maximum(D, E[k : k + s0, k : k + s0])
+        return (int(np.count_nonzero(D < r)) - s0) // 2
 
     b = _count(m)
     a = _count(m + 1)
@@ -258,6 +264,41 @@ _register("ts_lz_complexity", "Lempel-Ziv 复杂度（符号化）。", ["x", "w
            lambda x, window=200, bins=8: _apply(x, lambda v: _lz_complexity(v, int(window), int(bins))), cost=8)
 
 
+def _perm_entropy_o3(seg: np.ndarray) -> float:
+    """order=3 的 :func:`_permutation_entropy` 向量化等价（R66-perf）。
+
+    与参考实现逐点一致：stable argsort 秩、ties 丢弃（np.unique 判重）、
+    ``-Σ p·log p / log(3!)``；仅求和顺序不同（bincount 序 vs 首现序），
+    差异 ~1e-16。
+
+    R66-perf-2：无 ties 时 stable-argsort 的秩恰等于“严格小于它的元素个数”，
+    故用三个两两比较直接得到秩与 pattern code，跳过两次 argsort 与
+    take_along_axis；ties 掩码改为三个相等比较的并集，与排序后相邻相等
+    判定等价（三元素中任意相等 ⟺ 排序后相邻相等）。counts/p 的计算与
+    求和顺序保持不变。
+    """
+    n = seg.size
+    nw = n - 2
+    if nw < 1:
+        return np.nan
+    x0 = seg[:nw]
+    x1 = seg[1 : nw + 1]
+    x2 = seg[2 : nw + 2]
+    ok = ~((x0 == x1) | (x1 == x2) | (x0 == x2))
+    total = int(np.count_nonzero(ok))
+    if total <= 1:
+        return np.nan
+    x0 = x0[ok]
+    x1 = x1[ok]
+    x2 = x2[ok]
+    codes = ((x1 < x0).astype(np.int64) + (x2 < x0).astype(np.int64)) * 2 \
+        + (x2 < x1).astype(np.int64)
+    counts = np.bincount(codes, minlength=6)
+    p = counts[counts > 0] / total
+    h = -float(np.sum(p * np.log(p)))
+    return float(h / np.log(math.factorial(3)))
+
+
 def _multiscale_entropy_slope(vals: np.ndarray, max_scale: int, window: int) -> float:
     seg = vals[-int(window):]
     # P1-91: physical time axis only (no dropna reconnect over gaps).
@@ -274,7 +315,7 @@ def _multiscale_entropy_slope(vals: np.ndarray, max_scale: int, window: int) -> 
         # never the newest bars (the newest bar is the current decision row).
         # The old ``finite[: n//s*s]`` dropped the newest remainder.
         coarse = finite[len(finite) % s:].reshape(-1, s).mean(axis=1)
-        e = _permutation_entropy(coarse, 3, len(coarse))
+        e = _perm_entropy_o3(coarse)
         if np.isfinite(e):
             scales.append(float(s))
             ents.append(e)

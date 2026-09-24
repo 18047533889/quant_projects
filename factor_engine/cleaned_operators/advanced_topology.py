@@ -255,28 +255,264 @@ def _takens_points(vals: np.ndarray, tau: int, dim: int) -> np.ndarray | None:
     return pts
 
 
+# ---------------------------------------------------------------------------
+# R66-perf: batched Takens + Vietoris-Rips H1 kernels
+#
+# 逐 (row, col) 的 Python 循环（_takens_points + _rips_h1_pairs）改为面板级
+# 批量计算。语义逐点复刻：round-9、stable-unique 保留首次出现（时间序）、
+# 时间骨架抽稀到 ≤ _MAX_POINTS、边按 (dist, i, j) / 三角按 (flt, i, j, k)
+# 排序、F2 位掩码（双 word）最高位主元的 Zomorodian–Carlsson 消元。
+# ---------------------------------------------------------------------------
+
+_RIPS_TABLES_CACHE: dict[int, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+
+# W1(Hungarian)结果精确缓存：key 为两 diagram 的 (birth, death) 字节串。
+# 纯函数缓存，相同输入必得相同输出；超上限时整体清空。
+_W1_ASSIGN_CACHE: dict = {}
+
+
+def _rips_tables(n_max: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """``(edges_ij, triangles_ijk, triangle_edge_ids)`` of the ``n_max`` simplex."""
+    tab = _RIPS_TABLES_CACHE.get(n_max)
+    if tab is None:
+        pairs = [(i, j) for i in range(n_max) for j in range(i + 1, n_max)]
+        eid = {p: k for k, p in enumerate(pairs)}
+        tris = [
+            (i, j, k)
+            for i in range(n_max)
+            for j in range(i + 1, n_max)
+            for k in range(j + 1, n_max)
+        ]
+        tab = (
+            np.asarray(pairs, dtype=np.int64),
+            np.asarray(tris, dtype=np.int64),
+            np.asarray(
+                [[eid[(i, j)], eid[(i, k)], eid[(j, k)]] for (i, j, k) in tris],
+                dtype=np.int64,
+            ),
+        )
+        _RIPS_TABLES_CACHE[n_max] = tab
+    return tab
+
+
+def _high_bit_u64(lo: np.ndarray, hi: np.ndarray) -> np.ndarray:
+    """Highest set bit index of a two-word (lo, hi) F2 bitmask."""
+    hi_nz = hi != 0
+    word = np.where(hi_nz, hi, lo)
+    _, expo = np.frexp(word.astype(np.float64))
+    bit = expo.astype(np.int64) - 1
+    shift = np.clip(bit, 0, 63).astype(np.uint64)
+    set_ = ((word >> shift) & np.uint64(1)) != 0
+    bit = np.where(set_, bit, bit - 1)
+    return np.where(hi_nz, bit + 64, bit)
+
+
+def _robust_z_local(win2: np.ndarray):
+    """逐行 median/MAD*1.4826（std 回退）稳健 z，复刻 _takens_points 归一。"""
+    finite = np.isfinite(win2)
+    n_fin = finite.sum(axis=1)
+    pf = np.where(finite, win2, np.nan)
+    guarded = np.where((n_fin > 0)[:, None], pf, 0.0)
+    with np.errstate(invalid="ignore"):
+        med = np.nanmedian(guarded, axis=1)
+        mad = np.nanmedian(
+            np.where(n_fin[:, None] > 0, np.abs(pf - med[:, None]), 0.0), axis=1
+        ) * 1.4826
+    spread = np.where(mad > _EPS, mad, np.nan)
+    use_std = ~(mad > _EPS) & (n_fin >= 2)
+    if use_std.any():
+        with np.errstate(invalid="ignore"):
+            spread[use_std] = np.nanstd(guarded[use_std], axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        z = (win2 - med[:, None]) / spread[:, None]
+    return z, spread, n_fin
+
+
+def _trailing_windows(vals_2d: np.ndarray, w: int) -> np.ndarray:
+    """(rows, w, cols) 左对齐 trailing 窗口，行内不足补 NaN。"""
+    rows, cols = vals_2d.shape
+    ridx = np.arange(rows)[:, None]
+    widx = np.maximum(0, ridx - w + 1) + np.arange(w)[None, :]
+    gather = vals_2d[np.clip(widx, 0, rows - 1)]
+    return np.where((widx <= ridx)[:, :, None], gather, np.nan)
+
+
+def _takens_clouds_batch(win: np.ndarray, lag: int, dim: int, tau: int, cap: int):
+    """批量化 ``_takens_points``：返回 (pts, vmask, n_uniq)。
+
+    ``win`` 为 (cells, w) 的稳健 z 填充窗口；dedup 用 lexsort（时间索引为
+    末位 tie-break → 首次出现保序），抽稀为 round(linspace(0, n-1, cap))
+    去重的时间骨架。
+    """
+    cells, w = win.shape
+    n_pts = w - lag
+    posidx = np.arange(n_pts)[:, None] + tau * np.arange(dim)[None, :]
+    cloud = win[:, posidx]
+    valid = np.isfinite(cloud).all(axis=2)
+    rnd = np.round(cloud, 9)
+    keys = (np.broadcast_to(np.arange(n_pts, dtype=float), (cells, n_pts)),) + tuple(
+        np.where(valid, rnd[:, :, c], np.nan) for c in range(dim - 1, -1, -1)
+    )
+    perm = np.lexsort(keys, axis=1)
+    masked = np.where(valid[..., None], rnd, np.nan)
+    srt = np.take_along_axis(
+        masked, np.broadcast_to(perm[:, :, None], masked.shape), axis=1
+    )
+    pos = np.arange(n_pts, dtype=np.int64)[None, :]
+    starts = np.ones((cells, n_pts), dtype=bool)
+    starts[:, 1:] = ~(srt[:, 1:, :] == srt[:, :-1, :]).all(axis=2)
+    gstart = starts & (pos < valid.sum(axis=1)[:, None])
+    fidx = np.where(gstart, perm, n_pts)
+    order2 = np.argsort(fidx, axis=1, kind="stable")
+    found = np.take_along_axis(gstart, order2, axis=1)
+    n_uniq = found.sum(axis=1)
+    uni = np.take_along_axis(
+        srt, np.broadcast_to(order2[:, :, None], srt.shape), axis=1
+    )
+    span = np.maximum(n_uniq - 1, 0).astype(np.float64)
+    node = np.arange(cap, dtype=np.float64)[None, :] * (span / (cap - 1.0))[:, None]
+    node[:, -1] = span
+    last = np.maximum(n_uniq - 1, 0)[:, None]
+    ksrt = np.sort(np.clip(np.rint(node).astype(np.int64), 0, last), axis=1)
+    kmask = np.ones_like(ksrt, dtype=bool)
+    kmask[:, 1:] = ksrt[:, 1:] != ksrt[:, :-1]
+    pts = np.full((cells, cap, dim), np.nan)
+    vmask = np.zeros((cells, cap), dtype=bool)
+    flat = kmask.ravel()
+    rsel = np.repeat(np.arange(cells), cap)[flat]
+    csel = (np.cumsum(kmask, axis=1) - 1).ravel()[flat]
+    ssel = ksrt.ravel()[flat]
+    pts[rsel, csel] = uni[rsel, ssel]
+    vmask[rsel, csel] = True
+    vmask &= (n_uniq >= 4)[:, None]
+    return pts, vmask, n_uniq
+
+
+def _rips_h1_pairs_batch(points: np.ndarray, pmask: np.ndarray):
+    """批量化 ``_rips_h1_pairs``：返回 ``(birth, death, has)``。
+
+    has[c, t] = 第 c 个点云的第 t 个（filtration 序）三角消元后存活的 H1 对；
+    birth/death 为对应边长/三角 filtration。padding 产生的 inf 简单形已剔除。
+    """
+    rows, n_max, _ = points.shape
+    pairs_ij, tris, tri_edges = _rips_tables(n_max)
+    ei, ej = pairs_ij[:, 0], pairs_ij[:, 1]
+    ti, tj, tk = tris[:, 0], tris[:, 1], tris[:, 2]
+    diff = points[:, :, None, :] - points[:, None, :, :]
+    dist = np.sqrt((diff * diff).sum(axis=-1))
+    ok_pair = pmask[:, :, None] & pmask[:, None, :]
+    dist = np.where(ok_pair, dist, np.inf)
+    edge = dist[:, ei, ej]
+    tri_flt = np.maximum(np.maximum(dist[:, ti, tj], dist[:, ti, tk]), dist[:, tj, tk])
+    n_edges = edge.shape[1]
+    shp_e = edge.shape
+    # 边表按 (ei, ej) 字典序生成，故 lexsort((ej, ei, edge)) 的次键 tie-break
+    # 恰为表序 —— 等价于对 edge 的单键 stable argsort。
+    eorder = np.argsort(edge, axis=1, kind="stable")
+    e_sorted = np.take_along_axis(edge, eorder, axis=1)
+    erank = np.empty(shp_e, dtype=np.int64)
+    np.put_along_axis(erank, eorder, np.arange(n_edges, dtype=np.int64)[None, :], axis=1)
+    shp_t = tri_flt.shape
+    # 同理：三角表按 (ti, tj, tk) 字典序生成，lexsort 的三个次键 tie-break
+    # 恰为表序 —— 等价于对 tri_flt 的单键 stable argsort。
+    torder = np.argsort(tri_flt, axis=1, kind="stable")
+    tri_rank = erank[:, tri_edges]
+    # R66-perf-4：初始边界掩码循环前一次算完（(n_tris, rows) 布局，每轮取
+    # 连续行切片），并转置 torder/tri_flt；消元链本身与原实现逐步一致。
+    # 同一格内三条边 rank 互异（erank 是排列），位的 OR 等价于 XOR。
+    rix = np.arange(rows)
+    # 按每格 filtration 序（torder）gather 三角：输出列 t 对应 torder[:, t]。
+    rr_all = tri_rank[rix[:, None], torder]  # (rows, n_tris, 3)
+    low_all = rr_all < 64
+    blo = np.left_shift(np.uint64(1), (rr_all & np.int64(63)).astype(np.uint64))
+    blo = np.where(low_all, blo, np.uint64(0))
+    bhi = np.left_shift(
+        np.uint64(1), np.clip(rr_all - np.int64(64), 0, 63).astype(np.uint64)
+    )
+    bhi = np.where(low_all, np.uint64(0), bhi)
+    c0_lo = np.ascontiguousarray((blo[:, :, 0] | blo[:, :, 1] | blo[:, :, 2]).T)
+    c0_hi = np.ascontiguousarray((bhi[:, :, 0] | bhi[:, :, 1] | bhi[:, :, 2]).T)
+    flt_T = np.ascontiguousarray(tri_flt[rix[:, None], torder].T)
+    piv_lo = np.zeros((rows, n_edges), dtype=np.uint64)
+    piv_hi = np.zeros((rows, n_edges), dtype=np.uint64)
+    birth = np.full((rows, shp_t[1]), np.nan, dtype=float)
+    death = np.full((rows, shp_t[1]), np.nan, dtype=float)
+    has = np.zeros((rows, shp_t[1]), dtype=bool)
+    _zero = np.uint64(0)
+    for t in range(shp_t[1]):
+        clo = c0_lo[t].copy()
+        chi = c0_hi[t].copy()
+        flt = flt_T[t]
+        act = np.flatnonzero((clo | chi) != 0)
+        while act.size:
+            alo = clo[act]
+            ahi = chi[act]
+            hi = _high_bit_u64(alo, ahi)
+            # 占据过的 piv 位形必非零（act 只含非零掩码），零判定等价 piv_ok。
+            free = (piv_lo[act, hi] == _zero) & (piv_hi[act, hi] == _zero)
+            if free.any():
+                st = act[free]
+                hst = hi[free]
+                piv_lo[st, hst] = alo[free]
+                piv_hi[st, hst] = ahi[free]
+                # 同一轮内每格至多 free 一次，直接写等价于 stored 暂存。
+                birth[st, t] = e_sorted[st, hst]
+                death[st, t] = flt[st]
+                has[st, t] = True
+            keep = ~free
+            if not keep.any():
+                break
+            ct = act[keep]
+            phi = hi[keep]
+            clo[ct] = alo[keep] ^ piv_lo[ct, phi]
+            chi[ct] = ahi[keep] ^ piv_hi[ct, phi]
+            act = ct[(clo[ct] | chi[ct]) != 0]
+    has &= np.isfinite(birth) & np.isfinite(death)
+    return birth, death, has
+
+
 def _betti_series(vals_2d: np.ndarray, window: int, tau: int, dim: int) -> np.ndarray:
+    """R66-perf 批量化：每格 trailing 窗口 → Takens 云 → Rips H1 → max 持久
+    / 中位成对距离。语义与逐格参考实现一致。
+
+    R66-perf-4：robust-z / Takens / Rips 全量单批；消元内核见
+    ``_rips_h1_pairs_batch`` 的 R66-perf-4 注。
+    """
     rows, cols = vals_2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    for col in range(cols):
-        for row in range(rows):
-            start = max(0, row - window + 1)
-            chunk = vals_2d[start : row + 1, col]
-            pts = _takens_points(chunk, tau, dim)
-            if pts is None:
-                continue
-            pd_pairwise = np.sqrt(((pts[:, None, :] - pts[None, :, :]) ** 2).sum(-1))
-            # R6-121: the distance scale must come from the OFF-DIAGONAL
-            # distances (i<j) only — the full matrix median mechanically includes
-            # the zero diagonal and biases the scale low.  Use the strictly
-            # upper-triangular pairwise distances.
-            triu = pd_pairwise[np.triu_indices(pd_pairwise.shape[0], k=1)]
-            finite = triu[np.isfinite(triu)]
-            if finite.size == 0 or float(np.median(finite)) <= _EPS:
-                continue
-            pairs = _rips_h1_pairs(pts)
-            out[row, col] = _max_persistence(pairs) / float(np.median(finite))
-    return out
+    w = int(window)
+    lag = tau * (dim - 1)
+    if rows == 0 or cols == 0 or w - lag <= 0 or w < lag + 3:
+        return out
+    win = _trailing_windows(vals_2d, w).transpose(0, 2, 1).reshape(rows * cols, w)
+    # 注：曾尝试 np.unique(axis=0) 去重窗口，实测合成面板各列窗口几乎不重复
+    # 且 unique 本身有固定开销，得不偿失，回退为全量批量。
+    z, spread, n_fin = _robust_z_local(win)
+    pts, vmask, n_uniq = _takens_clouds_batch(z, lag, dim, tau, _MAX_POINTS)
+    birth, death, has = _rips_h1_pairs_batch(pts, vmask)
+    life = np.where(has, death - birth, -np.inf)
+    maxp = life.max(axis=1)
+    maxp = np.where(np.isfinite(maxp), maxp, 0.0)   # 无 H1 对 → 0.0
+    iu0, iu1 = np.triu_indices(_MAX_POINTS, k=1)
+    # 直接在 66 个上三角点对上算距离（避免 12x12 全矩阵广播再 gather）。
+    pa = pts[:, iu0]
+    pb = pts[:, iu1]
+    pd2 = ((pa - pb) ** 2).sum(-1)
+    pd2 = np.where(vmask[:, iu0] & vmask[:, iu1], pd2, np.nan)
+    triu_d = np.sqrt(pd2)
+    with np.errstate(invalid="ignore"):
+        med_d = np.nanmedian(triu_d, axis=1)
+    length = np.minimum(np.arange(rows) + 1, w)
+    ok = (
+        (n_fin >= 4)
+        & (np.repeat(length, cols) >= lag + 3)
+        & (spread > _EPS)
+        & (n_uniq >= 4)
+        & np.isfinite(med_d)
+        & (med_d > _EPS)
+    )
+    val = np.where(ok, maxp / np.where(med_d > _EPS, med_d, 1.0), np.nan)
+    return val.reshape(rows, cols)
 
 
 @register_operator(
@@ -392,24 +628,82 @@ def _diagram_w1(pairs_a: list[tuple[float, float]], pairs_b: list[tuple[float, f
 
 
 def _persistence_shift_series(vals_2d: np.ndarray, window: int, tau: int, dim: int) -> np.ndarray:
+    """R66-perf 批量化：当前/上一窗口的 H1 diagram 的 W1（逐格 Hungarian）。
+
+    语义与逐格参考实现一致：两窗口各 ≥6 行、Takens 云有效、diagram 为空时
+    按对角距离求和（_diagram_w1 的三分支）。
+
+    R66-perf-2：上一窗口与当前窗口共享同一条序列（prior[r] == cur[r-w]），
+    robust-z / Takens / Rips 只算一份，prior 侧按 ``w*cols`` 平移索引复用；
+    逐格 Hungarian 结果以 diagram 字节串为 key 精确缓存（纯函数，相同输入
+    必得相同输出，不改变语义）。
+    """
+    from scipy.optimize import linear_sum_assignment
+
     rows, cols = vals_2d.shape
     out = np.full((rows, cols), np.nan, dtype=float)
-    for col in range(cols):
-        for row in range(rows):
-            cur_lo = max(0, row - window + 1)
-            pri_lo = max(0, row - 2 * window + 1)
-            cur_chunk = vals_2d[cur_lo : row + 1, col]
-            pri_chunk = vals_2d[pri_lo:cur_lo, col]
-            if pri_chunk.shape[0] < 6 or cur_chunk.shape[0] < 6:
-                continue
-            cur_pts = _takens_points(cur_chunk, tau, dim)
-            pri_pts = _takens_points(pri_chunk, tau, dim)
-            if cur_pts is None or pri_pts is None:
-                continue
-            cur_pairs = _rips_h1_pairs(cur_pts)
-            pri_pairs = _rips_h1_pairs(pri_pts)
-            out[row, col] = _diagram_w1(cur_pairs, pri_pairs)
-    return out
+    w = int(window)
+    lag = tau * (dim - 1)
+    if rows == 0 or cols == 0 or rows <= w or w - lag <= 0 or w < lag + 3:
+        return out
+    win = _trailing_windows(vals_2d, w).transpose(0, 2, 1).reshape(rows * cols, w)
+    zc, spread_c, n_fin_c = _robust_z_local(win)
+    length_cur = np.minimum(np.arange(rows) + 1, w)
+    okc = (
+        (n_fin_c >= 4)
+        & (np.repeat(length_cur, cols) >= 6)
+        & (spread_c > _EPS)
+    )
+    okp = np.zeros_like(okc)
+    okp[w * cols:] = okc[: (rows - w) * cols]
+    pts_c, vmask_c, n_uniq_c = _takens_clouds_batch(zc, lag, dim, tau, _MAX_POINTS)
+    n_uniq_p = np.zeros_like(n_uniq_c)
+    n_uniq_p[w * cols:] = n_uniq_c[: (rows - w) * cols]
+    ok = okc & okp & (n_uniq_c >= 4) & (n_uniq_p >= 4)
+    if not ok.any():
+        return out
+    bc, dc, has_c = _rips_h1_pairs_batch(pts_c, vmask_c)
+    shift = w * cols
+    flat_out = np.full(rows * cols, np.nan, dtype=float)
+    BIG = 1e12
+    cache = _W1_ASSIGN_CACHE
+    if len(cache) > 200000:
+        cache.clear()
+    for cidx in np.flatnonzero(ok):
+        sc = cidx - shift
+        m1m = has_c[cidx]
+        m2m = has_c[sc]
+        b1 = bc[cidx][m1m]
+        d1 = dc[cidx][m1m]
+        b2 = bc[sc][m2m]
+        d2 = dc[sc][m2m]
+        m1 = b1.size
+        m2 = b2.size
+        if m1 == 0 and m2 == 0:
+            flat_out[cidx] = 0.0
+            continue
+        if m2 == 0:
+            flat_out[cidx] = float(np.sum((d1 - b1) / 2.0))
+            continue
+        if m1 == 0:
+            flat_out[cidx] = float(np.sum((d2 - b2) / 2.0))
+            continue
+        key = (b1.tobytes(), d1.tobytes(), b2.tobytes(), d2.tobytes())
+        val = cache.get(key)
+        if val is None:
+            n = m1 + m2
+            cost = np.full((n, n), BIG, dtype=float)
+            cost[:m1, :m2] = np.maximum(
+                np.abs(b1[:, None] - b2[None, :]), np.abs(d1[:, None] - d2[None, :])
+            )
+            cost[:m1, m2:] = ((d1 - b1) / 2.0)[:, None]
+            cost[m1:, :m2] = (d2 - b2) / 2.0
+            cost[m1:, m2:] = 0.0
+            rr, cc = linear_sum_assignment(cost)
+            val = float(cost[rr, cc].sum())
+            cache[key] = val
+        flat_out[cidx] = val
+    return flat_out.reshape(rows, cols)
 
 
 @register_operator(

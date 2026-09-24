@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections import Counter, deque
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
+from threading import Lock, local
 from types import MappingProxyType
-from threading import Lock
 from typing import Any, Callable, Iterator, Mapping
 
 import numpy as np
@@ -16,10 +17,268 @@ import pandas as pd
 
 from factor_engine.cleaned_operators.base import OperatorMetadata
 
+# Thread-parallel execution of the batched kernels' per-window loops.  The
+# per-window computations (LAPACK solves, HiGHS LPs, dgemv certificates) are
+# mutually independent and free of shared mutable state (the HiGHS instance /
+# LP-skeleton cache are thread-local), so the results are bit-identical to the
+# sequential order regardless of scheduling.
+_MAX_WORKER_THREADS = min(8, __import__("os").cpu_count() or 1)
+_PARALLEL_MIN_ITEMS = 64
+_EXECUTOR: ThreadPoolExecutor | None = None
+_EXECUTOR_LOCK = Lock()
+
+
+def _get_executor() -> ThreadPoolExecutor:
+    global _EXECUTOR
+    if _EXECUTOR is None:
+        with _EXECUTOR_LOCK:
+            if _EXECUTOR is None:
+                _EXECUTOR = ThreadPoolExecutor(
+                    max_workers=_MAX_WORKER_THREADS,
+                    thread_name_prefix="rolling_core")
+    return _EXECUTOR
+
+
+def _parallel_for(items: np.ndarray, fn: Callable[[int], bool]) -> bool:
+    """Run ``fn(item)`` for every item, possibly across worker threads.
+
+    ``fn`` returns False to flag a failure (e.g. LAPACK raised); the caller
+    then falls back exactly like the sequential loop would.  Sequential for
+    small item counts (thread hand-off would dominate) and inside process
+    workers (the GIL-bound numpy call wrappers do not overlap there).
+    """
+    n = len(items)
+    if (_IN_PROC_WORKER or n < _PARALLEL_MIN_ITEMS
+            or _MAX_WORKER_THREADS <= 1):
+        for i in items:
+            if not fn(int(i)):
+                return False
+        return True
+    ex = _get_executor()
+    bounds = np.linspace(0, n, _MAX_WORKER_THREADS + 1).astype(int)
+
+    def _run(lo: int, hi: int) -> bool:
+        for j in range(lo, hi):
+            if not fn(int(items[j])):
+                return False
+        return True
+
+    futures = [ex.submit(_run, lo, hi) for lo, hi in zip(bounds[:-1], bounds[1:])]
+    return all(f.result() for f in futures)
+
+
+# Process-level parallelism for the batched kernels.  The numpy call wrappers
+# (np.linalg.lstsq / highspy) hold the GIL for a large share of their runtime,
+# which caps thread-level speedup at ~2x; worker processes remove that cap.
+# Every step inside the batched kernels is per-window (all reductions run
+# along the window axis), so a contiguous axis-0 chunk returns bit-identical
+# results to the full-batch call — chunking cannot change any coefficient.
+_IN_PROC_WORKER = False
+_PROC_MIN_ITEMS = 128
+# ``RC_PROC_WORKERS`` overrides the worker count; ``RC_PROC_WORKERS=0``
+# disables the process path entirely (pure sequential/threads).
+_PROC_MAX_WORKERS = (int(__import__("os").environ["RC_PROC_WORKERS"])
+                     if __import__("os").environ.get("RC_PROC_WORKERS")
+                     else min(12, __import__("os").cpu_count() or 1))
+_PROC_POOL = None
+_PROC_POOL_LOCK = Lock()
+_PROC_POOL_BROKEN = False
+
+
+def _get_proc_pool():
+    global _PROC_POOL
+    if _PROC_POOL is None:
+        with _PROC_POOL_LOCK:
+            if _PROC_POOL is None:
+                import multiprocessing as _mp
+                from concurrent.futures import ProcessPoolExecutor as _PPE
+                # ``forkserver``: worker processes are forked from a clean,
+                # single-threaded server — never from the engine's worker
+                # threads (fork there risks inheriting held locks).  The
+                # kernel module is preloaded into the server so every forked
+                # worker starts with it already imported (COW-shared).
+                _mp.set_forkserver_preload(
+                    ["factor_engine.cleaned_operators.ts_model._rolling_core"])
+                # Workers must not re-execute the caller's main module: the
+                # server already imported it, and forked workers inherit that
+                # state.  Stripping the fixup keys avoids re-running main().
+                _orig_gpd = _mp.spawn.get_preparation_data
+
+                def _gpd_no_main(*a, **k):
+                    d = _orig_gpd(*a, **k)
+                    d.pop("init_main_from_path", None)
+                    d.pop("init_main_from_name", None)
+                    return d
+
+                _mp.spawn.get_preparation_data = _gpd_no_main
+                ctx = _mp.get_context("forkserver")
+                _PROC_POOL = _PPE(max_workers=_PROC_MAX_WORKERS, mp_context=ctx)
+    return _PROC_POOL
+
+
+def _batch_kernel_chunk(kernel: Callable[..., tuple], args: tuple,
+                        kwargs: dict) -> tuple:
+    """Worker-side entry: run ``kernel`` on one axis-0 chunk of the stack."""
+    global _IN_PROC_WORKER
+    _IN_PROC_WORKER = True
+    try:
+        return kernel(*args, **kwargs)
+    finally:
+        _IN_PROC_WORKER = False
+
+
+def _proc_fanout(kernel: Callable[..., tuple], args: tuple,
+                 kwargs: dict) -> tuple | None:
+    """Split the stacked inputs' axis 0 across worker processes.
+
+    Returns ``(betas, ok)`` reassembled in order, or ``None`` when process
+    execution is unavailable — the caller then runs its normal path, so any
+    failure here degrades to the sequential result (never a wrong one).
+    """
+    import math
+    global _PROC_POOL_BROKEN
+    if _PROC_POOL_BROKEN:
+        return None
+    try:
+        K = int(args[0].shape[0])
+        nchunk = min(_PROC_MAX_WORKERS, math.ceil(K / _PROC_MIN_ITEMS))
+        if nchunk < 2:
+            return None
+        pool = _get_proc_pool()
+        bounds = np.linspace(0, K, nchunk + 1).astype(int)
+        futures = []
+        for lo, hi in zip(bounds[:-1], bounds[1:]):
+            chunk = tuple(
+                a[lo:hi] if isinstance(a, np.ndarray) and a.ndim >= 1
+                and a.shape[0] == K else a       # scalars pass through
+                for a in args)
+            futures.append(pool.submit(_batch_kernel_chunk, kernel, chunk,
+                                       dict(kwargs)))
+        betas_parts, ok_parts = [], []
+        for f in futures:
+            b, o = f.result()
+            betas_parts.append(np.asarray(b, dtype=float))
+            ok_parts.append(np.asarray(o, dtype=bool))
+    except Exception:
+        _PROC_POOL_BROKEN = True
+        return None
+    return (np.concatenate(betas_parts, axis=0),
+            np.concatenate(ok_parts, axis=0))
+
 try:  # HiGHS LP for true pinball-loss quantile regression.
     from scipy.optimize import linprog as _linprog
 except Exception:  # pragma: no cover
     _linprog = None
+
+# Thread-local direct-HiGHS state (see :func:`_highs_solve_eq`).  Each thread
+# reuses one configured ``_Highs`` instance and one CSC skeleton per
+# ``(n, p, q)`` model shape; the per-window numerical payload is refreshed in
+# place.  Model and options are byte-for-byte what
+# ``linprog(..., method="highs", options={"maxiter": 10000, "time_limit": 5.0})``
+# hands to HiGHS via ``_linprog_highs``/``_highs_wrapper``, so the returned
+# primal / dual / objective match the legacy path bit for bit.
+_HIGHS_TLS = local()
+
+
+def _highs_solve_eq(z: np.ndarray, yn: np.ndarray, q: float):
+    """Solve ``min q·Σu + (1-q)·Σv  s.t.  z·γ + u − v = yn, u,v ≥ 0``.
+
+    Returns ``(x, row_dual, fun)`` for the optimal solve (HiGHS ``kOptimal``)
+    or ``None`` on any failure — the caller maps failure to the legacy
+    fail-closed ``non_converged`` path exactly as a non-success ``linprog``
+    result would be.
+    """
+    core = getattr(_HIGHS_TLS, "core", None)
+    if core is None:
+        try:
+            from scipy.optimize._highspy import _core as _hc
+        except Exception:  # pragma: no cover
+            return None
+        core = _hc
+        _HIGHS_TLS.core = core
+        _HIGHS_TLS.solver = None
+        _HIGHS_TLS.lp_cache = {}
+    try:
+        n, p = z.shape
+        cache = _HIGHS_TLS.lp_cache.get((n, p, q))
+        if cache is None:
+            nnz = n * p + 2 * n
+            indptr = np.empty(p + 2 * n + 1, dtype=np.int32)
+            indices = np.empty(nnz, dtype=np.int32)
+            data_const = np.empty(nnz, dtype=float)
+            indptr[0] = 0
+            for j in range(p):
+                indices[j * n:(j + 1) * n] = np.arange(n)
+                indptr[j + 1] = (j + 1) * n
+            for k in range(n):
+                col = p + k
+                indptr[col + 1] = indptr[col] + 1
+                indices[indptr[col]] = k
+                data_const[indptr[col]] = 1.0
+            for k in range(n):
+                col = p + n + k
+                indptr[col + 1] = indptr[col] + 1
+                indices[indptr[col]] = k
+                data_const[indptr[col]] = -1.0
+            inf = float(core.kHighsInf)
+            lb = np.concatenate([np.full(p, -inf), np.zeros(2 * n)])
+            ub = np.full(p + 2 * n, inf)
+            cost = np.concatenate(
+                [np.zeros(p), np.full(n, q), np.full(n, 1.0 - q)])
+            cache = (indptr, indices, data_const, lb, ub, cost)
+            _HIGHS_TLS.lp_cache[(n, p, q)] = cache
+        indptr, indices, data_const, lb, ub, cost = cache
+        data = data_const.copy()
+        for j in range(p):
+            data[j * n:(j + 1) * n] = z[:, j]
+        # A fresh ``_Highs`` + ``HighsOptions`` per call replicates
+        # ``linprog(..., method="highs")`` (which constructs both per call)
+        # bit for bit.  Reusing an instance across calls leaks solver state
+        # that ``clearSolver()`` does not fully reset: degenerate LPs can
+        # return order-dependent duals, flipping the caller's strict-rank
+        # certificate.  The CSC skeleton cache below keeps the remaining
+        # per-call work at numpy-copy speed.
+        solver = core._Highs()
+        opts = core.HighsOptions()
+        # Mirror the effective (non-None) options of _linprog_highs.
+        opts.presolve = "on"
+        opts.time_limit = 5.0
+        opts.highs_debug_level = int(core.kHighsDebugLevelNone)
+        opts.log_to_console = False
+        opts.output_flag = False
+        opts.simplex_strategy = int(
+            core.simplex_constants.SimplexStrategy.kSimplexStrategyDual)
+        opts.ipm_iteration_limit = 10_000
+        opts.simplex_iteration_limit = 10_000
+        if solver.passOptions(opts) == core.HighsStatus.kError:
+            return None
+        lp = core.HighsLp()
+        lp.num_col_ = p + 2 * n
+        lp.num_row_ = n
+        lp.a_matrix_.num_col_ = p + 2 * n
+        lp.a_matrix_.num_row_ = n
+        lp.a_matrix_.format_ = core.MatrixFormat.kColwise
+        lp.col_cost_ = cost
+        lp.col_lower_ = lb
+        lp.col_upper_ = ub
+        lp.row_lower_ = yn
+        lp.row_upper_ = yn
+        lp.a_matrix_.start_ = indptr
+        lp.a_matrix_.index_ = indices
+        lp.a_matrix_.value_ = data
+        if solver.passModel(lp) == core.HighsStatus.kError:
+            return None
+        if solver.run() == core.HighsStatus.kError:
+            return None
+        if solver.getModelStatus() != core.HighsModelStatus.kOptimal:
+            return None
+        solution = solver.getSolution()
+        info = solver.getInfo()
+        return (np.asarray(solution.col_value, dtype=float),
+                np.asarray(solution.row_dual, dtype=float),
+                float(info.objective_function_value))
+    except (MemoryError, RuntimeError, ValueError, OverflowError):
+        return None
 
 _INTEGER_PARAMS = frozenset(
     {"window", "min_periods", "order", "lag", "coefficient_index", "max_q", "q"}
@@ -1141,26 +1400,22 @@ def pinball_quantile_fit(design: np.ndarray, y: np.ndarray, q: float) -> np.ndar
         _set_fit_status(False, "singular", rank=int(np.linalg.matrix_rank(z)))
         return None
     try:
-        from scipy.sparse import csr_matrix, eye, hstack
-        sparse_z = csr_matrix(z)
-        identity = eye(n, format="csr")
-        a_eq = hstack([sparse_z, identity, -identity], format="csr")
-        objective = np.concatenate([
-            np.zeros(p), quantile * np.ones(n), (1.0 - quantile) * np.ones(n)])
-        bounds = [(None, None)] * p + [(0.0, None)] * (2 * n)
-        result = _linprog(
-            objective, A_eq=a_eq, b_eq=yn, bounds=bounds, method="highs",
-            options={"maxiter": 10_000, "time_limit": 5.0})
+        solved = _highs_solve_eq(z, yn, quantile)
     except (ImportError, MemoryError, RuntimeError, ValueError, OverflowError):
+        solved = None
+    if solved is None:
+        # Covers both a non-success solver result and a solver/runtime failure,
+        # exactly like the legacy ``not result.success or result.status != 0``
+        # and ``except`` handling around ``_linprog``.
         _set_fit_status(False, "non_converged")
         return None
-    if (not getattr(result, "success", False) or result.status != 0
-            or result.x is None or result.fun is None or not np.isfinite(result.fun)):
+    primal_full, dual, fun_value = solved
+    if not np.isfinite(fun_value):
         _set_fit_status(False, "non_converged")
         return None
-    gamma = np.asarray(result.x[:p], dtype=float)
-    positive = np.asarray(result.x[p : p + n], dtype=float)
-    negative = np.asarray(result.x[p + n :], dtype=float)
+    gamma = np.asarray(primal_full[:p], dtype=float)
+    positive = np.asarray(primal_full[p : p + n], dtype=float)
+    negative = np.asarray(primal_full[p + n :], dtype=float)
     if (gamma.shape != (p,) or positive.shape != (n,) or negative.shape != (n,)
             or not np.all(np.isfinite(gamma))
             or not np.all(np.isfinite(positive))
@@ -1174,16 +1429,11 @@ def pinball_quantile_fit(design: np.ndarray, y: np.ndarray, q: float) -> np.ndar
             or np.any(negative < -certificate_tol)):
         _set_fit_status(False, "non_converged")
         return None
-    try:
-        dual = np.asarray(result.eqlin.marginals, dtype=float)
-    except (AttributeError, TypeError, ValueError):
-        _set_fit_status(False, "coefficient_not_identified")
-        return None
     if dual.shape != (n,) or not np.all(np.isfinite(dual)):
         _set_fit_status(False, "coefficient_not_identified")
         return None
-    dual_gap = float(result.fun) - float(yn @ dual)
-    dual_tol = 1e-7 * max(1.0, abs(float(result.fun)))
+    dual_gap = fun_value - float(yn @ dual)
+    dual_tol = 1e-7 * max(1.0, abs(fun_value))
     stationarity = (z.T @ dual) / n
     if (np.any(dual > quantile + dual_tol)
             or np.any(dual < quantile - 1.0 - dual_tol)
@@ -1238,9 +1488,9 @@ def pinball_quantile_fit(design: np.ndarray, y: np.ndarray, q: float) -> np.ndar
         normalized_residual >= 0.0,
         quantile * normalized_residual,
         (quantile - 1.0) * normalized_residual)))
-    objective_tolerance = 5e-7 * max(1.0, float(result.fun))
+    objective_tolerance = 5e-7 * max(1.0, fun_value)
     if (not np.isfinite(restored_objective)
-            or abs(restored_objective - float(result.fun)) > objective_tolerance):
+            or abs(restored_objective - fun_value) > objective_tolerance):
         _set_fit_status(False, "numerical_failure", objective=restored_objective)
         return None
     _set_fit_status(
@@ -1363,3 +1613,710 @@ def current_prediction(seg_xs: list[float], b: np.ndarray, add_intercept: bool) 
         terms.append(1.0)
     terms.extend(seg_xs)
     return float(np.dot(terms, b))
+
+
+# ---------------------------------------------------------------------------
+# Batched fit kernels (R66).
+#
+# These evaluate the exact same primitive sequence as the scalar kernels
+# above, with the elementwise / reduction / matmul stages batched via NumPy
+# primitives whose per-slice results are bit-identical to the corresponding
+# 2-D calls (verified on this stack: axis-wise median / sum / mean / std and
+# stacked ``matmul`` reproduce the 2-D results bit for bit; 1-D ``dot`` and
+# ``np.linalg.norm`` equal the stacked matmul forms).  LAPACK solves use
+# per-window 2-D ``np.linalg.lstsq`` — the stacked gufunc variant applies a
+# different LAPACK workspace strategy and can differ by 1-2 ulp on weighted
+# designs, which IRLS amplifies through its convergence path.  Windows that
+# hit a rare branch (exact-fit consensus, MAD-degenerate scale, mid-IRLS
+# conditioning failure, non-finite iterates) are re-run individually through
+# the scalar kernel, so their results are the original ones by construction.
+# Only the intercept-first p=2 design produced by ``build_design`` is
+# supported — that is the shape every caller in this package uses.
+# ---------------------------------------------------------------------------
+
+
+def _gate_from_s(s: np.ndarray, n: int, p: int) -> np.ndarray:
+    """Vectorised well-conditioning gate from lstsq's singular values.
+
+    The scalar kernel gates the design (``np.linalg.svd``) *before* calling
+    ``lstsq``; using the singular values that ``np.linalg.lstsq`` already
+    computed from the identical matrix gives the same accept/reject outcome
+    (both are the exact singular values up to identical LAPACK rounding, and
+    the accept set is identical unless a value sits within 1 ulp of the
+    threshold), while halving the LAPACK work per iteration.
+    """
+    s_max = s[:, 0]
+    s_min = s[:, -1]
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        cond = np.where(s_min > 0.0, s_max / s_min, np.inf)
+        floor = s_max * max(n, p) * np.finfo(float).eps
+        rank_ok = np.sum(s > floor[:, None], axis=1) >= p
+    return (np.isfinite(s_max) & (s_max > 0.0)
+            & np.isfinite(cond) & (cond <= 1e12) & rank_ok)
+
+
+def _batch_huber_fit(
+    designs: np.ndarray,
+    targets: np.ndarray,
+    *,
+    delta: float = _HUBER_DELTA,
+    iterations: int = 100,
+    tolerance: float = 1e-6,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Stacked IRLS Huber fit, bit-identical to per-window ``huber_fit``.
+
+    ``designs`` is ``(K, n, 2)`` (intercept + one feature), ``targets`` is
+    ``(K, n)``.  Returns ``(betas, ok)`` where ``betas`` is ``(K, 2)`` and
+    ``ok[i]`` is True iff the scalar kernel would have returned a beta for
+    window ``i``.
+    """
+    if not _IN_PROC_WORKER and _PROC_MAX_WORKERS > 1:
+        res = _proc_fanout(
+            _batch_huber_fit, (designs, targets),
+            {"delta": delta, "iterations": iterations, "tolerance": tolerance})
+        if res is not None:
+            return res
+    K, n, p = designs.shape
+    eps = np.finfo(float).eps
+    cutoff, max_iter, tol = float(delta), int(iterations), float(tolerance)
+    betas = np.full((K, p), np.nan, dtype=float)
+    ok = np.zeros(K, dtype=bool)
+    fallback: list[int] = []
+    x = designs
+    target = targets
+
+    if not (np.all(np.isfinite(x)) and np.all(np.isfinite(target))):
+        for i in range(K):
+            b = huber_fit(x[i], target[i], delta=delta, iterations=iterations,
+                          tolerance=tolerance)
+            if b is not None:
+                betas[i] = b
+                ok[i] = True
+        return betas, ok
+
+    none_mask = np.zeros(K, dtype=bool)   # scalar kernel returns None
+    active = np.ones(K, dtype=bool)
+
+    # Intercept detection (mirrors the scalar constant-column logic).
+    constant = np.all(x == x[:, :1, :], axis=1)             # (K, p)
+    constant_nonzero = constant & (x[:, 0, :] != 0.0)
+    zero_const = np.any(constant & ~constant_nonzero, axis=1)
+    n_intercepts = np.sum(constant_nonzero, axis=1)
+    weird = zero_const | (n_intercepts != 1) | ~constant_nonzero[:, 0]
+    if np.any(weird):
+        idx = np.flatnonzero(weird)
+        fallback.extend(int(i) for i in idx)
+        active &= ~weird
+
+    # Normalization (intercept = column 0, features = columns 1..p-1).
+    x_max = np.max(np.abs(x), axis=1)                        # (K, p)
+    nf = p - 1
+    if nf:
+        feat_max = x_max[:, 1:]
+        bad = active & (~np.all(np.isfinite(feat_max), axis=1)
+                        | np.any(feat_max <= 0.0, axis=1))
+        if np.any(bad):
+            fallback.extend(int(i) for i in np.flatnonzero(bad))
+            active &= ~bad
+
+        normalized_x = x[:, :, 1:] / feat_max[:, None, :]    # (K, n, nf)
+        centers1 = np.mean(normalized_x, axis=1)             # (K, nf)
+        centered = normalized_x - centers1[:, None, :]
+        # ``np.linalg.norm(col2d, axis=0)`` reduces via the sum path per
+        # column; the axis-wise batched sum is bit-identical (ddot and the
+        # stacked gufunc matmul are different kernels — do not use them).
+        norm2 = np.full((K, nf), np.nan, dtype=float)
+        norm2[active] = np.sum(centered[active] * centered[active], axis=1)
+        scales1 = np.sqrt(norm2) / np.sqrt(n)
+        bad = active & (~np.all(np.isfinite(scales1), axis=1)
+                        | np.any(scales1 <= 0.0, axis=1))
+        if np.any(bad):
+            fallback.extend(int(i) for i in np.flatnonzero(bad))
+            active &= ~bad
+
+        z = np.empty_like(x)
+        z[:, :, 0] = 1.0
+        z[:, :, 1:] = centered / scales1[:, None, :]
+    else:
+        centers1 = np.zeros((K, 0), dtype=float)
+        scales1 = np.zeros((K, 0), dtype=float)
+        z = np.empty_like(x)
+        z[:, :, 0] = 1.0
+
+    y_max = np.max(np.abs(target), axis=1)
+    y_max = np.where(y_max == 0.0, 1.0, y_max)
+    normalized_y = target / y_max[:, None]
+    y_center = np.mean(normalized_y, axis=1)
+    centered_y = normalized_y - y_center[:, None]
+    y_spread = np.max(np.abs(centered_y), axis=1)
+    y_spread = np.where(y_spread == 0.0, 1.0, y_spread)
+    yn = centered_y / y_spread[:, None]
+
+    # Initial OLS seed.  Per-window 2-D ``np.linalg.lstsq`` reproduces the
+    # scalar kernel's LAPACK call bit-for-bit (the stacked gufunc variant uses
+    # a different LAPACK workspace strategy and can differ by 1-2 ulp on
+    # weighted designs, which IRLS then amplifies through its convergence
+    # path).  The conditioning gate reuses each solve's singular values.
+    gamma = np.full((K, p), np.nan, dtype=float)
+    s_arr = np.full((K, p), np.nan, dtype=float)
+
+    def _initial_solve(i: int) -> bool:
+        try:
+            sol, _res, _rk, s_i = np.linalg.lstsq(z[i], yn[i], rcond=None)
+        except (np.linalg.LinAlgError, ValueError):
+            return False
+        gamma[i] = sol
+        s_arr[i] = s_i
+        return True
+
+    lstsq_failed = not _parallel_for(np.flatnonzero(active), _initial_solve)
+    if lstsq_failed:
+        idx = np.flatnonzero(active)
+        fallback.extend(int(i) for i in idx)
+        active &= False
+    if np.any(active):
+        gate = _gate_from_s(s_arr, n, p)
+        bad = active & ~gate
+        if np.any(bad):
+            none_mask |= bad
+            active &= ~bad
+        bad = active & ~np.all(np.isfinite(gamma), axis=1)
+        if np.any(bad):
+            none_mask |= bad
+            active &= ~bad
+
+    if np.any(active):
+        norm_z_inf = np.max(np.sum(np.abs(z), axis=2), axis=1)
+        norm_g_inf = np.max(np.abs(gamma), axis=1)
+        backward_scale = (np.max(np.abs(yn), axis=1)
+                          + norm_z_inf * norm_g_inf)
+        exact_floor = 64.0 * eps * backward_scale
+        col_norm = np.sqrt(np.mean(z * z, axis=1))           # (K, p)
+        converged = np.zeros(K, dtype=bool)
+
+        resid: np.ndarray | None = None
+        for used in range(1, max_iter + 1):
+            if not np.any(active):
+                break
+            if resid is None:
+                resid = np.full((K, n), np.nan, dtype=float)
+                for i in np.flatnonzero(active):
+                    # 2-D dgemv — bit-identical to the scalar kernel's
+                    # z @ gamma; the stacked gufunc matmul is a different
+                    # kernel (1-2 ulp).
+                    resid[i] = yn[i] - z[i] @ gamma[i]
+            # else: carried over from the previous iteration's final_resid —
+            # the identical dgemv on identical inputs (gamma unchanged since),
+            # so reusing it is bit-for-bit the reference's next resid.
+            centered_resid = resid - np.median(resid, axis=1, keepdims=True)
+            mad = np.median(np.abs(centered_resid), axis=1)
+            residual_extent = np.max(np.abs(centered_resid), axis=1)
+            with np.errstate(invalid="ignore"):
+                cons_hit = (active & np.isfinite(mad)
+                            & (residual_extent > exact_floor)
+                            & (mad <= 64.0 * eps * residual_extent))
+            if np.any(cons_hit):
+                fallback.extend(int(i) for i in np.flatnonzero(cons_hit))
+                active &= ~cons_hit
+            if not np.any(active):
+                break
+            scale = 1.4826 * mad
+            scale_bad = active & (~np.isfinite(scale) | (scale == 0.0))
+            if np.any(scale_bad):
+                fallback.extend(int(i) for i in np.flatnonzero(scale_bad))
+                active &= ~scale_bad
+            if not np.any(active):
+                break
+            with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                u = resid / scale[:, None]
+                au = np.abs(u)
+                weight = np.where(au > cutoff, cutoff / au, 1.0)
+            root_w = np.sqrt(weight)
+            wz = z * root_w[:, :, None]
+            wyn = yn * root_w
+            gamma_new = np.full((K, p), np.nan, dtype=float)
+            s_new = np.full((K, p), np.nan, dtype=float)
+
+            def _irls_solve(i: int) -> bool:
+                try:
+                    sol, _res, _rk, s_i = np.linalg.lstsq(wz[i], wyn[i], rcond=None)
+                except (np.linalg.LinAlgError, ValueError):
+                    return False
+                gamma_new[i] = sol
+                s_new[i] = s_i
+                return True
+
+            # Window solves are independent; any failure sends the whole
+            # group to the scalar fallback (same as the sequential
+            # first-failure break it replaces).
+            lstsq_failed = not _parallel_for(np.flatnonzero(active), _irls_solve)
+            if lstsq_failed:
+                idx = np.flatnonzero(active)
+                fallback.extend(int(i) for i in idx)
+                active &= False
+                break
+            gate2 = _gate_from_s(s_new, n, p)
+            bad2 = active & ~gate2
+            if np.any(bad2):
+                none_mask |= bad2
+                active &= ~bad2
+            if not np.any(active):
+                break
+            bad3 = active & ~np.all(np.isfinite(gamma_new), axis=1)
+            if np.any(bad3):
+                none_mask |= bad3
+                active &= ~bad3
+            if not np.any(active):
+                break
+            prediction_delta = np.full((K, n), np.nan, dtype=float)
+            for i in np.flatnonzero(active):
+                # 2-D dgemv — bit-identical to the scalar kernel.
+                prediction_delta[i] = z[i] @ (gamma_new[i] - gamma[i])
+            with np.errstate(over="ignore", invalid="ignore"):
+                pred_change = (np.sqrt(np.mean(prediction_delta * prediction_delta,
+                                               axis=1))
+                               / np.maximum(scale, eps))
+                param_change = (np.max(np.abs(gamma_new - gamma), axis=1)
+                                / np.maximum(1.0, np.max(np.abs(gamma_new), axis=1)))
+            gamma = np.where(active[:, None], gamma_new, gamma)
+            final_resid = np.full((K, n), np.nan, dtype=float)
+            for i in np.flatnonzero(active):
+                # 2-D dgemv — bit-identical to the scalar kernel.
+                final_resid[i] = yn[i] - z[i] @ gamma[i]
+            centered_final = final_resid - np.median(final_resid, axis=1, keepdims=True)
+            final_mad = np.median(np.abs(centered_final), axis=1)
+            final_extent = np.max(np.abs(centered_final), axis=1)
+            with np.errstate(invalid="ignore"):
+                cons_hit2 = (active & np.isfinite(final_mad)
+                             & (final_extent > exact_floor)
+                             & (final_mad <= 64.0 * eps * final_extent))
+            if np.any(cons_hit2):
+                fallback.extend(int(i) for i in np.flatnonzero(cons_hit2))
+                active &= ~cons_hit2
+            if not np.any(active):
+                break
+            final_scale = 1.4826 * final_mad
+            fs_bad = active & (~np.isfinite(final_scale) | (final_scale == 0.0))
+            if np.any(fs_bad):
+                # Scalar kernel either certifies an exact fit or fails closed;
+                # both paths are reproduced by re-running the scalar kernel.
+                fallback.extend(int(i) for i in np.flatnonzero(fs_bad))
+                active &= ~fs_bad
+            if not np.any(active):
+                break
+            with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                psi = np.clip(final_resid / final_scale[:, None], -cutoff, cutoff)
+                zt_psi = np.full((K, p), np.nan, dtype=float)
+                for i in np.flatnonzero(active):
+                    # 2-D dgemv (transposed view) — bit-identical to the
+                    # scalar kernel's z.T @ psi.
+                    zt_psi[i] = z[i].T @ psi[i]
+                final_score = np.max(
+                    np.abs(zt_psi / n) / np.maximum(col_norm, eps), axis=1)
+            conv = (active & (pred_change <= tol) & (param_change <= tol)
+                    & (final_score <= tol))
+            converged |= conv
+            active &= ~conv
+            # Next iteration's ``resid`` in the scalar kernel is the same
+            # dgemv (``yn - z @ gamma``) on inputs unchanged since
+            # ``final_resid`` was computed — reuse it bit-for-bit.
+            resid = final_resid
+        non_converged = active
+        none_mask |= non_converged
+
+        # Beta restoration + tail diagnostics for converged windows (scalar
+        # arithmetic, cheap: K is the group size).
+        for i in np.flatnonzero(converged):
+            g = gamma[i]
+            ym = float(y_max[i])
+            ys_ = float(y_spread[i])
+            yc = float(y_center[i])
+            zi = z[i]
+
+            def _scaled_ratio(value: float, numerator: float,
+                              denominator_a: float,
+                              denominator_b: float = 1.0) -> float:
+                vm, ve = np.frexp(value)
+                nm, ne = np.frexp(numerator)
+                am, ae = np.frexp(denominator_a)
+                bm, be = np.frexp(denominator_b)
+                return float(np.ldexp((vm * nm) / (am * bm), ve + ne - ae - be))
+
+            beta = np.empty(p, dtype=float)
+            beta[0] = _scaled_ratio(float(g[0]), ym, 1.0)
+            for c in range(1, p):
+                beta[c] = _scaled_ratio(
+                    float(g[c] * ys_), ym, float(x_max[i, c]),
+                    float(scales1[i, c - 1]))
+            normalized_intercept = yc + ys_ * float(g[0])
+            if p > 1:
+                normalized_intercept -= ys_ * float(
+                    np.sum(g[1:] * centers1[i] / scales1[i]))
+            beta[0] = _scaled_ratio(normalized_intercept, ym, float(x[i, 0, 0]))
+            if not np.all(np.isfinite(beta)):
+                none_mask[i] = True
+                continue
+            original_resid = target[i] - x[i] @ beta
+            if not np.all(np.isfinite(original_resid)):
+                none_mask[i] = True
+                continue
+            reported_scale = 1.4826 * float(
+                np.median(np.abs(original_resid - np.median(original_resid))))
+            if not np.isfinite(reported_scale) or reported_scale == 0.0:
+                # Rare ``_stable_std`` fallback — re-run the scalar kernel.
+                fallback.append(int(i))
+                continue
+            reported_psi = np.clip(original_resid / reported_scale, -cutoff, cutoff)
+            reported_score = float(np.max(
+                np.abs((zi.T @ reported_psi) / n)
+                / np.maximum(col_norm[i], eps)))
+            if reported_score > tol:
+                none_mask[i] = True
+                continue
+            betas[i] = beta
+            ok[i] = True
+
+    # Rare-branch windows: reproduce the scalar kernel exactly.
+    for i in fallback:
+        b = huber_fit(x[i], target[i], delta=delta, iterations=iterations,
+                      tolerance=tolerance)
+        if b is not None:
+            betas[i] = b
+            ok[i] = True
+    return betas, ok & ~none_mask
+
+
+def _batch_expectile_fit(
+    designs: np.ndarray,
+    targets: np.ndarray,
+    q: float,
+    iterations: int = 8,
+    tolerance: float = 1e-6,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Stacked IRLS expectile fit, bit-identical to per-window ``quantile_fit``.
+
+    Returns ``(betas, ok)`` with the same contract as :func:`_batch_huber_fit`.
+    Uses per-window 2-D ``np.linalg.lstsq`` (bit-identical LAPACK calls to the
+    scalar kernel); the conditioning gate reuses each solve's singular values.
+    """
+    if not _IN_PROC_WORKER and _PROC_MAX_WORKERS > 1:
+        res = _proc_fanout(
+            _batch_expectile_fit, (designs, targets, q),
+            {"iterations": iterations, "tolerance": tolerance})
+        if res is not None:
+            return res
+    K, n, p = designs.shape
+    betas = np.full((K, p), np.nan, dtype=float)
+    ok = np.zeros(K, dtype=bool)
+    active = np.ones(K, dtype=bool)
+    fallback: list[int] = []
+
+    def _ols_batched(d2: np.ndarray, t2: np.ndarray):
+        """Per-window lstsq + conditioning gate; returns (beta, gate, failed)."""
+        beta = np.full((K, p), np.nan, dtype=float)
+        s_arr = np.full((K, p), np.nan, dtype=float)
+
+        def _solve(i: int) -> bool:
+            try:
+                sol, _res, _rk, s_i = np.linalg.lstsq(d2[i], t2[i], rcond=None)
+            except (np.linalg.LinAlgError, ValueError):
+                return False
+            beta[i] = sol
+            s_arr[i] = s_i
+            return True
+
+        # Window solves are independent; any failure sends the whole group
+        # to the scalar fallback (same as the sequential first-failure break).
+        failed = not _parallel_for(np.flatnonzero(active), _solve)
+        gate = _gate_from_s(s_arr, n, p) if not failed else np.zeros(K, dtype=bool)
+        return beta, gate, failed
+
+    beta, gate, failed = _ols_batched(designs, targets)
+    if failed:
+        fallback.extend(int(i) for i in range(K))
+        active &= False
+    else:
+        active &= gate
+    for _ in range(int(iterations)):
+        if not np.any(active):
+            break
+        resid = np.full((K, n), np.nan, dtype=float)
+        for i in np.flatnonzero(active):
+            # 2-D dgemv — bit-identical to the scalar kernel's design @ beta.
+            resid[i] = targets[i] - designs[i] @ beta[i]
+        weight = np.where(resid > 0, q, 1.0 - q)
+        weight = np.clip(weight, 1e-6, None)
+        sqrt_w = np.sqrt(weight)
+        d2 = designs * sqrt_w[:, :, None]
+        t2 = targets * sqrt_w
+        beta_new, gate2, failed = _ols_batched(d2, t2)
+        if failed:
+            fallback.extend(int(i) for i in np.flatnonzero(active))
+            active &= False
+            break
+        bad3 = active & ~gate2
+        if np.any(bad3):
+            active &= ~bad3
+        if not np.any(active):
+            break
+        bad4 = active & ~np.all(np.isfinite(beta_new), axis=1)
+        if np.any(bad4):
+            active &= ~bad4
+        if not np.any(active):
+            break
+        with np.errstate(invalid="ignore"):
+            change = np.max(np.abs(beta_new - beta), axis=1)
+            conv = active & (change < tolerance)
+        ok |= conv
+        betas[conv] = beta_new[conv]
+        active &= ~conv
+        beta = np.where(active[:, None], beta_new, beta)
+    for i in np.flatnonzero(active):
+        fallback.append(int(i))
+    for i in fallback:
+        b = quantile_fit(designs[i], targets[i], q,
+                         iterations=iterations, tolerance=tolerance)
+        if b is not None:
+            betas[i] = b
+            ok[i] = True
+    return betas, ok
+
+
+
+def _pinball_post_solve(
+    z: np.ndarray,
+    yn: np.ndarray,
+    orig: np.ndarray,
+    target: np.ndarray,
+    quantile: float,
+    base_scales: np.ndarray,
+    spreads: np.ndarray,
+    y_base: float,
+    y_spread: float,
+) -> tuple[bool, np.ndarray | None]:
+    """Per-window HiGHS solve + certificates, mirroring ``pinball_quantile_fit``.
+
+    ``z`` is the normalized design, ``orig`` the original one.  Returns
+    ``(ok, beta)`` — ``ok=False`` whenever the scalar kernel would have
+    returned ``None`` (no exception is raised).
+    """
+    n, p = z.shape
+    solved = None
+    try:
+        solved = _highs_solve_eq(z, yn, quantile)
+    except (ImportError, MemoryError, RuntimeError, ValueError, OverflowError):
+        solved = None
+    if solved is None:
+        return False, None
+    primal_full, dual, fun_value = solved
+    if not np.isfinite(fun_value):
+        return False, None
+    gamma = np.asarray(primal_full[:p], dtype=float)
+    positive = np.asarray(primal_full[p : p + n], dtype=float)
+    negative = np.asarray(primal_full[p + n :], dtype=float)
+    if (gamma.shape != (p,) or positive.shape != (n,) or negative.shape != (n,)
+            or not np.all(np.isfinite(gamma))
+            or not np.all(np.isfinite(positive))
+            or not np.all(np.isfinite(negative))):
+        return False, None
+    z_gamma = z @ gamma
+    primal_residual = z_gamma + positive - negative - yn
+    certificate_tol = 1e-8 * max(1.0, float(np.max(np.abs(yn))))
+    if (float(np.max(np.abs(primal_residual))) > certificate_tol
+            or np.any(positive < -certificate_tol)
+            or np.any(negative < -certificate_tol)):
+        return False, None
+    if dual.shape != (n,) or not np.all(np.isfinite(dual)):
+        return False, None
+    dual_gap = fun_value - float(yn @ dual)
+    dual_tol = 1e-7 * max(1.0, abs(fun_value))
+    stationarity = (z.T @ dual) / n
+    if (np.any(dual > quantile + dual_tol)
+            or np.any(dual < quantile - 1.0 - dual_tol)
+            or abs(dual_gap) > dual_tol
+            or not np.all(np.isfinite(stationarity))
+            or float(np.max(np.abs(stationarity))) > dual_tol):
+        return False, None
+    fitted_residual = yn - z_gamma
+    strict = ((np.abs(fitted_residual) <= certificate_tol)
+              & (dual < quantile - dual_tol)
+              & (dual > quantile - 1.0 + dual_tol))
+    strict_rank = int(np.linalg.matrix_rank(z[strict])) if np.any(strict) else 0
+    if strict_rank < p:
+        return False, None
+
+    def _ratio(value: float, na: float, nb: float, da: float, db: float = 1.0) -> float:
+        vm, ve = np.frexp(value)
+        am, ae = np.frexp(na)
+        bm, be = np.frexp(nb)
+        cm, ce = np.frexp(da)
+        dm, de = np.frexp(db)
+        return float(np.ldexp((vm * am * bm) / (cm * dm), ve + ae + be - ce - de))
+
+    beta = np.empty(p)
+    for column in range(1, p):
+        beta[column] = _ratio(
+            float(gamma[column]), y_base, y_spread,
+            float(base_scales[column]), float(spreads[column]))
+    # Intercept restoration against the ORIGINAL design (scalar kernel lines):
+    #   residual_for_intercept = target - x[:, feat] @ beta[feat]
+    #   beta[intercept] = quantile(residual, q, inverted_cdf) / x[0, intercept]
+    if p > 1:
+        residual_for_intercept = target - orig[:, 1:] @ beta[1:]
+        beta0 = float(np.quantile(residual_for_intercept, quantile,
+                                  method="inverted_cdf"))
+        beta[0] = beta0 / float(orig[0, 0])
+    if not np.all(np.isfinite(beta)):
+        return False, None
+    residual = target - orig @ beta
+    if not np.all(np.isfinite(residual)):
+        return False, None
+    normalized_residual = (residual / y_base) / y_spread
+    with np.errstate(invalid="ignore"):
+        restored_objective = float(np.sum(np.where(
+            normalized_residual >= 0.0,
+            quantile * normalized_residual,
+            (quantile - 1.0) * normalized_residual)))
+    objective_tolerance = 5e-7 * max(1.0, fun_value)
+    if (not np.isfinite(restored_objective)
+            or abs(restored_objective - fun_value) > objective_tolerance):
+        return False, None
+    return True, beta
+
+
+def _batch_pinball_fit(
+    designs: np.ndarray,
+    targets: np.ndarray,
+    q: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Batched pinball LP fit, bit-identical to per-window ``pinball_quantile_fit``.
+
+    ``designs`` is ``(K, n, p)``, ``targets`` is ``(K, n)`` — every window in a
+    group shares the same valid count ``n``.  The per-window normalization is
+    vectorised with elementwise / axis-wise reductions (verified bit-identical
+    to the scalar 1-D forms); the conditioning gate, the HiGHS solve and the
+    dgemv-based optimality certificates stay per-window so every accept/reject
+    decision and every returned coefficient is computed exactly like the
+    scalar kernel.  Windows on rare branches (no leading intercept column,
+    degenerate designs) are re-run through ``pinball_quantile_fit``.
+
+    Returns ``(betas, ok)`` where ``ok[i]`` is True iff the scalar kernel would
+    have returned a beta for window ``i``.
+    """
+    if not _IN_PROC_WORKER and _PROC_MAX_WORKERS > 1:
+        res = _proc_fanout(_batch_pinball_fit, (designs, targets, q), {})
+        if res is not None:
+            return res
+    K, n, p = designs.shape
+    betas = np.full((K, p), np.nan, dtype=float)
+    ok = np.zeros(K, dtype=bool)
+    quantile = float(q)
+
+    fallback: list[int] = []
+    if n < p + 2 or p < 2:
+        return betas, ok          # scalar kernel returns None for every window
+
+    if not (np.all(np.isfinite(designs)) and np.all(np.isfinite(targets))):
+        for i in range(K):
+            b = pinball_quantile_fit(designs[i], targets[i], quantile)
+            if b is not None:
+                betas[i] = b
+                ok[i] = True
+        return betas, ok
+
+    # Intercept detection (mirrors the scalar constant-column logic): the
+    # batch path requires the single intercept column to be column 0.
+    constant = np.all(designs == designs[:, :1, :], axis=1)            # (K, p)
+    constant_nonzero = constant & (designs[:, 0, :] != 0.0)
+    weird = (np.any(constant & ~constant_nonzero, axis=1)
+             | (np.sum(constant_nonzero, axis=1) != 1)
+             | ~constant_nonzero[:, 0])
+    if np.any(weird):
+        fallback.extend(int(i) for i in np.flatnonzero(weird))
+    active = ~np.asarray(weird, dtype=bool)
+
+    orig = designs                     # never mutated — needed for restoration
+    z = designs.copy()                 # becomes the normalized design
+    base_scales = np.ones((K, p), dtype=float)
+    spreads = np.ones((K, p), dtype=float)
+
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        for j in range(1, p):
+            col_x = orig[:, :, j]
+            delta_x = col_x - col_x[:, :1]
+            all_fin = np.all(np.isfinite(delta_x), axis=1)
+            base_a = np.max(np.abs(delta_x), axis=1)
+            nd_a = delta_x / base_a[:, None]
+            base_b = np.max(np.abs(col_x), axis=1)
+            nx_b = col_x / base_b[:, None]
+            nd_b = nx_b - nx_b[:, :1]
+            base = np.where(all_fin, base_a, base_b)
+            # all_fin & base>0 -> delta/base;  all_fin & base<=0 -> raw delta
+            # (flagged singular below);  ~all_fin -> normalized-minus-first.
+            normalized_delta = np.where(
+                (all_fin & (base_a > 0.0))[:, None], nd_a,
+                np.where(all_fin[:, None], delta_x, nd_b))
+            center = np.mean(normalized_delta, axis=1)
+            centered = normalized_delta - center[:, None]
+            spread = np.max(np.abs(centered), axis=1)
+            active &= ~((base <= 0.0) | (spread <= 0.0))
+            zj = centered / spread[:, None]
+            with np.errstate(invalid="ignore"):
+                zj_finite = np.all(np.isfinite(zj), axis=1)
+            active &= zj_finite
+            base_scales[:, j] = base
+            spreads[:, j] = spread
+            z[:, :, j] = np.where(active[:, None], zj, z[:, :, j])
+
+        delta_y = targets - targets[:, :1]
+        all_fin_y = np.all(np.isfinite(delta_y), axis=1)
+        y_base_a = np.max(np.abs(delta_y), axis=1)
+        ndy_a = delta_y / y_base_a[:, None]
+        y_base_b = np.max(np.abs(targets), axis=1)
+        ny_b = targets / y_base_b[:, None]
+        ndy_b = ny_b - ny_b[:, :1]
+        use_a = all_fin_y & (y_base_a > 0.0)
+        normalized_delta_y = np.where(
+            use_a[:, None], ndy_a,
+            np.where(all_fin_y[:, None], delta_y, ndy_b))
+        y_base = np.where(use_a, y_base_a, y_base_b)
+        y_center_delta = np.mean(normalized_delta_y, axis=1)
+        centered_y = normalized_delta_y - y_center_delta[:, None]
+        y_spread_a = np.max(np.abs(centered_y), axis=1)
+        # Degenerate y: the scalar kernel resets to a zero normalized target.
+        degen = ((~use_a) & (y_base_b <= 0.0)) | (y_spread_a <= 0.0)
+        y_base = np.where(degen, np.maximum(1.0, y_base_b), y_base)
+        y_spread = np.where(degen, 1.0, y_spread_a)
+        yn = np.where(degen[:, None], 0.0, centered_y / y_spread[:, None])
+
+    def _solve_window(i: int) -> bool:
+        if not design_is_well_conditioned(z[i]):
+            return True
+        good, beta_i = _pinball_post_solve(
+            z[i], yn[i], orig[i], targets[i], quantile,
+            base_scales[i], spreads[i], y_base[i], y_spread[i])
+        if good:
+            betas[i] = beta_i
+            ok[i] = True
+        return True
+
+    # Windows are fully independent (fresh HiGHS instance per solve, the LP
+    # skeleton cache is thread-local), so parallel scheduling cannot change
+    # any accept/reject decision or coefficient.
+    _parallel_for(np.flatnonzero(active), _solve_window)
+
+    for i in fallback:
+        b = pinball_quantile_fit(designs[i], targets[i], quantile)
+        if b is not None:
+            betas[i] = b
+            ok[i] = True
+    return betas, ok
+
+
+def fit_failure_sink_active() -> bool:
+    """True when a caller-owned fit-failure sink is bound in this context.
+
+    The batched dispatch paths skip ``record_current_fit`` bookkeeping (it is a
+    no-op without a sink); callers must check this before selecting them.
+    """
+    return _FIT_FAILURE_SINK.get() is not None

@@ -1088,6 +1088,288 @@ class first_not_null(SeriesOperator):
 
 
 # canonical=granger_causality backend=pandas_numpy selected=granger_causality source=statistics/hypothesis_ops.py
+def _expanding_granger_ssr_ftest_fast(x: pd.DataFrame, y: pd.DataFrame, lag: int, min_periods: int) -> pd.DataFrame:
+    """``expanding_bivariate`` + ``grangercausalitytests(data[['y','x']], maxlag=lag)``
+    中 ``[lag][0]['ssr_ftest'][1]`` 的向量化等价实现。
+
+    语义逐点复制：每列前缀内取 x/y 同时有限的配对样本（压缩成连续序列），
+    受限模型 y_t ~ [y_{t-1..t-lag}, 1]，非受限模型加入 x_{t-1..t-lag}；
+    F = (ssr_r-ssr_u)/ssr_u/mxlg*df_resid，p = f.sf(F, mxlg, df_resid)。
+    正规方程用前缀乘积累积和 O(1) 递推，代替每步重跑 statsmodels。
+    """
+    from statsmodels.tsa.stattools import grangercausalitytests  # noqa: F401  (语义基准)
+
+    mxlg = int(lag)
+    out = np.full((len(x.index), len(x.columns)), np.nan, dtype=float)
+    k_reg = 2 * mxlg + 1            # 非受限模型列数（含常数）
+    n_comp = k_reg + 1              # 11 个回归分量 + endog
+    lo_n = max(min_periods, 3 * mxlg + 2)   # granger 要求 k > 3*maxlag+1
+    for j, col in enumerate(x.columns):
+        xc = x[col].to_numpy(dtype=float, copy=False)
+        y_col = y[col] if col in y.columns else y.iloc[:, 0]
+        yc = y_col.reindex(x.index).to_numpy(dtype=float, copy=False)
+        pair = np.isfinite(xc) & np.isfinite(yc)
+        npair = np.cumsum(pair)
+        rows_idx = np.flatnonzero(npair >= lo_n)
+        if rows_idx.size == 0:
+            continue
+        yv = yc[pair]
+        xv = xc[pair]
+        m = yv.size
+        if m <= 3 * mxlg + 1:
+            continue
+        # 压缩序列的滞后分量（t < shift 处填 0，永远不进入求和区间 t>=mxlg）
+        # 布局：0..mxlg-1 = y 滞后, mxlg..2mxlg-1 = x 滞后, k_reg-1 = 常数, k_reg = endog
+        comps = np.zeros((n_comp, m), dtype=float)
+        for s in range(1, mxlg + 1):
+            comps[s - 1, s:] = yv[: m - s]
+            comps[mxlg - 1 + s, s:] = xv[: m - s]
+        comps[k_reg - 1] = 1.0
+        comps[k_reg] = yv                              # endog = y_t
+        # 前缀乘积累积和:PC[a,b,t] = sum_{u<=t} comps[a,u]*comps[b,u]
+        # longdouble 累积：ssr 与 yy 量级差可达 1e5，float64 累积会灾难性抵消
+        prod = (comps[:, None, :] * comps[None, :, :]).astype(np.longdouble)
+        PC = np.cumsum(prod, axis=2)
+        # 常数列检测的运行 max/min（从 t=mxlg 起）；dtajoint 列 = [y 滞后, x 滞后, 常数]
+        run_max = np.maximum.accumulate(comps[:k_reg, mxlg:], axis=1)
+        run_min = np.minimum.accumulate(comps[:k_reg, mxlg:], axis=1)
+        eps = np.finfo(float).eps
+        # 逐前缀 n（压缩序列长度）求解
+        ns = npair[rows_idx]
+        uniq_ns, first_idx = np.unique(ns, return_index=True)
+        vals_by_n = np.full(m + 1, np.nan)
+        a0 = mxlg                      # 求和起点（含）
+        for n in uniq_ns:
+            k = int(n)
+            if k <= 3 * mxlg + 1:
+                continue
+            b0 = k - 1
+            nobs = k - mxlg
+            # 常数列检查：dtajoint 列中 max==min 的必须恰好 1（即常数项自身）
+            n_const = int(np.count_nonzero(run_max[:, b0 - mxlg] == run_min[:, b0 - mxlg]))
+            if n_const != 1:
+                continue
+            S = PC[:, :, b0] - (PC[:, :, a0 - 1] if a0 > 0 else 0.0)
+            yy = S[k_reg, k_reg]
+            sy0 = float(np.sum(yv[a0:b0 + 1]))
+            rhs_u = S[:k_reg, k_reg]
+            M_u = S[:k_reg, :k_reg]
+            own_idx = list(range(mxlg)) + [k_reg - 1]  # y 滞后 + 常数
+            rhs_r = rhs_u[own_idx]
+            M_r = M_u[np.ix_(own_idx, own_idx)]
+            M_r64 = M_r.astype(float)
+            M_u64 = M_u.astype(float)
+            rhs_r64 = rhs_r.astype(float)
+            rhs_u64 = rhs_u.astype(float)
+            try:
+                b_r = np.linalg.solve(M_r64, rhs_r64)
+                b_u = np.linalg.solve(M_u64, rhs_u64)
+            except np.linalg.LinAlgError:
+                b_r = np.linalg.pinv(M_r64) @ rhs_r64
+                b_u = np.linalg.pinv(M_u64) @ rhs_u64
+            # 一步迭代精化（残差在 longdouble 中计算），压低条件数放大误差
+            try:
+                r_r = (rhs_r - M_r @ b_r.astype(np.longdouble)).astype(float)
+                r_u = (rhs_u - M_u @ b_u.astype(np.longdouble)).astype(float)
+                b_r = b_r + np.linalg.solve(M_r64, r_r)
+                b_u = b_u + np.linalg.solve(M_u64, r_u)
+            except np.linalg.LinAlgError:
+                pass
+            ssr_r = float(yy - np.dot(rhs_r, b_r.astype(np.longdouble)))
+            ssr_u = float(yy - np.dot(rhs_u, b_u.astype(np.longdouble)))
+            tss = yy - sy0 * sy0 / nobs
+            if tss == 0 or ssr_u == 0 or not np.isfinite(ssr_u) or (ssr_u / tss) < eps:
+                continue
+            f_stat = (ssr_r - ssr_u) / ssr_u / mxlg * (nobs - k_reg)
+            if not np.isfinite(f_stat):
+                continue
+            from scipy import stats as _sstats
+            pval = float(_sstats.f.sf(f_stat, mxlg, nobs - k_reg))
+            vals_by_n[k] = pval
+        out[rows_idx, j] = vals_by_n[ns]
+    return pd.DataFrame(out, index=x.index, columns=x.columns, dtype=float)
+
+
+def _adf_schwert_maxlag(nobs: int) -> int:
+    # statsmodels adfuller: Greene/Schwert 1989，'c' → ntrend=1
+    maxlag = int(np.ceil(12.0 * np.power(nobs / 100.0, 1 / 4.0)))
+    maxlag = min(nobs // 2 - 1 - 1, maxlag)
+    return maxlag
+
+
+def _expanding_adf_pvalue_fast(x: pd.DataFrame, min_periods: int = 10) -> pd.DataFrame:
+    """``expanding_univariate`` + ``adfuller(v, autolag='AIC')[1]`` 的向量化等价实现。
+
+    语义逐点复制：对每列前缀（压缩有限样本）做 ADF 检验——
+    maxlag = min(n//2-2, ceil(12*(n/100)^{1/4}))；autolag 在同一 trimmed 样本上
+    对候选滞后 0..maxlag 以 AIC 选优（同列数取最小滞后），再以选中滞后全样本
+    重估，取水平项 t 统计量，p 值用 MacKinnon (1994/2010) 多项式逼近。
+    所有回归用前缀乘积累积和的正规方程 O(1) 递推。
+    """
+    from statsmodels.tsa.adfvalues import (
+        _tau_largeps,
+        _tau_maxs,
+        _tau_mins,
+        _tau_smallps,
+        _tau_stars,
+    )
+    from scipy.special import ndtr
+
+    tau_max = _tau_maxs["c"][0]
+    tau_min = _tau_mins["c"][0]
+    tau_star = _tau_stars["c"][0]
+    coef_small = _tau_smallps["c"][0][::-1]   # 降序，Horner
+    coef_large = _tau_largeps["c"][0][::-1]
+
+    n_rows, n_cols = x.shape
+    out = np.full((n_rows, n_cols), np.nan, dtype=float)
+    for j, col in enumerate(x.columns):
+        vals = x[col].to_numpy(dtype=float, copy=False)
+        fin = np.isfinite(vals)
+        nv = np.cumsum(fin)
+        rows_idx = np.flatnonzero(nv >= min_periods)
+        if rows_idx.size == 0:
+            continue
+        xv = vals[fin]
+        m = xv.size
+        ml_glob = _adf_schwert_maxlag(m)
+        if ml_glob < 0:
+            continue
+        # 分量：0=常数, 1=水平 x_{t-1}, 2+s = d_{t-s}（d_t = x_t - x_{t-1}），末位=endog d_t
+        n_comp = ml_glob + 4
+        comps = np.zeros((n_comp, m), dtype=float)
+        comps[0] = 1.0
+        comps[1, 1:] = xv[:-1]
+        d = np.zeros(m)
+        d[1:] = xv[1:] - xv[:-1]
+        for s in range(0, ml_glob + 1):
+            comps[2 + s, s + 1:] = d[1: m - s]
+        comps[n_comp - 1] = d                      # endog = d_t（与 comps[2] 相同）
+        # longdouble 累积：ssr 相对 yy 是小量，float64 累积/直减会灾难性抵消
+        prod = (comps[:, None, :] * comps[None, :, :]).astype(np.longdouble)
+        PC = np.cumsum(prod, axis=2)
+        # 常数序列检测（adfuller 对常数输入抛错 → NaN）
+        rmax = np.maximum.accumulate(xv)
+        rmin = np.minimum.accumulate(xv)
+        ns = nv[rows_idx]
+        uniq_ns = np.unique(ns)
+        vals_by_n = np.full(m + 1, np.nan)
+        yy_all = PC[n_comp - 1, n_comp - 1]        # Σ d_t² 前缀累积
+        # 每个候选滞后的 aic 记录（按 uniq_ns）
+        n_U = uniq_ns.size
+        aic_tab = np.full((ml_glob + 1, n_U), np.inf)
+        # statsmodels adfuller 对齐：endog 行 t（d_t = x_{t+1}-x_{t+1-1}），
+        # autolag/最终回归行区间 [start, n-1]，start = 滞后数 + 1
+        ml_arr = np.array([_adf_schwert_maxlag(int(n)) for n in uniq_ns], dtype=np.int64)
+        a0_arr = ml_arr + 1                        # 首行（含）
+        b0_arr = uniq_ns.astype(np.int64) - 1      # 末行（含）
+        nobs_arr = uniq_ns.astype(np.int64) - 1 - ml_arr
+        ok_n = (ml_arr >= 0) & (nobs_arr > 0) & (rmax[uniq_ns - 1] != rmin[uniq_ns - 1])
+        for L in range(0, ml_glob + 1):
+            sel = ok_n & (ml_arr >= L)
+            if not sel.any():
+                continue
+            K = L + 2
+            uu = np.flatnonzero(sel)
+            a0s = a0_arr[uu]
+            b0s = b0_arr[uu]
+            # M[a,b] = Σ comp_a comp_b over t∈[a0, b0]; 列序 [const, level, d_t, d_{t-1}..d_{t-L+1}]
+            #（statsmodels 列 j = xdiff[t-j] = d_{t-(j-1)}，j=1..L）
+            idx = np.array([0, 1] + [2 + q for q in range(1, L + 1)])  # 差分列 = d_{t-1}..d_{t-L}
+            sub = PC[np.ix_(idx, idx)]
+            M_ld = np.moveaxis(sub[:, :, b0s] - sub[:, :, a0s - 1], 2, 0)
+            rhs_ld = (PC[idx, n_comp - 1][:, b0s] - PC[idx, n_comp - 1][:, a0s - 1]).T
+            yy = yy_all[b0s] - yy_all[a0s - 1]
+            M = M_ld.astype(float)
+            rhs = rhs_ld.astype(float)
+            try:
+                B = np.linalg.solve(M, rhs[:, :, None])[:, :, 0]
+                # 一步迭代精化（longdouble 残差）
+                R = (rhs_ld - np.matmul(M_ld, B.astype(np.longdouble)[..., None])[..., 0]).astype(float)
+                B = B + np.linalg.solve(M, R[..., None])[:, :, 0]
+            except np.linalg.LinAlgError:
+                B = np.empty_like(rhs)
+                for rr in range(uu.size):
+                    try:
+                        B[rr] = np.linalg.solve(M[rr], rhs[rr])
+                    except np.linalg.LinAlgError:
+                        B[rr] = np.linalg.pinv(M[rr]) @ rhs[rr]
+            ssr = (yy - np.einsum("nj,nj->n", rhs_ld, B.astype(np.longdouble))).astype(float)
+            ssr = np.where(ssr > 0, ssr, np.nan)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                llf = -(nobs_arr[uu] / 2.0) * (np.log(2 * np.pi) + np.log(ssr / nobs_arr[uu]) + 1.0)
+                aic = -2.0 * llf + 2.0 * K
+            aic_tab[L, uu] = aic
+        # 选最优滞后（同 aic 取最小 L）
+        bestL = np.argmin(aic_tab, axis=0).astype(np.int64)
+        best_aic = aic_tab[bestL, np.arange(n_U)]
+        good = ok_n & np.isfinite(best_aic)
+        # 最终回归：行 [L*+1, n-1]，设计 [const, level, d_1..d_L*]
+        pvals = np.full(n_U, np.nan)
+        for Lv in np.unique(bestL[good]):
+            sel = good & (bestL == Lv)
+            uu = np.flatnonzero(sel)
+            K = Lv + 2
+            idx = np.array([0, 1] + [2 + q for q in range(1, Lv + 1)])
+            a0s = np.full(uu.size, Lv + 1, dtype=np.int64)
+            b0s = b0_arr[uu]
+            nobs_f = uniq_ns[uu].astype(np.float64) - 1 - Lv
+            sub = PC[np.ix_(idx, idx)]
+            M_ld = np.moveaxis(sub[:, :, b0s] - sub[:, :, a0s - 1], 2, 0)
+            rhs_ld = (PC[idx, n_comp - 1][:, b0s] - PC[idx, n_comp - 1][:, a0s - 1]).T
+            yy = yy_all[b0s] - yy_all[a0s - 1]
+            M = M_ld.astype(float)
+            rhs = rhs_ld.astype(float)
+            e1 = np.zeros((uu.size, K, 1))
+            e1[:, 1, 0] = 1.0
+            try:
+                B = np.linalg.solve(M, rhs[:, :, None])[:, :, 0]
+                Z = np.linalg.solve(M, e1)[:, :, 0]          # M^{-1} e1
+                R = (rhs_ld - np.matmul(M_ld, B.astype(np.longdouble)[..., None])[..., 0]).astype(float)
+                B = B + np.linalg.solve(M, R[..., None])[:, :, 0]
+            except np.linalg.LinAlgError:
+                B = np.empty_like(rhs)
+                Z = np.empty_like(rhs)
+                for rr in range(uu.size):
+                    try:
+                        B[rr] = np.linalg.solve(M[rr], rhs[rr])
+                        Z[rr] = np.linalg.solve(M[rr], e1[rr, :, 0])
+                    except np.linalg.LinAlgError:
+                        B[rr] = np.linalg.pinv(M[rr]) @ rhs[rr]
+                        Z[rr] = np.linalg.pinv(M[rr]) @ e1[rr, :, 0]
+            ssr = (yy - np.einsum("nj,nj->n", rhs_ld, B.astype(np.longdouble))).astype(float)
+            inv11 = Z[:, 1]
+            with np.errstate(divide="ignore", invalid="ignore"):
+                sigma2 = ssr / (nobs_f - K)
+                denom = np.sqrt(sigma2 * inv11)
+                tstat = B[:, 1] / denom
+            # MacKinnon p（与 mackinnonp 相同的分支与多项式）
+            pv = np.empty(uu.size)
+            hi = tstat > tau_max
+            lo = tstat < tau_min
+            pv[hi] = 1.0
+            pv[lo] = 0.0
+            mid = ~(hi | lo) & np.isfinite(tstat)
+            if mid.any():
+                sm_b = tstat[mid]
+                pv_mid = np.empty(sm_b.shape)
+                sel_small = sm_b <= tau_star
+                for coef, sel_b in ((coef_small, sel_small), (coef_large, ~sel_small)):
+                    if not sel_b.any():
+                        continue
+                    sm_c = sm_b[sel_b]
+                    acc = np.zeros(sm_c.size)
+                    for cc in range(coef.size):
+                        acc = acc * sm_c + coef[cc]
+                    pv_mid[sel_b] = ndtr(acc)
+                pv[mid] = pv_mid
+            pv[~np.isfinite(tstat)] = np.nan
+            pvals[uu] = pv
+        vals_by_n[uniq_ns] = pvals
+        out[rows_idx, j] = vals_by_n[ns]
+    return pd.DataFrame(out, index=x.index, columns=x.columns, dtype=float)
+
+
 @register_operator(
     name="granger_causality",
     canonical="granger_causality",
@@ -1109,14 +1391,7 @@ class granger_causality(SeriesOperator):
 
             raise OperatorParameterError(f"granger maxlag must be >= 1, got {lag}")
 
-        def _granger_pval(a, b):
-            from statsmodels.tsa.stattools import grangercausalitytests
-
-            data = pd.DataFrame({"x": a, "y": b})
-            test_result = grangercausalitytests(data[["y", "x"]], maxlag=lag, verbose=False)
-            return test_result[lag][0]["ssr_ftest"][1]
-
-        return expanding_bivariate(x, y, _granger_pval, min_periods=lag + 2)
+        return _expanding_granger_ssr_ftest_fast(x, y, lag, min_periods=lag + 2)
 
 
 
@@ -1909,12 +2184,7 @@ class stationarity_test(SeriesOperator):
         tags=["statistics", "hypothesis", "adf", "stationarity"]
     )
     def _calculate_series(self, x: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        def _adf_pval(v):
-            from statsmodels.tsa.stattools import adfuller
-
-            return adfuller(v, autolag="AIC")[1]
-
-        return expanding_univariate(x, _adf_pval, min_periods=10)
+        return _expanding_adf_pvalue_fast(x, min_periods=10)
 
 
 
@@ -2027,6 +2297,68 @@ class ttest_paired(SeriesOperator):
 
 
 
+def _expanding_ttest_ind_fast(x: pd.DataFrame, y: pd.DataFrame, min_periods: int) -> pd.DataFrame:
+    """``expanding_two_sample`` + ``stats.ttest_ind(a, b)[1]`` 的向量化等价实现。
+
+    语义逐点复制：每列前缀内 x / y 各自取有限样本（不要求逐行对齐），
+    Student 等方差双样本 t 检验。累积和 O(n) 递推代替每步重算，
+    p 值用与 scipy 相同的 ``stdtr`` 路径计算。
+    """
+    from scipy import special
+
+    out = np.full((len(x.index), len(x.columns)), np.nan, dtype=float)
+    for j, col in enumerate(x.columns):
+        xc = x[col].to_numpy(dtype=float, copy=False)
+        y_col = y[col] if col in y.columns else y.iloc[:, 0]
+        yc = y_col.reindex(x.index).to_numpy(dtype=float, copy=False)
+        fx = np.isfinite(xc)
+        fy = np.isfinite(yc)
+        n1 = np.cumsum(fx).astype(float)
+        n2 = np.cumsum(fy).astype(float)
+        # Welford 在线均值/平方和递推：数值稳定（累积和在前缀近乎常数时会
+        # 灾难性抵消，与 scipy 的两方差语义产生 NaN 模式差异）。
+        m1a = np.empty(xc.size)
+        s1a = np.empty(xc.size)
+        m2a = np.empty(xc.size)
+        s2a = np.empty(xc.size)
+        c1 = 0
+        c2 = 0
+        mm1 = 0.0
+        ss1 = 0.0
+        mm2 = 0.0
+        ss2 = 0.0
+        for i in range(xc.size):
+            v = xc[i]
+            if np.isfinite(v):
+                c1 += 1
+                d1 = v - mm1
+                mm1 += d1 / c1
+                ss1 += d1 * (v - mm1)
+            v = yc[i]
+            if np.isfinite(v):
+                c2 += 1
+                d2 = v - mm2
+                mm2 += d2 / c2
+                ss2 += d2 * (v - mm2)
+            m1a[i] = mm1
+            s1a[i] = ss1
+            m2a[i] = mm2
+            s2a[i] = ss2
+        with np.errstate(divide="ignore", invalid="ignore"):
+            m1 = m1a
+            m2 = m2a
+            # scipy: v = moment/n * n/(n-1)，svar = ((n1-1)v1+(n2-1)v2)/(n1+n2-2)
+            #       → 等价于组内平方和之和除以 df。
+            df = n1 + n2 - 2.0
+            svar = (s1a + s2a) / df
+            denom = np.sqrt(svar * (1.0 / n1 + 1.0 / n2))
+            t = (m1 - m2) / denom
+            p = 2.0 * special.stdtr(df, -np.abs(t))
+        ok = (n1 >= min_periods) & (n2 >= min_periods) & (df > 0)
+        out[:, j] = np.where(ok, p, np.nan)
+    return pd.DataFrame(out, index=x.index, columns=x.columns, dtype=float)
+
+
 # canonical=ttest_two_samples backend=pandas_numpy selected=ttest_two_samples source=statistics/hypothesis_ops.py
 @register_operator(
     name="ttest_two_samples",
@@ -2043,12 +2375,7 @@ class ttest_two_samples(SeriesOperator):
         tags=["statistics", "hypothesis", "ttest"]
     )
     def _calculate_series(self, x: pd.DataFrame, y: pd.DataFrame, **kwargs) -> pd.DataFrame:
-        return expanding_two_sample(
-            x,
-            y,
-            lambda a, b: stats.ttest_ind(a, b)[1],
-            min_periods=2,
-        )
+        return _expanding_ttest_ind_fast(x, y, min_periods=2)
 
 
 

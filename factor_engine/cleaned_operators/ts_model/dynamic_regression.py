@@ -20,6 +20,7 @@ All fits degrade to NaN rather than fabricate values.
 from __future__ import annotations
 
 from collections import deque
+from functools import partial as _partial
 from typing import Any, Callable
 
 import numpy as np
@@ -31,6 +32,7 @@ from factor_engine.cleaned_operators.ts_model._rolling_core import (
     build_design,
     FitResult,
     FitStatus,
+    fit_failure_sink_active,
     fit_result,
     frame_like,
     huber_fit,
@@ -41,6 +43,9 @@ from factor_engine.cleaned_operators.ts_model._rolling_core import (
     record_current_fit,
     ridge_fit,
     rolling_fit,
+    _batch_expectile_fit,
+    _batch_huber_fit,
+    _batch_pinball_fit,
 )
 
 # The historic IRLS ``quantile_fit`` is an expectile fit; the ``expectile_*``
@@ -157,6 +162,214 @@ def _build_fit(fit_fn: Callable[..., Any], extra: Any, add_intercept: bool) -> C
     return fit_fn
 
 
+def _batch_kernel_for(fit_fn: Callable[..., Any], extra: Any) -> Callable[..., Any] | None:
+    """Stacked-kernel equivalent of ``_build_fit`` for the batched fast path.
+
+    Returns a callable ``(designs, targets) -> (betas, ok)`` bit-identical to
+    the scalar kernel, or ``None`` when no batched kernel exists (the caller
+    then falls back to the reference loop).  The returned callables are
+    module-level functions or ``functools.partial`` objects of them — picklable,
+    so the batched kernels can fan chunks out to worker processes.
+    """
+    if fit_fn is huber_fit and extra is None:
+        return _batch_huber_fit
+    if fit_fn is quantile_fit or fit_fn is expectile_fit:
+        return _partial(_batch_expectile_fit, q=extra)
+    if fit_fn is pinball_quantile_fit:
+        return _partial(_batch_pinball_fit, q=extra)
+    return None
+
+
+def _multi_regression_batched(
+    y: pd.DataFrame,
+    yv: np.ndarray,
+    xs: list[np.ndarray],
+    *,
+    rows: int,
+    cols: int,
+    w: int,
+    mp: int,
+    lag: int,
+    stat: str,
+    coeff_index: int,
+    add_intercept: bool,
+    warmup_policy: str,
+    batch_kernel: Callable[..., Any],
+    n_coeffs: int,
+    fit: Callable[..., Any],
+    record_enabled: bool,
+) -> pd.DataFrame:
+    """Batched fast path of :func:`_multi_regression` (identical outputs).
+
+    Requires ``stability_k == 0``.  Windows are classified per ``(row, col)``
+    exactly like the reference loop, grouped by valid count, solved with the
+    stacked kernel, and the per-window statistic assembly (coeff / resid /
+    resid_z + ``prediction_status_counts``) is replicated verbatim.
+
+    Fit-failure bookkeeping is reproduced exactly: windows whose stacked fit
+    failed are re-run through the scalar kernel via ``fit_result`` so a bound
+    failure sink receives the identical receipt (and any window where the
+    scalar kernel nevertheless succeeds still produces the reference value),
+    and ``insufficient_sample`` / ``singular`` / ``PREDICTION_*`` records are
+    emitted with the same statuses and coordinates as the reference loop.
+    """
+    out = np.full((rows, cols), np.nan, dtype=float)
+    prediction_status_counts = {
+        "PREDICTION_INPUT_NONFINITE": 0,
+        "PREDICTION_NUMERIC_INVALID": 0,
+        "PREDICTION_ZERO_SCALE": 0,
+        "PREDICTION_INSUFFICIENT_SCALE_SUPPORT": 0,
+    }
+    index = y.index
+    columns = y.columns
+
+    def _record(result: FitResult, col: int, start: int, fit_end: int, row: int) -> None:
+        if record_enabled:
+            record_current_fit(
+                result,
+                instrument=columns[col],
+                window_start=index[start],
+                window_end=index[fit_end],
+                output_row=index[row],
+                fit_cutoff=index[fit_end],
+                maturity_cutoff=index[fit_end],
+            )
+
+    def _record_prediction(reason: str, col: int, start: int, fit_end: int, row: int) -> None:
+        prediction_status_counts[reason] += 1
+        _record(FitResult(None, FitStatus(False, reason, (("phase", "prediction"),))),
+                col, start, fit_end, row)
+
+    # Phase A — classify every (row, col) window like the reference loop and
+    # collect the fit-needed ones grouped by valid count.
+    groups: dict[int, dict[str, list]] = {}
+    ordered: list[tuple[int, int, int, list[int]]] = []   # (col, row, nv, slot keys)
+    fit_windows: list[tuple[int, int, int, int, np.ndarray, list[np.ndarray]]] = []
+    for col in range(cols):
+        ycol = yv[:, col]
+        xcols = [x[:, col] for x in xs]
+        for row in range(rows):
+            fit_end = row - lag
+            if fit_end < 0:
+                continue
+            # P1: strict full-history floor when warmup_policy="full".
+            if warmup_policy == "full" and fit_end < w - 1:
+                continue
+            start = max(0, fit_end - w + 1)
+            seg_y = ycol[start : fit_end + 1]
+            seg_xs = [x[start : fit_end + 1] for x in xcols]
+            valid = np.isfinite(seg_y)
+            for x in seg_xs:
+                valid &= np.isfinite(x)
+            if valid.sum() < mp:
+                _record(FitResult(None, FitStatus(False, "insufficient_sample")),
+                        col, start, fit_end, row)
+                continue
+            vy = seg_y[valid]
+            vxs = [x[valid] for x in seg_xs]
+            if any(np.std(vx) <= 0.0 for vx in vxs):
+                _record(FitResult(None, FitStatus(False, "singular")),
+                        col, start, fit_end, row)
+                continue
+            nv = int(vy.shape[0])
+            slot = len(fit_windows)
+            fit_windows.append((row, col, start, fit_end, vy, vxs))
+            g = groups.get(nv)
+            if g is None:
+                g = groups[nv] = {"designs": [], "targets": [], "slots": []}
+            g["designs"].append(vxs)
+            g["targets"].append(vy)
+            g["slots"].append(slot)
+            ordered.append((col, row, nv, slot))
+
+    # Phase B — stacked kernel per valid-count group.
+    betas = np.full((len(fit_windows), n_coeffs), np.nan, dtype=float)
+    oks = np.zeros(len(fit_windows), dtype=bool)
+    for g in groups.values():
+        K = len(g["slots"])
+        nv = g["targets"][0].shape[0]
+        D = np.empty((K, nv, n_coeffs), dtype=float)
+        if add_intercept:
+            D[:, :, 0] = 1.0
+            for j in range(1, n_coeffs):
+                D[:, :, j] = np.stack([w_[j - 1] for w_ in g["designs"]])
+        else:
+            for j in range(n_coeffs):
+                D[:, :, j] = np.stack([w_[j] for w_ in g["designs"]])
+        T = np.stack(g["targets"])
+        b_group, ok_group = batch_kernel(D, T)
+        betas[g["slots"]] = b_group
+        oks[g["slots"]] = ok_group
+
+    # Phase C — per-window statistic assembly, verbatim from the reference.
+    for col, row, nv, slot in ordered:
+        _, _, start, fit_end, vy, vxs = fit_windows[slot]
+        b: np.ndarray | None
+        if oks[slot]:
+            b = betas[slot]
+        else:
+            # Stacked fit failed (or disagreed): reproduce the scalar kernel's
+            # exact FitResult — telemetry, receipt and value all match the
+            # reference loop for this window.
+            design = build_design(vxs, add_intercept)
+            result = fit_result(fit, design, vy)
+            _record(result, col, start, fit_end, row)
+            b = result.value
+            if b is None:
+                continue
+        if stat == "coeff":
+            out[row, col] = float(b[coeff_index])
+            continue
+        ycol = yv[:, col]
+        xcols = [x[:, col] for x in xs]
+        if stat == "resid":
+            cur_xs = [x[row] for x in xcols]
+            if np.isfinite(ycol[row]) and np.all(np.isfinite(cur_xs)):
+                terms = ([1.0] if add_intercept else []) + cur_xs
+                with np.errstate(over="ignore", invalid="ignore"):
+                    pred_now = float(np.dot(terms, b))
+                resid = float(ycol[row] - pred_now)
+                if np.isfinite(pred_now) and np.isfinite(resid):
+                    out[row, col] = resid
+                else:
+                    _record_prediction("PREDICTION_NUMERIC_INVALID", col, start, fit_end, row)
+            else:
+                _record_prediction("PREDICTION_INPUT_NONFINITE", col, start, fit_end, row)
+        elif stat == "resid_z":
+            cur_xs = [x[row] for x in xcols]
+            if np.isfinite(ycol[row]) and np.all(np.isfinite(cur_xs)):
+                design = build_design(vxs, add_intercept)
+                with np.errstate(over="ignore", invalid="ignore"):
+                    e = vy - design @ b
+                ddof = max(design.shape[1], 1)
+                if nv > ddof:
+                    sd = float(np.sqrt(np.sum(e * e) / max(nv - ddof, 1)))
+                else:
+                    sd = np.nan
+                if nv <= ddof:
+                    _record_prediction("PREDICTION_INSUFFICIENT_SCALE_SUPPORT", col, start, fit_end, row)
+                elif not np.isfinite(sd):
+                    _record_prediction("PREDICTION_NUMERIC_INVALID", col, start, fit_end, row)
+                elif sd > _PREDICTION_SCALE_EPS:
+                    terms = ([1.0] if add_intercept else []) + cur_xs
+                    with np.errstate(over="ignore", invalid="ignore"):
+                        pred_now = float(np.dot(terms, b))
+                    resid = float(ycol[row] - pred_now)
+                    zscore = resid / sd
+                    if np.isfinite(pred_now) and np.isfinite(resid) and np.isfinite(zscore):
+                        out[row, col] = zscore
+                    else:
+                        _record_prediction("PREDICTION_NUMERIC_INVALID", col, start, fit_end, row)
+                else:
+                    _record_prediction("PREDICTION_ZERO_SCALE", col, start, fit_end, row)
+            else:
+                _record_prediction("PREDICTION_INPUT_NONFINITE", col, start, fit_end, row)
+    result_frame = frame_like(y, out)
+    result_frame.attrs["prediction_status_counts"] = {
+        reason: count for reason, count in prediction_status_counts.items() if count}
+    return result_frame
+
+
 def _multi_regression(
     y: pd.DataFrame,
     features: list[pd.DataFrame],
@@ -222,6 +435,21 @@ def _multi_regression(
         w, min_periods, len(feats), add_intercept, fit_lag=lag
     )
     k = max(0, int(stability_k))
+
+    # Batched fast path: same outputs and same fit-failure receipts, stacked
+    # kernels grouped by valid count.  Excluded when stability tracking is on
+    # (the deque-based coefficient history has no batched equivalent).
+    if k == 0 and stat in ("coeff", "resid", "resid_z"):
+        batch_kernel = _batch_kernel_for(fit_fn, extra)
+        if batch_kernel is not None:
+            return _multi_regression_batched(
+                y, yv, xs,
+                rows=rows, cols=cols, w=w, mp=mp, lag=lag,
+                stat=stat, coeff_index=coeff_index,
+                add_intercept=bool(add_intercept),
+                warmup_policy=warmup_policy,
+                batch_kernel=batch_kernel, n_coeffs=n_coeffs,
+                fit=fit, record_enabled=fit_failure_sink_active())
 
     def record(
         result: FitResult, *, col: int, start: int, fit_end: int, row: int,

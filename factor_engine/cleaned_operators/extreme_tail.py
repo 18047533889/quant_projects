@@ -25,7 +25,7 @@ import pandas as pd
 from factor_engine.cleaned_operators.base import OperatorMetadata, ParamRole, ParamSpec, SeriesOperator, register_operator
 from factor_engine.cleaned_operators.parameter_validation import strict_finite_scalar, strict_integer
 from factor_engine.cleaned_operators.rolling_pack import frame_like
-from factor_engine.cleaned_operators.ts_model._rolling_core import pinball_quantile_fit
+from factor_engine.cleaned_operators.ts_model._rolling_core import _batch_pinball_fit, pinball_quantile_fit
 
 _EPS = 1e-12
 
@@ -345,6 +345,12 @@ def _quantile_beta_series(y: np.ndarray, x: np.ndarray, window: int, q: float) -
     rows, cols = y.shape
     w = strict_integer(window, "window", minimum=2)
     out = np.full((rows, cols), np.nan, dtype=float)
+    # Batched dispatch: windows classified exactly like the reference loop
+    # (strict full window, finite-count floor 3), grouped by valid count and
+    # solved with the stacked pinball kernel — bit-identical to per-window
+    # ``_quantile_beta`` calls, including the NaN map.
+    groups: dict[int, list[int]] = {}
+    wins: list[tuple[int, int, np.ndarray, np.ndarray]] = []
     for c in range(cols):
         for t in range(rows):
             lo = max(0, t - w + 1)
@@ -355,7 +361,19 @@ def _quantile_beta_series(y: np.ndarray, x: np.ndarray, window: int, q: float) -
             finite = np.isfinite(xw) & np.isfinite(yw)
             if int(finite.sum()) < 3:
                 continue
-            out[t, c] = _quantile_beta(xw[finite], yw[finite], q)
+            slot = len(wins)
+            wins.append((t, c, xw[finite], yw[finite]))
+            groups.setdefault(wins[slot][2].shape[0], []).append(slot)
+    for nv, slots in groups.items():
+        D = np.empty((len(slots), nv, 2), dtype=float)
+        D[:, :, 0] = 1.0
+        D[:, :, 1] = np.stack([wins[s][2] for s in slots])
+        T = np.stack([wins[s][3] for s in slots])
+        b, ok = _batch_pinball_fit(D, T, q)
+        for gi, (s, good) in enumerate(zip(slots, ok)):
+            if good:
+                t, c = wins[s][0], wins[s][1]
+                out[t, c] = float(b[gi, 1])
     return out
 
 

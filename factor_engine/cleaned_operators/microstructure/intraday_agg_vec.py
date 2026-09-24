@@ -178,6 +178,108 @@ def batch_daily_agg(frame, cal, tz, vec, *, coverage_floor=None):
                         dtype=float).sort_index()
 
 
+def _align_day_axis(B, days):
+    """Scatter a batch onto ``days`` (a DatetimeIndex); missing days -> empty.
+
+    Pair/triple aggregation iterates the day axis of the FIRST frame (the
+    scalar loop only ever emits rows for days observed in frame_a), so the
+    secondary batches are reindexed onto that day axis: days absent from the
+    secondary frame get all-NaN values, no valid slots and ``has_finite=False``
+    — replicating the scalar ``gb[gb.index.normalize() == day]`` empty-group
+    early exit.
+    """
+    days = pd.DatetimeIndex(days)
+    if B.uniq_days.equals(days):
+        return B
+    pos = B.uniq_days.get_indexer(days)
+    hit = pos >= 0
+    Dn, S, C = len(days), B.S, B.C
+    M = np.full((Dn, S, C), np.nan)
+    present = np.zeros((Dn, S, C), dtype=bool)
+    M[hit] = B.M[pos[hit]]
+    present[hit] = B.valid[pos[hit]]
+    has_finite = np.zeros((Dn, C), dtype=bool)
+    has_finite[hit] = B.has_finite[pos[hit]]
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import (
+        _COVERAGE_FLOOR,
+    )
+
+    return _Batch(M, present, np.zeros_like(present), B.EM, days, B.columns,
+                  has_finite, _COVERAGE_FLOOR)
+
+
+def _batch_out(res, days, columns):
+    return pd.DataFrame(np.asarray(res, dtype=float), index=days,
+                        columns=columns, dtype=float).sort_index()
+
+
+def batch_pair_agg(frame_a, frame_b, cal, tz, vec, *, coverage_floor=None):
+    """Vector fast path for ``_pair_agg``; ``None`` -> scalar fallback.
+
+    Both frames must already be session-local (the caller applies
+    ``_session_local_frame`` exactly as the scalar loop does).  The output day
+    axis is frame_a's (the scalar loop only iterates frame_a's days); frame_b
+    is aligned onto it.
+    """
+    del tz  # frames already session-local; kept for signature symmetry
+    if not isinstance(frame_a.index, pd.DatetimeIndex) \
+            or not isinstance(frame_b.index, pd.DatetimeIndex):
+        return None
+    if frame_a.shape[1] == 0:
+        return pd.DataFrame(dtype=float)
+    if not frame_a.columns.equals(frame_b.columns):
+        return None
+    outs = []
+    days = None
+    for c0 in range(0, frame_a.shape[1], _CHUNK):
+        Ba = _build_batch(frame_a.iloc[:, c0:c0 + _CHUNK], cal, coverage_floor)
+        Bb = _build_batch(frame_b.iloc[:, c0:c0 + _CHUNK], cal, coverage_floor)
+        if Ba is None or Bb is None:
+            return None
+        Bb = _align_day_axis(Bb, Ba.uniq_days)
+        r = np.asarray(vec(Ba, Bb), dtype=float)
+        if r.shape != (Ba.D, Ba.C):
+            raise ValueError(
+                f"pair-vec kernel returned {r.shape}, expected {(Ba.D, Ba.C)}"
+            )
+        outs.append(r)
+        days = Ba.uniq_days
+    return _batch_out(np.concatenate(outs, axis=1), days, frame_a.columns)
+
+
+def batch_triple_agg(frame_a, frame_b, frame_c, cal, tz, vec, *,
+                     coverage_floor=None):
+    """Vector fast path for ``_triple_agg``; ``None`` -> scalar fallback."""
+    del tz
+    if not isinstance(frame_a.index, pd.DatetimeIndex) \
+            or not isinstance(frame_b.index, pd.DatetimeIndex) \
+            or not isinstance(frame_c.index, pd.DatetimeIndex):
+        return None
+    if frame_a.shape[1] == 0:
+        return pd.DataFrame(dtype=float)
+    if not (frame_a.columns.equals(frame_b.columns)
+            and frame_a.columns.equals(frame_c.columns)):
+        return None
+    outs = []
+    days = None
+    for c0 in range(0, frame_a.shape[1], _CHUNK):
+        Ba = _build_batch(frame_a.iloc[:, c0:c0 + _CHUNK], cal, coverage_floor)
+        Bb = _build_batch(frame_b.iloc[:, c0:c0 + _CHUNK], cal, coverage_floor)
+        Bc = _build_batch(frame_c.iloc[:, c0:c0 + _CHUNK], cal, coverage_floor)
+        if Ba is None or Bb is None or Bc is None:
+            return None
+        Bb = _align_day_axis(Bb, Ba.uniq_days)
+        Bc = _align_day_axis(Bc, Ba.uniq_days)
+        r = np.asarray(vec(Ba, Bb, Bc), dtype=float)
+        if r.shape != (Ba.D, Ba.C):
+            raise ValueError(
+                f"triple-vec kernel returned {r.shape}, expected {(Ba.D, Ba.C)}"
+            )
+        outs.append(r)
+        days = Ba.uniq_days
+    return _batch_out(np.concatenate(outs, axis=1), days, frame_a.columns)
+
+
 # ---------------------------------------------------------------------------
 # shared gates
 # ---------------------------------------------------------------------------
@@ -390,6 +492,214 @@ def vec_seg_realized_vol(B, segment):
     with np.errstate(invalid="ignore", over="ignore"):
         s = np.nansum(r * r, axis=1)
     return _gated(B, np.sqrt(np.maximum(s, 0.0)))
+
+
+# ---------------------------------------------------------------------------
+# pair/triple kernels — each mirrors one scalar kernel in intraday_agg.py
+# ---------------------------------------------------------------------------
+
+def _slot_at(EM, minute):
+    """Official slot ordinal of an exact minute-of-day; -1 when off-grid."""
+    s = int(np.searchsorted(EM, int(minute)))
+    return s if s < EM.size and int(EM[s]) == int(minute) else -1
+
+
+def vec_seg_vwap_deviation(Bc, Ba, Bv, segment):
+    """``_seg_vwap_deviation``: segment-end close vs cumulative segment VWAP."""
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import (
+        _SEGMENT_END_MOD,
+    )
+
+    es = _slot_at(Bc.EM, _SEGMENT_END_MOD[str(segment)])
+    if es < 0:
+        return np.full((Bc.D, Bc.C), np.nan)
+    end = np.where(Bc.valid[:, es, :], Bc.M[:, es, :], np.nan)
+    segm = _seg_slot_mask(Bc, segment)
+    valid = Bc.valid & Ba.valid & Bv.valid & segm[None, :, None]
+    a = np.nansum(np.where(valid, Ba.M, np.nan), axis=1)
+    v = np.nansum(np.where(valid, Bv.M, np.nan), axis=1)
+    ok = Bc.cov_ok & np.isfinite(end) & (v > _eps())
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.where(ok, end / (a / np.where(ok, v, 1.0)) - 1.0, np.nan)
+
+
+def vec_vwap_above_ratio(Bc, Ba, Bv):
+    """``_vwap_above_ratio``: fraction of usable bars closing above day VWAP."""
+    valid = Bc.valid & Ba.valid & Bv.valid & (Bv.M > 0.0)
+    a = np.where(valid, Ba.M, 0.0)
+    v = np.where(valid, Bv.M, 0.0)
+    tv = v.sum(axis=1)                                   # NaN propagates
+    bad_tv = tv <= _eps()                                # False for NaN tv
+    with np.errstate(invalid="ignore", divide="ignore"):
+        dv = a.sum(axis=1) / np.where(bad_tv, 1.0, tv)
+    day_vwap = dv[:, None, :]
+    ok = valid & np.isfinite(Bc.M)
+    cnt = ok.sum(axis=1)
+    above = ok & (Bc.M > day_vwap)
+    mean = np.where(cnt > 0, above.sum(axis=1) / np.maximum(cnt, 1), np.nan)
+    res = np.where(bad_tv | (cnt == 0), np.nan, mean)
+    return np.where(Bc.has_finite & Ba.has_finite & Bv.has_finite, res, np.nan)
+
+
+def vec_vwap_cross_count(Bc, Ba, Bv):
+    """``_vwap_cross_count``: sign changes of close vs cumulative VWAP.
+
+    The scalar kernel compresses to usable slots and diffs consecutive signs;
+    the vector kernel carries the last-usable sign forward across non-usable
+    slots so every consecutive-usable pair is compared exactly once.
+    """
+    valid = Bc.valid & Ba.valid & Bv.valid
+    vol = np.where(valid, Bv.M, np.nan)
+    amt = np.where(valid, Ba.M, np.nan)
+    cum_v = np.nancumsum(vol, axis=1)
+    cum_a = np.nancumsum(amt, axis=1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        cum_vwap = np.where(cum_v > _eps(), cum_a / cum_v, np.nan)
+    ok = valid & np.isfinite(Bc.M) & np.isfinite(cum_vwap)
+    cnt = ok.sum(axis=1)
+    sign = np.sign(np.where(ok, Bc.M, np.nan) - cum_vwap)
+    idx = np.arange(Bc.S, dtype=np.int64).reshape(1, Bc.S, 1)
+    acc = np.maximum.accumulate(np.where(ok, idx, np.int64(-1)), axis=1)
+    prev = np.full_like(acc, -1)
+    prev[:, 1:, :] = acc[:, :-1, :]
+    has_prev = prev >= 0
+    sign_prev = np.take_along_axis(
+        sign, np.clip(prev, 0, Bc.S - 1), axis=1)
+    d = ok & has_prev & (sign != sign_prev)
+    chg = d.sum(axis=1)
+    res = np.where(cnt >= 2, chg.astype(float), np.nan)
+    return np.where(Bc.has_finite & Ba.has_finite & Bv.has_finite, res, np.nan)
+
+
+def vec_signed_imbalance_proxy(Bc, Bv):
+    """``_signed_imbalance_proxy``: sum(sign(r)*value)/sum(value)."""
+    R = Bc.log_returns
+    valid = Bc.valid & Bv.valid
+    value = np.where(valid, Bv.M, 0.0)
+    total = value.sum(axis=1)
+    signed = np.where(np.isfinite(R) & valid, np.sign(R), 0.0) * value
+    num = signed.sum(axis=1)
+    ok = total > _eps()
+    with np.errstate(invalid="ignore"):
+        res = np.where(ok, num / np.where(ok, total, 1.0), np.nan)
+    return np.where(Bc.has_finite & Bv.has_finite, res, np.nan)
+
+
+def vec_return_activity_corr(Bc, Ba, absolute_return):
+    """``_return_activity_corr``: Pearson corr of (|r|) vs activity.
+
+    Sufficient-statistic form of ``np.corrcoef`` (ddof cancels); rounding may
+    differ by ~1e-15 from the two-pass scalar computation.
+    """
+    R = Bc.log_returns
+    if absolute_return:
+        R = np.abs(R)
+    valid = Bc.valid & Ba.valid & np.isfinite(Ba.M) & np.isfinite(R)
+    n = valid.sum(axis=1)
+    nf = np.maximum(n, 1).astype(float)
+    rf = np.where(valid, R, 0.0)
+    af = np.where(valid, Ba.M, 0.0)
+    sr = rf.sum(axis=1)
+    sa = af.sum(axis=1)
+    srr = (rf * rf).sum(axis=1)
+    saa = (af * af).sum(axis=1)
+    sra = (rf * af).sum(axis=1)
+    var_r = srr / nf - (sr / nf) ** 2
+    var_a = saa / nf - (sa / nf) ** 2
+    ok = (n >= 2) & (np.sqrt(np.maximum(var_r, 0.0)) > _eps()) \
+        & (np.sqrt(np.maximum(var_a, 0.0)) > _eps())
+    num = nf * sra - sr * sa
+    den = np.sqrt(np.maximum(nf * srr - sr * sr, 0.0)
+                  * np.maximum(nf * saa - sa * sa, 0.0))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        corr = num / np.where(den > 0.0, den, 1.0)
+    res = np.where(ok & (den > 0.0), corr, np.nan)
+    return np.where(Bc.has_finite & Ba.has_finite, res, np.nan)
+
+
+def vec_amihud(Bc, Ba, scale):
+    """``_intra_amihud``: mean(|r| / max(amount, eps)) * scale."""
+    R = np.abs(Bc.log_returns)
+    valid = Bc.valid & Ba.valid
+    amount = np.where(valid, Ba.M, np.nan)
+    denom = np.maximum(amount, _eps())
+    with np.errstate(invalid="ignore"):
+        ratio = np.where(np.isfinite(R) & valid, R / denom, np.nan)
+    cnt = np.isfinite(ratio).sum(axis=1)
+    mean = np.nansum(ratio, axis=1) / np.maximum(cnt, 1)
+    res = np.where(cnt > 0, mean * float(scale), np.nan)
+    return np.where(Bc.has_finite & Ba.has_finite, res, np.nan)
+
+
+def vec_kyle_lambda_proxy(Bc, Ba):
+    """``_kyle_lambda_proxy``: cov(r, sign(r)*share, ddof=1) / var(share, ddof=0).
+
+    Sufficient-statistic form; rounding may differ ~1e-15 from ``np.cov``.
+    """
+    R = Bc.log_returns
+    valid = Bc.valid & Ba.valid
+    amount = np.where(valid, Ba.M, 0.0)
+    total = amount.sum(axis=1)
+    ok_total = total > _eps()
+    with np.errstate(invalid="ignore"):
+        share = np.sign(R) * amount / np.where(ok_total, total, 1.0)[:, None, :]
+    mask = valid & np.isfinite(R) & np.isfinite(share)
+    n = mask.sum(axis=1)
+    nf = np.maximum(n, 1).astype(float)
+    rm = np.where(mask, R, 0.0)
+    sm = np.where(mask, share, 0.0)
+    sr = rm.sum(axis=1)
+    ss = sm.sum(axis=1)
+    srs = (rm * sm).sum(axis=1)
+    ss2 = (sm * sm).sum(axis=1)
+    var_s = ss2 / nf - (ss / nf) ** 2
+    ok = (n >= 3) & ok_total & (np.sqrt(np.maximum(var_s, 0.0)) > _eps())
+    with np.errstate(invalid="ignore", divide="ignore"):
+        beta = ((srs - sr * ss / nf) / np.maximum(nf - 1.0, 1.0)) / np.where(
+            var_s > 0.0, var_s, 1.0)
+    res = np.where(ok & (var_s > 0.0), beta, np.nan)
+    return np.where(Bc.has_finite & Ba.has_finite, res, np.nan)
+
+
+def vec_lunch_gap_return(Bc, Bo, morning_cutoff, afternoon_start,
+                         endpoint_policy):
+    """``_lunch_gap_return``: afternoon first Open / morning last Close - 1."""
+    from factor_engine.cleaned_operators.microstructure.intraday_agg import (
+        _SEGMENT_END_MOD,
+        _SEGMENT_START_MOD,
+        _minute_hm,
+    )
+
+    gate = Bc.has_finite & Bo.has_finite
+    if endpoint_policy == "exact":
+        es = _slot_at(Bc.EM, _SEGMENT_END_MOD["morning"])
+        as_ = _slot_at(Bo.EM, _SEGMENT_START_MOD["afternoon"])
+        if es < 0 or as_ < 0:
+            return np.full((Bc.D, Bc.C), np.nan)
+        mc = np.where(Bc.valid[:, es, :], Bc.M[:, es, :], np.nan)
+        ao = np.where(Bo.valid[:, as_, :], Bo.M[:, as_, :], np.nan)
+        ok = np.isfinite(mc) & np.isfinite(ao) & (mc > _eps())
+        with np.errstate(divide="ignore", invalid="ignore"):
+            res = np.where(ok, ao / np.where(ok, mc, 1.0) - 1.0, np.nan)
+        return np.where(gate, res, np.nan)
+    # explicit recent-valid policy: last/first finite valid within the window
+    mm = (Bc.EM <= _minute_hm(morning_cutoff))[None, :, None]
+    am = (Bo.EM >= _minute_hm(afternoon_start))[None, :, None]
+    selm = mm & Bc.valid & np.isfinite(Bc.M)
+    sela = am & Bo.valid & np.isfinite(Bo.M)
+    cntm = selm.sum(axis=1)
+    cnta = sela.sum(axis=1)
+    lastm = (Bc.S - 1) - np.argmax(selm[:, ::-1, :], axis=1)
+    firsta = np.argmax(sela, axis=1)
+    mc = np.take_along_axis(Bc.M, np.clip(lastm, 0, Bc.S - 1)[:, None, :],
+                            axis=1)[:, 0, :]
+    ao = np.take_along_axis(Bo.M, np.clip(firsta, 0, Bo.S - 1)[:, None, :],
+                            axis=1)[:, 0, :]
+    ok = (cntm > 0) & (cnta > 0) & np.isfinite(mc) & np.isfinite(ao) \
+        & (mc > _eps())
+    with np.errstate(divide="ignore", invalid="ignore"):
+        res = np.where(ok, ao / np.where(ok, mc, 1.0) - 1.0, np.nan)
+    return np.where(gate, res, np.nan)
 
 
 # ---------------------------------------------------------------------------

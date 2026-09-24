@@ -99,8 +99,12 @@ _WINDOW_SEMANTICS = "max_lookback"
 
 try:
     from scipy.optimize import minimize as _minimize
+    from scipy.signal import lfilter as _lfilter
+    from scipy.signal._sigtools import _linear_filter as _linear_filter_c
 except Exception:  # pragma: no cover
     _minimize = None
+    _lfilter = None
+    _linear_filter_c = None
 
 
 # Audit round-3 (item 33): a raw nonstationary price level is statistically
@@ -235,6 +239,17 @@ def _fit_garch(rets: np.ndarray) -> tuple[float, float, float] | None:
     if _minimize is None or len(rets) < 10 or np.std(rets) <= 1e-12:
         return None
     long_var = float(np.var(rets))
+    r2 = rets ** 2  # squares are invariant across evaluations (shock**2)
+    r2w = r2[:-1]
+    n = len(rets)
+    # Preallocated evaluation buffers (the Nelder-Mead objective is called
+    # sequentially; reusing them removes per-eval allocation overhead without
+    # changing any arithmetic).
+    xbuf = np.empty(n, dtype=float)
+    logbuf = np.empty(n, dtype=float)
+    divbuf = np.empty(n, dtype=float)
+    ba = np.array([1.0, 0.0])
+    b1 = np.array([1.0])
 
     def _nll(params):
         a, b = params
@@ -245,11 +260,27 @@ def _fit_garch(rets: np.ndarray) -> tuple[float, float, float] | None:
         # seed (_variance_path callers pass var(fit_seg)): both backcast from the
         # unconditional variance long_var = omega/(1-alpha-beta), not the
         # constant term omega alone.
-        h = np.full(len(rets), long_var, dtype=float)
-        for t in range(1, len(rets)):
-            h[t] = _variance_step(h[t - 1], rets[t - 1], w, a, b)
+        # h[0]=long_var; h[t] = (w + a*r2[t-1]) + b*h[t-1] — bit-identical IIR
+        # evaluated via lfilter (see _variance_path note).
+        np.multiply(r2w, a, out=xbuf[1:])
+        xbuf[1:] += w
+        xbuf[0] = long_var
+        if _linear_filter_c is not None:
+            ba[1] = -float(b)
+            h = _linear_filter_c(b1, ba, xbuf)
+        elif _lfilter is not None:
+            h = _lfilter([1.0], [1.0, -float(b)], xbuf)
+        else:
+            h = np.full(n, long_var, dtype=float)
+            prev = long_var
+            for t in range(1, n):
+                prev = (w + a * r2[t - 1]) + b * prev
+                h[t] = prev
         with np.errstate(divide="ignore", invalid="ignore"):
-            return float(np.sum(np.log(h) + rets ** 2 / h))
+            np.log(h, out=logbuf)
+            np.divide(r2, h, out=divbuf)
+            np.add(logbuf, divbuf, out=logbuf)
+        return float(logbuf.sum())
     try:
         res = _minimize(_nll, np.array([0.05, 0.9]), method="Nelder-Mead",
                         options={"maxiter": 200, "xatol": 1e-4, "fatol": 1e-6})
@@ -323,9 +354,32 @@ def _variance_path(
     governing the LAST observation of ``seg`` (information strictly before it).
     The caller chooses ``h_init`` so the current return can never seed its own
     standardisation denominator (audit P0: the init must exclude r_t).
+
+    The scalar recursion ``h[t] = (w + coef*seg[t-1]**2) + b*h[t-1]`` is an
+    order-1 IIR filter; scipy's ``lfilter`` reproduces it bit-exactly in C
+    (verified elementwise against the loop, including NaN fail-closed
+    propagation and the GJR sign-dependent leverage coefficient).
     """
+    n = len(seg)
+    if n <= 1:
+        return float(h_init)
+    shocks = seg[:-1]
+    if asymmetric:
+        coef = np.where(shocks < 0.0, a + gamma, a)
+    else:
+        coef = a
+    u = w + coef * (shocks ** 2)
+    x = np.empty(n, dtype=float)
+    x[0] = h_init
+    x[1:] = u
+    if _linear_filter_c is not None:
+        h = _linear_filter_c(np.array([1.0]), np.array([1.0, -float(b)]), x)
+        return float(h[-1])
+    if _lfilter is not None:
+        h = _lfilter([1.0], [1.0, -float(b)], x)
+        return float(h[-1])
     h = h_init
-    for i in range(1, len(seg)):
+    for i in range(1, n):
         h = _variance_step(h, seg[i - 1], w, a, b, gamma, asymmetric=asymmetric)
     return h
 
@@ -415,6 +469,16 @@ def _fit_gjr(rets: np.ndarray) -> tuple[float, float, float, float] | None:
     if _minimize is None or len(rets) < 12 or np.std(rets) <= 1e-12:
         return None
     long_var = float(np.var(rets))
+    r2 = rets ** 2  # squares are invariant across evaluations (shock**2)
+    r2w = r2[:-1]
+    negw = rets[:-1] < 0.0
+    n = len(rets)
+    xbuf = np.empty(n, dtype=float)
+    logbuf = np.empty(n, dtype=float)
+    divbuf = np.empty(n, dtype=float)
+    cobuf = np.empty(n - 1, dtype=float)
+    ba = np.array([1.0, 0.0])
+    b1 = np.array([1.0])
 
     def _nll(p):
         a, g, b = p
@@ -423,13 +487,29 @@ def _fit_gjr(rets: np.ndarray) -> tuple[float, float, float, float] | None:
         w = max(long_var * (1 - a - 0.5 * g - b), 1e-12)
         # Unify with the output recursion seed: backcast from the unconditional
         # variance long_var (= omega/(1-a-0.5g-b)), matching _variance_path.
-        h = np.full(len(rets), long_var, dtype=float)
-        for t in range(1, len(rets)):
-            h[t] = _variance_step(
-                h[t - 1], rets[t - 1], w, a, b, g, asymmetric=True
-            )
+        # h[0]=long_var; h[t] = (w + (a + g*I(r<0))*r2[t-1]) + b*h[t-1] —
+        # bit-identical IIR evaluated via lfilter (see _variance_path note).
+        np.copyto(cobuf, a)
+        cobuf[negw] = a + g
+        np.multiply(cobuf, r2w, out=xbuf[1:])
+        xbuf[1:] += w
+        xbuf[0] = long_var
+        if _linear_filter_c is not None:
+            ba[1] = -float(b)
+            h = _linear_filter_c(b1, ba, xbuf)
+        elif _lfilter is not None:
+            h = _lfilter([1.0], [1.0, -float(b)], xbuf)
+        else:
+            h = np.full(n, long_var, dtype=float)
+            prev = long_var
+            for t in range(1, n):
+                prev = (w + cobuf[t - 1] * r2[t - 1]) + b * prev
+                h[t] = prev
         with np.errstate(divide="ignore", invalid="ignore"):
-            return float(np.sum(np.log(h) + rets ** 2 / h))
+            np.log(h, out=logbuf)
+            np.divide(r2, h, out=divbuf)
+            np.add(logbuf, divbuf, out=logbuf)
+        return float(logbuf.sum())
     try:
         res = _minimize(_nll, np.array([0.03, 0.05, 0.9]), method="Nelder-Mead",
                         options={"maxiter": 300, "xatol": 1e-4, "fatol": 1e-6})

@@ -492,17 +492,30 @@ def _dfa_hurst(run: np.ndarray, min_scale: int, max_scale: int, n_scales: int) -
         return np.nan
     log_s: list[float] = []
     log_f: list[float] = []
+    xs_cache: dict[int, tuple[float, float, np.ndarray]] = {}
     for s in scales:
         n_boxes = n // s
         if n_boxes < 2:
             continue
-        residual_sq: list[float] = []
-        for b in range(n_boxes):
-            seg = y[b * s : (b + 1) * s]
-            xs = np.arange(len(seg), dtype=float)
-            coeff = np.polyfit(xs, seg, 1)
-            trend = np.polyval(coeff, xs)
-            residual_sq.append(np.mean((seg - trend) ** 2))
+        # R66-perf: 盒内一阶 OLS 去趋势用闭式解批量计算（y 分块 reshape），
+        # 代替逐盒 np.polyfit；RSS = Σy² - aΣy - bΣxy（OLS 恒等式）。
+        ybox = y[: n_boxes * s].reshape(n_boxes, s)
+        hit = xs_cache.get(s)
+        if hit is None:
+            xs0 = np.arange(s, dtype=float)
+            hit = (float(xs0.sum()), float(np.dot(xs0, xs0)), xs0)
+            xs_cache[s] = hit
+        Sx, Sx2, xs0 = hit
+        Sy = ybox.sum(axis=1)
+        Sy2 = (ybox * ybox).sum(axis=1)
+        Sxy = ybox @ xs0
+        den = s * Sx2 - Sx * Sx
+        slope_b = (s * Sxy - Sx * Sy) / den
+        icpt_b = (Sy - slope_b * Sx) / s
+        # 两遍法残差（与参考 mean((seg-trend)**2) 同构，避免 y 为
+        # 随机游走累积量时 Σy² - aΣy - bΣxy 的大数抵消）
+        trend = icpt_b[:, None] + slope_b[:, None] * xs0[None, :]
+        residual_sq = ((ybox - trend) ** 2).mean(axis=1)
         f = float(np.sqrt(np.mean(residual_sq)))
         if not np.isfinite(f) or f <= 0.0:
             continue

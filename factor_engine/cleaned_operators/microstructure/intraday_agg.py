@@ -288,6 +288,7 @@ def _pair_agg(
     session_tz: str | None = None,
     source_timezone: str | None = None,
     mode: str = "research",
+    vec: Callable[[Any, Any], Any] | None = None,
 ) -> pd.DataFrame:
     """Tuple-complete pair aggregation (R26-022..024).
 
@@ -296,6 +297,11 @@ def _pair_agg(
     data-invalid and never acts as a single-series bar.
 
     R40 #238/#239：分层异常（同 :func:`_daily_agg`）。
+
+    R63: ``vec`` (optional) is a batched official-grid kernel
+    ``(intraday_agg_vec._Batch, _Batch) -> (D, C)`` taking precedence over the
+    per-(instrument, day) scalar loop in research mode; production mode keeps
+    the scalar loop (SessionPanel DQ hard-fail semantics).
     """
     a = _session_local_frame(
         _as_panel(frame_a), session_tz=session_tz, source_timezone=source_timezone, market=market
@@ -306,6 +312,14 @@ def _pair_agg(
     cal = _declared_calendar(market, bar_freq)
     tz = session_tz or _DEFAULT_SESSION_TZ
     is_prod = str(mode).strip().lower() == "production"
+    if vec is not None and not is_prod:
+        from factor_engine.cleaned_operators.microstructure.intraday_agg_vec import (
+            batch_pair_agg,
+        )
+
+        _fast = batch_pair_agg(a, b, cal, tz, vec)
+        if _fast is not None:
+            return _fast
     out: dict[str, pd.Series] = {}
     for inst in a.columns:
         per_day: dict[pd.Timestamp, float] = {}
@@ -349,6 +363,7 @@ def _triple_agg(
     session_tz: str | None = None,
     source_timezone: str | None = None,
     mode: str = "research",
+    vec: Callable[[Any, Any, Any], Any] | None = None,
 ) -> pd.DataFrame:
     """Tuple-complete three-input aggregation (R26-022..024).
 
@@ -357,6 +372,11 @@ def _triple_agg(
     cohort / denominator (R26-154).
 
     R40 #238/#239：分层异常（同 :func:`_daily_agg`）。
+
+    R63: ``vec`` (optional) is a batched official-grid kernel
+    ``(intraday_agg_vec._Batch, _Batch, _Batch) -> (D, C)`` taking precedence
+    over the per-(instrument, day) scalar loop in research mode; production
+    mode keeps the scalar loop (SessionPanel DQ hard-fail semantics).
     """
     a = _session_local_frame(
         _as_panel(frame_a), session_tz=session_tz, source_timezone=source_timezone, market=market
@@ -370,6 +390,14 @@ def _triple_agg(
     cal = _declared_calendar(market, bar_freq)
     tz = session_tz or _DEFAULT_SESSION_TZ
     is_prod = str(mode).strip().lower() == "production"
+    if vec is not None and not is_prod:
+        from factor_engine.cleaned_operators.microstructure.intraday_agg_vec import (
+            batch_triple_agg,
+        )
+
+        _fast = batch_triple_agg(a, b, c, cal, tz, vec)
+        if _fast is not None:
+            return _fast
     out: dict[str, pd.Series] = {}
     for inst in a.columns:
         per_day: dict[pd.Timestamp, float] = {}
@@ -633,6 +661,7 @@ class IntraSegmentVwapDeviation(SeriesOperator):
             close, amount, volume,
             lambda pa, pb, pc: _seg_vwap_deviation(pa, pb, pc, segment),
             session_tz=session_tz,
+            vec=lambda bc, ba, bv: _iav.vec_seg_vwap_deviation(bc, ba, bv, segment),
         )
 
 
@@ -955,7 +984,8 @@ class IntraVwapAboveRatio(SeriesOperator):
 
 
     def _calculate_series(self, close, amount, volume, **_):
-        return _triple_agg(close, amount, volume, _vwap_above_ratio)
+        return _triple_agg(close, amount, volume, _vwap_above_ratio,
+                           vec=_iav.vec_vwap_above_ratio)
 
 
 def _vwap_cross_count(pc: SessionPanel, pa: SessionPanel, pv: SessionPanel) -> float:
@@ -997,7 +1027,8 @@ class IntraVwapCrossCount(SeriesOperator):
 
 
     def _calculate_series(self, close, amount, volume, **_):
-        return _triple_agg(close, amount, volume, _vwap_cross_count)
+        return _triple_agg(close, amount, volume, _vwap_cross_count,
+                           vec=_iav.vec_vwap_cross_count)
 
 
 # ---------------------------------------------------------------------------
@@ -1113,7 +1144,8 @@ class IntraSignedImbalanceProxy(SeriesOperator):
 
 
     def _calculate_series(self, close, value, **_):
-        return _pair_agg(close, value, _signed_imbalance_proxy)
+        return _pair_agg(close, value, _signed_imbalance_proxy,
+                         vec=_iav.vec_signed_imbalance_proxy)
 
 
 def _return_activity_corr(pc: SessionPanel, pa: SessionPanel, absolute_return: bool) -> float:
@@ -1154,6 +1186,7 @@ class IntraReturnActivityCorr(SeriesOperator):
         return _pair_agg(
             close, activity,
             lambda pa, pb: _return_activity_corr(pa, pb, bool(absolute_return)),
+            vec=lambda bc, ba: _iav.vec_return_activity_corr(bc, ba, bool(absolute_return)),
         )
 
 
@@ -1197,6 +1230,7 @@ class IntraAmihud(SeriesOperator):
         return _pair_agg(
             close, amount,
             lambda pa, pb: _intra_amihud(pa, pb, _require_positive_finite(scale, "scale")),
+            vec=lambda bc, ba: _iav.vec_amihud(bc, ba, _require_positive_finite(scale, "scale")),
         )
 
 
@@ -1235,7 +1269,8 @@ class IntraKyleLambdaProxy(SeriesOperator):
 
 
     def _calculate_series(self, close, amount, **_):
-        return _pair_agg(close, amount, _kyle_lambda_proxy)
+        return _pair_agg(close, amount, _kyle_lambda_proxy,
+                         vec=_iav.vec_kyle_lambda_proxy)
 
 
 def _extreme_bar_return(panel: SessionPanel, side: str) -> float:
@@ -1342,6 +1377,7 @@ class IntraLunchGapReturn(SeriesOperator):
             close, open,
             lambda pc, po: _lunch_gap_return(pc, po, morning_cutoff, afternoon_start, endpoint_policy),
             session_tz=session_tz,
+            vec=lambda bc, bo: _iav.vec_lunch_gap_return(bc, bo, morning_cutoff, afternoon_start, endpoint_policy),
         )
 
 

@@ -430,65 +430,52 @@ def _rips_h1_entropy(points: np.ndarray, pmask: np.ndarray) -> np.ndarray:
     tri_flt = np.maximum(np.maximum(dist[:, ti, tj], dist[:, ti, tk]), dist[:, tj, tk])
     n_edges = edge.shape[1]
     shp_e = edge.shape
-    # edges sorted by (distance, i, j): the reference's ``edges.sort()``.
-    eorder = np.lexsort(
-        (np.broadcast_to(ej, shp_e), np.broadcast_to(ei, shp_e), edge), axis=1
-    )
+    # R66-perf-4: 边/三角表按字典序生成，lexsort 的次键 tie-break 恰为表序，
+    # 故等价于对 filtration 的单键 stable argsort（与原 lexsort 逐步一致）。
+    shp_t = tri_flt.shape
+    eorder = np.argsort(edge, axis=1, kind="stable")
     e_sorted = np.take_along_axis(edge, eorder, axis=1)
     erank = np.empty(shp_e, dtype=np.int64)
     np.put_along_axis(erank, eorder, np.arange(n_edges, dtype=np.int64)[None, :], axis=1)
-    # triangles sorted by (filtration, i, j, k): the reference's ``triangles.sort()``.
-    shp_t = tri_flt.shape
-    torder = np.lexsort(
-        (
-            np.broadcast_to(tk, shp_t),
-            np.broadcast_to(tj, shp_t),
-            np.broadcast_to(ti, shp_t),
-            tri_flt,
-        ),
-        axis=1,
-    )
+    torder = np.argsort(tri_flt, axis=1, kind="stable")
     tri_rank = erank[:, tri_edges]                   # (rows, n_tri, 3)
     rix = np.arange(rows)
+    # R66-perf-4: 初始边界掩码循环前一次算完（(n_tri, rows) 布局，行切片连续）；
+    # 同一格内三条边 rank 互异（erank 是排列），位的 OR 等价于 XOR。
+    rr_all = tri_rank[rix[:, None], torder]          # (rows, n_tri, 3)
+    low_all = rr_all < 64
+    blo = np.left_shift(np.uint64(1), (rr_all & np.int64(63)).astype(np.uint64))
+    blo = np.where(low_all, blo, np.uint64(0))
+    bhi = np.left_shift(
+        np.uint64(1), np.clip(rr_all - np.int64(64), 0, 63).astype(np.uint64)
+    )
+    bhi = np.where(low_all, np.uint64(0), bhi)
+    c0_lo = np.ascontiguousarray((blo[:, :, 0] | blo[:, :, 1] | blo[:, :, 2]).T)
+    c0_hi = np.ascontiguousarray((bhi[:, :, 0] | bhi[:, :, 1] | bhi[:, :, 2]).T)
+    flt_T = np.ascontiguousarray(tri_flt[rix[:, None], torder].T)
     piv_lo = np.zeros((rows, n_edges), dtype=np.uint64)
     piv_hi = np.zeros((rows, n_edges), dtype=np.uint64)
-    piv_ok = np.zeros((rows, n_edges), dtype=bool)
     life = np.full((rows, shp_t[1]), np.nan, dtype=float)
+    _zero = np.uint64(0)
     for t in range(shp_t[1]):
-        tri = torder[:, t]
-        rr = tri_rank[rix, tri]
-        clo = np.zeros(rows, dtype=np.uint64)
-        chi = np.zeros(rows, dtype=np.uint64)
-        for s in range(3):
-            r = rr[:, s]
-            low = r < 64
-            clo |= np.where(
-                low,
-                np.left_shift(np.uint64(1), (r & np.int64(63)).astype(np.uint64)),
-                np.uint64(0),
-            )
-            chi |= np.where(
-                low,
-                np.uint64(0),
-                np.left_shift(
-                    np.uint64(1), np.clip(r - np.int64(64), 0, 63).astype(np.uint64)
-                ),
-            )
-        flt = tri_flt[rix, tri]
-        stored_hi = np.full(rows, -1, dtype=np.int64)
+        clo = c0_lo[t].copy()
+        chi = c0_hi[t].copy()
+        flt = flt_T[t]
         act = np.flatnonzero((clo | chi) != 0)
         while act.size:
             alo = clo[act]
             ahi = chi[act]
             hi = _high_bit_u64(alo, ahi)
-            free = ~piv_ok[act, hi]                  # pivot row still unclaimed
+            # 占据过的 piv 位形必非零（act 只含非零掩码），零判定等价 piv_ok。
+            free = (piv_lo[act, hi] == _zero) & (piv_hi[act, hi] == _zero)
             if free.any():
                 st = act[free]
                 hst = hi[free]
                 piv_lo[st, hst] = alo[free]
                 piv_hi[st, hst] = ahi[free]
-                piv_ok[st, hst] = True
-                stored_hi[st] = hst                  # born at this edge, dies at flt
+                # 同一轮内每格至多 free 一次，直接写等价于 stored 暂存
+                #（born at this edge, dies at flt）。
+                life[st, t] = flt[st] - e_sorted[st, hst]
             keep = ~free
             if not keep.any():
                 break
@@ -497,9 +484,6 @@ def _rips_h1_entropy(points: np.ndarray, pmask: np.ndarray) -> np.ndarray:
             clo[ct] = alo[keep] ^ piv_lo[ct, phi]
             chi[ct] = ahi[keep] ^ piv_hi[ct, phi]
             act = ct[(clo[ct] | chi[ct]) != 0]        # reduced to zero -> no H1 class
-        st = np.flatnonzero(stored_hi >= 0)
-        if st.size:
-            life[st, t] = flt[st] - e_sorted[st, stored_hi[st]]
     return _entropy_from_lifetimes(life)
 
 
@@ -595,27 +579,42 @@ def _persistence_entropy_series(x2d: np.ndarray, window: int, tau: int, dim: int
         )
     posidx = np.arange(n_pts)[:, None] + tau * np.arange(dim)[None, :]
     length = np.minimum(np.arange(rows) + 1, w)
-    for c in range(cols):
-        x = np.asarray(x2d[:, c], dtype=float)
-        z, spread, n_fin, _finite = _robust_z_rows(_trailing_rows(x, w))
-        cloud = z[:, posidx]
-        valid = np.isfinite(cloud).all(axis=2)
-        n_cloud = valid.sum(axis=1)
-        # CURRENT_ROW_REQUIRED (P0-7) + the reference's feasibility gates: at
-        # least 4 finite observations, a non-degenerate robust spread, at least
-        # `lag + 3` observations in the window and 4 finite embedding rows.
-        gate = (
-            np.isfinite(x) & (n_fin >= 4) & (length >= lag + 3)
-            & (spread > _EPS) & (n_cloud >= 4)
-        )
-        if not gate.any():
-            continue
-        if h0:
-            ent = _h0_entropy_batch(z, valid, dim, tau)
-        else:
-            ent = _h1_entropy_batch(cloud, valid)
-        out[:, c] = np.where(gate, ent, np.nan)
-    return out
+    # R66-perf: 跨列展平成单批（原逐列循环把批内规模限制在 rows=rows，
+    # 48 列要重复跑 48 次约化循环）。row-major 展平与 x2d.reshape(-1) 一致。
+    ridx = np.arange(rows)[:, None]
+    widx2 = np.maximum(0, ridx - w + 1) + np.arange(w)[None, :]
+    gather = x2d[np.clip(widx2, 0, rows - 1)]
+    zp = np.where(
+        (widx2 <= ridx)[:, :, None], gather, np.nan
+    ).transpose(0, 2, 1).reshape(rows * cols, w)
+    xflat = x2d.reshape(-1)
+    # R66-perf-3: 面板各列常来自同一段序列，窗口大量重复——只对唯一窗口跑
+    # robust-z / 嵌入 / 约化管道，再按 inverse 映射回全部格子；CURRENT_ROW_
+    # REQUIRED 的当前行有限门与行长门（与窗口内容无关）在映射后施加，结果
+    # 与不去重时逐格一致。
+    uniq, inv = np.unique(zp, axis=0, return_inverse=True)
+    z, spread, n_fin, _finite = _robust_z_rows(uniq)
+    cloud = z[:, posidx]
+    valid = np.isfinite(cloud).all(axis=2)
+    n_cloud = valid.sum(axis=1)
+    # Per-window feasibility gates: at least 4 finite observations, a
+    # non-degenerate robust spread and 4 finite embedding rows.
+    gate_u = (n_fin >= 4) & (spread > _EPS) & (n_cloud >= 4)
+    if not gate_u.any():
+        return out
+    if h0:
+        ent_u = _h0_entropy_batch(z, valid, dim, tau)
+    else:
+        ent_u = _h1_entropy_batch(cloud, valid)
+    ent_u = np.where(gate_u, ent_u, np.nan)
+    # CURRENT_ROW_REQUIRED (P0-7) + the reference's window-length gate.
+    gate = (
+        np.isfinite(xflat)
+        & (np.repeat(length, cols) >= lag + 3)
+        & gate_u[inv]
+    )
+    ent = np.where(gate, ent_u[inv], np.nan)
+    return ent.reshape(rows, cols)
 
 
 def _register(name: str, description: str, *, h0: bool) -> SeriesOperator:

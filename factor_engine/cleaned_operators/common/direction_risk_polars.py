@@ -138,7 +138,7 @@ def ts_time_under_water(x,window=20):
 def _models(y,x,window,max_lag,min_periods,kind):
     from factor_engine.cleaned_operators.common._polars_bridge import align_cols
     from factor_engine.cleaned_operators.downside_risk import (
-        _best_lag_corr_raw,_best_lag_corr_excess,_stable_surrogate_seed,_price_delay_model)
+        _stable_surrogate_seed, _best_lag_corr_real_matrix, _best_lag_corr_excess_matrix)
     from factor_engine.backend.operator_semantic_version import versioned_name
     w=strict_integer(window,"window",minimum=2)
     ml=strict_integer(max_lag,"max_lag",minimum=1 if kind=="delay" else 0)
@@ -164,18 +164,34 @@ def _models(y,x,window,max_lag,min_periods,kind):
     observed=[t for t in times if t is not None]
     if len(set(observed))!=len(observed):
         raise ValueError("absolute time coordinate must be unique")
+    if kind in ("raw","excess"):
+        # Vectorized panel path (numerically equivalent to the scalar kernels in
+        # downside_risk.py; RNG consumption per cell is preserved exactly).
+        ya=np.column_stack([y[c].cast(pl.Float64).to_numpy() for c in columns])
+        xa=np.column_stack([x[c].cast(pl.Float64).to_numpy() for c in columns])
+        real=_best_lag_corr_real_matrix(xa,ya,w,ml)
+        if kind=="raw":
+            output=real
+        else:
+            canonical=versioned_name("ts_best_lag_corr_excess")
+            seed_rows=[]
+            for t,time in enumerate(times):
+                if time is None:
+                    seed_rows.append(None)
+                else:
+                    seed_rows.append(
+                        [_stable_surrogate_seed(42,time,c,canonical) for c in columns])
+            output=_best_lag_corr_excess_matrix(xa,ya,seed_rows,w,ml,real)
+        result=[pl.Series(c,output[:,i]) for i,c in enumerate(columns)]
+        return y.with_columns(result)
     result=[]
+    from factor_engine.cleaned_operators.downside_risk import _price_delay_model
     for c in columns:
         ya,xa=y[c].cast(pl.Float64).to_numpy(),x[c].cast(pl.Float64).to_numpy()
         output=np.full(y.height,np.nan)
         for t,time in enumerate(times):
-            if kind=="raw":
-                output[t]=_best_lag_corr_raw(xa,ya,t,w,ml)
-            elif kind=="delay":
+            if kind=="delay":
                 output[t]=_price_delay_model(ya,xa,t,w,ml,mp)
-            elif time is not None:
-                seed=_stable_surrogate_seed(42,time,c,versioned_name("ts_best_lag_corr_excess"))
-                output[t]=_best_lag_corr_excess(xa,ya,t,w,ml,identity_seed=seed)
         result.append(pl.Series(c,output))
     return y.with_columns(result)
 def ts_best_lag_corr_raw(y,x,window=20,max_lag=5):
