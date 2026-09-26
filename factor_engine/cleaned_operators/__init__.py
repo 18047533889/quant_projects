@@ -339,6 +339,10 @@ _LOAD_MODULES = (
     # DMA / BBI / Stochastic RSI / A-D Line.
     "factor_engine.cleaned_operators.technical.classic_indicators_v2",
     "factor_engine.cleaned_operators.wave1_seasonal",
+    # R68 batch-1: native polars backends for 45 high-frequency canonicals
+    # (fiscal / ts-complexity / cs-residual / intraday microstructure); loads
+    # after batch-2 so pandas references and earlier polars delegates resolve.
+    "factor_engine.cleaned_operators.polars_native.r68_native_batch1",
 )
 
 # R30 §7: explicit production / research / internal loader split.  The full
@@ -499,6 +503,86 @@ BOOTSTRAP_MODULE_SPECS: tuple[BootstrapModuleSpec, ...] = _build_bootstrap_modul
 BOOTSTRAP_MODULE_SPECS = BOOTSTRAP_MODULE_SPECS + (
     BootstrapModuleSpec(
         module="factor_engine.cleaned_operators._missing_public_bootstrap",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
+    ),
+    # R68 batch-2: native polars backends for the next 45 high-frequency canonicals.
+    # Registered AFTER every pandas reference module (same policy as batch-3):
+    # several of its pandas authorities live in _REVIEWED_EXTENSIONS
+    # (indicators_v2) or the research ts_model modules, which load after the
+    # plain _LOAD_MODULES window.
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators.polars_native.r68_native_batch2",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
+    ),
+    # R68 batch-3: native polars backends for the 45 pandas-delegate canonicals.
+    # Registered AFTER every pandas reference module (including the reviewed
+    # extensions) so the deep-copied pandas_numpy metadata is resolvable at
+    # import time — same policy as batch-2, but its pandas authorities live in
+    # _REVIEWED_EXTENSIONS which load after _LOAD_MODULES.
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators.polars_native.r68_native_batch3",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
+    ),
+    # R68 batch-4: native polars backends for delegate canonicals 135..180.
+    # Registered AFTER every pandas reference module (same policy as batch-3):
+    # its pandas authorities span the ts_model / advanced_* / intraday / ashare
+    # modules, several of which live in _REVIEWED_EXTENSIONS.
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators.polars_native.r68_native_batch4",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
+    ),
+    # R68 batch-5: native polars backends for delegate canonicals 180..225.
+    # Same policy as batch-4: registered after every pandas reference module
+    # (authorities span hvg_ext / composition / rqa_ext / dmd / intraday /
+    # cross_section_local / ts_model modules, several in _REVIEWED_EXTENSIONS).
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators.polars_native.r68_native_batch5",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
+    ),
+    # R68 batch-6: native polars backends for delegate canonicals 225..270.
+    # Same policy as batch-4/5: registered after every pandas reference module
+    # (authorities span dependence_ext / stateful / panel_model / research_*
+    # / alpha_language_* / ts_model modules).
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators.polars_native.r68_native_batch6",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
+    ),
+    # R68 batch-6 addendum (own agent): the 9 b6.json canonicals the
+    # concurrent batch6 rewrite does not carry. Self-contained module.
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators.polars_native.r68_native_batch6_addendum",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
+    ),
+    # R68 batch-7: native polars backends for delegate canonicals 270..315.
+    # Same policy as batch-4/5/6: registered after every pandas reference module
+    # (authorities span fiscal_event_ops / composition / fundamental /
+    # intraday_session / research_spectral / robust_scale / rqa_ext modules).
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators.polars_native.r68_native_batch7",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
+    ),
+    # R68 batch-9: native polars backends for delegate canonicals (ts_* shape /
+    # state / intraday / fiscal / candle / ashare families).  Same policy as
+    # batch-4..7: registered after every pandas reference module.
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators.polars_native.r68_native_batch9",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
+    ),
+    # R68 batch-8: native polars backends for 45 delegate canonicals (extremogram /
+    # binned_response / state / interval_geometry / psar / session recovery /
+    # ashare streaks / intraday idio variance families).  Same policy as
+    # batch-4..7/9: registered after every pandas reference module.
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators.polars_native.r68_native_batch8",
         role=BootstrapModuleRole.IMPLEMENTATION,
         required=True,
     ),
