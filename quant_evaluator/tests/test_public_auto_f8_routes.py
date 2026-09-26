@@ -177,7 +177,7 @@ def test_f12_exact_single_metric_routes(monkeypatch):
     )
     assert seen == [8 * 1024 ** 3]
     assert _select(monkeypatch, shape, F8_METRICS) == (
-        "cpu", "metric_not_certified_for_profile",
+        "cuda_strict", "certified_batch_real_cos_f12_mixed_three",
     )
     for metric in ("rank_ic_series", "ic_ir"):
         assert _select(monkeypatch, shape, (metric,)) == (
@@ -191,6 +191,31 @@ def test_f12_exact_single_metric_routes(monkeypatch):
         "cpu", "shape_outside_certified_range",
     )
 
+
+def test_f12_mixed_three_exact_gate(monkeypatch):
+    shape = (2586, 5461, 12)
+    seen = []
+    monkeypatch.setattr(
+        module, "_auto_batch_cuda_rejection",
+        lambda policy, threshold: seen.append(threshold) or None,
+    )
+    assert _select(monkeypatch, shape, F8_METRICS, mock_cuda=None) == (
+        "cuda_strict", "certified_batch_real_cos_f12_mixed_three",
+    )
+    assert _select(monkeypatch, shape, tuple(reversed(F8_METRICS)), mock_cuda=None) == (
+        "cuda_strict", "certified_batch_real_cos_f12_mixed_three",
+    )
+    assert seen == [14 * 1024 ** 3, 14 * 1024 ** 3]
+    assert _select(monkeypatch, shape, F8_METRICS,
+                   rejection="insufficient_cuda_memory") == (
+        "cpu", "insufficient_cuda_memory",
+    )
+    assert _select(monkeypatch, shape, F8_METRICS[:-1]) == (
+        "cpu", "metric_set_not_certified",
+    )
+    assert _select(monkeypatch, shape, F8_METRICS + F8_METRICS[:1]) == (
+        "cpu", "metric_set_not_certified",
+    )
 
 def test_f8_route_accounts_for_policy_fraction_and_keeps_f2_f1_routes(monkeypatch):
     from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy

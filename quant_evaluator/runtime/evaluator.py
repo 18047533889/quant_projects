@@ -78,7 +78,7 @@ def _resolve_alias(metric_id: str) -> str:
 # The 701-day x 5314-stock x 2-factor registered A-share panel showed full
 # CPU/CUDA output parity and a CUDA advantage in cold and alternating warm
 # public-facade runs for these metrics (2026-09-26). Other metrics retain CPU.
-_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260927_v11"
+_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260927_v12"
 _AUTO_SMALL_PROFILE = "ashare_701d_20260926"
 _AUTO_LARGE_PROFILE = "real_cos_region_20260927"
 _AUTO_LARGE_EXTRAP_PROFILE = "real_cos_bounded_headroom_20260927"
@@ -226,7 +226,9 @@ def _select_public_auto_backend(
         or canonical_metrics[0] not in (
             "rank_ic", "quantile_spread", "factor_turnover_rate"
         )
-    ) and batch_name not in _AUTO_REAL_COS_F12_BATCH_NAMES:
+    ) and not (batch_name in _AUTO_REAL_COS_F12_BATCH_NAMES
+               or (batch_name == "real_cos_mixed_three" and
+                   frozenset(canonical_metrics) == _AUTO_REAL_COS_MIXED_THREE)):
         return "cpu", "metric_not_certified_for_profile"
     if profile == _AUTO_REAL_COS_F8_PROFILE and (
         len(canonical_metrics) != 1
@@ -245,6 +247,11 @@ def _select_public_auto_backend(
         and (factor_batch.num_times, factor_batch.num_assets, factor_batch.num_factors)
             == _AUTO_REAL_COS_F8_SHAPE
     )
+    real_cos_f12_mixed_three = (
+        real_cos_mixed_three and profile == _AUTO_REAL_COS_F12_PROFILE
+        and (factor_batch.num_times, factor_batch.num_assets, factor_batch.num_factors)
+            == _AUTO_REAL_COS_F12_SHAPE
+    )
     real_cos_f8_certified_batch = (
         profile == _AUTO_REAL_COS_F8_PROFILE
         and batch_name in _AUTO_REAL_COS_F8_BATCH_NAMES
@@ -253,7 +260,7 @@ def _select_public_auto_backend(
         profile == _AUTO_REAL_COS_F12_PROFILE
         and batch_name in _AUTO_REAL_COS_F12_BATCH_NAMES
     )
-    if real_cos_mixed_three and not real_cos_f8_mixed_three and (
+    if real_cos_mixed_three and not (real_cos_f8_mixed_three or real_cos_f12_mixed_three) and (
         profile != _AUTO_LARGE_PROFILE or
         (factor_batch.num_times, factor_batch.num_assets, factor_batch.num_factors)
             != _AUTO_REAL_COS_MIXED_THREE_SHAPE
@@ -272,7 +279,9 @@ def _select_public_auto_backend(
             or evaluator is not None):
         return "cpu", "special_input_or_parameters"
     if batch_name is not None:
-        if real_cos_f12_certified_batch:
+        if real_cos_f12_mixed_three:
+            minimum = _AUTO_REAL_COS_F12_RANK_MIN_EFFECTIVE_VRAM_BYTES
+        elif real_cos_f12_certified_batch:
             minimum = (_AUTO_REAL_COS_F12_RANK_MIN_EFFECTIVE_VRAM_BYTES
                        if batch_name == "rank_chain"
                        else _AUTO_REAL_COS_F12_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES)
@@ -286,6 +295,8 @@ def _select_public_auto_backend(
         rejection = _auto_batch_cuda_rejection(gpu_policy, minimum)
         if rejection is not None:
             return "cpu", rejection
+        if real_cos_f12_mixed_three:
+            return "cuda_strict", "certified_batch_real_cos_f12_mixed_three"
         if real_cos_f8_mixed_three:
             return "cuda_strict", "certified_batch_real_cos_f8_mixed_three"
         if real_cos_f8_certified_batch:

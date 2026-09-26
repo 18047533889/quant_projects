@@ -150,7 +150,7 @@ max_drawdown_by_factor = drawdown.artifacts["max_drawdown"].values
 
 公开 `evaluate(...)`（省略 `backend` 或传入 `None`）和显式
 `evaluate(..., backend="auto")` 按整次请求选择 CPU 或 CUDA，并在返回的
-`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v11`。
+`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v12`。
 以下 701 日规则继续适用于短历史配置。
 它依据已注册 A 股日行情构造的 701 个交易日、5314 只股票、2 个因子输入，
 逐指标比较完整公开入口的 CPU/CUDA 结果。冷调用和交错顺序的热调用都更快、
@@ -267,9 +267,19 @@ CUDA 约 9.66–9.67 秒，峰值显存 9,332,757,504 字节；quantile 链 CPU 
 仅在精确 2586 日 × 5461 股 × 12 因子、float64、默认参数、无特殊输入和
 NVIDIA L20 上，对这两个完整指标集合自动选择 CUDA；rank 至少要求 14 GiB、
 quantile 至少要求 8 GiB 有效空闲显存，且实际空闲显存也不得低于门槛。
-子集、重复项、其它 F12 组合和相邻形状仍走 CPU。证据见
+子集、重复项、其它未认证 F12 组合和相邻形状仍走 CPU。证据见
 `docs/benchmarks/real_cos_f12_rank_chain_20260927.json` 与
 `docs/benchmarks/real_cos_f12_quantile_chain_20260927.json`。
+
+F12 另有精确三指标混合请求 `rank_ic`、`quantile_spread`、
+`factor_turnover_rate` 的独立六轮公开入口 A/B：CPU 热运行约
+53.65–53.95 秒，CUDA 约 16.03–16.23 秒，GPU 峰值
+9,332,757,504 字节；三项的数值、制品、掩码、计数、provenance、
+MetricValue 和配置哈希均与 CPU 对拍通过。只在相同精确 F12 面板、
+float64、默认参数、无特殊输入及 NVIDIA L20 下，对此完整集合自动选 CUDA；
+有效空闲显存和实际空闲显存均至少 14 GiB。指标顺序不限，但子集、重复项
+或其它组合不沿用此认证。证据见
+`docs/benchmarks/real_cos_f12_mixed_three_20260927.json`。
 
 其他规模和特殊输入使用 CPU，表示尚无足够的公开入口性能证据；
 不代表 CUDA 无法执行这些指标。
