@@ -1,0 +1,3468 @@
+{
+  "created_utc": "2026-09-27T01:57:53.938184+08:00",
+  "script_sha256": "4d89b39bf5d5ec5b373a83fdf075c9baecc66cecf5ad2e852f5b27bba5630f3b",
+  "request": {
+    "metrics": [
+      "rank_ic",
+      "quantile_spread",
+      "factor_turnover_rate"
+    ],
+    "backend_order": [
+      "cpu",
+      "cuda_strict",
+      "auto",
+      "auto",
+      "cuda_strict",
+      "cpu"
+    ],
+    "repeats_per_child": 2,
+    "timeout_s": 180.0,
+    "shape": [
+      2586,
+      5461,
+      8
+    ],
+    "dtype": "float64",
+    "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864"
+  },
+  "source": {
+    "sources": [
+      {
+        "factor_id": "weekly_db5616cd85a477b3",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d/weekly_db5616cd85a477b3.parquet",
+        "sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+        "bytes": 3828456,
+        "etag": "5efb1f8070196661daabeb563740dff0",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_4cbd7ca6dccc61dc",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59/weekly_4cbd7ca6dccc61dc.parquet",
+        "sha256": "35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59",
+        "bytes": 5400494,
+        "etag": "91da3ad8a2d54f3f35911e231bfcffa8",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_c83002810f9e5643",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/41ff2ef68d1be8e63399d239c4ef78ea321adc0eb1ae273d6ff28a2263298a70/weekly_c83002810f9e5643.parquet",
+        "sha256": "41ff2ef68d1be8e63399d239c4ef78ea321adc0eb1ae273d6ff28a2263298a70",
+        "bytes": 9053391,
+        "etag": "b968dca3f6582b036b6c56cc28779e15",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_d4cc0b4a9424e834",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/b811614bbabf16d03a6019003bcf97a665c41d3affc17cb48f7e4250cf0ce332/weekly_d4cc0b4a9424e834.parquet",
+        "sha256": "b811614bbabf16d03a6019003bcf97a665c41d3affc17cb48f7e4250cf0ce332",
+        "bytes": 9381300,
+        "etag": "07d03a12874fb17b4eafbc6c045d4934",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_23629be243c54739",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/c6ca9fef28f28fc85219d8c918e5c4829300058752c7977e7634b0a0d00651b1/weekly_23629be243c54739.parquet",
+        "sha256": "c6ca9fef28f28fc85219d8c918e5c4829300058752c7977e7634b0a0d00651b1",
+        "bytes": 11865566,
+        "etag": "6625f9fe75281cb284c981ae543909c0",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_7632208952b859e5",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/357d7f86a7e2f9419e1bde16eb2e8467af4da5bf991dc1337751234f98348a3e/weekly_7632208952b859e5.parquet",
+        "sha256": "357d7f86a7e2f9419e1bde16eb2e8467af4da5bf991dc1337751234f98348a3e",
+        "bytes": 12351702,
+        "etag": "3ad1d320b3d458b45c90f2ab3fd0cc33",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_6f27ea3106cc03c0",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/578f5f689cac5450d30c1d43245a21eddb557698f0291bcd63b8c6c8de6cb94f/weekly_6f27ea3106cc03c0.parquet",
+        "sha256": "578f5f689cac5450d30c1d43245a21eddb557698f0291bcd63b8c6c8de6cb94f",
+        "bytes": 15808239,
+        "etag": "09fa342961b13558eb42f4ad289ac568",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_5c866fa073382822",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/5cd04a82f45120138aa775e2dfb41252124b75335f6b4786a9e56ad6be367c6c/weekly_5c866fa073382822.parquet",
+        "sha256": "5cd04a82f45120138aa775e2dfb41252124b75335f6b4786a9e56ad6be367c6c",
+        "bytes": 16060978,
+        "etag": "a26122649b2142423e9c5f6e2023ec8d",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      }
+    ],
+    "days": 2586,
+    "assets": 5461,
+    "date_span": [
+      "2016-01-04",
+      "2026-08-25"
+    ],
+    "calendar_sessions": 2588,
+    "missing_adj_vwap_partitions": [],
+    "label": "decision t; execution t+1; AdjVwap(t+2)/AdjVwap(t+1)-1",
+    "factor_finite_ratio": 0.7711149034997938,
+    "label_finite_ratio": 0.7738646803396594,
+    "limitations": "research lineage; no upstream PIT/investability certification"
+  },
+  "load_s": 40.09299639199162,
+  "parent_peak_rss_kib": 7119512,
+  "config_hashes": [
+    "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c"
+  ],
+  "runs": [
+    {
+      "status": "ok",
+      "backend_requested": "cpu",
+      "seconds": [
+        38.14059850299964,
+        34.35183956194669
+      ],
+      "cold_s": 38.14059850299964,
+      "warm_median_s": 34.35183956194669,
+      "peak_rss_kib": 12114024,
+      "backend_used": "cpu",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "rank_ic": "cpu",
+        "quantile_spread": "cpu",
+        "factor_turnover_rate": "cpu"
+      },
+      "peak_vram": null,
+      "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+      "execution_receipt": {
+        "backend_requested": "cpu",
+        "backend_strategy": "explicit",
+        "backend_used": "cpu",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "rank_ic": "cpu",
+          "quantile_spread": "cpu",
+          "factor_turnover_rate": "cpu"
+        },
+        "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+        "receipt_hash": "8c59667edb83ce7795ece6c772ee7f0cef74fbe658fc598e2cdef43ba4f885cd"
+      },
+      "artifacts": {
+        "rank_ic": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "rank_ic",
+          "domain": "ic",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "4.0.0",
+          "values": [
+            -0.003396402996946234,
+            -0.003131996750469766,
+            0.00031829061606043497,
+            -0.0032162693570421176,
+            -0.019372921210558072,
+            -0.013338293801802199,
+            -0.04769853045496655,
+            0.031176181362737136
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2586,
+            2584,
+            2586,
+            2585,
+            2586,
+            2586
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "4.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "ic_sample_policy": {
+              "method": "spearman",
+              "min_assets": 20,
+              "time_weighting": "equal_finite_days",
+              "ir_ddof": 1,
+              "ir_annualized": false
+            },
+            "sample_unit": "daily_ic",
+            "observation_counts": [
+              2565,
+              2565,
+              2586,
+              2584,
+              2586,
+              2585,
+              2586,
+              2586
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "rank_ic",
+              "value": -0.003396402996946234,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.003131996750469766,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": 0.00031829061606043497,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.0032162693570421176,
+              "valid": true,
+              "observation_count": 2584,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.019372921210558072,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.013338293801802199,
+              "valid": true,
+              "observation_count": 2585,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.04769853045496655,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": 0.031176181362737136,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            }
+          ]
+        },
+        "quantile_spread": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "quantile_spread",
+          "domain": "quantile",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "3.0.0",
+          "values": [
+            -3.550350001867705e-05,
+            -3.904621844739756e-05,
+            6.840793074810925e-05,
+            -3.09447109750145e-05,
+            -0.0004099902639360646,
+            -0.00013479926469865886,
+            -0.0006166839187683048,
+            0.0010557031754216822
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2404,
+            2574,
+            2585,
+            2462,
+            2586,
+            2586
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "3.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "sample_unit": "daily_quantile_spread",
+            "observation_counts": [
+              2565,
+              2565,
+              2404,
+              2574,
+              2585,
+              2462,
+              2586,
+              2586
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.550350001867705e-05,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.904621844739756e-05,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": 6.840793074810925e-05,
+              "valid": true,
+              "observation_count": 2404,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.09447109750145e-05,
+              "valid": true,
+              "observation_count": 2574,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.0004099902639360646,
+              "valid": true,
+              "observation_count": 2585,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.00013479926469865886,
+              "valid": true,
+              "observation_count": 2462,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.0006166839187683048,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": 0.0010557031754216822,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            }
+          ]
+        },
+        "factor_turnover_rate": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "factor_turnover_rate",
+          "domain": "metric",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "2.0.0",
+          "values": [
+            0.013840725831047417,
+            0.027120146431538976,
+            0.07160452016796119,
+            0.00856034362362741,
+            0.055880643397591925,
+            0.21708511759854754,
+            0.010998515928942925,
+            0.018143483137535946
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2410,
+            2535,
+            2546,
+            2421,
+            2573,
+            2561,
+            2538,
+            2522
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "2.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "sample_unit": "valid_transition",
+            "observation_counts": [
+              2410,
+              2535,
+              2546,
+              2421,
+              2573,
+              2561,
+              2538,
+              2522
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.013840725831047417,
+              "valid": true,
+              "observation_count": 2410,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.027120146431538976,
+              "valid": true,
+              "observation_count": 2535,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.07160452016796119,
+              "valid": true,
+              "observation_count": 2546,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.00856034362362741,
+              "valid": true,
+              "observation_count": 2421,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.055880643397591925,
+              "valid": true,
+              "observation_count": 2573,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.21708511759854754,
+              "valid": true,
+              "observation_count": 2561,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.010998515928942925,
+              "valid": true,
+              "observation_count": 2538,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.018143483137535946,
+              "valid": true,
+              "observation_count": 2522,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            }
+          ]
+        }
+      },
+      "round": 1
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cuda_strict",
+      "seconds": [
+        12.36949634901248,
+        9.06230394897284
+      ],
+      "cold_s": 12.36949634901248,
+      "warm_median_s": 9.06230394897284,
+      "peak_rss_kib": 10873272,
+      "backend_used": "cuda",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "rank_ic": "cuda",
+        "quantile_spread": "cuda",
+        "factor_turnover_rate": "cuda"
+      },
+      "peak_vram": 9332757504,
+      "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+      "execution_receipt": {
+        "backend_requested": "cuda_strict",
+        "backend_strategy": "explicit",
+        "backend_used": "cuda",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "rank_ic": "cuda",
+          "quantile_spread": "cuda",
+          "factor_turnover_rate": "cuda"
+        },
+        "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+        "receipt_hash": "fc2a40203e1869af26667d03bb7434a0b6705d4a1c90a3611cc505a353c76cec"
+      },
+      "artifacts": {
+        "rank_ic": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "rank_ic",
+          "domain": "ic",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "4.0.0",
+          "values": [
+            -0.0033964029969462306,
+            -0.0031319967504697655,
+            0.0003182906160604352,
+            -0.00321626935704212,
+            -0.019372921210558065,
+            -0.013338293801802186,
+            -0.04769853045496654,
+            0.03117618136273724
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2586,
+            2584,
+            2586,
+            2585,
+            2586,
+            2586
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "4.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "ic_sample_policy": {
+              "method": "spearman",
+              "min_assets": 20,
+              "time_weighting": "equal_finite_days",
+              "ir_ddof": 1,
+              "ir_annualized": false
+            },
+            "sample_unit": "daily_ic",
+            "observation_counts": [
+              2565,
+              2565,
+              2586,
+              2584,
+              2586,
+              2585,
+              2586,
+              2586
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "rank_ic",
+              "value": -0.0033964029969462306,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.0031319967504697655,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": 0.0003182906160604352,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.00321626935704212,
+              "valid": true,
+              "observation_count": 2584,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.019372921210558065,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.013338293801802186,
+              "valid": true,
+              "observation_count": 2585,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.04769853045496654,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": 0.03117618136273724,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            }
+          ]
+        },
+        "quantile_spread": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "quantile_spread",
+          "domain": "quantile",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "3.0.0",
+          "values": [
+            -3.550350001867599e-05,
+            -3.904621844739654e-05,
+            6.840793074810985e-05,
+            -3.094471097501371e-05,
+            -0.0004099902639360648,
+            -0.00013479926469865905,
+            -0.0006166839187683047,
+            0.001055703175421681
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2404,
+            2574,
+            2585,
+            2462,
+            2586,
+            2586
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "3.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "sample_unit": "daily_quantile_spread",
+            "observation_counts": [
+              2565,
+              2565,
+              2404,
+              2574,
+              2585,
+              2462,
+              2586,
+              2586
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.550350001867599e-05,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.904621844739654e-05,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": 6.840793074810985e-05,
+              "valid": true,
+              "observation_count": 2404,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.094471097501371e-05,
+              "valid": true,
+              "observation_count": 2574,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.0004099902639360648,
+              "valid": true,
+              "observation_count": 2585,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.00013479926469865905,
+              "valid": true,
+              "observation_count": 2462,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.0006166839187683047,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": 0.001055703175421681,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            }
+          ]
+        },
+        "factor_turnover_rate": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "factor_turnover_rate",
+          "domain": "metric",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "2.0.0",
+          "values": [
+            0.01384072583104742,
+            0.027120146431539004,
+            0.07160452016796125,
+            0.008560343623627408,
+            0.055880643397591835,
+            0.21708511759854715,
+            0.010998515928942902,
+            0.018143483137535936
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2410,
+            2535,
+            2546,
+            2421,
+            2573,
+            2561,
+            2538,
+            2522
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "2.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "sample_unit": "valid_transition",
+            "observation_counts": [
+              2410,
+              2535,
+              2546,
+              2421,
+              2573,
+              2561,
+              2538,
+              2522
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.01384072583104742,
+              "valid": true,
+              "observation_count": 2410,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.027120146431539004,
+              "valid": true,
+              "observation_count": 2535,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.07160452016796125,
+              "valid": true,
+              "observation_count": 2546,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.008560343623627408,
+              "valid": true,
+              "observation_count": 2421,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.055880643397591835,
+              "valid": true,
+              "observation_count": 2573,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.21708511759854715,
+              "valid": true,
+              "observation_count": 2561,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.010998515928942902,
+              "valid": true,
+              "observation_count": 2538,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.018143483137535936,
+              "valid": true,
+              "observation_count": 2522,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            }
+          ]
+        }
+      },
+      "round": 2
+    },
+    {
+      "status": "ok",
+      "backend_requested": "auto",
+      "seconds": [
+        38.45241108495975,
+        34.49831090198131
+      ],
+      "cold_s": 38.45241108495975,
+      "warm_median_s": 34.49831090198131,
+      "peak_rss_kib": 12114792,
+      "backend_used": "cpu",
+      "auto_backend_reason": "shape_outside_certified_range",
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "rank_ic": "cpu",
+        "quantile_spread": "cpu",
+        "factor_turnover_rate": "cpu"
+      },
+      "peak_vram": null,
+      "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+      "execution_receipt": {
+        "backend_requested": "auto",
+        "backend_strategy": "auto",
+        "backend_used": "cpu",
+        "auto_backend_policy": "ashare_public_routes_20260927_v4",
+        "auto_backend_profile": null,
+        "auto_backend_reason": "shape_outside_certified_range",
+        "metric_backends": {
+          "rank_ic": "cpu",
+          "quantile_spread": "cpu",
+          "factor_turnover_rate": "cpu"
+        },
+        "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+        "receipt_hash": "724b4b76671225c03f916cdeb7c5deda7dc51f2c2bb40e1545fa31682eb82dc3"
+      },
+      "artifacts": {
+        "rank_ic": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "rank_ic",
+          "domain": "ic",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "4.0.0",
+          "values": [
+            -0.003396402996946234,
+            -0.003131996750469766,
+            0.00031829061606043497,
+            -0.0032162693570421176,
+            -0.019372921210558072,
+            -0.013338293801802199,
+            -0.04769853045496655,
+            0.031176181362737136
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2586,
+            2584,
+            2586,
+            2585,
+            2586,
+            2586
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "4.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "ic_sample_policy": {
+              "method": "spearman",
+              "min_assets": 20,
+              "time_weighting": "equal_finite_days",
+              "ir_ddof": 1,
+              "ir_annualized": false
+            },
+            "sample_unit": "daily_ic",
+            "observation_counts": [
+              2565,
+              2565,
+              2586,
+              2584,
+              2586,
+              2585,
+              2586,
+              2586
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "rank_ic",
+              "value": -0.003396402996946234,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.003131996750469766,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": 0.00031829061606043497,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.0032162693570421176,
+              "valid": true,
+              "observation_count": 2584,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.019372921210558072,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.013338293801802199,
+              "valid": true,
+              "observation_count": 2585,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.04769853045496655,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": 0.031176181362737136,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            }
+          ]
+        },
+        "quantile_spread": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "quantile_spread",
+          "domain": "quantile",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "3.0.0",
+          "values": [
+            -3.550350001867705e-05,
+            -3.904621844739756e-05,
+            6.840793074810925e-05,
+            -3.09447109750145e-05,
+            -0.0004099902639360646,
+            -0.00013479926469865886,
+            -0.0006166839187683048,
+            0.0010557031754216822
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2404,
+            2574,
+            2585,
+            2462,
+            2586,
+            2586
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "3.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "sample_unit": "daily_quantile_spread",
+            "observation_counts": [
+              2565,
+              2565,
+              2404,
+              2574,
+              2585,
+              2462,
+              2586,
+              2586
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.550350001867705e-05,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.904621844739756e-05,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": 6.840793074810925e-05,
+              "valid": true,
+              "observation_count": 2404,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.09447109750145e-05,
+              "valid": true,
+              "observation_count": 2574,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.0004099902639360646,
+              "valid": true,
+              "observation_count": 2585,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.00013479926469865886,
+              "valid": true,
+              "observation_count": 2462,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.0006166839187683048,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": 0.0010557031754216822,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            }
+          ]
+        },
+        "factor_turnover_rate": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "factor_turnover_rate",
+          "domain": "metric",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "2.0.0",
+          "values": [
+            0.013840725831047417,
+            0.027120146431538976,
+            0.07160452016796119,
+            0.00856034362362741,
+            0.055880643397591925,
+            0.21708511759854754,
+            0.010998515928942925,
+            0.018143483137535946
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2410,
+            2535,
+            2546,
+            2421,
+            2573,
+            2561,
+            2538,
+            2522
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "2.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "sample_unit": "valid_transition",
+            "observation_counts": [
+              2410,
+              2535,
+              2546,
+              2421,
+              2573,
+              2561,
+              2538,
+              2522
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.013840725831047417,
+              "valid": true,
+              "observation_count": 2410,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.027120146431538976,
+              "valid": true,
+              "observation_count": 2535,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.07160452016796119,
+              "valid": true,
+              "observation_count": 2546,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.00856034362362741,
+              "valid": true,
+              "observation_count": 2421,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.055880643397591925,
+              "valid": true,
+              "observation_count": 2573,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.21708511759854754,
+              "valid": true,
+              "observation_count": 2561,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.010998515928942925,
+              "valid": true,
+              "observation_count": 2538,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.018143483137535946,
+              "valid": true,
+              "observation_count": 2522,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            }
+          ]
+        }
+      },
+      "round": 3
+    },
+    {
+      "status": "ok",
+      "backend_requested": "auto",
+      "seconds": [
+        38.601932024001144,
+        34.56264671497047
+      ],
+      "cold_s": 38.601932024001144,
+      "warm_median_s": 34.56264671497047,
+      "peak_rss_kib": 12114536,
+      "backend_used": "cpu",
+      "auto_backend_reason": "shape_outside_certified_range",
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "rank_ic": "cpu",
+        "quantile_spread": "cpu",
+        "factor_turnover_rate": "cpu"
+      },
+      "peak_vram": null,
+      "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+      "execution_receipt": {
+        "backend_requested": "auto",
+        "backend_strategy": "auto",
+        "backend_used": "cpu",
+        "auto_backend_policy": "ashare_public_routes_20260927_v4",
+        "auto_backend_profile": null,
+        "auto_backend_reason": "shape_outside_certified_range",
+        "metric_backends": {
+          "rank_ic": "cpu",
+          "quantile_spread": "cpu",
+          "factor_turnover_rate": "cpu"
+        },
+        "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+        "receipt_hash": "724b4b76671225c03f916cdeb7c5deda7dc51f2c2bb40e1545fa31682eb82dc3"
+      },
+      "artifacts": {
+        "rank_ic": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "rank_ic",
+          "domain": "ic",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "4.0.0",
+          "values": [
+            -0.003396402996946234,
+            -0.003131996750469766,
+            0.00031829061606043497,
+            -0.0032162693570421176,
+            -0.019372921210558072,
+            -0.013338293801802199,
+            -0.04769853045496655,
+            0.031176181362737136
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2586,
+            2584,
+            2586,
+            2585,
+            2586,
+            2586
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "4.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "ic_sample_policy": {
+              "method": "spearman",
+              "min_assets": 20,
+              "time_weighting": "equal_finite_days",
+              "ir_ddof": 1,
+              "ir_annualized": false
+            },
+            "sample_unit": "daily_ic",
+            "observation_counts": [
+              2565,
+              2565,
+              2586,
+              2584,
+              2586,
+              2585,
+              2586,
+              2586
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "rank_ic",
+              "value": -0.003396402996946234,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.003131996750469766,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": 0.00031829061606043497,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.0032162693570421176,
+              "valid": true,
+              "observation_count": 2584,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.019372921210558072,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.013338293801802199,
+              "valid": true,
+              "observation_count": 2585,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.04769853045496655,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": 0.031176181362737136,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            }
+          ]
+        },
+        "quantile_spread": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "quantile_spread",
+          "domain": "quantile",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "3.0.0",
+          "values": [
+            -3.550350001867705e-05,
+            -3.904621844739756e-05,
+            6.840793074810925e-05,
+            -3.09447109750145e-05,
+            -0.0004099902639360646,
+            -0.00013479926469865886,
+            -0.0006166839187683048,
+            0.0010557031754216822
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2404,
+            2574,
+            2585,
+            2462,
+            2586,
+            2586
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "3.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "sample_unit": "daily_quantile_spread",
+            "observation_counts": [
+              2565,
+              2565,
+              2404,
+              2574,
+              2585,
+              2462,
+              2586,
+              2586
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.550350001867705e-05,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.904621844739756e-05,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": 6.840793074810925e-05,
+              "valid": true,
+              "observation_count": 2404,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.09447109750145e-05,
+              "valid": true,
+              "observation_count": 2574,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.0004099902639360646,
+              "valid": true,
+              "observation_count": 2585,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.00013479926469865886,
+              "valid": true,
+              "observation_count": 2462,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.0006166839187683048,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": 0.0010557031754216822,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            }
+          ]
+        },
+        "factor_turnover_rate": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "factor_turnover_rate",
+          "domain": "metric",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "2.0.0",
+          "values": [
+            0.013840725831047417,
+            0.027120146431538976,
+            0.07160452016796119,
+            0.00856034362362741,
+            0.055880643397591925,
+            0.21708511759854754,
+            0.010998515928942925,
+            0.018143483137535946
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2410,
+            2535,
+            2546,
+            2421,
+            2573,
+            2561,
+            2538,
+            2522
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "2.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "sample_unit": "valid_transition",
+            "observation_counts": [
+              2410,
+              2535,
+              2546,
+              2421,
+              2573,
+              2561,
+              2538,
+              2522
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.013840725831047417,
+              "valid": true,
+              "observation_count": 2410,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.027120146431538976,
+              "valid": true,
+              "observation_count": 2535,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.07160452016796119,
+              "valid": true,
+              "observation_count": 2546,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.00856034362362741,
+              "valid": true,
+              "observation_count": 2421,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.055880643397591925,
+              "valid": true,
+              "observation_count": 2573,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.21708511759854754,
+              "valid": true,
+              "observation_count": 2561,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.010998515928942925,
+              "valid": true,
+              "observation_count": 2538,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.018143483137535946,
+              "valid": true,
+              "observation_count": 2522,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            }
+          ]
+        }
+      },
+      "round": 4
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cuda_strict",
+      "seconds": [
+        12.509809273993596,
+        9.119224646012299
+      ],
+      "cold_s": 12.509809273993596,
+      "warm_median_s": 9.119224646012299,
+      "peak_rss_kib": 10873272,
+      "backend_used": "cuda",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "rank_ic": "cuda",
+        "quantile_spread": "cuda",
+        "factor_turnover_rate": "cuda"
+      },
+      "peak_vram": 9332757504,
+      "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+      "execution_receipt": {
+        "backend_requested": "cuda_strict",
+        "backend_strategy": "explicit",
+        "backend_used": "cuda",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "rank_ic": "cuda",
+          "quantile_spread": "cuda",
+          "factor_turnover_rate": "cuda"
+        },
+        "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+        "receipt_hash": "fc2a40203e1869af26667d03bb7434a0b6705d4a1c90a3611cc505a353c76cec"
+      },
+      "artifacts": {
+        "rank_ic": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "rank_ic",
+          "domain": "ic",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "4.0.0",
+          "values": [
+            -0.0033964029969462306,
+            -0.0031319967504697655,
+            0.0003182906160604352,
+            -0.00321626935704212,
+            -0.019372921210558065,
+            -0.013338293801802186,
+            -0.04769853045496654,
+            0.03117618136273724
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2586,
+            2584,
+            2586,
+            2585,
+            2586,
+            2586
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "4.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "ic_sample_policy": {
+              "method": "spearman",
+              "min_assets": 20,
+              "time_weighting": "equal_finite_days",
+              "ir_ddof": 1,
+              "ir_annualized": false
+            },
+            "sample_unit": "daily_ic",
+            "observation_counts": [
+              2565,
+              2565,
+              2586,
+              2584,
+              2586,
+              2585,
+              2586,
+              2586
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "rank_ic",
+              "value": -0.0033964029969462306,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.0031319967504697655,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": 0.0003182906160604352,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.00321626935704212,
+              "valid": true,
+              "observation_count": 2584,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.019372921210558065,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.013338293801802186,
+              "valid": true,
+              "observation_count": 2585,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.04769853045496654,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": 0.03117618136273724,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            }
+          ]
+        },
+        "quantile_spread": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "quantile_spread",
+          "domain": "quantile",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "3.0.0",
+          "values": [
+            -3.550350001867599e-05,
+            -3.904621844739654e-05,
+            6.840793074810985e-05,
+            -3.094471097501371e-05,
+            -0.0004099902639360648,
+            -0.00013479926469865905,
+            -0.0006166839187683047,
+            0.001055703175421681
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2404,
+            2574,
+            2585,
+            2462,
+            2586,
+            2586
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "3.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "sample_unit": "daily_quantile_spread",
+            "observation_counts": [
+              2565,
+              2565,
+              2404,
+              2574,
+              2585,
+              2462,
+              2586,
+              2586
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.550350001867599e-05,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.904621844739654e-05,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": 6.840793074810985e-05,
+              "valid": true,
+              "observation_count": 2404,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.094471097501371e-05,
+              "valid": true,
+              "observation_count": 2574,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.0004099902639360648,
+              "valid": true,
+              "observation_count": 2585,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.00013479926469865905,
+              "valid": true,
+              "observation_count": 2462,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.0006166839187683047,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": 0.001055703175421681,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            }
+          ]
+        },
+        "factor_turnover_rate": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "factor_turnover_rate",
+          "domain": "metric",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "2.0.0",
+          "values": [
+            0.01384072583104742,
+            0.027120146431539004,
+            0.07160452016796125,
+            0.008560343623627408,
+            0.055880643397591835,
+            0.21708511759854715,
+            0.010998515928942902,
+            0.018143483137535936
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2410,
+            2535,
+            2546,
+            2421,
+            2573,
+            2561,
+            2538,
+            2522
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "2.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "sample_unit": "valid_transition",
+            "observation_counts": [
+              2410,
+              2535,
+              2546,
+              2421,
+              2573,
+              2561,
+              2538,
+              2522
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.01384072583104742,
+              "valid": true,
+              "observation_count": 2410,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.027120146431539004,
+              "valid": true,
+              "observation_count": 2535,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.07160452016796125,
+              "valid": true,
+              "observation_count": 2546,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.008560343623627408,
+              "valid": true,
+              "observation_count": 2421,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.055880643397591835,
+              "valid": true,
+              "observation_count": 2573,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.21708511759854715,
+              "valid": true,
+              "observation_count": 2561,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.010998515928942902,
+              "valid": true,
+              "observation_count": 2538,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.018143483137535936,
+              "valid": true,
+              "observation_count": 2522,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            }
+          ]
+        }
+      },
+      "round": 5
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cpu",
+      "seconds": [
+        38.23262997099664,
+        34.49757128499914
+      ],
+      "cold_s": 38.23262997099664,
+      "warm_median_s": 34.49757128499914,
+      "peak_rss_kib": 12114208,
+      "backend_used": "cpu",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "rank_ic": "cpu",
+        "quantile_spread": "cpu",
+        "factor_turnover_rate": "cpu"
+      },
+      "peak_vram": null,
+      "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+      "execution_receipt": {
+        "backend_requested": "cpu",
+        "backend_strategy": "explicit",
+        "backend_used": "cpu",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "rank_ic": "cpu",
+          "quantile_spread": "cpu",
+          "factor_turnover_rate": "cpu"
+        },
+        "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+        "receipt_hash": "8c59667edb83ce7795ece6c772ee7f0cef74fbe658fc598e2cdef43ba4f885cd"
+      },
+      "artifacts": {
+        "rank_ic": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "rank_ic",
+          "domain": "ic",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "4.0.0",
+          "values": [
+            -0.003396402996946234,
+            -0.003131996750469766,
+            0.00031829061606043497,
+            -0.0032162693570421176,
+            -0.019372921210558072,
+            -0.013338293801802199,
+            -0.04769853045496655,
+            0.031176181362737136
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2586,
+            2584,
+            2586,
+            2585,
+            2586,
+            2586
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "4.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "ic_sample_policy": {
+              "method": "spearman",
+              "min_assets": 20,
+              "time_weighting": "equal_finite_days",
+              "ir_ddof": 1,
+              "ir_annualized": false
+            },
+            "sample_unit": "daily_ic",
+            "observation_counts": [
+              2565,
+              2565,
+              2586,
+              2584,
+              2586,
+              2585,
+              2586,
+              2586
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "rank_ic",
+              "value": -0.003396402996946234,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.003131996750469766,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": 0.00031829061606043497,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.0032162693570421176,
+              "valid": true,
+              "observation_count": 2584,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.019372921210558072,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.013338293801802199,
+              "valid": true,
+              "observation_count": 2585,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": -0.04769853045496655,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            },
+            {
+              "metric_id": "rank_ic",
+              "value": 0.031176181362737136,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "4.0.0",
+              "warnings": [],
+              "sample_unit": "daily_ic"
+            }
+          ]
+        },
+        "quantile_spread": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "quantile_spread",
+          "domain": "quantile",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "3.0.0",
+          "values": [
+            -3.550350001867705e-05,
+            -3.904621844739756e-05,
+            6.840793074810925e-05,
+            -3.09447109750145e-05,
+            -0.0004099902639360646,
+            -0.00013479926469865886,
+            -0.0006166839187683048,
+            0.0010557031754216822
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2404,
+            2574,
+            2585,
+            2462,
+            2586,
+            2586
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "3.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "sample_unit": "daily_quantile_spread",
+            "observation_counts": [
+              2565,
+              2565,
+              2404,
+              2574,
+              2585,
+              2462,
+              2586,
+              2586
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.550350001867705e-05,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.904621844739756e-05,
+              "valid": true,
+              "observation_count": 2565,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": 6.840793074810925e-05,
+              "valid": true,
+              "observation_count": 2404,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -3.09447109750145e-05,
+              "valid": true,
+              "observation_count": 2574,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.0004099902639360646,
+              "valid": true,
+              "observation_count": 2585,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.00013479926469865886,
+              "valid": true,
+              "observation_count": 2462,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": -0.0006166839187683048,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            },
+            {
+              "metric_id": "quantile_spread",
+              "value": 0.0010557031754216822,
+              "valid": true,
+              "observation_count": 2586,
+              "metric_version": "3.0.0",
+              "warnings": [],
+              "sample_unit": "daily_quantile_spread"
+            }
+          ]
+        },
+        "factor_turnover_rate": {
+          "type": "ScalarMetricArtifact",
+          "metric_id": "factor_turnover_rate",
+          "domain": "metric",
+          "artifact_kind": "scalar",
+          "factor_axis": {
+            "factor_ids": [
+              "weekly_db5616cd85a477b3",
+              "weekly_4cbd7ca6dccc61dc",
+              "weekly_c83002810f9e5643",
+              "weekly_d4cc0b4a9424e834",
+              "weekly_23629be243c54739",
+              "weekly_7632208952b859e5",
+              "weekly_6f27ea3106cc03c0",
+              "weekly_5c866fa073382822"
+            ],
+            "factor_versions": null,
+            "factor_order_hash": "66a7e2e78397060db133f56b1d4e813a38fe187b7fcfa7c81a4bd37444078df7"
+          },
+          "created_from": [],
+          "production": false,
+          "contract_schema_version": "1.0",
+          "producer_version": "2.0.0",
+          "values": [
+            0.013840725831047417,
+            0.027120146431538976,
+            0.07160452016796119,
+            0.00856034362362741,
+            0.055880643397591925,
+            0.21708511759854754,
+            0.010998515928942925,
+            0.018143483137535946
+          ],
+          "finite_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "valid_mask": [
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true,
+            true
+          ],
+          "counts": null,
+          "provenance_observation_counts": [
+            2410,
+            2535,
+            2546,
+            2421,
+            2573,
+            2561,
+            2538,
+            2522
+          ],
+          "provenance": {
+            "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+            "metric_version": "2.0.0",
+            "parameters": {},
+            "factor_value_bytes_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+            "factor_validity_hash": "ce96a02b6acac7042d421958f953f0e226f0fabe53dcd9a5057ce8051256040c",
+            "sample_unit": "valid_transition",
+            "observation_counts": [
+              2410,
+              2535,
+              2546,
+              2421,
+              2573,
+              2561,
+              2538,
+              2522
+            ]
+          },
+          "metric_values": [
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.013840725831047417,
+              "valid": true,
+              "observation_count": 2410,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.027120146431538976,
+              "valid": true,
+              "observation_count": 2535,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.07160452016796119,
+              "valid": true,
+              "observation_count": 2546,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.00856034362362741,
+              "valid": true,
+              "observation_count": 2421,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.055880643397591925,
+              "valid": true,
+              "observation_count": 2573,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.21708511759854754,
+              "valid": true,
+              "observation_count": 2561,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.010998515928942925,
+              "valid": true,
+              "observation_count": 2538,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            },
+            {
+              "metric_id": "factor_turnover_rate",
+              "value": 0.018143483137535946,
+              "valid": true,
+              "observation_count": 2522,
+              "metric_version": "2.0.0",
+              "warnings": [],
+              "sample_unit": "valid_transition"
+            }
+          ]
+        }
+      },
+      "round": 6
+    }
+  ],
+  "comparisons_to_first_cpu": {
+    "cpu": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "rank_ic": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_spread": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "factor_turnover_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "rank_ic": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_spread": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "factor_turnover_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ],
+    "cuda_strict": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "rank_ic": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_spread": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "factor_turnover_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "rank_ic": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_spread": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "factor_turnover_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ],
+    "auto": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "rank_ic": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_spread": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "factor_turnover_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "rank_ic": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_spread": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "factor_turnover_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ]
+  },
+  "parity_pass": true
+}

@@ -924,6 +924,47 @@ def compute_quantile_rank_stability(
         sub_finite = finite[valid_days]
 
         m = valid_days.size
+        # When every valid day has the same finite-bucket support, the
+        # pair-specific ranks are just the per-day ranks on that one support.
+        # Rank each day once and compute bounded Gram tiles instead of
+        # re-ranking every one of the O(m^2) date pairs.  Variable supports
+        # still use the general pairwise path below, since pairwise deletion
+        # changes the rank vectors themselves.
+        if np.all(sub_finite == sub_finite[0]):
+            common_columns = sub_finite[0]
+            ranked = rankdata(
+                sub[:, common_columns], axis=1, method="average"
+            ).astype(np.float64, copy=False)
+            centered = ranked - np.mean(ranked, axis=1, keepdims=True)
+            rank_ss = np.sum(centered * centered, axis=1)
+
+            pair_count = m * (m - 1) // 2
+            corr_arr = np.empty(pair_count, dtype=np.float64)
+            pair_pos = 0
+            # Limit the Gram intermediate to block_size * m values.  Write
+            # rows into corr_arr in the same lexicographic order as
+            # np.triu_indices(m, k=1), preserving deterministic reduction.
+            block_size = 64
+            for lo in range(0, m - 1, block_size):
+                hi = min(lo + block_size, m - 1)
+                gram = centered[lo:hi] @ centered.T
+                rows = np.arange(lo, hi)
+                local_i, pair_j = np.nonzero(np.arange(m)[None, :] > rows[:, None])
+                pair_i = rows[local_i]
+                valid = (rank_ss[pair_i] > 0) & (rank_ss[pair_j] > 0)
+                tile_corr = np.full(pair_i.size, np.nan, dtype=np.float64)
+                with np.errstate(invalid="ignore", divide="ignore"):
+                    tile_corr[valid] = gram[local_i[valid], pair_j[valid]] / np.sqrt(
+                        rank_ss[pair_i[valid]] * rank_ss[pair_j[valid]]
+                    )
+                next_pos = pair_pos + pair_i.size
+                corr_arr[pair_pos:next_pos] = tile_corr
+                pair_pos = next_pos
+
+            finite_pairs = np.isfinite(corr_arr)
+            if finite_pairs.any():
+                out[f] = float(np.mean(corr_arr[finite_pairs]))
+            continue
         # All pairs, batched: per-pair joint-support re-rank is preserved
         # exactly (rankdata on the pair's masked rows via +inf sentinels),
         # but the O(m^2) Python loop becomes chunked vectorized numpy

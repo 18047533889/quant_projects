@@ -150,7 +150,7 @@ max_drawdown_by_factor = drawdown.artifacts["max_drawdown"].values
 
 公开 `evaluate(...)`（省略 `backend` 或传入 `None`）和显式
 `evaluate(..., backend="auto")` 按整次请求选择 CPU 或 CUDA，并在返回的
-`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v3`。
+`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v7`。
 以下 701 日规则继续适用于短历史配置。
 它依据已注册 A 股日行情构造的 701 个交易日、5314 只股票、2 个因子输入，
 逐指标比较完整公开入口的 CPU/CUDA 结果。冷调用和交错顺序的热调用都更快、
@@ -172,7 +172,7 @@ max_drawdown_by_factor = drawdown.artifacts["max_drawdown"].values
 - `mixed_core`：`rank_ic`、`rank_ic_series`、`ic_ir`、
   `quantile_spread`、`turnover`、`factor_turnover_rate`。
 
-三组之外的组合均使用 CPU。已对拍的 `portfolio_core` 包含类型化组合轨迹，
+短历史三组之外的组合均使用 CPU。另有真实 COS 全量 2586 日 × 5461 股 × 2 因子的精确三指标组合 `rank_ic`、`quantile_spread`、`factor_turnover_rate` 已完成整批 CPU/CUDA A/B 与完整产物对拍，在该精确形状、默认参数、L20 和足额显存下整批使用 CUDA；相邻规模及其子集不据此开放。相同的规范三指标集合在独立 F8 COS 面板的精确 2586 日 × 5461 股 × 8 因子形状也完成六轮 CPU/CUDA A/B 和完整输出对拍，自动路由使用独立 profile 与至少 14 GiB 有效空闲显存门槛，三项统一走 CUDA，回执原因是 `certified_batch_real_cos_f8_mixed_three`；相邻形状和其它 F8 指标集合仍为 CPU。F8 CPU 热运行约 34.35–34.50 秒，整批 CUDA 约 9.06–9.12 秒，实测 GPU 峰值 9,332,757,504 字节。已对拍的 `portfolio_core` 包含类型化组合轨迹，
 目前也未开放自动 CUDA，因为它超出本策略的输入合同。所有自动 CUDA 路径都要求设备型号恰为 `NVIDIA L20`。单指标要求
 空闲显存与按 `GPUExecutionPolicy.max_vram_fraction` 计算的有效预算均至少
 8 GiB；三组批次的这两个门槛均为 12 GiB。例如比例上限为 40% 时，
@@ -187,8 +187,9 @@ max_drawdown_by_factor = drawdown.artifacts["max_drawdown"].values
 例如 `ic.rank.mean` 采用 `rank_ic` 的选择规则。设备不可用时自动走 CPU。
 多年路径同样要求 float64、默认指标参数及无上述特殊输入。
 
-多年大盘路径只对单指标 `rank_ic` 和 `quantile_spread` 开放；
-`factor_turnover_rate` 保持 CPU。公开入口在真实 COS 因子面板的六种形状
+多年大盘路径对单指标 `rank_ic` 和 `quantile_spread` 开放；
+`factor_turnover_rate` 单独请求保持 CPU。上述精确三指标组合是独立的整批认证例外，
+不适用单指标区域外推。公开入口在真实 COS 因子面板的六种形状
 （1000–2586 日、5000–5461 股、1 或 2 因子）完成 12/12 数值、掩码、
 计数和证据对拍。F2 从 1000 日起、F1 从 2000 日起可进入路由；
 F1 的 1000 日边界上 `rank_ic` 冷启动 CUDA 慢于 CPU，因此保持 CPU。
@@ -201,7 +202,37 @@ F1 的 1000 日边界上 `rank_ic` 冷启动 CUDA 慢于 CPU，因此保持 CPU�
 至少要求 8 GiB；`rank_ic` 要求不低于 8 GiB，且 F2 按
 `768 × 日数 × 股票数 × 因子数` 字节、F1 按 `1024 × 日数 × 股票数`
 字节估算最低有效显存。两系数约为六种实测峰值每单元的 1.5 倍向上取整。
-不足时自动退回 CPU，并记录 `insufficient_cuda_memory`。
+不足时自动退回 CPU，并记录 `insufficient_cuda_memory`。精确三指标组合沿用
+F2 `rank_ic` 的大面板显存预算公式（此形状约 21.7 GB 有效空闲显存）；
+实测整批 CUDA 峰值约 11.23 GB。该请求 CPU 约 8.5–8.9 秒、CUDA
+约 4.5–5.0 秒，逐指标 CUDA/CUDA/CPU 拆分计时约 5.6–5.7 秒；
+数值与逐字段证据对拍通过。
+
+另有真实 COS 独立 8 因子面板在精确 2586 日 × 5461 股 × 8 因子形状上，
+对单指标 `rank_ic`、`quantile_spread`、`factor_turnover_rate` 完成公开入口
+CPU/CUDA A/B 与完整输出对拍。这三个单指标只在该精确形状、float64、默认参数、
+无特殊输入且 NVIDIA L20 下自动使用 CUDA；形状、因子数或请求指标不同均不沿用
+此认证。rank 按实测 9,332,757,504 字节峰值的 1.5 倍设置有效空闲显存下限
+（13,999,136,256 字节）；quantile 与 turnover 继续要求至少 8 GiB。两者都同时
+检查实际空闲显存和乘以 `GPUExecutionPolicy.max_vram_fraction` 后的有效预算。
+相同规范三指标集合的 F8 整批路由至少要求 14 GiB 有效预算，另完成六轮 CPU/CUDA
+A/B（CPU 热 34.35–34.50 秒、CUDA 热 9.06–9.12 秒，峰值 9,332,757,504 字节），
+完整输出逐字段对拍通过。整批证据见
+`docs/benchmarks/real_cos_f8_mixed_20260927.json`。单指标证据见
+`docs/benchmarks/real_cos_f8_rank_20260927.json`、
+`docs/benchmarks/real_cos_f8_quantile_20260927.json`、
+`docs/benchmarks/real_cos_f8_turnover_20260927.json`。
+
+独立 F12 COS 面板在精确 2586 日 × 5461 股 × 12 因子形状上，单指标
+`rank_ic`、`quantile_spread`、`factor_turnover_rate` 均完成公开入口 CPU/CUDA
+A/B 和完整输出对拍。rank CPU/CUDA 热运行分别为 31.607/9.449 秒，GPU 峰值
+9,332,757,504 字节；quantile 为 21.612/8.787 秒，峰值 1,436,371,456 字节；
+turnover 为 19.510/14.297 秒，峰值 1,020,942,336 字节。这三个指标仅在该精确
+形状自动使用 CUDA，并要求 float64、默认参数、无特殊输入、NVIDIA L20；rank
+至少需 14 GiB 有效空闲显存，quantile 与 turnover 至少需 8 GiB。F12 多指标
+请求保持 CPU；三项单指标的回执原因均为 `certified_single_metric_real_cos_f12`。证据见 `docs/benchmarks/real_cos_f12_rank_20260927.json`、
+`docs/benchmarks/real_cos_f12_quantile_20260927.json` 和
+`docs/benchmarks/real_cos_f12_turnover_20260927.json`。
 
 其他规模和特殊输入使用 CPU，表示尚无足够的公开入口性能证据；
 不代表 CUDA 无法执行这些指标。
@@ -224,7 +255,7 @@ F1 的 1000 日边界上 `rank_ic` 冷启动 CUDA 慢于 CPU，因此保持 CPU�
 `backend_used` 为 `"cpu"` 或 `"cuda"`，
 `auto_backend_policy` 为策略版本，
 `auto_backend_reason` 记录选路原因，
-`auto_backend_profile` 区分 701 日、COS 已测核心和有界外推区，
+`auto_backend_profile` 区分 701 日、COS 已测核心、有界外推区和精确 F8/F12 区，
 `metric_backends` 给出原请求指标名到实际后端的映射。
 `execution_receipt` 保存这些路由字段、语义 `config_hash` 及独立的
 `receipt_hash`，便于区分默认、显式 CPU 与显式 CUDA 的执行记录。

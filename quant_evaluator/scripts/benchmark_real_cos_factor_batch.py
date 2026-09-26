@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CPU/CUDA/auto A/B on two COS bound factors over all available A-share sessions."""
+"""CPU/CUDA/auto A/B on COS-bound factor tiles over A-share sessions."""
 from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
@@ -18,18 +18,32 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--days", type=int, default=0, help="0 means every complete session")
     parser.add_argument("--assets", type=int, default=5500)
+    parser.add_argument("--factors", type=int, default=2, help="bound COS factors, 1..16")
+    parser.add_argument("--manifest-sha256", type=str, default=None)
+    parser.add_argument("--max-object-mib", type=int, default=8)
+    parser.add_argument("--max-total-mib", type=int, default=128)
     parser.add_argument("--repeats", type=int, default=1)
+    parser.add_argument("--metrics", type=str, default=",".join(METRICS))
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
     if not 1 <= args.repeats <= 3:
         parser.error("repeats must be 1..3")
+    requested_metrics = tuple(args.metrics.split(","))
+    if not requested_metrics or len(set(requested_metrics)) != len(requested_metrics) or any(
+        metric not in METRICS for metric in requested_metrics
+    ):
+        parser.error("metrics must be a unique subset of " + ",".join(METRICS))
     start = time.perf_counter()
-    factors, labels, provenance = load_real_batch(days=args.days, assets=args.assets)
+    factors, labels, provenance = load_real_batch(
+        factors=args.factors, days=args.days, assets=args.assets,
+        max_object_mib=args.max_object_mib, max_total_mib=args.max_total_mib,
+        **({"manifest_sha256": args.manifest_sha256} if args.manifest_sha256 else {}),
+    )
     load_s = time.perf_counter() - start
     routes._SOURCES = {"base": (factors, labels, {})}
     ctx = mp.get_context("fork")
     measurements = {}
-    for metric in METRICS:
+    for metric in requested_metrics:
         runs = {}
         for backend in ("cpu", "cuda_strict", "auto"):
             result = routes.run_one(ctx, metric, backend, args.repeats, 180)

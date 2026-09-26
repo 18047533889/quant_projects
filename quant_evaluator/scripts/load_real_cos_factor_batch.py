@@ -22,7 +22,6 @@ ROOT = Path("/home/sunhaiwei/quant_projects")
 MIRROR = Path("/home/sunhaiwei/cos_data/StockDailyBarAdj")
 SHA = "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66"
 BASE = "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show"
-MANIFEST = f"{BASE}/metadata/{SHA}/landing_manifest.json"
 POOL = f"{BASE}/factor_values"
 
 def _ds(name, uri, filename, fmt):
@@ -32,15 +31,20 @@ def _ds(name, uri, filename, fmt):
         glob=filename, format_spec=FormatSpec.from_yaml(fmt),
         storage=StorageSpec(type="cos", uri=uri, layout="plain"))
 
-def _factors(count, max_mib):
+def _factors(count, max_mib, manifest_sha256, max_total_mib):
     if not 1 <= count <= 16 or not 1 <= max_mib <= 64:
         raise ValueError("factor count 1..16, object limit 1..64 MiB")
+    if not 1 <= max_total_mib <= 256:
+        raise ValueError("total verified object limit must be 1..256 MiB")
+    if len(manifest_sha256) != 64 or any(c not in "0123456789abcdef" for c in manifest_sha256):
+        raise ValueError("manifest_sha256 must be a lowercase SHA256 digest")
     engine = DuckDBEngine(threads=2)
-    md = _ds("source_manifest", MANIFEST.rsplit("/", 1)[0], "landing_manifest.json", "json")
+    manifest_uri = f"{BASE}/metadata/{manifest_sha256}/landing_manifest.json"
+    md = _ds("source_manifest", manifest_uri.rsplit("/", 1)[0], "landing_manifest.json", "json")
     try:
         store = DataAccessStore(DatasetRegistry({md.name: md}), engine)
         manifest = read_declared_cos_object(store, md.name, allow_research=True)
-        if manifest.content_sha256 != SHA:
+        if manifest.content_sha256 != manifest_sha256:
             raise ValueError("landing manifest identity mismatch")
         rows = manifest.table.to_pylist()
         if len(rows) != 1 or not isinstance(rows[0].get("factors"), dict):
@@ -59,9 +63,10 @@ def _factors(count, max_mib):
             if record.get("uri") != f"{POOL}/{digest}/{name}.parquet":
                 raise ValueError("factor URI is not manifest bound")
             selected.append((name, record))
-            if len(selected) == count:
-                break
-        if len(selected) != count or sum(r["bytes"] for _, r in selected) > 128*1024**2:
+        # Prefer the smallest independently verified objects so larger
+        # research tiles fit the explicit bounded transfer budget.
+        selected = sorted(selected, key=lambda item: (item[1]["bytes"], item[0]))[:count]
+        if len(selected) != count or sum(r["bytes"] for _, r in selected) > max_total_mib*1024**2:
             raise ValueError("bounded verified sample unavailable")
         panels, sources = [], []
         for name, record in selected:
@@ -87,11 +92,12 @@ def _factors(count, max_mib):
     finally:
         engine.close()
 
-def load_real_batch(*, factors=2, days=500, assets=5500, max_object_mib=8):
+def load_real_batch(*, factors=2, days=500, assets=5500, max_object_mib=8, max_total_mib=128,
+                    manifest_sha256=SHA):
     """Decision t, execution t+1, label AdjVwap(t+2)/AdjVwap(t+1)-1."""
     if not 0 <= days <= 3000 or not 1 <= assets <= 5500:
         raise ValueError("days 0 (all) or 1..3000, assets 1..5500")
-    panels, sources = _factors(factors, max_object_mib)
+    panels, sources = _factors(factors, max_object_mib, manifest_sha256, max_total_mib)
     common_dates = panels[0].index
     for panel in panels[1:]:
         common_dates = common_dates.intersection(panel.index)
@@ -166,6 +172,9 @@ if __name__ == "__main__":
     parser.add_argument("--factors",type=int,default=2)
     parser.add_argument("--days",type=int,default=500)
     parser.add_argument("--assets",type=int,default=5500)
+    parser.add_argument("--manifest-sha256",default=SHA)
+    parser.add_argument("--max-total-mib",type=int,default=128)
     args = parser.parse_args()
-    _,_,info = load_real_batch(factors=args.factors,days=args.days,assets=args.assets)
+    _,_,info = load_real_batch(factors=args.factors,days=args.days,assets=args.assets,
+                               manifest_sha256=args.manifest_sha256,max_total_mib=args.max_total_mib)
     print(json.dumps(info,ensure_ascii=False,indent=2))

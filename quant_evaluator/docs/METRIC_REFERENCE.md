@@ -1436,7 +1436,7 @@ Decay_{h,f}=\mathrm{mean}_{t:\,IC_{t,f}^{(h)}\ finite}IC_{t,f}^{(h)}
 |---|---|
 | `horizons` | `None` |
 
-实现核对：[函数定义](../metrics/ic_summary.py#L975)；`quant_evaluator.metrics.ic_summary.compute_ic_decay_from_mean_ics`。
+实现核对：[函数定义](../metrics/ic_summary.py#L1016)；`quant_evaluator.metrics.ic_summary.compute_ic_decay_from_mean_ics`。
 
 <a id="metric-ic_ir"></a>
 ## ic_ir — IC Information Ratio
@@ -5733,7 +5733,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.ic_summary.compute_ic_summary_stats` | `fb567fbda1d296482d1244675d8f949d8828783e2f9d060f6ee1d77fc55a6ee3` |
 | `quant_evaluator.metrics.ic_summary.compute_ic_tstat` | `f77ae9c58e54e2926bfc79850467a578f028fa6c228a71115cdcca12c3d494c3` |
 | `quant_evaluator.metrics.ic_summary.compute_icir` | `513cc3fda0d2c2b9d8a7deab8a7c77b093882be51950b96148e9e6bfa8d110b6` |
-| `quant_evaluator.metrics.ic_summary.compute_quantile_rank_stability` | `58259795a183f7dc8911b6e5fb4cc893d2792c5496019f5e68729bdc3eaa9726` |
+| `quant_evaluator.metrics.ic_summary.compute_quantile_rank_stability` | `f8547f665db427409c327dba4d785ba0eb66dede463c2e8dbdfbcaea8606a317` |
 | `quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats` | `7cb4e7572dcb99e4fc3f060237b531974d0a89bced5304d881e4ca373e7a2541` |
 | `quant_evaluator.metrics.label_panel.normalize_label_panel` | `623ee37a5bf5de87790a0475178e8df0469437a3dd9c41c0f3b0859b5d3f1600` |
 | `quant_evaluator.metrics.long_only._matrix` | `24d9629100c137f5690085ad6f2cf805bb10fd4d6aa17e7f341041ee8a02dbdc` |

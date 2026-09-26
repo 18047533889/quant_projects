@@ -1,0 +1,202 @@
+{
+  "created_utc": "2026-09-26T17:43:11.183532+00:00",
+  "source": "DataAccess bound COS landing manifest and registered A-share calendar/AdjVwap",
+  "load_s": 41.43775069498224,
+  "peak_parent_rss_kib": 7108680,
+  "provenance": {
+    "sources": [
+      {
+        "factor_id": "weekly_db5616cd85a477b3",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d/weekly_db5616cd85a477b3.parquet",
+        "sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+        "bytes": 3828456,
+        "etag": "5efb1f8070196661daabeb563740dff0",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_4cbd7ca6dccc61dc",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59/weekly_4cbd7ca6dccc61dc.parquet",
+        "sha256": "35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59",
+        "bytes": 5400494,
+        "etag": "91da3ad8a2d54f3f35911e231bfcffa8",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_c83002810f9e5643",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/41ff2ef68d1be8e63399d239c4ef78ea321adc0eb1ae273d6ff28a2263298a70/weekly_c83002810f9e5643.parquet",
+        "sha256": "41ff2ef68d1be8e63399d239c4ef78ea321adc0eb1ae273d6ff28a2263298a70",
+        "bytes": 9053391,
+        "etag": "b968dca3f6582b036b6c56cc28779e15",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_d4cc0b4a9424e834",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/b811614bbabf16d03a6019003bcf97a665c41d3affc17cb48f7e4250cf0ce332/weekly_d4cc0b4a9424e834.parquet",
+        "sha256": "b811614bbabf16d03a6019003bcf97a665c41d3affc17cb48f7e4250cf0ce332",
+        "bytes": 9381300,
+        "etag": "07d03a12874fb17b4eafbc6c045d4934",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_23629be243c54739",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/c6ca9fef28f28fc85219d8c918e5c4829300058752c7977e7634b0a0d00651b1/weekly_23629be243c54739.parquet",
+        "sha256": "c6ca9fef28f28fc85219d8c918e5c4829300058752c7977e7634b0a0d00651b1",
+        "bytes": 11865566,
+        "etag": "6625f9fe75281cb284c981ae543909c0",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_7632208952b859e5",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/357d7f86a7e2f9419e1bde16eb2e8467af4da5bf991dc1337751234f98348a3e/weekly_7632208952b859e5.parquet",
+        "sha256": "357d7f86a7e2f9419e1bde16eb2e8467af4da5bf991dc1337751234f98348a3e",
+        "bytes": 12351702,
+        "etag": "3ad1d320b3d458b45c90f2ab3fd0cc33",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_6f27ea3106cc03c0",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/578f5f689cac5450d30c1d43245a21eddb557698f0291bcd63b8c6c8de6cb94f/weekly_6f27ea3106cc03c0.parquet",
+        "sha256": "578f5f689cac5450d30c1d43245a21eddb557698f0291bcd63b8c6c8de6cb94f",
+        "bytes": 15808239,
+        "etag": "09fa342961b13558eb42f4ad289ac568",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_5c866fa073382822",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/5cd04a82f45120138aa775e2dfb41252124b75335f6b4786a9e56ad6be367c6c/weekly_5c866fa073382822.parquet",
+        "sha256": "5cd04a82f45120138aa775e2dfb41252124b75335f6b4786a9e56ad6be367c6c",
+        "bytes": 16060978,
+        "etag": "a26122649b2142423e9c5f6e2023ec8d",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      }
+    ],
+    "days": 2586,
+    "assets": 5461,
+    "date_span": [
+      "2016-01-04",
+      "2026-08-25"
+    ],
+    "calendar_sessions": 2588,
+    "missing_adj_vwap_partitions": [],
+    "label": "decision t; execution t+1; AdjVwap(t+2)/AdjVwap(t+1)-1",
+    "factor_finite_ratio": 0.7711149034997938,
+    "label_finite_ratio": 0.7738646803396594,
+    "limitations": "research lineage; no upstream PIT/investability certification"
+  },
+  "metrics": {
+    "quantile_spread": {
+      "runs": {
+        "cpu": {
+          "status": "ok",
+          "cold_s": 16.06910445302492,
+          "warm_s": [
+            13.239582578011323
+          ],
+          "warm_median_s": 13.239582578011323,
+          "peak_rss_kib": 9528556,
+          "backend_used": "cpu",
+          "gpu_peak_vram": null,
+          "artifact_type": "ScalarMetricArtifact",
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2404,
+            2574,
+            2585,
+            2462,
+            2586,
+            2586
+          ],
+          "input_factor_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+          "execution_backend": null,
+          "no_fallback": null
+        },
+        "cuda_strict": {
+          "status": "ok",
+          "cold_s": 8.589221496018581,
+          "warm_s": [
+            5.558179422980174
+          ],
+          "warm_median_s": 5.558179422980174,
+          "peak_rss_kib": 10962640,
+          "backend_used": "cuda",
+          "gpu_peak_vram": 1436371456,
+          "artifact_type": "ScalarMetricArtifact",
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2404,
+            2574,
+            2585,
+            2462,
+            2586,
+            2586
+          ],
+          "input_factor_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+          "execution_backend": null,
+          "no_fallback": null
+        },
+        "auto": {
+          "status": "ok",
+          "cold_s": 16.04568039998412,
+          "warm_s": [
+            13.297239970997907
+          ],
+          "warm_median_s": 13.297239970997907,
+          "peak_rss_kib": 9528556,
+          "backend_used": "cpu",
+          "gpu_peak_vram": null,
+          "artifact_type": "ScalarMetricArtifact",
+          "provenance_observation_counts": [
+            2565,
+            2565,
+            2404,
+            2574,
+            2585,
+            2462,
+            2586,
+            2586
+          ],
+          "input_factor_hash": "f6b6ab027e41577fcab4e96e6dbfa85a2d9bd80ef2709f3601afc8fda7539363",
+          "execution_backend": null,
+          "no_fallback": null
+        }
+      },
+      "cuda_parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 1.3010426069826053e-18
+      },
+      "auto_parity": {
+        "pass": false,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": false,
+        "max_abs": 0.0
+      },
+      "auto_output_pass": true
+    }
+  }
+}
