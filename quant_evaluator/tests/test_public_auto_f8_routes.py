@@ -34,6 +34,8 @@ def _select(monkeypatch, shape, metrics, *, dtype=np.float64, policy=None,
 
 @pytest.mark.parametrize("metric,minimum", [
     ("rank_ic", 13_999_136_256),
+    ("rank_ic_series", 13_999_136_256),
+    ("ic_ir", 13_999_136_256),
     ("quantile_spread", 8 * 1024 ** 3),
     ("factor_turnover_rate", 8 * 1024 ** 3),
 ])
@@ -111,6 +113,10 @@ def test_f12_exact_single_metric_routes(monkeypatch):
     assert _select(monkeypatch, shape, F8_METRICS) == (
         "cpu", "metric_not_certified_for_profile",
     )
+    for metric in ("rank_ic_series", "ic_ir"):
+        assert _select(monkeypatch, shape, (metric,)) == (
+            "cpu", "metric_not_certified_for_profile",
+        )
     assert _select(monkeypatch, (2586, 5461, 11), ("rank_ic",)) == (
         "cpu", "shape_outside_certified_range",
     )
