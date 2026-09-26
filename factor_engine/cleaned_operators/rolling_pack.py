@@ -536,6 +536,35 @@ def register_polars_udf(canonical: str) -> None:
         # family, deterministically replace those classes with the exact
         # Pandas delegate whose content identity is bound above.
         if canonical in _DYNAMIC_REGRESSION_DELEGATES:
+            # R68 batch-2/3: a genuine audited POLARS_NATIVE replacement (e.g.
+            # r68_native_batch*) is NOT a "legacy single-series pseudo-native"
+            # backend — respect "first native registrant wins" and leave the
+            # slot alone instead of force-demoting it back to a pandas delegate.
+            try:
+                from factor_engine.backend.polars_backend_kind import (
+                    PolarsImplementationKind,
+                    canonical_polars_kind,
+                )
+                _cur = OperatorRegistry.get(canonical, "polars")
+                _cur_meta = (OperatorRegistry._catalog.get(canonical, {}) or {}).get("backend_meta", {}).get("polars") or {}
+                # R68 batch-11: canonical_polars_kind is a heuristic that
+                # mislabels some audited native replacements (e.g. the
+                # ts_quantile_regression_* family) as UNSUPPORTED — the
+                # registered op"s own POLARS_NATIVE_EXPR spec is authoritative
+                # (same precedent as r68_native_batch9"s atan2 note).
+                _cur_native = (
+                    canonical_polars_kind(canonical) is PolarsImplementationKind.POLARS_NATIVE
+                    or getattr(getattr(_cur, "_physical_spec", None), "execution_kind", None)
+                    is ExecutionKind.POLARS_NATIVE_EXPR
+                )
+                if (
+                    _cur is not None
+                    and _cur_native
+                    and "r68_native_batch" in str(_cur_meta.get("source", ""))
+                ):
+                    return
+            except Exception:
+                pass
             OperatorRegistry.register(
                 _PolarsUdf(), canonical=canonical, backend="polars",
                 source="dynamic_regression_reference_polars",

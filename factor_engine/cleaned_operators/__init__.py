@@ -585,6 +585,42 @@ BOOTSTRAP_MODULE_SPECS = BOOTSTRAP_MODULE_SPECS + (
         module="factor_engine.cleaned_operators.polars_native.r68_native_batch8",
         role=BootstrapModuleRole.IMPLEMENTATION,
         required=True,
+    ),    # R68 batch-13: native polars backends for 45 delegate canonicals
+    # (group ex-self / tail-systemic / intraday jump-robust / ts expanding
+    # statistics / recipe families).  Same policy as batch-4..9: registered
+    # after every pandas reference module.
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators.polars_native.r68_native_batch13",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
+    ),
+    # R68 batch-11: native polars backends for 45 delegate canonicals
+    # (technical v2 / group spectrum / relation / fiscal / intraday event
+    # response / quantile regression families).  Same policy as batch-4..13:
+    # registered after every pandas reference module.
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators.polars_native.r68_native_batch11",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
+    ),
+    # R68 batch-10: native polars backends for the 45 delegate canonicals from
+    # /tmp/r68/b6.json (regression / AR / technical / cross-section / report
+    # families).  Same policy as batch-4..13: registered after every pandas
+    # reference module.
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators.polars_native.r68_native_batch10",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
+    ),
+    # R68 batch-12: native polars backends for the 45 delegate canonicals from
+    # /tmp/r68/b8.json (shareholder / QQE / ElderRay / chip surfaces / transfer
+    # entropy / relation aggregation / group shape / robust EMA / fiscal
+    # divergence families).  Same policy as batch-4..13: registered after every
+    # pandas reference module.
+    BootstrapModuleSpec(
+        module="factor_engine.cleaned_operators.polars_native.r68_native_batch12",
+        role=BootstrapModuleRole.IMPLEMENTATION,
+        required=True,
     ),
 )
 

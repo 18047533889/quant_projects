@@ -107,6 +107,19 @@
    "event_interval_mark_coupling"
   ]
  },
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/polars_native/r68_native_batch11.py": [
+  "range-len-loop"
+ ],
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/polars_native/r68_native_batch4.py": [
+  "range-len-loop"
+ ],
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/polars_native/r68_native_batch5.py": [
+  "range-len-loop"
+ ],
+ "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/polars_native/r68_native_batch6.py": [
+  "range-len-loop",
+  "range-len-loop"
+ ],
  "/home/sunhaiwei/quant_projects/factor_engine/cleaned_operators/price_volume/polars_liquidity_v2.py": {
   "hits": [
    "range-len-loop:L316"
