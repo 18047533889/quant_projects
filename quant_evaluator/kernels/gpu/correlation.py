@@ -36,21 +36,21 @@ def _pairwise_finite_sums(x, y, min_obs: int):
         yb = y  # (T,F,N)
     finite = cp.isfinite(x) & cp.isfinite(yb)
     n = cp.sum(finite, axis=2, dtype=cp.float64)  # (T, F)
-    x0 = cp.where(finite, x, 0.0)
-    y0 = cp.where(finite, yb, 0.0)
-    sx = cp.sum(x0, axis=2)
-    sy = cp.sum(y0, axis=2)
-    sxx = cp.sum(x0 * x0, axis=2)
-    syy = cp.sum(y0 * y0, axis=2)
-    sxy = cp.sum(x0 * y0, axis=2)
-    # division by zero yields inf/nan; we mask those via zero_var / insufficient below
-    num = n * sxy - sx * sy
-    denom = (n * sxx - sx * sx) * (n * syy - sy * sy)
-    denom_safe = cp.maximum(denom, 0.0)
-    ic = num / cp.sqrt(denom_safe)
-    insufficient = n < min_obs
-    zero_var = (n * sxx - sx * sx <= 0) | (n * syy - sy * sy <= 0)
-    ic = cp.where(insufficient | zero_var | (denom_safe == 0.0), cp.nan, ic)
+    # Reduce in float64, then center before forming products. Raw moments in
+    # float32 lose the variance of a large cross-section with a common offset;
+    # even float64 raw moments can cancel when the offset is sufficiently large.
+    sx = cp.sum(cp.where(finite, x, 0.0), axis=2, dtype=cp.float64)
+    sy = cp.sum(cp.where(finite, yb, 0.0), axis=2, dtype=cp.float64)
+    mx = sx / cp.maximum(n, 1.0)
+    my = sy / cp.maximum(n, 1.0)
+    dx = cp.where(finite, x - mx[:, :, None], 0.0)
+    dy = cp.where(finite, yb - my[:, :, None], 0.0)
+    vx = cp.sum(dx * dx, axis=2, dtype=cp.float64)
+    vy = cp.sum(dy * dy, axis=2, dtype=cp.float64)
+    cov = cp.sum(dx * dy, axis=2, dtype=cp.float64)
+    denom = cp.sqrt(vx * vy)
+    ic = cov / denom
+    ic = cp.where((n < min_obs) | (vx <= 0) | (vy <= 0), cp.nan, ic)
     return ic, n.astype(cp.int32)
 
 

@@ -4,6 +4,7 @@ These adapters keep legacy tuple/series-returning metric APIs intact while
 exposing one well-defined value per registered metric.
 """
 
+import warnings
 import numpy as np
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
@@ -226,8 +227,11 @@ def compute_quantile_returns_full_value(
     quantile_returns, _ = compute_quantile_returns_fast(
         factor_batch, label_bundle, n_quantiles=n_quantiles
     )
-    with np.errstate(invalid="ignore"):
-        means = np.nanmean(quantile_returns, axis=0)  # (n_quantiles, F)
+    with warnings.catch_warnings():
+        # Entirely empty quantile/factor buckets are valid missing observations.
+        warnings.filterwarnings("ignore", message="Mean of empty slice", category=RuntimeWarning)
+        with np.errstate(invalid="ignore"):
+            means = np.nanmean(quantile_returns, axis=0)  # (n_quantiles, F)
     valid_counts = np.sum(np.isfinite(quantile_returns), axis=0)  # (n_quantiles, F)
     return np.where(valid_counts >= min_periods, means, np.nan)
 

@@ -1,6 +1,6 @@
 # 公开运行能力与输入/输出契约
 
-> 最后更新：2026-09-24（Asia/Hong_Kong）。文档维护规则：代码行为变更必须同一轮同步本文档并更新此时间戳。
+> 最后更新：2026-09-27（Asia/Hong_Kong）。文档维护规则：代码行为变更必须同一轮同步本文档并更新此时间戳。
 
 本页补充 `METRIC_REFERENCE.md` 的调用层说明。指标是否可请求以当前注册表为准；
 `METRIC_REGISTRY_COVERAGE.csv` 是迁移追踪表，不能把其中历史遗留的 `NOT_IMPLEMENTED` 当作当前运行结论。
@@ -150,7 +150,7 @@ max_drawdown_by_factor = drawdown.artifacts["max_drawdown"].values
 
 公开 `evaluate(...)`（省略 `backend` 或传入 `None`）和显式
 `evaluate(..., backend="auto")` 按整次请求选择 CPU 或 CUDA，并在返回的
-`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v9`。
+`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v10`。
 以下 701 日规则继续适用于短历史配置。
 它依据已注册 A 股日行情构造的 701 个交易日、5314 只股票、2 个因子输入，
 逐指标比较完整公开入口的 CPU/CUDA 结果。冷调用和交错顺序的热调用都更快、
@@ -172,10 +172,10 @@ max_drawdown_by_factor = drawdown.artifacts["max_drawdown"].values
 - `mixed_core`：`rank_ic`、`rank_ic_series`、`ic_ir`、
   `quantile_spread`、`turnover`、`factor_turnover_rate`。
 
-短历史三组之外的组合均使用 CPU。另有真实 COS 全量 2586 日 × 5461 股 × 2 因子的精确三指标组合 `rank_ic`、`quantile_spread`、`factor_turnover_rate` 已完成整批 CPU/CUDA A/B 与完整产物对拍，在该精确形状、默认参数、L20 和足额显存下整批使用 CUDA；相邻规模及其子集不据此开放。相同的规范三指标集合在独立 F8 COS 面板的精确 2586 日 × 5461 股 × 8 因子形状也完成六轮 CPU/CUDA A/B 和完整输出对拍，自动路由使用独立 profile 与至少 14 GiB 有效空闲显存门槛，三项统一走 CUDA，回执原因是 `certified_batch_real_cos_f8_mixed_three`；相邻形状和其它 F8 指标集合仍为 CPU。F8 CPU 热运行约 34.35–34.50 秒，整批 CUDA 约 9.06–9.12 秒，实测 GPU 峰值 9,332,757,504 字节。已对拍的 `portfolio_core` 包含类型化组合轨迹，
+短历史三组之外的组合均使用 CPU。另有真实 COS 全量 2586 日 × 5461 股 × 2 因子的精确三指标组合 `rank_ic`、`quantile_spread`、`factor_turnover_rate` 已完成整批 CPU/CUDA A/B 与完整产物对拍，在该精确形状、默认参数、L20 和足额显存下整批使用 CUDA；相邻规模及其子集不据此开放。相同的规范三指标集合在独立 F8 COS 面板的精确 2586 日 × 5461 股 × 8 因子形状也完成六轮 CPU/CUDA A/B 和完整输出对拍，自动路由使用独立 profile 与至少 14 GiB 有效空闲显存门槛，三项统一走 CUDA，回执原因是 `certified_batch_real_cos_f8_mixed_three`；相邻形状及未认证的 F8 指标集合仍为 CPU。F8 CPU 热运行约 34.35–34.50 秒，整批 CUDA 约 9.06–9.12 秒，实测 GPU 峰值 9,332,757,504 字节。已对拍的 `portfolio_core` 包含类型化组合轨迹，
 目前也未开放自动 CUDA，因为它超出本策略的输入合同。所有自动 CUDA 路径都要求设备型号恰为 `NVIDIA L20`。单指标要求
 空闲显存与按 `GPUExecutionPolicy.max_vram_fraction` 计算的有效预算均至少
-8 GiB；三组批次的这两个门槛均为 12 GiB。例如比例上限为 40% 时，
+8 GiB；短历史三组批次的这两个门槛均为 12 GiB。例如比例上限为 40% 时，
 批次至少需 30 GiB 实际空闲显存。型号或预算不满足时自动使用 CPU，
 并记录具体原因。8 GiB 高于单指标实测约 4.64 GiB 的峰值，
 12 GiB 高于混合批次实测约 9.00 GB 的峰值，分别留有余量。
@@ -228,14 +228,26 @@ A/B（CPU 热 34.35–34.50 秒、CUDA 热 9.06–9.12 秒，峰值 9,332,757,50
 `ic_ir` 约 20.56–20.58/5.96–6.01 秒。两者的六轮完整产物、掩码、计数、
 provenance、MetricValue 与配置哈希均对拍通过，GPU 峰值均为 9,332,757,504 字节。
 证据见 `docs/benchmarks/real_cos_f8_rank_ic_series_20260927.json` 和
-`docs/benchmarks/real_cos_f8_ic_ir_20260927.json`；未据此开放 F12 或多指标组合。
+`docs/benchmarks/real_cos_f8_ic_ir_20260927.json`；F12 仍不开放，多指标组合须有独立整批证据。
 `quantile_returns_daily` 六轮 CPU/CUDA 热运行约 9.50–9.85/5.43–5.89 秒；
 `quantile_returns_full` 约 9.47–9.53/5.40–5.41 秒。日序列 CUDA 曾缺失标签身份、
 参数和有效期计数等 provenance；补齐后六轮的数值、轴、掩码、计数、完整 provenance
 与配置哈希全部对拍通过。两项 GPU 峰值均为 1,436,371,456 字节。证据见
 `docs/benchmarks/real_cos_f8_quantile_returns_daily_20260927.json` 与
-`docs/benchmarks/real_cos_f8_quantile_returns_full_20260927.json`；F12 和组合请求仍保持 CPU。
+`docs/benchmarks/real_cos_f8_quantile_returns_full_20260927.json`；F12 和未认证的组合请求仍保持 CPU。
 
+同一 F8 COS 面板的两组完整多指标请求另有六轮交错 CPU/CUDA A/B：
+`rank_chain`（`rank_ic`、`rank_ic_series`、`ic_std`、`ic_ir`）的 CPU
+热运行约 20.48–20.89 秒，CUDA 约 6.00–6.03 秒；`quantile_chain`
+（`quantile_returns_full`、`quantile_returns_daily`、`quantile_spread`、
+`quantile_monotonicity`、`daily_quantile_monotonicity_rate`）的 CPU 热运行约
+28.32–28.64 秒，CUDA 约 5.44–5.62 秒。每组六轮的完整制品、有效掩码、
+计数、provenance、标量结果与配置哈希逐字段对拍通过。自动路由仅对精确
+2586 日 × 5461 股 × 8 因子、默认参数及 L20 放行这两个完整集合，
+顺序不限；rank 至少要求 14 GiB、quantile 至少要求 8 GiB 有效空闲显存。
+子集、含重复项、其它组合、F12 和相邻形状继续使用 CPU。证据：
+`docs/benchmarks/real_cos_f8_rank_chain_20260927.json` 与
+`docs/benchmarks/real_cos_f8_quantile_chain_20260927.json`。
 独立 F12 COS 面板在精确 2586 日 × 5461 股 × 12 因子形状上，单指标
 `rank_ic`、`quantile_spread`、`factor_turnover_rate` 均完成公开入口 CPU/CUDA
 A/B 和完整输出对拍。rank CPU/CUDA 热运行分别为 31.607/9.449 秒，GPU 峰值

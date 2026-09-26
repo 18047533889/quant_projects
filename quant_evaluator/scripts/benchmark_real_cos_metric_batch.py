@@ -21,7 +21,13 @@ import numpy as np
 
 from quant_evaluator.scripts.load_real_cos_factor_batch import load_real_batch
 
-METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+DEFAULT_METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+RANK_CHAIN = ("rank_ic", "rank_ic_series", "ic_std", "ic_ir")
+QUANTILE_CHAIN = ("quantile_returns_full", "quantile_returns_daily",
+                  "quantile_spread", "quantile_monotonicity",
+                  "daily_quantile_monotonicity_rate")
+METRICS = DEFAULT_METRICS
+ALLOWED_BATCHES = (DEFAULT_METRICS, RANK_CHAIN, QUANTILE_CHAIN)
 MANIFEST_SHA256 = "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864"
 _BATCH = None
 _LABELS = None
@@ -211,11 +217,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--timeout-s", type=float, default=180)
     parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--metrics", default=",".join(DEFAULT_METRICS))
+    parser.add_argument("--compact", action="store_true", help="write artifact hashes, not value arrays")
     args = parser.parse_args()
     if args.timeout_s <= 0:
         parser.error("timeout-s must be positive")
 
-    global _BATCH, _LABELS
+    global _BATCH, _LABELS, METRICS
+    requested = tuple(args.metrics.split(","))
+    if requested not in ALLOWED_BATCHES:
+        parser.error("metrics must be an exact default, rank-chain or quantile-chain set")
+    METRICS = requested
     load_start = time.perf_counter()
     _BATCH, _LABELS, source = load_real_batch(
         factors=8, days=0, assets=5500, max_object_mib=64,
@@ -248,17 +260,24 @@ def main():
         for backend, selected in by_backend.items()
     }
     config_hashes = sorted({run["config_hash"] for run in runs})
+    report_runs = runs if not args.compact else [
+        {key: value for key, value in run.items() if key != "artifacts"} | {
+            "artifact_sha256": hashlib.sha256(json.dumps(
+                _plain(run["artifacts"]), sort_keys=True, separators=(",", ":"),
+                allow_nan=False).encode()).hexdigest()}
+        for run in runs
+    ]
     report = {
         "created_utc": datetime.now().astimezone().isoformat(),
         "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "request": {"metrics": METRICS, "backend_order": order,
                     "repeats_per_child": 2, "timeout_s": args.timeout_s,
                     "shape": shape, "dtype": str(_BATCH.values.dtype),
-                    "manifest_sha256": MANIFEST_SHA256},
+                    "manifest_sha256": MANIFEST_SHA256, "compact_artifacts": args.compact},
         "source": _plain(source), "load_s": load_s,
         "parent_peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
         "config_hashes": config_hashes,
-        "runs": runs, "comparisons_to_first_cpu": comparisons,
+        "runs": report_runs, "comparisons_to_first_cpu": comparisons,
         "parity_pass": len(config_hashes) == 1 and all(
             comparison["pass"] for repeated in comparisons.values()
             for comparison in repeated),

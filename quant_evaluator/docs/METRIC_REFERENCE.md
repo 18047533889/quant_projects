@@ -376,7 +376,7 @@ H=\frac{Q_{(1+c)/2}(\bar x^{\ast})-Q_{(1-c)/2}(\bar x^{\ast})}{2}
 | `confidence_level` | `0.95` |
 | `random_seed` | `0` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L271)；`quant_evaluator.metrics.registry_adapters.compute_block_bootstrap_ci_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L275)；`quant_evaluator.metrics.registry_adapters.compute_block_bootstrap_ci_value`。
 
 <a id="metric-bonferroni_correction"></a>
 ## bonferroni_correction — Bonferroni Correction
@@ -616,7 +616,7 @@ Coverage_f=\frac{\sum_{t,n}\mathbf 1\{x_{tnf},y_{tn}\text{ jointly valid}\}}{TN}
 |---|---|
 | `min_assets` | `10` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L326)；`quant_evaluator.metrics.registry_adapters.compute_coverage_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L330)；`quant_evaluator.metrics.registry_adapters.compute_coverage_value`。
 
 <a id="metric-coverage_stability"></a>
 ## coverage_stability — coverage_stability
@@ -862,7 +862,7 @@ m_{t,f}=\frac{\sum_{q=1}^{Q-1}\mathbf1(r_{t,q+1,f}\gt r_{t,q,f})\mathbf1_{pair}}
 | `min_assets` | `10` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L257)；`quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_rate_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L261)；`quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_rate_value`。
 
 <a id="metric-daily_quantile_monotonicity_series"></a>
 ## daily_quantile_monotonicity_series — Daily Quantile Monotonicity Series
@@ -899,7 +899,7 @@ m_{t,f}=\frac{\sum_{q=1}^{Q-1}\mathbf1(r_{t,q+1,f}\gt r_{t,q,f})\mathbf1\{r_{t,q
 | `n_quantiles` | `5` |
 | `min_assets` | `10` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L235)；`quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_series_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L239)；`quant_evaluator.metrics.registry_adapters.compute_daily_quantile_monotonicity_series_value`。
 
 <a id="metric-distinct_level_ratio"></a>
 ## distinct_level_ratio — Distinct Level Ratio
@@ -1145,7 +1145,7 @@ $`V_t`$ 是当日因子有限的资产集。默认 `measure=universe_membership_
 | `min_periods` | `30` |
 | `quantile` | `0.9` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L297)；`quant_evaluator.metrics.registry_adapters.compute_factor_turnover_rate_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L301)；`quant_evaluator.metrics.registry_adapters.compute_factor_turnover_rate_value`。
 
 <a id="metric-hac_pvalue"></a>
 ## hac_pvalue — HAC p-value
@@ -1183,7 +1183,7 @@ Two-sided HAC-robust p-value for mean(IC) != 0 per factor (canonical alias ic.ra
 | `max_lag` | `5` |
 | `kernel` | `'bartlett'` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L416)；`quant_evaluator.metrics.registry_adapters.compute_hac_pvalue_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L420)；`quant_evaluator.metrics.registry_adapters.compute_hac_pvalue_value`。
 
 <a id="metric-hac_tstat"></a>
 ## hac_tstat — HAC t-statistic
@@ -1221,7 +1221,7 @@ t_{HAC}=\frac{\bar x}{\sqrt{n^{-1}(\gamma_0+2\sum_{k=1}^{L}w_k\gamma_k)}}
 | `max_lag` | `5` |
 | `kernel` | `'bartlett'` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L87)；`quant_evaluator.metrics.registry_adapters.compute_hac_tstat_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L88)；`quant_evaluator.metrics.registry_adapters.compute_hac_tstat_value`。
 
 <a id="metric-half_life"></a>
 ## half_life — IC Temporal Persistence Half-Life
@@ -1257,7 +1257,7 @@ IC_t=\alpha+\phi IC_{t-1}+\varepsilon_t,\qquad h_{1/2}=-\frac{\log2}{\log\phi}
 |---|---|
 | `min_periods` | `60` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L127)；`quant_evaluator.metrics.registry_adapters.compute_half_life_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L128)；`quant_evaluator.metrics.registry_adapters.compute_half_life_value`。
 
 <a id="metric-hhi_concentration"></a>
 ## hhi_concentration — hhi_concentration
@@ -1400,7 +1400,7 @@ First-order autocorrelation of IC series
 | `min_periods` | `30` |
 | `max_lag` | `20` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L99)；`quant_evaluator.metrics.registry_adapters.compute_ic_autocorr_lag1_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L100)；`quant_evaluator.metrics.registry_adapters.compute_ic_autocorr_lag1_value`。
 
 <a id="metric-ic_decay"></a>
 ## ic_decay — ic_decay
@@ -1472,7 +1472,7 @@ ICIR_f=\frac{\bar{IC}_f}{s_f},\qquad s_f^2=\frac1{n_f-1}\sum_t(IC_{t,f}-\bar{IC}
 |---|---|
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L79)；`quant_evaluator.metrics.registry_adapters.compute_ic_ir_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L80)；`quant_evaluator.metrics.registry_adapters.compute_ic_ir_value`。
 
 <a id="metric-ic_median"></a>
 ## ic_median — Median IC
@@ -1508,7 +1508,7 @@ MedIC_f=\mathrm{median}\{IC_{t,f}:IC_{t,f}\ finite\}
 |---|---|
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L400)；`quant_evaluator.metrics.registry_adapters.compute_ic_median_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L404)；`quant_evaluator.metrics.registry_adapters.compute_ic_median_value`。
 
 <a id="metric-ic_positive_ratio"></a>
 ## ic_positive_ratio — IC Positive Ratio
@@ -1962,7 +1962,7 @@ valid 使用 FactorBatch 与 LabelBundle 的联合有效掩码，不只是 NaN �
 |---|---|
 | `min_assets` | `10` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L326)；`quant_evaluator.metrics.registry_adapters.compute_coverage_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L330)；`quant_evaluator.metrics.registry_adapters.compute_coverage_value`。
 
 <a id="metric-kurtosis"></a>
 ## kurtosis — kurtosis
@@ -2620,7 +2620,7 @@ PIC_f=n_f^{-1}\sum_{t\in V_f}\mathrm{Corr}_P(x_{tf},y_t)
 | `min_periods` | `1` |
 | `min_assets` | `20` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L344)；`quant_evaluator.metrics.registry_adapters.compute_pearson_ic_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L348)；`quant_evaluator.metrics.registry_adapters.compute_pearson_ic_value`。
 
 <a id="metric-pearson_ic_ir"></a>
 ## pearson_ic_ir — Pearson IC Information Ratio
@@ -2652,7 +2652,7 @@ IR_f=\bar{IC}^P_f/s(IC^P_{tf})
 |---|---|
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L79)；`quant_evaluator.metrics.registry_adapters.compute_ic_ir_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L80)；`quant_evaluator.metrics.registry_adapters.compute_ic_ir_value`。
 
 <a id="metric-pearson_ic_series"></a>
 ## pearson_ic_series — Daily Pearson IC Series
@@ -2684,7 +2684,7 @@ $`V`$ 是同时有限配对；默认 min_assets=20。不足或常数截面为 Na
 |---|---|
 | `min_assets` | `20` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L376)；`quant_evaluator.metrics.registry_adapters.compute_pearson_ic_series_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L380)；`quant_evaluator.metrics.registry_adapters.compute_pearson_ic_series_value`。
 
 <a id="metric-pearson_ic_std"></a>
 ## pearson_ic_std — Pearson IC Standard Deviation
@@ -2927,7 +2927,7 @@ r_{tqf}=|B_{tqf}|^{-1}\sum_{i\in B_{tqf}}y_{ti}
 | `split_ref` | `None` |
 | `config_hash` | `None` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L30)；`quant_evaluator.metrics.registry_adapters.build_daily_quantile_return_artifact`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L31)；`quant_evaluator.metrics.registry_adapters.build_daily_quantile_return_artifact`。
 
 <a id="metric-quantile_returns_daily"></a>
 ## quantile_returns_daily — Daily quantile returns and counts
@@ -2967,7 +2967,7 @@ r_{tqf}=n_{tqf}^{-1}\sum_{i\in B_{tqf}}y_{ti},\quad v_{tqf}=\mathbf1[\mathrm{fin
 | `split_ref` | `None` |
 | `config_hash` | `None` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L30)；`quant_evaluator.metrics.registry_adapters.build_daily_quantile_return_artifact`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L31)；`quant_evaluator.metrics.registry_adapters.build_daily_quantile_return_artifact`。
 
 <a id="metric-quantile_returns_full"></a>
 ## quantile_returns_full — Full Quantile Returns
@@ -3000,7 +3000,7 @@ Per-quantile time-averaged returns as a VECTOR per factor — shape (n_quantiles
 | `min_periods` | `20` |
 | `n_quantiles` | `5` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L219)；`quant_evaluator.metrics.registry_adapters.compute_quantile_returns_full_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L220)；`quant_evaluator.metrics.registry_adapters.compute_quantile_returns_full_value`。
 
 <a id="metric-quantile_spread"></a>
 ## quantile_spread — Top-Bottom Quantile Spread
@@ -3033,7 +3033,7 @@ S_f=n_f^{-1}\sum_{t\in V_f}(r_{tQf}-r_{t1f})
 | `min_periods` | `20` |
 | `n_quantiles` | `5` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L183)；`quant_evaluator.metrics.registry_adapters.compute_quantile_spread_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L184)；`quant_evaluator.metrics.registry_adapters.compute_quantile_spread_value`。
 
 <a id="metric-quantile_stability"></a>
 ## quantile_stability — quantile_stability
@@ -3211,7 +3211,7 @@ RankIC={1\over n}\sum_{t\in T^{\ast}}IC_t
 | `min_periods` | `1` |
 | `min_assets` | `20` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L358)；`quant_evaluator.metrics.registry_adapters.compute_rank_ic_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L362)；`quant_evaluator.metrics.registry_adapters.compute_rank_ic_value`。
 
 <a id="metric-rank_ic_cross_section"></a>
 ## rank_ic_cross_section — rank_ic_cross_section
@@ -3241,7 +3241,7 @@ IC_t=\mathrm{corr}(\mathrm{rank}_{avg}f_{t,i},\mathrm{rank}_{avg}y_{t,i})
 |---|---|
 | `min_assets` | `20` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L388)；`quant_evaluator.metrics.registry_adapters.compute_rank_ic_series_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L392)；`quant_evaluator.metrics.registry_adapters.compute_rank_ic_series_value`。
 
 <a id="metric-rank_ic_decay_h01_h05_h10_h20"></a>
 ## rank_ic_decay_h01_h05_h10_h20 — IC Serial Autocorrelation (lags 1/5/10/20; legacy ID)
@@ -3332,7 +3332,7 @@ IC_t=\mathrm{corr}(\mathrm{rank}_{avg}f_{t,i},\mathrm{rank}_{avg}y_{t,i})
 |---|---|
 | `min_assets` | `20` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L388)；`quant_evaluator.metrics.registry_adapters.compute_rank_ic_series_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L392)；`quant_evaluator.metrics.registry_adapters.compute_rank_ic_series_value`。
 
 <a id="metric-rank_ic_time_series"></a>
 ## rank_ic_time_series — rank_ic_time_series
@@ -3362,7 +3362,7 @@ IC_t=\mathrm{corr}(\mathrm{rank}_{avg}f_{t,i},\mathrm{rank}_{avg}y_{t,i})
 |---|---|
 | `min_assets` | `20` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L388)；`quant_evaluator.metrics.registry_adapters.compute_rank_ic_series_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L392)；`quant_evaluator.metrics.registry_adapters.compute_rank_ic_series_value`。
 
 <a id="metric-rank_stability"></a>
 ## rank_stability — Rank Stability
@@ -3394,7 +3394,7 @@ s_t=\rho(f_{t,\cdot},f_{t-\ell,\cdot}),\qquad M={1\over |T^{\ast}|}\sum_ts_t
 | `lag` | `1` |
 | `method` | `'spearman'` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L111)；`quant_evaluator.metrics.registry_adapters.compute_rank_stability_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L112)；`quant_evaluator.metrics.registry_adapters.compute_rank_stability_value`。
 
 <a id="metric-recent_12m_rank_ic"></a>
 ## recent_12m_rank_ic — Recent 12-Month Rank IC
@@ -4286,7 +4286,7 @@ IC_t=\mathrm{corr}(\mathrm{rank}_{avg}f_{t,i},\mathrm{rank}_{avg}y_{t,i})
 | `min_periods` | `1` |
 | `min_assets` | `20` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L358)；`quant_evaluator.metrics.registry_adapters.compute_rank_ic_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L362)；`quant_evaluator.metrics.registry_adapters.compute_rank_ic_value`。
 
 <a id="metric-staleness"></a>
 ## staleness — Staleness
@@ -4344,7 +4344,7 @@ m=\max(1,\lfloor0.8T\rfloor),\quad S_b\sim\mathrm{SampleWithoutReplacement}(\{1,
 | `subsample_fraction` | `0.8` |
 | `random_seed` | `0` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L201)；`quant_evaluator.metrics.registry_adapters.compute_subsample_stability_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L202)；`quant_evaluator.metrics.registry_adapters.compute_subsample_stability_value`。
 
 <a id="metric-tail_vs_middle_contrast"></a>
 ## tail_vs_middle_contrast — Tail vs Middle Contrast
@@ -4751,7 +4751,7 @@ $`D`$ 是两日权重均已知的相邻转换集合。人数不足的日期整�
 |---|---|
 | `min_periods` | `2` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L135)；`quant_evaluator.metrics.registry_adapters.compute_turnover_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L136)；`quant_evaluator.metrics.registry_adapters.compute_turnover_value`。
 
 <a id="metric-turnover_adjusted_ic"></a>
 ## turnover_adjusted_ic — turnover_adjusted_ic
@@ -4851,7 +4851,7 @@ Average rate of change in factor ranking between periods
 |---|---|
 | `min_periods` | `2` |
 
-实现核对：[函数定义](../metrics/registry_adapters.py#L135)；`quant_evaluator.metrics.registry_adapters.compute_turnover_value`。
+实现核对：[函数定义](../metrics/registry_adapters.py#L136)；`quant_evaluator.metrics.registry_adapters.compute_turnover_value`。
 
 <a id="metric-turnover_stability"></a>
 ## turnover_stability — turnover_stability
@@ -5815,7 +5815,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.registry_adapters.compute_ic_median_value` | `c23a21e950cff5ffc5c60f93b54a906713e793bfd087ddcf44aceee5f28829de` |
 | `quant_evaluator.metrics.registry_adapters.compute_pearson_ic_series_value` | `32795368e0635031d30087387eee3888d702e6fb1f9c852791265da45795c8d1` |
 | `quant_evaluator.metrics.registry_adapters.compute_pearson_ic_value` | `e3c31bc8093e948dcd88b6f7780223efac1445ff5c38d4d7a8ebe5fbbf85f8b5` |
-| `quant_evaluator.metrics.registry_adapters.compute_quantile_returns_full_value` | `205ea7b0b98d2ee03a653382fad3f2c061e18bb45f7d1c5a8a5de9d877dddae8` |
+| `quant_evaluator.metrics.registry_adapters.compute_quantile_returns_full_value` | `76bb917c29da78135c42b70b09a672da5634461014184c0a00e84e020d5d67e3` |
 | `quant_evaluator.metrics.registry_adapters.compute_quantile_spread_value` | `5c183a3f26e0cf69112795ef961b9242a8eaad814ca68b42301ad7e93fc4d58a` |
 | `quant_evaluator.metrics.registry_adapters.compute_rank_ic_series_value` | `b4fc89ebe6b033e2232b0afa479928fda00d8a015c88c965d76183ef0df6af73` |
 | `quant_evaluator.metrics.registry_adapters.compute_rank_ic_value` | `6f6265b28abd476d16151366891fed14960419ca1cdbd9d779cf6dfcd3078fe1` |

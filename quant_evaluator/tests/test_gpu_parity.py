@@ -107,6 +107,24 @@ def test_gpu_pearson_ic_parity(data):
     assert np.nanmax(np.abs(gpu[mask] - cpu[mask])) < 1e-8
 
 
+@pytest.mark.parametrize("label_offset", [0.0, 10_000.0])
+def test_gpu_pearson_ic_float32_large_offset(label_offset):
+    rng = np.random.default_rng(42)
+    n = 100_000
+    signal = rng.normal(size=n).astype(np.float32)
+    noise = rng.normal(size=n).astype(np.float32)
+    factors = (10_000.0 + signal).astype(np.float32)
+    labels = (label_offset + signal + noise).astype(np.float32)
+
+    gpu, counts = batched_pearson_ic(
+        factors[None, None, :], labels[None, :], min_obs=20
+    )
+    expected = np.corrcoef(factors, labels)[0, 1]
+    gpu_value = cp.asnumpy(gpu)[0, 0]
+    assert cp.asnumpy(counts)[0, 0] == n
+    assert np.isfinite(gpu_value)
+    assert abs(gpu_value - expected) < 1e-5
+
 def test_gpu_rank_heavy_ties():
     x = np.array([[3.0, 1, 2, 2, 5, 1, 2, 2]])
     gpu = cp.asnumpy(batched_rank(x))[0]

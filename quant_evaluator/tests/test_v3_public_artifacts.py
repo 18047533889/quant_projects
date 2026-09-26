@@ -1,3 +1,4 @@
+import warnings
 import numpy as np
 import pytest
 from quant_evaluator.api.requests import EvaluationRequest
@@ -8,6 +9,7 @@ from quant_evaluator.contracts.metric_artifacts import SeriesMetricArtifact, Vec
 from quant_evaluator.contracts.errors import InvalidContractError
 from quant_evaluator.runtime.evaluator import evaluate, Evaluator
 from quant_evaluator.registry.metrics import get_metric
+from quant_evaluator.metrics import registry_adapters
 
 
 def inputs():
@@ -33,6 +35,28 @@ def test_series_and_vector_are_not_implicit_scalar_objectives():
     for artifact in out.artifacts.values():
         restored = type(artifact).from_dict(artifact.to_dict())
         np.testing.assert_equal(restored.values, artifact.values)
+
+
+def test_quantile_returns_full_empty_bucket_preserves_values_and_provenance(monkeypatch):
+    daily = np.array([
+        [[0.1, np.nan], [np.nan, 0.2]],
+        [[0.3, np.nan], [np.nan, np.nan]],
+        [[np.nan, np.nan], [np.nan, 0.4]],
+    ])
+    monkeypatch.setattr(
+        registry_adapters, "compute_quantile_returns_fast",
+        lambda *args, **kwargs: (daily, np.zeros_like(daily, dtype=int)),
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        artifact = registry_adapters.compute_quantile_returns_full_artifact(
+            object(), object(), min_periods=2, n_quantiles=2,
+        )
+    np.testing.assert_allclose(
+        artifact.values, [[0.2, np.nan], [np.nan, 0.3]], equal_nan=True,
+    )
+    assert artifact.provenance == {"n_quantiles": 2, "min_periods": 2}
+    assert artifact.created_from == ("factor_batch", "label_bundle")
 
 
 def test_parameters_change_public_values_identity_and_cached_execution():

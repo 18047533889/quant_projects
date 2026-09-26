@@ -9,6 +9,13 @@ import pytest
 module = import_module("quant_evaluator.runtime.evaluator")
 F8_SHAPE = (2586, 5461, 8)
 F8_METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+F8_RANK_CHAIN = ("rank_ic", "rank_ic_series", "ic_std", "ic_ir")
+F8_QUANTILE_CHAIN = (
+    "quantile_returns_full", "quantile_returns_daily", "quantile_spread",
+    "quantile_monotonicity", "daily_quantile_monotonicity_rate",
+)
+
+
 
 
 def _select(monkeypatch, shape, metrics, *, dtype=np.float64, policy=None,
@@ -80,6 +87,35 @@ def test_f8_route_keeps_other_metrics_and_partial_sets_on_cpu(monkeypatch):
     )
     assert seen == [14 * 1024 ** 3]
 
+@pytest.mark.parametrize("metrics,minimum,reason", [
+    (F8_RANK_CHAIN, 14 * 1024 ** 3, "certified_batch_real_cos_f8_rank_chain"),
+    (F8_QUANTILE_CHAIN, 8 * 1024 ** 3, "certified_batch_real_cos_f8_quantile_chain"),
+])
+def test_f8_exact_certified_batch_routes(monkeypatch, metrics, minimum, reason):
+    seen = []
+    monkeypatch.setattr(
+        module, "_auto_batch_cuda_rejection",
+        lambda policy, threshold: seen.append(threshold) or None,
+    )
+    assert _select(monkeypatch, F8_SHAPE, metrics, mock_cuda=None) == (
+        "cuda_strict", reason,
+    )
+    assert _select(monkeypatch, F8_SHAPE, tuple(reversed(metrics)), mock_cuda=None) == (
+        "cuda_strict", reason,
+    )
+    assert seen == [minimum, minimum]
+    assert _select(monkeypatch, F8_SHAPE, metrics, rejection="insufficient_cuda_memory") == (
+        "cpu", "insufficient_cuda_memory",
+    )
+    assert _select(monkeypatch, F8_SHAPE, metrics[:-1]) == (
+        "cpu", "metric_set_not_certified",
+    )
+    assert _select(monkeypatch, F8_SHAPE, metrics + metrics[:1]) == (
+        "cpu", "metric_set_not_certified",
+    )
+    assert _select(monkeypatch, (2586, 5461, 12), metrics) == (
+        "cpu", "metric_not_certified_for_profile",
+    )
 
 def test_f8_route_retains_default_input_and_dtype_gates(monkeypatch):
     assert _select(monkeypatch, F8_SHAPE, ("rank_ic",), dtype=np.float32) == (
