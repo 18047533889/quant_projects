@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded full-batch CPU/CUDA/auto A/B on F8/F12/F13 DataAccess COS panels."""
+"""Bounded full-batch CPU/CUDA/auto A/B on F2/F8/F12/F13 DataAccess COS panels."""
 from __future__ import annotations
 
 import argparse
@@ -26,6 +26,7 @@ RANK_CHAIN = ("rank_ic", "rank_ic_series", "ic_std", "ic_ir")
 QUANTILE_CHAIN = ("quantile_returns_full", "quantile_returns_daily",
                   "quantile_spread", "quantile_monotonicity",
                   "daily_quantile_monotonicity_rate")
+RANK_SERIES_SINGLE = ("rank_ic_series",)
 METRICS = DEFAULT_METRICS
 ALLOWED_BATCHES = (DEFAULT_METRICS, RANK_CHAIN, QUANTILE_CHAIN)
 MANIFEST_SHA256 = "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864"
@@ -218,7 +219,7 @@ def main():
     parser.add_argument("--timeout-s", type=float, default=180)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--metrics", default=",".join(DEFAULT_METRICS))
-    parser.add_argument("--factors", type=int, choices=(8, 12, 13), default=8)
+    parser.add_argument("--factors", type=int, choices=(2, 8, 12, 13), default=8)
     parser.add_argument("--compact", action="store_true", help="write artifact hashes, not value arrays")
     args = parser.parse_args()
     if args.timeout_s <= 0:
@@ -227,14 +228,18 @@ def main():
     global _BATCH, _LABELS, METRICS
     requested = tuple(args.metrics.split(","))
     if requested not in ALLOWED_BATCHES:
-        parser.error("metrics must be an exact default, rank-chain or quantile-chain set")
+        if not (args.factors == 2 and requested == RANK_SERIES_SINGLE):
+            parser.error("metrics must be an exact default, rank-chain or quantile-chain set; "
+                         "F2 also permits rank_ic_series alone")
+    if args.factors == 2 and requested != RANK_SERIES_SINGLE:
+        parser.error("F2 runs require rank_ic_series alone")
     if args.factors == 13 and requested not in (RANK_CHAIN, QUANTILE_CHAIN):
         parser.error("F13 runs require the exact rank-chain or quantile-chain metric set")
     METRICS = requested
     load_start = time.perf_counter()
     _BATCH, _LABELS, source = load_real_batch(
         factors=args.factors, days=0, assets=5500, max_object_mib=64,
-        max_total_mib=128 if args.factors == 8 else 256,
+        max_total_mib=128 if args.factors in (2, 8) else 256,
         manifest_sha256=MANIFEST_SHA256)
     load_s = time.perf_counter() - load_start
     shape = (_BATCH.num_times, _BATCH.num_assets, _BATCH.num_factors)

@@ -179,7 +179,7 @@ Spearman/Pearson 的秩与相关中间量每个期限独立生成，绝不跨不
 
 公开 `evaluate(...)`（省略 `backend` 或传入 `None`）和显式
 `evaluate(..., backend="auto")` 按整次请求选择 CPU 或 CUDA，并在返回的
-`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v13`。
+`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v14`。
 以下 701 日规则继续适用于短历史配置。
 它依据已注册 A 股日行情构造的 701 个交易日、5314 只股票、2 个因子输入，
 逐指标比较完整公开入口的 CPU/CUDA 结果。冷调用和交错顺序的热调用都更快、
@@ -315,6 +315,18 @@ GPU 峰值 9,332,757,504 字节；quantile 链 CPU 53.23–53.28 秒、CUDA
 不沿用 F13 批次认证。原始证据见
 `docs/benchmarks/real_cos_f13_rank_chain_20260927.json` 与
 `docs/benchmarks/real_cos_f13_quantile_chain_20260927.json`。
+
+同一绑定 COS manifest 的精确 2586 日 × 5461 股 × 2 因子面板上，
+`rank_ic_series` 单指标完成六轮交错 CPU/CUDA/auto 公开入口 A/B。
+每轮完整序列制品、有效掩码、计数、逐因子 MetricValue、来源与配置哈希
+对拍通过。CPU 热运行 6.16–6.23 秒，CUDA 1.56–1.57 秒；CUDA
+GPU pool 峰值 11,234,754,560 字节。基准前两次 `auto` 均因该指标
+尚未认证而走 CPU；更新后的公开入口复测见
+`docs/benchmarks/real_cos_f2_rank_ic_series_auto_20260927.json`。
+现在仅对该精确形状、float64、默认参数、无特殊输入和 NVIDIA L20
+的单项请求选择 CUDA，并要求有效与实际空闲显存均至少 14 GiB。
+相邻形状、其他 F2 指标或组合不沿用此认证。原始证据见
+`docs/benchmarks/real_cos_f2_rank_ic_series_20260927.json`。
 
 F12 另有精确三指标混合请求 `rank_ic`、`quantile_spread`、
 `factor_turnover_rate` 的独立六轮公开入口 A/B：CPU 热运行约

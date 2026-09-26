@@ -247,6 +247,38 @@ def test_large_region_metric_and_vram_gates(monkeypatch):
         "cpu", "insufficient_cuda_memory")
 
 
+def test_f2_rank_ic_series_exact_real_cos_route(monkeypatch):
+    budgets = []
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda policy, minimum: budgets.append(minimum) or None)
+    batch = SimpleNamespace(num_times=2586, num_assets=5461, num_factors=2,
+                            values=np.empty(0, dtype=np.float64))
+    labels = SimpleNamespace(values=np.empty(0, dtype=np.float64))
+    options = dict(metric_parameters={}, context=None, quantile_builder_parameters={},
+                   portfolio_returns=None, holding_returns=None, trade_eligibility=None,
+                   calendar_snapshot=None, exposure_panel=None,
+                   generalization_evidence=None, evaluator=None)
+    select = module._select_public_auto_backend
+    assert select(batch, labels, ("rank_ic_series",), **options) == (
+        "cuda_strict", "certified_single_metric_real_cos_f2_rank_ic_series")
+    assert budgets == [14 * 1024 ** 3]
+    for t, n, f in ((2585, 5461, 2), (2586, 5460, 2), (2586, 5461, 1),
+                    (2586, 5461, 3)):
+        batch.num_times, batch.num_assets, batch.num_factors = t, n, f
+        assert select(batch, labels, ("rank_ic_series",), **options)[0] == "cpu"
+    batch.num_times, batch.num_assets, batch.num_factors = 2586, 5461, 2
+    batch.values = np.empty(0, dtype=np.float32)
+    assert select(batch, labels, ("rank_ic_series",), **options) == (
+        "cpu", "dtype_outside_certified_range")
+    batch.values = np.empty(0, dtype=np.float64)
+    assert select(batch, labels, ("rank_ic_series",), **(options | {"context": object()})) == (
+        "cpu", "special_input_or_parameters")
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda *args: "insufficient_cuda_memory")
+    assert select(batch, labels, ("rank_ic_series",), **options) == (
+        "cpu", "insufficient_cuda_memory")
+
+
 def test_f13_exact_whole_batch_routes_and_guards(monkeypatch):
     budgets = []
     monkeypatch.setattr(module, "_auto_batch_cuda_rejection",

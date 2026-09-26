@@ -78,7 +78,7 @@ def _resolve_alias(metric_id: str) -> str:
 # The 701-day x 5314-stock x 2-factor registered A-share panel showed full
 # CPU/CUDA output parity and a CUDA advantage in cold and alternating warm
 # public-facade runs for these metrics (2026-09-26). Other metrics retain CPU.
-_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260927_v13"
+_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260927_v14"
 _AUTO_SMALL_PROFILE = "ashare_701d_20260926"
 _AUTO_LARGE_PROFILE = "real_cos_region_20260927"
 _AUTO_LARGE_EXTRAP_PROFILE = "real_cos_bounded_headroom_20260927"
@@ -107,6 +107,8 @@ _AUTO_REAL_COS_F13_SHAPE = (2586, 5461, 13)
 _AUTO_REAL_COS_F13_BATCH_NAMES = frozenset({"rank_chain", "quantile_chain"})
 _AUTO_REAL_COS_F13_RANK_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F13_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
+_AUTO_REAL_COS_F2_RANK_SERIES_SHAPE = (2586, 5461, 2)
+_AUTO_REAL_COS_F2_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_LARGE_METRICS = frozenset({"rank_ic", "quantile_spread"})
 _AUTO_LARGE_MIN_TIMES, _AUTO_LARGE_MAX_TIMES = 1000, 2600
 _AUTO_LARGE_MIN_ASSETS, _AUTO_LARGE_MAX_ASSETS = 5000, 5500
@@ -274,6 +276,12 @@ def _select_public_auto_backend(
         profile == _AUTO_REAL_COS_F13_PROFILE
         and batch_name in _AUTO_REAL_COS_F13_BATCH_NAMES
     )
+    real_cos_f2_rank_series = (
+        profile == _AUTO_LARGE_PROFILE
+        and canonical_metrics == ("rank_ic_series",)
+        and (factor_batch.num_times, factor_batch.num_assets,
+             factor_batch.num_factors) == _AUTO_REAL_COS_F2_RANK_SERIES_SHAPE
+    )
     if real_cos_mixed_three and not (real_cos_f8_mixed_three or real_cos_f12_mixed_three) and (
         profile != _AUTO_LARGE_PROFILE or
         (factor_batch.num_times, factor_batch.num_assets, factor_batch.num_factors)
@@ -282,7 +290,8 @@ def _select_public_auto_backend(
         return "cpu", "metric_not_certified_for_profile"
     if (profile in (_AUTO_LARGE_PROFILE, _AUTO_LARGE_EXTRAP_PROFILE)
             and (batch_name is not None and not real_cos_mixed_three
-                 or batch_name is None and canonical_metrics[0] not in _AUTO_LARGE_METRICS)):
+                 or batch_name is None and canonical_metrics[0] not in _AUTO_LARGE_METRICS
+                 and not real_cos_f2_rank_series)):
         return "cpu", "metric_not_certified_for_profile"
     if factor_batch.values.dtype != np.float64 or label_bundle.values.dtype != np.float64:
         return "cpu", "dtype_outside_certified_range"
@@ -340,13 +349,19 @@ def _select_public_auto_backend(
             else _AUTO_REAL_COS_F8_OTHER_MIN_EFFECTIVE_VRAM_BYTES
         )
     else:
-        min_effective_vram = (_auto_large_min_effective_vram_bytes(factor_batch, canonical_metrics[0])
-                              if profile in (_AUTO_LARGE_PROFILE, _AUTO_LARGE_EXTRAP_PROFILE)
-                              else _AUTO_SINGLE_MIN_EFFECTIVE_VRAM_BYTES)
+        min_effective_vram = (
+            _AUTO_REAL_COS_F2_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES
+            if real_cos_f2_rank_series
+            else (_auto_large_min_effective_vram_bytes(factor_batch, canonical_metrics[0])
+                  if profile in (_AUTO_LARGE_PROFILE, _AUTO_LARGE_EXTRAP_PROFILE)
+                  else _AUTO_SINGLE_MIN_EFFECTIVE_VRAM_BYTES)
+        )
     rejection = _auto_batch_cuda_rejection(gpu_policy, min_effective_vram)
     if rejection is not None:
         return "cpu", rejection
     if profile == _AUTO_LARGE_PROFILE:
+        if real_cos_f2_rank_series:
+            return "cuda_strict", "certified_single_metric_real_cos_f2_rank_ic_series"
         return "cuda_strict", "certified_single_metric_real_cos_region"
     if profile == _AUTO_LARGE_EXTRAP_PROFILE:
         return "cuda_strict", "bounded_extrapolation_real_cos_headroom"

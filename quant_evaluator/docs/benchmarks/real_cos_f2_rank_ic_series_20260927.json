@@ -1,0 +1,384 @@
+{
+  "created_utc": "2026-09-27T06:38:38.505088+08:00",
+  "script_sha256": "523d215ed768fad8f4dada63b8516ea98c7c7153faafb6a9c817e831e0c07ebc",
+  "request": {
+    "metrics": [
+      "rank_ic_series"
+    ],
+    "backend_order": [
+      "cpu",
+      "cuda_strict",
+      "auto",
+      "auto",
+      "cuda_strict",
+      "cpu"
+    ],
+    "factors": 2,
+    "repeats_per_child": 2,
+    "timeout_s": 300.0,
+    "shape": [
+      2586,
+      5461,
+      2
+    ],
+    "dtype": "float64",
+    "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+    "compact_artifacts": true
+  },
+  "source": {
+    "sources": [
+      {
+        "factor_id": "weekly_db5616cd85a477b3",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d/weekly_db5616cd85a477b3.parquet",
+        "sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+        "bytes": 3828456,
+        "etag": "5efb1f8070196661daabeb563740dff0",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_4cbd7ca6dccc61dc",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59/weekly_4cbd7ca6dccc61dc.parquet",
+        "sha256": "35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59",
+        "bytes": 5400494,
+        "etag": "91da3ad8a2d54f3f35911e231bfcffa8",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      }
+    ],
+    "days": 2586,
+    "assets": 5461,
+    "date_span": [
+      "2016-01-04",
+      "2026-08-25"
+    ],
+    "calendar_sessions": 2588,
+    "missing_adj_vwap_partitions": [],
+    "label": "decision t; execution t+1; AdjVwap(t+2)/AdjVwap(t+1)-1",
+    "factor_finite_ratio": 0.7654643989659928,
+    "label_finite_ratio": 0.7738646803396594,
+    "limitations": "research lineage; no upstream PIT/investability certification"
+  },
+  "load_s": 23.219110125035513,
+  "parent_peak_rss_kib": 2868984,
+  "config_hashes": [
+    "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f"
+  ],
+  "runs": [
+    {
+      "status": "ok",
+      "backend_requested": "cpu",
+      "seconds": [
+        7.220157743024174,
+        6.229394519003108
+      ],
+      "cold_s": 7.220157743024174,
+      "warm_median_s": 6.229394519003108,
+      "peak_rss_kib": 3550984,
+      "backend_used": "cpu",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "rank_ic_series": "cpu"
+      },
+      "peak_vram": null,
+      "config_hash": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+      "execution_receipt": {
+        "backend_requested": "cpu",
+        "backend_strategy": "explicit",
+        "backend_used": "cpu",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "rank_ic_series": "cpu"
+        },
+        "config_hash": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+        "receipt_hash": "10dd5878cbf5cdaea018c8de86c8059920422f492634eb06720a68c8e21a8157"
+      },
+      "round": 1,
+      "artifact_sha256": "42fcb4f62e182a59370ecbbbabaa65331864bb57f7941d218c8596445657f423"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cuda_strict",
+      "seconds": [
+        2.7913048950140364,
+        1.5746842629741877
+      ],
+      "cold_s": 2.7913048950140364,
+      "warm_median_s": 1.5746842629741877,
+      "peak_rss_kib": 3279908,
+      "backend_used": "cuda",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "rank_ic_series": "cuda"
+      },
+      "peak_vram": 11234754560,
+      "config_hash": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+      "execution_receipt": {
+        "backend_requested": "cuda_strict",
+        "backend_strategy": "explicit",
+        "backend_used": "cuda",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "rank_ic_series": "cuda"
+        },
+        "config_hash": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+        "receipt_hash": "22185f95db8b6de4212bcbdda8b845ab09382db240de5349630ded7aa693709c"
+      },
+      "round": 2,
+      "artifact_sha256": "26b09cfd6f2213f4ce37db1792e484ef9ed9b80d35a22ff83f20d66c3ab7d185"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "auto",
+      "seconds": [
+        7.223724875017069,
+        6.23803422995843
+      ],
+      "cold_s": 7.223724875017069,
+      "warm_median_s": 6.23803422995843,
+      "peak_rss_kib": 3550328,
+      "backend_used": "cpu",
+      "auto_backend_reason": "metric_not_certified_for_profile",
+      "auto_backend_profile": "real_cos_region_20260927",
+      "metric_backends": {
+        "rank_ic_series": "cpu"
+      },
+      "peak_vram": null,
+      "config_hash": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+      "execution_receipt": {
+        "backend_requested": "auto",
+        "backend_strategy": "auto",
+        "backend_used": "cpu",
+        "auto_backend_policy": "ashare_public_routes_20260927_v13",
+        "auto_backend_profile": "real_cos_region_20260927",
+        "auto_backend_reason": "metric_not_certified_for_profile",
+        "metric_backends": {
+          "rank_ic_series": "cpu"
+        },
+        "config_hash": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+        "receipt_hash": "365a5dd82ef6f354e824cd029930dad14c1bc4dfa10940a5be296947e9f79cfd"
+      },
+      "round": 3,
+      "artifact_sha256": "42fcb4f62e182a59370ecbbbabaa65331864bb57f7941d218c8596445657f423"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "auto",
+      "seconds": [
+        7.159212375991046,
+        6.176688352948986
+      ],
+      "cold_s": 7.159212375991046,
+      "warm_median_s": 6.176688352948986,
+      "peak_rss_kib": 3552560,
+      "backend_used": "cpu",
+      "auto_backend_reason": "metric_not_certified_for_profile",
+      "auto_backend_profile": "real_cos_region_20260927",
+      "metric_backends": {
+        "rank_ic_series": "cpu"
+      },
+      "peak_vram": null,
+      "config_hash": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+      "execution_receipt": {
+        "backend_requested": "auto",
+        "backend_strategy": "auto",
+        "backend_used": "cpu",
+        "auto_backend_policy": "ashare_public_routes_20260927_v13",
+        "auto_backend_profile": "real_cos_region_20260927",
+        "auto_backend_reason": "metric_not_certified_for_profile",
+        "metric_backends": {
+          "rank_ic_series": "cpu"
+        },
+        "config_hash": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+        "receipt_hash": "365a5dd82ef6f354e824cd029930dad14c1bc4dfa10940a5be296947e9f79cfd"
+      },
+      "round": 4,
+      "artifact_sha256": "42fcb4f62e182a59370ecbbbabaa65331864bb57f7941d218c8596445657f423"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cuda_strict",
+      "seconds": [
+        2.9207959409686737,
+        1.5590757529716939
+      ],
+      "cold_s": 2.9207959409686737,
+      "warm_median_s": 1.5590757529716939,
+      "peak_rss_kib": 3289436,
+      "backend_used": "cuda",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "rank_ic_series": "cuda"
+      },
+      "peak_vram": 11234754560,
+      "config_hash": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+      "execution_receipt": {
+        "backend_requested": "cuda_strict",
+        "backend_strategy": "explicit",
+        "backend_used": "cuda",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "rank_ic_series": "cuda"
+        },
+        "config_hash": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+        "receipt_hash": "22185f95db8b6de4212bcbdda8b845ab09382db240de5349630ded7aa693709c"
+      },
+      "round": 5,
+      "artifact_sha256": "26b09cfd6f2213f4ce37db1792e484ef9ed9b80d35a22ff83f20d66c3ab7d185"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cpu",
+      "seconds": [
+        7.148637693957426,
+        6.1580991329974495
+      ],
+      "cold_s": 7.148637693957426,
+      "warm_median_s": 6.1580991329974495,
+      "peak_rss_kib": 3559960,
+      "backend_used": "cpu",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "rank_ic_series": "cpu"
+      },
+      "peak_vram": null,
+      "config_hash": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+      "execution_receipt": {
+        "backend_requested": "cpu",
+        "backend_strategy": "explicit",
+        "backend_used": "cpu",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "rank_ic_series": "cpu"
+        },
+        "config_hash": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+        "receipt_hash": "10dd5878cbf5cdaea018c8de86c8059920422f492634eb06720a68c8e21a8157"
+      },
+      "round": 6,
+      "artifact_sha256": "42fcb4f62e182a59370ecbbbabaa65331864bb57f7941d218c8596445657f423"
+    }
+  ],
+  "comparisons_to_first_cpu": {
+    "cpu": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "rank_ic_series": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "rank_ic_series": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ],
+    "cuda_strict": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "rank_ic_series": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "rank_ic_series": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ],
+    "auto": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "rank_ic_series": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "rank_ic_series": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ]
+  },
+  "parity_pass": true
+}
