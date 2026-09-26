@@ -113,8 +113,36 @@ def test_f8_exact_certified_batch_routes(monkeypatch, metrics, minimum, reason):
     assert _select(monkeypatch, F8_SHAPE, metrics + metrics[:1]) == (
         "cpu", "metric_set_not_certified",
     )
-    assert _select(monkeypatch, (2586, 5461, 12), metrics) == (
-        "cpu", "metric_not_certified_for_profile",
+    assert _select(monkeypatch, (2586, 5461, 11), metrics) == (
+        "cpu", "shape_outside_certified_range",
+    )
+
+
+@pytest.mark.parametrize("metrics,minimum,reason", [
+    (F8_RANK_CHAIN, 14 * 1024 ** 3, "certified_batch_real_cos_f12_rank_chain"),
+    (F8_QUANTILE_CHAIN, 8 * 1024 ** 3, "certified_batch_real_cos_f12_quantile_chain"),
+])
+def test_f12_exact_certified_batch_routes(monkeypatch, metrics, minimum, reason):
+    shape = (2586, 5461, 12)
+    seen = []
+    monkeypatch.setattr(
+        module, "_auto_batch_cuda_rejection",
+        lambda policy, threshold: seen.append(threshold) or None,
+    )
+    assert _select(monkeypatch, shape, metrics, mock_cuda=None) == ("cuda_strict", reason)
+    assert _select(monkeypatch, shape, tuple(reversed(metrics)), mock_cuda=None) == (
+        "cuda_strict", reason,
+    )
+    assert seen == [minimum, minimum]
+    assert _select(monkeypatch, shape, metrics, rejection="insufficient_cuda_memory") == (
+        "cpu", "insufficient_cuda_memory",
+    )
+    assert _select(monkeypatch, shape, metrics[:-1]) == ("cpu", "metric_set_not_certified")
+    assert _select(monkeypatch, shape, metrics + metrics[:1]) == (
+        "cpu", "metric_set_not_certified",
+    )
+    assert _select(monkeypatch, shape, metrics, dtype=np.float32) == (
+        "cpu", "dtype_outside_certified_range",
     )
 
 def test_f8_route_retains_default_input_and_dtype_gates(monkeypatch):

@@ -78,7 +78,7 @@ def _resolve_alias(metric_id: str) -> str:
 # The 701-day x 5314-stock x 2-factor registered A-share panel showed full
 # CPU/CUDA output parity and a CUDA advantage in cold and alternating warm
 # public-facade runs for these metrics (2026-09-26). Other metrics retain CPU.
-_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260927_v10"
+_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260927_v11"
 _AUTO_SMALL_PROFILE = "ashare_701d_20260926"
 _AUTO_LARGE_PROFILE = "real_cos_region_20260927"
 _AUTO_LARGE_EXTRAP_PROFILE = "real_cos_bounded_headroom_20260927"
@@ -101,6 +101,7 @@ _AUTO_REAL_COS_F12_SHAPE = (2586, 5461, 12)
 _AUTO_REAL_COS_F12_RANK_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F12_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
 _AUTO_REAL_COS_F12_TURNOVER_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
+_AUTO_REAL_COS_F12_BATCH_NAMES = frozenset({"rank_chain", "quantile_chain"})
 _AUTO_LARGE_METRICS = frozenset({"rank_ic", "quantile_spread"})
 _AUTO_LARGE_MIN_TIMES, _AUTO_LARGE_MAX_TIMES = 1000, 2600
 _AUTO_LARGE_MIN_ASSETS, _AUTO_LARGE_MAX_ASSETS = 5000, 5500
@@ -225,7 +226,7 @@ def _select_public_auto_backend(
         or canonical_metrics[0] not in (
             "rank_ic", "quantile_spread", "factor_turnover_rate"
         )
-    ):
+    ) and batch_name not in _AUTO_REAL_COS_F12_BATCH_NAMES:
         return "cpu", "metric_not_certified_for_profile"
     if profile == _AUTO_REAL_COS_F8_PROFILE and (
         len(canonical_metrics) != 1
@@ -248,6 +249,10 @@ def _select_public_auto_backend(
         profile == _AUTO_REAL_COS_F8_PROFILE
         and batch_name in _AUTO_REAL_COS_F8_BATCH_NAMES
     )
+    real_cos_f12_certified_batch = (
+        profile == _AUTO_REAL_COS_F12_PROFILE
+        and batch_name in _AUTO_REAL_COS_F12_BATCH_NAMES
+    )
     if real_cos_mixed_three and not real_cos_f8_mixed_three and (
         profile != _AUTO_LARGE_PROFILE or
         (factor_batch.num_times, factor_batch.num_assets, factor_batch.num_factors)
@@ -267,7 +272,11 @@ def _select_public_auto_backend(
             or evaluator is not None):
         return "cpu", "special_input_or_parameters"
     if batch_name is not None:
-        if real_cos_f8_certified_batch and batch_name == "quantile_chain":
+        if real_cos_f12_certified_batch:
+            minimum = (_AUTO_REAL_COS_F12_RANK_MIN_EFFECTIVE_VRAM_BYTES
+                       if batch_name == "rank_chain"
+                       else _AUTO_REAL_COS_F12_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES)
+        elif real_cos_f8_certified_batch and batch_name == "quantile_chain":
             minimum = _AUTO_REAL_COS_F8_QUANTILE_BATCH_MIN_EFFECTIVE_VRAM_BYTES
         elif real_cos_f8_mixed_three or real_cos_f8_certified_batch:
             minimum = _AUTO_REAL_COS_F8_BATCH_MIN_EFFECTIVE_VRAM_BYTES
@@ -281,6 +290,8 @@ def _select_public_auto_backend(
             return "cuda_strict", "certified_batch_real_cos_f8_mixed_three"
         if real_cos_f8_certified_batch:
             return "cuda_strict", f"certified_batch_real_cos_f8_{batch_name}"
+        if real_cos_f12_certified_batch:
+            return "cuda_strict", f"certified_batch_real_cos_f12_{batch_name}"
         return "cuda_strict", f"certified_batch_{batch_name}"
     if profile == _AUTO_REAL_COS_F12_PROFILE:
         min_effective_vram = (

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded full-batch CPU/CUDA/auto A/B on an F8 DataAccess COS panel."""
+"""Bounded full-batch CPU/CUDA/auto A/B on F8/F12 DataAccess COS panels."""
 from __future__ import annotations
 
 import argparse
@@ -218,6 +218,7 @@ def main():
     parser.add_argument("--timeout-s", type=float, default=180)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--metrics", default=",".join(DEFAULT_METRICS))
+    parser.add_argument("--factors", type=int, choices=(8, 12), default=8)
     parser.add_argument("--compact", action="store_true", help="write artifact hashes, not value arrays")
     args = parser.parse_args()
     if args.timeout_s <= 0:
@@ -230,11 +231,12 @@ def main():
     METRICS = requested
     load_start = time.perf_counter()
     _BATCH, _LABELS, source = load_real_batch(
-        factors=8, days=0, assets=5500, max_object_mib=64,
+        factors=args.factors, days=0, assets=5500, max_object_mib=64,
+        max_total_mib=128 if args.factors == 8 else 256,
         manifest_sha256=MANIFEST_SHA256)
     load_s = time.perf_counter() - load_start
     shape = (_BATCH.num_times, _BATCH.num_assets, _BATCH.num_factors)
-    if shape != (2586, 5461, 8):
+    if shape != (2586, 5461, args.factors):
         raise RuntimeError(f"unexpected bound panel shape: {shape}")
 
     # Symmetric interleaving reduces order and cache bias across backends.
@@ -271,6 +273,7 @@ def main():
         "created_utc": datetime.now().astimezone().isoformat(),
         "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "request": {"metrics": METRICS, "backend_order": order,
+                    "factors": args.factors,
                     "repeats_per_child": 2, "timeout_s": args.timeout_s,
                     "shape": shape, "dtype": str(_BATCH.values.dtype),
                     "manifest_sha256": MANIFEST_SHA256, "compact_artifacts": args.compact},

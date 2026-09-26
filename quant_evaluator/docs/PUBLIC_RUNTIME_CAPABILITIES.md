@@ -150,7 +150,7 @@ max_drawdown_by_factor = drawdown.artifacts["max_drawdown"].values
 
 公开 `evaluate(...)`（省略 `backend` 或传入 `None`）和显式
 `evaluate(..., backend="auto")` 按整次请求选择 CPU 或 CUDA，并在返回的
-`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v10`。
+`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v11`。
 以下 701 日规则继续适用于短历史配置。
 它依据已注册 A 股日行情构造的 701 个交易日、5314 只股票、2 个因子输入，
 逐指标比较完整公开入口的 CPU/CUDA 结果。冷调用和交错顺序的热调用都更快、
@@ -228,13 +228,13 @@ A/B（CPU 热 34.35–34.50 秒、CUDA 热 9.06–9.12 秒，峰值 9,332,757,50
 `ic_ir` 约 20.56–20.58/5.96–6.01 秒。两者的六轮完整产物、掩码、计数、
 provenance、MetricValue 与配置哈希均对拍通过，GPU 峰值均为 9,332,757,504 字节。
 证据见 `docs/benchmarks/real_cos_f8_rank_ic_series_20260927.json` 和
-`docs/benchmarks/real_cos_f8_ic_ir_20260927.json`；F12 仍不开放，多指标组合须有独立整批证据。
+`docs/benchmarks/real_cos_f8_ic_ir_20260927.json`；F12 单指标仍不开放，多指标组合须有独立整批证据。
 `quantile_returns_daily` 六轮 CPU/CUDA 热运行约 9.50–9.85/5.43–5.89 秒；
 `quantile_returns_full` 约 9.47–9.53/5.40–5.41 秒。日序列 CUDA 曾缺失标签身份、
 参数和有效期计数等 provenance；补齐后六轮的数值、轴、掩码、计数、完整 provenance
 与配置哈希全部对拍通过。两项 GPU 峰值均为 1,436,371,456 字节。证据见
 `docs/benchmarks/real_cos_f8_quantile_returns_daily_20260927.json` 与
-`docs/benchmarks/real_cos_f8_quantile_returns_full_20260927.json`；F12 和未认证的组合请求仍保持 CPU。
+`docs/benchmarks/real_cos_f8_quantile_returns_full_20260927.json`；F12 单指标和未认证的组合请求仍保持 CPU。
 
 同一 F8 COS 面板的两组完整多指标请求另有六轮交错 CPU/CUDA A/B：
 `rank_chain`（`rank_ic`、`rank_ic_series`、`ic_std`、`ic_ir`）的 CPU
@@ -245,7 +245,7 @@ provenance、MetricValue 与配置哈希均对拍通过，GPU 峰值均为 9,332
 计数、provenance、标量结果与配置哈希逐字段对拍通过。自动路由仅对精确
 2586 日 × 5461 股 × 8 因子、默认参数及 L20 放行这两个完整集合，
 顺序不限；rank 至少要求 14 GiB、quantile 至少要求 8 GiB 有效空闲显存。
-子集、含重复项、其它组合、F12 和相邻形状继续使用 CPU。证据：
+子集、含重复项、其它组合和相邻形状继续使用 CPU；F12 需另看下文的独立证据。证据：
 `docs/benchmarks/real_cos_f8_rank_chain_20260927.json` 与
 `docs/benchmarks/real_cos_f8_quantile_chain_20260927.json`。
 独立 F12 COS 面板在精确 2586 日 × 5461 股 × 12 因子形状上，单指标
@@ -254,10 +254,22 @@ A/B 和完整输出对拍。rank CPU/CUDA 热运行分别为 31.607/9.449 秒，
 9,332,757,504 字节；quantile 为 21.612/8.787 秒，峰值 1,436,371,456 字节；
 turnover 为 19.510/14.297 秒，峰值 1,020,942,336 字节。这三个指标仅在该精确
 形状自动使用 CUDA，并要求 float64、默认参数、无特殊输入、NVIDIA L20；rank
-至少需 14 GiB 有效空闲显存，quantile 与 turnover 至少需 8 GiB。F12 多指标
+至少需 14 GiB 有效空闲显存，quantile 与 turnover 至少需 8 GiB。未认证的 F12 多指标
 请求保持 CPU；三项单指标的回执原因均为 `certified_single_metric_real_cos_f12`。证据见 `docs/benchmarks/real_cos_f12_rank_20260927.json`、
 `docs/benchmarks/real_cos_f12_quantile_20260927.json` 和
 `docs/benchmarks/real_cos_f12_turnover_20260927.json`。
+
+F12 的完整 `rank_chain` 和 `quantile_chain` 分别完成独立六轮交错公开入口
+CPU/CUDA/auto A/B，所有指标的数值、制品类型、掩码、计数、provenance、
+MetricValue 和配置哈希逐字段对拍通过。rank 链 CPU 热运行约 30.79–30.89 秒，
+CUDA 约 9.66–9.67 秒，峰值显存 9,332,757,504 字节；quantile 链 CPU 热运行
+约 47.73–48.06 秒，CUDA 约 8.74–8.75 秒，峰值显存 1,436,371,456 字节。
+仅在精确 2586 日 × 5461 股 × 12 因子、float64、默认参数、无特殊输入和
+NVIDIA L20 上，对这两个完整指标集合自动选择 CUDA；rank 至少要求 14 GiB、
+quantile 至少要求 8 GiB 有效空闲显存，且实际空闲显存也不得低于门槛。
+子集、重复项、其它 F12 组合和相邻形状仍走 CPU。证据见
+`docs/benchmarks/real_cos_f12_rank_chain_20260927.json` 与
+`docs/benchmarks/real_cos_f12_quantile_chain_20260927.json`。
 
 其他规模和特殊输入使用 CPU，表示尚无足够的公开入口性能证据；
 不代表 CUDA 无法执行这些指标。
