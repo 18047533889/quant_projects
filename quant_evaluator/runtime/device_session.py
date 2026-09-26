@@ -153,6 +153,12 @@ class DeviceEvaluationSession:
         self._h2d_bytes += dev.nbytes
         return dev
 
+    def release_labels(self, target_id: str) -> None:
+        """Drop one horizon's device label while retaining the factor tile."""
+        self._staged_labels.pop(target_id, None)
+        self._intermediates.clear()
+        self._pool.free_all_blocks()
+
     def stage_holding_returns(self, panel):
         from quant_evaluator.contracts.portfolio_inputs import HoldingReturnPanel
         if not isinstance(panel, HoldingReturnPanel):

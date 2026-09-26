@@ -1,0 +1,267 @@
+{
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "source_factors": [
+    {
+      "factor_id": "weekly_db5616cd85a477b3",
+      "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d/weekly_db5616cd85a477b3.parquet",
+      "sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+      "bytes": 3828456,
+      "etag": "5efb1f8070196661daabeb563740dff0",
+      "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+      "source_status": "evaluated_optimization_pending"
+    },
+    {
+      "factor_id": "weekly_4cbd7ca6dccc61dc",
+      "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59/weekly_4cbd7ca6dccc61dc.parquet",
+      "sha256": "35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59",
+      "bytes": 5400494,
+      "etag": "91da3ad8a2d54f3f35911e231bfcffa8",
+      "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+      "source_status": "evaluated_optimization_pending"
+    }
+  ],
+  "label_source": "decision t; execution t+1; AdjVwap(t+2)/AdjVwap(t+1)-1",
+  "shape": [
+    2586,
+    5461,
+    2
+  ],
+  "horizon_ids": [
+    "adj_vwap_tplus1_to_tplus2_return",
+    "adj_vwap_tplus1_to_tplus3_compound_return"
+  ],
+  "horizon2_construction": "adjacent real AdjVwap returns compounded; last row invalid",
+  "horizon2_adjacent_days": 2585,
+  "horizon2_valid_cells": 10923169,
+  "load_seconds": 20.972661,
+  "run_order": [
+    "sequential",
+    "shared",
+    "shared",
+    "sequential"
+  ],
+  "runs": [
+    {
+      "route": "sequential",
+      "seconds": 3.670502,
+      "factor_uploads": 2,
+      "factor_upload_widths": [
+        2,
+        2
+      ],
+      "h2d_bytes": 677863008,
+      "d2h_bytes": 82784,
+      "peak_vram_bytes": 11234754560,
+      "counter_scope": "per_evaluation_session",
+      "config_hashes": {
+        "adj_vwap_tplus1_to_tplus2_return": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+        "adj_vwap_tplus1_to_tplus3_compound_return": "519b049f43fd8b1c2cd0d065159471ce296fdad0ae95caf5637d6b62a9fc9365"
+      },
+      "parity_with_first_sequential": null
+    },
+    {
+      "route": "shared",
+      "seconds": 3.137748,
+      "factor_uploads": 1,
+      "factor_upload_widths": [
+        2
+      ],
+      "h2d_bytes": 451908672,
+      "d2h_bytes": 82784,
+      "peak_vram_bytes": 11234754560,
+      "counter_scope": "shared_session_total",
+      "config_hashes": {
+        "adj_vwap_tplus1_to_tplus2_return": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+        "adj_vwap_tplus1_to_tplus3_compound_return": "519b049f43fd8b1c2cd0d065159471ce296fdad0ae95caf5637d6b62a9fc9365"
+      },
+      "parity_with_first_sequential": {
+        "adj_vwap_tplus1_to_tplus2_return": {
+          "config_hash": true,
+          "artifact_keys": true,
+          "artifact_fields": {
+            "rank_ic_series": {
+              "metric_id": true,
+              "domain": true,
+              "artifact_kind": true,
+              "provenance": true,
+              "created_from": true,
+              "factor_axis": true,
+              "production": true,
+              "contract_schema_version": true,
+              "producer_version": true,
+              "values": true,
+              "time_index": true,
+              "time_axis": true
+            }
+          },
+          "grouped_metrics": true,
+          "factor_artifacts": true,
+          "semantic_provenance": true,
+          "pass": true
+        },
+        "adj_vwap_tplus1_to_tplus3_compound_return": {
+          "config_hash": true,
+          "artifact_keys": true,
+          "artifact_fields": {
+            "rank_ic_series": {
+              "metric_id": true,
+              "domain": true,
+              "artifact_kind": true,
+              "provenance": true,
+              "created_from": true,
+              "factor_axis": true,
+              "production": true,
+              "contract_schema_version": true,
+              "producer_version": true,
+              "values": true,
+              "time_index": true,
+              "time_axis": true
+            }
+          },
+          "grouped_metrics": true,
+          "factor_artifacts": true,
+          "semantic_provenance": true,
+          "pass": true
+        }
+      }
+    },
+    {
+      "route": "shared",
+      "seconds": 3.105107,
+      "factor_uploads": 1,
+      "factor_upload_widths": [
+        2
+      ],
+      "h2d_bytes": 451908672,
+      "d2h_bytes": 82784,
+      "peak_vram_bytes": 11234754560,
+      "counter_scope": "shared_session_total",
+      "config_hashes": {
+        "adj_vwap_tplus1_to_tplus2_return": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+        "adj_vwap_tplus1_to_tplus3_compound_return": "519b049f43fd8b1c2cd0d065159471ce296fdad0ae95caf5637d6b62a9fc9365"
+      },
+      "parity_with_first_sequential": {
+        "adj_vwap_tplus1_to_tplus2_return": {
+          "config_hash": true,
+          "artifact_keys": true,
+          "artifact_fields": {
+            "rank_ic_series": {
+              "metric_id": true,
+              "domain": true,
+              "artifact_kind": true,
+              "provenance": true,
+              "created_from": true,
+              "factor_axis": true,
+              "production": true,
+              "contract_schema_version": true,
+              "producer_version": true,
+              "values": true,
+              "time_index": true,
+              "time_axis": true
+            }
+          },
+          "grouped_metrics": true,
+          "factor_artifacts": true,
+          "semantic_provenance": true,
+          "pass": true
+        },
+        "adj_vwap_tplus1_to_tplus3_compound_return": {
+          "config_hash": true,
+          "artifact_keys": true,
+          "artifact_fields": {
+            "rank_ic_series": {
+              "metric_id": true,
+              "domain": true,
+              "artifact_kind": true,
+              "provenance": true,
+              "created_from": true,
+              "factor_axis": true,
+              "production": true,
+              "contract_schema_version": true,
+              "producer_version": true,
+              "values": true,
+              "time_index": true,
+              "time_axis": true
+            }
+          },
+          "grouped_metrics": true,
+          "factor_artifacts": true,
+          "semantic_provenance": true,
+          "pass": true
+        }
+      }
+    },
+    {
+      "route": "sequential",
+      "seconds": 3.165612,
+      "factor_uploads": 2,
+      "factor_upload_widths": [
+        2,
+        2
+      ],
+      "h2d_bytes": 677863008,
+      "d2h_bytes": 82784,
+      "peak_vram_bytes": 11234754560,
+      "counter_scope": "per_evaluation_session",
+      "config_hashes": {
+        "adj_vwap_tplus1_to_tplus2_return": "b90355d60ffe466478788f96e3151ec14807710bb91c31835117ca3368360c3f",
+        "adj_vwap_tplus1_to_tplus3_compound_return": "519b049f43fd8b1c2cd0d065159471ce296fdad0ae95caf5637d6b62a9fc9365"
+      },
+      "parity_with_first_sequential": {
+        "adj_vwap_tplus1_to_tplus2_return": {
+          "config_hash": true,
+          "artifact_keys": true,
+          "artifact_fields": {
+            "rank_ic_series": {
+              "metric_id": true,
+              "domain": true,
+              "artifact_kind": true,
+              "provenance": true,
+              "created_from": true,
+              "factor_axis": true,
+              "production": true,
+              "contract_schema_version": true,
+              "producer_version": true,
+              "values": true,
+              "time_index": true,
+              "time_axis": true
+            }
+          },
+          "grouped_metrics": true,
+          "factor_artifacts": true,
+          "semantic_provenance": true,
+          "pass": true
+        },
+        "adj_vwap_tplus1_to_tplus3_compound_return": {
+          "config_hash": true,
+          "artifact_keys": true,
+          "artifact_fields": {
+            "rank_ic_series": {
+              "metric_id": true,
+              "domain": true,
+              "artifact_kind": true,
+              "provenance": true,
+              "created_from": true,
+              "factor_axis": true,
+              "production": true,
+              "contract_schema_version": true,
+              "producer_version": true,
+              "values": true,
+              "time_index": true,
+              "time_axis": true
+            }
+          },
+          "grouped_metrics": true,
+          "factor_artifacts": true,
+          "semantic_provenance": true,
+          "pass": true
+        }
+      }
+    }
+  ],
+  "median_sequential_seconds": 3.418057,
+  "median_shared_seconds": 3.1214275000000002,
+  "speedup": 1.0950300783856104,
+  "peak_rss_kib": 3585908,
+  "all_parity_pass": true
+}

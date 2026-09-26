@@ -146,11 +146,40 @@ max_drawdown_by_factor = drawdown.artifacts["max_drawdown"].values
 省略 `ProbePortfolioArtifact` 会关闭式失败；运行层不会把 `LabelBundle` 的前向收益静默当作已构造的组合轨迹。
 
 
+## 多期限 IC 的 CUDA 因子 tile 复用
+
+`evaluate_many` 和 `evaluate_horizons` 在每个期限的公开合约、样本掩码、
+sealed split 与后端选择均通过预校验后，对 CUDA IC 指标使用同一个
+`DeviceEvaluationSession`。执行器按因子 tile 上传一次，再逐个期限上传标签并计算；
+Spearman/Pearson 的秩与相关中间量每个期限独立生成，绝不跨不同 pairwise-finite
+掩码复用。当前复用范围是 `rank_ic`、`rank_ic_series`、`ic_ir`、
+`ic_std`、`ic_median` 及对应的 Pearson IC 家族；其他请求沿用原有路径。
+显式 CUDA 失败仍报错，OOM 只重切当前因子 tile。
+
+每个期限返回的 `h2d_bytes`、`d2h_bytes` 等设备会话计数在复用路径中属于
+**所有期限共享的会话总量**，由
+`device_session_counter_scope="shared_session_total"` 标识，并提供
+`shared_session_label_count` 与 `shared_session_factor_tiles_processed`。
+这些计数不能逐期限相加。结果制品、配置哈希及逐期限标签溯源仍各自独立。
+
+真实 COS 同一绑定 manifest 的 2586 日 × 5461 股 × 2 因子、两个 AdjVwap
+前向期限在 NVIDIA L20 上做了顺序 CUDA / 共享 CUDA 的 ABBA。第二期限由连续
+真实交易区间的单期收益复合，未知末期标为无效。两个期限每轮的配置哈希、
+完整 `SeriesMetricArtifact` 每个字段、逐因子 MetricValue 与语义溯源均对拍通过。
+顺序调用与复用调用的中位耗时分别为 3.418057 秒和 3.121428 秒
+（约 1.095 倍）；因子上传 2 次降为 1 次，H2D 从 677,863,008 降至
+451,908,672 字节，D2H 均为 82,784 字节，GPU pool 峰值均为
+11,234,754,560 字节。该 A/B 只验证此规模、F2、双期限
+`rank_ic_series` 请求，不扩展单次请求的自动路由认证。
+可复跑脚本为 `quant_evaluator/scripts/benchmark_real_cos_multi_horizon_f2.py`，
+小型源绑定、逐字段布尔对拍与性能证据见
+`quant_evaluator/docs/benchmarks/real_cos_multi_horizon_f2_20260927.json`。
+
 ## 默认后端与 `backend="auto"` 的保守选择范围
 
 公开 `evaluate(...)`（省略 `backend` 或传入 `None`）和显式
 `evaluate(..., backend="auto")` 按整次请求选择 CPU 或 CUDA，并在返回的
-`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v12`。
+`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v13`。
 以下 701 日规则继续适用于短历史配置。
 它依据已注册 A 股日行情构造的 701 个交易日、5314 只股票、2 个因子输入，
 逐指标比较完整公开入口的 CPU/CUDA 结果。冷调用和交错顺序的热调用都更快、
@@ -270,6 +299,22 @@ quantile 至少要求 8 GiB 有效空闲显存，且实际空闲显存也不得�
 子集、重复项、其它未认证 F12 组合和相邻形状仍走 CPU。证据见
 `docs/benchmarks/real_cos_f12_rank_chain_20260927.json` 与
 `docs/benchmarks/real_cos_f12_quantile_chain_20260927.json`。
+
+独立 F13 COS 面板在精确 2586 日 × 5461 股 × 13 因子形状上，对完整
+`rank_chain` 和 `quantile_chain` 各完成六轮交错公开入口 CPU/CUDA/auto A/B。
+每组的数值、制品类型、掩码、计数、provenance、MetricValue 和配置哈希
+逐字段对拍通过。rank 链 CPU 热运行 34.12–35.16 秒、CUDA 10.31–10.97 秒，
+GPU 峰值 9,332,757,504 字节；quantile 链 CPU 53.23–53.28 秒、CUDA
+9.49–9.52 秒，峰值 1,436,371,456 字节。基准前的 `auto` 尚未放行 F13，
+因此六轮中的两次 `auto` 均回退 CPU；路由更新后的复测见
+`docs/benchmarks/real_cos_f13_rank_chain_auto_20260927.json` 与
+`docs/benchmarks/real_cos_f13_quantile_chain_auto_20260927.json`。
+现在仅在此精确形状、float64、默认参数、无特殊输入和 NVIDIA L20 下，
+对上述两个完整集合自动选 CUDA；rank 要求至少 14 GiB、quantile 至少
+8 GiB 有效及实际空闲显存。单指标、子集、重复项、其他组合和相邻形状
+不沿用 F13 批次认证。原始证据见
+`docs/benchmarks/real_cos_f13_rank_chain_20260927.json` 与
+`docs/benchmarks/real_cos_f13_quantile_chain_20260927.json`。
 
 F12 另有精确三指标混合请求 `rank_ic`、`quantile_spread`、
 `factor_turnover_rate` 的独立六轮公开入口 A/B：CPU 热运行约

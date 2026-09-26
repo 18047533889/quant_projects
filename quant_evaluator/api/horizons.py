@@ -175,13 +175,21 @@ def evaluate_horizons(
     }
     artifacts: dict[int, SeriesMetricArtifact] = {}
     from quant_evaluator.runtime.evaluator import evaluate
+    from quant_evaluator.api.evaluate_many import _evaluate_ic_labels_shared_cuda
     series_metric = "pearson_ic_series" if ic_method == "pearson" else "rank_ic_series"
-    for horizon in horizons:
-        selected_label = replace(labels[horizon], validity=selected_masks[horizon])
-        result = evaluate(
-            factors, selected_label, metrics=(series_metric,), backend=backend,
-            metric_parameters={series_metric: {"min_assets": min_assets}},
-        )
+    selected_labels = tuple(
+        replace(labels[h], validity=selected_masks[h]) for h in horizons
+    )
+    parameters = {series_metric: {"min_assets": min_assets}}
+    shared = _evaluate_ic_labels_shared_cuda(
+        factors, selected_labels, metrics=(series_metric,), backend=backend,
+        metric_parameters=parameters,
+    )
+    for index, horizon in enumerate(horizons):
+        result = (shared[index] if shared is not None else evaluate(
+            factors, selected_labels[index], metrics=(series_metric,), backend=backend,
+            metric_parameters=parameters,
+        ))
         artifacts[horizon] = result.artifacts[series_metric]
 
     from quant_evaluator.metrics.statistical_evidence import build_horizon_curve_evidence

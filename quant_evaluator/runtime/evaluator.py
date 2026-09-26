@@ -78,7 +78,7 @@ def _resolve_alias(metric_id: str) -> str:
 # The 701-day x 5314-stock x 2-factor registered A-share panel showed full
 # CPU/CUDA output parity and a CUDA advantage in cold and alternating warm
 # public-facade runs for these metrics (2026-09-26). Other metrics retain CPU.
-_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260927_v12"
+_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260927_v13"
 _AUTO_SMALL_PROFILE = "ashare_701d_20260926"
 _AUTO_LARGE_PROFILE = "real_cos_region_20260927"
 _AUTO_LARGE_EXTRAP_PROFILE = "real_cos_bounded_headroom_20260927"
@@ -102,6 +102,11 @@ _AUTO_REAL_COS_F12_RANK_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F12_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
 _AUTO_REAL_COS_F12_TURNOVER_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
 _AUTO_REAL_COS_F12_BATCH_NAMES = frozenset({"rank_chain", "quantile_chain"})
+_AUTO_REAL_COS_F13_PROFILE = "real_cos_f13_exact_20260927"
+_AUTO_REAL_COS_F13_SHAPE = (2586, 5461, 13)
+_AUTO_REAL_COS_F13_BATCH_NAMES = frozenset({"rank_chain", "quantile_chain"})
+_AUTO_REAL_COS_F13_RANK_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
+_AUTO_REAL_COS_F13_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
 _AUTO_LARGE_METRICS = frozenset({"rank_ic", "quantile_spread"})
 _AUTO_LARGE_MIN_TIMES, _AUTO_LARGE_MAX_TIMES = 1000, 2600
 _AUTO_LARGE_MIN_ASSETS, _AUTO_LARGE_MAX_ASSETS = 5000, 5500
@@ -142,6 +147,8 @@ _AUTO_SINGLE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
 def _auto_public_shape_profile(factor_batch):
     """Identify a public-facade A/B-backed shape region."""
     shape = (factor_batch.num_times, factor_batch.num_assets, factor_batch.num_factors)
+    if shape == _AUTO_REAL_COS_F13_SHAPE:
+        return _AUTO_REAL_COS_F13_PROFILE
     if shape == _AUTO_REAL_COS_F12_SHAPE:
         return _AUTO_REAL_COS_F12_PROFILE
     if shape == _AUTO_REAL_COS_F8_SHAPE:
@@ -221,6 +228,9 @@ def _select_public_auto_backend(
     profile = _auto_public_shape_profile(factor_batch)
     if profile is None:
         return "cpu", "shape_outside_certified_range"
+    if (profile == _AUTO_REAL_COS_F13_PROFILE
+            and batch_name not in _AUTO_REAL_COS_F13_BATCH_NAMES):
+        return "cpu", "metric_not_certified_for_profile"
     if profile == _AUTO_REAL_COS_F12_PROFILE and (
         len(canonical_metrics) != 1
         or canonical_metrics[0] not in (
@@ -260,6 +270,10 @@ def _select_public_auto_backend(
         profile == _AUTO_REAL_COS_F12_PROFILE
         and batch_name in _AUTO_REAL_COS_F12_BATCH_NAMES
     )
+    real_cos_f13_certified_batch = (
+        profile == _AUTO_REAL_COS_F13_PROFILE
+        and batch_name in _AUTO_REAL_COS_F13_BATCH_NAMES
+    )
     if real_cos_mixed_three and not (real_cos_f8_mixed_three or real_cos_f12_mixed_three) and (
         profile != _AUTO_LARGE_PROFILE or
         (factor_batch.num_times, factor_batch.num_assets, factor_batch.num_factors)
@@ -279,7 +293,11 @@ def _select_public_auto_backend(
             or evaluator is not None):
         return "cpu", "special_input_or_parameters"
     if batch_name is not None:
-        if real_cos_f12_mixed_three:
+        if real_cos_f13_certified_batch:
+            minimum = (_AUTO_REAL_COS_F13_RANK_MIN_EFFECTIVE_VRAM_BYTES
+                       if batch_name == "rank_chain"
+                       else _AUTO_REAL_COS_F13_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES)
+        elif real_cos_f12_mixed_three:
             minimum = _AUTO_REAL_COS_F12_RANK_MIN_EFFECTIVE_VRAM_BYTES
         elif real_cos_f12_certified_batch:
             minimum = (_AUTO_REAL_COS_F12_RANK_MIN_EFFECTIVE_VRAM_BYTES
@@ -301,6 +319,8 @@ def _select_public_auto_backend(
             return "cuda_strict", "certified_batch_real_cos_f8_mixed_three"
         if real_cos_f8_certified_batch:
             return "cuda_strict", f"certified_batch_real_cos_f8_{batch_name}"
+        if real_cos_f13_certified_batch:
+            return "cuda_strict", f"certified_batch_real_cos_f13_{batch_name}"
         if real_cos_f12_certified_batch:
             return "cuda_strict", f"certified_batch_real_cos_f12_{batch_name}"
         return "cuda_strict", f"certified_batch_{batch_name}"
@@ -1517,6 +1537,8 @@ def evaluate(
     exposure_panel=None,
     quantile_builder_parameters=None,
     generalization_evidence=None,
+    _prepare_only=False,
+    _gpu_result_override=None,
 ):
     """Evaluate explicit factor and label contracts through the runtime.
 
@@ -1834,13 +1856,16 @@ def evaluate(
             generalization_evidence=generalization_evidence, evaluator=evaluator,
             gpu_policy=gpu_policy,
         )
-    gpu_result = None
+    if _prepare_only:
+        return backend_name
+    gpu_result = _gpu_result_override
     gpu_risk_results = {}
     # "gpu" is normalized to the cuda dispatch instead of silently falling
     # back to CPU (2026-09-25): callers asking for GPU must never get CPU
     # results without knowing.  On hosts without CUDA the device session
     # raises its own clear error (fail-closed), matching backend="cuda".
-    if backend_name is not None and str(backend_name).lower() in ("cuda", "cuda_strict", "gpu"):
+    if (_gpu_result_override is None and backend_name is not None
+            and str(backend_name).lower() in ("cuda", "cuda_strict", "gpu")):
         from quant_evaluator.runtime.device_session import DeviceEvaluationSession
         from quant_evaluator.runtime.gpu_executor import GPUExecutor
         from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy

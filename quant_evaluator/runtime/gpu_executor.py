@@ -230,6 +230,69 @@ class GPUExecutor:
         out.metadata["exposure_kernel_no_fallback"] = bool(self.exposure_kernel_dispatches)
         return out
 
+    def run_tiled_many(self, factor_batch, label_bundles, metrics) -> list[BatchEvaluationBundle]:
+        """Reuse each uploaded factor tile across labels with isolated metric caches.
+
+        Labels are staged one at a time.  In particular, run() creates fresh
+        rank caches for each label's pairwise-finite mask.
+        """
+        self.validate_metric_plan(metrics)
+        cp = _import_cp()
+        values = factor_batch.values
+        T, N, F = values.shape
+        tile = min(F, self.session.estimate_tile(metrics, T, N, values.dtype.itemsize))
+        outputs = [BatchEvaluationBundle(tuple(factor_batch.factor_ids), lb.target_id)
+                   for lb in label_bundles]
+        start = 0
+        count = 0
+        while start < F:
+            stop = min(start + tile, F)
+            ids = factor_batch.factor_ids[start:stop]
+            self.session._final_tile = tile
+            try:
+                chunk = values[:, :, start:stop]
+                if factor_batch.validity is not None:
+                    chunk = np.where(factor_batch.validity[:, :, start:stop], chunk, np.nan)
+                self.session.stage_factors(chunk, ids, layout="T,N,F")
+                for output, lb in zip(outputs, label_bundles):
+                    label_values = (np.where(lb.validity, lb.values, np.nan)
+                                    if lb.validity is not None else lb.values)
+                    try:
+                        self.session.stage_labels(label_values, lb.target_id)
+                        result = self.run(ids, metrics, lb.target_id)
+                    finally:
+                        self.session.release_labels(lb.target_id)
+                    for field in ("scalar_metrics", "series_metrics", "vector_metrics", "observation_counts"):
+                        destination = getattr(output, field)
+                        for name, arr in getattr(result, field).items():
+                            if arr.ndim == 0 or arr.shape[-1] != stop - start:
+                                raise ValueError(f"GPU metric {name!r} has no trailing factor axis")
+                            if name not in destination:
+                                self._reserve_host_result(int(np.prod(arr.shape[:-1])) * F * arr.dtype.itemsize)
+                                destination[name] = np.empty((*arr.shape[:-1], F), dtype=arr.dtype)
+                            destination[name][..., start:stop] = arr
+                            self.session._d2h_bytes += arr.nbytes
+            except cp.cuda.memory.OutOfMemoryError:
+                if not self.session.policy.oom_retile or stop - start <= 1:
+                    raise
+                tile = self.session.retile_on_oom(stop - start)
+                continue
+            finally:
+                self.session.release_factor_tile()
+            start = stop
+            count += 1
+        for output in outputs:
+            output.metadata = self.session.metadata()
+            output.metadata["factor_tiles_processed"] = count
+            output.metadata["host_result_bytes_reserved"] = self._host_result_bytes
+            output.metadata["host_result_budget_bytes"] = self.session.policy.max_host_result_bytes
+            output.metadata["multi_label_factor_tile_reuse"] = True
+            output.metadata["device_session_counter_scope"] = "shared_session_total"
+            output.metadata["shared_session_label_count"] = len(label_bundles)
+            output.metadata["shared_session_factor_tiles_processed"] = count
+        return outputs
+
+
     def run(
         self,
         factor_ids: Sequence[str],

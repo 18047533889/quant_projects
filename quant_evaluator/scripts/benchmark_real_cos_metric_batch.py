@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded full-batch CPU/CUDA/auto A/B on F8/F12 DataAccess COS panels."""
+"""Bounded full-batch CPU/CUDA/auto A/B on F8/F12/F13 DataAccess COS panels."""
 from __future__ import annotations
 
 import argparse
@@ -218,7 +218,7 @@ def main():
     parser.add_argument("--timeout-s", type=float, default=180)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--metrics", default=",".join(DEFAULT_METRICS))
-    parser.add_argument("--factors", type=int, choices=(8, 12), default=8)
+    parser.add_argument("--factors", type=int, choices=(8, 12, 13), default=8)
     parser.add_argument("--compact", action="store_true", help="write artifact hashes, not value arrays")
     args = parser.parse_args()
     if args.timeout_s <= 0:
@@ -228,6 +228,8 @@ def main():
     requested = tuple(args.metrics.split(","))
     if requested not in ALLOWED_BATCHES:
         parser.error("metrics must be an exact default, rank-chain or quantile-chain set")
+    if args.factors == 13 and requested not in (RANK_CHAIN, QUANTILE_CHAIN):
+        parser.error("F13 runs require the exact rank-chain or quantile-chain metric set")
     METRICS = requested
     load_start = time.perf_counter()
     _BATCH, _LABELS, source = load_real_batch(

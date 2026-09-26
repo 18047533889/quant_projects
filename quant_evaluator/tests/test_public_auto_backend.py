@@ -247,6 +247,59 @@ def test_large_region_metric_and_vram_gates(monkeypatch):
         "cpu", "insufficient_cuda_memory")
 
 
+def test_f13_exact_whole_batch_routes_and_guards(monkeypatch):
+    budgets = []
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda policy, minimum: budgets.append(minimum) or None)
+    batch = SimpleNamespace(num_times=2586, num_assets=5461, num_factors=13,
+                            values=np.empty(0, dtype=np.float64))
+    labels = SimpleNamespace(values=np.empty(0, dtype=np.float64))
+    options = dict(metric_parameters={}, context=None, quantile_builder_parameters={},
+                   portfolio_returns=None, holding_returns=None, trade_eligibility=None,
+                   calendar_snapshot=None, exposure_panel=None,
+                   generalization_evidence=None, evaluator=None)
+    select = module._select_public_auto_backend
+    for name in ("rank_chain", "quantile_chain"):
+        metrics = _BATCHES[name]
+        expected = ("cuda_strict", f"certified_batch_real_cos_f13_{name}")
+        assert select(batch, labels, metrics, **options) == expected
+        assert select(batch, labels, tuple(reversed(metrics)), **options) == expected
+        assert select(batch, labels, metrics[:-1], **options) == (
+            "cpu", "metric_set_not_certified")
+        assert select(batch, labels, metrics + (metrics[0],), **options) == (
+            "cpu", "metric_set_not_certified")
+    assert budgets == [14 * 1024 ** 3] * 2 + [8 * 1024 ** 3] * 2
+    assert select(batch, labels, ("rank_ic",), **options) == (
+        "cpu", "metric_not_certified_for_profile")
+    assert select(batch, labels, _BATCHES["mixed_core"], **options) == (
+        "cpu", "metric_not_certified_for_profile")
+    batch.num_factors = 14
+    assert select(batch, labels, _BATCHES["rank_chain"], **options) == (
+        "cpu", "shape_outside_certified_range")
+    batch.num_factors = 13
+    batch.values = np.empty(0, dtype=np.float32)
+    assert select(batch, labels, _BATCHES["rank_chain"], **options) == (
+        "cpu", "dtype_outside_certified_range")
+    batch.values = np.empty(0, dtype=np.float64)
+    assert select(batch, labels, _BATCHES["rank_chain"], **(options | {"context": object()})) == (
+        "cpu", "special_input_or_parameters")
+
+
+def test_f13_hardware_and_vram_rejection(monkeypatch):
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda *args: "insufficient_cuda_memory")
+    batch = SimpleNamespace(num_times=2586, num_assets=5461, num_factors=13,
+                            values=np.empty(0, dtype=np.float64))
+    labels = SimpleNamespace(values=np.empty(0, dtype=np.float64))
+    options = dict(metric_parameters={}, context=None, quantile_builder_parameters={},
+                   portfolio_returns=None, holding_returns=None, trade_eligibility=None,
+                   calendar_snapshot=None, exposure_panel=None,
+                   generalization_evidence=None, evaluator=None)
+    assert module._select_public_auto_backend(
+        batch, labels, _BATCHES["rank_chain"], **options) == (
+            "cpu", "insufficient_cuda_memory")
+
+
 def _inputs(t, n):
     rng = np.random.default_rng(20260926)
     factors = rng.normal(size=(t, n, 2))

@@ -1,8 +1,8 @@
 """`evaluate_many` — batch evaluation facade (spec §26, §43).
 
 Evaluates one FactorBatch against multiple LabelBundles (e.g. different
-horizons H01/H05/H10/H20) without re-staging factors per horizon on GPU.
-Returns a dict keyed by label_id → BatchEvaluationBundle.
+horizons H01/H05/H10/H20). CUDA IC requests reuse each uploaded factor tile
+across labels. Returns a dict keyed by label_id → EvaluationBundle.
 """
 
 from __future__ import annotations
@@ -12,6 +12,50 @@ from typing import Any, Dict, Optional, Sequence
 from quant_evaluator.runtime.evaluator import evaluate
 from quant_evaluator.contracts.label_bundle import LabelBundle
 
+
+_IC_METRICS = frozenset({
+    "rank_ic", "ic_ir", "ic_std", "ic_median", "rank_ic_series",
+    "pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir",
+})
+
+
+def _evaluate_ic_labels_shared_cuda(
+    factor_batch, labels, *, metrics, backend, gpu_policy=None,
+    split_ref=None, metric_parameters=None,
+):
+    """Return CUDA evaluation bundles with one session and one factor upload per tile.
+
+    The ordinary evaluator performs every label's contract, split, and backend
+    admission checks before device allocation. Other requests use its existing
+    path. GPUExecutor.run() keeps pairwise rank caches local to each label.
+    """
+    selected_metrics = tuple(metrics)
+    if not labels or not set(selected_metrics) <= _IC_METRICS:
+        return None
+    for label in labels:
+        selected = evaluate(
+            factor_batch, label, metrics=selected_metrics, backend=backend,
+            gpu_policy=gpu_policy, split_ref=split_ref,
+            metric_parameters=metric_parameters, _prepare_only=True,
+        )
+        if selected not in {"cuda", "cuda_strict", "gpu"}:
+            return None
+    from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
+    from quant_evaluator.runtime.device_session import DeviceEvaluationSession
+    from quant_evaluator.runtime.gpu_executor import GPUExecutor
+
+    with DeviceEvaluationSession(gpu_policy or GPUExecutionPolicy()) as session:
+        executor = GPUExecutor(session)
+        executor.metric_parameters = dict(metric_parameters or {})
+        gpu_bundles = executor.run_tiled_many(factor_batch, labels, selected_metrics)
+    return [
+        evaluate(
+            factor_batch, label, metrics=selected_metrics, backend=backend,
+            gpu_policy=gpu_policy, split_ref=split_ref,
+            metric_parameters=metric_parameters, _gpu_result_override=gpu_bundle,
+        )
+        for label, gpu_bundle in zip(labels, gpu_bundles)
+    ]
 
 def evaluate_many(
     factor_batch,
@@ -36,8 +80,17 @@ def evaluate_many(
         dict {label.target_id: bundle} where bundle is the result of
         ``evaluate(..., backend=backend)`` for that label.
     """
+    selected_metrics = metrics or ("rank_ic", "ic_ir")
+    label_list = tuple(labels)
+    if context is None:
+        shared = _evaluate_ic_labels_shared_cuda(
+            factor_batch, label_list, metrics=selected_metrics, backend=backend,
+            gpu_policy=gpu_policy, split_ref=split_ref,
+        )
+        if shared is not None:
+            return {label.target_id: result for label, result in zip(label_list, shared)}
     out: Dict[str, Any] = {}
-    for lb in labels:
+    for lb in label_list:
         out[lb.target_id] = evaluate(
             factor_batch,
             lb,
