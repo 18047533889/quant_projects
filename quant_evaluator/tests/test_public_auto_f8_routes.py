@@ -37,6 +37,8 @@ def _select(monkeypatch, shape, metrics, *, dtype=np.float64, policy=None,
     ("rank_ic_series", 13_999_136_256),
     ("ic_ir", 13_999_136_256),
     ("quantile_spread", 8 * 1024 ** 3),
+    ("quantile_returns_daily", 8 * 1024 ** 3),
+    ("quantile_returns_full", 8 * 1024 ** 3),
     ("factor_turnover_rate", 8 * 1024 ** 3),
 ])
 def test_f8_exact_single_metric_route_and_memory_threshold(monkeypatch, metric, minimum):
@@ -114,6 +116,10 @@ def test_f12_exact_single_metric_routes(monkeypatch):
         "cpu", "metric_not_certified_for_profile",
     )
     for metric in ("rank_ic_series", "ic_ir"):
+        assert _select(monkeypatch, shape, (metric,)) == (
+            "cpu", "metric_not_certified_for_profile",
+        )
+    for metric in ("quantile_returns_daily", "quantile_returns_full"):
         assert _select(monkeypatch, shape, (metric,)) == (
             "cpu", "metric_not_certified_for_profile",
         )

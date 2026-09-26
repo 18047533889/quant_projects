@@ -150,7 +150,7 @@ max_drawdown_by_factor = drawdown.artifacts["max_drawdown"].values
 
 公开 `evaluate(...)`（省略 `backend` 或传入 `None`）和显式
 `evaluate(..., backend="auto")` 按整次请求选择 CPU 或 CUDA，并在返回的
-`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v8`。
+`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v9`。
 以下 701 日规则继续适用于短历史配置。
 它依据已注册 A 股日行情构造的 701 个交易日、5314 只股票、2 个因子输入，
 逐指标比较完整公开入口的 CPU/CUDA 结果。冷调用和交错顺序的热调用都更快、
@@ -210,11 +210,12 @@ F2 `rank_ic` 的大面板显存预算公式（此形状约 21.7 GB 有效空闲�
 
 另有真实 COS 独立 8 因子面板在精确 2586 日 × 5461 股 × 8 因子形状上，
 对单指标 `rank_ic`、`rank_ic_series`、`ic_ir`、`quantile_spread`、
-`factor_turnover_rate` 完成公开入口 CPU/CUDA A/B 与完整输出对拍。这五个单指标
-只在该精确形状、float64、默认参数、无特殊输入且 NVIDIA L20 下自动使用 CUDA；
+`factor_turnover_rate`、`quantile_returns_daily`、`quantile_returns_full` 完成公开入口
+CPU/CUDA A/B 与完整输出对拍。这七个单指标只在该精确形状、float64、默认参数、
+无特殊输入且 NVIDIA L20 下自动使用 CUDA；
 形状、因子数或请求指标不同均不沿用此认证。rank 家族按实测
 9,332,757,504 字节峰值的 1.5 倍设置有效空闲显存下限
-（13,999,136,256 字节）；quantile 与 turnover 继续要求至少 8 GiB。两者都同时
+（13,999,136,256 字节）；分位收益、分位差与换手继续要求至少 8 GiB。所有路径同时
 检查实际空闲显存和乘以 `GPUExecutionPolicy.max_vram_fraction` 后的有效预算。
 相同规范三指标集合的 F8 整批路由至少要求 14 GiB 有效预算，另完成六轮 CPU/CUDA
 A/B（CPU 热 34.35–34.50 秒、CUDA 热 9.06–9.12 秒，峰值 9,332,757,504 字节），
@@ -228,6 +229,12 @@ A/B（CPU 热 34.35–34.50 秒、CUDA 热 9.06–9.12 秒，峰值 9,332,757,50
 provenance、MetricValue 与配置哈希均对拍通过，GPU 峰值均为 9,332,757,504 字节。
 证据见 `docs/benchmarks/real_cos_f8_rank_ic_series_20260927.json` 和
 `docs/benchmarks/real_cos_f8_ic_ir_20260927.json`；未据此开放 F12 或多指标组合。
+`quantile_returns_daily` 六轮 CPU/CUDA 热运行约 9.50–9.85/5.43–5.89 秒；
+`quantile_returns_full` 约 9.47–9.53/5.40–5.41 秒。日序列 CUDA 曾缺失标签身份、
+参数和有效期计数等 provenance；补齐后六轮的数值、轴、掩码、计数、完整 provenance
+与配置哈希全部对拍通过。两项 GPU 峰值均为 1,436,371,456 字节。证据见
+`docs/benchmarks/real_cos_f8_quantile_returns_daily_20260927.json` 与
+`docs/benchmarks/real_cos_f8_quantile_returns_full_20260927.json`；F12 和组合请求仍保持 CPU。
 
 独立 F12 COS 面板在精确 2586 日 × 5461 股 × 12 因子形状上，单指标
 `rank_ic`、`quantile_spread`、`factor_turnover_rate` 均完成公开入口 CPU/CUDA

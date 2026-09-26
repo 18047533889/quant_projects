@@ -100,6 +100,13 @@ def test_daily_quantile_public_cpu_gpu_keeps_all_axes_counts_and_masks():
     assert not cpu.metric_values
     assert not left.provenance_refs_present
     assert left.provenance['config_hash'] == cpu.config_hash == gpu.config_hash
+    assert set(left.provenance) == set(right.provenance)
+    for key in left.provenance:
+        if key == 'valid_period_counts_qf':
+            np.testing.assert_array_equal(left.provenance[key], right.provenance[key])
+        else:
+            assert left.provenance[key] == right.provenance[key]
+
 
 
 @pytest.mark.parametrize('backend', [None, 'cuda'])

@@ -80,16 +80,20 @@ def _worker(connection, backend, repeats):
                 _metric_value(bundle.grouped_metrics[factor_id].get(metric))
                 for factor_id in bundle.factor_ids
             )
-            artifacts[metric] = {
+            descriptor = {
                 "type": type(artifact).__name__,
-                "metric_id": artifact.metric_id,
-                "domain": artifact.domain,
-                "artifact_kind": artifact.artifact_kind,
-                "factor_axis": _plain(artifact.factor_axis),
-                "created_from": _plain(artifact.created_from),
-                "production": artifact.production,
-                "contract_schema_version": artifact.contract_schema_version,
-                "producer_version": artifact.producer_version,
+                "artifact_kind": _plain(getattr(artifact, "artifact_kind", None)),
+            }
+            if is_dataclass(artifact):
+                descriptor.update({
+                    field.name: _plain(getattr(artifact, field.name))
+                    for field in fields(artifact)
+                    if field.name not in {"values", "counts", "valid_mask", "provenance"}
+                })
+            else:
+                raise TypeError(f"unsupported non-dataclass artifact: {type(artifact).__name__}")
+            artifacts[metric] = {
+                "descriptor": descriptor,
                 "values": values.tolist(),
                 "finite_mask": finite_mask.tolist(),
                 "valid_mask": (finite_mask if explicit_mask is None else
@@ -183,12 +187,7 @@ def _compare(reference, candidate):
     for metric in METRICS:
         a, b = reference["artifacts"][metric], candidate["artifacts"][metric]
         result["metrics"][metric] = {
-            "descriptor": _same({k: a[k] for k in (
-                "type", "metric_id", "domain", "artifact_kind", "factor_axis",
-                "created_from", "production", "contract_schema_version", "producer_version")},
-                {k: b[k] for k in (
-                "type", "metric_id", "domain", "artifact_kind", "factor_axis",
-                "created_from", "production", "contract_schema_version", "producer_version")}),
+            "descriptor": _same(a["descriptor"], b["descriptor"]),
             "values_rtol_1e-8_atol_1e-10": _close_values(a["values"], b["values"]),
             "finite_mask": _same(a["finite_mask"], b["finite_mask"]),
             "valid_mask": _same(a["valid_mask"], b["valid_mask"]),

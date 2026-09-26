@@ -78,7 +78,7 @@ def _resolve_alias(metric_id: str) -> str:
 # The 701-day x 5314-stock x 2-factor registered A-share panel showed full
 # CPU/CUDA output parity and a CUDA advantage in cold and alternating warm
 # public-facade runs for these metrics (2026-09-26). Other metrics retain CPU.
-_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260927_v8"
+_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260927_v9"
 _AUTO_SMALL_PROFILE = "ashare_701d_20260926"
 _AUTO_LARGE_PROFILE = "real_cos_region_20260927"
 _AUTO_LARGE_EXTRAP_PROFILE = "real_cos_bounded_headroom_20260927"
@@ -88,6 +88,7 @@ _AUTO_REAL_COS_F8_PROFILE = "real_cos_f8_exact_20260927"
 _AUTO_REAL_COS_F8_SHAPE = (2586, 5461, 8)
 _AUTO_REAL_COS_F8_METRICS = frozenset({
     "rank_ic", "rank_ic_series", "ic_ir", "quantile_spread", "factor_turnover_rate",
+    "quantile_returns_daily", "quantile_returns_full",
 })
 _AUTO_REAL_COS_F8_RANK_FAMILY = frozenset({"rank_ic", "rank_ic_series", "ic_ir"})
 _AUTO_REAL_COS_F8_RANK_MIN_EFFECTIVE_VRAM_BYTES = 13_999_136_256
@@ -2487,13 +2488,26 @@ def evaluate(
         from quant_evaluator.contracts.artifact_types import DailyQuantileReturnArtifact
         if gpu_result is not None and _resolve_alias(metric_id) == "quantile_returns_daily":
             params = metric_parameters.get(metric_id, {})
+            daily_counts = np.asarray(gpu_result.observation_counts[metric_id], dtype=np.int64)
+            min_assets = params.get("min_assets", 10)
+            daily_valid = np.isfinite(raw) & (daily_counts >= min_assets)
             raw = DailyQuantileReturnArtifact(values=raw,
-                counts=gpu_result.observation_counts[metric_id], valid_mask=np.isfinite(raw),
+                counts=daily_counts, valid_mask=daily_valid,
                 time_axis=time_index, quantile_axis=tuple(range(raw.shape[1])),
                 factor_axis=tuple(factor_batch.factor_ids),
                 tie_status_ref=params.get("tie_status_ref"), tradability_ref=params.get("tradability_ref"),
                 risk_exposure_ref=params.get("risk_exposure_ref"), producer_version=versions[metric_id],
-                metric_id=metric_id)
+                metric_id=metric_id, provenance={
+                    "label_id": label_bundle.target_id,
+                    "label_content_hash": label_bundle.content_hash,
+                    "factor_value_hash": factor_batch.value_hash,
+                    "n_quantiles": params.get("n_quantiles", 5),
+                    "min_assets": min_assets,
+                    "min_periods": params.get("min_periods", 20),
+                    "split_ref": None,
+                    "config_hash": None,
+                    "valid_period_counts_qf": np.sum(daily_valid, axis=0),
+                })
         if isinstance(raw, DailyQuantileReturnArtifact):
             from dataclasses import replace
             if tuple(raw.factor_axis) != tuple(factor_batch.factor_ids) or tuple(raw.time_axis) != time_index:

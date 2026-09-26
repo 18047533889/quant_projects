@@ -15,13 +15,13 @@ from quant_evaluator.scripts import benchmark_real_cos_metric_batch as full
 from quant_evaluator.scripts.load_real_cos_factor_batch import load_real_batch
 
 DEFAULT_METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
-EXTENDED_METRICS = ("rank_ic_series", "ic_ir")
+EXTENDED_METRICS = ("rank_ic_series", "ic_ir", "quantile_returns_daily", "quantile_returns_full")
 METRICS = DEFAULT_METRICS + EXTENDED_METRICS
 
 def run_extended(ctx, requested_metrics, factors, labels, provenance, args, load_s):
     """Interleaved full-artifact A/B for the exact verified F8 panel."""
     if tuple(requested_metrics) != tuple(m for m in EXTENDED_METRICS if m in requested_metrics):
-        raise ValueError("extended metrics must be rank_ic_series,ic_ir in that order")
+        raise ValueError("extended metrics must follow EXTENDED_METRICS order")
     if (args.factors, args.days, args.assets) != (8, 0, 5500):
         raise ValueError("extended trial requires the exact F8 full-history request")
     if (args.manifest_sha256 != full.MANIFEST_SHA256 or
@@ -92,7 +92,7 @@ def main():
     if any(metric in EXTENDED_METRICS for metric in requested_metrics):
         if requested_metrics != tuple(metric for metric in EXTENDED_METRICS
                                       if metric in requested_metrics):
-            parser.error("extended trial accepts rank_ic_series,ic_ir in that order")
+            parser.error("extended trial metrics must follow EXTENDED_METRICS order")
         if ((args.factors, args.days, args.assets) != (8, 0, 5500) or
                 args.manifest_sha256 != full.MANIFEST_SHA256 or
                 args.max_object_mib != 64 or args.max_total_mib != 256):
