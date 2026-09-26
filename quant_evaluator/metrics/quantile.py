@@ -195,24 +195,16 @@ def assign_quantiles_fast(
     return quantiles
 
 
-def _percentile_boundaries(
+def _percentile_boundaries_reference(
     v_finite: np.ndarray,
     n_quantiles: int,
 ) -> np.ndarray:
-    """Internal boundary computation shared by every assign_quantiles* path.
+    """Equivalence oracle for :func:`_percentile_boundaries` (scalar loop).
 
-    QE-Q-P0-002: all quantile binning implementations (NumPy reference, fast,
-    Numba, Polars, CuPy) must derive bins from the same percentile boundaries,
-    so the boundary values themselves are computed in exactly one place.
-
-    Boundaries are interpolated on the sorted values with the formula
-    ``sv[lo] + frac * (sv[lo+1] - sv[lo])`` at position
-    ``pos = (b+1)/n_quantiles * (n-1)``.  Positions within 1e-9 of an integer
-    snap to the exact sorted value: np.percentile can land one ulp off the
-    data value there (its percentile/100 rounding), which would silently flip
-    the tie policy for the value sitting exactly on the boundary.  The snap
-    keeps every backend bit-identical at the only positions where exact ties
-    are possible.
+    This is the ORIGINAL per-quantile Python-loop implementation, kept
+    verbatim so the vectorized replacement can be validated bit-for-bit in the
+    test suite.  Do NOT change its arithmetic — change
+    ``_percentile_boundaries`` / ``_percentile_boundaries_from_sorted`` instead.
     """
     sv = np.sort(v_finite)
     n = sv.shape[0]
@@ -237,6 +229,86 @@ def _percentile_boundaries(
     return boundaries
 
 
+def _percentile_boundaries_from_sorted(
+    sv: np.ndarray,
+    n_quantiles: int,
+) -> np.ndarray:
+    """Vectorized boundaries from an ALREADY SORTED 1-D array.
+
+    Bit-identical to :func:`_percentile_boundaries_reference` evaluated on the
+    same sorted input: the reference sorts first, so feeding it ``np.sort(x)``
+    and feeding this function ``np.sort(x)`` yields byte-identical boundaries.
+    This lets the batch kernels sort each (time, factor) panel ONCE and derive
+    every candidate Q's boundaries from that single sorted array (optimization
+    A/C), instead of re-sorting for every Q.
+
+    The vectorized snap/overflow branches mirror the scalar loop exactly:
+    ``pos = arange(1, nq)/nq*(n-1)``, ``lo = int(pos)`` (truncation toward
+    zero, identical to int() for non-negative pos), and the same 1e-9 snap and
+    finite-delta fallback.  All arithmetic is float64, matching the reference.
+    """
+    sv = np.asarray(sv, dtype=np.float64)
+    n = sv.shape[0]
+    nq = int(n_quantiles)
+    boundaries = np.empty(max(nq - 1, 0), dtype=np.float64)
+    if nq < 2 or n == 0:
+        return boundaries
+    pos = (np.arange(1, nq, dtype=np.float64) / nq) * (n - 1)
+    lo = pos.astype(np.int64)
+    frac = pos - lo
+    overflow = lo >= (n - 1)
+    safe = ~overflow
+    lo_safe = np.where(safe, lo, 0).astype(np.int64)
+    sv_lo = sv[lo_safe]
+    sv_hi = sv[np.minimum(lo_safe + 1, n - 1)]
+    # The scalar oracle computes delta with Python floats, so an overflowing
+    # subtraction yields +inf (not a raised error) and the finite-delta fallback
+    # triggers.  Replicate that exactly: suppress numpy's overflow/invalid flags
+    # (the original relied on Python-float inf) and let np.isfinite pick the
+    # branch.  Result is bit-identical to the oracle.
+    with np.errstate(over="ignore", invalid="ignore"):
+        delta = sv_hi - sv_lo
+        interp = np.where(
+            np.isfinite(delta),
+            sv_lo + frac * delta,
+            (1.0 - frac) * sv_lo + frac * sv_hi,
+        )
+    snap_low = frac < 1e-9
+    snap_high = frac > 1.0 - 1e-9
+    res = np.where(snap_low, sv_lo, interp)
+    res = np.where(snap_high, sv_hi, res)
+    res = np.where(overflow, sv[n - 1], res)
+    return res
+
+
+def _percentile_boundaries(
+    v_finite: np.ndarray,
+    n_quantiles: int,
+) -> np.ndarray:
+    """Internal boundary computation shared by every assign_quantiles* path.
+
+    QE-Q-P0-002: all quantile binning implementations (NumPy reference, fast,
+    Numba, Polars, CuPy) must derive bins from the same percentile boundaries,
+    so the boundary values themselves are computed in exactly one place.
+
+    This is the vectorized form of the original scalar loop (kept verbatim as
+    :func:`_percentile_boundaries_reference`).  It sorts ``v_finite`` once, then
+    delegates to :func:`_percentile_boundaries_from_sorted`, which is
+    bit-identical to the reference on the same sorted array.
+
+    Boundaries are interpolated on the sorted values with the formula
+    ``sv[lo] + frac * (sv[lo+1] - sv[lo])`` at position
+    ``pos = (b+1)/n_quantiles * (n-1)``.  Positions within 1e-9 of an integer
+    snap to the exact sorted value: np.percentile can land one ulp off the
+    data value there (its percentile/100 rounding), which would silently flip
+    the tie policy for the value sitting exactly on the boundary.  The snap
+    keeps every backend bit-identical at the only positions where exact ties
+    are possible.
+    """
+    sv = np.sort(v_finite)
+    return _percentile_boundaries_from_sorted(sv, n_quantiles)
+
+
 def _searchsorted_bins(
     boundaries: np.ndarray,
     v_finite: np.ndarray,
@@ -255,26 +327,16 @@ def _searchsorted_bins(
     return np.clip(q_bins, 0, n_quantiles - 1)
 
 
-def assign_quantiles_batch(
+def _assign_quantiles_batch_reference(
     values: np.ndarray,
     n_quantiles: int = 5,
     method: str = "max",
 ) -> np.ndarray:
-    """
-    Ultra-fast batch quantile assignment with minimal Python loops.
+    """Equivalence oracle for :func:`assign_quantiles_batch` (pre-optimization).
 
-    QE-Q-P0-001: Enforces tie-breaking policy.
-
-    Processes entire time×asset×factor tensor with vectorized operations.
-    Best performance for large batches.
-
-    Args:
-        values: Input values shape (T, N, F)
-        n_quantiles: Number of quantiles
-        method: Tie-breaking policy ('min' or 'max'). Default 'max'.
-
-    Returns:
-        Quantile assignments shape (T, N, F), -1 for NaN
+    Verbatim pre-optimization implementation: per-(t,f) re-sort via
+    ``_percentile_boundaries``.  Kept so the optimized version can be validated
+    bit-for-bit in the test suite.  Do not change its arithmetic.
     """
     policy = validate_tie_policy(method)
     _validate_quantile_count(n_quantiles)
@@ -303,11 +365,113 @@ def assign_quantiles_batch(
             v_finite = v_t[mask, f]
 
             # QE-Q-P0-002: same percentile boundaries + tie policy as the
-            # reference implementation (shared helpers).
-            boundaries = _percentile_boundaries(v_finite, n_quantiles)
+            # reference implementation (shared helpers).  Uses the scalar
+            # oracle so this function is the faithful PRE-optimization kernel.
+            boundaries = _percentile_boundaries_reference(v_finite, n_quantiles)
             q_bins = _searchsorted_bins(boundaries, v_finite, n_quantiles, policy)
 
             quantiles[t, mask, f] = q_bins
+
+    return quantiles[:, :, 0] if original_ndim == 2 else quantiles
+
+
+def assign_quantiles_batch(
+    values: np.ndarray,
+    n_quantiles: int = 5,
+    method: str = "max",
+) -> np.ndarray:
+    """
+    Ultra-fast batch quantile assignment with minimal Python loops.
+
+    QE-Q-P0-001: Enforces tie-breaking policy.
+
+    Processes entire time×asset×factor tensor with vectorized operations.
+    Best performance for large batches.
+
+    Optimization C: one vectorized ``np.sort(axis=1)`` per time slice (instead
+    of a per-(t,f) re-sort), then derive boundaries from the sorted panel via
+    :func:`_percentile_boundaries_from_sorted`.  Non-finite entries are filled
+    with ``+inf`` before sorting so they sort past every finite value; the first
+    ``n_finite[f]`` rows of each column are then exactly the sorted finite
+    values (bit-identical to sorting the finite subset), so the per-(t,f)
+    boundary + ``searchsorted`` step is unchanged in result.
+
+    Args:
+        values: Input values shape (T, N, F)
+        n_quantiles: Number of quantiles
+        method: Tie-breaking policy ('min' or 'max'). Default 'max'.
+
+    Returns:
+        Quantile assignments shape (T, N, F), -1 for NaN
+    """
+    policy = validate_tie_policy(method)
+    _validate_quantile_count(n_quantiles)
+    original_ndim = values.ndim
+    if original_ndim not in (2, 3):
+        raise ValueError("quantile input must be T x N or T x N x F")
+    if values.ndim == 2:
+        values = values[:, :, np.newaxis]
+
+    T, N, F = values.shape
+    quantiles = np.full((T, N, F), -1, dtype=np.int32)
+
+    # Optimization C: a SINGLE vectorized sort of the whole panel (axis=1) plus a
+    # SINGLE vectorized boundary pass over every (t, f) -- instead of a per-(t,f)
+    # re-sort and a per-(t,f) boundary call (which would pay numpy per-call
+    # overhead ~15us each, slower than the scalar loop for the small nq actually
+    # used).  Non-finite values are filled with +inf so they sort past every
+    # finite value; ``sv[t, :n_finite[t,f], f]`` is then the sorted finite panel
+    # for (t, f), bit-identical to sorting the finite subset.  The boundary
+    # positions depend only on n_finite and n_quantiles, so they are computed for
+    # the whole (T, F) grid at once; the per-(t,f) loop below only does the
+    # searchsorted + assignment.
+    finite_mask = np.isfinite(values)                       # (T, N, F)
+    v_fill = np.where(finite_mask, values, np.inf)          # +inf sorts last
+    sv = np.sort(v_fill, axis=1)                            # (T, N, F) sorted per (t,f)
+    n_finite = finite_mask.sum(axis=1)                      # (T, F)
+
+    boundaries_all = None
+    if n_quantiles >= 2:
+        b = np.arange(1, n_quantiles, dtype=np.float64)     # (nq-1,)
+        pos = (b[None, None, :] / n_quantiles) * (n_finite[:, :, None] - 1)
+        lo = pos.astype(np.int64)
+        frac = pos - lo
+        t_idx = np.arange(T)[:, None, None]
+        f_idx = np.arange(F)[None, :, None]
+        lo_idx = np.minimum(lo, N - 1)
+        sv_lo = sv[t_idx, lo_idx, f_idx]
+        sv_hi = sv[t_idx, np.minimum(lo_idx + 1, N - 1), f_idx]
+        # Mirror the scalar oracle: delta overflow (extreme +/- values) must yield
+        # inf, not a raised error, so np.isfinite selects the fallback branch.
+        with np.errstate(over="ignore", invalid="ignore"):
+            delta = sv_hi - sv_lo
+            interp = np.where(
+                np.isfinite(delta),
+                sv_lo + frac * delta,
+                (1.0 - frac) * sv_lo + frac * sv_hi,
+            )
+        boundaries_all = np.where(frac < 1e-9, sv_lo, interp)
+        boundaries_all = np.where(frac > 1.0 - 1e-9, sv_hi, boundaries_all)
+        last_idx = np.minimum(n_finite - 1, N - 1)[:, :, None]
+        boundaries_all = np.where(
+            lo >= (n_finite - 1)[:, :, None],
+            sv[t_idx, last_idx, f_idx],
+            boundaries_all,
+        )
+    else:
+        # n_quantiles == 1: no boundaries.  searchsorted on the empty array maps
+        # every finite value to bin 0 (then clipped), matching the scalar oracle.
+        boundaries_all = np.empty((T, F, 0), dtype=np.float64)
+
+    for t in range(T):
+        for f in range(F):
+            nf = int(n_finite[t, f])
+            if nf < n_quantiles:
+                continue
+            bnd = boundaries_all[t, f, :] if boundaries_all is not None else None
+            v_finite = values[t, finite_mask[t, :, f], f]
+            q_bins = _searchsorted_bins(bnd, v_finite, n_quantiles, policy)
+            quantiles[t, finite_mask[t, :, f], f] = q_bins
 
     return quantiles[:, :, 0] if original_ndim == 2 else quantiles
 

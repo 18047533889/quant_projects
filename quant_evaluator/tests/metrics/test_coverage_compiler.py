@@ -24,6 +24,19 @@ from quant_evaluator.metrics.coverage_compiler import (
 )
 
 
+@pytest.fixture(scope="session")
+def coverage_rows():
+    """Session-scoped compiled coverage rows.
+
+    ``compile_coverage_rows`` scans the whole package and costs ~20s per
+    call; every assertion below is unchanged, but the three row-consuming
+    tests share one computation instead of paying for three identical
+    scans.  The CSV-writer test still exercises the real
+    ``compile_metric_coverage`` end to end.
+    """
+    return compile_coverage_rows()
+
+
 def test_resolve_implementation_real_kernel():
     """The compiler must resolve a real catalog kernel to True."""
     ok, detail = _resolve_implementation(
@@ -41,27 +54,27 @@ def test_resolve_implementation_fails_closed_on_missing():
     assert ok is False
 
 
-def test_compile_rows_cover_all_catalog_metrics():
+def test_compile_rows_cover_all_catalog_metrics(coverage_rows):
     """One row per catalog metric (the compiler scans the real catalog)."""
     from quant_evaluator.metrics.catalog import list_all_metric_ids
 
-    rows = compile_coverage_rows()
+    rows = coverage_rows
     row_ids = {r["metric"] for r in rows}
     catalog_ids = set(list_all_metric_ids())
     assert row_ids == catalog_ids
     assert len(rows) == len(catalog_ids)
 
 
-def test_rows_have_expected_columns():
-    rows = compile_coverage_rows()
+def test_rows_have_expected_columns(coverage_rows):
+    rows = coverage_rows
     expected = {"metric", "kernel", "registry", "artifact", "test", "report", "prod_status"}
     for row in rows:
         assert set(row.keys()) == expected
 
 
-def test_prod_status_mapping_consistent():
+def test_prod_status_mapping_consistent(coverage_rows):
     """kernel NO => NOT_IMPL; all five YES => READY; anything else => GAP."""
-    rows = compile_coverage_rows()
+    rows = coverage_rows
     for row in rows:
         if row["kernel"] == "NO":
             assert row["prod_status"] == "NOT_IMPL", row

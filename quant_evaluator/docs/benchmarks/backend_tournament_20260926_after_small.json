@@ -1,0 +1,222 @@
+{
+  "kind": "synthetic_ic_kernel_tournament",
+  "seed": 260926,
+  "started_at_utc": "2026-09-26T09:02:01.942312+00:00",
+  "source_sha256": {
+    "benchmark_script": "84d10484281ff574affe817ff0ce3d642e871c989a25808936ac5e56156e174c",
+    "polars_backend": "38213cf41abbafef907da1906bb5f7ac4df15f3cf05cae468308c8472d6d9265"
+  },
+  "repeats": 3,
+  "timeout_s": 90.0,
+  "parity": {
+    "rtol": 1e-08,
+    "atol": 1e-10,
+    "counts_and_finite_mask_exact": true
+  },
+  "cases": {
+    "120x300x1_pearson": {
+      "exact": {
+        "status": "ok",
+        "construct_s": 0.0026694000116549432,
+        "source": {
+          "days": 120,
+          "assets": 300,
+          "factors": 1
+        },
+        "cold_s": 0.0031494649592787027,
+        "warm_s": [
+          0.002837205014657229,
+          0.0028195350314490497,
+          0.0027946160407736897
+        ],
+        "warm_median_s": 0.0028195350314490497,
+        "end_to_end_cold_s": 0.005818864970933646,
+        "peak_rss_kib": 165692,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 0.0
+        }
+      },
+      "numba": {
+        "status": "ok",
+        "construct_s": 0.0028226549620740116,
+        "source": {
+          "days": 120,
+          "assets": 300,
+          "factors": 1
+        },
+        "cold_s": 0.14996842201799154,
+        "warm_s": [
+          0.0119824199937284,
+          0.0064252360025420785,
+          0.00552830402739346
+        ],
+        "warm_median_s": 0.0064252360025420785,
+        "end_to_end_cold_s": 0.15279107698006555,
+        "peak_rss_kib": 210388,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 5.551115123125783e-17
+        }
+      },
+      "polars": {
+        "status": "ok",
+        "construct_s": 0.0028346049948595464,
+        "source": {
+          "days": 120,
+          "assets": 300,
+          "factors": 1
+        },
+        "cold_s": 0.29526667401660234,
+        "warm_s": [
+          0.0038135459762997925,
+          0.0030554389813914895,
+          0.003297820978332311
+        ],
+        "warm_median_s": 0.003297820978332311,
+        "end_to_end_cold_s": 0.2981012790114619,
+        "peak_rss_kib": 474832,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 2.220446049250313e-16
+        }
+      },
+      "gpu": {
+        "status": "ok",
+        "construct_s": 0.0027379280072636902,
+        "source": {
+          "days": 120,
+          "assets": 300,
+          "factors": 1
+        },
+        "cold_s": 0.37483184301527217,
+        "warm_s": [
+          0.0011059270473197103,
+          0.0009139630128629506,
+          0.0008727530366741121
+        ],
+        "warm_median_s": 0.0009139630128629506,
+        "end_to_end_cold_s": 0.37756977102253586,
+        "peak_rss_kib": 505464,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 2.498001805406602e-16
+        }
+      }
+    },
+    "120x300x1_spearman": {
+      "exact": {
+        "status": "ok",
+        "construct_s": 0.0026787189999595284,
+        "source": {
+          "days": 120,
+          "assets": 300,
+          "factors": 1
+        },
+        "cold_s": 0.004758146998938173,
+        "warm_s": [
+          0.004381087957881391,
+          0.004344560031313449,
+          0.0043262699618935585
+        ],
+        "warm_median_s": 0.004344560031313449,
+        "end_to_end_cold_s": 0.0074368659988977015,
+        "peak_rss_kib": 167652,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 0.0
+        }
+      },
+      "numba": {
+        "status": "ok",
+        "construct_s": 0.002831954974681139,
+        "source": {
+          "days": 120,
+          "assets": 300,
+          "factors": 1
+        },
+        "cold_s": 0.19394471001578495,
+        "warm_s": [
+          0.009412027022335678,
+          0.020994819002225995,
+          0.01985965302446857
+        ],
+        "warm_median_s": 0.01985965302446857,
+        "end_to_end_cold_s": 0.1967766649904661,
+        "peak_rss_kib": 210136,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 2.7755575615628914e-17
+        }
+      },
+      "polars": {
+        "status": "ok",
+        "construct_s": 0.002886963018681854,
+        "source": {
+          "days": 120,
+          "assets": 300,
+          "factors": 1
+        },
+        "cold_s": 0.2898630469571799,
+        "warm_s": [
+          0.006080307008232921,
+          0.005303600977640599,
+          0.005519664031453431
+        ],
+        "warm_median_s": 0.005519664031453431,
+        "end_to_end_cold_s": 0.29275000997586176,
+        "peak_rss_kib": 481740,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 2.7755575615628914e-17
+        }
+      },
+      "gpu": {
+        "status": "ok",
+        "construct_s": 0.0028544740052893758,
+        "source": {
+          "days": 120,
+          "assets": 300,
+          "factors": 1
+        },
+        "cold_s": 0.42938627302646637,
+        "warm_s": [
+          0.004617361002601683,
+          0.004355358949396759,
+          0.004334920027758926
+        ],
+        "warm_median_s": 0.004355358949396759,
+        "end_to_end_cold_s": 0.43224074703175575,
+        "peak_rss_kib": 551708,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 5.551115123125783e-17
+        }
+      }
+    }
+  }
+}

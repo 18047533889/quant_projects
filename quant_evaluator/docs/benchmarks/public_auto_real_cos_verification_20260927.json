@@ -1,0 +1,263 @@
+{
+  "created_utc": "2026-09-26T17:00:00.465231+00:00",
+  "source": "DataAccess bound COS landing manifest and registered AdjVwap",
+  "input_shape": [
+    2586,
+    5461,
+    2
+  ],
+  "input_load_s": 24.199041771003976,
+  "source_manifest_sha256": [
+    "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+    "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66"
+  ],
+  "full_panel": {
+    "rank_ic": {
+      "runs": {
+        "cpu": {
+          "elapsed_s": 6.4185101490002126,
+          "backend_requested": "cpu",
+          "backend_strategy": "explicit",
+          "backend_used": "cpu",
+          "auto_backend_policy": null,
+          "auto_backend_profile": null,
+          "auto_backend_reason": null,
+          "config_hash": "328ee355b54abeb0bdf8aeda5404a007457b31c0d16a52a898b7fab7e24ae39e",
+          "receipt_hash": "ee33835b76e22e33996540637b7bd71fdbe89ef34060048d472ab39725b2ee02",
+          "receipt_config_matches": true,
+          "peak_vram": null
+        },
+        "cuda_strict": {
+          "elapsed_s": 2.176416068978142,
+          "backend_requested": "cuda_strict",
+          "backend_strategy": "explicit",
+          "backend_used": "cuda",
+          "auto_backend_policy": null,
+          "auto_backend_profile": null,
+          "auto_backend_reason": null,
+          "config_hash": "328ee355b54abeb0bdf8aeda5404a007457b31c0d16a52a898b7fab7e24ae39e",
+          "receipt_hash": "7078d3023ccfdf82dd32cf5a1ef873ffb970305fec77aa2a620addcf642d2fdf",
+          "receipt_config_matches": true,
+          "peak_vram": 11234754560
+        },
+        "auto": {
+          "elapsed_s": 1.590421950968448,
+          "backend_requested": "auto",
+          "backend_strategy": "auto",
+          "backend_used": "cuda",
+          "auto_backend_policy": "ashare_public_routes_20260927_v3",
+          "auto_backend_profile": "real_cos_region_20260927",
+          "auto_backend_reason": "certified_single_metric_real_cos_region",
+          "config_hash": "328ee355b54abeb0bdf8aeda5404a007457b31c0d16a52a898b7fab7e24ae39e",
+          "receipt_hash": "7086b8a0028f30d349b9a260f03fc5a4d68ca2a99ac97d7a3e2ed3b6bb6ca1ed",
+          "receipt_config_matches": true,
+          "peak_vram": 11234754560
+        },
+        "default": {
+          "elapsed_s": 1.5735176510061137,
+          "backend_requested": "default",
+          "backend_strategy": "auto",
+          "backend_used": "cuda",
+          "auto_backend_policy": "ashare_public_routes_20260927_v3",
+          "auto_backend_profile": "real_cos_region_20260927",
+          "auto_backend_reason": "certified_single_metric_real_cos_region",
+          "config_hash": "328ee355b54abeb0bdf8aeda5404a007457b31c0d16a52a898b7fab7e24ae39e",
+          "receipt_hash": "2ff3542e588c638d67b4899ccc77815210bbc6aed482ca55bff61d988eb9a722",
+          "receipt_config_matches": true,
+          "peak_vram": 11234754560
+        }
+      },
+      "parity_vs_cpu": {
+        "cuda_strict": {
+          "pass": true,
+          "same_shape": true,
+          "same_finite": true,
+          "numeric_1e-8_1e-10": true,
+          "same_counts": true,
+          "same_mask": true,
+          "same_metric_values": true,
+          "same_config_hash": true
+        },
+        "auto": {
+          "pass": true,
+          "same_shape": true,
+          "same_finite": true,
+          "numeric_1e-8_1e-10": true,
+          "same_counts": true,
+          "same_mask": true,
+          "same_metric_values": true,
+          "same_config_hash": true
+        },
+        "default": {
+          "pass": true,
+          "same_shape": true,
+          "same_finite": true,
+          "numeric_1e-8_1e-10": true,
+          "same_counts": true,
+          "same_mask": true,
+          "same_metric_values": true,
+          "same_config_hash": true
+        }
+      }
+    },
+    "quantile_spread": {
+      "runs": {
+        "cpu": {
+          "elapsed_s": 2.7856289169867523,
+          "backend_requested": "cpu",
+          "backend_strategy": "explicit",
+          "backend_used": "cpu",
+          "auto_backend_policy": null,
+          "auto_backend_profile": null,
+          "auto_backend_reason": null,
+          "config_hash": "4f99e63f22f43495e679f986ef287ee5ca09f12f8d96a8ea10280da03e4657bc",
+          "receipt_hash": "ca9bcc95ff9c00dd6fd331b0496545ebb617828ff4620fc83cc36fe707b6fac0",
+          "receipt_config_matches": true,
+          "peak_vram": null
+        },
+        "cuda_strict": {
+          "elapsed_s": 1.4388048960245214,
+          "backend_requested": "cuda_strict",
+          "backend_strategy": "explicit",
+          "backend_used": "cuda",
+          "auto_backend_policy": null,
+          "auto_backend_profile": null,
+          "auto_backend_reason": null,
+          "config_hash": "4f99e63f22f43495e679f986ef287ee5ca09f12f8d96a8ea10280da03e4657bc",
+          "receipt_hash": "bcb97391c8db1819db77a23a04d165d108b26ab35a62b6151e537139413ffa00",
+          "receipt_config_matches": true,
+          "peak_vram": 757267456
+        },
+        "auto": {
+          "elapsed_s": 1.4118334400118329,
+          "backend_requested": "auto",
+          "backend_strategy": "auto",
+          "backend_used": "cuda",
+          "auto_backend_policy": "ashare_public_routes_20260927_v3",
+          "auto_backend_profile": "real_cos_region_20260927",
+          "auto_backend_reason": "certified_single_metric_real_cos_region",
+          "config_hash": "4f99e63f22f43495e679f986ef287ee5ca09f12f8d96a8ea10280da03e4657bc",
+          "receipt_hash": "20a4693ef6dd2f82d8b8c2da1bb23b45918a21b968ea5154cd21e2720bcafc48",
+          "receipt_config_matches": true,
+          "peak_vram": 757267456
+        },
+        "default": {
+          "elapsed_s": 1.4366412609815598,
+          "backend_requested": "default",
+          "backend_strategy": "auto",
+          "backend_used": "cuda",
+          "auto_backend_policy": "ashare_public_routes_20260927_v3",
+          "auto_backend_profile": "real_cos_region_20260927",
+          "auto_backend_reason": "certified_single_metric_real_cos_region",
+          "config_hash": "4f99e63f22f43495e679f986ef287ee5ca09f12f8d96a8ea10280da03e4657bc",
+          "receipt_hash": "611c4a50a06912ce507880d7ef7d8df27a25e79e26a6eab585e805f4b821f5f6",
+          "receipt_config_matches": true,
+          "peak_vram": 757267456
+        }
+      },
+      "parity_vs_cpu": {
+        "cuda_strict": {
+          "pass": true,
+          "same_shape": true,
+          "same_finite": true,
+          "numeric_1e-8_1e-10": true,
+          "same_counts": true,
+          "same_mask": true,
+          "same_metric_values": true,
+          "same_config_hash": true
+        },
+        "auto": {
+          "pass": true,
+          "same_shape": true,
+          "same_finite": true,
+          "numeric_1e-8_1e-10": true,
+          "same_counts": true,
+          "same_mask": true,
+          "same_metric_values": true,
+          "same_config_hash": true
+        },
+        "default": {
+          "pass": true,
+          "same_shape": true,
+          "same_finite": true,
+          "numeric_1e-8_1e-10": true,
+          "same_counts": true,
+          "same_mask": true,
+          "same_metric_values": true,
+          "same_config_hash": true
+        }
+      }
+    }
+  },
+  "cold_start_edge": {
+    "shape": [
+      1000,
+      5000,
+      1
+    ],
+    "metric": "rank_ic",
+    "runs": {
+      "cpu": {
+        "elapsed_s": 1.1639449700014666,
+        "backend_requested": "cpu",
+        "backend_strategy": "explicit",
+        "backend_used": "cpu",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "config_hash": "f950ce3244f7c410f78604867bc8cd069ccc23f396ab8d2569f22d5674a0c34a",
+        "receipt_hash": "a76de52592617041c77c7a4cc3ece6af9f33b2384214ab3a759db7c78a661227",
+        "receipt_config_matches": true,
+        "peak_vram": null
+      },
+      "auto": {
+        "elapsed_s": 1.1456410509999841,
+        "backend_requested": "auto",
+        "backend_strategy": "auto",
+        "backend_used": "cpu",
+        "auto_backend_policy": "ashare_public_routes_20260927_v3",
+        "auto_backend_profile": null,
+        "auto_backend_reason": "shape_outside_certified_range",
+        "config_hash": "f950ce3244f7c410f78604867bc8cd069ccc23f396ab8d2569f22d5674a0c34a",
+        "receipt_hash": "d9f708becdc4e84a3b286a034fba7f845aca1ccdf0b40520c39075454fdb3ee5",
+        "receipt_config_matches": true,
+        "peak_vram": null
+      },
+      "default": {
+        "elapsed_s": 1.171660935971886,
+        "backend_requested": "default",
+        "backend_strategy": "auto",
+        "backend_used": "cpu",
+        "auto_backend_policy": "ashare_public_routes_20260927_v3",
+        "auto_backend_profile": null,
+        "auto_backend_reason": "shape_outside_certified_range",
+        "config_hash": "f950ce3244f7c410f78604867bc8cd069ccc23f396ab8d2569f22d5674a0c34a",
+        "receipt_hash": "264b67df7d28b74ab8ab4e9e48691a8fe254a97b5073c449e38f16571e0af9a8",
+        "receipt_config_matches": true,
+        "peak_vram": null
+      }
+    },
+    "parity_vs_cpu": {
+      "auto": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_metric_values": true,
+        "same_config_hash": true
+      },
+      "default": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_metric_values": true,
+        "same_config_hash": true
+      }
+    }
+  }
+}

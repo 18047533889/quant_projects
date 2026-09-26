@@ -56,6 +56,23 @@ class ReportBatchEvaluation:
     factors: Mapping[str, ReportEvaluation]
     backend_used: str
     backend_fallback_reason: str | None = None
+    ic_numerics: str = "exact_float64"
+    backend_selection_reason: str | None = None
+
+
+def _report_auto_numba_reason(shape: tuple[int, int, int]) -> str | None:
+    """Bound the CPU fast route to the report-sized panel and memory envelope."""
+    t, n, f = shape
+    if not (600 <= t <= 3500 and 5000 <= n <= 6000 and 1 <= f <= 8):
+        return None
+    # Conservative host workspace estimate, including the input, validity,
+    # pairwise mask, quantile scratch, and per-factor report intermediates.
+    estimated_bytes = t * n * f * 8 * 8 + t * n * 8 * 4
+    if estimated_bytes > 16 * 1024**3:
+        return None
+    measured = 600 <= t <= 2700 and 5000 <= n <= 5500
+    return ("measured_report_shape_numba" if measured else
+            "bounded_extrapolated_report_shape_numba")
 
 
 def _contracts(factors: np.ndarray, returns: np.ndarray) -> tuple[FactorBatch, LabelBundle]:
@@ -134,23 +151,50 @@ def evaluate_report_batch(
     commission_rate: float = 0.0,
 ) -> ReportBatchEvaluation:
     """Evaluate a bounded factor tile with shared QE IC/quantile intermediates."""
-    if backend not in {"cpu", "auto", "cuda", "cuda_strict"}:
-        raise ValueError("backend must be cpu, auto, cuda, or cuda_strict")
+    if backend not in {"cpu", "numba", "auto", "cuda", "cuda_strict"}:
+        raise ValueError("backend must be cpu, numba, auto, cuda, or cuda_strict")
     if not np.isfinite(commission_rate) or commission_rate < 0:
         raise ValueError("commission_rate must be a finite non-negative one-way fraction")
     fb, lb = _batch_contracts(factors, forward_returns, factor_ids)
     fallback_reason = None
     backend_used = "cpu"
-    use_cuda = backend in {"auto", "cuda", "cuda_strict"}
+    selection_reason = None
+    selected_backend = backend
+    if backend == "auto":
+        shape_reason = _report_auto_numba_reason(fb.values.shape)
+        if n_quantiles != 10:
+            selected_backend = "cpu"
+            fallback_reason = "QE CUDA quantile returns currently has canonical n_quantiles=10"
+            selection_reason = "noncanonical_quantiles_exact_cpu"
+        elif min_assets != 20:
+            selected_backend = "cpu"
+            fallback_reason = "QE CUDA rank_ic currently has canonical min_assets=20"
+            selection_reason = "noncanonical_min_assets_exact_cpu"
+        elif shape_reason is not None:
+            try:
+                from quant_evaluator.kernels.numba_backend import NUMBA_AVAILABLE
+            except Exception:
+                NUMBA_AVAILABLE = False
+            if NUMBA_AVAILABLE:
+                selected_backend = "numba"
+                selection_reason = shape_reason
+            else:
+                selected_backend = "cpu"
+                fallback_reason = "Numba unavailable; exact CPU selected"
+                selection_reason = "numba_unavailable"
+        else:
+            selected_backend = "cpu"
+            selection_reason = "outside_measured_report_shape_exact_cpu"
+    use_cuda = selected_backend in {"cuda", "cuda_strict"}
     if use_cuda and n_quantiles != 10:
         message = "QE CUDA quantile returns currently has canonical n_quantiles=10"
-        if backend == "cuda_strict":
+        if selected_backend == "cuda_strict":
             raise ValueError(message)
         fallback_reason = message
         use_cuda = False
     if use_cuda and min_assets != 20:
         message = "QE CUDA rank_ic currently has canonical min_assets=20"
-        if backend == "cuda_strict":
+        if selected_backend == "cuda_strict":
             raise ValueError(message)
         fallback_reason = message
         use_cuda = False
@@ -168,7 +212,7 @@ def evaluate_report_batch(
                         "n_quantiles": n_quantiles, "min_assets": min_assets,
                     },
                 },
-                backend="cuda_strict" if backend == "cuda_strict" else "cuda",
+                backend="cuda_strict" if selected_backend == "cuda_strict" else "cuda",
             )
             raw_ic = np.asarray(gpu.series_metrics["rank_ic_series"], dtype=np.float64)
             daily = gpu.artifacts["quantile_returns_daily"]
@@ -181,12 +225,25 @@ def evaluate_report_batch(
                 raise ValueError("QE RankIC shape differs from requested T,F")
             backend_used = "cuda"
         except Exception as exc:
-            if backend == "cuda_strict":
+            if selected_backend == "cuda_strict":
                 raise
             fallback_reason = f"{type(exc).__name__}: {exc}"
             use_cuda = False
     if not use_cuda:
-        raw_ic, _ = compute_daily_ic(fb, lb, method="spearman", min_assets=min_assets)
+        try:
+            raw_ic, _ = compute_daily_ic(
+                fb, lb, method="spearman", min_assets=min_assets,
+                backend="numba" if selected_backend == "numba" else "exact",
+            )
+        except Exception as exc:
+            if backend != "auto" or selected_backend != "numba":
+                raise
+            fallback_reason = f"Numba RankIC failed; exact CPU selected: {type(exc).__name__}: {exc}"
+            selection_reason = "numba_failure_exact_cpu"
+            selected_backend = "cpu"
+            raw_ic, _ = compute_daily_ic(
+                fb, lb, method="spearman", min_assets=min_assets, backend="exact")
+        backend_used = "numba" if selected_backend == "numba" else "cpu"
         quantile, _ = compute_quantile_returns(
             fb, lb, n_quantiles=n_quantiles, min_assets=min_assets
         )
@@ -217,7 +274,6 @@ def evaluate_report_batch(
             # Use the SAME QE tie/assignment policy as quantile returns. No
             # future-label mask enters target holdings. This is a documented
             # target-weight turnover model, not a drift-aware execution simulator.
-            assignments = assign_quantiles_batch(fb.values[:, :, index], n_quantiles=n_quantiles)
             turnover = np.zeros_like(factor_quantiles)
             for group in range(n_quantiles):
                 raw_group = n_quantiles - 1 - group if directions[index] < 0 else group
@@ -280,6 +336,10 @@ def evaluate_report_batch(
         factors=factor_results,
         backend_used=backend_used,
         backend_fallback_reason=fallback_reason,
+        ic_numerics=("numba_float64_ulp_variant" if backend_used == "numba" else
+                     "cuda_float64_ulp_variant" if backend_used == "cuda" else
+                     "exact_float64"),
+        backend_selection_reason=selection_reason,
     )
 
 

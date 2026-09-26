@@ -107,6 +107,18 @@ def evaluate_instances(request, *, evaluator=None, backend=None, gpu_policy=None
             config = stable_content_hex(tag="MetricInstanceResult.v1", fields={
                 "instance": item.instance_id, "source_config": bundle.config_hash,
                 "labels": scenario.label_bundle.content_hash})
+            source_receipt = dict(bundle.metadata["execution_receipt"])
+            instance_receipt_fields = {
+                "instance_id": item.instance_id,
+                "config_hash": config,
+                "backend_used": bundle.metadata["backend_used"],
+                "source_evaluation_receipt": source_receipt,
+            }
+            metadata["instance_execution_receipt"] = {
+                **instance_receipt_fields,
+                "receipt_hash": stable_content_hex(
+                    tag="MetricInstanceExecutionReceipt.v1", fields=instance_receipt_fields),
+            }
             children[item.instance_id] = replace(
                 bundle, request_id=f"{bundle.request_id}:{item.instance_id}", config_hash=config,
                 metric_values={k:v for k,v in bundle.metric_values.items() if k == mid},
@@ -124,6 +136,13 @@ def evaluate_instances(request, *, evaluator=None, backend=None, gpu_policy=None
         raise ValueError("Metric instance evaluation requires at least one instance")
     config = stable_content_hex(tag="MetricInstanceBundle.v1", fields={
         key: child.config_hash for key, child in children.items()})
+    instance_receipts = {
+        key: child.metadata["instance_execution_receipt"] for key, child in children.items()}
+    aggregate_receipt_fields = {
+        "config_hash": config,
+        "instance_receipt_hashes": {
+            key: receipt["receipt_hash"] for key, receipt in instance_receipts.items()},
+    }
     return replace(first, metric_values={}, metric_versions={}, artifacts={}, factor_artifacts={},
                    grouped_metrics=None, series_refs=None, label_id="MULTI_SCENARIO",
                    config_hash=config, instance_results=children, instance_specs=instances,
@@ -132,4 +151,11 @@ def evaluate_instances(request, *, evaluator=None, backend=None, gpu_policy=None
                                 if request.factor_value_ref is not None else {}),
                              "requested_to_resolved_instances": requested_to_resolved,
                              "shared_evaluation_groups": len(groups),
-                             "instance_statuses": {key: "COMPUTED" for key in children}})
+                             "instance_statuses": {key: "COMPUTED" for key in children},
+                             "instance_execution_receipts": instance_receipts,
+                             "execution_receipt": {
+                                 **aggregate_receipt_fields,
+                                 "receipt_hash": stable_content_hex(
+                                     tag="MetricInstanceBundleExecutionReceipt.v1",
+                                     fields=aggregate_receipt_fields),
+                             }})

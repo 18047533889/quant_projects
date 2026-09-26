@@ -293,32 +293,76 @@ def compute_adaptive_quantile_count(factor_batch, policy=None, tie_policy="max")
     if factor_batch.validity is not None:
         values = np.where(factor_batch.validity, values, np.nan)
 
+    from quant_evaluator.metrics.quantile import (
+        _percentile_boundaries_from_sorted,
+        _searchsorted_bins,
+    )
     candidates = policy.candidate_bin_counts()
-    assignments = {
-        q: assign_quantiles_batch(values, n_quantiles=q, method=tie_policy_value)
-        for q in candidates
-    }
-    if values.shape[2] == 1:
-        assignments = {q: a[:, :, None] for q, a in assignments.items()}
-
-    output = np.full(factor_batch.num_factors, np.nan, dtype=np.float64)
+    T, N, F = values.shape
+    policy_obj = validate_tie_policy(tie_policy)
+    # Optimization A: sort the WHOLE (T, N, F) panel ONCE with a single
+    # vectorized ``np.sort(axis=1)``.  Non-finite entries are filled with +inf so
+    # they sort past every finite value, hence ``sv[t, :n_finite[t,f], f]`` is the
+    # sorted finite panel for that (t, f) -- bit-identical to sorting the finite
+    # subset.  Every candidate Q then derives its bin boundaries from that ONE
+    # sorted array via ``_percentile_boundaries_from_sorted`` (bit-identical to
+    # ``_percentile_boundaries`` on the same sorted input).  This replaces three
+    # full assign_quantiles_batch calls -- each of which re-sorted the whole panel
+    # per candidate Q -- so the sort cost drops by ~3x.
+    #
+    # Divisor-chain fast path: when candidates are exact divisors in descending
+    # order (the DEFAULT policy 20/10/5 and any halving chain), the coarser-Q
+    # boundaries are an EXACT subset of the finest-Q boundaries, so a coarser bin
+    # is just ``finest_bin // (finest_q // q)``.  We then compute the finest-Q
+    # assignment ONCE per (t,f) and derive every other candidate's min-bucket
+    # count by integer division -- turning 3x searchsorted+bincount into 1x.  This
+    # is bit-identical to deriving each Q's boundaries independently (verified by
+    # the equivalence test suite); the faithful per-Q path is used whenever the
+    # candidates are not an exact divisor chain.  The min-bucket-count evidence
+    # and every downstream decision are unchanged.
+    div_chain = all(
+        candidates[i] % candidates[i + 1] == 0
+        for i in range(len(candidates) - 1)
+    )
+    q_max = candidates[0]
+    finite_mask = np.isfinite(values)                       # (T, N, F)
+    v_fill = np.where(finite_mask, values, np.inf)          # +inf sorts last
+    sv = np.sort(v_fill, axis=1)                            # (T, N, F) sorted per (t,f)
+    n_finite = finite_mask.sum(axis=1)                      # (T, F)
+    output = np.full(F, np.nan, dtype=np.float64)
     factor_evidence = []
     observation_counts = []
     for f, factor_id in enumerate(factor_batch.factor_ids):
         date_rows = []
         candidate_minima = {q: [] for q in candidates}
-        for t in range(factor_batch.num_times):
-            finite = np.isfinite(values[t, :, f])
-            finite_names = int(finite.sum())
-            distinct = int(np.unique(values[t, finite, f]).size) if finite_names else 0
+        for t in range(T):
+            v = values[t, :, f]
+            finite = finite_mask[t, :, f]
+            finite_names = int(n_finite[t, f])
+            distinct = int(np.unique(v[finite]).size) if finite_names else 0
+            v_finite = v[finite]
+            # Finest-Q assignment (computed once per (t,f)).
+            assigned_max = None
+            if finite_names >= q_max:
+                b_max = _percentile_boundaries_from_sorted(
+                    sv[t, :finite_names, f], q_max)
+                assigned_max = _searchsorted_bins(b_max, v_finite, q_max, policy_obj)
             observed = []
             for q in candidates:
-                assigned = assignments[q][t, :, f]
-                valid_bins = assigned[assigned >= 0]
-                minimum = (
-                    int(np.bincount(valid_bins, minlength=q).min())
-                    if valid_bins.size else None
-                )
+                if finite_names >= q:
+                    if div_chain and assigned_max is not None and q != q_max:
+                        # Coarser Q bins are exact groups of finest-Q bins.
+                        assigned = assigned_max // (q_max // q)
+                    elif q == q_max and assigned_max is not None:
+                        assigned = assigned_max
+                    else:
+                        boundaries = _percentile_boundaries_from_sorted(
+                            sv[t, :finite_names, f], q)
+                        assigned = _searchsorted_bins(
+                            boundaries, v_finite, q, policy_obj)
+                    minimum = int(np.bincount(assigned, minlength=q).min())
+                else:
+                    minimum = None
                 observed.append((q, minimum))
                 candidate_minima[q].append(minimum)
             applicable = finite_names > 0
@@ -686,27 +730,32 @@ def compute_shape_bootstrap_confidence(qr: np.ndarray, block_length: int = 2,
     F = windows.shape[2]
     out = np.full(F, np.nan)
     mean_profile = _per_window_profile(windows)
+    # Optimization D: the moving-block indices are identical for every factor, so
+    # fancy-index ``windows`` ONCE per factor (instead of once per resample) and
+    # average the block with a vectorized nanmean over all resamples.  The
+    # per-resample Spearman agreement (rankdata + corrcoef) is kept because the
+    # finite mask can differ per resample, but the dominant indexing cost is gone.
     for f in range(F):
         mp = mean_profile[:, f]
         if np.sum(np.isfinite(mp)) < 3:
             continue
+        block = windows[bootstrap_indices, :, f]      # (resamples, nw, nq)
+        sp_all = np.nanmean(block, axis=1)            # (resamples, nq)
         agreed = 0
         drawn = 0
-        for idx in bootstrap_indices:
-            sample = windows[idx, :, f]
-            with np.errstate(invalid="ignore"):
-                sp = np.nanmean(sample, axis=0)
+        for r in range(resamples):
+            sp = sp_all[r]
             finite = np.isfinite(sp) & np.isfinite(mp)
             if np.sum(finite) < 3:
                 continue
             if np.ptp(sp[finite]) == 0.0 or np.ptp(mp[finite]) == 0.0:
                 continue
-            r = np.corrcoef(
-                rankdata(sp[finite],method="average"),
-                rankdata(mp[finite],method="average"),
+            r_corr = np.corrcoef(
+                rankdata(sp[finite], method="average"),
+                rankdata(mp[finite], method="average"),
             )[0, 1]
             drawn += 1
-            if np.isfinite(r) and r >= agreement_threshold:
+            if np.isfinite(r_corr) and r_corr >= agreement_threshold:
                 agreed += 1
         if drawn:
             out[f] = agreed / drawn
@@ -741,6 +790,204 @@ def compute_top_quantile_cliff_robust(qr: np.ndarray) -> np.ndarray:
         if not np.all(np.isfinite(seg)):
             continue
         out[f] = seg[-1] - float(np.mean(seg[:-1]))
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Equivalence oracles (pre-optimization implementations, kept verbatim).
+# These are NOT used in production; the perf test suite asserts the optimized
+# kernels reproduce them bit-for-bit.  Do not change their arithmetic.
+# ---------------------------------------------------------------------------
+
+
+def _compute_adaptive_quantile_count_reference(factor_batch, policy=None, tie_policy="max"):
+    """Equivalence oracle for ``compute_adaptive_quantile_count`` (pre-A).
+
+    Verbatim pre-optimization implementation that calls
+    ``_assign_quantiles_batch_reference`` (the original, per-(t,f) re-sorting
+    assignment kernel) so the optimized A-path can be validated bit-for-bit.
+    """
+    if not (hasattr(factor_batch, "time_axis") and hasattr(factor_batch, "validity")):
+        qr_or_artifact = factor_batch
+        if hasattr(qr_or_artifact, "n_quantiles"):
+            nq = int(qr_or_artifact.n_quantiles)
+            values = np.asarray(qr_or_artifact.values, dtype=np.float64)
+        else:
+            values = np.asarray(qr_or_artifact, dtype=np.float64)
+            if values.ndim == 1:
+                values = values[:, None]
+            nq = int(values.shape[0])
+        if values.ndim != 2 or values.shape[0] == 0:
+            return np.array([np.nan], dtype=np.float64)
+        return np.where(np.all(np.isfinite(values), axis=0), float(nq), np.nan)
+
+    from quant_evaluator.contracts.adaptive_bins_policy import (
+        AdaptiveBinsDateEvidence,
+        AdaptiveBinsFactorEvidence,
+        AdaptiveBinsPolicy,
+        AdaptiveBinsResolution,
+    )
+    from quant_evaluator.contracts.axis_refs import FactorAxisRef
+    from quant_evaluator.contracts.metric_artifacts import ScalarMetricArtifact
+    from quant_evaluator.contracts.quantile_policy import validate_tie_policy
+    from quant_evaluator.metrics.quantile import _assign_quantiles_batch_reference
+
+    if policy is None:
+        policy = AdaptiveBinsPolicy()
+    elif not isinstance(policy, AdaptiveBinsPolicy):
+        from collections.abc import Mapping
+        if isinstance(policy, Mapping):
+            policy = AdaptiveBinsPolicy.from_dict(policy)
+    if not isinstance(policy, AdaptiveBinsPolicy):
+        raise TypeError("policy must be AdaptiveBinsPolicy")
+    tie_policy_value = validate_tie_policy(tie_policy).value
+    values = np.asarray(factor_batch.values, dtype=np.float64)
+    if factor_batch.validity is not None:
+        values = np.where(factor_batch.validity, values, np.nan)
+
+    candidates = policy.candidate_bin_counts()
+    assignments = {
+        q: _assign_quantiles_batch_reference(values, n_quantiles=q, method=tie_policy_value)
+        for q in candidates
+    }
+    if values.shape[2] == 1:
+        assignments = {q: a[:, :, None] for q, a in assignments.items()}
+
+    output = np.full(factor_batch.num_factors, np.nan, dtype=np.float64)
+    factor_evidence = []
+    observation_counts = []
+    for f, factor_id in enumerate(factor_batch.factor_ids):
+        date_rows = []
+        candidate_minima = {q: [] for q in candidates}
+        for t in range(factor_batch.num_times):
+            finite = np.isfinite(values[t, :, f])
+            finite_names = int(finite.sum())
+            distinct = int(np.unique(values[t, finite, f]).size) if finite_names else 0
+            observed = []
+            for q in candidates:
+                assigned = assignments[q][t, :, f]
+                valid_bins = assigned[assigned >= 0]
+                minimum = (
+                    int(np.bincount(valid_bins, minlength=q).min())
+                    if valid_bins.size else None
+                )
+                observed.append((q, minimum))
+                candidate_minima[q].append(minimum)
+            applicable = finite_names > 0
+            date_rows.append(AdaptiveBinsDateEvidence(
+                date_index=t,
+                applicable=applicable,
+                finite_names=finite_names,
+                distinct_levels=distinct,
+                candidate_min_bucket_counts=tuple(observed),
+                reason="evaluated" if applicable else "missing_factor_values",
+            ))
+
+        selected = None
+        selected_minimum = None
+        for q in candidates:
+            counts = candidate_minima[q]
+            if counts and all(
+                count is not None and count >= policy.min_effective_names_per_bin
+                for count in counts
+            ):
+                selected = q
+                selected_minimum = float(min(counts))
+                break
+        reason = (
+            "preferred" if selected == policy.preferred_bins
+            else "fallback" if selected is not None
+            else "insufficient"
+        )
+        resolution = AdaptiveBinsResolution(
+            bin_count=selected,
+            reason=reason,
+            min_names_per_bin=selected_minimum,
+            policy_id=policy.policy_id,
+            policy_version=policy.policy_version,
+        )
+        if selected is not None:
+            output[f] = float(selected)
+        observation_counts.append(sum(row.applicable for row in date_rows))
+        factor_evidence.append(AdaptiveBinsFactorEvidence(
+            factor_id=factor_id,
+            resolution=resolution,
+            tie_policy=tie_policy_value,
+            comparison_policy="largest_fixed_q_feasible_on_every_date",
+            dates=tuple(date_rows),
+        ))
+
+    return ScalarMetricArtifact(
+        metric_id="adaptive_quantile_count",
+        domain="quantile_shape",
+        values=output,
+        factor_axis=FactorAxisRef(tuple(factor_batch.factor_ids)),
+        provenance={
+            "adaptive_bins_policy": {
+                "policy_id": policy.policy_id,
+                "policy_version": policy.policy_version,
+                "preferred_bins": policy.preferred_bins,
+                "fallback_bins": tuple(policy.fallback_bins),
+                "min_effective_names_per_bin": policy.min_effective_names_per_bin,
+            },
+            "adaptive_bins_coverage": tuple(row.to_dict() for row in factor_evidence),
+            "observation_counts": tuple(observation_counts),
+        },
+    )
+
+
+def _compute_shape_bootstrap_confidence_reference(qr: np.ndarray, block_length: int = 2,
+                                                 resamples: int = 100, random_seed: int = 0,
+                                                 agreement_threshold: float = .5) -> np.ndarray:
+    """Equivalence oracle for ``compute_shape_bootstrap_confidence`` (pre-D).
+
+    Verbatim pre-optimization implementation (per-resample fancy-index of
+    ``windows``).  Kept so the optimized D-path can be validated bit-for-bit.
+    """
+    m = np.asarray(qr, dtype=np.float64)
+    windows, multi = _windows_or_single(m)
+    nw = windows.shape[0]
+    if isinstance(block_length, bool) or not isinstance(block_length, (int, np.integer)) or block_length < 1:
+        raise ValueError("block_length must be a positive integer")
+    if isinstance(resamples, bool) or not isinstance(resamples, (int, np.integer)) or resamples < 1:
+        raise ValueError("resamples must be a positive integer")
+    if not np.isfinite(agreement_threshold) or not -1 <= agreement_threshold <= 1:
+        raise ValueError("agreement_threshold must be in [-1,1]")
+    rng = np.random.default_rng(random_seed)
+    if nw < 3:
+        return np.full(windows.shape[2], np.nan, dtype=np.float64)
+    if block_length > nw:
+        raise ValueError("block_length cannot exceed window count")
+    from scipy.stats import rankdata
+    starts = rng.integers(0, nw-block_length+1, size=(resamples,int(np.ceil(nw/block_length))))
+    bootstrap_indices = (starts[:,:,None]+np.arange(block_length)).reshape(resamples,-1)[:,:nw]
+    F = windows.shape[2]
+    out = np.full(F, np.nan)
+    mean_profile = _per_window_profile(windows)
+    for f in range(F):
+        mp = mean_profile[:, f]
+        if np.sum(np.isfinite(mp)) < 3:
+            continue
+        agreed = 0
+        drawn = 0
+        for idx in bootstrap_indices:
+            sample = windows[idx, :, f]
+            with np.errstate(invalid="ignore"):
+                sp = np.nanmean(sample, axis=0)
+            finite = np.isfinite(sp) & np.isfinite(mp)
+            if np.sum(finite) < 3:
+                continue
+            if np.ptp(sp[finite]) == 0.0 or np.ptp(mp[finite]) == 0.0:
+                continue
+            r = np.corrcoef(
+                rankdata(sp[finite],method="average"),
+                rankdata(mp[finite],method="average"),
+            )[0, 1]
+            drawn += 1
+            if np.isfinite(r) and r >= agreement_threshold:
+                agreed += 1
+        if drawn:
+            out[f] = agreed / drawn
     return out
 
 

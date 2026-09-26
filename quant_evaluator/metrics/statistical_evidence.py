@@ -32,7 +32,7 @@ def build_hac_evidence(series, *, max_lag: int = 5, min_periods: int = 30,
     # The legacy kernel compresses nonfinite dates. Without an explicit
     # irregular-time estimator this changes the meaning of the lag, so this
     # typed producer refuses to certify a gapped series instead of compressing it.
-    if has_internal_gap or n_time < min_periods or max_lag >= n_time:
+    if np.isinf(values).any() or has_internal_gap or n_time < min_periods or max_lag >= n_time:
         return HACEvidence(float(np.mean(valid)) if n_time else np.nan, None, None,
                            n_time, kernel, max_lag, bandwidth_rule, "INSUFFICIENT")
     tstat, se = compute_hac_tstat(valid[:, None], max_lag=max_lag, kernel=kernel)
@@ -57,12 +57,69 @@ def build_paired_block_bootstrap_difference(candidate, baseline, *, block_length
     a, b = np.asarray(candidate, float), np.asarray(baseline, float)
     if a.ndim != 1 or b.ndim != 1 or a.shape != b.shape:
         raise ValueError("paired bootstrap inputs must be equal-length time series")
-    joint = np.isfinite(a) & np.isfinite(b); diff = a[joint] - b[joint]; n = len(diff)
+    joint = np.isfinite(a) & np.isfinite(b)
+    with np.errstate(over="ignore"):
+        diff = a[joint] - b[joint]
+    n = len(diff)
     positions = np.flatnonzero(joint)
     has_internal_gap = bool(n and positions[-1] - positions[0] + 1 != n)
     # Dropping missing dates before drawing blocks invents new adjacency and
     # can give differently-masked candidate comparisons different time draws.
     # Irregular-time resampling is not certified by this moving-block producer.
+    if (np.isinf(a).any() or np.isinf(b).any() or not np.isfinite(diff).all()
+            or has_internal_gap or n < min_periods or block_length > n):
+        return PairedBootstrapEvidence(None, (None, None), n, block_length, repetitions,
+                                       seed, "percentile_shared_moving_blocks", "INSUFFICIENT")
+    with np.errstate(over="ignore", invalid="ignore"):
+        estimate = float(np.mean(diff))
+    if not np.isfinite(estimate):
+        return PairedBootstrapEvidence(None, (None, None), n, block_length, repetitions,
+                                       seed, "percentile_shared_moving_blocks", "INSUFFICIENT")
+    rng = np.random.default_rng(seed); starts_max = n - block_length + 1
+    blocks = int(np.ceil(n / block_length))
+    # Vectorized replicate loop. One batched integers() draw consumes the RNG
+    # stream in exactly the same order as the legacy per-replicate
+    # ``rng.integers(0, starts_max, size=blocks)`` calls (verified bitwise), so
+    # the draw matrix is identical. Per-replicate means reduce the same values
+    # in the same order along axis=1, matching the legacy ``np.mean`` bitwise.
+    starts = rng.integers(0, starts_max, size=(repetitions, blocks))
+    offsets = np.arange(block_length, dtype=np.int64)
+    draw_indices = (starts[:, :, None] + offsets[None, None, :]).reshape(repetitions, -1)[:, :n]
+    max_gather_elements = 1_000_000
+    rows_per_batch = max(1, max_gather_elements // max(1, n))
+    means = np.empty(repetitions)
+    for first in range(0, repetitions, rows_per_batch):
+        last = min(first + rows_per_batch, repetitions)
+        with np.errstate(over="ignore", invalid="ignore"):
+            means[first:last] = diff[draw_indices[first:last]].mean(axis=1)
+    if not np.isfinite(means).all():
+        return PairedBootstrapEvidence(None, (None, None), n, block_length, repetitions,
+                                       seed, "percentile_shared_moving_blocks", "INSUFFICIENT")
+    alpha = (1 - confidence_level) / 2
+    lo, hi = np.quantile(means, [alpha, 1 - alpha])
+    return PairedBootstrapEvidence(estimate, (float(lo), float(hi)), n,
+                                   block_length, repetitions, seed,
+                                   "percentile_shared_moving_blocks", "VALID")
+
+
+def _build_paired_block_bootstrap_difference_reference(candidate, baseline, *, block_length: int = 10,
+                                                       repetitions: int = 1000, confidence_level: float = 0.95,
+                                                       seed: int = 0, min_periods: int = 30):
+    """Verbatim legacy oracle for equivalence testing."""
+    for name, value, minimum in (("block_length", block_length, 1),
+                                  ("repetitions", repetitions, 2),
+                                  ("min_periods", min_periods, 2), ("seed", seed, 0)):
+        _integer_parameter(name, value, minimum)
+    if (isinstance(confidence_level, (bool, np.bool_))
+            or not isinstance(confidence_level, (int, float, np.integer, np.floating))
+            or not np.isfinite(confidence_level) or not 0 < confidence_level < 1):
+        raise ValueError("confidence_level must be finite and strictly between zero and one")
+    a, b = np.asarray(candidate, float), np.asarray(baseline, float)
+    if a.ndim != 1 or b.ndim != 1 or a.shape != b.shape:
+        raise ValueError("paired bootstrap inputs must be equal-length time series")
+    joint = np.isfinite(a) & np.isfinite(b); diff = a[joint] - b[joint]; n = len(diff)
+    positions = np.flatnonzero(joint)
+    has_internal_gap = bool(n and positions[-1] - positions[0] + 1 != n)
     if has_internal_gap or n < min_periods or block_length > n:
         return PairedBootstrapEvidence(None, (None, None), n, block_length, repetitions,
                                        seed, "percentile_shared_moving_blocks", "INSUFFICIENT")

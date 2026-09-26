@@ -53,6 +53,7 @@ packages = [
     "quant_evaluator.kernels",
     "quant_evaluator.kernels.gpu",
     "quant_evaluator.metrics",
+    "quant_evaluator.metrics.extension",
     "quant_evaluator.metrics.interactions",
     "quant_evaluator.metrics.probe_portfolio",
     "quant_evaluator.metrics.risk",

@@ -1,5 +1,7 @@
 # QuantEvaluator 指标计算口径与 CogAlpha 差异决策
 
+> 最后更新：2026-09-24（Asia/Hong_Kong）。文档维护规则：代码行为变更必须同一轮同步本文档并更新此时间戳。
+
 RankIC 系数路径的等值提速说明见
 [性能核验](RANK_IC_COEFFICIENT_PERFORMANCE.md)；指标公式和显著性准入不变。
 

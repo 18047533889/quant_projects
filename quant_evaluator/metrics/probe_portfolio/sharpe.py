@@ -75,6 +75,32 @@ def compute_drawdown_persistence(returns: np.ndarray, holding_days: int = 20, mi
     return float(0.5 * norm_duration + 0.5 * norm_tuw)
 
 
+def _compute_rolling_sharpe_quantile_reference(
+    returns: np.ndarray,
+    window: int = 60,
+    quantile: float = 0.20,
+    periods_per_year: int = 252,
+    min_periods: int = 30,
+) -> float:
+    """Bit-exact oracle of :func:`compute_rolling_sharpe_quantile` (per-window loop)."""
+    returns = _as_1d(returns)
+    T = returns.shape[0]
+    if T < window:
+        return np.nan
+    roll = np.full(T, np.nan)
+    for t in range(window - 1, T):
+        seg = returns[t - window + 1 : t + 1]
+        if np.sum(np.isfinite(seg)) >= min_periods:
+            roll[t] = float(compute_sharpe_ratio(
+                seg, risk_free_rate=0.0,
+                periods_per_year=periods_per_year, min_periods=min_periods,
+            ))
+    valid = roll[np.isfinite(roll)]
+    if valid.size == 0:
+        return np.nan
+    return float(np.quantile(valid, quantile))
+
+
 def compute_rolling_sharpe_quantile(
     returns: np.ndarray,
     window: int = 60,
@@ -92,19 +118,19 @@ def compute_rolling_sharpe_quantile(
 
     Returns:
         float；数据不足时 NaN。
+
+    Vectorized via :func:`portfolio_stats._rolling_sharpe_per_window`
+    (cumsum closed-form mean / variance).  Full-finite windows are bit-exact;
+    windows containing NaNs match the per-window ``compute_sharpe_ratio`` call
+    within ulp (see GPU-parity tolerance tests for the measured max deviation).
     """
+    from quant_evaluator.metrics.portfolio_stats import _rolling_sharpe_per_window
+
     returns = _as_1d(returns)
     T = returns.shape[0]
     if T < window:
         return np.nan
-    roll = np.full(T, np.nan)
-    for t in range(window - 1, T):
-        seg = returns[t - window + 1 : t + 1]
-        if np.sum(np.isfinite(seg)) >= min_periods:
-            roll[t] = float(compute_sharpe_ratio(
-                seg, risk_free_rate=0.0,
-                periods_per_year=periods_per_year, min_periods=min_periods,
-            ))
+    roll = _rolling_sharpe_per_window(returns, window, periods_per_year, min_periods)
     valid = roll[np.isfinite(roll)]
     if valid.size == 0:
         return np.nan

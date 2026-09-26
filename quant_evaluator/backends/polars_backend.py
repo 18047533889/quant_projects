@@ -136,11 +136,17 @@ def polars_ic_batch(
         raise ValueError(f"Invalid label shape: {label_values.shape}")
 
     # Apply validity masks
-    factors = factor_values.copy()
+    # The canonical IC reference promotes compressed cross-sections to
+    # float64 before correlation.  Keeping float32 columns here makes the
+    # grouped moment calculation differ beyond the accepted parity bound
+    # for tied/near-zero IC panels.
+    if np.asarray(factor_values).dtype.kind not in "iuf" or np.asarray(labels).dtype.kind not in "iuf":
+        raise TypeError("factor and label values must be real numeric arrays")
+    factors = np.asarray(factor_values, dtype=np.float64)
     if factor_validity is not None:
         factors = np.where(factor_validity, factors, np.nan)
 
-    labels_bcast = labels.copy()
+    labels_bcast = np.asarray(labels, dtype=np.float64)
     if label_validity is not None:
         if label_validity.ndim == 1:
             label_validity = np.broadcast_to(label_validity[:, np.newaxis], (T, N))
@@ -151,12 +157,17 @@ def polars_ic_batch(
             )
         labels_bcast = np.where(label_validity, labels_bcast, np.nan)
 
-    # Convert to long format
+    # Convert to long format.
+    # Performance note (2026-09-25 AB benchmark): grouping used to include a
+    # per-row string ``factor_id`` column built with a Python list
+    # comprehension over T*N*F rows.  ``factor_idx`` is already a group key
+    # that identifies the same partition, so the string column was pure
+    # overhead and has been removed.  ``factor_ids`` remains a required
+    # parameter for signature compatibility and output labeling.
     time_idx = np.repeat(np.arange(T), N * F)
     asset_idx = np.tile(np.repeat(np.arange(N), F), T)
     factor_idx = np.tile(np.arange(F), T * N)
 
-    factor_id_arr = np.array([factor_ids[i] for i in factor_idx])
     value_flat = factors.ravel()
 
     # Expand labels to match factor dimensions
@@ -165,7 +176,6 @@ def polars_ic_batch(
     # Build dataframe with both factor values and labels
     df = pl.DataFrame({
         "time_idx": time_idx,
-        "factor_id": factor_id_arr,
         "factor_idx": factor_idx,
         "value": value_flat,
         "label": label_expanded,
@@ -176,50 +186,42 @@ def polars_ic_batch(
         pl.col("value").is_finite() & pl.col("label").is_finite()
     )
 
-    # Compute correlation using polars groupby
-    if method == "pearson":
-        ic_result = (
-            df_clean
-            .lazy()
-            .group_by(["time_idx", "factor_id", "factor_idx"])
-            .agg([
-                pl.corr("value", "label").alias("ic"),
-                pl.len().alias("n_obs"),
-            ])
-            .filter(pl.col("n_obs") >= min_obs)
-            .collect()
-        )
-    else:  # spearman
-        # Rank within each group, then compute pearson on ranks
-        # We need to rank first, then compute correlation on the ranks
-        ranked = (
-            df_clean
-            .lazy()
-            .with_columns([
-                pl.col("value")
-                .rank(method="average")
-                .over(["time_idx", "factor_id", "factor_idx"])
-                .alias("rank_value"),
-                pl.col("label")
-                .rank(method="average")
-                .over(["time_idx", "factor_id", "factor_idx"])
-                .alias("rank_label"),
-            ])
-            .collect()
-        )
+    # Correlation via grouped SUM aggregations + vectorized post-arithmetic
+    # (2026-09-25 rewrite).  Per-group ``pl.corr`` was 2.5x slower than one
+    # groupby emitting the raw moment sums; and the moments are computed on
+    # WINDOW-CENTERED deviations (native ``mean().over`` pass) so offset data
+    # cannot trigger catastrophic cancellation in the raw-moment formula.
+    # This is pure polars end to end: numpy panels enter once as columns,
+    # every reduction after that is a native expression.
+    lf = df.lazy().filter(pl.col("value").is_finite() & pl.col("label").is_finite())
 
-        # Now compute correlation on ranks
-        ic_result = (
-            ranked
-            .lazy()
-            .group_by(["time_idx", "factor_id", "factor_idx"])
-            .agg([
-                pl.corr("rank_value", "rank_label").alias("ic"),
-                pl.len().alias("n_obs"),
-            ])
-            .filter(pl.col("n_obs") >= min_obs)
-            .collect()
-        )
+    # F == 1 collapses to a single group key: hashing (time_idx, factor_idx)
+    # with a constant factor column measurably regressed the dominant
+    # single-factor case (39ms -> matches the 11ms prototype with one key).
+    group_keys = ["time_idx"] if F == 1 else ["time_idx", "factor_idx"]
+
+    if method == "spearman":
+        lf = lf.with_columns([
+            pl.col("value").rank(method="average").over(group_keys).alias("value"),
+            pl.col("label").rank(method="average").over(group_keys).alias("label"),
+        ])
+
+    lf = lf.with_columns([
+        (pl.col("value") - pl.col("value").mean().over(group_keys)).alias("value"),
+        (pl.col("label") - pl.col("label").mean().over(group_keys)).alias("label"),
+    ])
+
+    ic_result = (
+        lf.group_by(group_keys)
+        .agg([
+            pl.len().alias("n_obs"),
+            (pl.col("value") * pl.col("value")).sum().alias("svv"),
+            (pl.col("label") * pl.col("label")).sum().alias("syy"),
+            (pl.col("value") * pl.col("label")).sum().alias("svy"),
+        ])
+        .filter(pl.col("n_obs") >= min_obs)
+        .collect()
+    )
 
     # Convert back to (T, F) format
     ic_matrix = np.full((T, F), np.nan, dtype=np.float64)
@@ -227,12 +229,22 @@ def polars_ic_batch(
 
     if len(ic_result) > 0:
         times = ic_result["time_idx"].to_numpy()
-        factor_indices = ic_result["factor_idx"].to_numpy()
-        ic_vals = ic_result["ic"].to_numpy()
-        counts = ic_result["n_obs"].to_numpy()
+        if F == 1:
+            factor_indices = np.zeros(len(times), dtype=np.int64)
+        else:
+            factor_indices = ic_result["factor_idx"].to_numpy()
+        n_obs = ic_result["n_obs"].to_numpy().astype(np.float64)
+        svv = ic_result["svv"].to_numpy()
+        syy = ic_result["syy"].to_numpy()
+        svy = ic_result["svy"].to_numpy()
+
+        denom = np.sqrt(svv * syy)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            ic_vals = np.where(denom > 0, svy / np.where(denom > 0, denom, 1.0), np.nan)
+        ic_vals = np.where(n_obs >= min_obs, ic_vals, np.nan)
 
         ic_matrix[times, factor_indices] = ic_vals
-        valid_counts[times, factor_indices] = counts
+        valid_counts[times, factor_indices] = n_obs.astype(np.int32)
 
     return ic_matrix, valid_counts
 

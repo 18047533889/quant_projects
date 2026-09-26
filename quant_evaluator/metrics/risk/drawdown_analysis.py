@@ -9,12 +9,11 @@ from typing import Tuple, List, Dict, Optional
 import numpy as np
 
 
-def drawdown_events(returns: np.ndarray) -> List[Dict]:
-    """Single-pass, observation-aligned events (definition version 0.3).
+def _drawdown_events_reference(returns: np.ndarray) -> List[Dict]:
+    """Bit-exact oracle of :func:`drawdown_events` (single-pass state machine).
 
-    A missing return makes subsequent NAV unknown, not a flat day. Such an
-    event is censored at the first valuation gap; no recovery is inferred
-    across it. Durations are grid intervals, never finite-observation counts.
+    Kept verbatim so the vectorized rewrite can be diffed for bit-level
+    equivalence.  Do not change behavior.
     """
     values = np.asarray(returns, dtype=np.float64)
     if values.ndim != 1:
@@ -59,6 +58,100 @@ def drawdown_events(returns: np.ndarray) -> List[Dict]:
                      duration=len(values) - event["start_idx"],
                      valid_observations=len(values) - event["start_idx"])
         events.append(event)
+    return events
+
+
+def drawdown_events(returns: np.ndarray) -> List[Dict]:
+    """Single-pass, observation-aligned events (definition version 0.3).
+
+    A missing return makes subsequent NAV unknown, not a flat day. Such an
+    event is censored at the first valuation gap; no recovery is inferred
+    across it. Durations are grid intervals, never finite-observation counts.
+
+    Vectorized rewrite: wealth / running-max / drawdown are built with
+    ``cumprod`` + ``maximum.accumulate``; each drawdown episode is a maximal run
+    of ``drawdown > 0`` (RLE over the boolean mask).  Event boundaries — the
+    first valuation gap (censored ``INVALID_VALUATION``), end-of-series
+    censoring (``DEFAULTED`` / ``ACTIVE``) and trough/peak high-water indexing
+    — match the single-pass oracle :func:`_drawdown_events_reference`
+    bit-for-bit (verified by the equivalence tests).
+    """
+    values = np.asarray(returns, dtype=np.float64)
+    if values.ndim != 1:
+        raise ValueError("drawdown_events requires 1D returns")
+    if np.any(values[np.isfinite(values)] < -1):
+        raise ValueError("returns below -100% require an explicit negative-capital contract")
+
+    T = values.shape[0]
+    nan_mask = ~np.isfinite(values)
+    has_nan = bool(nan_mask.any())
+    first_nan = int(np.argmax(nan_mask)) if has_nan else T
+    k = first_nan  # length of the finite leading prefix
+
+    events: List[Dict] = []
+    peak_before = -1
+    if k > 0:
+        wealth = np.cumprod(1.0 + values[:k])
+        high = np.maximum.accumulate(wealth)
+        high = np.maximum(high, 1.0)
+        dd = np.maximum(0.0, 1.0 - wealth / high)
+        new_high = wealth == high
+        idx = np.arange(k)
+        last_high = np.where(new_high, idx, -1)
+        peak_array = np.maximum.accumulate(last_high)
+        in_dd = dd > 0.0
+        if in_dd.any():
+            padded = np.concatenate(([False], in_dd, [False]))
+            diff = padded[1:].astype(int) - padded[:-1].astype(int)
+            starts = np.flatnonzero(diff == 1)
+            ends = np.flatnonzero(diff == -1) - 1  # inclusive end in in_dd coords
+            for s, e in zip(starts.tolist(), ends.tolist()):
+                peak_idx = int(peak_array[s - 1]) if s > 0 else -1
+                seg_dd = dd[s:e + 1]
+                trough_idx = s + int(np.argmax(seg_dd))
+                drawdown = float(dd[trough_idx])
+                recovered = e < k - 1
+                if recovered:
+                    rec_idx = e + 1
+                    events.append(dict(
+                        peak_idx=peak_idx, start_idx=int(s), trough_idx=int(trough_idx),
+                        drawdown=drawdown, recovery_idx=int(rec_idx), end_idx=int(rec_idx),
+                        censored=False, status="RECOVERED",
+                        duration=int(rec_idx) - int(s),
+                        valid_observations=int(rec_idx) - int(s) + 1,
+                    ))
+                else:
+                    status = "DEFAULTED" if wealth[e] == 0 else "ACTIVE"
+                    events.append(dict(
+                        peak_idx=peak_idx, start_idx=int(s), trough_idx=int(trough_idx),
+                        drawdown=drawdown, recovery_idx=-1, end_idx=int(k - 1),
+                        censored=True, status=status,
+                        duration=int(k) - int(s),
+                        valid_observations=int(k) - int(s),
+                    ))
+        peak_before = int(peak_array[k - 1])
+
+    # First missing return: censor at the gap (mirrors the early-return branch).
+    if has_nan:
+        if events and events[-1].get("status") in ("DEFAULTED", "ACTIVE"):
+            last = events[-1]
+            last.update(
+                recovery_idx=-1, end_idx=T - 1, censored=True,
+                status="INVALID_VALUATION", first_missing_idx=first_nan,
+                duration=T - last["start_idx"],
+                valid_observations=int(np.isfinite(values[last["start_idx"]:]).sum()),
+            )
+        else:
+            valid_obs = int(np.isfinite(values[first_nan:]).sum())
+            events.append(dict(
+                peak_idx=peak_before, start_idx=first_nan, trough_idx=-1,
+                drawdown=float("nan"), recovery_idx=-1, end_idx=T - 1,
+                censored=True, status="INVALID_VALUATION",
+                first_missing_idx=first_nan,
+                duration=T - first_nan, valid_observations=valid_obs,
+            ))
+        return events
+
     return events
 
 

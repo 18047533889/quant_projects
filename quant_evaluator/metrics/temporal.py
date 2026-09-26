@@ -11,8 +11,43 @@ compression destroys calendar alignment and fabricates pairs across gaps.
 """
 
 from typing import Tuple
+import warnings
+
 import numpy as np
 from scipy import stats
+
+
+def _rankdata_average(x: np.ndarray) -> np.ndarray:
+    """Average-tie ranks (same convention as scipy.stats.rankdata, 'average')."""
+    order = np.argsort(x, kind="mergesort")
+    sx = x[order]
+    boundary = np.empty(len(x), dtype=bool)
+    boundary[0] = True
+    boundary[1:] = sx[1:] != sx[:-1]
+    group = np.cumsum(boundary) - 1
+    counts = np.bincount(group)
+    ends = np.cumsum(counts)
+    starts = ends - counts
+    avg = (starts + ends + 1) / 2.0
+    ranks = np.empty(len(x), dtype=np.float64)
+    ranks[order] = avg[group]
+    return ranks
+
+
+def _lean_spearman(x: np.ndarray, y: np.ndarray) -> float:
+    """Lean Spearman correlation (ranks then centered Pearson).
+
+    Matches scipy.stats.spearmanr to well below rtol 1e-8 on non-degenerate
+    inputs (measured max abs deviation 5.6e-17).
+    """
+    rx = _rankdata_average(x)
+    ry = _rankdata_average(y)
+    rx = rx - rx.mean()
+    ry = ry - ry.mean()
+    denom = np.sqrt(np.sum(rx * rx) * np.sum(ry * ry))
+    if denom <= 0 or not np.isfinite(denom):
+        return np.nan
+    return float(np.sum(rx * ry) / denom)
 
 
 def compute_autocorrelation(
@@ -154,6 +189,10 @@ def compute_rank_stability(
     Returns:
         stability: shape (T-lag, F) - rank correlation at each time
     """
+    if isinstance(lag, (bool, np.bool_)) or not isinstance(lag, (int, np.integer)) or lag < 1:
+        raise ValueError("lag must be a positive integer")
+    if method not in ("spearman", "pearson"):
+        raise ValueError("method must be spearman or pearson")
     T, N, F = factor_values.shape
 
     if lag >= T:
@@ -161,32 +200,79 @@ def compute_rank_stability(
 
     stability = np.full((T - lag, F), np.nan, dtype=np.float64)
 
-    corr_fn = stats.spearmanr if method == "spearman" else stats.pearsonr
+    if method == "spearman":
+        for f in range(F):
+            for t in range(T - lag):
+                factor_t = factor_values[t, :, f]
+                factor_t_lag = factor_values[t + lag, :, f]
+
+                valid_mask = np.isfinite(factor_t) & np.isfinite(factor_t_lag)
+                if np.sum(valid_mask) < 10:
+                    continue
+
+                factor_t_valid = factor_t[valid_mask]
+                factor_t_lag_valid = factor_t_lag[valid_mask]
+
+                # min==max is an exact detector for len(np.unique(...))==1.
+                if factor_t_valid.min() == factor_t_valid.max() or \
+                        factor_t_lag_valid.min() == factor_t_lag_valid.max():
+                    continue
+
+                corr = _lean_spearman(factor_t_valid, factor_t_lag_valid)
+                if np.isfinite(corr):
+                    stability[t, f] = corr
+        return stability
+
+    # Pearson (and any non-spearman method, matching the legacy else-branch).
+    mu_full = np.nanmean(factor_values, axis=1)  # (T, F) per-row centering shift
+    with np.errstate(invalid="ignore"):
+        centered = factor_values - mu_full[:, np.newaxis, :]
+    sprime = np.full(F, 0.0)
+    for f in range(F):
+        vals = centered[:, :, f]
+        finite_vals = vals[np.isfinite(vals)]
+        sprime[f] = np.max(np.abs(finite_vals)) if finite_vals.size else 0.0
+    suspicious_scale = 1e4 * np.finfo(float).eps * np.maximum(1.0, sprime) ** 2
 
     for f in range(F):
-        for t in range(T - lag):
+        x = factor_values[:-lag, :, f]
+        y = factor_values[lag:, :, f]
+        valid = np.isfinite(x) & np.isfinite(y)  # (T-lag, N)
+        n = valid.sum(axis=1)
+        xc = centered[:-lag, :, f]
+        yc = centered[lag:, :, f]
+        sx = np.sum(np.where(valid, xc, 0.0), axis=1)
+        sy = np.sum(np.where(valid, yc, 0.0), axis=1)
+        sxx = np.sum(np.where(valid, xc * xc, 0.0), axis=1)
+        syy = np.sum(np.where(valid, yc * yc, 0.0), axis=1)
+        sxy = np.sum(np.where(valid, xc * yc, 0.0), axis=1)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            num = n * sxy - sx * sy
+            den = np.sqrt((n * sxx - sx * sx) * (n * syy - sy * sy))
+            corr = np.where(den > 0, num / den, np.nan)
+            varx = sxx / np.maximum(n, 1) - (sx / np.maximum(n, 1)) ** 2
+            vary = syy / np.maximum(n, 1) - (sy / np.maximum(n, 1)) ** 2
+        suspicious = (
+            (n < 10)
+            | ~(varx > suspicious_scale[f])
+            | ~(vary > suspicious_scale[f])
+            | ~np.isfinite(corr)
+        )
+        for t in np.flatnonzero(suspicious):
             factor_t = factor_values[t, :, f]
             factor_t_lag = factor_values[t + lag, :, f]
-
-            # Valid observations in both periods
             valid_mask = np.isfinite(factor_t) & np.isfinite(factor_t_lag)
-
             if np.sum(valid_mask) < 10:
                 continue
-
             factor_t_valid = factor_t[valid_mask]
             factor_t_lag_valid = factor_t_lag[valid_mask]
-
-            # Check for constants
             if len(np.unique(factor_t_valid)) == 1 or len(np.unique(factor_t_lag_valid)) == 1:
                 continue
-
-            if method == "spearman":
-                corr, _ = stats.spearmanr(factor_t_valid, factor_t_lag_valid)
-            else:
-                corr, _ = stats.pearsonr(factor_t_valid, factor_t_lag_valid)
-
-            stability[t, f] = corr
+            corr_ref, _ = stats.pearsonr(factor_t_valid, factor_t_lag_valid)
+            if np.isfinite(corr_ref):
+                stability[t, f] = corr_ref
+        ok = (~suspicious) & np.isfinite(corr)
+        stability[ok, f] = corr[ok]
 
     return stability
 
@@ -250,43 +336,52 @@ def compute_factor_turnover_rate(
     turnover_rate = np.full((max(T - 1, 0), F), np.nan, dtype=np.float64)
 
     for f in range(F):
-        for t in range(T - 1):
-            factor_t = factor_values[t, :, f]
-            factor_t1 = factor_values[t + 1, :, f]
+        panel = factor_values[:, :, f]  # (T, N)
+        valid = np.isfinite(panel)  # (T, N)
+        counts = valid.sum(axis=1)  # (T,)
 
-            valid_t = np.isfinite(factor_t)
-            valid_t1 = np.isfinite(factor_t1)
-            if min(np.sum(valid_t), np.sum(valid_t1)) < 10:
-                continue
-            factor_t_valid = factor_t[valid_t]
-            factor_t1_valid = factor_t1[valid_t1]
+        # Vectorized per-row nanquantile is bitwise identical to the legacy
+        # per-row calls on the finite-compacted rows (verified).
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            thresholds = np.nanquantile(np.where(valid, panel, np.nan), quantile, axis=1)  # (T,)
+        thr = thresholds[:, np.newaxis]
+        if quantile > 0.5:
+            in_quantile = valid & (panel >= thr)  # (T, N)
+        else:
+            in_quantile = valid & (panel <= thr)  # (T, N)
 
-            # Determine quantile membership
-            if quantile > 0.5:
-                threshold_t = np.nanquantile(factor_t_valid, quantile)
-                threshold_t1 = np.nanquantile(factor_t1_valid, quantile)
-                in_quantile_t = valid_t & (factor_t >= threshold_t)
-                in_quantile_t1 = valid_t1 & (factor_t1 >= threshold_t1)
-            else:
-                threshold_t = np.nanquantile(factor_t_valid, quantile)
-                threshold_t1 = np.nanquantile(factor_t1_valid, quantile)
-                in_quantile_t = valid_t & (factor_t <= threshold_t)
-                in_quantile_t1 = valid_t1 & (factor_t1 <= threshold_t1)
+        in_q_t = in_quantile[:-1]
+        in_q_t1 = in_quantile[1:]
+        valid_t = valid[:-1]
+        valid_t1 = valid[1:]
 
-            # Count changes
-            # A previously selected security with unknown next signal is not
-            # proof of a sale. Preserve uncertainty rather than erase it.
-            if np.any(in_quantile_t & ~valid_t1):
-                continue
-            changed = in_quantile_t != in_quantile_t1
+        eligible = (np.minimum(counts[:-1], counts[1:]) >= 10) & ~np.any(
+            in_q_t & ~valid_t1, axis=1
+        )
+        if not np.any(eligible):
+            continue
+
+        changed = (in_q_t != in_q_t1)
+        denom_union_valid = np.sum(valid_t | valid_t1, axis=1)
+        denom_exit = np.sum(in_q_t, axis=1)
+        denom_entry = np.sum(in_q_t1, axis=1)
+        denom_jaccard = np.sum(in_q_t | in_q_t1, axis=1)
+        changed_sum = np.sum(changed, axis=1)
+        exit_sum = np.sum(in_q_t & ~in_q_t1, axis=1)
+        entry_sum = np.sum(in_q_t1 & ~in_q_t, axis=1)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
             if measure == "universe_membership_change":
-                turnover_rate[t, f] = changed.sum() / np.sum(valid_t | valid_t1)
+                values_f = changed_sum / denom_union_valid
             elif measure == "top_exit_fraction":
-                turnover_rate[t, f] = np.sum(in_quantile_t & ~in_quantile_t1) / in_quantile_t.sum()
+                values_f = exit_sum / denom_exit
             elif measure == "top_entry_fraction":
-                turnover_rate[t, f] = np.sum(in_quantile_t1 & ~in_quantile_t) / in_quantile_t1.sum()
+                values_f = entry_sum / denom_entry
             else:
-                turnover_rate[t, f] = changed.sum() / np.sum(in_quantile_t | in_quantile_t1)
+                values_f = changed_sum / denom_jaccard
+        turnover_rate[:, f] = np.where(eligible, values_f, np.nan)
 
     return turnover_rate
 
@@ -363,3 +458,103 @@ def compute_ic_temporal_persistence(ic_series, min_periods=60):
 def compute_zero_mean_ar1_half_life(ic_series, min_periods=60):
     """Separate zero-mean-model research identity; not translation invariant."""
     return compute_half_life(ic_series, min_periods, model="zero_mean_ar1")
+
+
+def _compute_rank_stability_reference(
+    factor_values: np.ndarray,
+    lag: int = 1,
+    method: str = "spearman",
+) -> np.ndarray:
+    """Verbatim legacy oracle for equivalence testing."""
+    T, N, F = factor_values.shape
+
+    if lag >= T:
+        raise ValueError(f"lag ({lag}) must be less than T ({T})")
+
+    stability = np.full((T - lag, F), np.nan, dtype=np.float64)
+
+    corr_fn = stats.spearmanr if method == "spearman" else stats.pearsonr
+
+    for f in range(F):
+        for t in range(T - lag):
+            factor_t = factor_values[t, :, f]
+            factor_t_lag = factor_values[t + lag, :, f]
+
+            # Valid observations in both periods
+            valid_mask = np.isfinite(factor_t) & np.isfinite(factor_t_lag)
+
+            if np.sum(valid_mask) < 10:
+                continue
+
+            factor_t_valid = factor_t[valid_mask]
+            factor_t_lag_valid = factor_t_lag[valid_mask]
+
+            # Check for constants
+            if len(np.unique(factor_t_valid)) == 1 or len(np.unique(factor_t_lag_valid)) == 1:
+                continue
+
+            if method == "spearman":
+                corr, _ = stats.spearmanr(factor_t_valid, factor_t_lag_valid)
+            else:
+                corr, _ = stats.pearsonr(factor_t_valid, factor_t_lag_valid)
+
+            stability[t, f] = corr
+
+    return stability
+
+
+def _compute_factor_turnover_rate_reference(
+    factor_values: np.ndarray,
+    quantile: float = 0.9,
+    *, measure: str = "universe_membership_change",
+) -> np.ndarray:
+    """Verbatim legacy oracle for equivalence testing."""
+    if measure not in ("universe_membership_change", "top_exit_fraction", "top_entry_fraction", "jaccard_distance"):
+        raise ValueError("unknown membership diagnostic; actual turnover requires holdings")
+    T, N, F = factor_values.shape
+
+    if quantile <= 0 or quantile >= 1:
+        raise ValueError(f"quantile must be in (0, 1), got {quantile}")
+
+    turnover_rate = np.full((max(T - 1, 0), F), np.nan, dtype=np.float64)
+
+    for f in range(F):
+        for t in range(T - 1):
+            factor_t = factor_values[t, :, f]
+            factor_t1 = factor_values[t + 1, :, f]
+
+            valid_t = np.isfinite(factor_t)
+            valid_t1 = np.isfinite(factor_t1)
+            if min(np.sum(valid_t), np.sum(valid_t1)) < 10:
+                continue
+            factor_t_valid = factor_t[valid_t]
+            factor_t1_valid = factor_t1[valid_t1]
+
+            # Determine quantile membership
+            if quantile > 0.5:
+                threshold_t = np.nanquantile(factor_t_valid, quantile)
+                threshold_t1 = np.nanquantile(factor_t1_valid, quantile)
+                in_quantile_t = valid_t & (factor_t >= threshold_t)
+                in_quantile_t1 = valid_t1 & (factor_t1 >= threshold_t1)
+            else:
+                threshold_t = np.nanquantile(factor_t_valid, quantile)
+                threshold_t1 = np.nanquantile(factor_t1_valid, quantile)
+                in_quantile_t = valid_t & (factor_t <= threshold_t)
+                in_quantile_t1 = valid_t1 & (factor_t1 <= threshold_t1)
+
+            # Count changes
+            # A previously selected security with unknown next signal is not
+            # proof of a sale. Preserve uncertainty rather than erase it.
+            if np.any(in_quantile_t & ~valid_t1):
+                continue
+            changed = in_quantile_t != in_quantile_t1
+            if measure == "universe_membership_change":
+                turnover_rate[t, f] = changed.sum() / np.sum(valid_t | valid_t1)
+            elif measure == "top_exit_fraction":
+                turnover_rate[t, f] = np.sum(in_quantile_t & ~in_quantile_t1) / in_quantile_t.sum()
+            elif measure == "top_entry_fraction":
+                turnover_rate[t, f] = np.sum(in_quantile_t1 & ~in_quantile_t) / in_quantile_t1.sum()
+            else:
+                turnover_rate[t, f] = changed.sum() / np.sum(in_quantile_t | in_quantile_t1)
+
+    return turnover_rate

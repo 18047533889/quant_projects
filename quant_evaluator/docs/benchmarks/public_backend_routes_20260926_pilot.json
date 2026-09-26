@@ -1,0 +1,247 @@
+{
+  "started_at_utc": "2026-09-26T09:22:15.788772+00:00",
+  "source": {
+    "dataset": "ashare_stock_daily_adj",
+    "source_rows": 3714828,
+    "local_partition_days": 723,
+    "read_groups": 155,
+    "gaps_over_three_calendar_days": 18,
+    "calendar_days": 723,
+    "days": 701,
+    "assets": 5314,
+    "factors": 2,
+    "date_span": [
+      "2023-09-01",
+      "2026-08-27"
+    ],
+    "signal": "AdjVwap[t-1]/AdjVwap[t-6 or t-21]-1",
+    "label": "AdjVwap[t+1]/AdjVwap[t]-1"
+  },
+  "source_load_s": 5.961840461008251,
+  "script_sha256": "caed3fbed1a147e19dae133611ffe932ca7522f49d19c63d60a3dbc03f628f05",
+  "groups": [
+    "base",
+    "portfolio",
+    "risk",
+    "exposure"
+  ],
+  "repeats": 1,
+  "timeout_s": 90.0,
+  "results": {
+    "rank_ic": {
+      "cpu": {
+        "status": "ok",
+        "cold_s": 1.5448892069980502,
+        "warm_s": [
+          1.4871405620360747
+        ],
+        "warm_median_s": 1.4871405620360747,
+        "peak_rss_kib": 1340080,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.09746910398826,
+        "warm_s": [
+          0.6232689370517619
+        ],
+        "warm_median_s": 0.6232689370517619,
+        "peak_rss_kib": 1468608,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 4981047296,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 7.632783294297951e-17
+      }
+    },
+    "sharpe_ratio": {
+      "cpu": {
+        "status": "ok",
+        "cold_s": 0.5616060910397209,
+        "warm_s": [
+          0.4928929749876261
+        ],
+        "warm_median_s": 0.4928929749876261,
+        "peak_rss_kib": 977996,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 0.8682235949672759,
+        "warm_s": [
+          0.46321430802345276
+        ],
+        "warm_median_s": 0.46321430802345276,
+        "peak_rss_kib": 1440136,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 89487872,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 1.8041124150158794e-16
+      }
+    },
+    "worst_calendar_month": {
+      "cpu": {
+        "status": "ok",
+        "cold_s": 0.5635574120096862,
+        "warm_s": [
+          0.48459836398251355
+        ],
+        "warm_median_s": 0.48459836398251355,
+        "peak_rss_kib": 978280,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 0.8125177989713848,
+        "warm_s": [
+          0.4501420299638994
+        ],
+        "warm_median_s": 0.4501420299638994,
+        "peak_rss_kib": 1261452,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 18432,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": "cuda_strict",
+        "no_fallback": true
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 2.220446049250313e-16
+      }
+    },
+    "worst_rolling_21d": {
+      "cpu": {
+        "status": "ok",
+        "cold_s": 0.5759199610329233,
+        "warm_s": [
+          0.5020901190000586
+        ],
+        "warm_median_s": 0.5020901190000586,
+        "peak_rss_kib": 978004,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 0.8669782819924876,
+        "warm_s": [
+          0.5327642970369197
+        ],
+        "warm_median_s": 0.5327642970369197,
+        "peak_rss_kib": 1261436,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 15872,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": "cuda_strict",
+        "no_fallback": true
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 2.220446049250313e-16
+      }
+    },
+    "size_exposure": {
+      "cpu": {
+        "status": "ok",
+        "cold_s": 6.227728130004834,
+        "warm_s": [
+          6.139715724973939
+        ],
+        "warm_median_s": 6.139715724973939,
+        "peak_rss_kib": 1657964,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 6.332311246951576,
+        "warm_s": [
+          5.850784499023575
+        ],
+        "warm_median_s": 5.850784499023575,
+        "peak_rss_kib": 2468244,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 1814196224,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": "cuda_strict",
+        "no_fallback": true
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 6.776263578034403e-19
+      }
+    }
+  }
+}

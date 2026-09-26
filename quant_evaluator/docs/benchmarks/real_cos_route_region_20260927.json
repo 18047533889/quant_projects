@@ -1,0 +1,396 @@
+{
+  "created_utc": "2026-09-26T16:29:17.556965+00:00",
+  "source_provenance": {
+    "sources": [
+      {
+        "factor_id": "weekly_4cbd7ca6dccc61dc",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59/weekly_4cbd7ca6dccc61dc.parquet",
+        "sha256": "35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59",
+        "bytes": 5400494,
+        "etag": "91da3ad8a2d54f3f35911e231bfcffa8",
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_db5616cd85a477b3",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d/weekly_db5616cd85a477b3.parquet",
+        "sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+        "bytes": 3828456,
+        "etag": "5efb1f8070196661daabeb563740dff0",
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending"
+      }
+    ],
+    "days": 2586,
+    "assets": 5461,
+    "date_span": [
+      "2016-01-04",
+      "2026-08-25"
+    ],
+    "calendar_sessions": 2588,
+    "missing_adj_vwap_partitions": [],
+    "label": "decision t; execution t+1; AdjVwap(t+2)/AdjVwap(t+1)-1",
+    "factor_finite_ratio": 0.7654643989659928,
+    "label_finite_ratio": 0.7738646803396594,
+    "limitations": "research lineage; no upstream PIT/investability certification"
+  },
+  "input_load_s": 20.874015734996647,
+  "host_parent_peak_rss_kib": 2944144,
+  "shapes": [
+    {
+      "t": 1000,
+      "n": 5000,
+      "f": 1,
+      "metrics": {
+        "rank_ic": {
+          "cpu": {
+            "cold_s": 1.3836040180176497,
+            "warm_s": 1.1320812809863128,
+            "peak_rss_kib": 2625936
+          },
+          "cuda": {
+            "cold_s": 2.400995711039286,
+            "warm_s": 0.2963776219985448,
+            "peak_rss_kib": 3043472,
+            "peak_vram": 811837440
+          },
+          "parity": {
+            "pass": true,
+            "same_shape": true,
+            "same_finite": true,
+            "numeric_1e-8_1e-10": true,
+            "same_counts": true,
+            "same_mask": true,
+            "same_evidence": true,
+            "same_provenance_counts": true,
+            "same_input_hash": true,
+            "gpu_routed": true,
+            "max_abs": 0.0
+          }
+        },
+        "quantile_spread": {
+          "cpu": {
+            "cold_s": 0.9712050780071877,
+            "warm_s": 0.598933378001675,
+            "peak_rss_kib": 2696336
+          },
+          "cuda": {
+            "cold_s": 0.9229541050153784,
+            "warm_s": 0.2681619239738211,
+            "peak_rss_kib": 3015568,
+            "peak_vram": 450134016
+          },
+          "parity": {
+            "pass": true,
+            "same_shape": true,
+            "same_finite": true,
+            "numeric_1e-8_1e-10": true,
+            "same_counts": true,
+            "same_mask": true,
+            "same_evidence": true,
+            "same_provenance_counts": true,
+            "same_input_hash": true,
+            "gpu_routed": true,
+            "max_abs": 1.0842021724855044e-19
+          }
+        }
+      }
+    },
+    {
+      "t": 1000,
+      "n": 5461,
+      "f": 2,
+      "metrics": {
+        "rank_ic": {
+          "cpu": {
+            "cold_s": 3.116916018014308,
+            "warm_s": 2.6318200799869373,
+            "peak_rss_kib": 2625336
+          },
+          "cuda": {
+            "cold_s": 1.4540555969579145,
+            "warm_s": 0.6156393460114487,
+            "peak_rss_kib": 3144504,
+            "peak_vram": 5457231872
+          },
+          "parity": {
+            "pass": true,
+            "same_shape": true,
+            "same_finite": true,
+            "numeric_1e-8_1e-10": true,
+            "same_counts": true,
+            "same_mask": true,
+            "same_evidence": true,
+            "same_provenance_counts": true,
+            "same_input_hash": true,
+            "gpu_routed": true,
+            "max_abs": 8.673617379884035e-19
+          }
+        },
+        "quantile_spread": {
+          "cpu": {
+            "cold_s": 1.6653320610057563,
+            "warm_s": 1.1375459780101664,
+            "peak_rss_kib": 2697528
+          },
+          "cuda": {
+            "cold_s": 1.4008071339922026,
+            "warm_s": 0.5449489619932137,
+            "peak_rss_kib": 3141688,
+            "peak_vram": 549146112
+          },
+          "parity": {
+            "pass": true,
+            "same_shape": true,
+            "same_finite": true,
+            "numeric_1e-8_1e-10": true,
+            "same_counts": true,
+            "same_mask": true,
+            "same_evidence": true,
+            "same_provenance_counts": true,
+            "same_input_hash": true,
+            "gpu_routed": true,
+            "max_abs": 4.675621868843738e-19
+          }
+        }
+      }
+    },
+    {
+      "t": 1800,
+      "n": 5000,
+      "f": 2,
+      "metrics": {
+        "rank_ic": {
+          "cpu": {
+            "cold_s": 4.915764200966805,
+            "warm_s": 4.225526790018193,
+            "peak_rss_kib": 2954672
+          },
+          "cuda": {
+            "cold_s": 2.023482716002036,
+            "warm_s": 1.0013445439981297,
+            "peak_rss_kib": 3342924,
+            "peak_vram": 5049983488
+          },
+          "parity": {
+            "pass": true,
+            "same_shape": true,
+            "same_finite": true,
+            "numeric_1e-8_1e-10": true,
+            "same_counts": true,
+            "same_mask": true,
+            "same_evidence": true,
+            "same_provenance_counts": true,
+            "same_input_hash": true,
+            "gpu_routed": true,
+            "max_abs": 3.0357660829594124e-18
+          }
+        },
+        "quantile_spread": {
+          "cpu": {
+            "cold_s": 2.606350898044184,
+            "warm_s": 1.7914556310279295,
+            "peak_rss_kib": 2706764
+          },
+          "cuda": {
+            "cold_s": 1.9274329820182174,
+            "warm_s": 0.8861523320083506,
+            "peak_rss_kib": 3344972,
+            "peak_vram": 612985344
+          },
+          "parity": {
+            "pass": true,
+            "same_shape": true,
+            "same_finite": true,
+            "numeric_1e-8_1e-10": true,
+            "same_counts": true,
+            "same_mask": true,
+            "same_evidence": true,
+            "same_provenance_counts": true,
+            "same_input_hash": true,
+            "gpu_routed": true,
+            "max_abs": 9.58841296291868e-19
+          }
+        }
+      }
+    },
+    {
+      "t": 2400,
+      "n": 5461,
+      "f": 1,
+      "metrics": {
+        "rank_ic": {
+          "cpu": {
+            "cold_s": 3.3193308169720694,
+            "warm_s": 2.7099403119646013,
+            "peak_rss_kib": 2634156
+          },
+          "cuda": {
+            "cold_s": 1.6158507940126583,
+            "warm_s": 0.7838184590218589,
+            "peak_rss_kib": 3080364,
+            "peak_vram": 8601040384
+          },
+          "parity": {
+            "pass": true,
+            "same_shape": true,
+            "same_finite": true,
+            "numeric_1e-8_1e-10": true,
+            "same_counts": true,
+            "same_mask": true,
+            "same_evidence": true,
+            "same_provenance_counts": true,
+            "same_input_hash": true,
+            "gpu_routed": true,
+            "max_abs": 4.336808689942018e-19
+          }
+        },
+        "quantile_spread": {
+          "cpu": {
+            "cold_s": 1.9590576119953766,
+            "warm_s": 1.426363667997066,
+            "peak_rss_kib": 2705580
+          },
+          "cuda": {
+            "cold_s": 1.4498881239560433,
+            "warm_s": 0.6914630529936403,
+            "peak_rss_kib": 3081900,
+            "peak_vram": 627815936
+          },
+          "parity": {
+            "pass": true,
+            "same_shape": true,
+            "same_finite": true,
+            "numeric_1e-8_1e-10": true,
+            "same_counts": true,
+            "same_mask": true,
+            "same_evidence": true,
+            "same_provenance_counts": true,
+            "same_input_hash": true,
+            "gpu_routed": true,
+            "max_abs": 9.41900637346782e-19
+          }
+        }
+      }
+    },
+    {
+      "t": 2400,
+      "n": 5000,
+      "f": 2,
+      "metrics": {
+        "rank_ic": {
+          "cpu": {
+            "cold_s": 6.328086325025652,
+            "warm_s": 5.52225689496845,
+            "peak_rss_kib": 3448116
+          },
+          "cuda": {
+            "cold_s": 2.5304864610079676,
+            "warm_s": 1.3352502339985222,
+            "peak_rss_kib": 3458524,
+            "peak_vram": 7876762624
+          },
+          "parity": {
+            "pass": true,
+            "same_shape": true,
+            "same_finite": true,
+            "numeric_1e-8_1e-10": true,
+            "same_counts": true,
+            "same_mask": true,
+            "same_evidence": true,
+            "same_provenance_counts": true,
+            "same_input_hash": true,
+            "gpu_routed": true,
+            "max_abs": 1.734723475976807e-18
+          }
+        },
+        "quantile_spread": {
+          "cpu": {
+            "cold_s": 3.2119015590287745,
+            "warm_s": 2.303696176968515,
+            "peak_rss_kib": 2821084
+          },
+          "cuda": {
+            "cold_s": 2.303893272008281,
+            "warm_s": 1.1779799100477248,
+            "peak_rss_kib": 3455452,
+            "peak_vram": 685080576
+          },
+          "parity": {
+            "pass": true,
+            "same_shape": true,
+            "same_finite": true,
+            "numeric_1e-8_1e-10": true,
+            "same_counts": true,
+            "same_mask": true,
+            "same_evidence": true,
+            "same_provenance_counts": true,
+            "same_input_hash": true,
+            "gpu_routed": true,
+            "max_abs": 8.876905287225068e-19
+          }
+        }
+      }
+    },
+    {
+      "t": 2586,
+      "n": 5461,
+      "f": 2,
+      "metrics": {
+        "rank_ic": {
+          "cpu": {
+            "cold_s": 7.108598555030767,
+            "warm_s": 6.157154595013708,
+            "peak_rss_kib": 3788208
+          },
+          "cuda": {
+            "cold_s": 2.7220156750408933,
+            "warm_s": 1.5443780539790168,
+            "peak_rss_kib": 3804208,
+            "peak_vram": 11234754560
+          },
+          "parity": {
+            "pass": true,
+            "same_shape": true,
+            "same_finite": true,
+            "numeric_1e-8_1e-10": true,
+            "same_counts": true,
+            "same_mask": true,
+            "same_evidence": true,
+            "same_provenance_counts": true,
+            "same_input_hash": true,
+            "gpu_routed": true,
+            "max_abs": 3.469446951953614e-18
+          }
+        },
+        "quantile_spread": {
+          "cpu": {
+            "cold_s": 3.779020858986769,
+            "warm_s": 2.6279738700250164,
+            "peak_rss_kib": 3498544
+          },
+          "cuda": {
+            "cold_s": 2.5851004919968545,
+            "warm_s": 1.374173463031184,
+            "peak_rss_kib": 3806000,
+            "peak_vram": 757267456
+          },
+          "parity": {
+            "pass": true,
+            "same_shape": true,
+            "same_finite": true,
+            "numeric_1e-8_1e-10": true,
+            "same_counts": true,
+            "same_mask": true,
+            "same_evidence": true,
+            "same_provenance_counts": true,
+            "same_input_hash": true,
+            "gpu_routed": true,
+            "max_abs": 1.0706496453294356e-18
+          }
+        }
+      }
+    }
+  ],
+  "note": "one cold and one warm evaluation per backend; process order alternated"
+}

@@ -11,7 +11,11 @@ from quant_evaluator.contracts.backend_policy import (
     GPUExecutionPolicy,
 )
 from quant_evaluator.api.batch_bundle import BatchEvaluationBundle
-from quant_evaluator.api.horizons import HorizonEvaluationBundle, evaluate_horizons
+from quant_evaluator.api.ic_decay import ICDecayResult, compute_ic_decay
+from quant_evaluator.api.horizons import (
+    HorizonEvaluationBundle, MultiHorizonSummary,
+    evaluate_horizons, evaluate_factor_multi_horizon,
+)
 
 __all__ = [
     "evaluate",
@@ -20,6 +24,7 @@ __all__ = [
     "PrecisionPolicy",
     "GPUExecutionPolicy",
     "BatchEvaluationBundle",
-    "HorizonEvaluationBundle",
-    "evaluate_horizons",
+    "HorizonEvaluationBundle", "MultiHorizonSummary",
+    "ICDecayResult", "compute_ic_decay",
+    "evaluate_horizons", "evaluate_factor_multi_horizon",
 ]

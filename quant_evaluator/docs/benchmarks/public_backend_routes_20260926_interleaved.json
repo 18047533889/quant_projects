@@ -1,0 +1,948 @@
+{
+  "started_at_utc": "2026-09-26T09:39:40.766257+00:00",
+  "source": {
+    "dataset": "ashare_stock_daily_adj",
+    "source_rows": 3714828,
+    "local_partition_days": 723,
+    "read_groups": 155,
+    "gaps_over_three_calendar_days": 18,
+    "calendar_days": 723,
+    "days": 701,
+    "assets": 5314,
+    "factors": 2,
+    "date_span": [
+      "2023-09-01",
+      "2026-08-27"
+    ],
+    "signal": "AdjVwap[t-1]/AdjVwap[t-6 or t-21]-1",
+    "label": "AdjVwap[t+1]/AdjVwap[t]-1"
+  },
+  "source_load_s": 5.72600154398242,
+  "script_sha256": "2e90ffcd7aad8896728e08eddf1b4494cf5934f4462245bb4cec67fa24bd5992",
+  "groups": [
+    "base"
+  ],
+  "repeats": 3,
+  "alternate_order": true,
+  "timeout_s": 90.0,
+  "results": {
+    "coverage": {
+      "backend_order": [
+        "cpu",
+        "cuda_strict"
+      ],
+      "cpu": {
+        "status": "ok",
+        "cold_s": 0.7111144380178303,
+        "warm_s": [
+          0.6699941050028428,
+          0.6559241570066661,
+          0.6564976599765942
+        ],
+        "warm_median_s": 0.6564976599765942,
+        "peak_rss_kib": 777696,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 0.7900717659504153,
+        "warm_s": [
+          0.43014593300176784,
+          0.507288494030945,
+          0.4345611699973233
+        ],
+        "warm_median_s": 0.4345611699973233,
+        "peak_rss_kib": 1174124,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 108029440,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 0.0
+      }
+    },
+    "daily_quantile_monotonicity_rate": {
+      "backend_order": [
+        "cuda_strict",
+        "cpu"
+      ],
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.0145807880326174,
+        "warm_s": [
+          0.4825629380065948,
+          0.4813645030371845,
+          0.48643702099798247
+        ],
+        "warm_median_s": 0.4825629380065948,
+        "peak_rss_kib": 1306232,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 507794944,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cpu": {
+        "status": "ok",
+        "cold_s": 1.7872583159478381,
+        "warm_s": [
+          1.5228377140010707,
+          1.5147768859751523,
+          1.5449350390117615
+        ],
+        "warm_median_s": 1.5228377140010707,
+        "peak_rss_kib": 849920,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 0.0
+      }
+    },
+    "daily_quantile_monotonicity_series": {
+      "backend_order": [
+        "cpu",
+        "cuda_strict"
+      ],
+      "cpu": {
+        "status": "ok",
+        "cold_s": 1.3030044110491872,
+        "warm_s": [
+          1.0294369119801559,
+          1.0199290679884143,
+          0.9947328850394115
+        ],
+        "warm_median_s": 1.0199290679884143,
+        "peak_rss_kib": 850200,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "SeriesMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.0023304260103032,
+        "warm_s": [
+          0.48975189100019634,
+          0.4926580739556812,
+          0.48899127496406436
+        ],
+        "warm_median_s": 0.48975189100019634,
+        "peak_rss_kib": 1306604,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 507794944,
+        "artifact_type": "SeriesMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 0.0
+      }
+    },
+    "factor_turnover_rate": {
+      "backend_order": [
+        "cuda_strict",
+        "cpu"
+      ],
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.683845805004239,
+        "warm_s": [
+          1.3773717049625702,
+          1.2567411509808153,
+          1.259049631014932
+        ],
+        "warm_median_s": 1.259049631014932,
+        "peak_rss_kib": 1268304,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 90387456,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cpu": {
+        "status": "ok",
+        "cold_s": 0.9160234410082921,
+        "warm_s": [
+          0.8516433049808256,
+          0.8448642790317535,
+          0.8534720199531876
+        ],
+        "warm_median_s": 0.8516433049808256,
+        "peak_rss_kib": 778688,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 2.0816681711721685e-17
+      }
+    },
+    "ic_ir": {
+      "backend_order": [
+        "cpu",
+        "cuda_strict"
+      ],
+      "cpu": {
+        "status": "ok",
+        "cold_s": 1.5393697069957852,
+        "warm_s": [
+          1.6255214079865254,
+          1.4893056610017084,
+          1.487569562974386
+        ],
+        "warm_median_s": 1.4893056610017084,
+        "peak_rss_kib": 1137212,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.0762603350449353,
+        "warm_s": [
+          0.6110581050161272,
+          0.6100601759972051,
+          0.6153959449729882
+        ],
+        "warm_median_s": 0.6110581050161272,
+        "peak_rss_kib": 1297384,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 4981047296,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 5.551115123125783e-17
+      }
+    },
+    "ic_median": {
+      "backend_order": [
+        "cuda_strict",
+        "cpu"
+      ],
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.0970550799975172,
+        "warm_s": [
+          0.6340924040414393,
+          0.6162522090016864,
+          0.6211770820082165
+        ],
+        "warm_median_s": 0.6211770820082165,
+        "peak_rss_kib": 1297512,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 4981047296,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cpu": {
+        "status": "ok",
+        "cold_s": 1.543023895996157,
+        "warm_s": [
+          1.5005997720290907,
+          1.488483116030693,
+          1.4662373750470579
+        ],
+        "warm_median_s": 1.488483116030693,
+        "peak_rss_kib": 1137360,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 3.469446951953614e-18
+      }
+    },
+    "ic_std": {
+      "backend_order": [
+        "cpu",
+        "cuda_strict"
+      ],
+      "cpu": {
+        "status": "ok",
+        "cold_s": 1.5387856140150689,
+        "warm_s": [
+          1.4931174869998358,
+          1.5435749999596737,
+          1.5682663379702717
+        ],
+        "warm_median_s": 1.5435749999596737,
+        "peak_rss_kib": 1137264,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.2333575030206703,
+        "warm_s": [
+          0.6481861199717969,
+          0.6442304480005987,
+          0.6528461499838158
+        ],
+        "warm_median_s": 0.6481861199717969,
+        "peak_rss_kib": 1297532,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 4981047296,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 2.7755575615628914e-17
+      }
+    },
+    "pearson_ic": {
+      "backend_order": [
+        "cuda_strict",
+        "cpu"
+      ],
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 0.9241091180010699,
+        "warm_s": [
+          0.4813974419957958,
+          0.4699808359728195,
+          0.49213951895944774
+        ],
+        "warm_median_s": 0.4813974419957958,
+        "peak_rss_kib": 1260728,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 286835200,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cpu": {
+        "status": "ok",
+        "cold_s": 0.7310370900086127,
+        "warm_s": [
+          0.6734864099998958,
+          0.6573128949967213,
+          0.6919839939801022
+        ],
+        "warm_median_s": 0.6734864099998958,
+        "peak_rss_kib": 779028,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 1.734723475976807e-17
+      }
+    },
+    "pearson_ic_ir": {
+      "backend_order": [
+        "cpu",
+        "cuda_strict"
+      ],
+      "cpu": {
+        "status": "ok",
+        "cold_s": 0.7687991849961691,
+        "warm_s": [
+          0.6593484139884822,
+          0.6862492959480733,
+          0.6617706809774972
+        ],
+        "warm_median_s": 0.6617706809774972,
+        "peak_rss_kib": 779600,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 0.9422409620019607,
+        "warm_s": [
+          0.552688300027512,
+          0.5274560680263676,
+          0.5021593080018647
+        ],
+        "warm_median_s": 0.5274560680263676,
+        "peak_rss_kib": 1261368,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 286835200,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 8.326672684688674e-17
+      }
+    },
+    "pearson_ic_series": {
+      "backend_order": [
+        "cuda_strict",
+        "cpu"
+      ],
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 0.9535684220027179,
+        "warm_s": [
+          0.4868007500190288,
+          0.5105327370110899,
+          0.5327406889991835
+        ],
+        "warm_median_s": 0.5105327370110899,
+        "peak_rss_kib": 1260852,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 286835200,
+        "artifact_type": "SeriesMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cpu": {
+        "status": "ok",
+        "cold_s": 0.7365717829670757,
+        "warm_s": [
+          0.6906917929882184,
+          0.7163058019941673,
+          0.679266185965389
+        ],
+        "warm_median_s": 0.6906917929882184,
+        "peak_rss_kib": 779412,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "SeriesMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 8.881784197001252e-16
+      }
+    },
+    "pearson_ic_std": {
+      "backend_order": [
+        "cpu",
+        "cuda_strict"
+      ],
+      "cpu": {
+        "status": "ok",
+        "cold_s": 0.7694783940096386,
+        "warm_s": [
+          0.6796781339799054,
+          0.6585516479681246,
+          0.6754802590003237
+        ],
+        "warm_median_s": 0.6754802590003237,
+        "peak_rss_kib": 779108,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 0.9268108959659003,
+        "warm_s": [
+          0.501184647961054,
+          0.5001303090248257,
+          0.5018997760489583
+        ],
+        "warm_median_s": 0.501184647961054,
+        "peak_rss_kib": 1261108,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 286835200,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 2.7755575615628914e-17
+      }
+    },
+    "quantile_monotonicity": {
+      "backend_order": [
+        "cuda_strict",
+        "cpu"
+      ],
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.1063021619920619,
+        "warm_s": [
+          0.5345588950440288,
+          0.5245264770346694,
+          0.532610822992865
+        ],
+        "warm_median_s": 0.532610822992865,
+        "peak_rss_kib": 1306656,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 507794944,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cpu": {
+        "status": "ok",
+        "cold_s": 1.2821702760411426,
+        "warm_s": [
+          0.9888925609993748,
+          1.0026712759863585,
+          0.9940025969990529
+        ],
+        "warm_median_s": 0.9940025969990529,
+        "peak_rss_kib": 850164,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 0.0
+      }
+    },
+    "quantile_returns_daily": {
+      "backend_order": [
+        "cpu",
+        "cuda_strict"
+      ],
+      "cpu": {
+        "status": "ok",
+        "cold_s": 1.2715088370023295,
+        "warm_s": [
+          1.0050657140091062,
+          1.0593757419846952,
+          1.0162317889626138
+        ],
+        "warm_median_s": 1.0162317889626138,
+        "peak_rss_kib": 850224,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "DailyQuantileReturnArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.0879417639807798,
+        "warm_s": [
+          0.4981762180104852,
+          0.4948370679630898,
+          0.49862079496961087
+        ],
+        "warm_median_s": 0.4981762180104852,
+        "peak_rss_kib": 1306996,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 507794944,
+        "artifact_type": "DailyQuantileReturnArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 1.5265566588595902e-16
+      }
+    },
+    "quantile_returns_full": {
+      "backend_order": [
+        "cuda_strict",
+        "cpu"
+      ],
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.077715620980598,
+        "warm_s": [
+          0.5079780829837546,
+          0.5156738520017825,
+          0.5086043950286694
+        ],
+        "warm_median_s": 0.5086043950286694,
+        "peak_rss_kib": 1306736,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 507794944,
+        "artifact_type": "VectorMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cpu": {
+        "status": "ok",
+        "cold_s": 1.3172569519956596,
+        "warm_s": [
+          1.0022993079619482,
+          1.0107441729633138,
+          0.9982439199811779
+        ],
+        "warm_median_s": 1.0022993079619482,
+        "peak_rss_kib": 849768,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "VectorMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 1.3552527156068805e-18
+      }
+    },
+    "quantile_spread": {
+      "backend_order": [
+        "cpu",
+        "cuda_strict"
+      ],
+      "cpu": {
+        "status": "ok",
+        "cold_s": 1.853008730977308,
+        "warm_s": [
+          1.5253283790079877,
+          1.5315583809860982,
+          1.5680837339605205
+        ],
+        "warm_median_s": 1.5315583809860982,
+        "peak_rss_kib": 849964,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.1411183649906889,
+        "warm_s": [
+          0.5424050990259275,
+          0.5062907040119171,
+          0.5046113950083964
+        ],
+        "warm_median_s": 0.5062907040119171,
+        "peak_rss_kib": 1306740,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 507794944,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 2.3852447794681098e-18
+      }
+    },
+    "rank_ic": {
+      "backend_order": [
+        "cuda_strict",
+        "cpu"
+      ],
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.117597822973039,
+        "warm_s": [
+          0.6268927889759652,
+          0.6266941559733823,
+          0.6421247819671407
+        ],
+        "warm_median_s": 0.6268927889759652,
+        "peak_rss_kib": 1297556,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 4981047296,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cpu": {
+        "status": "ok",
+        "cold_s": 1.6079070169944316,
+        "warm_s": [
+          1.5876248459680937,
+          1.5097181880264543,
+          1.5017593470402062
+        ],
+        "warm_median_s": 1.5097181880264543,
+        "peak_rss_kib": 1138604,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 7.632783294297951e-17
+      }
+    },
+    "rank_ic_series": {
+      "backend_order": [
+        "cpu",
+        "cuda_strict"
+      ],
+      "cpu": {
+        "status": "ok",
+        "cold_s": 1.5237597459927201,
+        "warm_s": [
+          1.5096953280153684,
+          1.491500795003958,
+          1.5007944759563543
+        ],
+        "warm_median_s": 1.5007944759563543,
+        "peak_rss_kib": 1138604,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "SeriesMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.1110092300223187,
+        "warm_s": [
+          0.6217691240017302,
+          0.638549058989156,
+          0.6205318509601057
+        ],
+        "warm_median_s": 0.6217691240017302,
+        "peak_rss_kib": 1297348,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 4981047296,
+        "artifact_type": "SeriesMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 1.1102230246251565e-16
+      }
+    },
+    "turnover": {
+      "backend_order": [
+        "cuda_strict",
+        "cpu"
+      ],
+      "cuda_strict": {
+        "status": "ok",
+        "cold_s": 1.070388460997492,
+        "warm_s": [
+          0.5251878860290162,
+          0.5333118329872377,
+          0.5272723730304278
+        ],
+        "warm_median_s": 0.5272723730304278,
+        "peak_rss_kib": 1301280,
+        "backend_used": "cuda",
+        "gpu_peak_vram": 4978867200,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "cpu": {
+        "status": "ok",
+        "cold_s": 1.2476806530030444,
+        "warm_s": [
+          0.9671461540274322,
+          0.9830412769806571,
+          0.9665585120092146
+        ],
+        "warm_median_s": 0.9671461540274322,
+        "peak_rss_kib": 848248,
+        "backend_used": null,
+        "gpu_peak_vram": null,
+        "artifact_type": "ScalarMetricArtifact",
+        "execution_backend": null,
+        "no_fallback": null
+      },
+      "parity": {
+        "pass": true,
+        "same_shape": true,
+        "same_finite": true,
+        "numeric_1e-8_1e-10": true,
+        "same_counts": true,
+        "same_mask": true,
+        "same_evidence": true,
+        "same_provenance_counts": true,
+        "same_input_hash": true,
+        "gpu_routed": true,
+        "max_abs": 2.7755575615628914e-17
+      }
+    }
+  }
+}

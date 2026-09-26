@@ -2,6 +2,33 @@
 Factor exposure analysis: loadings, sector/style exposure decomposition.
 
 Reference implementation for attribution and risk factor exposure measurement.
+
+Performance note (exposure family optimization)
+------------------------------------------------
+``compute_factor_loadings`` previously called ``rank_aware_projection`` once
+per time period inside a Python loop.  For T=1250 that is 1250 Python-side
+iterations of per-day array setup, a small SVD and a diagnostics ``dict``
+build — the Python dispatch overhead, not the linear algebra, dominates.
+
+The optimized ``compute_factor_loadings`` below replicates the *exact* numeric
+path of ``rank_aware_projection`` but:
+  * vectorizes the weighted centering / scaling over all eligible days,
+  * groups eligible days by their number of valid assets (so the design
+    matrices share one shape) and issues a single batched ``np.linalg.svd``,
+  * reconstructs coefficients / residuals per-day using the same formulas,
+    branching on the (small, <= num_coefs) distinct ranks within a group.
+
+A batched ``np.linalg.svd`` over a (M, n, p) stack calls the identical LAPACK
+routine per slice as a standalone 2-D SVD, so the singular values / vectors are
+bit-identical; the centering/scaling are elementwise reductions over the same
+asset axis, so they are bit-identical too.  Diagnostics that the contract
+treats as exact (``status`` / ``n`` / ``rank`` / ``effective_df``) are integers
+or strings and reproduce exactly.
+
+The untouched ``rank_aware_projection`` remains the single projection authority
+and is aliased to ``_rank_aware_projection_reference``; the original per-day
+``compute_factor_loadings`` loop is preserved verbatim as
+``_compute_factor_loadings_reference`` for equivalence testing.
 """
 
 from typing import Optional, Tuple
@@ -72,6 +99,157 @@ def rank_aware_projection(X, y, *, add_intercept=True, rcond=None, weights=None)
     return fitted,residual,diagnostics
 
 
+# Verbatim preserved reference of the single projection authority. The optimized
+# ``compute_factor_loadings`` re-derives the same math; this alias exists so the
+# equivalence tests can compare against the untouched original implementation.
+_rank_aware_projection_reference = rank_aware_projection
+
+
+def _ordered_valid_indices(valid: np.ndarray) -> np.ndarray:
+    """Return (T, max_n) integer array ``col_idx`` where, for each row ``t``,
+    ``col_idx[t, :n_per_t[t]]`` are the valid column positions in natural order.
+
+    Used to gather equal-length per-day blocks out of the ragged valid masks so
+    the linear algebra can be batched.
+    """
+    T, N = valid.shape
+    if not valid.any():
+        return np.empty((T, 0), dtype=np.int64)
+    cum = np.cumsum(valid.astype(np.int64), axis=1)
+    pos = np.where(valid, cum - 1, -1)
+    max_n = int(valid.sum(axis=1).max())
+    col_idx = np.full((T, max_n), -1, dtype=np.int64)
+    flat_valid = valid.reshape(-1)
+    cflat = np.nonzero(flat_valid)[0]
+    t_idx = np.repeat(np.arange(T), N)[cflat]
+    c_idx = cflat % N
+    j_pos = pos.reshape(-1)[cflat]
+    col_idx[t_idx, j_pos] = c_idx
+    return col_idx
+
+
+def _batched_wls(y, X, w, add_intercept=True, rcond=None):
+    """Batched centered weighted least squares.
+
+    ``y`` : (M, n), ``X`` : (M, n, k), ``w`` : (M, n) — all ``M`` rows share the
+    same ``n`` (number of valid assets). Replicates ``rank_aware_projection``'s
+    numeric path for a batch; see module docstring for the bit-exactness
+    argument. Returns ``(residual, beta, rank, df, status_list, condition,
+    tolerance, total_variance, residual_variance)`` with per-row arrays (and a
+    per-row ``status`` string list).
+    """
+    M, n, k = X.shape
+    num_coefs = k + 1 if add_intercept else k
+    eps = np.finfo(float).eps
+    tiny = np.finfo(float).tiny
+
+    # --- weight normalization (identical to rank_aware_projection) ---
+    w = w / np.max(w, axis=1, keepdims=True)
+    w = w / np.sum(w, axis=1, keepdims=True)
+
+    # Weighted mean of y (used for total_variance in BOTH intercept modes —
+    # rank_aware_projection computes total_variance as sum(w*(y - weighted_mean)^2)
+    # regardless of add_intercept, so it must be derived independently here).
+    y_origin_wm = y[:, 0] + np.sum((y - y[:, 0:1]) * w, axis=1)
+
+    # --- weighted centering (identical) ---
+    if add_intercept:
+        x_origin = X[:, 0, :] + np.sum((X - X[:, 0:1, :]) * w[:, :, None], axis=1)
+        y_origin = y_origin_wm
+        xc = X - x_origin[:, None, :]
+        yc = y - y_origin[:, None]
+    else:
+        x_origin = np.zeros((M, k), dtype=np.float64)
+        y_origin = np.zeros(M, dtype=np.float64)
+        xc = X
+        yc = y
+
+    xs = np.sqrt(np.sum(w[:, :, None] * xc * xc, axis=1))
+    xs = np.where(xs > 0, xs, 1.)
+    ys = np.sqrt(np.sum(w * yc * yc, axis=1))
+    ys = np.where(ys > 0, ys, 1.)
+
+    design = xc / xs[:, None, :]
+    if add_intercept:
+        design = np.concatenate((np.ones((M, n, 1)), design), axis=2)
+    rootw = np.sqrt(w)
+    Mmat = design * rootw[:, :, None]
+
+    u, singular, vh = np.linalg.svd(Mmat, full_matrices=False)
+
+    cutoff = (eps * max(n, num_coefs) if rcond is None else rcond)
+    rank = np.sum(singular > cutoff * singular[:, 0:1], axis=1).astype(np.int64)
+
+    rhs = (yc / ys[:, None]) * rootw  # (M, n)
+    beta = np.zeros((M, num_coefs), dtype=np.float64)
+    predicted = np.zeros((M, n), dtype=np.float64)
+
+    # Full-rank rows: a single batched solve (rank == num_coefs).
+    full = rank == num_coefs
+    if full.any():
+        m = full
+        um = u[m]
+        pc = np.matmul(np.transpose(um, (0, 2, 1)), rhs[m][:, :, None])[:, :, 0]
+        beta[m] = np.matmul(np.transpose(vh[m], (0, 2, 1)),
+                            (pc / singular[m])[:, :, None])[:, :, 0]
+        predicted[m] = np.matmul(um, pc[:, :, None])[:, :, 0] * ys[m][:, None] / rootw[m]
+
+    # Rank-deficient rows: branch per distinct rank (<= num_coefs values).
+    def_mask = ~full
+    if def_mask.any():
+        for r in np.unique(rank[def_mask]):
+            m = rank == r
+            ur = u[m][:, :, :r]  # (Mr, n, r)
+            pc = np.matmul(np.transpose(ur, (0, 2, 1)), rhs[m][:, :, None])[:, :, 0]
+            beta[m] = np.matmul(np.transpose(vh[m][:, :r, :], (0, 2, 1)),
+                                (pc / singular[m][:, :r])[:, :, None])[:, :, 0]
+            predicted[m] = np.matmul(ur, pc[:, :, None])[:, :, 0] * ys[m][:, None] / rootw[m]
+
+    residual = yc - predicted
+
+    scale = np.linalg.norm(yc, axis=1)
+    norm_pred = np.linalg.norm(predicted, axis=1)
+    tolerance = 64.0 * eps * max(n, k + int(add_intercept)) * \
+        np.maximum(np.maximum(scale, norm_pred), tiny)
+    df = n - rank
+
+    safe_idx = np.maximum(rank - 1, 0)
+    condition = np.where(rank > 0,
+                         singular[:, 0] / singular[np.arange(M), safe_idx],
+                         np.inf)
+
+    norm_resid = np.linalg.norm(residual, axis=1)
+    no_var = (df >= 2) & (norm_resid <= tolerance)
+    residual = np.where(no_var[:, None], 0.0, residual)
+
+    # Per-row status string with the exact precedence of rank_aware_projection.
+    status_list = []
+    for i in range(M):
+        if df[i] < 2:
+            st = "INSUFFICIENT_DF"
+        elif norm_resid[i] <= tolerance[i]:
+            st = "NO_RESIDUAL_VARIANCE"
+        elif rank[i] < num_coefs:
+            st = "RANK_DEFICIENT"
+        else:
+            st = "OK"
+        status_list.append(st)
+
+    total_variance = np.sum(w * (y - y_origin_wm[:, None]) ** 2, axis=1)
+    residual_variance = np.sum(w * residual ** 2, axis=1)
+
+    # Coefficients (intercept-first when add_intercept).
+    if add_intercept:
+        slopes = beta[:, 1:] * ys[:, None] / xs
+        intercept_term = y_origin + beta[:, 0] * ys - np.sum(x_origin * slopes, axis=1)
+        coef = np.concatenate((intercept_term[:, None], slopes), axis=1)
+    else:
+        coef = beta * ys[:, None] / xs
+
+    return (residual, coef, rank, df, status_list, condition,
+            tolerance, total_variance, residual_variance)
+
+
 def compute_factor_loadings(
     factor_values: np.ndarray,
     risk_factors: np.ndarray,
@@ -96,6 +274,108 @@ def compute_factor_loadings(
         loadings: shape (T, K) or (T, K+1) if intercept=True
         r_squared: shape (T,)
         residuals: shape (T, N)
+
+    Notes:
+        Optimized batching preserves the numerical semantics of the original
+        per-day ``rank_aware_projection`` path (see module docstring).
+    """
+    factor_values=np.asarray(factor_values,dtype=float)
+    risk_factors=np.asarray(risk_factors,dtype=float)
+    if factor_values.ndim!=2 or risk_factors.ndim!=3 or risk_factors.shape[:2]!=factor_values.shape:
+        raise ValueError("factor/risk inputs must have aligned (T,N)/(T,N,K) axes")
+    if isinstance(min_obs,(bool,np.bool_)) or not isinstance(min_obs,(int,np.integer)) or min_obs<2:
+        raise ValueError("min_obs must be an integer >=2")
+    T, N = factor_values.shape
+    K = risk_factors.shape[2]
+
+    num_coefs = K + 1 if intercept else K
+    loadings = np.full((T, num_coefs), np.nan, dtype=np.float64)
+    r_squared = np.full(T, np.nan, dtype=np.float64)
+    residuals = np.full((T, N), np.nan, dtype=np.float64)
+    weights=np.ones((T,N)) if weights is None else np.asarray(weights,dtype=float)
+    if weights.shape!=(T,N) or np.any(np.isfinite(weights)&(weights<0)):
+        raise ValueError("weights must have shape (T,N) and be nonnegative")
+    diagnostics=[None]*T
+
+    # Vectorized validity — elementwise identical to the per-day mask.
+    valid = (np.isfinite(factor_values)
+             & np.all(np.isfinite(risk_factors), axis=2)
+             & np.isfinite(weights)
+             & (weights > 0))
+    n_per_t = valid.sum(axis=1).astype(np.int64)
+    eligible = n_per_t >= min_obs
+
+    # Diagnostics for ineligible days (fewer than min_obs valid observations).
+    for t in np.nonzero(~eligible)[0]:
+        diagnostics[t]={"status":"INSUFFICIENT_OBSERVATIONS","n":int(n_per_t[t]),"rank":0,"effective_df":0}
+
+    if eligible.any():
+        col_idx = _ordered_valid_indices(valid)
+        uniq_n = np.unique(n_per_t[eligible])
+        # When every eligible day is fully observed (no NaNs dropped any asset)
+        # the gather is an identity, so skip take_along_axis entirely.
+        fully_valid = (uniq_n.size == 1 and uniq_n[0] == N)
+        for n in uniq_n:
+            tg = np.nonzero((n_per_t == n) & eligible)[0]
+            M = tg.size
+            if fully_valid:
+                y_g = factor_values[tg]                # (M, n)  identity gather
+                X_g = risk_factors[tg]                 # (M, n, K)
+                w_g = weights[tg]                      # (M, n)
+            else:
+                cg = col_idx[tg, :n]                                   # (M, n)
+                y_g = np.take_along_axis(factor_values[tg], cg, axis=1)            # (M, n)
+                X_g = np.take_along_axis(risk_factors[tg], cg[:, :, None], axis=1) # (M, n, K)
+                w_g = np.take_along_axis(weights[tg], cg, axis=1)                  # (M, n)
+
+            (res_g, coef_g, rank_g, df_g, status_g, cond_g, tol_g, tv_g, rv_g) = \
+                _batched_wls(y_g, X_g, w_g, add_intercept=intercept)
+
+            full_write = df_g >= 2
+            if full_write.any():
+                ridx = tg[full_write]
+                if fully_valid:
+                    residuals[ridx] = res_g[full_write]
+                else:
+                    residuals[ridx[:, None], cg[full_write]] = res_g[full_write]
+            lw = full_write & (rank_g == num_coefs)
+            if lw.any():
+                loadings[tg[lw]] = coef_g[lw]
+            r2w = full_write & (tv_g > 0) & (rank_g > int(intercept))
+            if r2w.any():
+                r_squared[tg[r2w]] = 1.0 - rv_g[r2w] / tv_g[r2w]
+
+            for i, t in enumerate(tg):
+                r = int(rank_g[i]); d = int(df_g[i])
+                diagnostics[t]={
+                    "coefficients": coef_g[i].copy(),
+                    "rank": r,
+                    "effective_df": d,
+                    "n": int(n),
+                    "condition": float(cond_g[i]),
+                    "residual_tolerance": float(tol_g[i]),
+                    "status": status_g[i],
+                    "estimation_scope":"SAME_DATE_DESCRIPTIVE",
+                    "method_version":"centered_wls_svd.v1",
+                    "total_variance": float(tv_g[i]),
+                    "residual_variance": float(rv_g[i]),
+                }
+
+    result=(loadings,r_squared,residuals)
+    return (*result,tuple(diagnostics)) if return_diagnostics else result
+
+
+def _compute_factor_loadings_reference(
+    factor_values: np.ndarray,
+    risk_factors: np.ndarray,
+    intercept: bool = True,
+    min_obs: int = 10,
+    *, weights=None, return_diagnostics: bool = False,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Verbatim original per-day ``compute_factor_loadings`` (pre-optimization).
+
+    Kept for equivalence testing against the optimized implementation. Do not
+    edit the numeric path.
     """
     factor_values=np.asarray(factor_values,dtype=float)
     risk_factors=np.asarray(risk_factors,dtype=float)

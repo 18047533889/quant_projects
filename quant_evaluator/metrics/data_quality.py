@@ -30,6 +30,7 @@ __all__ = [
     "compute_label_maturity",
     "compute_tradable_coverage",
     "compute_universe_churn",
+    "compute_return_coverage",
 ]
 
 
@@ -226,3 +227,49 @@ def compute_universe_churn(
     curr = tradable[1:, :, :]
     churn = np.sum(prev != curr, axis=1)  # (T-1, F)
     return np.mean(churn / N, axis=0)
+
+
+# ---------------------------------------------------------------------------
+# Missing-kernel round (2026-09-24): registry kernel for the return_coverage
+# catalog id (doc metric-return_coverage).  Pure function over the supplied
+# forward-return panel; the universe is exactly that panel.
+# ---------------------------------------------------------------------------
+
+
+def compute_return_coverage(forward_returns) -> float:
+    """Fraction of the supplied forward-return panel that is finite (pool scalar).
+
+    Doc metric-return_coverage::
+
+        C = #{(t,i): y_{t,i} finite} / #{(t,i): i in U_t}
+
+    The universe ``U_t`` is exactly the supplied (T, N) panel: every cell
+    counts toward the denominator and only finite cells toward the numerator,
+    so pre-masking cells to NaN (e.g. by a validity mask) is equivalent to
+    declaring them uncovered.  The result is a pool-level scalar because the
+    forward-return panel has no factor axis; the registry binding broadcasts
+    it to the factor axis.  An empty panel yields NaN.  Accumulation is a
+    single ``np.isfinite`` count, so repeated calls are bit-identical.
+
+    bool / complex / object inputs are rejected (a boolean return flag is not
+    a return).
+
+    Args:
+        forward_returns: (T, N) forward-return panel.
+
+    Returns:
+        Python float in [0, 1]; NaN for an empty panel.
+    """
+    arr = np.asarray(forward_returns)
+    if arr.dtype == object:
+        raise TypeError("forward_returns must be a real numeric array, got object dtype")
+    if arr.dtype == bool:
+        raise TypeError("forward_returns must be a real numeric array, got bool dtype")
+    if np.iscomplexobj(arr):
+        raise TypeError("forward_returns must be a real numeric array, got complex dtype")
+    arr = arr.astype(np.float64, copy=False)
+    if arr.ndim != 2:
+        raise ValueError("forward_returns must be (T, N)")
+    if arr.size == 0:
+        return float("nan")
+    return float(np.sum(np.isfinite(arr)) / arr.size)

@@ -326,28 +326,36 @@ def compute_cohort_pnl(
             pnl_net[T - 1] -= entry_fee
         # Entry quote belongs to the old position; first earned interval ends
         # at entry+1. A truncated observation window never invents an exit.
-        for t in range(entry_t + 1, min(exit_t + 1, T)):
-            ret_t = np.where(np.isfinite(next_ret[t]), next_ret[t], 0.0)
-            # long 侧：+w*r；short 侧（w_short 为负）：做空收益 = -|w|*r。
-            day_contrib = w_long * ret_t + w_short * ret_t
-            # 成本：入场日扣入场成本，出场日扣出场成本（各自 per-side 一次）。
-            cost = np.zeros(N)
-            notional = np.abs(w_long) + np.abs(w_short)
-            if t == exit_t:
-                cost = cost + notional * per_side_cost
-            pnl_net[t] += np.sum(day_contrib - cost) / holding
-            if np.any((notional > EPS) & ~np.isfinite(next_ret[t])):
-                pnl_net[t] = np.nan
-                active_ret[t] = np.nan
-            if t == exit_t:
-                exit_cost_series[t] += np.sum(cost) / holding
-            gross[t] += side_notional / holding
+        notional = np.abs(w_long) + np.abs(w_short)
+        held = notional > EPS
+        end_t = min(exit_t + 1, T)
+        # Bound the temporary panel even for a very long holding period.
+        for chunk_start in range(entry_t + 1, end_t, 32):
+            chunk_end = min(chunk_start + 32, end_t)
+            window = slice(chunk_start, chunk_end)
+            ret = next_ret[window]
+            finite = np.isfinite(ret)
+            safe_ret = np.where(finite, ret, 0.0)
+            contribution = w_long * safe_ret + w_short * safe_ret
+            daily_pnl = np.sum(contribution, axis=1) / holding
+            if exit_t < T and chunk_start <= exit_t < chunk_end:
+                cost = notional * per_side_cost
+                daily_pnl[exit_t - chunk_start] = (
+                    np.sum(contribution[exit_t - chunk_start] - cost) / holding
+                )
+                exit_cost_series[exit_t] += np.sum(cost) / holding
+            pnl_net[window] += daily_pnl
+            invalid_held = np.any(held & ~finite, axis=1)
+            pnl_net[window][invalid_held] = np.nan
+            active_ret[window][invalid_held] = np.nan
+            gross[window] += side_notional / holding
 
-            # D10 long-only active return：D10 桶均值 - 基准，按 1/H 缩放。
+            # Keep the finite-member bucket mean and daily accumulation order.
             if n_long > 0:
-                bucket = _bucket_mean(next_ret[t], long_t)
-                if np.isfinite(bucket) and np.isfinite(bench[t]):
-                    active_ret[t] += (bucket - bench[t]) / holding
+                for t in range(chunk_start, chunk_end):
+                    bucket = _bucket_mean(next_ret[t], long_t)
+                    if np.isfinite(bucket) and np.isfinite(bench[t]):
+                        active_ret[t] += (bucket - bench[t]) / holding
 
         cohort_weight[start] += 1.0 / holding
         # 信号日（start）的 cohort 权重：该 cohort 名义 1.0 均摊到持有期

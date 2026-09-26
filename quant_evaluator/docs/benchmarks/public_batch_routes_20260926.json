@@ -1,0 +1,1081 @@
+{
+  "started_at_utc": "2026-09-26T10:04:40.484243+00:00",
+  "source": {
+    "dataset": "ashare_stock_daily_adj",
+    "source_rows": 3714828,
+    "local_partition_days": 723,
+    "read_groups": 155,
+    "gaps_over_three_calendar_days": 18,
+    "calendar_days": 723,
+    "days": 701,
+    "assets": 5314,
+    "factors": 2,
+    "date_span": [
+      "2023-09-01",
+      "2026-08-27"
+    ],
+    "signal": "AdjVwap[t-1]/AdjVwap[t-6 or t-21]-1",
+    "label": "AdjVwap[t+1]/AdjVwap[t]-1"
+  },
+  "load_s": 6.006487479025964,
+  "hardware": "NVIDIA L20, server-c",
+  "protocol": "2 rounds, each backend in isolated forked process, cold + 2 warm evaluate calls; order reversed",
+  "cases": {
+    "rank_chain": [
+      "base",
+      [
+        "rank_ic",
+        "rank_ic_series",
+        "ic_std",
+        "ic_ir"
+      ]
+    ],
+    "quantile_chain": [
+      "base",
+      [
+        "quantile_returns_full",
+        "quantile_returns_daily",
+        "quantile_spread",
+        "quantile_monotonicity",
+        "daily_quantile_monotonicity_rate"
+      ]
+    ],
+    "mixed_core": [
+      "base",
+      [
+        "rank_ic",
+        "rank_ic_series",
+        "ic_ir",
+        "quantile_spread",
+        "turnover",
+        "factor_turnover_rate"
+      ]
+    ],
+    "portfolio_core": [
+      "portfolio",
+      [
+        "rank_ic",
+        "quantile_spread",
+        "sharpe_ratio",
+        "sortino_ratio",
+        "max_drawdown",
+        "calmar_ratio"
+      ]
+    ]
+  },
+  "results": {
+    "rank_chain": [
+      {
+        "order": [
+          "cpu",
+          "cuda_strict"
+        ],
+        "cpu": {
+          "status": "ok",
+          "cold_s": 1.5569421400432475,
+          "warm_s": [
+            1.488352941989433,
+            1.4843638809979893
+          ],
+          "warm_median_s": 1.4863584114937112,
+          "rss_kib": 1158572,
+          "backend_used": null,
+          "peak_vram": null
+        },
+        "cuda_strict": {
+          "status": "ok",
+          "cold_s": 1.071341955976095,
+          "warm_s": [
+            0.6081856379751116,
+            0.606939796009101
+          ],
+          "warm_median_s": 0.6075627169921063,
+          "rss_kib": 1294116,
+          "backend_used": "cuda",
+          "peak_vram": 4981047296
+        },
+        "parity": {
+          "rank_ic": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 7.632783294297951e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "rank_ic_series": {
+            "pass": true,
+            "kind_equal": true,
+            "shape": [
+              701,
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": true,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 1.1102230246251565e-16,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "ic_std": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.7755575615628914e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "ic_ir": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 5.551115123125783e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          }
+        },
+        "all_parity_pass": false,
+        "warm_cuda_over_cpu": 0.40875922812018,
+        "all_parity_numeric_tolerance_pass": true
+      },
+      {
+        "order": [
+          "cuda_strict",
+          "cpu"
+        ],
+        "cuda_strict": {
+          "status": "ok",
+          "cold_s": 1.085020224971231,
+          "warm_s": [
+            0.6161798679968342,
+            0.6369774030172266
+          ],
+          "warm_median_s": 0.6265786355070304,
+          "rss_kib": 1294088,
+          "backend_used": "cuda",
+          "peak_vram": 4981047296
+        },
+        "cpu": {
+          "status": "ok",
+          "cold_s": 1.5550880760420114,
+          "warm_s": [
+            1.4926510619698092,
+            1.4852513240184635
+          ],
+          "warm_median_s": 1.4889511929941364,
+          "rss_kib": 1158316,
+          "backend_used": null,
+          "peak_vram": null
+        },
+        "parity": {
+          "rank_ic": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 7.632783294297951e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "rank_ic_series": {
+            "pass": true,
+            "kind_equal": true,
+            "shape": [
+              701,
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": true,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 1.1102230246251565e-16,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "ic_std": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.7755575615628914e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "ic_ir": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 5.551115123125783e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          }
+        },
+        "all_parity_pass": false,
+        "warm_cuda_over_cpu": 0.4208187873821717,
+        "all_parity_numeric_tolerance_pass": true
+      }
+    ],
+    "quantile_chain": [
+      {
+        "order": [
+          "cpu",
+          "cuda_strict"
+        ],
+        "cpu": {
+          "status": "ok",
+          "cold_s": 3.8401321080164053,
+          "warm_s": [
+            3.5796648479881696,
+            3.5545063840108924
+          ],
+          "warm_median_s": 3.567085615999531,
+          "rss_kib": 858404,
+          "backend_used": null,
+          "peak_vram": null
+        },
+        "cuda_strict": {
+          "status": "ok",
+          "cold_s": 1.0415989700122736,
+          "warm_s": [
+            0.5373915159725584,
+            0.5239400609862059
+          ],
+          "warm_median_s": 0.5306657884793822,
+          "rss_kib": 1294852,
+          "backend_used": "cuda",
+          "peak_vram": 507794944
+        },
+        "parity": {
+          "quantile_returns_full": {
+            "pass": true,
+            "kind_equal": true,
+            "shape": [
+              5,
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": true,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 1.3552527156068805e-18,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "quantile_returns_daily": {
+            "pass": true,
+            "kind_equal": true,
+            "shape": [
+              701,
+              5,
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": true,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 1.5265566588595902e-16,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "quantile_spread": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.3852447794681098e-18,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "quantile_monotonicity": {
+            "pass": true,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": true,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 0.0,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "daily_quantile_monotonicity_rate": {
+            "pass": true,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": true,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 0.0,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          }
+        },
+        "all_parity_pass": false,
+        "warm_cuda_over_cpu": 0.14876732593666234,
+        "all_parity_numeric_tolerance_pass": true
+      },
+      {
+        "order": [
+          "cuda_strict",
+          "cpu"
+        ],
+        "cuda_strict": {
+          "status": "ok",
+          "cold_s": 1.065192021022085,
+          "warm_s": [
+            0.5788351309602149,
+            0.5780283050262369
+          ],
+          "warm_median_s": 0.5784317179932259,
+          "rss_kib": 1295028,
+          "backend_used": "cuda",
+          "peak_vram": 507794944
+        },
+        "cpu": {
+          "status": "ok",
+          "cold_s": 3.8512329849763773,
+          "warm_s": [
+            3.568774504994508,
+            3.6488232989795506
+          ],
+          "warm_median_s": 3.6087989019870292,
+          "rss_kib": 858416,
+          "backend_used": null,
+          "peak_vram": null
+        },
+        "parity": {
+          "quantile_returns_full": {
+            "pass": true,
+            "kind_equal": true,
+            "shape": [
+              5,
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": true,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 1.3552527156068805e-18,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "quantile_returns_daily": {
+            "pass": true,
+            "kind_equal": true,
+            "shape": [
+              701,
+              5,
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": true,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 1.5265566588595902e-16,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "quantile_spread": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.3852447794681098e-18,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "quantile_monotonicity": {
+            "pass": true,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": true,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 0.0,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "daily_quantile_monotonicity_rate": {
+            "pass": true,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": true,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 0.0,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          }
+        },
+        "all_parity_pass": false,
+        "warm_cuda_over_cpu": 0.1602837214550075,
+        "all_parity_numeric_tolerance_pass": true
+      }
+    ],
+    "mixed_core": [
+      {
+        "order": [
+          "cpu",
+          "cuda_strict"
+        ],
+        "cpu": {
+          "status": "ok",
+          "cold_s": 3.673199455952272,
+          "warm_s": [
+            3.4227905239677057,
+            3.391258382005617
+          ],
+          "warm_median_s": 3.4070244529866613,
+          "rss_kib": 1224456,
+          "backend_used": null,
+          "peak_vram": null
+        },
+        "cuda_strict": {
+          "status": "ok",
+          "cold_s": 2.062417675042525,
+          "warm_s": [
+            1.5388057450181805,
+            1.5337145579978824
+          ],
+          "warm_median_s": 1.5362601515080314,
+          "rss_kib": 1268968,
+          "backend_used": "cuda",
+          "peak_vram": 9003471872
+        },
+        "parity": {
+          "rank_ic": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 7.632783294297951e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "rank_ic_series": {
+            "pass": true,
+            "kind_equal": true,
+            "shape": [
+              701,
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": true,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 1.1102230246251565e-16,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "ic_ir": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 5.551115123125783e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "quantile_spread": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.3852447794681098e-18,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "turnover": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.7755575615628914e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "factor_turnover_rate": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.0816681711721685e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          }
+        },
+        "all_parity_pass": false,
+        "warm_cuda_over_cpu": 0.45090963469936857,
+        "all_parity_numeric_tolerance_pass": true
+      },
+      {
+        "order": [
+          "cuda_strict",
+          "cpu"
+        ],
+        "cuda_strict": {
+          "status": "ok",
+          "cold_s": 2.0609307200065814,
+          "warm_s": [
+            1.4907628590008244,
+            1.480883284995798
+          ],
+          "warm_median_s": 1.4858230719983112,
+          "rss_kib": 1268624,
+          "backend_used": "cuda",
+          "peak_vram": 9003471872
+        },
+        "cpu": {
+          "status": "ok",
+          "cold_s": 3.6948347960133106,
+          "warm_s": [
+            3.4481066730222665,
+            3.500159907969646
+          ],
+          "warm_median_s": 3.4741332904959563,
+          "rss_kib": 1224504,
+          "backend_used": null,
+          "peak_vram": null
+        },
+        "parity": {
+          "rank_ic": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 7.632783294297951e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "rank_ic_series": {
+            "pass": true,
+            "kind_equal": true,
+            "shape": [
+              701,
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": true,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 1.1102230246251565e-16,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "ic_ir": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 5.551115123125783e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "quantile_spread": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.3852447794681098e-18,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "turnover": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.7755575615628914e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "factor_turnover_rate": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.0816681711721685e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          }
+        },
+        "all_parity_pass": false,
+        "warm_cuda_over_cpu": 0.42768165402951475,
+        "all_parity_numeric_tolerance_pass": true
+      }
+    ],
+    "portfolio_core": [
+      {
+        "order": [
+          "cpu",
+          "cuda_strict"
+        ],
+        "cpu": {
+          "status": "ok",
+          "cold_s": 2.8498467660392635,
+          "warm_s": [
+            2.505844826984685,
+            2.548626379983034
+          ],
+          "warm_median_s": 2.5272356034838594,
+          "rss_kib": 1224404,
+          "backend_used": null,
+          "peak_vram": null
+        },
+        "cuda_strict": {
+          "status": "ok",
+          "cold_s": 1.1827573369955644,
+          "warm_s": [
+            0.6881294859922491,
+            0.7442901869653724
+          ],
+          "warm_median_s": 0.7162098364788108,
+          "rss_kib": 1269468,
+          "backend_used": "cuda",
+          "peak_vram": 4981047296
+        },
+        "parity": {
+          "rank_ic": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 7.632783294297951e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "quantile_spread": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.3852447794681098e-18,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "sharpe_ratio": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 1.8041124150158794e-16,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "sortino_ratio": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.498001805406602e-16,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "max_drawdown": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 9.43689570931383e-16,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "calmar_ratio": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 1.3183898417423734e-15,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          }
+        },
+        "all_parity_pass": false,
+        "warm_cuda_over_cpu": 0.28339654422860183,
+        "all_parity_numeric_tolerance_pass": true
+      },
+      {
+        "order": [
+          "cuda_strict",
+          "cpu"
+        ],
+        "cuda_strict": {
+          "status": "ok",
+          "cold_s": 1.1855272540124133,
+          "warm_s": [
+            0.7160836149705574,
+            0.7142556400503963
+          ],
+          "warm_median_s": 0.7151696275104769,
+          "rss_kib": 1269072,
+          "backend_used": "cuda",
+          "peak_vram": 4981047296
+        },
+        "cpu": {
+          "status": "ok",
+          "cold_s": 2.8063726719701663,
+          "warm_s": [
+            2.530063668033108,
+            2.5028900260222144
+          ],
+          "warm_median_s": 2.5164768470276613,
+          "rss_kib": 1224548,
+          "backend_used": null,
+          "peak_vram": null
+        },
+        "parity": {
+          "rank_ic": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 7.632783294297951e-17,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "quantile_spread": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.3852447794681098e-18,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "sharpe_ratio": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 1.8041124150158794e-16,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "sortino_ratio": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 2.498001805406602e-16,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "max_drawdown": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 9.43689570931383e-16,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          },
+          "calmar_ratio": {
+            "pass": false,
+            "kind_equal": true,
+            "shape": [
+              2
+            ],
+            "finite_mask_equal": true,
+            "numeric_1e8_1e10": true,
+            "evidence_equal": false,
+            "counts_equal": true,
+            "valid_mask_equal": true,
+            "provenance_counts_equal": true,
+            "input_hash_equal": true,
+            "max_abs": 1.3183898417423734e-15,
+            "metric_evidence_semantic_equal": true,
+            "pass_numeric_tolerance": true
+          }
+        },
+        "all_parity_pass": false,
+        "warm_cuda_over_cpu": 0.28419479732356767,
+        "all_parity_numeric_tolerance_pass": true
+      }
+    ]
+  },
+  "evidence_followup": "Original evidence_equal used exact Python float equality. Separate repeat compared metric identity, validity, sample count, version, warnings, sample unit exactly and scalar value with rtol=1e-8/atol=1e-10."
+}

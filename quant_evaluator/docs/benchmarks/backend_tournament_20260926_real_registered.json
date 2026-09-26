@@ -1,0 +1,319 @@
+{
+  "kind": "registered_real_and_or_synthetic_ic_kernel_tournament",
+  "seed": 260926,
+  "registered_source_load_s": 5.769374336989131,
+  "started_at_utc": "2026-09-26T09:13:12.175495+00:00",
+  "source_sha256": {
+    "benchmark_script": "bdd7c95f1b52d7f9016eb58ec849759c3362c74913630dcbb9fdaac0812a5d6e",
+    "polars_backend": "38213cf41abbafef907da1906bb5f7ac4df15f3cf05cae468308c8472d6d9265"
+  },
+  "repeats": 3,
+  "timeout_s": 120.0,
+  "parity": {
+    "rtol": 1e-08,
+    "atol": 1e-10,
+    "counts_and_finite_mask_exact": true
+  },
+  "cases": {
+    "real_registered_pearson": {
+      "exact": {
+        "status": "ok",
+        "construct_s": 6.89999433234334e-06,
+        "source": {
+          "dataset": "ashare_stock_daily_adj",
+          "source_rows": 3714828,
+          "local_partition_days": 723,
+          "read_groups": 155,
+          "gaps_over_three_calendar_days": 18,
+          "calendar_days": 723,
+          "days": 701,
+          "assets": 5314,
+          "factors": 2,
+          "date_span": [
+            "2023-09-01",
+            "2026-08-27"
+          ],
+          "signal": "AdjVwap[t-1]/AdjVwap[t-6 or t-21]-1",
+          "label": "AdjVwap[t+1]/AdjVwap[t]-1"
+        },
+        "cold_s": 0.1885439319885336,
+        "warm_s": [
+          0.16190071299206465,
+          0.1753993680467829,
+          0.15951758495066315
+        ],
+        "warm_median_s": 0.16190071299206465,
+        "end_to_end_cold_s": 0.18855083198286593,
+        "peak_rss_kib": 523816,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 0.0
+        }
+      },
+      "numba": {
+        "status": "ok",
+        "construct_s": 5.220004823058844e-06,
+        "source": {
+          "dataset": "ashare_stock_daily_adj",
+          "source_rows": 3714828,
+          "local_partition_days": 723,
+          "read_groups": 155,
+          "gaps_over_three_calendar_days": 18,
+          "calendar_days": 723,
+          "days": 701,
+          "assets": 5314,
+          "factors": 2,
+          "date_span": [
+            "2023-09-01",
+            "2026-08-27"
+          ],
+          "signal": "AdjVwap[t-1]/AdjVwap[t-6 or t-21]-1",
+          "label": "AdjVwap[t+1]/AdjVwap[t]-1"
+        },
+        "cold_s": 0.3176424120320007,
+        "warm_s": [
+          0.09501250402536243,
+          0.09957440599100664,
+          0.0949930350179784
+        ],
+        "warm_median_s": 0.09501250402536243,
+        "end_to_end_cold_s": 0.3176476320368238,
+        "peak_rss_kib": 592680,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 3.164135620181696e-15
+        }
+      },
+      "polars": {
+        "status": "ok",
+        "construct_s": 6.320013199001551e-06,
+        "source": {
+          "dataset": "ashare_stock_daily_adj",
+          "source_rows": 3714828,
+          "local_partition_days": 723,
+          "read_groups": 155,
+          "gaps_over_three_calendar_days": 18,
+          "calendar_days": 723,
+          "days": 701,
+          "assets": 5314,
+          "factors": 2,
+          "date_span": [
+            "2023-09-01",
+            "2026-08-27"
+          ],
+          "signal": "AdjVwap[t-1]/AdjVwap[t-6 or t-21]-1",
+          "label": "AdjVwap[t+1]/AdjVwap[t]-1"
+        },
+        "cold_s": 0.679776505974587,
+        "warm_s": [
+          0.3007797689642757,
+          0.26414525997824967,
+          0.28420517704216763
+        ],
+        "warm_median_s": 0.28420517704216763,
+        "end_to_end_cold_s": 0.679782825987786,
+        "peak_rss_kib": 2300808,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 1.8318679906315083e-15
+        }
+      },
+      "gpu": {
+        "status": "ok",
+        "construct_s": 3.5589036997407675e-05,
+        "source": {
+          "dataset": "ashare_stock_daily_adj",
+          "source_rows": 3714828,
+          "local_partition_days": 723,
+          "read_groups": 155,
+          "gaps_over_three_calendar_days": 18,
+          "calendar_days": 723,
+          "days": 701,
+          "assets": 5314,
+          "factors": 2,
+          "date_span": [
+            "2023-09-01",
+            "2026-08-27"
+          ],
+          "signal": "AdjVwap[t-1]/AdjVwap[t-6 or t-21]-1",
+          "label": "AdjVwap[t+1]/AdjVwap[t]-1"
+        },
+        "cold_s": 0.7175126119982451,
+        "warm_s": [
+          0.3466399809694849,
+          0.3337057090247981,
+          0.3204218079918064
+        ],
+        "warm_median_s": 0.3337057090247981,
+        "end_to_end_cold_s": 0.7175482010352425,
+        "peak_rss_kib": 925556,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 8.881784197001252e-16
+        }
+      }
+    },
+    "real_registered_spearman": {
+      "exact": {
+        "status": "ok",
+        "construct_s": 6.700051017105579e-06,
+        "source": {
+          "dataset": "ashare_stock_daily_adj",
+          "source_rows": 3714828,
+          "local_partition_days": 723,
+          "read_groups": 155,
+          "gaps_over_three_calendar_days": 18,
+          "calendar_days": 723,
+          "days": 701,
+          "assets": 5314,
+          "factors": 2,
+          "date_span": [
+            "2023-09-01",
+            "2026-08-27"
+          ],
+          "signal": "AdjVwap[t-1]/AdjVwap[t-6 or t-21]-1",
+          "label": "AdjVwap[t+1]/AdjVwap[t]-1"
+        },
+        "cold_s": 1.0358678030315787,
+        "warm_s": [
+          0.9863454310107045,
+          0.9868910950026475,
+          0.9893651109887287
+        ],
+        "warm_median_s": 0.9868910950026475,
+        "end_to_end_cold_s": 1.0358745030825958,
+        "peak_rss_kib": 1037420,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 0.0
+        }
+      },
+      "numba": {
+        "status": "ok",
+        "construct_s": 5.209993105381727e-06,
+        "source": {
+          "dataset": "ashare_stock_daily_adj",
+          "source_rows": 3714828,
+          "local_partition_days": 723,
+          "read_groups": 155,
+          "gaps_over_three_calendar_days": 18,
+          "calendar_days": 723,
+          "days": 701,
+          "assets": 5314,
+          "factors": 2,
+          "date_span": [
+            "2023-09-01",
+            "2026-08-27"
+          ],
+          "signal": "AdjVwap[t-1]/AdjVwap[t-6 or t-21]-1",
+          "label": "AdjVwap[t+1]/AdjVwap[t]-1"
+        },
+        "cold_s": 0.39035889599472284,
+        "warm_s": [
+          0.20099900901550427,
+          0.1605609740363434,
+          0.16520274395588785
+        ],
+        "warm_median_s": 0.16520274395588785,
+        "end_to_end_cold_s": 0.3903641059878282,
+        "peak_rss_kib": 594004,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 2.220446049250313e-16
+        }
+      },
+      "polars": {
+        "status": "ok",
+        "construct_s": 6.5899803303182125e-06,
+        "source": {
+          "dataset": "ashare_stock_daily_adj",
+          "source_rows": 3714828,
+          "local_partition_days": 723,
+          "read_groups": 155,
+          "gaps_over_three_calendar_days": 18,
+          "calendar_days": 723,
+          "days": 701,
+          "assets": 5314,
+          "factors": 2,
+          "date_span": [
+            "2023-09-01",
+            "2026-08-27"
+          ],
+          "signal": "AdjVwap[t-1]/AdjVwap[t-6 or t-21]-1",
+          "label": "AdjVwap[t+1]/AdjVwap[t]-1"
+        },
+        "cold_s": 0.9664015910238959,
+        "warm_s": [
+          0.43678393098525703,
+          0.5542741689714603,
+          0.49107307801023126
+        ],
+        "warm_median_s": 0.49107307801023126,
+        "end_to_end_cold_s": 0.9664081810042262,
+        "peak_rss_kib": 2564576,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 2.220446049250313e-16
+        }
+      },
+      "gpu": {
+        "status": "ok",
+        "construct_s": 6.880029104650021e-06,
+        "source": {
+          "dataset": "ashare_stock_daily_adj",
+          "source_rows": 3714828,
+          "local_partition_days": 723,
+          "read_groups": 155,
+          "gaps_over_three_calendar_days": 18,
+          "calendar_days": 723,
+          "days": 701,
+          "assets": 5314,
+          "factors": 2,
+          "date_span": [
+            "2023-09-01",
+            "2026-08-27"
+          ],
+          "signal": "AdjVwap[t-1]/AdjVwap[t-6 or t-21]-1",
+          "label": "AdjVwap[t+1]/AdjVwap[t]-1"
+        },
+        "cold_s": 0.8730650270008482,
+        "warm_s": [
+          0.4223204859881662,
+          0.41135375504381955,
+          0.40851932001532987
+        ],
+        "warm_median_s": 0.41135375504381955,
+        "end_to_end_cold_s": 0.8730719070299529,
+        "peak_rss_kib": 1001240,
+        "parity_vs_exact": {
+          "pass": true,
+          "same_finite": true,
+          "same_counts": true,
+          "allclose_1e-8_1e-10": true,
+          "max_abs_ic": 1.1102230246251565e-16
+        }
+      }
+    }
+  }
+}

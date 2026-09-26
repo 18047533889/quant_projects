@@ -10,6 +10,7 @@ import numpy as np
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
+from quant_evaluator.metrics.interactions.substitution import _require_matching_asset_coordinates
 from quant_evaluator.metrics.interactions.substitution import compute_substitution_effect
 
 
@@ -159,9 +160,150 @@ def compute_interaction_strength(
         interaction_ic: shape (T,) - IC of interaction term A*B
         additive_ic: shape (T,) - IC of additive model A+B
     """
+    _require_matching_asset_coordinates(factor_batch, label_bundle)
     if method not in ("pearson", "spearman"):
         raise ValueError(f"Unknown method: {method}. Must be 'pearson' or 'spearman'")
+    if method == "spearman":
+        return _compute_interaction_strength_reference(
+            factor_batch, label_bundle, factor_a_idx, factor_b_idx,
+            method=method, min_assets=min_assets,
+        )
 
+    values = factor_batch.values  # (T, N, F)
+    labels = label_bundle.values
+
+    if labels.ndim == 1:
+        labels = np.broadcast_to(labels[:, np.newaxis], (factor_batch.num_times, factor_batch.num_assets))
+
+    T, N, F = values.shape
+
+    interaction_ic = np.full(T, np.nan, dtype=np.float64)
+    additive_ic = np.full(T, np.nan, dtype=np.float64)
+
+    # Hoisted validity-masked panels (identical values to the legacy per-t
+    # np.where applications).
+    fa = values[:, :, factor_a_idx]
+    fb = values[:, :, factor_b_idx]
+    if factor_batch.validity is not None:
+        fa = np.where(factor_batch.validity[:, :, factor_a_idx], fa, np.nan)
+        fb = np.where(factor_batch.validity[:, :, factor_b_idx], fb, np.nan)
+    lab = labels
+    if label_bundle.validity is not None:
+        lab = np.where(label_bundle.validity, lab, np.nan)
+
+    valid = np.isfinite(fa) & np.isfinite(fb) & np.isfinite(lab)  # (T, N)
+    n = valid.sum(axis=1).astype(np.float64)
+
+    # Per-column centering shifts keep the raw-moment correlation accurate;
+    # suspicious (near-constant) cells fall back to the verbatim legacy path.
+    import warnings as _warnings
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("ignore")
+        mu_a = np.nanmean(fa, axis=1)
+        mu_b = np.nanmean(fb, axis=1)
+        mu_l = np.nanmean(lab, axis=1)
+        xac = np.where(np.isfinite(fa), fa - mu_a[:, None], 0.0)
+        xbc = np.where(np.isfinite(fb), fb - mu_b[:, None], 0.0)
+        labc = np.where(np.isfinite(lab), lab - mu_l[:, None], 0.0)
+        sprime_a = np.max(np.abs(xac), axis=1)
+        sprime_b = np.max(np.abs(xbc), axis=1)
+        sprime_l = np.max(np.abs(labc), axis=1)
+    thr_a = 1e4 * np.finfo(float).eps * np.maximum(1.0, sprime_a) ** 2
+    thr_b = 1e4 * np.finfo(float).eps * np.maximum(1.0, sprime_b) ** 2
+    thr_l = 1e4 * np.finfo(float).eps * np.maximum(1.0, sprime_l) ** 2
+
+    xz = np.where(valid, xac, 0.0)
+    yz = np.where(valid, xbc, 0.0)
+    lz = np.where(valid, labc, 0.0)
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        # Standardize factors: (x - mean) / (std + 1e-8), legacy formula.
+        mean_a_c = xz.sum(axis=1) / np.maximum(n, 1.0)
+        mean_b_c = yz.sum(axis=1) / np.maximum(n, 1.0)
+        var_a = (xz * xz).sum(axis=1) / np.maximum(n, 1.0) - mean_a_c ** 2
+        var_b = (yz * yz).sum(axis=1) / np.maximum(n, 1.0) - mean_b_c ** 2
+        std_a = np.sqrt(np.maximum(var_a, 0.0))
+        std_b = np.sqrt(np.maximum(var_b, 0.0))
+        fa_std = (xz - mean_a_c[:, None]) / (std_a + 1e-8)[:, None]
+        fb_std = (yz - mean_b_c[:, None]) / (std_b + 1e-8)[:, None]
+        inter = np.where(valid, fa_std * fb_std, 0.0)
+        add = np.where(valid, (fa_std + fb_std) / 2.0, 0.0)
+        si = inter.sum(axis=1); sii = (inter * inter).sum(axis=1); sil = (inter * lz).sum(axis=1)
+        sa = add.sum(axis=1); saa = (add * add).sum(axis=1); sal = (add * lz).sum(axis=1)
+        sl = lz.sum(axis=1); sll = (lz * lz).sum(axis=1)
+        corr_i = np.where((n * sii - si * si) * (n * sll - sl * sl) > 0,
+                          (n * sil - si * sl) / np.sqrt((n * sii - si * si) * (n * sll - sl * sl)),
+                          np.nan)
+        corr_a2 = np.where((n * saa - sa * sa) * (n * sll - sl * sl) > 0,
+                           (n * sal - sa * sl) / np.sqrt((n * saa - sa * sa) * (n * sll - sl * sl)),
+                           np.nan)
+        var_i = sii / np.maximum(n, 1.0) - (si / np.maximum(n, 1.0)) ** 2
+        var_add = saa / np.maximum(n, 1.0) - (sa / np.maximum(n, 1.0)) ** 2
+        var_l = sll / np.maximum(n, 1.0) - (sl / np.maximum(n, 1.0)) ** 2
+
+    suspicious = (
+        (n < min_assets)
+        | ~(var_i > thr_a) | ~(var_add > thr_a) | ~(var_a > thr_a) | ~(var_b > thr_b)
+        | ~(var_l > thr_l)
+        | ~np.isfinite(corr_i) | ~np.isfinite(corr_a2)
+    )
+    fast = ~suspicious
+    interaction_ic[fast] = corr_i[fast]
+    additive_ic[fast] = corr_a2[fast]
+
+    for t in np.flatnonzero(suspicious):
+        factor_a = fa[t]
+        factor_b = fb[t]
+        label_t = lab[t]
+
+        # Filter valid observations
+        v = np.isfinite(factor_a) & np.isfinite(factor_b) & np.isfinite(label_t)
+
+        if np.sum(v) < min_assets:
+            continue
+
+        fa_v = factor_a[v]
+        fb_v = factor_b[v]
+        label_v = label_t[v]
+
+        # Standardize factors
+        fa_std_v = (fa_v - np.mean(fa_v)) / (np.std(fa_v) + 1e-8)
+        fb_std_v = (fb_v - np.mean(fb_v)) / (np.std(fb_v) + 1e-8)
+
+        # Compute interaction term
+        interaction = fa_std_v * fb_std_v
+
+        # Compute additive term
+        additive = (fa_std_v + fb_std_v) / 2.0
+
+        # IC of interaction term
+        if np.std(interaction) > 0 and np.std(label_v) > 0:
+            if method == "pearson":
+                interaction_ic[t] = np.corrcoef(interaction, label_v)[0, 1]
+            else:
+                from scipy import stats
+                interaction_ic[t], _ = stats.spearmanr(interaction, label_v)
+
+        # IC of additive term
+        if np.std(additive) > 0 and np.std(label_v) > 0:
+            if method == "pearson":
+                additive_ic[t] = np.corrcoef(additive, label_v)[0, 1]
+            else:
+                from scipy import stats
+                additive_ic[t], _ = stats.spearmanr(additive, label_v)
+
+    return interaction_ic, additive_ic
+
+
+def _compute_interaction_strength_reference(
+    factor_batch: FactorBatch,
+    label_bundle: LabelBundle,
+    factor_a_idx: int,
+    factor_b_idx: int,
+    method: str = "pearson",
+    min_assets: int = 30,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Verbatim legacy oracle for equivalence testing."""
     values = factor_batch.values  # (T, N, F)
     labels = label_bundle.values
 

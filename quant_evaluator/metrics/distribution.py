@@ -201,6 +201,44 @@ def compute_higher_moments(
     with np.errstate(invalid='ignore'):
         mean = np.nanmean(values, axis=axis)
         std = np.nanstd(values, axis=axis, ddof=1)
+        # Vectorized central-moment skew/kurtosis replicating
+        # scipy.stats.skew/kurtosis(nan_policy='omit', bias=False):
+        #   G1 = (m3/m2^1.5) * sqrt(n(n-1))/(n-2)
+        #   G2 = ((n+1)*g2 + 6) * (n-1)/((n-2)(n-3)),  g2 = m4/m2^2 - 3
+        mu = np.expand_dims(mean, axis)
+        dev = np.where(finite_mask, values - mu, 0.0)
+        n_safe = np.maximum(n_obs, 1)
+        m2 = np.sum(dev * dev, axis=axis) / n_safe
+        m3 = np.sum(dev * dev * dev, axis=axis) / n_safe
+        m4 = np.sum(dev * dev * dev * dev, axis=axis) / n_safe
+        with np.errstate(divide='ignore', invalid='ignore'):
+            g1 = m3 / m2 ** 1.5
+            skew_corr = g1 * np.sqrt(n_obs * (n_obs - 1.0)) / (n_obs - 2.0)
+            g2 = m4 / m2 ** 2.0 - 3.0
+            kurt_corr = ((n_obs + 1.0) * g2 + 6.0) * (n_obs - 1.0) / ((n_obs - 2.0) * (n_obs - 3.0))
+
+    # Mask insufficient observations
+    insufficient = n_obs < min_obs
+    mean = np.where(insufficient, np.nan, mean)
+    std = np.where(insufficient, np.nan, std)
+    skew = np.where(insufficient, np.nan, skew_corr)
+    kurt = np.where(insufficient, np.nan, kurt_corr)
+
+    return mean, std, skew, kurt
+
+
+def _compute_higher_moments_reference(
+    values: np.ndarray,
+    axis: int = 0,
+    min_obs: int = 20,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Verbatim legacy oracle for equivalence testing."""
+    finite_mask = np.isfinite(values)
+    n_obs = np.sum(finite_mask, axis=axis)
+
+    with np.errstate(invalid='ignore'):
+        mean = np.nanmean(values, axis=axis)
+        std = np.nanstd(values, axis=axis, ddof=1)
         skew = stats.skew(values, axis=axis, nan_policy='omit', bias=False)
         kurt = stats.kurtosis(values, axis=axis, nan_policy='omit', bias=False, fisher=True)
 

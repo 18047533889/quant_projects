@@ -46,10 +46,172 @@ from quant_evaluator.registry.metrics import (
 )
 
 
+# Parameters that the metric facade binds from the request's typed artifacts
+# (see ``_make_panel_wrapper``: ``returns`` from a ProbePortfolioArtifact,
+# ``calendar_snapshot``/``time_index``/``factor_ids`` from the calendar
+# request, ``forward_returns``/``factor_values`` from the batch payload).
+#
+# QE dispatch fix (2026-09-23): the required-parameter gate below runs
+# *before* the facade wrapper, so a metric whose compute function takes a
+# required ``returns`` argument used to be rejected outright whenever it
+# also declared ``requires=["probe_pnl"]`` (the declaration made the gate
+# fire).  That made 11 catalog metrics unreachable through the public API:
+# worst_quarter / worst_month / worst_12m / time_to_recovery /
+# rolling_1y_sharpe_q10 / rolling_1y_sharpe_min / return_skew /
+# max_underwater_duration / mean_underwater_duration /
+# cvar_expected_shortfall / downside_deviation.  Exempting the facade-bound
+# names restores them; fail-closed behaviour is preserved because the wrapper
+# still raises "requires a ProbePortfolioArtifact" when the artifact is
+# genuinely absent (pinned by tests/metrics/test_probe_pnl_dispatch.py).
+_FACADE_BOUND_PARAMETERS = frozenset({
+    "returns", "calendar_snapshot", "time_index", "factor_ids",
+    "forward_returns", "factor_values",
+})
+
+
 def _resolve_alias(metric_id: str) -> str:
     """Resolve a canonical dotted metric name (e.g. "ic.pearson.mean") to
     its registry name ("mean_ic"). Unknown names pass through unchanged."""
     return CANONICAL_METRIC_ALIASES.get(metric_id, metric_id)
+
+
+# The 701-day x 5314-stock x 2-factor registered A-share panel showed full
+# CPU/CUDA output parity and a CUDA advantage in cold and alternating warm
+# public-facade runs for these metrics (2026-09-26). Other metrics retain CPU.
+_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260927_v3"
+_AUTO_SMALL_PROFILE = "ashare_701d_20260926"
+_AUTO_LARGE_PROFILE = "real_cos_region_20260927"
+_AUTO_LARGE_EXTRAP_PROFILE = "real_cos_bounded_headroom_20260927"
+_AUTO_LARGE_METRICS = frozenset({"rank_ic", "quantile_spread"})
+_AUTO_LARGE_MIN_TIMES, _AUTO_LARGE_MAX_TIMES = 1000, 2600
+_AUTO_LARGE_MIN_ASSETS, _AUTO_LARGE_MAX_ASSETS = 5000, 5500
+_AUTO_LARGE_HEADROOM_MAX_TIMES, _AUTO_LARGE_HEADROOM_MAX_ASSETS = 3200, 6000
+# Observed rank peaks were under 512 bytes/cell for F2 and 672 for F1.
+# The 1.5x effective-free margins are rounded upward to 768/1024.
+_AUTO_LARGE_RANK_F2_VRAM_BYTES_PER_CELL = 768
+_AUTO_LARGE_RANK_F1_VRAM_BYTES_PER_CELL = 1024
+_AUTO_CUDA_METRICS = frozenset({
+    "daily_quantile_monotonicity_rate",
+    "daily_quantile_monotonicity_series",
+    "ic_ir", "ic_median", "ic_std",
+    "quantile_monotonicity", "quantile_returns_daily",
+    "quantile_returns_full", "quantile_spread",
+    "rank_ic", "rank_ic_series", "turnover",
+})
+# Exact canonical metric sets; order and aliases do not affect shared GPU
+# intermediates.  These three public batches passed cold/warm A/B and 8/8
+# complete parity checks on the registered A-share panel and NVIDIA L20.
+_AUTO_CUDA_BATCHES = {
+    frozenset(("rank_ic", "rank_ic_series", "ic_std", "ic_ir")): "rank_chain",
+    frozenset(("quantile_returns_full", "quantile_returns_daily",
+               "quantile_spread", "quantile_monotonicity",
+               "daily_quantile_monotonicity_rate")): "quantile_chain",
+    frozenset(("rank_ic", "rank_ic_series", "ic_ir", "quantile_spread",
+               "turnover", "factor_turnover_rate")): "mixed_core",
+}
+_AUTO_BATCH_MIN_EFFECTIVE_VRAM_BYTES = 12 * 1024 ** 3
+_AUTO_SINGLE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
+
+
+def _auto_public_shape_profile(factor_batch):
+    """Identify a public-facade A/B-backed shape region."""
+    if (600 <= factor_batch.num_times <= 800
+            and 5000 <= factor_batch.num_assets <= 5500
+            and factor_batch.num_factors == 2):
+        return _AUTO_SMALL_PROFILE
+    if (_AUTO_LARGE_MIN_TIMES <= factor_batch.num_times <= _AUTO_LARGE_HEADROOM_MAX_TIMES
+            and _AUTO_LARGE_MIN_ASSETS <= factor_batch.num_assets <= _AUTO_LARGE_HEADROOM_MAX_ASSETS
+            and (factor_batch.num_factors == 2 or
+                 (factor_batch.num_factors == 1 and factor_batch.num_times >= 2000))):
+        if (factor_batch.num_times <= _AUTO_LARGE_MAX_TIMES
+                and factor_batch.num_assets <= _AUTO_LARGE_MAX_ASSETS):
+            return _AUTO_LARGE_PROFILE
+        return _AUTO_LARGE_EXTRAP_PROFILE
+    return None
+
+
+def _auto_large_min_effective_vram_bytes(factor_batch, metric_id):
+    if metric_id == "rank_ic":
+        bytes_per_cell = (_AUTO_LARGE_RANK_F1_VRAM_BYTES_PER_CELL if factor_batch.num_factors == 1
+                          else _AUTO_LARGE_RANK_F2_VRAM_BYTES_PER_CELL)
+        return max(_AUTO_SINGLE_MIN_EFFECTIVE_VRAM_BYTES,
+                   bytes_per_cell * factor_batch.num_times
+                   * factor_batch.num_assets * factor_batch.num_factors)
+    return _AUTO_SINGLE_MIN_EFFECTIVE_VRAM_BYTES
+
+
+def _auto_batch_cuda_rejection(
+    gpu_policy, min_effective_vram_bytes=_AUTO_BATCH_MIN_EFFECTIVE_VRAM_BYTES,
+):
+    """Require the tested L20 and enough effective free VRAM."""
+    from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
+
+    policy = gpu_policy or GPUExecutionPolicy()
+    if (not isinstance(policy, GPUExecutionPolicy)
+            or len(policy.device_ids) != 1 or policy.required_capabilities):
+        return "gpu_policy_outside_certified_range"
+    try:
+        import cupy as cp
+        with cp.cuda.Device(policy.device_ids[0]):
+            properties = cp.cuda.runtime.getDeviceProperties(policy.device_ids[0])
+            name = properties["name"]
+            if isinstance(name, bytes):
+                name = name.decode("utf-8")
+            free_bytes, _ = cp.cuda.runtime.memGetInfo()
+    except Exception:
+        return "cuda_unavailable"
+    if str(name).strip() != "NVIDIA L20":
+        return "gpu_model_not_certified"
+    if (free_bytes < min_effective_vram_bytes
+            or free_bytes * policy.max_vram_fraction < min_effective_vram_bytes):
+        return "insufficient_cuda_memory"
+    return None
+
+
+def _select_public_auto_backend(
+    factor_batch, label_bundle, canonical_metrics, *, metric_parameters,
+    context, quantile_builder_parameters, portfolio_returns, holding_returns,
+    trade_eligibility, calendar_snapshot, exposure_panel,
+    generalization_evidence, evaluator, gpu_policy=None,
+):
+    """Return a bounded whole-request route and an auditable reason."""
+    batch_name = None
+    if len(canonical_metrics) == 1:
+        if canonical_metrics[0] not in _AUTO_CUDA_METRICS:
+            return "cpu", "metric_not_certified"
+    else:
+        batch_name = _AUTO_CUDA_BATCHES.get(frozenset(canonical_metrics))
+        if batch_name is None or len(canonical_metrics) != len(set(canonical_metrics)):
+            return "cpu", "metric_set_not_certified"
+    profile = _auto_public_shape_profile(factor_batch)
+    if profile is None:
+        return "cpu", "shape_outside_certified_range"
+    if profile in (_AUTO_LARGE_PROFILE, _AUTO_LARGE_EXTRAP_PROFILE) and (batch_name is not None or canonical_metrics[0] not in _AUTO_LARGE_METRICS):
+        return "cpu", "metric_not_certified_for_profile"
+    if factor_batch.values.dtype != np.float64 or label_bundle.values.dtype != np.float64:
+        return "cpu", "dtype_outside_certified_range"
+    if (metric_parameters or quantile_builder_parameters or context is not None
+            or portfolio_returns is not None or holding_returns is not None
+            or trade_eligibility is not None or calendar_snapshot is not None
+            or exposure_panel is not None or generalization_evidence is not None
+            or evaluator is not None):
+        return "cpu", "special_input_or_parameters"
+    if batch_name is not None:
+        rejection = _auto_batch_cuda_rejection(gpu_policy)
+        if rejection is not None:
+            return "cpu", rejection
+        return "cuda_strict", f"certified_batch_{batch_name}"
+    min_effective_vram = (_auto_large_min_effective_vram_bytes(factor_batch, canonical_metrics[0])
+                          if profile in (_AUTO_LARGE_PROFILE, _AUTO_LARGE_EXTRAP_PROFILE)
+                          else _AUTO_SINGLE_MIN_EFFECTIVE_VRAM_BYTES)
+    rejection = _auto_batch_cuda_rejection(gpu_policy, min_effective_vram)
+    if rejection is not None:
+        return "cpu", rejection
+    if profile == _AUTO_LARGE_PROFILE:
+        return "cuda_strict", "certified_single_metric_real_cos_region"
+    if profile == _AUTO_LARGE_EXTRAP_PROFILE:
+        return "cuda_strict", "bounded_extrapolation_real_cos_headroom"
+    return "cuda_strict", "certified_single_metric_shape"
 
 
 # Resource-node costs are deliberately attached to the real public builders,
@@ -596,6 +758,7 @@ class Evaluator:
                     in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
                     and parameter.default is inspect.Parameter.empty
                     and name not in call_args
+                    and name not in _FACADE_BOUND_PARAMETERS
                 ]
                 if unresolved:
                     raise InvalidContractError(
@@ -608,7 +771,8 @@ class Evaluator:
             unresolved = [name for name, p in signature.parameters.items()
                 if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD,
                               inspect.Parameter.KEYWORD_ONLY)
-                and p.default is inspect.Parameter.empty and name not in call_args]
+                and p.default is inspect.Parameter.empty and name not in call_args
+                and name not in _FACADE_BOUND_PARAMETERS]
             if unresolved:
                 raise InvalidContractError(f'Metric {metric_id} has unresolved required parameters: {unresolved}')
         return metric_fn, call_args
@@ -1203,6 +1367,10 @@ _RETURNS_PANEL_METRIC_IDS = frozenset({
     "calmar_ratio",
     "worst_calendar_month", "worst_calendar_quarter", "worst_calendar_year",
     "worst_rolling_21d", "worst_rolling_63d", "worst_rolling_252d",
+    # 2026-09-24 missing-kernel round: return_coverage consumes the raw
+    # (T, N) forward-return panel (doc metric-return_coverage); the panel
+    # scalar is broadcast to the factor axis by the registry adapter.
+    "return_coverage",
 })
 
 
@@ -1246,6 +1414,21 @@ def evaluate(
     from quant_evaluator.api.requests import EvaluationBundle, MetricValue
     from quant_evaluator.contracts.sealed_split import check_sealed_split_overlap
     from quant_evaluator.diagnosis.factor import diagnose_all_factors
+
+    # Check before the MetricInstance delegation too: an unrecognized public
+    # backend must never look successful while silently running on CPU.
+    backend_name = getattr(backend, "value", backend)
+    if backend_name is not None:
+        if not isinstance(backend_name, str) or backend_name.lower() not in {
+            "cpu", "auto", "cuda", "cuda_strict", "gpu"
+        }:
+            raise InvalidContractError(
+                f"Unsupported public evaluate backend {backend!r}; choose "
+                "None, 'cpu', 'auto', 'cuda', 'cuda_strict', or 'gpu'. "
+                "The 'numba' and 'polars' choices belong to compute_daily_ic, "
+                "not the public evaluate facade."
+            )
+        backend_name = backend_name.lower()
 
     request_metadata = {}
     request_fields = {}
@@ -1513,10 +1696,28 @@ def evaluate(
         )
 
     # Apply the same leakage and shape guards before either backend starts.
-    backend_name = getattr(backend, "value", backend)
+    # An omitted backend follows the certified whole-request auto policy;
+    # callers requiring the reference path can explicitly request "cpu".
+    requested_backend = "default" if backend_name is None else backend_name
+    auto_route_reason = None
+    if backend_name is None or backend_name == "auto":
+        backend_name, auto_route_reason = _select_public_auto_backend(
+            factor_batch, label_bundle, canonical_metrics,
+            metric_parameters=metric_parameters, context=context,
+            quantile_builder_parameters=quantile_builder_parameters,
+            portfolio_returns=portfolio_returns, holding_returns=holding_returns,
+            trade_eligibility=trade_eligibility, calendar_snapshot=calendar_snapshot,
+            exposure_panel=exposure_panel,
+            generalization_evidence=generalization_evidence, evaluator=evaluator,
+            gpu_policy=gpu_policy,
+        )
     gpu_result = None
     gpu_risk_results = {}
-    if backend_name is not None and str(backend_name).lower() in ("cuda", "cuda_strict"):
+    # "gpu" is normalized to the cuda dispatch instead of silently falling
+    # back to CPU (2026-09-25): callers asking for GPU must never get CPU
+    # results without knowing.  On hosts without CUDA the device session
+    # raises its own clear error (fail-closed), matching backend="cuda".
+    if backend_name is not None and str(backend_name).lower() in ("cuda", "cuda_strict", "gpu"):
         from quant_evaluator.runtime.device_session import DeviceEvaluationSession
         from quant_evaluator.runtime.gpu_executor import GPUExecutor
         from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
@@ -1791,6 +1992,16 @@ def evaluate(
                                 means = np.nansum(daily,axis=0)/np.maximum(days,1)
                                 quantile_profile_cache[key] = np.where(days >= min_periods, means, np.nan)
                         accepted = inspect.signature(cfn).parameters
+                        # 2026-09-24 missing-kernel round: kernels declared
+                        # with a ``daily_quantile_returns`` parameter consume
+                        # the raw (T, Q, F) daily quantile-return matrix
+                        # (cross-time statistics such as quantile_stability
+                        # cannot be computed from the (Q, F) profile).
+                        if "daily_quantile_returns" in accepted:
+                            return cfn(
+                                daily_quantile_returns=daily,
+                                **{k: v for k, v in kwargs.items() if k in accepted and k != "daily_quantile_returns"}
+                            )
                         return cfn(quantile_profile_cache[key], **{k:v for k,v in kwargs.items() if k in accepted})
                     return wrapper
                 windowed = _resolve_alias(metric_id) in {"shape_stability", "shape_regime_stability", "shape_bootstrap_confidence", "shape_bootstrap_rank_agreement"}
@@ -1805,6 +2016,50 @@ def evaluate(
             if _resolve_alias(metric_id) in _RETURNS_PANEL_METRIC_IDS:
                 metric_specs[-1]["requires_full_batch"] = True
                 facade_panel_wrappers[metric_id] = _make_panel_wrapper(spec.compute_fn, portfolio_returns, calendar_snapshot)
+            # 2026-09-23 dispatch fix: specs that declare
+            # ``requires=["probe_pnl"]`` are per-factor SCALAR reducers over
+            # the probe portfolio PnL series (signature ``(returns: 1-D, ...)``
+            # -> float, e.g. worst_quarter / worst_month / worst_12m /
+            # time_to_recovery / rolling_1y_sharpe_q10|min / return_skew /
+            # max|mean_underwater_duration / cvar_expected_shortfall /
+            # downside_deviation).  They previously got neither a wrapper nor
+            # a binding for ``returns`` (the required-parameter gate rejected
+            # them first), so all eleven were unreachable through the public
+            # facade.  The adapter below reduces each factor's own probe
+            # series independently and returns the (F,) vector the scalar
+            # adapter expects; a missing artifact still fails closed.
+            elif "probe_pnl" in (spec.requires or ()):
+                def _make_pnl_series_wrapper(cfn, portfolio_returns):
+                    def _pnl_series_wrapper(factor_batch=None, label_bundle=None, **kwargs):
+                        if portfolio_returns is None:
+                            raise InvalidContractError(
+                                "Metric requires a ProbePortfolioArtifact; "
+                                "forward labels are not portfolio returns"
+                            )
+                        series = np.asarray(portfolio_returns.values, dtype=np.float64)
+                        if series.ndim == 1:
+                            series = series[:, None]
+                        if series.ndim != 2:
+                            raise InvalidContractError(
+                                "probe portfolio returns must be a (T,) or (T, F) series"
+                            )
+                        accepted = inspect.signature(cfn).parameters
+                        extra = {
+                            k: v for k, v in kwargs.items()
+                            if k in accepted and k != "returns"
+                        }
+                        reduced = [
+                            cfn(returns=series[:, index], **extra)
+                            for index in range(series.shape[1])
+                        ]
+                        return np.asarray(reduced, dtype=np.float64)
+
+                    return _pnl_series_wrapper
+
+                metric_specs[-1]["requires_full_batch"] = True
+                facade_panel_wrappers[metric_id] = _make_pnl_series_wrapper(
+                    spec.compute_fn, portfolio_returns
+                )
             if "ICSeriesArtifact" in (spec.requires or []):
                 compute_fn = spec.compute_fn
                 # QE-P1-27: the wrapper IC series must follow the metric —
@@ -1926,6 +2181,42 @@ def evaluate(
                     return _pvalue_wrapper
                 facade_pvalue_wrappers[metric_id] = _make_pvalue_wrapper(spec.compute_fn)
                 runtime.register_metric(metric_id, facade_pvalue_wrappers[metric_id])
+            # 2026-09-24 missing-kernel round: turnover_adjusted_ic consumes a
+            # daily IC series AND the rank-proxy turnover series derived from
+            # the same factor panel.  No single facade artifact covers both,
+            # so this id gets its own thin input adapter: the IC series comes
+            # from the shared cached daily-IC builder (pearson, min_assets=20
+            # default) and the turnover series from
+            # metrics.turnover.estimate_turnover_from_ranks; the registry
+            # compute_fn stays the single source of truth for the value.
+            if _resolve_alias(metric_id) == "turnover_adjusted_ic":
+                def _make_turnover_adjusted_ic_wrapper(cfn: Callable) -> Callable:
+                    def _turnover_adjusted_ic_wrapper(
+                        factor_batch=None, label_bundle=None, **kwargs
+                    ):
+                        from quant_evaluator.metrics.ic import compute_daily_ic
+                        from quant_evaluator.metrics.turnover import estimate_turnover_from_ranks
+
+                        min_assets = kwargs.get("min_assets", 20)
+                        key = ("pearson", min_assets)
+                        if key not in ic_series_cache:
+                            ic_series_cache[key], _ = compute_daily_ic(
+                                factor_batch, label_bundle,
+                                method="pearson", min_assets=min_assets,
+                            )
+                        accepted = inspect.signature(cfn).parameters
+                        filtered = {
+                            k: v for k, v in kwargs.items() if k in accepted
+                        }
+                        return cfn(
+                            ic_series=ic_series_cache[key],
+                            turnover_series=estimate_turnover_from_ranks(factor_batch),
+                            **filtered,
+                        )
+                    return _turnover_adjusted_ic_wrapper
+                runtime.register_metric(
+                    metric_id, _make_turnover_adjusted_ic_wrapper(spec.compute_fn)
+                )
 
         # QE-R2: register the returns-panel adapters so the runtime resolves the
         # panel-shaped compute_fn through its registered callables (same route as
@@ -2407,6 +2698,28 @@ def evaluate(
         bundle_metadata["execution_certified"] = False
     if gpu_result is not None:
         bundle_metadata.update(result.metadata)
+    selected_backend = "cuda" if gpu_result is not None else "cpu"
+    backend_strategy = "auto" if auto_route_reason is not None else "explicit"
+    execution_route = {
+        "backend_requested": requested_backend,
+        "backend_strategy": backend_strategy,
+        "backend_used": selected_backend,
+        "auto_backend_policy": _AUTO_CUDA_POLICY_VERSION if auto_route_reason is not None else None,
+        "auto_backend_profile": _auto_public_shape_profile(factor_batch) if auto_route_reason is not None else None,
+        "auto_backend_reason": auto_route_reason,
+        "metric_backends": {mid: selected_backend for mid in metric_ids},
+    }
+    bundle_metadata.update(execution_route)
+    # Execution identity is separate from the semantic config_hash, which
+    # remains stable across CPU and CUDA runs of the same request.
+    bundle_metadata["execution_receipt"] = {
+        **execution_route,
+        "config_hash": config_hash,
+        "receipt_hash": stable_content_hex(
+            tag="EvaluationExecutionReceipt.v1",
+            fields={"config_hash": config_hash, **execution_route},
+        ),
+    }
     request_id = str(bundle_metadata.pop("request_id", uuid4()))
 
     return EvaluationBundle(

@@ -674,3 +674,172 @@ def numba_ic_batch(
         return numba_spearman_ic_batch(factor_values, label_values, min_obs)
     else:
         raise ValueError(f"Unknown method: {method}")
+
+
+# =============================================================================
+# Daily IC fast-path kernel (opt-in backend for metrics.ic.compute_daily_ic)
+# =============================================================================
+
+@njit(cache=True)
+def _numba_centered_corr(x: np.ndarray, y: np.ndarray, n: int) -> float:
+    """
+    Two-pass centered Pearson correlation with sequential accumulation.
+
+    Numerics intentionally mirror the exact path's *semantics* (center
+    first, then accumulate co-moments) but the summation order is
+    sequential rather than numpy's pairwise / BLAS gemm, so results differ
+    from ``np.corrcoef`` at the ulp level (measured max |dIC| ~1e-16..1e-15
+    on random panels; asserted < 1e-12 in
+    ``tests/metrics/test_ic_fast_backend.py``).  Evidence content hashes
+    produced through this path therefore differ from the exact path.
+
+    A constant input (zero variance after centering) yields NaN, matching
+    the exact path's constant gate bit-for-bit in terms of NaN positions.
+    """
+    sx = 0.0
+    sy = 0.0
+    for i in range(n):
+        sx += x[i]
+        sy += y[i]
+    mx = sx / n
+    my = sy / n
+    cxy = 0.0
+    vx = 0.0
+    vy = 0.0
+    for i in range(n):
+        dx = x[i] - mx
+        dy = y[i] - my
+        cxy += dx * dy
+        vx += dx * dx
+        vy += dy * dy
+    if vx > 0.0 and vy > 0.0:
+        return cxy / np.sqrt(vx * vy)
+    return np.nan
+
+
+@njit(parallel=True, cache=True)
+def _numba_daily_ic_kernel(
+    v: np.ndarray,
+    lab: np.ndarray,
+    mask: np.ndarray,
+    eligible: np.ndarray,
+    min_assets: int,
+    method_code: int,
+) -> np.ndarray:
+    """
+    Single-pass daily IC kernel over (T, N, F) panels.
+
+    Per (t, f) cell: compress the pairwise-finite (factor, label) pairs,
+    then compute either a centered Pearson correlation (method_code == 0)
+    or an average-tie rank correlation (method_code == 1, ranks via
+    argsort + tie-run averaging, matching scipy's ``method="average"``
+    semantics bit-for-bit — average ranks of exact-integer runs are exactly
+    representable and permutation-invariant within tie runs).
+
+    NaN placement contract (identical to the exact path):
+    - cells failing the ``eligible`` gate stay NaN;
+    - cells with a constant factor or label cross-section stay NaN;
+    - all other eligible cells receive a finite IC.
+
+    Parallelism is over the time axis only; every output cell is written
+    by exactly one thread and no cross-thread reduction occurs, so output
+    is deterministic and bitwise reproducible across runs.
+
+    First call per (dtype, method) signature JIT-compiles (~1-2s); later
+    runs load the on-disk numba cache (cache=True).
+    """
+    T, N, F = v.shape
+    ic = np.full((T, F), np.nan, dtype=np.float64)
+
+    for t in prange(T):
+        for f in range(F):
+            if not eligible[t, f]:
+                continue
+
+            n = 0
+            for i in range(N):
+                if mask[t, i, f]:
+                    n += 1
+            if n < min_assets or n == 0:
+                continue
+
+            x = np.empty(n, dtype=np.float64)
+            y = np.empty(n, dtype=np.float64)
+            j = 0
+            x_min = np.inf
+            x_max = -np.inf
+            y_min = np.inf
+            y_max = -np.inf
+            for i in range(N):
+                if mask[t, i, f]:
+                    xi = v[t, i, f]
+                    yi = lab[t, i]
+                    x[j] = xi
+                    y[j] = yi
+                    j += 1
+                    if xi < x_min:
+                        x_min = xi
+                    if xi > x_max:
+                        x_max = xi
+                    if yi < y_min:
+                        y_min = yi
+                    if yi > y_max:
+                        y_max = yi
+
+            # Constant gate on the RAW values (checked for both methods, not
+            # just spearman): all-equal values must yield NaN exactly like
+            # the exact path's max-min == 0 gate.  This cannot be left to
+            # the vx > 0 check after centering: for huge-magnitude constant
+            # rows (e.g. 1e300) the sequential mean can round off by one
+            # ulp, making dx nonzero and producing a garbage finite value.
+            if x_min == x_max or y_min == y_max:
+                continue
+
+            if method_code == 0:
+                ic[t, f] = _numba_centered_corr(x, y, n)
+            else:
+                rx = _rank_with_ties(x)
+                ry = _rank_with_ties(y)
+                ic[t, f] = _numba_centered_corr(rx, ry, n)
+
+    return ic
+
+
+def numba_daily_ic_fast(
+    v: np.ndarray,
+    lab: np.ndarray,
+    mask: np.ndarray,
+    eligible: np.ndarray,
+    min_assets: int,
+    method: str,
+) -> np.ndarray:
+    """
+    Opt-in numba fast path for :func:`quant_evaluator.metrics.ic.compute_daily_ic`.
+
+    Consumes the already-vectorized validity/mask/eligibility state computed
+    by ``compute_daily_ic`` so that ``valid_counts`` and every NaN gate are
+    shared with the exact path bit-for-bit.
+
+    Args:
+        v: (T, N, F) factor values with validity applied as NaN (float32/64)
+        lab: (T, N) normalized label panel (float32/64)
+        mask: (T, N, F) bool pairwise-finite mask (bool)
+        eligible: (T, F) bool min_assets gate (bool)
+        min_assets: minimum valid pairs per cell
+        method: "pearson" or "spearman"
+
+    Returns:
+        ic_series (T, F) float64; NaN positions match the exact path
+        exactly, finite values differ at the ulp level (~1e-15; see
+        ``_numba_centered_corr``).  Evidence content hashes produced via
+        this path differ from the exact path.  First call per (dtype,
+        method) signature pays a ~1-2s JIT compile (cached on disk via
+        cache=True).
+    """
+    if method == "pearson":
+        code = 0
+    elif method == "spearman":
+        code = 1
+    else:
+        raise ValueError(f"Unknown method: {method}. Must be 'pearson' or 'spearman'")
+    return _numba_daily_ic_kernel(v, lab, mask, eligible, min_assets, code)

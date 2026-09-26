@@ -63,7 +63,8 @@ from hashlib import sha256
 
 import numpy as np
 
-from quant_evaluator.metrics.exposure import compute_factor_loadings
+from quant_evaluator.metrics.exposure import compute_factor_loadings, _ordered_valid_indices
+from quant_evaluator.metrics.exposure import _compute_factor_loadings_reference
 from quant_evaluator.metrics.ic import _spearman_rank_correlation  # rank-IC kernel (stable)
 __all__ = [
     "ExposureStyle",
@@ -376,6 +377,70 @@ def build_factor_loading_series(panel, factor_values, *, factor_id="research:sin
     if w.shape!=values.shape or not np.isfinite(w).all() or np.any(w<0):
         raise ValueError("weights must be finite nonnegative (T,N)")
     raw,r2,_,diagnostics=compute_factor_loadings(values,arr,min_obs=min_obs,weights=w,return_diagnostics=True)
+    standardized=np.full_like(raw[:,1:],np.nan)
+    joint=np.isfinite(values)&valid.all(axis=2)&(w>0)
+    # Vectorized per-style standardization.  Grouping by the number of jointly
+    # valid assets lets the weighted centering / scaling run as batched array
+    # ops instead of one Python iteration per date; the per-day formulas
+    # (including the ``y[0]`` baseline center, ``sy>0`` / ``sz>0`` branches and
+    # NaN positions) are preserved exactly.
+    use = joint.any(axis=1) & np.isfinite(r2)
+    if use.any():
+        nper = joint.sum(axis=1)
+        _Nj = values.shape[1]
+        # Fully observed days need no gather (identity), so skip take_along_axis.
+        _fully_valid = bool(use.all() and nper[use].min() == _Nj)
+        col_idx = _ordered_valid_indices(joint)
+        for n in np.unique(nper[use]):
+            tg = np.nonzero((nper == n) & use)[0]
+            if _fully_valid:
+                wj = w[tg]
+                yj = values[tg]
+                zj = arr[tg]
+            else:
+                cg = col_idx[tg, :n]
+                wj = np.take_along_axis(w[tg], cg, axis=1)
+                yj = np.take_along_axis(values[tg], cg, axis=1)
+                zj = np.take_along_axis(arr[tg], cg[:, :, None], axis=1)
+            ww = wj / np.max(wj, axis=1, keepdims=True)
+            ww = ww / ww.sum(axis=1, keepdims=True)
+            yc = yj - (yj[:, 0:1] + np.sum((yj - yj[:, 0:1]) * ww, axis=1, keepdims=True))
+            zc = zj - (zj[:, 0:1, :] + np.sum((zj - zj[:, 0:1, :]) * ww[:, :, None], axis=1, keepdims=True))
+            sy = np.sqrt(np.sum(ww * yc * yc, axis=1))
+            sz = np.sqrt(np.sum(ww[:, :, None] * zc * zc, axis=1))
+            raw_g = raw[tg, 1:]
+            standardized[tg] = np.where(
+                sy[:, None] > 0,
+                np.where(sz > 0, raw_g * sz / sy[:, None], np.nan),
+                np.nan,
+            )
+    safe_diagnostics=tuple({k:v for k,v in d.items() if k!="coefficients"} for d in diagnostics)
+    return FactorLoadingSeries(standardized,raw[:,1:],r2,joint.sum(axis=1),tuple(panel.style_names),
+        factor_id,panel.source_ref,panel.provider,panel.date_index or tuple(range(len(values))),
+        "support:"+sha256(joint.tobytes()+w.tobytes()).hexdigest(),safe_diagnostics,
+        "factor-values:"+sha256(np.ascontiguousarray(values).tobytes()).hexdigest(),
+        panel.weight_ref or ("explicit_weight_array" if weights is not None else "equal_weight"))
+
+
+def _build_factor_loading_series_reference(panel, factor_values, *, factor_id="research:single-factor", min_obs=10, weights=None):
+    """Verbatim original ``build_factor_loading_series`` (pre-optimization).
+
+    Uses ``_compute_factor_loadings_reference`` so it is a true end-to-end
+    reference of the old implementation. Kept for equivalence testing.
+    """
+    if not isinstance(panel,ExposurePanel):
+        raise TypeError("factor regression requires a SecurityExposurePanel")
+    values=np.asarray(factor_values,dtype=float)
+    arr,valid=_panel_arrays(panel)
+    if values.ndim!=2 or values.shape!=arr.shape[:2]:
+        raise ValueError("factor_values must match risk time/security axes (T,N)")
+    if weights is not None and panel.regression_weights is not None:
+        raise ValueError("regression weights already bound by ExposurePanel")
+    w=panel.regression_weights if weights is None else np.asarray(weights,dtype=float)
+    if w is None: w=np.ones(values.shape)
+    if w.shape!=values.shape or not np.isfinite(w).all() or np.any(w<0):
+        raise ValueError("weights must be finite nonnegative (T,N)")
+    raw,r2,_,diagnostics=_compute_factor_loadings_reference(values,arr,min_obs=min_obs,weights=w,return_diagnostics=True)
     standardized=np.full_like(raw[:,1:],np.nan)
     joint=np.isfinite(values)&valid.all(axis=2)&(w>0)
     for t in range(len(values)):

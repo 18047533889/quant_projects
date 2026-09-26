@@ -90,6 +90,25 @@ from quant_evaluator.metrics.data_quality import (
     compute_tradable_coverage,
     compute_universe_churn,
 )
+from quant_evaluator.metrics.distribution import compute_skewness, compute_kurtosis
+from quant_evaluator.metrics.ic_summary import (
+    compute_ic_decay_from_mean_ics,
+    compute_ic_stability_scalar,
+    compute_ic_summary_stats,
+    compute_quantile_rank_stability,
+    compute_rolling_ic_stats,
+)
+from quant_evaluator.metrics.data_quality import compute_return_coverage
+from quant_evaluator.metrics.turnover import (
+    compute_turnover_adjusted_ic_from_series,
+    compute_turnover_stability_from_series,
+    estimate_turnover_from_ranks,
+)
+from quant_evaluator.metrics.exposure import compute_concentration_hhi
+from quant_evaluator.metrics.temporal import compute_ic_autocorrelation
+from quant_evaluator.metrics.quality import compute_per_time_coverage
+from quant_evaluator.metrics.risk.drawdown_analysis import compute_drawdown_duration
+from quant_evaluator.metrics.risk.var_cvar import compute_cvar, compute_var
 from quant_evaluator.metrics.multiple_testing import (
     benjamini_hochberg_correction,
     bonferroni_correction,
@@ -1090,6 +1109,177 @@ _REGISTRY.register(MetricSpec(
 
 
 # ---------------------------------------------------------------------------
+# Legacy catalog binding adapters (2026-09-24).
+#
+# The 10-domain legacy catalog ids below are documented (docs/METRIC_REFERENCE.md)
+# against the kernels their ``implementation_id`` points at.  These adapters bind
+# them to exactly those kernels: they only adapt parameter names, fix a
+# documented confidence level, or select the documented output field of a
+# dict-returning kernel.  No numeric logic is duplicated here.
+# ---------------------------------------------------------------------------
+
+
+def _bind_skewness_value(returns, min_obs: int = 10):
+    """Legacy ``skewness``: sample skewness of the return series
+    (doc metric-skewness; metrics.distribution.compute_skewness)."""
+    return compute_skewness(returns, axis=0, min_obs=min_obs)
+
+
+def _bind_kurtosis_value(returns, min_obs: int = 10):
+    """Legacy ``kurtosis``: excess kurtosis of the return series
+    (doc metric-kurtosis; metrics.distribution.compute_kurtosis)."""
+    return compute_kurtosis(returns, axis=0, min_obs=min_obs)
+
+
+def _bind_var_99_value(returns):
+    """Legacy ``var_99``: historical VaR at the fixed confidence level 0.99
+    (doc metric-var_99; metrics.risk.var_cvar.compute_var)."""
+    return compute_var(returns, confidence_level=0.99)
+
+
+def _bind_cvar_99_value(returns):
+    """Legacy ``cvar_99``: historical CVaR at the fixed confidence level 0.99
+    (doc metric-cvar_99; metrics.risk.var_cvar.compute_cvar)."""
+    return compute_cvar(returns, confidence_level=0.99)
+
+
+def _bind_drawdown_duration_value(returns, min_periods: int = 10):
+    """Legacy ``drawdown_duration``: longest underwater period
+    ``D_max = max_j(e_j - s_j + 1)`` — the documented ``max_drawdown_duration``
+    field of metrics.risk.drawdown_analysis.compute_drawdown_duration."""
+    return compute_drawdown_duration(returns, min_periods=min_periods)["max_drawdown_duration"]
+
+
+def _bind_rolling_ic_value(ic_series, window: int = 60, min_periods: int = 20):
+    """Legacy ``rolling_ic``: rolling-window mean IC
+    ``mu_t = mean(IC_{max(0,t-w+1)..t})`` — the documented ``rolling_ic_mean``
+    field of metrics.ic_summary.compute_rolling_ic_stats."""
+    return compute_rolling_ic_stats(
+        ic_series, window=window, min_periods=min_periods
+    )["rolling_ic_mean"]
+
+
+def _bind_factor_coverage_value(factor_batch):
+    """Legacy ``factor_coverage``: per-factor fraction of valid factor cells
+    ``1/(TN) * sum(1{x finite AND validity})`` — the complement of
+    metrics.data_quality.compute_missing_ratio (same finite-and-validity basis)."""
+    return 1.0 - compute_missing_ratio(factor_batch)
+
+
+def _bind_coverage_stability_value(factor_batch, label_bundle):
+    """Legacy ``coverage_stability``: population variance over time of the
+    per-day joint factor/label coverage ``V_f = (1/T) sum_t (c_{t,f} - mean_c_f)^2``
+    (doc metric-coverage_stability) over
+    metrics.quality.compute_per_time_coverage."""
+    per_time = compute_per_time_coverage(factor_batch, label_bundle)
+    return np.var(per_time, axis=0)
+
+
+# ---------------------------------------------------------------------------
+# Missing-kernel round (2026-09-24): binding adapters for the remaining ten
+# legacy catalog ids.  Each adapter only reduces/adapts the output of a
+# documented kernel (imported, never re-implemented) into the registry's
+# declared output shape; the numeric semantics live in the metric modules.
+# ---------------------------------------------------------------------------
+
+
+def _valid_factor_panel(factor_batch) -> np.ndarray:
+    """(T, N, F) float64 factor panel with validity masked to NaN."""
+    values = np.asarray(factor_batch.values, dtype=np.float64)
+    if factor_batch.validity is not None:
+        values = np.where(
+            np.asarray(factor_batch.validity, dtype=bool), values, np.nan
+        )
+    return values
+
+
+def _bind_ic_summary_value(ic_series, min_periods: int = 20):
+    """Legacy ``ic_summary``: the documented PRIMARY statistic of the IC
+    summary distribution — the finite mean IC (doc metric-ic_summary lists
+    mean first).  The remaining documented statistics (std/ICIR/t/p) stay
+    available at the function layer via
+    ``metrics.ic_summary.compute_ic_summary_stats``."""
+    return compute_ic_summary_stats(ic_series, min_periods=min_periods)["mean"]
+
+
+def _bind_ic_stability_value(ic_series, window_size: int = 60, min_periods: int = 20):
+    """Legacy ``ic_stability`` scalar adaptation: the doc (metric-ic_stability)
+    defers the single-scalar interpretation to the registry adapter; the bound
+    interpretation is the mean of the finite rolling half-vs-half correlation
+    windows over ``metrics.ic_summary.compute_ic_stability``."""
+    return compute_ic_stability_scalar(
+        ic_series, window_size=window_size, min_periods=min_periods
+    )
+
+
+def _bind_quantile_stability_value(daily_quantile_returns, min_periods: int = 2):
+    """Legacy ``quantile_stability``: cross-time stability of the daily
+    quantile-return rankings (doc metric-quantile_stability) over
+    ``metrics.ic_summary.compute_quantile_rank_stability`` on the daily
+    (T, Q, F) quantile-return matrix."""
+    return compute_quantile_rank_stability(
+        daily_quantile_returns, min_periods=min_periods
+    )
+
+
+def _bind_hhi_concentration_value(factor_batch):
+    """Legacy ``hhi_concentration``: time mean of the finite daily
+    gross-exposure HHI series (doc metric-hhi_concentration) over
+    ``metrics.exposure.compute_concentration_hhi``."""
+    values = _valid_factor_panel(factor_batch)
+    out = np.full(values.shape[2], np.nan, dtype=np.float64)
+    for f in range(values.shape[2]):
+        hhi = compute_concentration_hhi(values[:, :, f])
+        finite = hhi[np.isfinite(hhi)]
+        if finite.size:
+            out[f] = float(np.mean(finite))
+    return out
+
+
+def _bind_hhi_effective_n_value(factor_batch):
+    """Legacy ``hhi_effective_n``: time mean of the finite daily effective
+    group counts ``N_eff,t = 1/HHI_t`` — mean of reciprocals over days with
+    finite positive HHI, NOT the reciprocal of a mean (doc
+    metric-hhi_effective_n) over ``metrics.exposure.compute_concentration_hhi``."""
+    values = _valid_factor_panel(factor_batch)
+    out = np.full(values.shape[2], np.nan, dtype=np.float64)
+    for f in range(values.shape[2]):
+        hhi = compute_concentration_hhi(values[:, :, f])
+        valid = np.isfinite(hhi) & (hhi > 0)
+        if np.any(valid):
+            out[f] = float(np.mean(1.0 / hhi[valid]))
+    return out
+
+
+def _bind_return_coverage_value(forward_returns=None, factor_values=None):
+    """Legacy ``return_coverage``: pool-level fraction of finite forward-return
+    cells (doc metric-return_coverage) over
+    ``metrics.data_quality.compute_return_coverage``.  The (T, N) return panel
+    has no factor axis, so the panel scalar is broadcast to the factor axis."""
+    coverage = compute_return_coverage(forward_returns)
+    n_factors = 1 if factor_values is None else int(np.asarray(factor_values).shape[-1])
+    return np.full(n_factors, float(coverage), dtype=np.float64)
+
+
+def _bind_turnover_stability_value(factor_batch, min_periods: int = 2):
+    """Legacy ``turnover_stability``: cross-period variance of the per-factor
+    rank-proxy turnover series (doc metric-turnover_stability) over
+    ``metrics.turnover.estimate_turnover_from_ranks`` +
+    ``metrics.turnover.compute_turnover_stability_from_series``."""
+    turnover = estimate_turnover_from_ranks(factor_batch)
+    return compute_turnover_stability_from_series(turnover, min_periods=min_periods)
+
+
+def _bind_turnover_adjusted_ic_value(ic_series=None, turnover_series=None, min_periods: int = 20):
+    """Legacy ``turnover_adjusted_ic``: mean finite IC per unit of mean
+    rank-proxy turnover (doc metric-turnover_adjusted_ic) over
+    ``metrics.turnover.compute_turnover_adjusted_ic_from_series``."""
+    return compute_turnover_adjusted_ic_from_series(
+        ic_series, turnover_series, min_periods=min_periods
+    )
+
+
+# ---------------------------------------------------------------------------
 # QE-P0-R-C2: 10-domain catalog specs merged into the SINGLE registry.
 #
 # These were previously populated into a SEPARATE ``metrics.catalog._REGISTRY``
@@ -1109,6 +1299,9 @@ _REGISTRY.register(MetricSpec(
     description="Spearman rank correlation between factor values and forward returns",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=compute_rank_ic_value,
+    requires=["factor_batch", "label_bundle"],
+    ic_method="spearman",
     domain=Domain.IC,
     metric_id="spearman_ic",
     required_inputs={"factor", "forward_returns"},
@@ -1125,13 +1318,13 @@ _REGISTRY.register(MetricSpec(
     description="Summary statistics (mean, std, skew, kurtosis) of IC time series",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_ic_summary_value,
+    requires=["ICSeriesArtifact"],
     domain=Domain.IC,
     metric_id="ic_summary",
     required_inputs={"factor", "forward_returns"},
-    implementation_id="quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats",
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_ic_summary_stats",
     metric_version="1.0.0",
-    artifact_kind="distribution",
-    required_axes=("time",),
     units="correlation",
     direction="neutral",
     missing_policy="nan",
@@ -1145,6 +1338,9 @@ _REGISTRY.register(MetricSpec(
     description="Rank IC computed per time slice, returned as a time series",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=compute_rank_ic_series_value,
+    requires=["factor_batch", "label_bundle"],
+    ic_method="spearman",
     domain=Domain.RANK_IC,
     metric_id="rank_ic_time_series",
     required_inputs={"factor", "forward_returns"},
@@ -1163,6 +1359,9 @@ _REGISTRY.register(MetricSpec(
     description="Rank IC computed cross-sectionally for each date",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=compute_rank_ic_series_value,
+    requires=["factor_batch", "label_bundle"],
+    ic_method="spearman",
     domain=Domain.RANK_IC,
     metric_id="rank_ic_cross_section",
     required_inputs={"factor", "forward_returns"},
@@ -1183,6 +1382,8 @@ _REGISTRY.register(MetricSpec(
     description="Average forward return per quantile bucket",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=build_daily_quantile_return_artifact,
+    requires=["factor_batch", "label_bundle"],
     domain=Domain.QUANTILE,
     metric_id="quantile_returns",
     required_inputs={"factor", "forward_returns"},
@@ -1201,13 +1402,13 @@ _REGISTRY.register(MetricSpec(
     description="Stability of quantile return rankings across time",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_quantile_stability_value,
+    requires=["QuantileReturnArtifact"],
     domain=Domain.QUANTILE,
     metric_id="quantile_stability",
     required_inputs={"factor", "forward_returns"},
-    output_type="timeseries",
-    implementation_id="quant_evaluator.metrics.ic_summary.compute_ic_stability",
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_quantile_rank_stability",
     metric_version="1.0.0",
-    required_axes=("time",),
     units="correlation",
     direction="higher_is_better",
     missing_policy="nan",
@@ -1238,6 +1439,8 @@ _REGISTRY.register(MetricSpec(
     description="Duration (in periods) of the longest drawdown",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_drawdown_duration_value,
+    requires=["probe_pnl"],
     domain=Domain.DRAWDOWN,
     metric_id="drawdown_duration",
     required_inputs={"factor", "forward_returns"},
@@ -1273,6 +1476,8 @@ _REGISTRY.register(MetricSpec(
     description="Average rate of change in factor ranking between periods",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=compute_turnover_value,
+    requires=["factor_batch"],
     domain=Domain.TURNOVER,
     metric_id="turnover_rate",
     required_inputs={"factor"},
@@ -1309,10 +1514,11 @@ _REGISTRY.register(MetricSpec(
     description="IC adjusted for turnover-induced transaction costs",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_turnover_adjusted_ic_value,
     domain=Domain.TURNOVER,
     metric_id="turnover_adjusted_ic",
     required_inputs={"factor", "forward_returns", "transaction_costs"},
-    implementation_id="quant_evaluator.metrics.turnover.compute_turnover_contribution",
+    implementation_id="quant_evaluator.metrics.turnover.compute_turnover_adjusted_ic_from_series",
     metric_version="1.0.0",
     units="correlation",
     direction="higher_is_better",
@@ -1327,6 +1533,8 @@ _REGISTRY.register(MetricSpec(
     description="Value at Risk at 95% confidence level",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=compute_var,
+    requires=["probe_pnl"],
     domain=Domain.TAIL_RISK,
     metric_id="var_95",
     required_inputs={"forward_returns"},
@@ -1343,6 +1551,8 @@ _REGISTRY.register(MetricSpec(
     description="Value at Risk at 99% confidence level",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_var_99_value,
+    requires=["probe_pnl"],
     domain=Domain.TAIL_RISK,
     metric_id="var_99",
     required_inputs={"forward_returns"},
@@ -1359,6 +1569,8 @@ _REGISTRY.register(MetricSpec(
     description="Conditional Value at Risk (Expected Shortfall) at 95%",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=compute_cvar,
+    requires=["probe_pnl"],
     domain=Domain.TAIL_RISK,
     metric_id="cvar_95",
     required_inputs={"forward_returns"},
@@ -1375,6 +1587,8 @@ _REGISTRY.register(MetricSpec(
     description="Conditional Value at Risk (Expected Shortfall) at 99%",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_cvar_99_value,
+    requires=["probe_pnl"],
     domain=Domain.TAIL_RISK,
     metric_id="cvar_99",
     required_inputs={"forward_returns"},
@@ -1391,6 +1605,8 @@ _REGISTRY.register(MetricSpec(
     description="Skewness of the return distribution",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_skewness_value,
+    requires=["probe_pnl"],
     domain=Domain.TAIL_RISK,
     metric_id="skewness",
     required_inputs={"forward_returns"},
@@ -1407,6 +1623,8 @@ _REGISTRY.register(MetricSpec(
     description="Excess kurtosis of the return distribution",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_kurtosis_value,
+    requires=["probe_pnl"],
     domain=Domain.TAIL_RISK,
     metric_id="kurtosis",
     required_inputs={"forward_returns"},
@@ -1425,6 +1643,8 @@ _REGISTRY.register(MetricSpec(
     description="Fraction of universe with non-null factor values",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_factor_coverage_value,
+    requires=["factor_batch"],
     domain=Domain.COVERAGE,
     metric_id="factor_coverage",
     required_inputs={"factor"},
@@ -1441,10 +1661,11 @@ _REGISTRY.register(MetricSpec(
     description="Fraction of universe with non-null forward returns",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_return_coverage_value,
     domain=Domain.COVERAGE,
     metric_id="return_coverage",
     required_inputs={"forward_returns"},
-    implementation_id="quant_evaluator.metrics.quality.compute_coverage",
+    implementation_id="quant_evaluator.metrics.data_quality.compute_return_coverage",
     metric_version="1.0.0",
     units="fraction",
     direction="higher_is_better",
@@ -1457,6 +1678,8 @@ _REGISTRY.register(MetricSpec(
     description="Fraction of universe with both factor and return available",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=compute_coverage_value,
+    requires=["factor_batch", "label_bundle"],
     domain=Domain.COVERAGE,
     metric_id="joint_coverage",
     required_inputs={"factor", "forward_returns"},
@@ -1475,6 +1698,7 @@ _REGISTRY.register(MetricSpec(
     description="Herfindahl-Hirschman Index of factor value concentration",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_hhi_concentration_value,
     domain=Domain.HHI,
     metric_id="hhi_concentration",
     required_inputs={"factor"},
@@ -1491,6 +1715,7 @@ _REGISTRY.register(MetricSpec(
     description="Effective number of groups (1/HHI) for factor concentration",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_hhi_effective_n_value,
     domain=Domain.HHI,
     metric_id="hhi_effective_n",
     required_inputs={"factor"},
@@ -1509,10 +1734,12 @@ _REGISTRY.register(MetricSpec(
     description="Rolling correlation of IC values across sub-periods",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_ic_stability_value,
+    requires=["ICSeriesArtifact"],
     domain=Domain.STABILITY,
     metric_id="ic_stability",
     required_inputs={"factor", "forward_returns"},
-    implementation_id="quant_evaluator.metrics.ic_summary.compute_ic_stability",
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_ic_stability_scalar",
     metric_version="1.0.0",
     units="correlation",
     direction="higher_is_better",
@@ -1525,10 +1752,11 @@ _REGISTRY.register(MetricSpec(
     description="Variance of turnover rate across periods",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_turnover_stability_value,
     domain=Domain.STABILITY,
     metric_id="turnover_stability",
     required_inputs={"factor"},
-    implementation_id="quant_evaluator.metrics.turnover.compute_turnover",
+    implementation_id="quant_evaluator.metrics.turnover.compute_turnover_stability_from_series",
     metric_version="1.0.0",
     units="variance",
     direction="lower_is_better",
@@ -1541,6 +1769,8 @@ _REGISTRY.register(MetricSpec(
     description="Variance of factor coverage across periods",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_coverage_stability_value,
+    requires=["factor_batch", "label_bundle"],
     domain=Domain.STABILITY,
     metric_id="coverage_stability",
     required_inputs={"factor"},
@@ -1559,6 +1789,8 @@ _REGISTRY.register(MetricSpec(
     description="Rolling window IC values over time",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    compute_fn=_bind_rolling_ic_value,
+    requires=["ICSeriesArtifact"],
     domain=Domain.TEMPORAL,
     metric_id="rolling_ic",
     required_inputs={"factor", "forward_returns"},
@@ -1577,11 +1809,21 @@ _REGISTRY.register(MetricSpec(
     description="IC decay: correlation at increasing forward horizons",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    # 2026-09-24 missing-kernel round: the kernel
+    # (metrics.ic_summary.compute_ic_decay_from_mean_ics) consumes the
+    # pre-computed per-horizon mean-IC matrix.  The declared requirement
+    # ("HorizonMeanIC") is intentionally NOT a facade artifact builder: the
+    # public facade cannot synthesise one LabelBundle per forward horizon,
+    # so this id stays unavailable through evaluate() (declared gap in
+    # tests/metrics/test_all_metrics_ab_contract.py).  API-layer callers
+    # (e.g. api/horizons summarize_horizons) supply the means explicitly.
+    compute_fn=compute_ic_decay_from_mean_ics,
+    requires=["HorizonMeanIC"],
     domain=Domain.TEMPORAL,
     metric_id="ic_decay",
     required_inputs={"factor", "forward_returns"},
-    output_type="timeseries",
-    implementation_id="quant_evaluator.metrics.ic_summary.compute_ic_decay",
+    output_type="vector",
+    implementation_id="quant_evaluator.metrics.ic_summary.compute_ic_decay_from_mean_ics",
     metric_version="1.0.0",
     required_axes=("horizon",),
     units="correlation",
@@ -1595,10 +1837,17 @@ _REGISTRY.register(MetricSpec(
     description="Autocorrelation of IC values at specified lags",
     status=MetricStatus.STABLE,
     tier=MetricTier.EXTENDED,
+    # 2026-09-24 missing-kernel round: bound through the ICSeriesArtifact
+    # wrapper channel.  The documented output is the IC autocorrelation
+    # function (max_lag+1, F) over a LAG axis; the facade's generic vector
+    # artifact channel (output_type="vector") carries the K=max_lag+1 axis,
+    # so no new artifact contract was required.
+    compute_fn=compute_ic_autocorrelation,
+    requires=["ICSeriesArtifact"],
     domain=Domain.TEMPORAL,
     metric_id="autocorrelation_ic",
     required_inputs={"factor", "forward_returns"},
-    output_type="timeseries",
+    output_type="vector",
     implementation_id="quant_evaluator.metrics.temporal.compute_ic_autocorrelation",
     metric_version="1.0.0",
     required_axes=("lag",),

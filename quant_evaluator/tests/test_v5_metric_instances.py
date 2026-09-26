@@ -35,6 +35,18 @@ def test_public_q10_q20_h10_h20_coexist_and_roundtrip(backend):
     result = evaluate(request, backend=backend)
     assert len(result.instance_results) == 4
     assert len({child.config_hash for child in result.instance_results.values()}) == 4
+    receipts = result.metadata["instance_execution_receipts"]
+    assert set(receipts) == set(result.instance_results)
+    assert "backend_used" not in result.metadata
+    assert result.metadata["execution_receipt"]["config_hash"] == result.config_hash
+    assert result.metadata["execution_receipt"]["instance_receipt_hashes"] == {
+        key: receipt["receipt_hash"] for key, receipt in receipts.items()}
+    for key, child in result.instance_results.items():
+        assert receipts[key] == child.metadata["instance_execution_receipt"]
+        assert receipts[key]["config_hash"] == child.config_hash
+        assert receipts[key]["backend_used"] == child.metadata["backend_used"]
+        assert receipts[key]["backend_used"] == backend
+        assert receipts[key]["source_evaluation_receipt"] == child.metadata["execution_receipt"]
     for item in items:
         child = result.instance_results[result.metadata["requested_to_resolved_instances"][item.instance_id]]
         assert child.artifacts[item.metric_id].values.shape == (item.parameters["n_quantiles"], 2)
@@ -45,7 +57,21 @@ def test_public_q10_q20_h10_h20_coexist_and_roundtrip(backend):
     restored = EvaluationBundle.from_dict(json.loads(json.dumps(result.to_dict())))
     assert restored.config_hash == result.config_hash
     assert set(restored.instance_results) == set(result.instance_results)
+    assert restored.metadata["instance_execution_receipts"] == receipts
+    assert restored.metadata["execution_receipt"] == result.metadata["execution_receipt"]
 
+
+def test_default_auto_route_is_auditable_per_instance():
+    batch, label = inputs()
+    result = evaluate(EvaluationRequest(
+        batch, label, metric_instances=(MetricInstance("coverage"),)))
+    key, child = next(iter(result.instance_results.items()))
+    receipt = result.metadata["instance_execution_receipts"][key]
+    assert receipt["config_hash"] == child.config_hash
+    assert receipt["backend_used"] == child.metadata["backend_used"]
+    assert receipt["source_evaluation_receipt"]["backend_requested"] == "default"
+    assert receipt["source_evaluation_receipt"]["backend_strategy"] == "auto"
+    assert "backend_used" not in result.metadata
 
 def test_missing_bindings_and_lying_horizons_fail_closed():
     batch, label = inputs()

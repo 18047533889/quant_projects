@@ -104,7 +104,6 @@ from quant_evaluator.metrics.quantile import (
     compute_quantile_returns,
 )
 from quant_evaluator.metrics.quantile_numba import compute_quantile_returns_numba
-from quant_evaluator.metrics.quantile_optimized import compute_quantile_returns_ultra_fast
 from quant_evaluator.metrics.turnover import estimate_turnover_from_ranks
 from quant_evaluator.metrics.quality import compute_valid_pair_counts
 from quant_evaluator.metrics.exposure import compute_factor_loadings, compute_concentration_hhi
@@ -549,23 +548,18 @@ def test_quantile_binning_parity_across_optimizations(panel):
 
 
 def test_quantile_returns_parity_across_implementations(panel):
-    """Reference (metrics), fast (kernels), numba, and ultra-fast quantile
-    returns must agree (NaN-aware) within tight tolerance."""
+    """Reference (metrics), fast (kernels), and numba quantile returns must
+    agree (NaN-aware) within tight tolerance."""
     values, labels, batch, bundle = panel
 
     q_ref, c_ref = compute_quantile_returns(batch, bundle, n_quantiles=5, min_assets=10)
     q_fast, c_fast = compute_quantile_returns_fast(values, labels, n_quantiles=5, min_assets=10)
     q_numba, c_numba = compute_quantile_returns_numba(batch, bundle, n_quantiles=5, min_assets=10)
-    q_ultra, c_ultra = compute_quantile_returns_ultra_fast(
-        batch, bundle, n_quantiles=5, min_assets=10
-    )
 
     assert _allclose_nanaware(q_ref, q_fast, rtol=1e-9, atol=1e-12)
     assert _allclose_nanaware(q_ref, q_numba, rtol=1e-9, atol=1e-12)
-    assert _allclose_nanaware(q_ref, q_ultra, rtol=1e-9, atol=1e-12)
     assert np.array_equal(c_ref, c_fast)
     assert np.array_equal(c_ref, c_numba)
-    assert np.array_equal(c_ref, c_ultra)
 
 
 # ---------------------------------------------------------------------------

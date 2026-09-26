@@ -128,6 +128,33 @@ def compute_time_to_recovery(
     return float(np.mean(recovered)) if recovered else np.nan
 
 
+def _compute_worst_period_return_reference(
+    returns: np.ndarray,
+    period: str = "month",
+    min_periods: int = 10,
+) -> float:
+    """Bit-exact oracle of :func:`compute_worst_period_return` (loop)."""
+    ret = _as_1d(returns)
+    if ret.size < min_periods:
+        return np.nan
+    if period == "month":
+        block = _PERIODS_PER_MONTH
+    elif period == "quarter":
+        block = _PERIODS_PER_QUARTER
+    elif period == "year":
+        block = _PERIODS_PER_YEAR
+    else:
+        raise ValueError(
+            f"period must be one of 'month'|'quarter'|'year', got {period!r}"
+        )
+    if ret.size < block:
+        return np.nan
+    blocks = np.full(ret.size - block + 1, np.nan)
+    for t in range(ret.size - block + 1):
+        blocks[t] = np.prod(1.0 + ret[t : t + block]) - 1.0
+    return float(np.min(blocks))
+
+
 def compute_worst_period_return(
     returns: np.ndarray,
     period: str = "month",
@@ -145,6 +172,11 @@ def compute_worst_period_return(
     index dependence — a pure mathematical "worst 21-period block" over the
     dot-frequency PnL series (kept calendar-window-agnostic because the probe
     PnL series carries only a dot index, not calendar dates).
+
+    Vectorized with ``sliding_window_view`` + ``np.prod(axis=1)``; the reduction
+    order is unchanged (left-to-right over each block), so results are
+    bit-identical, including NaN propagation when a block contains a missing
+    return.
     """
     ret = _as_1d(returns)
     if ret.size < min_periods:
@@ -161,31 +193,21 @@ def compute_worst_period_return(
         )
     if ret.size < block:
         return np.nan
-    # Compounded block returns: prod(1+r) over each length-block window.
-    blocks = np.full(ret.size - block + 1, np.nan)
-    for t in range(ret.size - block + 1):
-        blocks[t] = np.prod(1.0 + ret[t : t + block]) - 1.0
+    from numpy.lib.stride_tricks import sliding_window_view
+
+    windows = sliding_window_view(ret, block)
+    blocks = np.prod(1.0 + windows, axis=1) - 1.0
     return float(np.min(blocks))
 
 
-def compute_rolling_sharpe_tail(
+def _compute_rolling_sharpe_tail_reference(
     returns: np.ndarray,
     window: int = _PERIODS_PER_YEAR,
     quantile: float = 0.10,
     min_periods: int = 30,
     periods_per_year: int = _PERIODS_PER_YEAR,
 ) -> float:
-    """Rolling-window annualized Sharpe tail statistic.
-
-    Computes the rolling-window Sharpe (``quant_evaluator.metrics.
-    portfolio_stats.compute_sharpe_ratio``) over every aligned window with at
-    least ``min_periods`` finite returns, then returns the requested quantile:
-
-    - ``quantile=0.0``   -> ``rolling_1y_sharpe_min`` (minimum attained);
-    - ``quantile=0.10``  -> ``rolling_1y_sharpe_q10``.
-
-    NaN when there are no valid rolling windows.
-    """
+    """Bit-exact oracle of :func:`compute_rolling_sharpe_tail` (per-window loop)."""
     from quant_evaluator.metrics.portfolio_stats import compute_sharpe_ratio
 
     ret = _as_1d(returns)
@@ -210,6 +232,43 @@ def compute_rolling_sharpe_tail(
     if quantile == 0.0:
         return float(min(roll))
     return float(np.quantile(roll, quantile))
+
+
+def compute_rolling_sharpe_tail(
+    returns: np.ndarray,
+    window: int = _PERIODS_PER_YEAR,
+    quantile: float = 0.10,
+    min_periods: int = 30,
+    periods_per_year: int = _PERIODS_PER_YEAR,
+) -> float:
+    """Rolling-window annualized Sharpe tail statistic.
+
+    Computes the rolling-window Sharpe (``quant_evaluator.metrics.
+    portfolio_stats.compute_sharpe_ratio``) over every aligned window with at
+    least ``min_periods`` finite returns, then returns the requested quantile:
+
+    - ``quantile=0.0``   -> ``rolling_1y_sharpe_min`` (minimum attained);
+    - ``quantile=0.10``  -> ``rolling_1y_sharpe_q10``.
+
+    NaN when there are no valid rolling windows.
+
+    Vectorized via :func:`portfolio_stats._rolling_sharpe_per_window`
+    (cumsum closed-form mean / variance).  Full-finite windows are bit-exact;
+    windows containing NaNs match the per-window ``compute_sharpe_ratio`` call
+    within ulp (see GPU-parity tolerance tests for the measured max deviation).
+    """
+    from quant_evaluator.metrics.portfolio_stats import _rolling_sharpe_per_window
+
+    ret = _as_1d(returns)
+    if ret.size < window:
+        return np.nan
+    roll_arr = _rolling_sharpe_per_window(ret, window, periods_per_year, min_periods)
+    valid = roll_arr[np.isfinite(roll_arr)]
+    if valid.size == 0:
+        return np.nan
+    if quantile == 0.0:
+        return float(valid.min())
+    return float(np.quantile(valid, quantile))
 
 
 def compute_return_skew(returns: np.ndarray, min_periods: int = 20, *, bias: bool = False) -> float:

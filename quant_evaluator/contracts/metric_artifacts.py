@@ -136,7 +136,26 @@ def _freeze_value(value: Any) -> Any:
     ndarray -> read-only copy; immutable scalars/strings/bytes/None/Enum/
     numpy-scalar/datetime pass through unchanged; anything else (a mutable
     object) raises :class:`InvalidContractError` fail-closed.
+
+    Performance note (2026-09-22): the exact-type fast paths below skip the
+    ABC ``isinstance`` chain for the overwhelmingly common container/scalar
+    types.  Evidence payloads routinely carry thousands of small dicts
+    (e.g. per-day regression diagnostics), where the ABC checks dominated
+    the freeze cost.  Only *exact* types take a fast path; every subclass
+    (including ``np.float64``, which subclasses ``float``) falls through to
+    the unchanged general chain, so the historical ordering and fail-closed
+    behaviour are byte-for-byte preserved.
     """
+    value_type = type(value)
+    if value_type is float or value_type is str or value_type is int \
+            or value_type is bool or value_type is bytes or value is None:
+        return value
+    if value_type is tuple or value_type is list:
+        return tuple(_freeze_value(v) for v in value)
+    if value_type is dict:
+        return FrozenMapping({k: _freeze_value(v) for k, v in value.items()})
+    if value_type is np.ndarray:
+        return _freeze_array(value, "metadata")
     if isinstance(value, Mapping):
         return FrozenMapping({k: _freeze_value(v) for k, v in value.items()})
     if isinstance(value, (list, tuple)):

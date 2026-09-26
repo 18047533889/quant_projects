@@ -1,0 +1,41 @@
+{
+  "kind": "real_cos_attempt_failed_before_benchmark",
+  "seed": 260926,
+  "repeats": 2,
+  "timeout_s": 90.0,
+  "parity": {
+    "rtol": 1e-08,
+    "atol": 1e-10,
+    "counts_and_finite_mask_exact": true
+  },
+  "cases": {
+    "real_cos_pearson": {
+      "exact": {
+        "status": "error",
+        "error": "ValidationError: exact object metadata is missing or mismatched"
+      },
+      "numba": {
+        "status": "error",
+        "error": "ValidationError: exact object metadata is missing or mismatched"
+      },
+      "gpu": {
+        "status": "error",
+        "error": "ValidationError: exact object metadata is missing or mismatched"
+      }
+    },
+    "real_cos_spearman": {
+      "exact": {
+        "status": "error",
+        "error": "ValidationError: exact object metadata is missing or mismatched"
+      },
+      "numba": {
+        "status": "error",
+        "error": "ValidationError: exact object metadata is missing or mismatched"
+      },
+      "gpu": {
+        "status": "error",
+        "error": "ValidationError: exact object metadata is missing or mismatched"
+      }
+    }
+  }
+}
