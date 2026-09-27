@@ -48,3 +48,51 @@ def test_nondefault_gpu_min_assets_matches_cpu():
         cpu = evaluate(batch,label,**options)
         gpu = evaluate(batch,label,backend='cuda',**options)
         np.testing.assert_allclose(cpu.artifacts['rank_ic'].values,gpu.artifacts['rank_ic'].values,atol=1e-12)
+
+def test_gpu_rank_ic_positive_ratio_public_parity_and_reuse(monkeypatch):
+    pytest.importorskip('cupy')
+    from quant_evaluator.kernels.gpu import correlation
+
+    rng = np.random.default_rng(72)
+    values = rng.normal(size=(35, 40, 2))
+    values[:10, :, 1] = 1.0  # fewer than 30 finite daily rank IC values
+    labels = rng.normal(size=(35, 40))
+    batch, label = contracts(values, labels)
+    metrics = ('rank_ic', 'rank_ic_positive_ratio')
+    options = {
+        'metrics': metrics,
+        'metric_parameters': {'rank_ic_positive_ratio': {'min_periods': 30}},
+    }
+    cpu = evaluate(batch, label, **options)
+
+    original = correlation.batched_spearman_ic
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(kwargs.get('min_obs'))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(correlation, 'batched_spearman_ic', counted)
+    gpu = evaluate(batch, label, backend='cuda_strict', **options)
+    assert calls == [20]
+
+    for metric in metrics:
+        np.testing.assert_allclose(
+            gpu.artifacts[metric].values,
+            cpu.artifacts[metric].values,
+            rtol=1e-10,
+            atol=1e-12,
+            equal_nan=True,
+        )
+        np.testing.assert_array_equal(
+            gpu.artifacts[metric].provenance['observation_counts'],
+            cpu.artifacts[metric].provenance['observation_counts'],
+        )
+        for factor_id in batch.factor_ids:
+            actual = gpu.get_metric(metric, factor_id)
+            expected = cpu.get_metric(metric, factor_id)
+            assert actual.valid == expected.valid
+            assert actual.observation_count == expected.observation_count
+            if expected.valid:
+                assert actual.value == pytest.approx(expected.value, abs=1e-12)
+    assert np.isnan(gpu.artifacts['rank_ic_positive_ratio'].values[1])

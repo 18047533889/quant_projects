@@ -5,8 +5,9 @@ import pandas as pd
 import pytest
 
 from quant_evaluator.scripts.load_real_cos_factor_batch import (
-    _assemble_factor_values, _factors, SHA,
+    _assemble_factor_values, _factors, _trim_factor_values_in_place, SHA,
 )
+from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 
 
 @pytest.mark.parametrize("count,max_mib,total_mib", [
@@ -58,3 +59,77 @@ def test_streamed_factor_values_match_panel_reindex_and_stack_exactly():
     assert got_sources == sources
     np.testing.assert_array_equal(np.isnan(actual), np.isnan(expected))
     np.testing.assert_array_equal(actual, expected)
+
+
+def test_in_place_factor_trim_preserves_axis_intersection_reorder_and_immutability(monkeypatch):
+    dates = pd.date_range("2024-01-01", periods=5, freq="D")
+    source_assets = pd.Index(["C.SZ", "A.SZ", "D.SZ", "B.SZ"])
+    source = np.arange(5 * 4 * 3, dtype=np.float64).reshape(5, 4, 3)
+    source[1, 3, 1] = np.nan
+    expected = source[np.ix_([1, 3, 4], [3, 2, 1], np.arange(3))].copy()
+    selected_dates = dates[[1, 3, 4]]
+    selected_assets = ["B.SZ", "D.SZ", "A.SZ"]
+
+    allocations = []
+    real_empty = np.empty
+
+    def tracking_empty(shape, *args, **kwargs):
+        if isinstance(shape, tuple) and len(shape) > 1:
+            allocations.append(shape)
+        return real_empty(shape, *args, **kwargs)
+
+    monkeypatch.setattr(np, "empty", tracking_empty)
+    trimmed = _trim_factor_values_in_place(
+        source, dates, source_assets, selected_dates, selected_assets
+    )
+
+    assert allocations == [(len(selected_assets), source.shape[2])]
+    assert source.shape not in allocations
+    assert trimmed.dtype == np.float64
+    assert trimmed.flags.c_contiguous
+    assert np.shares_memory(trimmed, source)
+    assert trimmed.shape == (3, 3, 3)
+    np.testing.assert_array_equal(np.isnan(trimmed), np.isnan(expected))
+    np.testing.assert_array_equal(trimmed, expected)
+    np.testing.assert_array_equal(trimmed.view(np.uint64), expected.view(np.uint64))
+
+    batch = FactorBatch(
+        ("f0", "f1", "f2"),
+        AxisRef("time", "datetime64[ns]", len(selected_dates), selected_dates.to_numpy()),
+        AxisRef("asset", "str", len(selected_assets), np.asarray(selected_assets)),
+        trimmed,
+        validity=np.isfinite(trimmed),
+    )
+    assert not batch.values.flags.writeable
+    assert not np.shares_memory(batch.values, trimmed)
+    np.testing.assert_array_equal(np.isnan(batch.values), np.isnan(expected))
+    np.testing.assert_array_equal(batch.values, expected)
+    np.testing.assert_array_equal(batch.values.view(np.uint64), expected.view(np.uint64))
+
+
+def test_in_place_factor_trim_rejects_nonmonotone_time_before_mutation():
+    dates = pd.date_range("2024-01-01", periods=4, freq="D")
+    assets = pd.Index(["A.SZ", "B.SZ"])
+    source = np.arange(4 * 2, dtype=np.float64).reshape(4, 2, 1)
+    before = source.copy()
+
+    with pytest.raises(ValueError, match="out of source order"):
+        _trim_factor_values_in_place(source, dates, assets, dates[[2, 1]], assets)
+
+    np.testing.assert_array_equal(source, before)
+
+
+def test_in_place_factor_trim_randomized_bitwise_parity():
+    dates = pd.date_range("2024-01-01", periods=9, freq="D")
+    assets = pd.Index([f"S{i}.SZ" for i in range(7)])
+    for seed in range(12):
+        rng = np.random.default_rng(seed)
+        values = rng.standard_normal((9, 7, 4))
+        values[seed % 9, seed % 7, seed % 4] = np.nan
+        selected_times = np.sort(rng.choice(9, size=1 + seed % 9, replace=False))
+        selected_assets = rng.permutation(7)[:1 + seed % 7]
+        expected = values[np.ix_(selected_times, selected_assets, np.arange(4))]
+        actual = _trim_factor_values_in_place(
+            values, dates, assets, dates[selected_times], assets[selected_assets])
+        np.testing.assert_array_equal(actual.view(np.uint64), expected.view(np.uint64))
+        assert actual.flags.c_contiguous and np.shares_memory(actual, values)

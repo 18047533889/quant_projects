@@ -139,6 +139,45 @@ def _assemble_factor_values(panel_stream, factor_count):
         raise ValueError("verified factor panel count changed")
     return values, common_dates, common_assets, sources, base_dates, base_assets
 
+
+def _trim_factor_values_in_place(values, base_dates, base_assets, dates, assets):
+    """Compact a factor cube onto selected axes without allocating another cube.
+
+    Time selections must preserve source order. Asset selections may reorder
+    freely; one selected time row is staged at a time while the cube is
+    compacted into its own leading bytes. The returned view is contiguous and
+    aliases the writable input buffer. FactorBatch takes its normal immutable
+    ownership copy when constructed.
+    """
+    if (not isinstance(values, np.ndarray) or values.ndim != 3
+            or values.dtype != np.float64 or not values.flags.c_contiguous
+            or not values.flags.writeable):
+        raise ValueError("factor values must be a writable C-contiguous float64 cube")
+    if values.shape[:2] != (len(base_dates), len(base_assets)):
+        raise ValueError("factor values do not match source axes")
+    time_positions = base_dates.get_indexer(dates)
+    asset_positions = base_assets.get_indexer(assets)
+    if (np.any(time_positions < 0) or np.any(asset_positions < 0)
+            or len(np.unique(time_positions)) != len(time_positions)
+            or len(np.unique(asset_positions)) != len(asset_positions)
+            or (len(time_positions) > 1 and np.any(np.diff(time_positions) <= 0))):
+        raise ValueError("selected factor axes are missing, duplicated, or out of source order")
+
+    selected_times, selected_assets, factor_count = (
+        len(time_positions), len(asset_positions), values.shape[2]
+    )
+    flat = values.reshape(-1)
+    row = np.empty((selected_assets, factor_count), dtype=np.float64)
+    row_size = selected_assets * factor_count
+    for output_time, source_time in enumerate(time_positions):
+        np.take(values[source_time], asset_positions, axis=0, out=row)
+        start = output_time * row_size
+        flat[start:start + row_size] = row.reshape(-1)
+    return flat[:selected_times * row_size].reshape(
+        selected_times, selected_assets, factor_count
+    )
+
+
 def load_real_batch(*, factors=2, days=500, assets=5500, max_object_mib=8, max_total_mib=128,
                     manifest_sha256=SHA):
     """Decision t, execution t+1, label AdjVwap(t+2)/AdjVwap(t+1)-1."""
@@ -188,8 +227,7 @@ def load_real_batch(*, factors=2, days=500, assets=5500, max_object_mib=8, max_t
     with np.errstate(divide="ignore",invalid="ignore",over="ignore"):
         labels_array = p2/p1-1
     labels_array[~np.isfinite(labels_array)] = np.nan
-    values = values[np.ix_(base_dates.get_indexer(decision),
-                           base_assets.get_indexer(names), np.arange(factors))]
+    values = _trim_factor_values_in_place(values, base_dates, base_assets, decision, names)
     times = decision.to_numpy(dtype="datetime64[ns]")
     time_axis = AxisRef("time","datetime64[ns]",len(times),times)
     asset_axis = AxisRef("asset","str",len(names),np.asarray(names,dtype=str))

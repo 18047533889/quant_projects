@@ -33,7 +33,7 @@ class GPUExecutor:
 
     SUPPORTED_METRICS = frozenset({
         "sharpe_ratio", "sortino_ratio", "win_rate", "max_drawdown", "calmar_ratio",
-        "coverage", "rank_ic", "ic_ir", "ic_std", "ic_median", "rank_ic_series",
+        "coverage", "rank_ic", "rank_ic_positive_ratio", "ic_ir", "ic_std", "ic_median", "rank_ic_series",
         "pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir",
         "quantile_returns_full", "quantile_returns_daily", "quantile_spread",
         "quantile_monotonicity", "daily_quantile_monotonicity_series",
@@ -389,7 +389,7 @@ class GPUExecutor:
                 cov = cp.mean(finite, axis=2)  # (T,F)
                 scalar["coverage"] = _to_cpu(cp.mean(cov, axis=0))  # (F,)
                 counts[m] = _to_cpu(cp.sum(finite, axis=(0, 2)))
-            elif m in ("rank_ic", "ic_ir", "ic_std", "ic_median", "rank_ic_series"):
+            elif m in ("rank_ic", "rank_ic_positive_ratio", "ic_ir", "ic_std", "ic_median", "rank_ic_series"):
                 if min_assets not in rank_cache:
                     from quant_evaluator.kernels.gpu.correlation import batched_spearman_ic
                     rank_cache[min_assets], _ = batched_spearman_ic(factors, labels, min_obs=min_assets)
@@ -400,6 +400,10 @@ class GPUExecutor:
                     series["rank_ic_series"] = _to_cpu(rank_ic)
                 elif m == "rank_ic":
                     scalar["rank_ic"] = _to_cpu(cp.where(count >= min_periods, cp.nanmean(rank_ic, axis=0), cp.nan))
+                elif m == "rank_ic_positive_ratio":
+                    positive = cp.sum(cp.isfinite(rank_ic) & (rank_ic > 0), axis=0)
+                    ratio = positive / cp.maximum(count, 1)
+                    scalar[m] = _to_cpu(cp.where(count >= min_periods, ratio, cp.nan))
                 elif m == "ic_ir":
                     finite_ic = cp.where(cp.isfinite(rank_ic), rank_ic, cp.nan)
                     mu = cp.nanmean(finite_ic, axis=0)

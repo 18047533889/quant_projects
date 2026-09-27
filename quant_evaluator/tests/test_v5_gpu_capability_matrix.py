@@ -63,11 +63,11 @@ def assert_public_parity(cpu, gpu, metrics):
                     right.valid, right.observation_count, right.sample_unit)
 
 
-def test_all_18_factor_label_metrics_execute_real_cpu_and_strict_cuda():
+def test_all_19_factor_label_metrics_execute_real_cpu_and_strict_cuda():
     batch, labels = contracts()
     cpu = evaluate(batch, labels, metrics=BASE)
     gpu = evaluate(batch, labels, metrics=BASE, backend="cuda_strict")
-    assert len(BASE) == 18
+    assert len(BASE) == 19
     assert_public_parity(cpu, gpu, BASE)
     assert gpu.metadata["peak_vram"] > 0 and gpu.metadata["factor_tiles_processed"] >= 1
 
@@ -153,6 +153,6 @@ def test_v5_long_only_and_cost_metrics_are_strictly_unsupported_before_gpu_open(
     assert opened == []
 
 
-def test_supported_matrix_is_exactly_32_without_metadata_only_entries():
-    assert len(BASE) + len(PORTFOLIO) + len(EXPOSURE) == 32
+def test_supported_matrix_is_exactly_33_without_metadata_only_entries():
+    assert len(BASE) + len(PORTFOLIO) + len(EXPOSURE) == 33
     assert set(BASE) | set(PORTFOLIO) | set(EXPOSURE) == GPUExecutor.SUPPORTED_METRICS

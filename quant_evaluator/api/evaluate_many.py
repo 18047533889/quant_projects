@@ -96,7 +96,7 @@ def evaluate_many(
 
     Args:
         factor_batch: FactorBatch evaluated against every label.
-        labels: LabelBundles (typically one per horizon).
+        labels: LabelBundles (typically one per horizon), with unique target_id values.
         metrics: metric ids requested for every horizon.
         context / backend / gpu_policy: forwarded to ``evaluate``.
         split_ref: optional sealed split ref.
@@ -108,6 +108,9 @@ def evaluate_many(
     """
     selected_metrics = tuple(metrics or ("rank_ic", "ic_ir"))
     label_list = tuple(labels)
+    target_ids = tuple(label.target_id for label in label_list)
+    if len(set(target_ids)) != len(target_ids):
+        raise ValueError("evaluate_many labels must have unique target_id values")
     if context is None:
         shared = _evaluate_ic_labels_shared_cuda(
             factor_batch, label_list, metrics=selected_metrics, backend=backend,

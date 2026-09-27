@@ -564,6 +564,10 @@ print(fastest_certified.metadata["auto_backend_reason"])
 和 `effective_buffers` 是生效状态。把这些能力列为
 `required_capabilities` 会关闭式报错，不会假装启用。
 
+`rank_ic_positive_ratio` 现可显式请求 CUDA，且与 `rank_ic` 同批时复用
+设备上的日度 rank-IC 中间结果；其大面板整批性能尚未认证，`auto`
+仍按未认证请求回到 CPU。
+
 默认调用的 `bundle.metadata["backend_requested"]` 为 `"default"`，显式
 `backend="auto"` 为 `"auto"`；显式 `backend="cpu"` 固定参考 CPU 路径。
 `backend_strategy` 区分 `"auto"` 和 `"explicit"`，
