@@ -244,19 +244,79 @@ class GPUExecutor:
         out.metadata["exposure_kernel_no_fallback"] = bool(self.exposure_kernel_dispatches)
         return out
 
+    def _factor_tile_size_with_resident_labels(self, metrics, T, N, F, dtype_bytes, candidate_limit):
+        """Size against both live labels and one tile's metric working set."""
+        plan = tuple(metrics)
+        quantile_chain = frozenset((
+            "quantile_returns_full", "quantile_returns_daily",
+            "quantile_spread", "quantile_monotonicity",
+            "daily_quantile_monotonicity_rate"))
+        quantile_default = (
+            len(plan) == 5 and frozenset(plan) == quantile_chain
+            and not self.metric_parameters)
+        if quantile_default:
+            # This specialized estimator also admits its bounded row workspace.
+            return self._factor_tile_size(metrics, T, N, F, dtype_bytes)
+        live_bytes = self.session._pool.used_bytes()
+        for candidate in (128, 64, 32, 16, 8, 4, 2, 1):
+            tile = min(F, candidate)
+            if tile > candidate_limit:
+                continue
+            estimate = self.session._estimate_working_set(
+                metrics, T, N, tile, dtype_bytes)
+            if estimate + live_bytes <= self.session._vram_budget:
+                self.session._final_tile = tile
+                return tile
+        raise MemoryError(
+            "GPU memory budget cannot fit resident labels and one factor; "
+            "use per-tile label staging")
+
     def run_tiled_many(self, factor_batch, label_bundles, metrics) -> list[BatchEvaluationBundle]:
         """Reuse each uploaded factor tile across labels with isolated metric caches.
 
-        Labels are staged one at a time.  In particular, run() creates fresh
-        rank caches for each label's pairwise-finite mask.
+        With an explicit resident-label preference, keep labels resident across
+        factor tiles when they fit alongside a one-factor working set. Admission
+        or runtime OOM safely falls back to per-tile staging. run() still creates
+        fresh rank caches for each label's pairwise-finite mask.
         """
         self.validate_metric_plan(metrics)
         cp = _import_cp()
         values = factor_batch.values
         T, N, F = values.shape
         tile = self._factor_tile_size(metrics, T, N, F, values.dtype.itemsize)
+        initial_tile = tile
+        host_result_bytes_at_start = self._host_result_bytes
         outputs = [BatchEvaluationBundle(tuple(factor_batch.factor_ids), lb.target_id)
                    for lb in label_bundles]
+        resident_label_ids = []
+        label_staging_mode = "per_tile"
+        prefer_resident_labels = self.session.policy.prefer_resident_labels
+        if prefer_resident_labels and len(label_bundles) > 1:
+            use_fp64 = self.session.policy.precision_policy.value in (
+                "gpu_fp64", "reference_fp64")
+            all_label_bytes = sum(
+                int(np.asarray(lb.values).size) *
+                (8 if use_fp64 else np.asarray(lb.values).dtype.itemsize)
+                for lb in label_bundles)
+            minimum_working_set = self.session._estimate_working_set(
+                metrics, T, N, 1, values.dtype.itemsize)
+            if (all_label_bytes > 0
+                    and minimum_working_set + all_label_bytes <= self.session._vram_budget):
+                try:
+                    for lb in label_bundles:
+                        label_values = (np.where(lb.validity, lb.values, np.nan)
+                                        if lb.validity is not None else lb.values)
+                        self.session.stage_labels(label_values, lb.target_id)
+                        resident_label_ids.append(lb.target_id)
+                    # Include every label allocation and the active metric working set.
+                    tile = self._factor_tile_size_with_resident_labels(
+                        metrics, T, N, F, values.dtype.itemsize, initial_tile)
+                    label_staging_mode = "resident"
+                except (cp.cuda.memory.OutOfMemoryError, MemoryError):
+                    for target_id in resident_label_ids:
+                        self.session.release_labels(target_id)
+                    resident_label_ids.clear()
+                    tile = self._factor_tile_size(metrics, T, N, F, values.dtype.itemsize)
         start = 0
         count = 0
         while start < F:
@@ -269,13 +329,15 @@ class GPUExecutor:
                     chunk = np.where(factor_batch.validity[:, :, start:stop], chunk, np.nan)
                 self.session.stage_factors(chunk, ids, layout="T,N,F")
                 for output, lb in zip(outputs, label_bundles):
-                    label_values = (np.where(lb.validity, lb.values, np.nan)
-                                    if lb.validity is not None else lb.values)
-                    try:
+                    if not resident_label_ids:
+                        label_values = (np.where(lb.validity, lb.values, np.nan)
+                                        if lb.validity is not None else lb.values)
                         self.session.stage_labels(label_values, lb.target_id)
+                    try:
                         result = self.run(ids, metrics, lb.target_id)
                     finally:
-                        self.session.release_labels(lb.target_id)
+                        if not resident_label_ids:
+                            self.session.release_labels(lb.target_id)
                     for field in ("scalar_metrics", "series_metrics", "vector_metrics", "observation_counts"):
                         destination = getattr(output, field)
                         for name, arr in getattr(result, field).items():
@@ -287,6 +349,22 @@ class GPUExecutor:
                             destination[name][..., start:stop] = arr
                             self.session._d2h_bytes += arr.nbytes
             except cp.cuda.memory.OutOfMemoryError:
+                if resident_label_ids:
+                    # Resident labels consumed memory needed by the tile. Drop
+                    # the cache and restart the whole result through the known
+                    # per-tile route before applying its normal OOM retiling.
+                    for target_id in resident_label_ids:
+                        self.session.release_labels(target_id)
+                    resident_label_ids.clear()
+                    label_staging_mode = "per_tile_fallback_after_oom"
+                    for output in outputs:
+                        for field in ("scalar_metrics", "series_metrics", "vector_metrics", "observation_counts"):
+                            getattr(output, field).clear()
+                    self._host_result_bytes = host_result_bytes_at_start
+                    tile = initial_tile
+                    start = 0
+                    count = 0
+                    continue
                 if not self.session.policy.oom_retile or stop - start <= 1:
                     raise
                 tile = self.session.retile_on_oom(stop - start)
@@ -295,12 +373,18 @@ class GPUExecutor:
                 self.session.release_factor_tile()
             start = stop
             count += 1
+        for target_id in resident_label_ids:
+            self.session.release_labels(target_id)
+        resident_label_ids.clear()
         for output in outputs:
             output.metadata = self.session.metadata()
             output.metadata["factor_tiles_processed"] = count
             output.metadata["host_result_bytes_reserved"] = self._host_result_bytes
             output.metadata["host_result_budget_bytes"] = self.session.policy.max_host_result_bytes
             output.metadata["multi_label_factor_tile_reuse"] = True
+            output.metadata["label_staging_mode"] = label_staging_mode
+            output.metadata["label_staging_preference"] = (
+                "resident" if prefer_resident_labels else "per_tile")
             output.metadata["device_session_counter_scope"] = "shared_session_total"
             output.metadata["shared_session_label_count"] = len(label_bundles)
             output.metadata["shared_session_factor_tiles_processed"] = count

@@ -8,8 +8,16 @@ pytest.importorskip("cupy")
 from quant_evaluator.api.evaluate_many import evaluate_many
 from quant_evaluator.api.horizons import evaluate_horizons
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
+from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.runtime.device_session import DeviceEvaluationSession
+
+
+def test_gpu_execution_policy_resident_label_preference_is_opt_in_and_boolean():
+    assert GPUExecutionPolicy().prefer_resident_labels is False
+    assert GPUExecutionPolicy(prefer_resident_labels=True).prefer_resident_labels is True
+    with pytest.raises(ValueError, match="prefer_resident_labels must be a bool"):
+        GPUExecutionPolicy(prefer_resident_labels=1)
 
 
 def _inputs(n=40):
@@ -50,13 +58,19 @@ def test_evaluate_many_cuda_reuses_tiles_and_isolates_pairwise_ranks(monkeypatch
         for lb in labels
     }
     uploads = []
+    label_uploads = []
     opens = []
     original_stage = DeviceEvaluationSession.stage_factors
+    original_stage_labels = DeviceEvaluationSession.stage_labels
     original_open = DeviceEvaluationSession._open
 
     def stage(self, values, factor_ids, layout="T,F,N"):
         uploads.append(tuple(factor_ids))
         return original_stage(self, values, factor_ids, layout)
+
+    def stage_label(self, values, target_id="next_ret"):
+        label_uploads.append(target_id)
+        return original_stage_labels(self, values, target_id)
 
     def opened(self):
         opens.append(True)
@@ -64,16 +78,21 @@ def test_evaluate_many_cuda_reuses_tiles_and_isolates_pairwise_ranks(monkeypatch
 
     monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", lambda *a, **k: 2)
     monkeypatch.setattr(DeviceEvaluationSession, "stage_factors", stage)
+    monkeypatch.setattr(DeviceEvaluationSession, "stage_labels", stage_label)
     monkeypatch.setattr(DeviceEvaluationSession, "_open", opened)
-    gpu = evaluate_many(factors, labels, backend="cuda_strict", metrics=("rank_ic_series",))
+    gpu = evaluate_many(factors, labels, backend="cuda_strict", metrics=("rank_ic_series",),
+                        gpu_policy=GPUExecutionPolicy(prefer_resident_labels=True))
     assert len(opens) == 1
     assert uploads == [("f0", "f1"), ("f2", "f3"), ("f4",)]
-    # Transfer counters describe the one shared session, not either result alone.
-    expected_h2d = factors.values.nbytes + len(labels) * 3 * labels[0].values.nbytes
+    assert label_uploads == ["h1", "h5"]
+    # Factor tiles and each horizon label are uploaded exactly once.
+    expected_h2d = factors.values.nbytes + sum(lb.values.nbytes for lb in labels)
     for result in gpu.values():
         assert result.metadata["device_session_counter_scope"] == "shared_session_total"
         assert result.metadata["shared_session_label_count"] == 2
         assert result.metadata["shared_session_factor_tiles_processed"] == 3
+        assert result.metadata["label_staging_preference"] == "resident"
+        assert result.metadata["label_staging_mode"] == "resident"
         assert result.metadata["h2d_bytes"] == expected_h2d
     for lb in labels:
         np.testing.assert_allclose(
@@ -153,7 +172,8 @@ def test_evaluate_many_quantile_chain_reuses_uploads_and_matches_cpu(monkeypatch
     monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", lambda *a, **k: 2)
     monkeypatch.setattr(DeviceEvaluationSession, "stage_factors", stage)
     monkeypatch.setattr(DeviceEvaluationSession, "_open", opened)
-    gpu = evaluate_many(factors, labels, backend="cuda_strict", metrics=metrics)
+    gpu = evaluate_many(factors, labels, backend="cuda_strict", metrics=metrics,
+                        gpu_policy=GPUExecutionPolicy(prefer_resident_labels=True))
     assert len(opens) == 1
     assert uploads == [("f0", "f1"), ("f2", "f3"), ("f4",)]
     assert any(np.isfinite(cpu["h1"].artifacts["quantile_returns_daily"].values.ravel()))
@@ -162,6 +182,8 @@ def test_evaluate_many_quantile_chain_reuses_uploads_and_matches_cpu(monkeypatch
         assert right.config_hash == left.config_hash
         assert right.metadata["multi_label_factor_tile_reuse"] is True
         assert right.metadata["shared_session_factor_tiles_processed"] == 3
+        assert right.metadata["label_staging_preference"] == "resident"
+        assert right.metadata["label_staging_mode"] == "resident"
         for metric in metrics:
             a, b = left.artifacts[metric], right.artifacts[metric]
             np.testing.assert_allclose(b.values, a.values, rtol=1e-8,
@@ -203,7 +225,8 @@ def test_evaluate_many_mixed_panel_metrics_share_cuda_and_match_cpu(monkeypatch)
 
     monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", lambda *a, **k: 2)
     monkeypatch.setattr(DeviceEvaluationSession, "stage_factors", stage)
-    gpu = evaluate_many(factors, labels, backend="cuda_strict", metrics=metrics)
+    gpu = evaluate_many(factors, labels, backend="cuda_strict", metrics=metrics,
+                        gpu_policy=GPUExecutionPolicy(prefer_resident_labels=True))
     assert uploads == [("f0", "f1"), ("f2", "f3"), ("f4",)]
     for label in labels:
         left, right = cpu[label.target_id], gpu[label.target_id]
@@ -245,11 +268,12 @@ def test_evaluate_many_rank_ic_positive_ratio_reuses_cuda_uploads_with_parity(mo
     gpu = evaluate_many(
         factors, labels, backend="cuda_strict", metrics=metrics,
         metric_parameters=parameters,
+        gpu_policy=GPUExecutionPolicy(prefer_resident_labels=True),
     )
 
     assert len(opens) == 1
     assert uploads == [("f0", "f1"), ("f2", "f3"), ("f4",)]
-    expected_h2d = factors.values.nbytes + len(labels) * 3 * labels[0].values.nbytes
+    expected_h2d = factors.values.nbytes + sum(lb.values.nbytes for lb in labels)
     for label in labels:
         left, right = cpu[label.target_id], gpu[label.target_id]
         assert right.config_hash == left.config_hash
@@ -260,6 +284,8 @@ def test_evaluate_many_rank_ic_positive_ratio_reuses_cuda_uploads_with_parity(mo
         assert right.metadata["shared_session_label_count"] == len(labels)
         assert right.metadata["shared_session_factor_tiles_processed"] == 3
         assert right.metadata["device_session_counter_scope"] == "shared_session_total"
+        assert right.metadata["label_staging_preference"] == "resident"
+        assert right.metadata["label_staging_mode"] == "resident"
         assert right.metadata["h2d_bytes"] == expected_h2d
         for metric in metrics:
             expected, actual = left.artifacts[metric], right.artifacts[metric]
@@ -335,6 +361,72 @@ def test_evaluate_horizons_cuda_reuses_tiles_with_selected_masks(monkeypatch, po
         )
 
 
+
+
+def test_evaluate_many_cuda_defaults_to_per_tile_label_staging(monkeypatch):
+    factors, labels = _inputs()
+    label_uploads = []
+    original_stage_labels = DeviceEvaluationSession.stage_labels
+
+    def stage_labels(self, values, target_id="next_ret"):
+        label_uploads.append(target_id)
+        return original_stage_labels(self, values, target_id)
+
+    monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", lambda *a, **k: 2)
+    monkeypatch.setattr(DeviceEvaluationSession, "stage_labels", stage_labels)
+    results = evaluate_many(factors, labels, backend="cuda_strict",
+                            metrics=("rank_ic_series",))
+    assert label_uploads == ["h1", "h5"] * 3
+    for result in results.values():
+        assert result.metadata["label_staging_preference"] == "per_tile"
+        assert result.metadata["label_staging_mode"] == "per_tile"
+
+
+def test_evaluate_many_cuda_uses_per_tile_labels_when_budget_rejects_residency(monkeypatch):
+    factors, labels = _inputs()
+    from quant_evaluator.runtime.evaluator import evaluate
+    cpu = {
+        lb.target_id: evaluate(factors, lb, backend="cpu", metrics=("rank_ic_series",))
+        for lb in labels
+    }
+    uploads = []
+    label_uploads = []
+    original_stage_factors = DeviceEvaluationSession.stage_factors
+    original_stage_labels = DeviceEvaluationSession.stage_labels
+    original_open = DeviceEvaluationSession._open
+
+    def stage_factors(self, values, factor_ids, layout="T,F,N"):
+        uploads.append(tuple(factor_ids))
+        return original_stage_factors(self, values, factor_ids, layout)
+
+    def stage_labels(self, values, target_id="next_ret"):
+        label_uploads.append(target_id)
+        return original_stage_labels(self, values, target_id)
+
+    def opened(self):
+        original_open(self)
+        self._vram_budget = 1
+
+    monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", lambda *a, **k: 2)
+    monkeypatch.setattr(DeviceEvaluationSession, "stage_factors", stage_factors)
+    monkeypatch.setattr(DeviceEvaluationSession, "stage_labels", stage_labels)
+    monkeypatch.setattr(DeviceEvaluationSession, "_open", opened)
+    gpu = evaluate_many(factors, labels, backend="cuda_strict", metrics=("rank_ic_series",),
+                        gpu_policy=GPUExecutionPolicy(prefer_resident_labels=True))
+
+    assert uploads == [("f0", "f1"), ("f2", "f3"), ("f4",)]
+    assert label_uploads == ["h1", "h5"] * 3
+    for lb in labels:
+        actual = gpu[lb.target_id]
+        assert actual.metadata["label_staging_preference"] == "resident"
+        assert actual.metadata["label_staging_mode"] == "per_tile"
+        np.testing.assert_allclose(
+            actual.artifacts["rank_ic_series"].values,
+            cpu[lb.target_id].artifacts["rank_ic_series"].values,
+            rtol=0, atol=1e-12, equal_nan=True,
+        )
+
+
 def test_evaluate_many_cuda_retiles_after_second_label_oom(monkeypatch):
     import cupy as cp
     from quant_evaluator.runtime.gpu_executor import GPUExecutor
@@ -359,6 +451,44 @@ def test_evaluate_many_cuda_retiles_after_second_label_oom(monkeypatch):
     result = evaluate_many(factors, labels, backend="cuda_strict", metrics=("rank_ic_series",))
     assert attempts[:2] == [(4, "h1"), (4, "h5")]
     assert result["h1"].metadata["oom_retries"] == 1
+    assert result["h1"].metadata["label_staging_preference"] == "per_tile"
+    assert result["h1"].metadata["label_staging_mode"] == "per_tile"
+    for lb in labels:
+        np.testing.assert_allclose(
+            result[lb.target_id].artifacts["rank_ic_series"].values,
+            reference[lb.target_id].artifacts["rank_ic_series"].values,
+            rtol=0, atol=1e-12, equal_nan=True,
+        )
+
+
+
+def test_evaluate_many_cuda_falls_back_after_resident_label_oom(monkeypatch):
+    import cupy as cp
+    from quant_evaluator.runtime.gpu_executor import GPUExecutor
+
+    factors, labels = _inputs()
+    reference = evaluate_many(factors, labels, backend="cpu", metrics=("rank_ic_series",))
+
+    original_run = GPUExecutor.run
+    attempts = []
+    failed = False
+
+    def run(self, factor_ids, metrics, label_id="next_ret"):
+        nonlocal failed
+        attempts.append((len(factor_ids), label_id))
+        if len(factor_ids) > 2 and label_id == "h5" and not failed:
+            failed = True
+            raise cp.cuda.memory.OutOfMemoryError(100, 100, 100)
+        return original_run(self, factor_ids, metrics, label_id)
+
+    monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", lambda *a, **k: 4)
+    monkeypatch.setattr(GPUExecutor, "run", run)
+    result = evaluate_many(factors, labels, backend="cuda_strict", metrics=("rank_ic_series",),
+                           gpu_policy=GPUExecutionPolicy(prefer_resident_labels=True))
+    assert attempts[:2] == [(4, "h1"), (4, "h5")]
+    assert result["h1"].metadata["oom_retries"] == 0
+    assert result["h1"].metadata["label_staging_preference"] == "resident"
+    assert result["h1"].metadata["label_staging_mode"] == "per_tile_fallback_after_oom"
     for lb in labels:
         np.testing.assert_allclose(
             result[lb.target_id].artifacts["rank_ic_series"].values,

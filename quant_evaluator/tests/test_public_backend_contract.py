@@ -37,3 +37,21 @@ def test_supported_cpu_and_auto_enum_keep_working():
     auto = evaluate(batch, label, metrics=("coverage",), backend=BackendPolicy.AUTO)
     assert cpu.metric_values == auto.metric_values
     assert auto.metadata["backend_used"] == "cpu"
+
+@pytest.mark.parametrize("backend", ["auto", "cpu", "cuda", "cuda_strict", "gpu"])
+def test_documented_public_backend_names_are_accepted_before_dispatch(backend):
+    batch, label = inputs()
+    selected = evaluate(
+        batch, label, metrics=("coverage",), backend=backend,
+        _prepare_only=True,
+    )
+    assert selected == ("cpu" if backend == "auto" else backend)
+
+
+def test_omitted_backend_uses_auto_policy_and_records_default_request():
+    batch, label = inputs()
+    result = evaluate(batch, label, metrics=("coverage",))
+    receipt = result.metadata["execution_receipt"]
+    assert receipt["backend_requested"] == "default"
+    assert receipt["backend_strategy"] == "auto"
+    assert receipt["backend_used"] == "cpu"

@@ -55,6 +55,10 @@ class GPUExecutionPolicy:
     required_capabilities: Tuple[str, ...] = ()
     # One worker's materialized results, not the entire queued factor universe.
     max_host_result_bytes: int = 256 * 1024 * 1024
+    # Keep (T, N) labels resident across factor tiles only when explicitly requested.
+    # The default remains per-tile staging until representative evidence shows a
+    # stable wall-time benefit; resident staging may fall back safely.
+    prefer_resident_labels: bool = False
 
     def __post_init__(self) -> None:
         if (isinstance(self.max_host_result_bytes, bool)
@@ -65,6 +69,8 @@ class GPUExecutionPolicy:
             raise ValueError(
                 f"max_vram_fraction must be in (0,1], got {self.max_vram_fraction}"
             )
+        if not isinstance(self.prefer_resident_labels, bool):
+            raise ValueError("prefer_resident_labels must be a bool")
         if not self.device_ids:
             raise ValueError("device_ids must be non-empty")
         object.__setattr__(self, 'required_capabilities', tuple(self.required_capabilities))

@@ -63,6 +63,22 @@ bundle: EvaluationBundle = evaluate(
 )
 ```
 
+### 选择 CPU、自动路由或 GPU
+
+`evaluate(..., backend=None)`（默认）和 `backend="auto"` 使用同一套确定性、整批自动路由：只有经过公开入口 A/B 与输出对拍的硬件、面板形状、dtype、指标集合及默认参数组合才会走 CUDA；其余请求走 CPU。自动路由不会在调用时运行基准测试，也不会把同一请求拆成按指标选择不同后端。用 `bundle.metadata["execution_receipt"]` 可检查 `backend_requested`、`backend_used`、`auto_backend_policy`、`auto_backend_profile` 和 `auto_backend_reason`。
+
+明确指定后端可用 `"cpu"`、`"cuda"`、`"cuda_strict"` 或 `"gpu"`（GPU 别名）。显式 GPU 请求不会静默回退到 CPU；CUDA 不可用或所请求的指标不受 GPU 执行器支持时会报错。未知后端名称同样会报错。`"numba"` 和 `"polars"` 不是公开 `evaluate` 门面的后端名称。
+
+真实多年度全市场 32 因子面板（2586 日 × 5461 股，float64）已有 L20 上公开 `evaluate` 的完整 A/B 证据。可对完整已认证指标链使用自动路由：
+
+```python
+rank_metrics = ("rank_ic", "rank_ic_series", "ic_std", "ic_ir")
+bundle = evaluate(fb, lb, metrics=rank_metrics, backend="auto")
+print(bundle.metadata["execution_receipt"])
+```
+
+这项自动 CUDA 路由只认证上述精确面板形状、float64、默认指标参数、无额外上下文、单 NVIDIA L20，以及足够的有效空闲显存；rank 链需要至少 14 GiB。完整分位链和默认三指标批次各有独立认证。形状、指标组合或运行条件超出认证范围时，自动路由使用 CPU；显式 CUDA 请求则按 GPU 路径校验并失败关闭。基准证据证明这些已测请求在该环境中更快且数值对拍通过，不构成对其它 GPU、所有指标组合或全部 164 项指标的速度保证。详见 `docs/benchmarks/real_cos_f32_chain_ab_20260928.md`、`docs/benchmarks/real_cos_f32_single_routes_20260928.md` 和 `docs/benchmarks/real_cos_f32_default_batch_20260928.json`。
+
 核心契约：
 - **LabelBundle** — 显式前向标签；时序全部由调用方提供；默认 `price_convention="vwap_to_vwap"`；
   `__post_init__` 强制校验严格递增 + 因果链。

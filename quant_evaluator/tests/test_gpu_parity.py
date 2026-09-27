@@ -107,6 +107,50 @@ def test_gpu_pearson_ic_parity(data):
     assert np.nanmax(np.abs(gpu[mask] - cpu[mask])) < 1e-8
 
 
+@pytest.mark.parametrize("method", ["pearson", "spearman"])
+def test_gpu_ic_seeded_pairwise_oracle(method):
+    """Independent CPU oracle across ties, missing values and constant subsets."""
+    rng = np.random.default_rng(20260928)
+    kernel = batched_pearson_ic if method == "pearson" else batched_spearman_ic
+    max_error = 0.0
+    for case in range(20):
+        x = rng.normal(size=(3, 4, 53))
+        y = rng.normal(size=(3, 53))
+        if case % 3 == 0:
+            x = np.round(x, 1)
+        if case % 4 == 0:
+            y = np.round(y, 1)
+        x[rng.random(x.shape) < 0.18] = np.nan
+        y[rng.random(y.shape) < 0.13] = np.nan
+        if case % 7 == 0:
+            x[0, 0, :35] = 1e12
+            x[0, 0, 35:] = np.nan
+        if case % 11 == 0:
+            y[1, :40] = 1e12
+            x[1, 0, 40:] = np.nan
+        gpu, counts = kernel(x, y, min_obs=20)
+        gpu, counts = cp.asnumpy(gpu), cp.asnumpy(counts)
+        expected = np.full((3, 4), np.nan)
+        expected_counts = np.zeros((3, 4), dtype=np.int32)
+        for ti in range(3):
+            for fi in range(4):
+                valid = np.isfinite(x[ti, fi]) & np.isfinite(y[ti])
+                expected_counts[ti, fi] = valid.sum()
+                if valid.sum() < 20:
+                    continue
+                xv, yv = x[ti, fi, valid], y[ti, valid]
+                if np.ptp(xv) == 0 or np.ptp(yv) == 0:
+                    continue
+                if method == "spearman":
+                    xv = pd.Series(xv).rank(method="average").to_numpy()
+                    yv = pd.Series(yv).rank(method="average").to_numpy()
+                expected[ti, fi] = np.corrcoef(xv, yv)[0, 1]
+        np.testing.assert_array_equal(counts, expected_counts)
+        np.testing.assert_array_equal(np.isnan(gpu), np.isnan(expected))
+        max_error = max(max_error, np.nanmax(np.abs(gpu - expected)))
+    assert max_error < 1e-8
+
+
 @pytest.mark.parametrize("label_offset", [0.0, 10_000.0])
 def test_gpu_pearson_ic_float32_large_offset(label_offset):
     rng = np.random.default_rng(42)

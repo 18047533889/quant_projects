@@ -150,22 +150,31 @@ max_drawdown_by_factor = drawdown.artifacts["max_drawdown"].values
 
 `evaluate_many` 和 `evaluate_horizons` 在每个期限的公开合约、样本掩码、
 sealed split 与后端选择均通过预校验后，对合格请求使用同一个
-`DeviceEvaluationSession`。执行器按因子 tile 上传一次，再逐个期限上传标签并计算；
-Spearman/Pearson 的秩与相关中间量每个期限独立生成，绝不跨不同 pairwise-finite
-掩码复用。`evaluate_horizons` 保持 IC 家族；`evaluate_many` 还可复用
+`DeviceEvaluationSession`。执行器按因子 tile 复用因子上传；默认逐 tile 重传标签。
+只有显式设置 `GPUExecutionPolicy(prefer_resident_labels=True)` 才尝试让多期限标签
+跨 tile 驻留，并同时核对全部驻留标签和一个因子 tile 的工作集。该选项是偏好而非保证：
+准入预算不足或驻留期间遇到 OOM 时会释放标签并退回逐 tile 上传；OOM 回退会丢弃部分结果，
+从首个因子 tile 重跑。Spearman/Pearson 的秩与相关中间量每个期限独立生成，
+绝不跨不同 pairwise-finite 掩码复用。`evaluate_horizons` 保持 IC 家族；`evaluate_many` 还可复用
 自含的 quantile 链、`coverage`、`turnover` 和 `factor_turnover_rate`。
 注册别名先按规范指标 ID 判断共享资格，公开返回仍保留调用方的别名键；
 例如 `ic.rank.daily` 与 `rank_ic_series` 都可触发同一条共享路径。
 每个期限仍必须独立通过原有 CUDA 准入；扩展共享上传不扩大 `auto` 的指标、形状或参数认证范围。
 需要组合/持有期收益或暴露面板等额外类型化输入的指标仍沿用原有路径。
-显式 CUDA 失败仍报错，OOM 只重切当前因子 tile。
+除上述明确的驻留 OOM 回退外，显式 CUDA 错误仍直接报错；逐 tile 路径按原策略重切当前因子 tile。
 
 ```python
 from quant_evaluator import evaluate_many
+from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
 
 metrics = ("quantile_returns_full", "quantile_returns_daily", "quantile_spread",
            "quantile_monotonicity", "daily_quantile_monotonicity_rate")
 by_label = evaluate_many(batch, (h1_labels, h2_labels), metrics=metrics)
+# 共享 CUDA 仍按原准入选择，标签默认逐 tile 上传。
+# 显式偏好驻留标签；资源不足或运行时 OOM 会安全退回逐 tile。
+resident_preferred = evaluate_many(
+    batch, (h1_labels, h2_labels), metrics=metrics,
+    gpu_policy=GPUExecutionPolicy(prefer_resident_labels=True))
 # 省略 backend 等同 auto：仅在每个期限均获认证时选择共享 CUDA。
 forced = evaluate_many(batch, (h1_labels, h2_labels), metrics=metrics,
                        backend="cuda_strict")
@@ -176,13 +185,18 @@ custom = evaluate_many(batch, (h1_labels, h2_labels),
 ```
 
 `metric_parameters` 逐期限原样转交公开 `evaluate`；自定义参数不继承默认
-`auto` 的 CUDA 性能认证，需显式选择并自行核验设备预算。
+`auto` 的 CUDA 性能认证，需显式选择并自行核验设备预算。`GPUExecutionPolicy`
+默认 `prefer_resident_labels=False`；设置为 `True` 仅表示尝试驻留，不改变后端准入。
 
 每个期限返回的 `h2d_bytes`、`d2h_bytes` 等设备会话计数在复用路径中属于
 **所有期限共享的会话总量**，由
 `device_session_counter_scope="shared_session_total"` 标识，并提供
-`shared_session_label_count` 与 `shared_session_factor_tiles_processed`。
-这些计数不能逐期限相加。结果制品、配置哈希及逐期限标签溯源仍各自独立。
+`shared_session_label_count`、`shared_session_factor_tiles_processed`、
+`label_staging_preference`（请求的 `resident` 或 `per_tile`）和
+`label_staging_mode`（实际的 `resident`、`per_tile` 或 OOM 后的
+`per_tile_fallback_after_oom`）。这些计数不能逐期限相加。逐 tile 路径仍按既有策略在 OOM 后缩小 tile。
+结果制品、配置哈希及逐期限标签溯源仍各自独立。合成 A/B 的传输与时延结论及边界见
+`quant_evaluator/docs/benchmarks/synthetic_multi_horizon_label_staging_20260928.md`。
 
 真实 COS 同一绑定 manifest 的 2586 日 × 5461 股 × 2 因子、两个 AdjVwap
 前向期限在 NVIDIA L20 上做了顺序 CUDA / 共享 CUDA 的 ABBA。第二期限由连续
@@ -203,7 +217,9 @@ custom = evaluate_many(batch, (h1_labels, h2_labels),
 `daily_quantile_monotonicity_rate` 五项组合。顺序 CUDA / 共享 CUDA 按
 ABBA 交错执行，两个共享轮次的制品逐字段、配置哈希与语义溯源均与首个顺序
 轮次一致；随后 `auto` 对两个期限都选择 CUDA，共享上传一次且同样对拍通过。
-顺序与共享路径的中位耗时为 35.753644 秒和 33.983173 秒，约快 5.2%；
+该 profile 只有一个因子 tile，因此旧的逐 tile 标签暂存本身就会每个标签只上传一次；此记录的
+H2D 数字不证明跨 tile 标签驻留带来传输节省。顺序与共享路径的中位耗时为
+35.753644 秒和 33.983173 秒，约快 5.2%；
 因子上传从 2 次、5,422,904,064 字节降为 1 次、2,711,452,032 字节，
 H2D 从 5,648,858,400 降为 2,937,406,368 字节。单轮 GPU 峰值约
 3.25 GB，进程 RSS 高水位约 25.0 GiB；数据载入另耗时 96.38 秒，不含于
@@ -211,6 +227,19 @@ H2D 从 5,648,858,400 降为 2,937,406,368 字节。单轮 GPU 峰值约
 `quant_evaluator/docs/benchmarks/real_cos_multi_horizon_f24_quantile_chain_20260927.json`；
 脚本可用 `--profile f24-quantile-chain` 复跑。这个结果只支持该 F24 双期限、
 默认参数、五项组合；不能推断 F32/F64、任意参数或全部指标都以 GPU 最快。
+
+
+合成 F12 三期限 A/B 用于检查显式偏好驻留标签时的传输效果，不构成市场数据或自动路由认证；
+驻留未设为默认，因为两项合成 A/B 的 wall-time 差异不足以得出稳定速度结论。
+在 L20 上用随机合成面板（2,586 日 × 5,461 资产 × 12 因子、3 个标签、rank-chain 四指标）
+交替运行逐 tile 与驻留模式各两次，单因子 tile 为 4，共 3 个 tile。每轮所有制品、配置哈希、
+计数、有效掩码及 provenance 完全相同。逐 tile 与驻留模式的 H2D 分别为
+2,372,520,528 与 1,694,657,520 字节，驻留少传 677,857,008 字节；每个期限的标签从每轮
+每个 tile 重复传输改为会话中每个标签只传一次。四次耗时为逐 tile 38.445/38.347 秒、驻留
+37.768/38.546 秒。计时期间另有 CPU pytest 进程运行，因此 wall-time 结果不作速度结论。
+开始时 MemAvailable 为 71.94 GiB、L20 空闲显存 43.66 GiB，GPU 策略上限为当时空闲显存的
+30%；运行期间最低记录 MemAvailable 为 34.37 GiB，显存保持充足。输入仅在内存中生成，未写入文件。
+绑定 COS manifest 当前不可用，因此此项仅作为合成传输证据，不能证明真实行情批次性能或扩展自动路由范围。
 
 ## 默认后端与 `backend="auto"` 的保守选择范围
 
