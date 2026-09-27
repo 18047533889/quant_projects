@@ -352,6 +352,10 @@ def compute_underwater_evidence(
     """Bundle all underwater/drawdown-extent evidence for one dot-frequency
     PnL series into a plain dict of scalars (all NaN-safe).
 
+    min_periods is propagated to each bundled metric's finite-observation
+    gate.  rolling_min_periods remains the separate gate for rolling
+    Sharpe windows.
+
     Keys (mirror the registry metric ids in ``registry/metrics.py``):
         max_drawdown / max_underwater_duration / mean_underwater_duration /
         time_to_recovery / worst_month / worst_quarter / worst_12m /
@@ -378,11 +382,11 @@ def compute_underwater_evidence(
         }
     return {
         "max_drawdown": float(
-            compute_maximum_drawdown(ret, missing_return_policy="zero_fill")[0]
+            compute_maximum_drawdown(ret, missing_return_policy="unknown")[0]
         ),
         "max_underwater_duration": compute_max_underwater_duration(ret, min_periods),
         "mean_underwater_duration": compute_mean_underwater_duration(ret, min_periods),
-        "time_to_recovery": compute_time_to_recovery(ret),
+        "time_to_recovery": compute_time_to_recovery(ret, min_periods),
         "worst_month": compute_worst_period_return(ret, "month", min_periods),
         "worst_quarter": compute_worst_period_return(ret, "quarter", min_periods),
         "worst_12m": compute_worst_period_return(ret, "year", min_periods),
@@ -395,6 +399,8 @@ def compute_underwater_evidence(
             min_periods=rolling_min_periods,
         ),
         "return_skew": compute_return_skew(ret, min_periods),
-        "downside_deviation": compute_downside_deviation(ret),
-        "cvar_expected_shortfall": compute_cvar_expected_shortfall(ret),
+        "downside_deviation": compute_downside_deviation(ret, min_periods=min_periods),
+        "cvar_expected_shortfall": compute_cvar_expected_shortfall(
+            ret, min_periods=min_periods
+        ),
     }

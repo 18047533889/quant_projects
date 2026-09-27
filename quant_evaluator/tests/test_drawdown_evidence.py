@@ -363,6 +363,37 @@ def test_underwater_evidence_bundle_computes():
             assert np.isfinite(val), key
 
 
+def test_underwater_evidence_bundle_fails_closed_on_unknown_drawdown_path():
+    ret = np.array([-0.5] + [0.0] * 8 + [np.nan] + [0.0] * 11)
+    ev = compute_underwater_evidence(ret)
+
+    # The observed 50% drawdown is only a lower bound: NAV after the gap is
+    # unknown, so the bundle cannot report an exact full-window maximum.
+    assert np.isnan(ev["max_drawdown"])
+    assert np.isnan(ev["max_underwater_duration"])
+    assert np.isnan(ev["mean_underwater_duration"])
+    assert np.isnan(ev["time_to_recovery"])
+
+
+def test_underwater_evidence_bundle_propagates_min_periods():
+    ret = np.array([-0.10, 1 / 9, 0.0, 0.0, -0.01])
+    min_periods = 5
+    ev = compute_underwater_evidence(ret, min_periods=min_periods)
+
+    assert ev["time_to_recovery"] == pytest.approx(
+        compute_time_to_recovery(ret, min_periods=min_periods)
+    )
+    assert ev["time_to_recovery"] == pytest.approx(1.0)
+    assert ev["downside_deviation"] == pytest.approx(
+        compute_downside_deviation(ret, min_periods=min_periods)
+    )
+    assert ev["downside_deviation"] == pytest.approx(1.12809574061779)
+    assert ev["cvar_expected_shortfall"] == pytest.approx(
+        compute_cvar_expected_shortfall(ret, min_periods=min_periods)
+    )
+    assert ev["cvar_expected_shortfall"] == pytest.approx(0.1)
+
+
 # ---------------------------------------------------------------------------
 # 4. Overlapping H10/H20 guard: never annualize overlapping horizon labels
 #    as dot-frequency daily PnL

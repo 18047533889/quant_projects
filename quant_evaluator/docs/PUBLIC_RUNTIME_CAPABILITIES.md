@@ -587,6 +587,18 @@ GPU 峰值为 16,053,793,792 字节，故该指标单独要求至少 17 GiB
 路由调整后的实际 `auto` 复测见
 `docs/benchmarks/real_cos_f32_rank_ic_series_auto_v19_20260929.json`。
 
+同一 F32 绑定面板的单指标 `quantile_returns_full` 也完成路由前、
+路由后各六轮交错 CPU/CUDA/auto A/B。路由前 CPU 热运行
+52.97、53.16 秒，CUDA 30.63、30.53 秒，原 `auto` 留在 CPU；
+路由后两轮 `auto` 实际选 CUDA，热运行 32.43、32.46 秒，
+同期 CPU 为 55.15、55.20 秒。两份报告的完整 artifact 值
+（rtol=1e-8、atol=1e-10）、有效掩码、计数、provenance、
+MetricValue 与配置哈希均通过对拍。实测 GPU 峰值 2,341,843,456
+字节；该精确 F32、float64、默认参数、无特殊输入、L20 的
+单指标请求要求有效及实际空闲显存至少 8 GiB，其它形状/参数仍用 CPU。
+证据见 `docs/benchmarks/real_cos_f32_quantile_returns_full_ab_20260929.json`
+和 `docs/benchmarks/real_cos_f32_quantile_returns_full_auto_v20_20260929.json`。
+
 新版 CPU 行块与加载器组合在同一 F24 rank 链上另完成六轮真实 COS
 公开入口复测，完整制品对拍通过；父进程 RSS 峰值 10,850,236 KiB，
 CPU worker RSS 峰值 19,223,060–19,248,388 KiB。两个 `auto` 均走 CUDA。
