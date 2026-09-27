@@ -27,9 +27,11 @@ QUANTILE_CHAIN = ("quantile_returns_full", "quantile_returns_daily",
                   "quantile_spread", "quantile_monotonicity",
                   "daily_quantile_monotonicity_rate")
 RANK_SERIES_SINGLE = ("rank_ic_series",)
+QUANTILE_FULL_SINGLE = ("quantile_returns_full",)
 TURNOVER_SINGLE = ("factor_turnover_rate",)
 METRICS = DEFAULT_METRICS
 ALLOWED_BATCHES = (DEFAULT_METRICS, RANK_CHAIN, QUANTILE_CHAIN)
+F32_SINGLE_METRICS = (RANK_SERIES_SINGLE, QUANTILE_FULL_SINGLE)
 MANIFEST_SHA256 = "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864"
 _BATCH = None
 _LABELS = None
@@ -223,7 +225,7 @@ def main():
     parser.add_argument("--timeout-s", type=float, default=180)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--metrics", default=",".join(DEFAULT_METRICS))
-    parser.add_argument("--factors", type=int, choices=(2, 8, 12, 13, 24), default=8)
+    parser.add_argument("--factors", type=int, choices=(2, 8, 12, 13, 24, 32), default=8)
     parser.add_argument("--compact", action="store_true", help="write artifact hashes, not value arrays")
     args = parser.parse_args()
     if args.timeout_s <= 0:
@@ -233,9 +235,11 @@ def main():
     requested = tuple(args.metrics.split(","))
     if requested not in ALLOWED_BATCHES:
         if not ((args.factors == 2 and requested == RANK_SERIES_SINGLE)
-                or (args.factors == 13 and requested == TURNOVER_SINGLE)):
+                or (args.factors == 13 and requested == TURNOVER_SINGLE)
+                or (args.factors == 32 and requested in F32_SINGLE_METRICS)):
             parser.error("metrics must be an exact default, rank-chain or quantile-chain set; "
-                         "F2 permits rank_ic_series alone; F13 permits factor_turnover_rate alone")
+                         "F2 permits rank_ic_series alone, F13 permits factor_turnover_rate alone, "
+                         "and F32 permits rank_ic_series or quantile_returns_full alone")
     if args.factors == 2 and requested != RANK_SERIES_SINGLE:
         parser.error("F2 runs require rank_ic_series alone")
     if args.factors == 13 and requested not in (RANK_CHAIN, QUANTILE_CHAIN, TURNOVER_SINGLE):
@@ -243,12 +247,14 @@ def main():
                      "or factor_turnover_rate request")
     if args.factors == 24 and requested not in (RANK_CHAIN, QUANTILE_CHAIN):
         parser.error("F24 runs require the exact rank-chain or quantile-chain request")
+    if args.factors == 32 and requested not in F32_SINGLE_METRICS:
+        parser.error("F32 runs require exactly rank_ic_series or quantile_returns_full")
     METRICS = requested
     load_start = time.perf_counter()
     _BATCH, _LABELS, source = load_real_batch(
         factors=args.factors, days=0, assets=5500,
-        max_object_mib=128 if args.factors == 24 else 64,
-        max_total_mib=(2048 if args.factors == 24 else
+        max_object_mib=128 if args.factors in (24, 32) else 64,
+        max_total_mib=(2048 if args.factors in (24, 32) else
                        128 if args.factors in (2, 8) else 256),
         manifest_sha256=MANIFEST_SHA256)
     load_s = time.perf_counter() - load_start
