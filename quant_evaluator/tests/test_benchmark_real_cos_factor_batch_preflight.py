@@ -63,12 +63,15 @@ def test_preflight_requires_14_gib_effective_vram_at_conservative_40_percent():
     })
 
 
-def test_f32_working_set_estimate_uses_conservative_f24_extrapolation():
-    estimate = benchmark._estimate_f32_peak_bytes()
+def test_f32_working_set_estimate_is_manifest_bound():
+    from quant_evaluator.scripts import benchmark_real_cos_metric_batch as full
+
+    assert benchmark._estimate_f32_peak_bytes(full.MANIFEST_SHA256) == 50 * 1024**3
     array_bound = 3000 * 5500 * 32 * 8
     scaled_f24 = (46 * 1024**3 * 32 + 23) // 24
-    assert estimate == max(array_bound * 16, scaled_f24)
-    assert estimate == 67_584_000_000
+    conservative = max(array_bound * 16, scaled_f24)
+    assert benchmark._estimate_f32_peak_bytes() == conservative
+    assert benchmark._estimate_f32_peak_bytes("0" * 64) == conservative
 
 
 def test_f32_whole_batch_uses_complete_metric_batch_worker(monkeypatch, capsys):

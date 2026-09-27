@@ -117,9 +117,19 @@ def _gpu_memory_snapshot():
         return {"status": "unavailable", "detail": f"{type(exc).__name__}: {exc}"}
 
 
-def _estimate_f32_peak_bytes():
-    """Conservative extrapolation from the observed F24 CPU rank peak."""
+def _estimate_f32_peak_bytes(manifest_sha256=None):
+    """Bound the exact verified F32 manifest empirically; keep others conservative."""
     array_upper_bytes = 3000 * 5500 * 32 * 8
+    if manifest_sha256 == full.MANIFEST_SHA256:
+        # Same immutable 32-object sample: largest observed parent RSS
+        # 13,872,336 KiB; largest F32 worker RSS 29,282,916 KiB across
+        # rank, quantile and default mixed double-call batches. Add 20% to their
+        # conservative sum, round up to GiB, then require 8 GiB headroom.
+        observed_combined = (13_872_336 + 29_282_916) * 1024
+        empirical = (observed_combined * 6 + 4) // 5
+        gib = 1024**3
+        empirical = ((empirical + gib - 1) // gib) * gib
+        return max(array_upper_bytes * 8, empirical)
     observed_f24_peak_bytes = 46 * 1024**3
     scaled_f24_peak_bytes = (observed_f24_peak_bytes * 32 + 23) // 24
     return max(array_upper_bytes * 16, scaled_f24_peak_bytes)
@@ -190,11 +200,11 @@ def preflight_factor_count_profile(args):
                     "max_total_bytes": args.profile_max_total_mib * 1024**2,
                     "mem_available_bytes": _mem_available_bytes(),
                     "gpu_memory": _gpu_memory_snapshot()}
-        # Empirical upper model: 16x the maximum values array, or the observed
-        # F24 CPU rank parent+child peak scaled to 32 factors, whichever is larger.
+        # The exact immutable manifest uses observed F32 peaks; unseen
+        # manifests retain the conservative F24 extrapolation.
         array_upper_bytes = 3000 * 5500 * 32 * 8
         observed_f24_peak_bytes = 46 * 1024**3
-        estimated_peak_bytes = _estimate_f32_peak_bytes()
+        estimated_peak_bytes = _estimate_f32_peak_bytes(requested_sha)
         mem_available = _mem_available_bytes()
         gpu_memory = _gpu_memory_snapshot()
         budget_bytes = args.max_working_gib * 1024**3
@@ -216,7 +226,10 @@ def preflight_factor_count_profile(args):
             "max_object_bytes": args.profile_max_object_mib * 1024**2,
             "max_total_bytes": args.profile_max_total_mib * 1024**2,
             "estimated_peak_bytes": estimated_peak_bytes,
-            "estimated_peak_model": "max(16 * F32 values array upper bound, observed F24 CPU peak 46 GiB * 32/24); empirical, not certification",
+            "estimated_peak_model": (
+                "exact manifest: max(8x array bound, 1.2x observed F32 parent+worker RSS rounded to GiB)"
+                if requested_sha == full.MANIFEST_SHA256 else
+                "unseen manifest: max(16x array bound, old F24 CPU peak 46 GiB * 32/24)"),
             "array_upper_bound_bytes": array_upper_bytes,
             "observed_f24_peak_bytes": observed_f24_peak_bytes,
             "max_working_bytes": budget_bytes,
@@ -404,7 +417,7 @@ def main():
                         help="for F32, compare all default metrics in one public call or run them singly")
     parser.add_argument("--profile-max-object-mib", type=int, default=128)
     parser.add_argument("--profile-max-total-mib", type=int, default=2048)
-    parser.add_argument("--max-working-gib", type=int, default=24)
+    parser.add_argument("--max-working-gib", type=int, default=50)
     parser.add_argument("--preflight-only", action="store_true",
                         help="inspect manifest/resources and exit before factor-object reads")
     parser.add_argument("--run", action="store_true",

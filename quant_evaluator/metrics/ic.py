@@ -344,13 +344,23 @@ def compute_daily_ic(
     # in ``_compute_daily_ic_reference``): invalid factor/label entries are
     # treated as NaN, and a pair is valid iff both entries are finite.
     v = values
-    if factor_batch.validity is not None:
-        v = np.where(factor_batch.validity, v, np.nan)
     lab = labels
-    if label_validity is not None:
-        lab = np.where(label_validity, lab, np.nan)
-
-    mask = np.isfinite(v) & np.isfinite(lab)[:, :, None]  # (T, N, F)
+    if backend == "exact":
+        # The exact kernels only read values through the pairwise mask, so
+        # validity need not materialize another full float64 factor panel.
+        mask = np.isfinite(v) & np.isfinite(lab)[:, :, None]
+        if factor_batch.validity is not None:
+            mask &= factor_batch.validity
+        if label_validity is not None:
+            mask &= label_validity[:, :, None]
+    else:
+        # Optional kernels receive NaN-masked values as part of their own
+        # backend contract; retain their existing input representation.
+        if factor_batch.validity is not None:
+            v = np.where(factor_batch.validity, v, np.nan)
+        if label_validity is not None:
+            lab = np.where(label_validity, lab, np.nan)
+        mask = np.isfinite(v) & np.isfinite(lab)[:, :, None]
     valid_counts[:, :] = np.sum(mask, axis=1).astype(np.int32)
 
     # A day/factor is eligible when it passes the original min_obs gate
@@ -489,33 +499,31 @@ def compute_daily_ic(
     # ELIGIBLE rows yields bit-identical ranks for those rows while
     # skipping the wasted work on ineligible (t, f) cells.
     rows = np.argwhere(eligible)
-    if rows.size:
-        flat_rows = rows[:, 0] * F + rows[:, 1]
-        sentinel_x = np.where(mask, v, np.inf).transpose(0, 2, 1).reshape(T * F, N)[flat_rows]
-        sentinel_y = (
-            np.where(mask, lab[:, :, None], np.inf)
-            .transpose(0, 2, 1)
-            .reshape(T * F, N)[flat_rows]
-        )
+    # Bound rankdata's sort/rank scratch independently of T*F. On a full
+    # market, multi-year F32 panel the former whole-panel sentinels and two
+    # rank arrays each scaled with every day and factor at once. Ranking is
+    # row-independent, so fixed-size row tiles preserve the exact result.
+    row_tile = 128
+    for lo in range(0, len(rows), row_tile):
+        selected = rows[lo:lo + row_tile]
+        day, factor = selected[:, 0], selected[:, 1]
+        pair_mask = mask[day, :, factor]
+        sentinel_x = np.where(pair_mask, v[day, :, factor], np.inf)
+        sentinel_y = np.where(pair_mask, lab[day], np.inf)
         r_x = stats.rankdata(sentinel_x, axis=1, method="average")
         r_y = stats.rankdata(sentinel_y, axis=1, method="average")
 
-        for k in range(rows.shape[0]):
-            t, f = rows[k]
-            m = mask[t, :, f]
+        for k, (t, f) in enumerate(selected):
+            m = pair_mask[k]
             rx = r_x[k][m]
             ry = r_y[k][m]
             # The original constant check ran on the raw valid values; all-equal
             # values <=> all-equal average ranks, so checking ranks is exactly
-            # equivalent (and avoids compressing the raw row again).  min==max
-            # is the same decision as np.all(rx == rx[0]) without the bool
-            # temporary.
+            # equivalent (and avoids compressing the raw row again). min==max
+            # is the same decision as np.all(rx == rx[0]).
             if rx.min() == rx.max() or ry.min() == ry.max():
                 continue
-            # Keep the column layout semantics and [1, 0] extraction
-            # (including rounding order) of the historical coefficient path;
-            # _corrcoef_rank_last replicates
-            # np.corrcoef(..., rowvar=False)[1, 0] bit-for-bit.
+            # Preserve the reference coefficient's op order and [1,0] result.
             ic_series[t, f] = _corrcoef_rank_last(rx, ry, rx.size)
 
     return ic_series, valid_counts

@@ -113,6 +113,12 @@ _AUTO_REAL_COS_F24_SHAPE = (2586, 5461, 24)
 _AUTO_REAL_COS_F24_BATCH_NAMES = frozenset({"rank_chain", "quantile_chain"})
 _AUTO_REAL_COS_F24_RANK_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F24_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
+_AUTO_REAL_COS_F32_PROFILE = "real_cos_f32_exact_20260928"
+_AUTO_REAL_COS_F32_SHAPE = (2586, 5461, 32)
+_AUTO_REAL_COS_F32_BATCH_NAMES = frozenset({
+    "rank_chain", "quantile_chain", "real_cos_mixed_three"})
+_AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
+_AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
 _AUTO_REAL_COS_F2_RANK_SERIES_SHAPE = (2586, 5461, 2)
 _AUTO_REAL_COS_F2_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_LARGE_METRICS = frozenset({"rank_ic", "quantile_spread"})
@@ -155,6 +161,8 @@ _AUTO_SINGLE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
 def _auto_public_shape_profile(factor_batch):
     """Identify a public-facade A/B-backed shape region."""
     shape = (factor_batch.num_times, factor_batch.num_assets, factor_batch.num_factors)
+    if shape == _AUTO_REAL_COS_F32_SHAPE:
+        return _AUTO_REAL_COS_F32_PROFILE
     if shape == _AUTO_REAL_COS_F24_SHAPE:
         return _AUTO_REAL_COS_F24_PROFILE
     if shape == _AUTO_REAL_COS_F13_SHAPE:
@@ -238,6 +246,9 @@ def _select_public_auto_backend(
     profile = _auto_public_shape_profile(factor_batch)
     if profile is None:
         return "cpu", "shape_outside_certified_range"
+    if (profile == _AUTO_REAL_COS_F32_PROFILE
+            and batch_name not in _AUTO_REAL_COS_F32_BATCH_NAMES):
+        return "cpu", "metric_not_certified_for_profile"
     if (profile == _AUTO_REAL_COS_F24_PROFILE
             and batch_name not in _AUTO_REAL_COS_F24_BATCH_NAMES):
         return "cpu", "metric_not_certified_for_profile"
@@ -290,6 +301,10 @@ def _select_public_auto_backend(
         profile == _AUTO_REAL_COS_F13_PROFILE
         and batch_name in _AUTO_REAL_COS_F13_BATCH_NAMES
     )
+    real_cos_f32_certified_batch = (
+        profile == _AUTO_REAL_COS_F32_PROFILE
+        and batch_name in _AUTO_REAL_COS_F32_BATCH_NAMES
+    )
     real_cos_f24_certified_batch = (
         profile == _AUTO_REAL_COS_F24_PROFILE
         and batch_name in _AUTO_REAL_COS_F24_BATCH_NAMES
@@ -300,7 +315,8 @@ def _select_public_auto_backend(
         and (factor_batch.num_times, factor_batch.num_assets,
              factor_batch.num_factors) == _AUTO_REAL_COS_F2_RANK_SERIES_SHAPE
     )
-    if real_cos_mixed_three and not (real_cos_f8_mixed_three or real_cos_f12_mixed_three) and (
+    if real_cos_mixed_three and not (
+        real_cos_f8_mixed_three or real_cos_f12_mixed_three or real_cos_f32_certified_batch) and (
         profile != _AUTO_LARGE_PROFILE or
         (factor_batch.num_times, factor_batch.num_assets, factor_batch.num_factors)
             != _AUTO_REAL_COS_MIXED_THREE_SHAPE
@@ -320,7 +336,11 @@ def _select_public_auto_backend(
             or evaluator is not None):
         return "cpu", "special_input_or_parameters"
     if batch_name is not None:
-        if real_cos_f24_certified_batch:
+        if real_cos_f32_certified_batch:
+            minimum = (_AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES
+                       if batch_name in ("rank_chain", "real_cos_mixed_three")
+                       else _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES)
+        elif real_cos_f24_certified_batch:
             minimum = (_AUTO_REAL_COS_F24_RANK_MIN_EFFECTIVE_VRAM_BYTES
                        if batch_name == "rank_chain"
                        else _AUTO_REAL_COS_F24_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES)
@@ -350,6 +370,10 @@ def _select_public_auto_backend(
             return "cuda_strict", "certified_batch_real_cos_f8_mixed_three"
         if real_cos_f8_certified_batch:
             return "cuda_strict", f"certified_batch_real_cos_f8_{batch_name}"
+        if real_cos_f32_certified_batch:
+            if real_cos_mixed_three:
+                return "cuda_strict", "certified_batch_real_cos_f32_mixed_three"
+            return "cuda_strict", f"certified_batch_real_cos_f32_{batch_name}"
         if real_cos_f24_certified_batch:
             return "cuda_strict", f"certified_batch_real_cos_f24_{batch_name}"
         if real_cos_f13_certified_batch:

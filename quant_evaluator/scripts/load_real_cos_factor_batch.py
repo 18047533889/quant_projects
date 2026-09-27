@@ -31,7 +31,7 @@ def _ds(name, uri, filename, fmt):
         glob=filename, format_spec=FormatSpec.from_yaml(fmt),
         storage=StorageSpec(type="cos", uri=uri, layout="plain"))
 
-def _factors(count, max_mib, manifest_sha256, max_total_mib):
+def _iter_factors(count, max_mib, manifest_sha256, max_total_mib):
     if (type(count) is not int or type(max_mib) is not int
             or not 1 <= count <= 32 or not 1 <= max_mib <= 128):
         raise ValueError("factor count 1..32, object limit 1..128 MiB")
@@ -71,7 +71,7 @@ def _factors(count, max_mib, manifest_sha256, max_total_mib):
             raise ValueError("bounded verified sample unavailable")
         if len({record["sha256"] for _, record in selected}) != count:
             raise ValueError("selected factors do not have unique content hashes")
-        panels, sources = [], []
+        # Stream verified panels so their data does not overlap with np.stack.
         for name, record in selected:
             fd = _ds("factor_panel", record["uri"].rsplit("/", 1)[0], name+".parquet", "parquet")
             fs = DataAccessStore(DatasetRegistry({md.name: md, fd.name: fd}), engine)
@@ -87,24 +87,66 @@ def _factors(count, max_mib, manifest_sha256, max_total_mib):
             frame.index = pd.to_datetime(frame.index).normalize()
             if frame.index.has_duplicates or frame.columns.has_duplicates:
                 raise ValueError("duplicate factor axis")
-            panels.append(frame.loc[:, [c for c in frame if c.endswith((".SZ", ".SH"))]].sort_index())
-            sources.append({"factor_id": name, "uri": obj.source_uri, "sha256": obj.content_sha256,
-                            "bytes": obj.downloaded_bytes, "etag": obj.source_etag,
-                            "manifest_sha256": bound.manifest_sha256,
-                            "source_status": bound.source_status})
-        return panels, sources
+            frame = frame.loc[:, [c for c in frame if c.endswith((".SZ", ".SH"))]].sort_index()
+            source = {"factor_id": name, "uri": obj.source_uri, "sha256": obj.content_sha256,
+                      "bytes": obj.downloaded_bytes, "etag": obj.source_etag,
+                      "manifest_sha256": bound.manifest_sha256,
+                      "source_status": bound.source_status}
+            del bound, obj, fs, fd
+            yield frame, source
+            del frame, source
     finally:
         engine.close()
+
+
+def _factors(count, max_mib, manifest_sha256, max_total_mib):
+    """Compatibility helper for callers that explicitly need all panels."""
+    loaded = list(_iter_factors(count, max_mib, manifest_sha256, max_total_mib))
+    return [frame for frame, _ in loaded], [source for _, source in loaded]
+
+
+def _assemble_factor_values(panel_stream, factor_count):
+    """Align panels into one array while retaining at most one pandas panel."""
+    iterator = iter(panel_stream)
+    try:
+        first, first_source = next(iterator)
+    except StopIteration as exc:
+        raise ValueError("no verified factor panels") from exc
+    base_dates, base_assets = first.index, first.columns
+    values = np.empty((len(base_dates), len(base_assets), factor_count), dtype=np.float64)
+    common_dates = base_dates
+    common_assets = set(base_assets)
+    sources = []
+    frame = first
+    del first
+    for position in range(factor_count):
+        if position:
+            try:
+                frame, source = next(iterator)
+            except StopIteration as exc:
+                raise ValueError("verified factor panel count changed") from exc
+            common_dates = common_dates.intersection(frame.index)
+            common_assets.intersection_update(frame.columns)
+        aligned = frame.reindex(index=base_dates, columns=base_assets).to_numpy(dtype=np.float64, copy=False)
+        values[:, :, position] = aligned
+        sources.append(first_source if position == 0 else source)
+        del aligned, frame
+    try:
+        next(iterator)
+    except StopIteration:
+        pass
+    else:
+        raise ValueError("verified factor panel count changed")
+    return values, common_dates, common_assets, sources, base_dates, base_assets
 
 def load_real_batch(*, factors=2, days=500, assets=5500, max_object_mib=8, max_total_mib=128,
                     manifest_sha256=SHA):
     """Decision t, execution t+1, label AdjVwap(t+2)/AdjVwap(t+1)-1."""
     if not 0 <= days <= 3000 or not 1 <= assets <= 5500:
         raise ValueError("days 0 (all) or 1..3000, assets 1..5500")
-    panels, sources = _factors(factors, max_object_mib, manifest_sha256, max_total_mib)
-    common_dates = panels[0].index
-    for panel in panels[1:]:
-        common_dates = common_dates.intersection(panel.index)
+    values, common_dates, common_assets, sources, base_dates, base_assets = _assemble_factor_values(
+        _iter_factors(factors, max_object_mib, manifest_sha256, max_total_mib), factors
+    )
     if common_dates.empty:
         raise ValueError("no shared factor dates")
     store = get_store()
@@ -125,7 +167,7 @@ def load_real_batch(*, factors=2, days=500, assets=5500, max_object_mib=8, max_t
     if not positions or (days and len(positions) != days):
         raise ValueError(f"only {len(positions)} complete calendar/factor/price triplets")
     decision = trading[positions]
-    names = sorted(set.intersection(*(set(p.columns) for p in panels)))[:assets]
+    names = sorted(common_assets)[:assets]
     if len(names) < 30:
         raise ValueError("fewer than 30 common A-share assets")
     start, end = trading[min(positions)], trading[max(positions)+2]
@@ -146,8 +188,8 @@ def load_real_batch(*, factors=2, days=500, assets=5500, max_object_mib=8, max_t
     with np.errstate(divide="ignore",invalid="ignore",over="ignore"):
         labels_array = p2/p1-1
     labels_array[~np.isfinite(labels_array)] = np.nan
-    values = np.stack([p.reindex(index=decision,columns=names).to_numpy(dtype=np.float64)
-                       for p in panels],axis=-1)
+    values = values[np.ix_(base_dates.get_indexer(decision),
+                           base_assets.get_indexer(names), np.arange(factors))]
     times = decision.to_numpy(dtype="datetime64[ns]")
     time_axis = AxisRef("time","datetime64[ns]",len(times),times)
     asset_axis = AxisRef("asset","str",len(names),np.asarray(names,dtype=str))

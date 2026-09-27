@@ -189,6 +189,20 @@ def test_equivalence_multi_factor_independent_labels():
     _assert_bit_identical(fb, lb, min_assets=(10,))
 
 
+def test_spearman_row_tile_boundaries_keep_reference_bits():
+    """Eligible (day, factor) rows cross multiple 128-row scratch tiles."""
+    rng = np.random.default_rng(20260928)
+    vals = np.round(rng.normal(size=(171, 33, 4)), 1)
+    labels = np.round(rng.normal(size=(171, 33)), 1)
+    factor_valid = rng.random(vals.shape) > 0.12
+    label_valid = rng.random(labels.shape) > 0.09
+    vals[32:35] = np.nan
+    vals[127, :, 3] = 2.0
+    labels[128] = np.nan
+    fb, lb = _make_batch(vals, labels, factor_valid, label_valid)
+    _assert_bit_identical(fb, lb, methods=("spearman",), min_assets=(1, 18, 32))
+
+
 @pytest.mark.parametrize("method", _METHODS)
 def test_known_value_oracle_small_case(method):
     """Hand-checkable tiny case: perfectly monotone cross-section.

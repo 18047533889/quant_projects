@@ -421,21 +421,87 @@ MetricValue 均对拍通过。改路由前两轮 `auto` 都留在 CPU；现在�
 `docs/benchmarks/real_cos_f24_rank_chain_20260927.json` 和
 `docs/benchmarks/real_cos_f24_rank_chain_auto_20260927.json`。
 
-F32（32 个因子）仍未获得自动 CUDA 认证。只读预检命令：
+F32 的完整 rank 链、完整分位链及默认三指标整批请求已分别认证自动 CUDA。只读预检命令：
 
 ```bash
 python -m quant_evaluator.scripts.benchmark_real_cos_factor_batch --factor-count-profile 32 --preflight-only
 ```
 
 它只检查绑定 manifest、对象字节数及 RAM/VRAM 余量，不会载入因子数组或执行评估。
-`--max-working-gib` 默认 24；提高该上限不能绕过可用内存与预留余量检查。
+`--max-working-gib` 默认 50；提高该上限不能绕过可用内存与预留余量检查。
 只有显式加 `--run`，且预检
 通过后，才会执行整批多指标 CPU/CUDA/auto 六轮 A/B；可选
 `--factor-profile-mode single` 改为逐指标诊断。当前绑定 manifest 有 61 个
-符合筛选条件的对象，最小 32 个合计 1,946,203,073 字节，但按本轮 F24
-实测内存峰值外推并预留 8 GiB 后，服务器资源门禁未放行；这是安全估算，
-不是 F32 性能或正确性结论。现有加载器最多支持 32 个因子，F64（64 因子）
+符合筛选条件的对象，最小 32 个合计 1,946,203,073 字节。精确内容哈希的
+F32 样本按已测最大父/worker RSS 合计加 20% 后上取整为 50 GiB，
+另需至少 8 GiB 可用内存余量；其它 manifest 仍用旧保守模型。
+现有加载器最多支持 32 个因子，F64（64 因子）
 暂不能用该脚本验证。
+
+CPU 参考后端的 Spearman 日 IC 已改为每次最多处理 128 个
+`(交易日, 因子)` 行，避免整段历史的哨兵值与秩数组同时驻留；精确路径还直接
+把 validity 并入 pairwise mask，不再复制一整份 float64 因子面板。
+这不改变统计口径。中等规模固定种子 A/B（600 日 × 2000 股 × 12 因子）
+两轮交错测得进程 RSS 约从 1.66 GiB 降至 0.52 GiB，计算耗时约从
+1.58–1.60 秒降至 1.33–1.36 秒，输出数组与计数字节哈希相同；
+跨 tile、ties、缺失和有效性掩码也与历史逐行参考实现逐位一致。
+脚本与原始数字见 `scripts/benchmark_cpu_ic_row_tiles.py` 和
+`docs/benchmarks/cpu_ic_row_tiles_20260928.md`。这只是合成证据；
+F24/F32 真实全市场复测见下文。
+
+新版加载器在同一绑定 manifest 上单独载入 F32 全历史批次（不运行评估）：
+2586 日 × 5461 股 × 32 因子，32 个已校验 COS 对象，日期跨度
+2016-01-04 至 2026-08-25，耗时 124.916 秒，父进程 RSS 峰值
+13,838,164 KiB。此测量只覆盖数据装载，不单独证明评估阶段的
+内存安全、口径或性能；后续分阶段实测见下文。预检已经依据
+完整双调用的最大 RSS 校准，资源不足时仍会拒绝运行。
+
+随后在同一 F32 绑定面板上对完整 `rank_chain`（`rank_ic`、
+`rank_ic_series`、`ic_std`、`ic_ir`）做 CPU 与 `cuda_strict`
+各两次公开入口调用。CPU 冷/热为 81.849/78.405 秒，CUDA 为
+38.160/33.895 秒；CUDA 热调用在这次并发环境中约快 2.31 倍。
+CPU/CUDA 的配置哈希相同，四项完整制品（数值、有限与有效掩码、
+计数、来源及逐因子 MetricValue）均按现有严格比较器通过。
+CPU/GPU worker RSS 峰值分别为 23,761,400/25,434,024 KiB，
+GPU pool 峰值 9,451,395,584 字节。这次双调用仅为先行探针；
+后续交错和 `auto` 复测结果见下文。
+
+随后按 CPU/CUDA/CUDA/CPU 四轮交错、每轮冷/热各一次复测，
+CPU 热运行 79.105/78.837 秒，CUDA 34.181/34.349 秒，
+约 2.3 倍加速；配置哈希相同，四轮四项完整制品全部对拍通过。
+在加入精确路由后，又用一轮 CPU 参考及两轮 `auto` 冷/热调用复测：
+两轮 `auto` 均实际走 CUDA，热运行 34.485/34.310 秒，
+完整制品均与 CPU 对拍通过。仅对这个精确形状、float64、默认参数、
+完整 rank 链、无特殊输入及单 NVIDIA L20 且有效空闲显存至少 14 GiB
+启用自动 CUDA；单指标、子集、混合请求与不同形状/设备不继承。
+
+同一 F32 面板的完整分位链（`quantile_returns_full`、
+`quantile_returns_daily`、`quantile_spread`、`quantile_monotonicity`、
+`daily_quantile_monotonicity_rate`）另做 CPU/CUDA/CUDA/CPU 四轮交错。
+CPU 冷调用 168.197/167.598 秒，CUDA 34.749/34.886 秒，
+约快 4.8 倍；五项完整制品逐轮对拍通过。加入精确路由后，两轮
+`auto` 均实际选 CUDA（34.682/34.729 秒）且与 CPU 对拍通过。
+仅对相同精确形状、完整五项、float64、默认参数、无特殊输入、
+单 NVIDIA L20 且有效空闲显存至少 8 GiB 自动选 CUDA。
+两条 F32 链的详细请求、耗时、内存峰值及排除范围见
+`docs/benchmarks/real_cos_f32_chain_ab_20260928.md`。
+
+同一 F32 面板的默认三指标整批请求（`rank_ic`、`quantile_spread`、
+`factor_turnover_rate`）完成 CPU/CUDA/auto/auto/CUDA/CPU 六轮交错，
+每轮各含冷、热调用。CPU 热运行 160.171/160.457 秒，强制 CUDA
+36.414/36.219 秒，两轮 `auto` 实际走 CUDA、热运行
+35.907/35.992 秒，约为 CPU 的 4.45 倍。六轮配置哈希一致，
+三个完整制品逐轮对拍通过；GPU pool 峰值 9,451,395,584 字节。
+仅对精确 F32 形状、这三个默认指标的完整集合、float64、默认参数、
+无特殊输入、单 NVIDIA L20 且有效空闲显存至少 14 GiB 自动选 CUDA。
+原始报告见 `docs/benchmarks/real_cos_f32_default_batch_20260928.json`。
+
+新版 CPU 行块与加载器组合在同一 F24 rank 链上另完成六轮真实 COS
+公开入口复测，完整制品对拍通过；父进程 RSS 峰值 10,850,236 KiB，
+CPU worker RSS 峰值 19,223,060–19,248,388 KiB。两个 `auto` 均走 CUDA。
+CPU 热调用约 60.8 秒、CUDA/auto 约 25.2–25.5 秒；与旧轮次速度差异
+可能受同机并发 GPU 任务影响，不能据此作独立性能改进结论。
+原始报告为 `docs/benchmarks/real_cos_f24_rank_chain_row_tiles_20260928.json`。
 
 自定义分位参数：`n_quantiles=1` 是合法的单桶请求，有限因子值全部进入第 0 桶；
 形状单调性此时没有相邻桶，结果为缺失。CPU/CUDA 现在都支持这一口径。
