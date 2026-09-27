@@ -421,7 +421,7 @@ MetricValue 均对拍通过。改路由前两轮 `auto` 都留在 CPU；现在�
 `docs/benchmarks/real_cos_f24_rank_chain_20260927.json` 和
 `docs/benchmarks/real_cos_f24_rank_chain_auto_20260927.json`。
 
-F32 的完整 rank 链、完整分位链及默认三指标整批请求已分别认证自动 CUDA。只读预检命令：
+F32 的完整 rank 链、完整分位链、默认三指标整批及三个单指标请求已分别认证自动 CUDA。只读预检命令：
 
 ```bash
 python -m quant_evaluator.scripts.benchmark_real_cos_factor_batch --factor-count-profile 32 --preflight-only
@@ -473,7 +473,7 @@ CPU 热运行 79.105/78.837 秒，CUDA 34.181/34.349 秒，
 两轮 `auto` 均实际走 CUDA，热运行 34.485/34.310 秒，
 完整制品均与 CPU 对拍通过。仅对这个精确形状、float64、默认参数、
 完整 rank 链、无特殊输入及单 NVIDIA L20 且有效空闲显存至少 14 GiB
-启用自动 CUDA；单指标、子集、混合请求与不同形状/设备不继承。
+启用自动 CUDA；子集、单指标及混合请求不继承本链认证，须各自独立验证。
 
 同一 F32 面板的完整分位链（`quantile_returns_full`、
 `quantile_returns_daily`、`quantile_spread`、`quantile_monotonicity`、
@@ -495,6 +495,15 @@ CPU 冷调用 168.197/167.598 秒，CUDA 34.749/34.886 秒，
 仅对精确 F32 形状、这三个默认指标的完整集合、float64、默认参数、
 无特殊输入、单 NVIDIA L20 且有效空闲显存至少 14 GiB 自动选 CUDA。
 原始报告见 `docs/benchmarks/real_cos_f32_default_batch_20260928.json`。
+
+同一 F32 面板的 `rank_ic`、`quantile_spread`、`factor_turnover_rate`
+又分别完成单指标 CPU/CUDA/CUDA/CPU 四轮交错和两轮真实 `auto` 复测。
+三项 CPU 两端分别约 85/80/69 秒，CUDA 分别约 39/36/36 秒；
+每项四轮配置一致、完整制品对拍通过，两轮 `auto` 均实际走 CUDA
+且与 CPU 参考对拍通过。单指标 `rank_ic` 要求至少 14 GiB 有效及
+实际空闲显存，另两项至少 8 GiB；float64、默认参数、无特殊输入及
+单 NVIDIA L20 的精确 F32 形状之外仍用 CPU。详见
+`docs/benchmarks/real_cos_f32_single_routes_20260928.md`。
 
 新版 CPU 行块与加载器组合在同一 F24 rank 链上另完成六轮真实 COS
 公开入口复测，完整制品对拍通过；父进程 RSS 峰值 10,850,236 KiB，

@@ -441,8 +441,14 @@ def test_f32_rank_and_quantile_chains_exact_shape_and_gpu_gate(monkeypatch):
                        8 * 1024 ** 3, 8 * 1024 ** 3]
     assert select(batch, labels, quantile_metrics[:-1], **options) == (
         "cpu", "metric_set_not_certified")
-    assert select(batch, labels, ("quantile_spread",), **options) == (
-        "cpu", "metric_not_certified_for_profile")
+    single_metrics = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+    for metric in single_metrics:
+        assert select(batch, labels, (metric,), **options) == (
+            "cuda_strict", f"certified_single_metric_real_cos_f32_{metric}")
+    assert budgets[-3:] == [14 * 1024 ** 3, 8 * 1024 ** 3,
+                            8 * 1024 ** 3]
+    assert select(batch, labels, ("coverage",), **options) == (
+        "cpu", "metric_not_certified")
     mixed_metrics = ("rank_ic", "quantile_spread", "factor_turnover_rate")
     mixed_expected = ("cuda_strict", "certified_batch_real_cos_f32_mixed_three")
     assert select(batch, labels, mixed_metrics, **options) == mixed_expected
@@ -456,13 +462,23 @@ def test_f32_rank_and_quantile_chains_exact_shape_and_gpu_gate(monkeypatch):
     batch.num_factors = 31
     assert select(batch, labels, metrics, **options) == (
         "cpu", "shape_outside_certified_range")
+    for metric in single_metrics:
+        assert select(batch, labels, (metric,), **options) == (
+            "cpu", "shape_outside_certified_range")
     batch.num_factors = 32
     batch.values = np.empty(0, dtype=np.float32)
     assert select(batch, labels, metrics, **options) == (
         "cpu", "dtype_outside_certified_range")
+    for metric in single_metrics:
+        assert select(batch, labels, (metric,), **options) == (
+            "cpu", "dtype_outside_certified_range")
     batch.values = np.empty(0, dtype=np.float64)
     assert select(batch, labels, metrics, **(options | {"context": object()})) == (
         "cpu", "special_input_or_parameters")
+    for metric in single_metrics:
+        assert select(batch, labels, (metric,),
+                      **(options | {"context": object()})) == (
+            "cpu", "special_input_or_parameters")
     monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
                         lambda *args: "insufficient_cuda_memory")
     assert select(batch, labels, metrics, **options) == (
@@ -471,6 +487,9 @@ def test_f32_rank_and_quantile_chains_exact_shape_and_gpu_gate(monkeypatch):
         "cpu", "insufficient_cuda_memory")
     assert select(batch, labels, mixed_metrics, **options) == (
         "cpu", "insufficient_cuda_memory")
+    for metric in single_metrics:
+        assert select(batch, labels, (metric,), **options) == (
+            "cpu", "insufficient_cuda_memory")
 
 
 def _inputs(t, n):

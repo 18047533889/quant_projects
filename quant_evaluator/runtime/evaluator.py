@@ -119,6 +119,8 @@ _AUTO_REAL_COS_F32_BATCH_NAMES = frozenset({
     "rank_chain", "quantile_chain", "real_cos_mixed_three"})
 _AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
+_AUTO_REAL_COS_F32_SINGLE_METRICS = frozenset(
+    {"rank_ic", "quantile_spread", "factor_turnover_rate"})
 _AUTO_REAL_COS_F2_RANK_SERIES_SHAPE = (2586, 5461, 2)
 _AUTO_REAL_COS_F2_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_LARGE_METRICS = frozenset({"rank_ic", "quantile_spread"})
@@ -234,7 +236,8 @@ def _select_public_auto_backend(
     batch_name = None
     if len(canonical_metrics) == 1:
         if (canonical_metrics[0] not in _AUTO_CUDA_METRICS
-                and canonical_metrics[0] not in _AUTO_REAL_COS_F8_METRICS):
+                and canonical_metrics[0] not in _AUTO_REAL_COS_F8_METRICS
+                and canonical_metrics[0] not in _AUTO_REAL_COS_F32_SINGLE_METRICS):
             return "cpu", "metric_not_certified"
     else:
         batch_name = _AUTO_CUDA_BATCHES.get(frozenset(canonical_metrics))
@@ -247,7 +250,9 @@ def _select_public_auto_backend(
     if profile is None:
         return "cpu", "shape_outside_certified_range"
     if (profile == _AUTO_REAL_COS_F32_PROFILE
-            and batch_name not in _AUTO_REAL_COS_F32_BATCH_NAMES):
+            and batch_name not in _AUTO_REAL_COS_F32_BATCH_NAMES
+            and not (len(canonical_metrics) == 1
+                     and canonical_metrics[0] in _AUTO_REAL_COS_F32_SINGLE_METRICS)):
         return "cpu", "metric_not_certified_for_profile"
     if (profile == _AUTO_REAL_COS_F24_PROFILE
             and batch_name not in _AUTO_REAL_COS_F24_BATCH_NAMES):
@@ -274,7 +279,7 @@ def _select_public_auto_backend(
                    frozenset(canonical_metrics) == _AUTO_REAL_COS_MIXED_THREE)):
         return "cpu", "metric_not_certified_for_profile"
     if (profile not in (_AUTO_REAL_COS_F8_PROFILE, _AUTO_REAL_COS_F12_PROFILE,
-                        _AUTO_REAL_COS_F13_PROFILE)
+                        _AUTO_REAL_COS_F13_PROFILE, _AUTO_REAL_COS_F32_PROFILE)
             and len(canonical_metrics) == 1
             and canonical_metrics[0] not in _AUTO_CUDA_METRICS):
         return "cpu", "metric_not_certified"
@@ -381,7 +386,11 @@ def _select_public_auto_backend(
         if real_cos_f12_certified_batch:
             return "cuda_strict", f"certified_batch_real_cos_f12_{batch_name}"
         return "cuda_strict", f"certified_batch_{batch_name}"
-    if profile == _AUTO_REAL_COS_F12_PROFILE:
+    if profile == _AUTO_REAL_COS_F32_PROFILE:
+        min_effective_vram = (_AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES
+                              if canonical_metrics[0] == "rank_ic"
+                              else _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES)
+    elif profile == _AUTO_REAL_COS_F12_PROFILE:
         min_effective_vram = (
             _AUTO_REAL_COS_F12_RANK_MIN_EFFECTIVE_VRAM_BYTES
             if canonical_metrics[0] == "rank_ic"
@@ -413,6 +422,8 @@ def _select_public_auto_backend(
         return "cuda_strict", "certified_single_metric_real_cos_region"
     if profile == _AUTO_LARGE_EXTRAP_PROFILE:
         return "cuda_strict", "bounded_extrapolation_real_cos_headroom"
+    if profile == _AUTO_REAL_COS_F32_PROFILE:
+        return "cuda_strict", f"certified_single_metric_real_cos_f32_{canonical_metrics[0]}"
     if profile == _AUTO_REAL_COS_F12_PROFILE:
         return "cuda_strict", "certified_single_metric_real_cos_f12"
     if profile == _AUTO_REAL_COS_F13_PROFILE:
