@@ -78,7 +78,7 @@ def _resolve_alias(metric_id: str) -> str:
 # The 701-day x 5314-stock x 2-factor registered A-share panel showed full
 # CPU/CUDA output parity and a CUDA advantage in cold and alternating warm
 # public-facade runs for these metrics (2026-09-26). Other metrics retain CPU.
-_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260927_v17"
+_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260928_v18"
 _AUTO_SMALL_PROFILE = "ashare_701d_20260926"
 _AUTO_LARGE_PROFILE = "real_cos_region_20260927"
 _AUTO_LARGE_EXTRAP_PROFILE = "real_cos_bounded_headroom_20260927"
@@ -101,6 +101,8 @@ _AUTO_REAL_COS_F12_SHAPE = (2586, 5461, 12)
 _AUTO_REAL_COS_F12_RANK_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F12_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
 _AUTO_REAL_COS_F12_TURNOVER_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
+_AUTO_REAL_COS_F12_PEARSON_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
+_AUTO_REAL_COS_F12_SINGLE_METRICS = frozenset({"rank_ic", "quantile_spread", "factor_turnover_rate", "pearson_ic"})
 _AUTO_REAL_COS_F12_BATCH_NAMES = frozenset({"rank_chain", "quantile_chain"})
 _AUTO_REAL_COS_F13_PROFILE = "real_cos_f13_exact_20260927"
 _AUTO_REAL_COS_F13_SHAPE = (2586, 5461, 13)
@@ -239,6 +241,7 @@ def _select_public_auto_backend(
     if len(canonical_metrics) == 1:
         if (canonical_metrics[0] not in _AUTO_CUDA_METRICS
                 and canonical_metrics[0] not in _AUTO_REAL_COS_F8_METRICS
+                and canonical_metrics[0] not in _AUTO_REAL_COS_F12_SINGLE_METRICS
                 and canonical_metrics[0] not in _AUTO_REAL_COS_F13_SINGLE_METRICS
                 and canonical_metrics[0] not in _AUTO_REAL_COS_F32_SINGLE_METRICS):
             return "cpu", "metric_not_certified"
@@ -267,9 +270,7 @@ def _select_public_auto_backend(
         return "cpu", "metric_not_certified_for_profile"
     if profile == _AUTO_REAL_COS_F12_PROFILE and (
         len(canonical_metrics) != 1
-        or canonical_metrics[0] not in (
-            "rank_ic", "quantile_spread", "factor_turnover_rate"
-        )
+        or canonical_metrics[0] not in _AUTO_REAL_COS_F12_SINGLE_METRICS
     ) and not (batch_name in _AUTO_REAL_COS_F12_BATCH_NAMES
                or (batch_name == "real_cos_mixed_three" and
                    frozenset(canonical_metrics) == _AUTO_REAL_COS_MIXED_THREE)):
@@ -399,7 +400,9 @@ def _select_public_auto_backend(
             if canonical_metrics[0] == "rank_ic"
             else (_AUTO_REAL_COS_F12_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES
                   if canonical_metrics[0] == "quantile_spread"
-                  else _AUTO_REAL_COS_F12_TURNOVER_MIN_EFFECTIVE_VRAM_BYTES)
+                  else (_AUTO_REAL_COS_F12_PEARSON_MIN_EFFECTIVE_VRAM_BYTES
+                        if canonical_metrics[0] == "pearson_ic"
+                        else _AUTO_REAL_COS_F12_TURNOVER_MIN_EFFECTIVE_VRAM_BYTES))
         )
     elif (profile == _AUTO_REAL_COS_F13_PROFILE
           and canonical_metrics[0] == "rank_ic_positive_ratio"):
@@ -431,6 +434,8 @@ def _select_public_auto_backend(
     if profile == _AUTO_REAL_COS_F32_PROFILE:
         return "cuda_strict", f"certified_single_metric_real_cos_f32_{canonical_metrics[0]}"
     if profile == _AUTO_REAL_COS_F12_PROFILE:
+        if canonical_metrics[0] == "pearson_ic":
+            return "cuda_strict", "certified_single_metric_real_cos_f12_pearson_ic"
         return "cuda_strict", "certified_single_metric_real_cos_f12"
     if profile == _AUTO_REAL_COS_F13_PROFILE:
         if canonical_metrics[0] == "rank_ic_positive_ratio":

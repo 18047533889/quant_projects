@@ -1,6 +1,6 @@
 # 公开运行能力与输入/输出契约
 
-> 最后更新：2026-09-27（Asia/Hong_Kong）。文档维护规则：代码行为变更必须同一轮同步本文档并更新此时间戳。
+> 最后更新：2026-09-28（Asia/Hong_Kong）。文档维护规则：代码行为变更必须同一轮同步本文档并更新此时间戳。
 
 本页补充 `METRIC_REFERENCE.md` 的调用层说明。指标是否可请求以当前注册表为准；
 `METRIC_REGISTRY_COVERAGE.csv` 是迁移追踪表，不能把其中历史遗留的 `NOT_IMPLEMENTED` 当作当前运行结论。
@@ -324,6 +324,17 @@ turnover 为 19.510/14.297 秒，峰值 1,020,942,336 字节。这三个指标�
 请求保持 CPU；三项单指标的回执原因均为 `certified_single_metric_real_cos_f12`。证据见 `docs/benchmarks/real_cos_f12_rank_20260927.json`、
 `docs/benchmarks/real_cos_f12_quantile_20260927.json` 和
 `docs/benchmarks/real_cos_f12_turnover_20260927.json`。
+
+F12 的单指标 `pearson_ic` 另经相同 COS manifest、2586 日 × 5461 股 × 12 因子
+的六轮交错公开入口 A/B 验证：CPU 热调用 12.21–12.31 秒，显式 CUDA
+9.22–9.55 秒；两轮冷调用 CPU 13.89–14.46 秒、CUDA 12.19–12.25 秒。
+完整制品、掩码、计数、provenance、逐因子 MetricValue 和配置哈希均对拍通过。
+路由更新后又完成六轮复测，两次 `auto` 均实际使用 CUDA 并与 CPU 完整对拍通过。
+仅在精确 F12 形状、双端 float64、默认参数、无特殊输入和单 NVIDIA L20 下，
+`pearson_ic` 单指标自动选 CUDA；实际与策略有效空闲显存均至少需 8 GiB。
+实测 GPU pool 峰值 3,968,325,632 字节。其余 Pearson 指标、相邻形状和组合
+不沿用此认证；回执原因是 `certified_single_metric_real_cos_f12_pearson_ic`。
+原始及路由后证据见 `docs/benchmarks/real_cos_f12_pearson_ic_20260928.md`。
 
 F12 的完整 `rank_chain` 和 `quantile_chain` 分别完成独立六轮交错公开入口
 CPU/CUDA/auto A/B，所有指标的数值、制品类型、掩码、计数、provenance、

@@ -279,6 +279,74 @@ def test_f2_rank_ic_series_exact_real_cos_route(monkeypatch):
         "cpu", "insufficient_cuda_memory")
 
 
+def test_f12_pearson_ic_exact_auto_route_and_guards(monkeypatch):
+    from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
+
+    class Device:
+        def __init__(self, index):
+            self.index = index
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            return None
+
+    hardware = {"name": b"NVIDIA L20", "free": 16 * 1024 ** 3}
+    runtime = SimpleNamespace(
+        getDeviceProperties=lambda index: {"name": hardware["name"]},
+        memGetInfo=lambda: (hardware["free"], 48 * 1024 ** 3),
+    )
+    fake_cp = SimpleNamespace(cuda=SimpleNamespace(Device=Device, runtime=runtime))
+    monkeypatch.setitem(sys.modules, "cupy", fake_cp)
+    batch = SimpleNamespace(num_times=2586, num_assets=5461, num_factors=12,
+                            values=np.empty(0, dtype=np.float64))
+    labels = SimpleNamespace(values=np.empty(0, dtype=np.float64))
+    options = dict(metric_parameters={}, context=None, quantile_builder_parameters={},
+                   portfolio_returns=None, holding_returns=None, trade_eligibility=None,
+                   calendar_snapshot=None, exposure_panel=None,
+                   generalization_evidence=None, evaluator=None)
+    select = module._select_public_auto_backend
+    metric = ("pearson_ic",)
+    expected = ("cuda_strict", "certified_single_metric_real_cos_f12_pearson_ic")
+    assert module._AUTO_REAL_COS_F12_PEARSON_MIN_EFFECTIVE_VRAM_BYTES == 8 * 1024 ** 3
+    assert select(batch, labels, metric, **options) == expected
+    for shape in ((2585, 5461, 12), (2586, 5460, 12), (2586, 5461, 11),
+                  (2586, 5461, 14)):
+        batch.num_times, batch.num_assets, batch.num_factors = shape
+        assert select(batch, labels, metric, **options) == (
+            "cpu", "shape_outside_certified_range")
+    batch.num_times, batch.num_assets, batch.num_factors = 2586, 5461, 8
+    assert select(batch, labels, metric, **options) == (
+        "cpu", "metric_not_certified_for_profile")
+    batch.num_factors = 12
+    batch.values = np.empty(0, dtype=np.float32)
+    assert select(batch, labels, metric, **options) == (
+        "cpu", "dtype_outside_certified_range")
+    batch.values = np.empty(0, dtype=np.float64)
+    labels.values = np.empty(0, dtype=np.float32)
+    assert select(batch, labels, metric, **options) == (
+        "cpu", "dtype_outside_certified_range")
+    labels.values = np.empty(0, dtype=np.float64)
+    assert select(batch, labels, metric, **(options | {
+        "metric_parameters": {"pearson_ic": {"min_assets": 30}}
+    })) == ("cpu", "special_input_or_parameters")
+    assert select(batch, labels, metric, **(options | {"context": object()})) == (
+        "cpu", "special_input_or_parameters")
+    assert select(batch, labels, metric + metric, **options) == (
+        "cpu", "metric_set_not_certified")
+    assert select(batch, labels, ("pearson_ic_series",), **options) == (
+        "cpu", "metric_not_certified")
+    hardware["name"] = b"NVIDIA L20S"
+    assert select(batch, labels, metric, **options) == ("cpu", "gpu_model_not_certified")
+    hardware["name"] = b"NVIDIA L20"
+    hardware["free"] = 10 * 1024 ** 3
+    assert select(batch, labels, metric, **options) == ("cpu", "insufficient_cuda_memory")
+    hardware["free"] = 16 * 1024 ** 3
+    assert select(batch, labels, metric, **(options | {
+        "gpu_policy": GPUExecutionPolicy(max_vram_fraction=0.4)
+    })) == ("cpu", "insufficient_cuda_memory")
+    assert select(batch, labels, metric, **options) == expected
+
+
 def test_f13_exact_whole_batch_routes_and_guards(monkeypatch):
     budgets = []
     monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
