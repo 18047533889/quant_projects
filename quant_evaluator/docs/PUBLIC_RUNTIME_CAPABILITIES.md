@@ -340,6 +340,14 @@ provenance、MetricValue 与配置哈希均对拍通过，GPU 峰值均为 9,332
 `docs/benchmarks/real_cos_f8_quantile_returns_daily_20260927.json` 与
 `docs/benchmarks/real_cos_f8_quantile_returns_full_20260927.json`；F12 单指标和未认证的组合请求仍保持 CPU。
 
+同一 F8 形状后来各做了六轮 CPU/CUDA/auto 交错复测：单项
+`rank_ic_series` 的 CPU 热调用约 20.4 秒，CUDA 与 `auto` 约 6.3 秒；
+`quantile_returns_daily` 的 CPU 约 9.9 秒，CUDA 与 `auto` 约 5.9 秒。
+两项各自的完整产物对拍通过，且两轮 `auto` 均实际走 CUDA。
+这两份复测记录分别为 [F8 rank IC 日序列 A/B](benchmarks/real_cos_f8_rank_ic_series_ab_20260929.json)
+和 [F8 日分位收益 A/B](benchmarks/real_cos_f8_quantile_returns_daily_ab_20260929.json)；
+结论仍限于该精确形状、默认参数、L20 与当时的资源条件。
+
 同一 F8 COS 面板的两组完整多指标请求另有六轮交错 CPU/CUDA A/B：
 `rank_chain`（`rank_ic`、`rank_ic_series`、`ic_std`、`ic_ir`）的 CPU
 热运行约 20.48–20.89 秒，CUDA 约 6.00–6.03 秒；`quantile_chain`
@@ -519,6 +527,54 @@ F32 样本按已测最大父/worker RSS 合计加 20% 后上取整为 50 GiB，
 另需至少 8 GiB 可用内存余量；其它 manifest 仍用旧保守模型。
 现有加载器最多支持 32 个因子，F64（64 因子）
 暂不能用该脚本验证。
+
+### 超过 32 因子的研究分片路径
+
+`scripts/benchmark_real_cos_factor_tiles.py` 是另一条 33–64 因子的研究路径，
+不改变上面的单次完整请求限制。它先读取绑定的 landing manifest，并按对象字节数和
+因子 ID 固定排序；每个因子对象最多 128 MiB，所选对象每遍合计最多 4096 MiB。
+第一遍经 DataAccess 的 `read_bound_factor` 校验对象身份并求所有因子的共同日期、资产轴；
+再按注册交易日历和 AdjVwap 构造一次共同标签；第二遍重新校验每个对象的来源及轴，
+按最多 32 因子一组（默认 8）调用公开 `evaluate`。运行前及每组前检查主机可用内存
+和 DataAccess COS 临时缓存所在文件系统的剩余空间。该两遍读取降低常驻因子面板规模，
+代价是对每个所选对象读取两次。
+
+以下命令在总仓库根目录运行。第一条只读 manifest 并做资源预检；第二条显式执行 CPU
+分片评估并写入有界 JSON 报告。执行时省略 `--backend` 默认选择 `auto`：
+
+```bash
+ASHARE_PARQUET_ROOT=/home/sunhaiwei/cos_data \
+DATA_ACCESS_COS_CLI=/usr/local/bin/admin-cos \
+DATA_ACCESS_COS_CACHE_ROOT=/home/sunhaiwei/.cache/quant-dataaccess/research \
+python -m quant_evaluator.scripts.benchmark_real_cos_factor_tiles --factors 48 --tile-size 8
+
+ASHARE_PARQUET_ROOT=/home/sunhaiwei/cos_data \
+DATA_ACCESS_COS_CLI=/usr/local/bin/admin-cos \
+DATA_ACCESS_COS_CACHE_ROOT=/home/sunhaiwei/.cache/quant-dataaccess/research \
+python -m quant_evaluator.scripts.benchmark_real_cos_factor_tiles --factors 48 --tile-size 8 \
+  --backend cpu --run --output quant_evaluator/docs/benchmarks/research_f48_tiles.json
+```
+
+也可显式选 `--backend cuda_strict` 或 `--backend auto`；每组在报告中保留公开评估器
+实际返回的后端和原始执行回执。
+[F48 CPU](benchmarks/real_cos_f48_factor_tiles_20260929.json)、
+[F48 严格 CUDA](benchmarks/real_cos_f48_factor_tiles_cuda_20260929.json) 和
+[F48 auto](benchmarks/real_cos_f48_factor_tiles_auto_20260929.json) 三份真实 COS 报告
+均覆盖 2586 日 × 5461 股 × 48 因子，分为 6 组、每组 8 因子。
+`rank_ic`、`quantile_spread`、`factor_turnover_rate` 的 48 个逐因子结果均有效；
+三组集合两两对拍各覆盖 144 个指标值，来源、标签、轴、数值容差、有效性、观测数、版本
+及样本单位均通过，没有差异。`auto` 六组实际都走 CUDA，复用了已认证的精确 F8
+三指标整批路由；这说明逐组路由，不表示整个 F48 请求获得了单次 CUDA 认证。
+
+严格 CUDA 和 `auto` 的逐组评估分别为 7.57–8.08 秒、7.81–9.15 秒，
+六组评估合计 46.45 秒、48.57 秒。第一遍来源/轴扫描分别耗时
+147.31 秒、148.81 秒，第二遍六组载入合计 162.13 秒、159.35 秒；
+从命令开始到最后一组完成的总耗时分别为 372.95 秒、373.60 秒，
+不含最后的报告序列化和写入。总耗时包含两遍 COS 读取和标签构造，
+不能当作纯评估内核耗时。集合只索引各组真实的配置哈希、执行回执与逐因子值/计数，
+不是一次完整 F48 `EvaluationBundle`；尚无 F48 单次完整请求的性能或最快后端认证。
+当前绑定 manifest 的合格对象数为 61，因此该清单不能提供 64 个因子的实测请求；
+即便另一清单有足够对象，F64 单次完整请求仍未获支持或最快后端认证。
 
 CPU 参考后端的 Spearman 日 IC 已改为每次最多处理 128 个
 `(交易日, 因子)` 行，避免整段历史的哨兵值与秩数组同时驻留；精确路径还直接
