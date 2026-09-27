@@ -11,6 +11,20 @@ from quant_evaluator.contracts.metric_artifacts import FrozenMapping, _freeze_ar
 from quant_evaluator.contracts._hashutil import stable_content_hex
 
 
+def _has_immutable_bytes_owner(array: Any) -> bool:
+    """Whether an ndarray is read-only and ultimately owned by immutable bytes."""
+    if not isinstance(array, np.ndarray) or array.flags.writeable:
+        return False
+    owner = array
+    seen: set[int] = set()
+    while isinstance(owner, np.ndarray) and owner.base is not None:
+        if id(owner) in seen:
+            return False
+        seen.add(id(owner))
+        owner = owner.base
+    return isinstance(owner, bytes)
+
+
 @dataclass(frozen=True)
 class LabelBundle:
     """
@@ -44,6 +58,9 @@ class LabelBundle:
     content_hash: str = field(init=False, default="")
 
     def __post_init__(self):
+        self._initialize(reuse_frozen_values=False)
+
+    def _initialize(self, *, reuse_frozen_values: bool) -> None:
         for name in ("decision_time", "execution_time", "signal_available_time",
                      "label_start_time", "label_end_time", "observation_time"):
             object.__setattr__(self, name, tuple(getattr(self, name)))
@@ -152,7 +169,8 @@ class LabelBundle:
             )
         if self.validity is not None and self.validity.dtype != np.bool_:
             raise ValueError("Label validity must have boolean dtype")
-        object.__setattr__(self, "values", _freeze_array(self.values, "label values"))
+        if not (reuse_frozen_values and _has_immutable_bytes_owner(self.values)):
+            object.__setattr__(self, "values", _freeze_array(self.values, "label values"))
         if self.validity is not None:
             object.__setattr__(self, "validity", _freeze_array(self.validity, "label validity"))
         object.__setattr__(self, "metadata", FrozenMapping(self.metadata))
@@ -165,6 +183,20 @@ class LabelBundle:
             tuple(self.asset_axis.values.tolist())
             if self.asset_axis is not None and self.asset_axis.values is not None else None)
         object.__setattr__(self, "content_hash", stable_content_hex(tag="LabelBundle.v2", fields=identity))
+
+    def _with_validity_mask(self, validity: np.ndarray) -> "LabelBundle":
+        """Return a validated copy with a new mask, reusing only immutable values.
+
+        All LabelBundle contract checks and content hashing still run. Values
+        without a read-only bytes owner take the regular copying path.
+        """
+        result = object.__new__(type(self))
+        for name in self.__dataclass_fields__:
+            if name != "content_hash":
+                object.__setattr__(result, name, getattr(self, name))
+        object.__setattr__(result, "validity", validity)
+        result._initialize(reuse_frozen_values=True)
+        return result
 
     def slice(self, time_slice: slice, asset_slice: slice = slice(None)) -> "LabelBundle":
         """Slice data and all semantic coordinates together; never re-default fields."""

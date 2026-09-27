@@ -163,6 +163,13 @@ sealed split 与后端选择均通过预校验后，对合格请求使用同一�
 需要组合/持有期收益或暴露面板等额外类型化输入的指标仍沿用原有路径。
 除上述明确的驻留 OOM 回退外，显式 CUDA 错误仍直接报错；逐 tile 路径按原策略重切当前因子 tile。
 
+`evaluate_horizons` 生成成熟度/共同样本掩码时，会为每个期限建立新的标签契约。
+当原标签值由只读不可变字节缓冲区持有时，新契约复用这份值缓冲区，只冻结新掩码；
+仍重新执行时序与形状校验，并产生与常规 `dataclasses.replace` 相同的内容哈希。
+不满足不可变所有权条件时仍复制标签值。这样避免多期限全市场请求在预处理阶段
+重复持有整张标签面板，不改变 CPU/CUDA 指标口径或自动路由范围。
+对应的两期限内存 A/B 见 `docs/benchmarks/horizon_label_mask_reuse_20260928.md`。
+
 ```python
 from quant_evaluator import evaluate_many
 from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy

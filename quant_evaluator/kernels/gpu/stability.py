@@ -7,6 +7,8 @@ set, min 10 valid, constant rejection.  Returns (T-1, F) series.
 
 from __future__ import annotations
 
+import numpy as np
+
 from quant_evaluator.kernels.gpu.rank import batched_rank, batched_distinct_level_count
 
 
@@ -21,6 +23,8 @@ def batched_rank_stability(factor_values, lag: int = 1, min_obs: int = 10):
     Returns (T-lag, F) Spearman stability series (NaN where insufficient or
     constant), matching CPU ``compute_rank_stability``.
     """
+    if isinstance(lag, (bool, np.bool_)) or not isinstance(lag, (int, np.integer)) or lag < 1:
+        raise ValueError("lag must be a positive integer")
     cp = _import_cp()
     x = cp.asarray(factor_values)
     T, F, N = x.shape

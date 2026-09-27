@@ -178,7 +178,7 @@ def evaluate_horizons(
     from quant_evaluator.api.evaluate_many import _evaluate_ic_labels_shared_cuda
     series_metric = "pearson_ic_series" if ic_method == "pearson" else "rank_ic_series"
     selected_labels = tuple(
-        replace(labels[h], validity=selected_masks[h]) for h in horizons
+        labels[h]._with_validity_mask(selected_masks[h]) for h in horizons
     )
     parameters = {series_metric: {"min_assets": min_assets}}
     shared = _evaluate_ic_labels_shared_cuda(
