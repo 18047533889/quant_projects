@@ -5605,11 +5605,12 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.quality._valid_pair_mask](../metrics/quality.py#L17)
 - [quant_evaluator.metrics.quality.compute_coverage_per_factor](../metrics/quality.py#L94)
 - [quant_evaluator.metrics.quality.compute_per_time_coverage](../metrics/quality.py#L157)
-- [quant_evaluator.metrics.quantile._percentile_boundaries_from_sorted](../metrics/quantile.py#L232)
-- [quant_evaluator.metrics.quantile._searchsorted_bins](../metrics/quantile.py#L312)
-- [quant_evaluator.metrics.quantile._validate_quantile_count](../metrics/quantile.py#L77)
-- [quant_evaluator.metrics.quantile.assign_quantiles_batch](../metrics/quantile.py#L378)
-- [quant_evaluator.metrics.quantile.compute_quantile_returns](../metrics/quantile.py#L480)
+- [quant_evaluator.metrics.quantile._percentile_boundaries_from_sorted](../metrics/quantile.py#L240)
+- [quant_evaluator.metrics.quantile._searchsorted_bins](../metrics/quantile.py#L320)
+- [quant_evaluator.metrics.quantile._validate_min_assets](../metrics/quantile.py#L83)
+- [quant_evaluator.metrics.quantile._validate_quantile_count](../metrics/quantile.py#L78)
+- [quant_evaluator.metrics.quantile.assign_quantiles_batch](../metrics/quantile.py#L386)
+- [quant_evaluator.metrics.quantile.compute_quantile_returns](../metrics/quantile.py#L488)
 - [quant_evaluator.metrics.quantile.compute_quantile_returns_fast](../metrics/quantile.py#L42)
 - [quant_evaluator.metrics.quantile_numba.compute_quantile_returns_numba](../metrics/quantile_numba.py#L232)
 - [quant_evaluator.metrics.quantile_shape._as_matrix](../metrics/quantile_shape.py#L29)
@@ -5786,11 +5787,12 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.quality.compute_per_time_coverage` | `ac2fc7555901dd64a41c2f2255150e7de17bdc515cf101a24044e65c94885150` |
 | `quant_evaluator.metrics.quantile._percentile_boundaries_from_sorted` | `ff68fbcd4af385888de12e80cb0167825f4b7540b0cade44e3ba35fea7c140a6` |
 | `quant_evaluator.metrics.quantile._searchsorted_bins` | `14ea6c1f029264e10fd45d2396c34b2f7773096e89dd3ed8985d7fd3de90f155` |
+| `quant_evaluator.metrics.quantile._validate_min_assets` | `c1674c691dd91a7c4045b772adf26552f145fbe16ca2144b5d8c3406ba1a8406` |
 | `quant_evaluator.metrics.quantile._validate_quantile_count` | `2034e129494bc9950df02d152b2d1de1f360662b7c65caeefc1c7f1cb755aae2` |
 | `quant_evaluator.metrics.quantile.assign_quantiles_batch` | `822a8f5f5d331330c467fb64c3f04746c601742699b8b06e149e524a14f94768` |
-| `quant_evaluator.metrics.quantile.compute_quantile_returns` | `1b5b6ba86fd2baacdceeef54cb6c7ce99bc1e9b9bf862fa889d88316298ce6a9` |
-| `quant_evaluator.metrics.quantile.compute_quantile_returns_fast` | `a333a80bd310c5334f771b45bef42c409a63e7586a7004dd0c4d50ce6ba0fc24` |
-| `quant_evaluator.metrics.quantile_numba.compute_quantile_returns_numba` | `a4bbec682e4fc712865a43bafb0809df3cd8fbe169b8648c696c78a84524f90e` |
+| `quant_evaluator.metrics.quantile.compute_quantile_returns` | `5986649a28b21521967f9e4d1a9f04c080edd6128b9a223492a39607445c9745` |
+| `quant_evaluator.metrics.quantile.compute_quantile_returns_fast` | `1b4db92ddcf4100916ee5de3f0bceec6890a48d06bf7146be54e4793be2dc40d` |
+| `quant_evaluator.metrics.quantile_numba.compute_quantile_returns_numba` | `20e081b39225efbbb70c1f41ee3827fada1407b4c5b1f8d3ac9409529fe85586` |
 | `quant_evaluator.metrics.quantile_shape._as_matrix` | `179ebe17a5e5133b07c132e0131404c618b147f4c4d032d2197f0855e4e76aa5` |
 | `quant_evaluator.metrics.quantile_shape._finite_columns` | `f61eb31021df766312ed7f37577bae6ab43d39ad9ca792d5610fc124dd905318` |
 | `quant_evaluator.metrics.quantile_shape.compute_bottom_quantile_cliff` | `258f1edbcd73f1e00bce67629b21f4f595df02afac325e8441b73928aeaaff7c` |

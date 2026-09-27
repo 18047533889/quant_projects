@@ -211,13 +211,39 @@ class DeviceEvaluationSession:
             raise MemoryError("device output admission exceeds session budget")
         return min(1 << 30, max(1, int(remaining * .8)))
 
-    def estimate_tile(self, metric_plan, T: int, N: int, dtype_bytes: int) -> int:
+    def estimate_tile(self, metric_plan, T: int, N: int, dtype_bytes: int,
+                      *, metric_parameters=None) -> int:
         """Pick an initial factor tile from a candidate list (spec §7)."""
         if not hasattr(self, "_vram_budget") or self._vram_budget is None:
             self._open()  # ensure budget is computed (session may not be open yet)
+        plan = tuple(metric_plan or ())
+        quantile_default = (
+            len(plan) == 5 and frozenset(plan) == frozenset((
+                "quantile_returns_full", "quantile_returns_daily",
+                "quantile_spread", "quantile_monotonicity",
+                "daily_quantile_monotonicity_rate"))
+            and not metric_parameters)
         for tile in (128, 64, 32, 16, 8, 4, 2, 1):
-            est = self._estimate_working_set(metric_plan, T, N, tile, dtype_bytes)
-            if est <= self._vram_budget:
+            other_live_bytes = 0
+            est = self._estimate_working_set(
+                metric_plan, T, N, tile, dtype_bytes,
+                quantile_default=quantile_default)
+            if quantile_default:
+                # The quantile kernel requires one bounded cross-section even
+                # when the resident tile itself fits the device budget.
+                cell_bytes = max(dtype_bytes, 8) if self.policy.precision_policy in (
+                    PrecisionPolicy.GPU_FP64, PrecisionPolicy.REFERENCE_FP64
+                ) else dtype_bytes
+                row_bytes = 4 * ((cell_bytes + 32) * N + 64 * 5) + 40 * N
+                factor_bytes = T * tile * N * cell_bytes
+                output_bytes = 16 * T * tile * 5
+                pool = getattr(self, "_pool", None)
+                other_live_bytes = pool.used_bytes() if pool is not None else 0
+                available = int(.8 * (self._vram_budget - other_live_bytes
+                                        - factor_bytes - T * N * 8 - output_bytes))
+                if row_bytes > min(1 << 30, available):
+                    continue
+            if est + other_live_bytes <= self._vram_budget:
                 self._final_tile = tile
                 return tile
         raise MemoryError(
@@ -225,7 +251,17 @@ class DeviceEvaluationSession:
             "reduce the time/asset panel or increase max_vram_fraction"
         )
 
-    def _estimate_working_set(self, metric_plan, T, N, ftile, dtype_bytes) -> int:
+    def _estimate_working_set(self, metric_plan, T, N, ftile, dtype_bytes,
+                              *, quantile_default=False) -> int:
+        if quantile_default:
+            # Exact default five-metric quantile chain: one cached Q=5 result,
+            # bounded <=1 GiB row workspace, and generous 2x factor overhead.
+            # Mixed plans and custom parameters retain the rank-family bound.
+            if self.policy.precision_policy in (PrecisionPolicy.GPU_FP64,
+                                                PrecisionPolicy.REFERENCE_FP64):
+                dtype_bytes = max(dtype_bytes, 8)
+            factor_bytes = T * ftile * N * dtype_bytes
+            return 3 * factor_bytes + T * N * 8 + (1 << 30)
         # Realistic working set for the Spearman rank family (spec §57),
         # calibrated against the real 500-factor benchmark on L20:
         #   factor tile (T,ftile,N) in input dtype

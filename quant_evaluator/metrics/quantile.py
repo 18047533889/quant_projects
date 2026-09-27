@@ -64,6 +64,7 @@ def compute_quantile_returns_fast(
         quantile_returns: shape (T, n_quantiles, F)
         quantile_counts: shape (T, n_quantiles, F)
     """
+    _validate_min_assets(min_assets)
     if use_numba and _NUMBA_AVAILABLE:
         return compute_quantile_returns_numba(
             factor_batch, label_bundle, n_quantiles, min_assets
@@ -77,6 +78,13 @@ def compute_quantile_returns_fast(
 def _validate_quantile_count(n_quantiles):
     if isinstance(n_quantiles, (bool, np.bool_)) or not isinstance(n_quantiles, (int, np.integer)) or n_quantiles < 1:
         raise ValueError("n_quantiles must be a positive integer")
+
+
+def _validate_min_assets(min_assets):
+    if (isinstance(min_assets, (bool, np.bool_))
+            or not isinstance(min_assets, (int, np.integer))
+            or min_assets < 1):
+        raise ValueError("min_assets must be a positive integer")
 
 
 def assign_quantiles(
@@ -499,6 +507,7 @@ def compute_quantile_returns(
         quantile_returns: shape (T, n_quantiles, F)
         quantile_counts: shape (T, n_quantiles, F)
     """
+    _validate_min_assets(min_assets)
     values = factor_batch.values  # (T, N, F)
     if factor_batch.validity is not None:
         values = np.where(factor_batch.validity, values, np.nan)
@@ -568,6 +577,7 @@ def compute_quantile_returns_optimized(
         quantile_returns: shape (T, n_quantiles, F)
         quantile_counts: shape (T, n_quantiles, F)
     """
+    _validate_min_assets(min_assets)
     values = factor_batch.values  # (T, N, F)
     if factor_batch.validity is not None:
         values = np.where(factor_batch.validity, values, np.nan)

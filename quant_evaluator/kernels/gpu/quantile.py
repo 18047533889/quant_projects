@@ -47,8 +47,8 @@ def batched_quantile_returns(
         raise ValueError("expected factors (T,F,N) and returns (T,N)")
     if isinstance(min_assets, (bool, np.bool_)) or not isinstance(min_assets, (int, np.integer)) or min_assets < 1:
         raise ValueError("min_assets must be a positive integer")
-    if isinstance(n_quantiles, (bool, np.bool_)) or not isinstance(n_quantiles, (int, np.integer)) or n_quantiles < 2:
-        raise ValueError("n_quantiles must be an integer >= 2")
+    if isinstance(n_quantiles, (bool, np.bool_)) or not isinstance(n_quantiles, (int, np.integer)) or n_quantiles < 1:
+        raise ValueError("n_quantiles must be a positive integer")
     if method not in ("min", "max"):
         raise ValueError("quantile method must be min/max")
     budget = (1 << 30) if workspace_bytes is None else workspace_bytes

@@ -1,6 +1,27 @@
 import numpy as np
 import pytest
-from quant_evaluator.metrics.quantile import assign_quantiles, assign_quantiles_fast, assign_quantiles_batch
+from quant_evaluator.metrics.quantile import (
+    assign_quantiles, assign_quantiles_fast, assign_quantiles_batch,
+    compute_quantile_returns, compute_quantile_returns_fast,
+    compute_quantile_returns_optimized,
+)
+
+
+@pytest.mark.parametrize("function", [
+    compute_quantile_returns, compute_quantile_returns_fast,
+    compute_quantile_returns_optimized,
+])
+@pytest.mark.parametrize("min_assets", [0, -1, True, np.bool_(True), 1.5, "2"])
+def test_quantile_returns_reject_invalid_min_assets(function, min_assets):
+    with pytest.raises(ValueError, match="min_assets must be a positive integer"):
+        function(None, None, min_assets=min_assets)
+
+
+@pytest.mark.parametrize("min_assets", [0, -1, True, np.bool_(True), 1.5, "2"])
+def test_numba_quantile_returns_reject_invalid_min_assets(min_assets):
+    from quant_evaluator.metrics.quantile_numba import compute_quantile_returns_numba
+    with pytest.raises(ValueError, match="min_assets must be a positive integer"):
+        compute_quantile_returns_numba(None, None, min_assets=min_assets)
 
 @pytest.mark.parametrize("function", [assign_quantiles, assign_quantiles_fast, assign_quantiles_batch])
 @pytest.mark.parametrize("method", ["min", "max"])
@@ -33,4 +54,3 @@ def test_twenty_layers_preserve_extreme_plateau_tie_policy(method, expected):
     with np.errstate(over="raise", invalid="raise"):
         actual = assign_quantiles_batch(values, n_quantiles=20, method=method)
     np.testing.assert_array_equal(actual, [expected])
-

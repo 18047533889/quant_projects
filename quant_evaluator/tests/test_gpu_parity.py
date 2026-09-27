@@ -182,6 +182,27 @@ def test_gpu_quantile_returns_parity(data):
     assert np.nanmax(np.abs(qr_gpu[mask] - qr_cpu[mask])) < 1e-8
 
 
+def test_single_quantile_assignment_and_returns_match_cpu():
+    x = np.tile(np.arange(12, dtype=float)[None, :, None], (2, 1, 1))
+    x[0, 1, 0] = np.nan
+    x[1, 2, 0] = np.inf
+    y = np.tile(np.arange(12, dtype=float), (2, 1))
+    y[0, 3] = np.nan
+    y[1, 4] = np.inf
+    cpu_assignment = assign_quantiles(x[:, :, 0], n_quantiles=1)
+    gpu_assignment = cp.asnumpy(batched_quantile_assignment(
+        x[:, :, 0], n_quantiles=1))
+    np.testing.assert_array_equal(gpu_assignment, cpu_assignment)
+    fb, lb = _make_batch(x, y)
+    cpu_values, cpu_counts = compute_quantile_returns(
+        fb, lb, n_quantiles=1, min_assets=10)
+    gpu_values, gpu_counts = batched_quantile_returns(
+        np.transpose(x, (0, 2, 1)), y, n_quantiles=1,
+        min_assets=10, return_counts=True)
+    np.testing.assert_allclose(cp.asnumpy(gpu_values), cpu_values, equal_nan=True)
+    np.testing.assert_array_equal(cp.asnumpy(gpu_counts), cpu_counts)
+
+
 def test_gpu_turnover_parity(data):
     x, _ = data
     xt = np.transpose(x, (0, 2, 1))

@@ -196,8 +196,8 @@ def batched_quantile_assignment(values, n_quantiles: int = 10, method: str = "ma
     """
     if method not in ("min", "max"):
         raise ValueError("batched_quantile_assignment method supports min/max only")
-    if isinstance(n_quantiles, (bool, np.bool_)) or not isinstance(n_quantiles, (int, np.integer)) or n_quantiles < 2:
-        raise ValueError("n_quantiles must be an integer >= 2")
+    if isinstance(n_quantiles, (bool, np.bool_)) or not isinstance(n_quantiles, (int, np.integer)) or n_quantiles < 1:
+        raise ValueError("n_quantiles must be a positive integer")
     cp = _import_cp()
     x = cp.asarray(values)
     if x.ndim < 1:
@@ -210,6 +210,9 @@ def batched_quantile_assignment(values, n_quantiles: int = 10, method: str = "ma
     budget = _MAX_CHUNK_BYTES if workspace_bytes is None else workspace_bytes
     if isinstance(budget, bool) or not isinstance(budget, (int, np.integer)) or budget < 1:
         raise ValueError("workspace_bytes must be a positive integer")
+    if n_quantiles == 1:
+        # With no percentile boundaries, every finite value is in bucket 0.
+        return cp.where(cp.isfinite(x), 0, -1).astype(cp.int32)
     # Includes actual int64 sort indices, values, masks, boundary arrays,
     # scatter results and conservative sorting scratch, excludes caller-owned
     # input/output (admitted separately by the device session).

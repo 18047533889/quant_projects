@@ -259,6 +259,9 @@ def compute_quantile_returns_numba(
     # Python, so this still returns a correct result (just slower).
     from quant_evaluator.contracts.quantile_policy import validate_tie_policy
     policy = validate_tie_policy(method)
+    from quant_evaluator.metrics.quantile import _validate_quantile_count, _validate_min_assets
+    _validate_quantile_count(n_quantiles)
+    _validate_min_assets(min_assets)
 
     values = factor_batch.values
     if factor_batch.validity is not None:

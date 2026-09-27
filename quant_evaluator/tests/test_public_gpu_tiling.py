@@ -101,6 +101,78 @@ def test_budget_does_not_force_unfitting_minimum_tile():
         session.estimate_tile(None, 500, 2000, 8)
 
 
+def test_default_quantile_chain_uses_bounded_larger_tiles_only():
+    plan = ("quantile_returns_full", "quantile_returns_daily",
+            "quantile_spread", "quantile_monotonicity",
+            "daily_quantile_monotonicity_rate")
+    session = DeviceEvaluationSession()
+    t, n = 2586, 5461
+    budget = session._estimate_working_set(
+        plan, t, n, 32, 8, quantile_default=True)
+    assert budget < session._estimate_working_set(plan, t, n, 32, 8)
+    session._vram_budget = budget
+    assert session.estimate_tile(plan, t, n, 8, metric_parameters={}) == 32
+    assert session.estimate_tile(tuple(reversed(plan)), t, n, 8) == 32
+    assert session.estimate_tile(
+        plan, t, n, 8,
+        metric_parameters={"quantile_spread": {"n_quantiles": 6}}) < 32
+    assert session.estimate_tile(plan + ("rank_ic",), t, n, 8) < 32
+    session._vram_budget = budget - 1
+    assert session.estimate_tile(plan, t, n, 8) == 16
+    session._vram_budget = 1
+    with pytest.raises(MemoryError, match="single factor"):
+        session.estimate_tile(plan, t, n, 8)
+    session._vram_budget = 1 << 40
+    with pytest.raises(MemoryError, match="single factor"):
+        session.estimate_tile(plan, 1, 6_000_000, 8)
+
+
+def test_quantile_chain_public_cpu_cuda_threshold_and_tie_parity():
+    t, n = 21, 50
+    base = np.arange(n, dtype=float)
+    values = np.broadcast_to(base[None, :, None], (t, n, 2)).copy()
+    values[0, :20, 0] = 0.0  # boundary plateau: MAX sends the whole tie high
+    values[0, 0, 0] = np.nan
+    labels = np.broadcast_to(base[None, :], (t, n)).copy()
+    labels[2, 0] = np.nan  # factor 0 has 19 valid days; factor 1 has 20
+    dates = tuple(pd.date_range("2024-01-01", periods=t))
+    batch = FactorBatch(
+        ("edge_19_days", "edge_20_days"), AxisRef("time", "datetime", t),
+        AxisRef("asset", "str", n), values)
+    label = LabelBundle(
+        "ret", labels, 1, decision_time=dates, label_start_time=dates,
+        label_end_time=tuple(day + pd.Timedelta(days=1) for day in dates))
+    metrics = ("quantile_returns_full", "quantile_returns_daily",
+               "quantile_spread", "quantile_monotonicity",
+               "daily_quantile_monotonicity_rate")
+    cpu = evaluate(batch, label, backend="cpu", metrics=metrics)
+    gpu = evaluate(batch, label, backend="cuda_strict", metrics=metrics)
+    assert np.isnan(cpu.artifacts["quantile_returns_full"].values[0, 0])
+    assert np.isfinite(cpu.artifacts["quantile_returns_full"].values[0, 1])
+    for metric in metrics:
+        left, right = cpu.artifacts[metric], gpu.artifacts[metric]
+        np.testing.assert_allclose(right.values, left.values,
+                                   rtol=1e-8, atol=1e-10, equal_nan=True)
+        for field in ("counts", "valid_mask"):
+            a, b = getattr(left, field, None), getattr(right, field, None)
+            if a is not None and b is not None:
+                np.testing.assert_array_equal(b, a)
+
+
+def test_public_single_quantile_custom_parameter_cpu_cuda_parity():
+    batch, label = _contracts()
+    options = {"quantile_returns_daily": {"n_quantiles": 1}}
+    cpu = evaluate(batch, label, backend="cpu",
+                   metrics=("quantile_returns_daily",), metric_parameters=options)
+    gpu = evaluate(batch, label, backend="cuda_strict",
+                   metrics=("quantile_returns_daily",), metric_parameters=options)
+    left = cpu.artifacts["quantile_returns_daily"]
+    right = gpu.artifacts["quantile_returns_daily"]
+    assert left.values.shape == (4, 1, 5)
+    np.testing.assert_allclose(right.values, left.values, equal_nan=True)
+    np.testing.assert_array_equal(right.counts, left.counts)
+
+
 def test_public_l20_quantile_monotonicity_uses_strict_shape_kernel(monkeypatch):
     """QE-08: formal metric is monotonicity of the mean profile, not daily votes."""
     T,N,F = 40,100,2

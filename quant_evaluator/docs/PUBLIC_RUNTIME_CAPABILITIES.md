@@ -363,6 +363,17 @@ CUDA 约 18.30–18.31 秒，约快 6.1 倍；CUDA GPU pool 峰值
 实际空闲显存均至少 8 GiB 的完整集合自动选择 CUDA。单项、子集、
 混合请求、相邻形状及其他硬件不沿用此认证；改后自动路由实测见
 `docs/benchmarks/real_cos_f24_quantile_chain_auto_20260927.json`。
+随后只对默认五项完整 quantile 链启用专用显存估算；自定义指标参数和混合请求仍用
+原保守估算。独立六轮 A/B 将 F24 因子 tile 从 8 扩至 24、GPU tile 次数从 3
+降至 1，CUDA 热运行 17.33–17.36 秒、`auto` 17.43–17.79 秒；CPU
+两端约 112 秒，完整指标对拍通过。GPU pool 峰值约 3.25 GB，仍低于会话预算。
+该经验估算不是对任意形状的显存保证：单行工作区另做 admission，CuPy OOM 仍按
+策略重切 tile。证据见 `docs/benchmarks/real_cos_f24_quantile_tile_ab_20260927.json`。
+
+自定义分位参数：`n_quantiles=1` 是合法的单桶请求，有限因子值全部进入第 0 桶；
+形状单调性此时没有相邻桶，结果为缺失。CPU/CUDA 现在都支持这一口径。
+`min_assets` 必须是正整数，零、布尔值、浮点数和字符串均在计算前拒绝，
+避免空桶除零及 CPU/CUDA 接受域不一致。
 
 其他规模和特殊输入使用 CPU，表示尚无足够的公开入口性能证据；
 不代表 CUDA 无法执行这些指标。

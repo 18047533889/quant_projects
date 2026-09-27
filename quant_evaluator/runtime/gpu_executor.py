@@ -90,6 +90,20 @@ class GPUExecutor:
                 "reduce the queued factor batch and persist each completed batch via DataAccess")
         self._host_result_bytes = total
 
+    def _factor_tile_size(self, metrics, T, N, F, dtype_bytes):
+        # Preserve the existing estimator call contract for non-quantile
+        # plans. Only the exact five-metric chain needs parameter-aware
+        # admission; custom quantile parameters retain the generic bound.
+        quantile_chain = frozenset((
+            "quantile_returns_full", "quantile_returns_daily",
+            "quantile_spread", "quantile_monotonicity",
+            "daily_quantile_monotonicity_rate"))
+        plan = tuple(metrics)
+        kwargs = ({"metric_parameters": self.metric_parameters}
+                  if len(plan) == 5 and frozenset(plan) == quantile_chain else {})
+        return min(F, self.session.estimate_tile(
+            metrics, T, N, dtype_bytes, **kwargs))
+
     def build_probe_pnl_tiled(self, factor_batch, holding_returns, portfolio_spec, trade_eligibility=None):
         """Build the canonical research-probe trajectory on CUDA by factor tile."""
         cp = _import_cp()
@@ -181,7 +195,7 @@ class GPUExecutor:
         cp = _import_cp()
         values = factor_batch.values
         T, N, F = values.shape
-        tile = min(F, self.session.estimate_tile(metrics, T, N, values.dtype.itemsize))
+        tile = self._factor_tile_size(metrics, T, N, F, values.dtype.itemsize)
         labels = label_bundle.values
         if label_bundle.validity is not None:
             labels = np.where(label_bundle.validity, labels, np.nan)
@@ -240,7 +254,7 @@ class GPUExecutor:
         cp = _import_cp()
         values = factor_batch.values
         T, N, F = values.shape
-        tile = min(F, self.session.estimate_tile(metrics, T, N, values.dtype.itemsize))
+        tile = self._factor_tile_size(metrics, T, N, F, values.dtype.itemsize)
         outputs = [BatchEvaluationBundle(tuple(factor_batch.factor_ids), lb.target_id)
                    for lb in label_bundles]
         start = 0
