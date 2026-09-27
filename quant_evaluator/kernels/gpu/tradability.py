@@ -24,6 +24,11 @@ from __future__ import annotations
 import numpy as np
 
 
+# Bound temporary arrays for time-vectorized membership turnover.
+_FACTOR_TURNOVER_WORKSPACE_BYTES = 128 << 20
+_FACTOR_TURNOVER_BYTES_PER_CELL = 128
+
+
 def _import_cp():
     import cupy as cp
     return cp
@@ -77,15 +82,26 @@ def batched_factor_turnover_rate(factor_values, quantile: float = 0.9):
     if T < 2:
         return cp.full((0, F), cp.nan, dtype=cp.float64).get()
     out = cp.full((T - 1, F), cp.nan, dtype=cp.float64)
-    for t in range(T - 1):
-        a = x[t]      # (F, N)
-        b = x[t + 1]  # (F, N)
+
+    # Process adjacent dates in bounded batches. The old per-date loop
+    # synchronized the host and device once per date via bool(cp.any(ok));
+    # these row-wise operations are independent across (date, factor), so
+    # batching removes those synchronizations without changing semantics.
+    cells_per_pair = max(F * N, 1)
+    pairs_per_chunk = max(
+        1,
+        int(_FACTOR_TURNOVER_WORKSPACE_BYTES // (
+            _FACTOR_TURNOVER_BYTES_PER_CELL * cells_per_pair
+        )),
+    )
+    for start in range(0, T - 1, pairs_per_chunk):
+        stop = min(start + pairs_per_chunk, T - 1)
+        a = x[start:stop].reshape(-1, N)          # (pairs*F, N)
+        b = x[start + 1:stop + 1].reshape(-1, N)  # (pairs*F, N)
         va, vb = cp.isfinite(a), cp.isfinite(b)
         na, nb = va.sum(axis=1), vb.sum(axis=1)
         n = cp.sum(va | vb, axis=1)
         ok = (na >= 10) & (nb >= 10)
-        if not bool(cp.any(ok)):
-            continue
         a_safe = cp.where(va, a, cp.inf)
         b_safe = cp.where(vb, b, cp.inf)
         thr_a = _nanquantile_rows(a_safe, na, quantile)
@@ -96,12 +112,13 @@ def batched_factor_turnover_rate(factor_values, quantile: float = 0.9):
         else:
             in_a = a_safe <= thr_a[:, None]
             in_b = b_safe <= thr_b[:, None]
-        in_a = in_a & va
-        in_b = in_b & vb
+        in_a &= va
+        in_b &= vb
+        # Unknown next-day values for a selected asset do not imply an exit.
         ok &= ~cp.any(in_a & ~vb, axis=1)
-        changed = in_a != in_b  # (F, N)
-        rate = cp.sum(changed, axis=1) / cp.maximum(n, 1.0)  # (F,)
-        out[t] = cp.where(ok, rate, cp.nan)
+        changed = in_a != in_b
+        rate = cp.sum(changed, axis=1) / cp.maximum(n, 1.0)
+        out[start:stop] = cp.where(ok, rate, cp.nan).reshape(stop - start, F)
     return out.get()
 
 

@@ -86,7 +86,7 @@ def test_declared_json_metadata_uses_dataaccess_projection_and_cleanup(json_sour
 def test_json_metadata_has_small_admission_budget(json_source):
     json_source[1]['size'] = 3*1024**2
     with pytest.raises(ValidationError, match='budget'):
-        read(json_source)
+        read(json_source, max_object_mib=128)
     assert json_source[2] == []
 
 
@@ -117,6 +117,31 @@ def test_download_budget_rejects_before_transfer(source):
         read(source, query_budget=QueryBudget(max_scan_bytes=10))
     assert source[2] == []
 
+
+def test_parquet_128_mib_cap_requires_explicit_opt_in(source):
+    source[1]["size"] = 65 * 1024**2
+    with pytest.raises(ValidationError, match="budget"):
+        read(source)
+    assert source[2] == []
+
+    result = read(source, max_object_mib=128)
+    assert result.table.to_pydict() == {"x": [1., 2.], "y": [3., 4.]}
+    assert len(source[2]) == 1
+
+
+def test_parquet_128_mib_opt_in_respects_lower_query_budget(source):
+    source[1]["size"] = 65 * 1024**2
+    with pytest.raises(ValidationError, match="budget"):
+        read(source, max_object_mib=128,
+             query_budget=QueryBudget(max_scan_bytes=64 * 1024**2))
+    assert source[2] == []
+
+
+@pytest.mark.parametrize("value", [0, 129, True, 1.5])
+def test_parquet_object_limit_is_bounded_integer(source, value):
+    with pytest.raises(ValidationError, match="max_object_mib"):
+        read(source, max_object_mib=value)
+    assert source[2] == []
 
 def test_mismatched_object_metadata_rejects_before_transfer(source):
     source[1]["key"] = "pool/other.parquet"

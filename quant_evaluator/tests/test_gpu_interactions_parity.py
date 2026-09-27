@@ -212,6 +212,41 @@ def test_gpu_factor_turnover_rate_bottom(data):
     assert np.nanmax(np.abs(gpu[mask] - cpu[mask])) < 1e-8
 
 
+
+@pytest.mark.parametrize("quantile", [0.9, 0.1])
+def test_gpu_factor_turnover_rate_time_chunks_preserve_cpu_contract(monkeypatch, quantile):
+    import quant_evaluator.kernels.gpu.tradability as tradability
+
+    # Force one adjacent-date pair per device chunk so this covers chunk
+    # boundaries as well as the vectorized rows within each chunk.
+    monkeypatch.setattr(tradability, "_FACTOR_TURNOVER_WORKSPACE_BYTES", 1)
+    rng = np.random.default_rng(20260927)
+    T, N, F = 8, 25, 3
+    x = rng.integers(-4, 5, size=(T, N, F)).astype(np.float64)
+    x[rng.random(x.shape) < 0.12] = np.nan
+
+    # Ties exercise the linear-quantile boundary rule. Make a selected asset
+    # unavailable on the following day; that pair must remain unknown (NaN).
+    selected = N - 1 if quantile > 0.5 else 0
+    x[0, :, 0] = np.arange(N, dtype=np.float64)
+    x[1, selected, 0] = np.nan
+    # Fewer than ten finite values on one side fails the eligibility floor.
+    x[3, :, 1] = np.nan
+    x[3, :9, 1] = np.arange(9, dtype=np.float64)
+    x[5, 2, 2] = np.inf
+    x[6, 3, 2] = -np.inf
+
+    expected = compute_factor_turnover_rate(x, quantile=quantile)
+    actual = cp.asnumpy(
+        tradability.batched_factor_turnover_rate(
+            cp.asarray(np.transpose(x, (0, 2, 1))), quantile=quantile
+        )
+    )
+    np.testing.assert_allclose(actual, expected, rtol=RTOL, atol=ATOL, equal_nan=True)
+    assert np.isnan(actual[0, 0])
+    assert np.isnan(actual[2, 1])
+
+
 def test_gpu_weighted_turnover_parity(data):
     x, _ = data
     rng = np.random.default_rng(5)

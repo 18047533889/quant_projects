@@ -34,12 +34,13 @@ def read_declared_cos_object(
     store, dataset: str, *, params: Mapping[str, Any] | None = None,
     columns: Sequence[str] | None = None, time_range=None,
     instrument_filter=None, query_budget: QueryBudget | None = None,
-    allow_research: bool = False,
+    allow_research: bool = False, max_object_mib: int = 64,
 ) -> ResearchObjectRead:
     """Read one declared Parquet or small JSON object through the COS gateway.
 
     Resolve validated dataset parameters, authorize before network I/O, inspect
-    exact-object metadata, admit up to 64 MiB (2 MiB for JSON), then fetch into a private ephemeral
+    exact-object metadata, admit up to max_object_mib MiB for Parquet (default
+    64, hard maximum 128) or 2 MiB for JSON, then fetch into a private ephemeral
     directory. Both metadata observations must agree; single-part MD5 ETags
     are verified against the downloaded content. DataAccess performs the
     actual column/time/instrument read with the original dataset contract.
@@ -51,11 +52,13 @@ def read_declared_cos_object(
     """
     if allow_research is not True or is_strict_semantics():
         raise ValidationError("explicit research opt-in required; strict/production is unsupported")
+    if type(max_object_mib) is not int or not 1 <= max_object_mib <= 128:
+        raise ValidationError("max_object_mib must be an integer in 1..128")
     store.authorize_dataset(dataset)
     store._authorize_factor_params(dataset, params)
     ds = store._registry.get(dataset)
     json_metadata = ds.format in {'json', 'jsonl', 'ndjson'}
-    scan_cap = (2 if json_metadata else 64) * 1024**2
+    scan_cap = (2 if json_metadata else max_object_mib) * 1024**2
     result_cap = (8 if json_metadata else 128) * 1024**2
     row_cap = 10_000 if json_metadata else 2_000_000
     budget = store._resolve_read_budget(ds, query_budget)

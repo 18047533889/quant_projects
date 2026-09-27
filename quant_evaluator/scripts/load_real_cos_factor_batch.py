@@ -32,10 +32,11 @@ def _ds(name, uri, filename, fmt):
         storage=StorageSpec(type="cos", uri=uri, layout="plain"))
 
 def _factors(count, max_mib, manifest_sha256, max_total_mib):
-    if not 1 <= count <= 16 or not 1 <= max_mib <= 64:
-        raise ValueError("factor count 1..16, object limit 1..64 MiB")
-    if not 1 <= max_total_mib <= 256:
-        raise ValueError("total verified object limit must be 1..256 MiB")
+    if (type(count) is not int or type(max_mib) is not int
+            or not 1 <= count <= 32 or not 1 <= max_mib <= 128):
+        raise ValueError("factor count 1..32, object limit 1..128 MiB")
+    if type(max_total_mib) is not int or not 1 <= max_total_mib <= 2048:
+        raise ValueError("total verified object limit must be 1..2048 MiB")
     if len(manifest_sha256) != 64 or any(c not in "0123456789abcdef" for c in manifest_sha256):
         raise ValueError("manifest_sha256 must be a lowercase SHA256 digest")
     engine = DuckDBEngine(threads=2)
@@ -68,11 +69,14 @@ def _factors(count, max_mib, manifest_sha256, max_total_mib):
         selected = sorted(selected, key=lambda item: (item[1]["bytes"], item[0]))[:count]
         if len(selected) != count or sum(r["bytes"] for _, r in selected) > max_total_mib*1024**2:
             raise ValueError("bounded verified sample unavailable")
+        if len({record["sha256"] for _, record in selected}) != count:
+            raise ValueError("selected factors do not have unique content hashes")
         panels, sources = [], []
         for name, record in selected:
             fd = _ds("factor_panel", record["uri"].rsplit("/", 1)[0], name+".parquet", "parquet")
             fs = DataAccessStore(DatasetRegistry({md.name: md, fd.name: fd}), engine)
-            bound = read_bound_factor(fs, md.name, fd.name, name, allow_research=True)
+            bound = read_bound_factor(fs, md.name, fd.name, name,
+                                      max_object_mib=max_mib, allow_research=True)
             obj = bound.factor
             if obj.content_sha256 != record["sha256"] or obj.downloaded_bytes != record["bytes"]:
                 raise ValueError("factor object identity mismatch")

@@ -332,6 +332,79 @@ def test_f13_hardware_and_vram_rejection(monkeypatch):
             "cpu", "insufficient_cuda_memory")
 
 
+def test_f13_factor_turnover_rate_exact_single_route(monkeypatch):
+    budgets = []
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda policy, minimum: budgets.append(minimum) or None)
+    batch = SimpleNamespace(num_times=2586, num_assets=5461, num_factors=13,
+                            values=np.empty(0, dtype=np.float64))
+    labels = SimpleNamespace(values=np.empty(0, dtype=np.float64))
+    options = dict(metric_parameters={}, context=None, quantile_builder_parameters={},
+                   portfolio_returns=None, holding_returns=None, trade_eligibility=None,
+                   calendar_snapshot=None, exposure_panel=None,
+                   generalization_evidence=None, evaluator=None)
+    select = module._select_public_auto_backend
+    expected = ("cuda_strict", "certified_single_metric_real_cos_f13_turnover")
+    assert select(batch, labels, ("factor_turnover_rate",), **options) == expected
+    assert budgets == [8 * 1024 ** 3]
+    assert select(batch, labels, ("rank_ic",), **options) == (
+        "cpu", "metric_not_certified_for_profile")
+    batch.num_factors = 14
+    assert select(batch, labels, ("factor_turnover_rate",), **options) == (
+        "cpu", "shape_outside_certified_range")
+    batch.num_factors = 13
+    batch.values = np.empty(0, dtype=np.float32)
+    assert select(batch, labels, ("factor_turnover_rate",), **options) == (
+        "cpu", "dtype_outside_certified_range")
+    batch.values = np.empty(0, dtype=np.float64)
+    assert select(batch, labels, ("factor_turnover_rate",),
+                  **(options | {"context": object()})) == (
+        "cpu", "special_input_or_parameters")
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda *args: "insufficient_cuda_memory")
+    assert select(batch, labels, ("factor_turnover_rate",), **options) == (
+        "cpu", "insufficient_cuda_memory")
+
+
+def test_f24_quantile_chain_exact_batch_only(monkeypatch):
+    budgets = []
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda policy, minimum: budgets.append(minimum) or None)
+    batch = SimpleNamespace(num_times=2586, num_assets=5461, num_factors=24,
+                            values=np.empty(0, dtype=np.float64))
+    labels = SimpleNamespace(values=np.empty(0, dtype=np.float64))
+    options = dict(metric_parameters={}, context=None, quantile_builder_parameters={},
+                   portfolio_returns=None, holding_returns=None, trade_eligibility=None,
+                   calendar_snapshot=None, exposure_panel=None,
+                   generalization_evidence=None, evaluator=None)
+    select = module._select_public_auto_backend
+    metrics = _BATCHES["quantile_chain"]
+    expected = ("cuda_strict", "certified_batch_real_cos_f24_quantile_chain")
+    assert select(batch, labels, metrics, **options) == expected
+    assert select(batch, labels, tuple(reversed(metrics)), **options) == expected
+    assert budgets == [8 * 1024 ** 3, 8 * 1024 ** 3]
+    assert select(batch, labels, metrics[:-1], **options) == (
+        "cpu", "metric_set_not_certified")
+    assert select(batch, labels, _BATCHES["rank_chain"], **options) == (
+        "cpu", "metric_not_certified_for_profile")
+    assert select(batch, labels, ("quantile_spread",), **options) == (
+        "cpu", "metric_not_certified_for_profile")
+    batch.num_factors = 23
+    assert select(batch, labels, metrics, **options) == (
+        "cpu", "shape_outside_certified_range")
+    batch.num_factors = 24
+    batch.values = np.empty(0, dtype=np.float32)
+    assert select(batch, labels, metrics, **options) == (
+        "cpu", "dtype_outside_certified_range")
+    batch.values = np.empty(0, dtype=np.float64)
+    assert select(batch, labels, metrics, **(options | {"context": object()})) == (
+        "cpu", "special_input_or_parameters")
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda *args: "insufficient_cuda_memory")
+    assert select(batch, labels, metrics, **options) == (
+        "cpu", "insufficient_cuda_memory")
+
+
 def _inputs(t, n):
     rng = np.random.default_rng(20260926)
     factors = rng.normal(size=(t, n, 2))

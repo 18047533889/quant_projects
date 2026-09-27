@@ -74,6 +74,33 @@ def test_bound_reader_verifies_actual_data_and_reports_rank_scope(declared_sourc
     assert not list((declared_source[3] / "cache").rglob("object.*"))
 
 
+
+def test_bound_reader_passes_object_opt_in_only_to_factor_read(declared_source, monkeypatch):
+    from data_access.cos import research
+    from factor_optimizer.research_manifest import read_bound_factor
+
+    original = research.read_declared_cos_object
+    calls = []
+
+    def tracked(store, dataset, **kwargs):
+        calls.append((dataset, kwargs.get("max_object_mib")))
+        return original(store, dataset, **kwargs)
+
+    monkeypatch.setattr(research, "read_declared_cos_object", tracked)
+    read_bound_factor(declared_source[0], "manifest", "factor", "f",
+                      allow_research=True, max_object_mib=128)
+    assert calls == [("manifest", None), ("factor", 128)]
+
+
+@pytest.mark.parametrize("value", [0, 129, True, 1.5])
+def test_bound_reader_rejects_unbounded_object_opt_in_before_manifest(value, declared_source):
+    from factor_optimizer.research_manifest import read_bound_factor
+
+    with pytest.raises(ValueError, match="max_object_mib"):
+        read_bound_factor(declared_source[0], "manifest", "factor", "f",
+                          allow_research=True, max_object_mib=value)
+    assert declared_source[2] == []
+
 @pytest.mark.parametrize("field,value", [
     ("uri", "cos://bucket/pool/other.parquet"),
     ("verified", False),

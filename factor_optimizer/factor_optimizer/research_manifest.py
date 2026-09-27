@@ -150,7 +150,8 @@ def _rank_scope(expression):
 
 
 def read_bound_factor(store, manifest_dataset, factor_dataset, factor_id, *,
-                      manifest_params=None, factor_params=None, allow_research=False):
+                      manifest_params=None, factor_params=None, allow_research=False,
+                      max_object_mib=64):
     """Read declared datasets through DataAccess; enforce URI, bytes and SHA256.
 
     Only known nonblocked research landing statuses are admitted. This is not
@@ -162,6 +163,8 @@ def read_bound_factor(store, manifest_dataset, factor_dataset, factor_id, *,
 
     if allow_research is not True:
         raise ValueError("explicit allow_research=True required")
+    if type(max_object_mib) is not int or not 1 <= max_object_mib <= 128:
+        raise ValueError("max_object_mib must be an integer in 1..128")
     if not isinstance(factor_id, str) or not factor_id:
         raise ValueError("factor_id is required")
     manifest = read_declared_cos_object(store, manifest_dataset,
@@ -191,7 +194,8 @@ def read_bound_factor(store, manifest_dataset, factor_dataset, factor_id, *,
     if not isinstance(record.get("uri"), str) or uri != record["uri"]:
         raise ValueError("declared factor URI does not match manifest")
     factor = read_declared_cos_object(store, factor_dataset,
-        params=factor_params, allow_research=True)
+        params=factor_params, allow_research=True,
+        max_object_mib=max_object_mib)
     if (factor.source_uri != record["uri"] or factor.content_sha256 != sha
             or factor.downloaded_bytes != size):
         raise ValueError("factor URI, content SHA256 or byte count differs from manifest")

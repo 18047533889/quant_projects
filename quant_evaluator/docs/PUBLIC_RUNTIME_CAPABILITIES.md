@@ -179,7 +179,7 @@ Spearman/Pearson 的秩与相关中间量每个期限独立生成，绝不跨不
 
 公开 `evaluate(...)`（省略 `backend` 或传入 `None`）和显式
 `evaluate(..., backend="auto")` 按整次请求选择 CPU 或 CUDA，并在返回的
-`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v14`。
+`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v15`。
 以下 701 日规则继续适用于短历史配置。
 它依据已注册 A 股日行情构造的 701 个交易日、5314 只股票、2 个因子输入，
 逐指标比较完整公开入口的 CPU/CUDA 结果。冷调用和交错顺序的热调用都更快、
@@ -316,6 +316,19 @@ GPU 峰值 9,332,757,504 字节；quantile 链 CPU 53.23–53.28 秒、CUDA
 `docs/benchmarks/real_cos_f13_rank_chain_20260927.json` 与
 `docs/benchmarks/real_cos_f13_quantile_chain_20260927.json`。
 
+F13 的单项 `factor_turnover_rate` 在 GPU 内部改为有界时间块计算，
+消除了逐交易日 Python→GPU 同步。真实 COS 全量 2586 日 × 5461 股 ×
+13 因子的六轮交错 CPU/CUDA/auto A/B，完整数值、制品、掩码、计数、
+MetricValue、来源和配置哈希对拍通过。CPU 热运行 21.34–21.63 秒，
+CUDA 9.37–9.46 秒，GPU pool 峰值 1,129,165,824 字节；基准前两次
+`auto` 因未认证而走 CPU。现在仅该精确形状、float64、默认参数、
+无特殊输入、NVIDIA L20 和至少 8 GiB 有效及实际空闲显存下，
+此单项自动走 CUDA。证据见
+`docs/benchmarks/real_cos_f13_factor_turnover_rate_20260927.json`；
+改后路由实测见
+`docs/benchmarks/real_cos_f13_factor_turnover_rate_auto_20260927.json`。
+该指标是分位成员变化率，不是 rank-weight `turnover`，两者不共享认证。
+
 同一绑定 COS manifest 的精确 2586 日 × 5461 股 × 2 因子面板上，
 `rank_ic_series` 单指标完成六轮交错 CPU/CUDA/auto 公开入口 A/B。
 每轮完整序列制品、有效掩码、计数、逐因子 MetricValue、来源与配置哈希
@@ -338,6 +351,19 @@ float64、默认参数、无特殊输入及 NVIDIA L20 下，对此完整集合�
 或其它组合不沿用此认证。证据见
 `docs/benchmarks/real_cos_f12_mixed_three_20260927.json`。
 
+同一绑定 COS manifest 的精确 2586 日 × 5461 股 × 24 因子面板上，
+完整 `quantile_returns_full`、`quantile_returns_daily`、`quantile_spread`、
+`quantile_monotonicity`、`daily_quantile_monotonicity_rate` 集合通过六轮交错
+CPU/CUDA/auto 公开入口 A/B。五项的完整制品、有效掩码、计数、来源、
+逐因子 MetricValue 及配置哈希全部对拍通过。CPU 热运行约 112–113 秒，
+CUDA 约 18.30–18.31 秒，约快 6.1 倍；CUDA GPU pool 峰值
+1,436,371,456 字节。原始证据见
+`docs/benchmarks/real_cos_f24_quantile_chain_20260927.json`。
+仅对此精确形状、float64、默认参数、无特殊输入、NVIDIA L20，且有效与
+实际空闲显存均至少 8 GiB 的完整集合自动选择 CUDA。单项、子集、
+混合请求、相邻形状及其他硬件不沿用此认证；改后自动路由实测见
+`docs/benchmarks/real_cos_f24_quantile_chain_auto_20260927.json`。
+
 其他规模和特殊输入使用 CPU，表示尚无足够的公开入口性能证据；
 不代表 CUDA 无法执行这些指标。
 
@@ -353,13 +379,45 @@ float64、默认参数、无特殊输入及 NVIDIA L20 下，对此完整集合�
 `cpu_fast` 或拼错的 CUDA 名称。`numba`、`polars` 目前仅在底层
 `compute_daily_ic()` 的后端参数中可用，不能据此推断公开入口已使用它们。
 
+调用者可以在同一公开函数中选择执行方式，并检查实际回执：
+
+```python
+from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
+from quant_evaluator.runtime.evaluator import evaluate
+
+metrics = ("rank_ic_series",)
+fastest_certified = evaluate(batch, labels, metrics=metrics)  # 等同 backend="auto"
+reference = evaluate(batch, labels, metrics=metrics, backend="cpu")
+forced_gpu = evaluate(
+    batch, labels, metrics=metrics, backend="cuda_strict",
+    gpu_policy=GPUExecutionPolicy(
+        device_ids=(0,), max_vram_fraction=0.75,
+        oom_retile=True, max_host_result_bytes=256 * 1024 * 1024,
+    ),
+)
+print(fastest_certified.metadata["backend_used"])
+print(fastest_certified.metadata["auto_backend_reason"])
+```
+
+`auto` 是经过特定硬件、形状、指标集合和默认参数 A/B 认证的确定性选择，
+不是对所有 164 项指标的实时穷举测速；未认证请求会回到 CPU。
+`cuda_strict` 用于主动验证未认证的 GPU 路径，设备、指标或预算不满足时
+直接报错，不静默重跑 CPU。`GPUExecutionPolicy` 的 `max_vram_fraction`
+限制会话显存预算，`oom_retile` 控制显存不足时是否缩小因子 tile，
+`max_host_result_bytes` 限制一次工作器物化结果的主机内存；增大预算
+不代表该形状获得 `auto` 性能认证。当前 `pinned_host_memory`、
+`async_transfer`、`double_buffer` 仅是请求字段，实际传输仍为同步、
+单缓冲；`bundle.metadata` 的 `effective_transfer`、`effective_pinned`
+和 `effective_buffers` 是生效状态。把这些能力列为
+`required_capabilities` 会关闭式报错，不会假装启用。
+
 默认调用的 `bundle.metadata["backend_requested"]` 为 `"default"`，显式
 `backend="auto"` 为 `"auto"`；显式 `backend="cpu"` 固定参考 CPU 路径。
 `backend_strategy` 区分 `"auto"` 和 `"explicit"`，
 `backend_used` 为 `"cpu"` 或 `"cuda"`，
 `auto_backend_policy` 为策略版本，
 `auto_backend_reason` 记录选路原因，
-`auto_backend_profile` 区分 701 日、COS 已测核心、有界外推区和精确 F8/F12 区，
+`auto_backend_profile` 区分 701 日、COS 已测核心、有界外推区和精确 F8/F12/F13/F24 区，
 `metric_backends` 给出原请求指标名到实际后端的映射。
 `execution_receipt` 保存这些路由字段、语义 `config_hash` 及独立的
 `receipt_hash`，便于区分默认、显式 CPU 与显式 CUDA 的执行记录。
