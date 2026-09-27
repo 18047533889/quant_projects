@@ -366,6 +366,53 @@ def test_f13_factor_turnover_rate_exact_single_route(monkeypatch):
         "cpu", "insufficient_cuda_memory")
 
 
+def test_f13_rank_ic_positive_ratio_exact_route_and_guards(monkeypatch):
+    budgets = []
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda policy, minimum: budgets.append(minimum) or None)
+    batch = SimpleNamespace(num_times=2586, num_assets=5461, num_factors=13,
+                            values=np.empty(0, dtype=np.float64))
+    labels = SimpleNamespace(values=np.empty(0, dtype=np.float64))
+    options = dict(metric_parameters={}, context=None, quantile_builder_parameters={},
+                   portfolio_returns=None, holding_returns=None, trade_eligibility=None,
+                   calendar_snapshot=None, exposure_panel=None,
+                   generalization_evidence=None, evaluator=None)
+    select = module._select_public_auto_backend
+    metric = ("rank_ic_positive_ratio",)
+    expected = ("cuda_strict",
+                "certified_single_metric_real_cos_f13_rank_ic_positive_ratio")
+    assert select(batch, labels, metric, **options) == expected
+    assert budgets == [14 * 1024 ** 3]
+    assert module._AUTO_REAL_COS_F13_RANK_POSITIVE_RATIO_PEAK_VRAM_BYTES == 9_332_757_504
+
+    for shape, reason in (((2585, 5461, 13), "shape_outside_certified_range"),
+                          ((2586, 5460, 13), "shape_outside_certified_range"),
+                          ((2586, 5461, 12), "metric_not_certified_for_profile"),
+                          ((2586, 5461, 14), "shape_outside_certified_range")):
+        batch.num_times, batch.num_assets, batch.num_factors = shape
+        assert select(batch, labels, metric, **options) == ("cpu", reason)
+    batch.num_times, batch.num_assets, batch.num_factors = 2586, 5461, 13
+    batch.values = np.empty(0, dtype=np.float32)
+    assert select(batch, labels, metric, **options) == (
+        "cpu", "dtype_outside_certified_range")
+    batch.values = np.empty(0, dtype=np.float64)
+    labels.values = np.empty(0, dtype=np.float32)
+    assert select(batch, labels, metric, **options) == (
+        "cpu", "dtype_outside_certified_range")
+    labels.values = np.empty(0, dtype=np.float64)
+    assert select(batch, labels, metric, **(options | {
+        "metric_parameters": {"rank_ic_positive_ratio": {"min_assets": 20}}
+    })) == ("cpu", "special_input_or_parameters")
+
+    for rejection in ("gpu_model_not_certified", "insufficient_cuda_memory"):
+        monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                            lambda *args, _rejection=rejection: _rejection)
+        assert select(batch, labels, metric, **options) == ("cpu", rejection)
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection", lambda *args: None)
+    assert select(batch, labels, ("rank_ic",), **options) == (
+        "cpu", "metric_not_certified_for_profile")
+
+
 def test_f24_rank_and_quantile_chains_exact_batches_only(monkeypatch):
     budgets = []
     monkeypatch.setattr(module, "_auto_batch_cuda_rejection",

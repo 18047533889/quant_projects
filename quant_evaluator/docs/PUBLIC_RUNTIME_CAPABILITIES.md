@@ -366,6 +366,16 @@ CUDA 9.37–9.46 秒，GPU pool 峰值 1,129,165,824 字节；基准前两次
 `docs/benchmarks/real_cos_f13_factor_turnover_rate_auto_20260927.json`。
 该指标是分位成员变化率，不是 rank-weight `turnover`，两者不共享认证。
 
+F13 的单项 `rank_ic_positive_ratio` 另完成六轮交错真实 COS
+CPU/CUDA/auto A/B，完整制品、掩码、计数、来源、逐因子 MetricValue
+及配置哈希对拍通过。CPU 热运行约 32.46–32.72 秒，CUDA
+11.74–11.80 秒，GPU pool 峰值 9,332,757,504 字节。
+原来两次 `auto` 均留在 CPU；精确路由更新后又完成六轮复测，
+两次 `auto` 均实际走 CUDA 且完整对拍通过。只在精确 F13 形状、
+float64、默认参数、无特殊输入、单 NVIDIA L20 及至少 14 GiB
+实际和有效空闲显存下自动选 CUDA。证据见
+`docs/benchmarks/real_cos_f13_positive_ratio_20260927.md`。
+
 同一绑定 COS manifest 的精确 2586 日 × 5461 股 × 2 因子面板上，
 `rank_ic_series` 单指标完成六轮交错 CPU/CUDA/auto 公开入口 A/B。
 每轮完整序列制品、有效掩码、计数、逐因子 MetricValue、来源与配置哈希
@@ -455,6 +465,14 @@ F24/F32 真实全市场复测见下文。
 13,838,164 KiB。此测量只覆盖数据装载，不单独证明评估阶段的
 内存安全、口径或性能；后续分阶段实测见下文。预检已经依据
 完整双调用的最大 RSS 校准，资源不足时仍会拒绝运行。
+
+加载器改为在原有 float64 因子数组内逐行压缩选中的日期与股票轴后，
+又对同一绑定 manifest 单独重测装载：仍为 2586 × 5461 × 32，
+耗时 140.295 秒，父进程 RSS 峰值 12,770,604 KiB；受共享服务器
+负载影响，这不是端到端加速结论。新旧裁剪在有界合成面板上逐位一致，
+详见 `docs/benchmarks/real_cos_f32_loader_inplace_20260927.md`。
+评估 worker 尚未在新版加载器下重新测峰值，因此 50 GiB 加 8 GiB
+余量的预检门槛暂不降低。
 
 随后在同一 F32 绑定面板上对完整 `rank_chain`（`rank_ic`、
 `rank_ic_series`、`ic_std`、`ic_ir`）做 CPU 与 `cuda_strict`

@@ -215,6 +215,79 @@ def test_evaluate_many_mixed_panel_metrics_share_cuda_and_match_cpu(monkeypatch)
                                        atol=1e-10, equal_nan=True)
 
 
+def test_evaluate_many_rank_ic_positive_ratio_reuses_cuda_uploads_with_parity(monkeypatch):
+    factors, labels = _inputs()
+    metrics = ("rank_ic_positive_ratio", "ic.rank.mean")
+    parameters = {
+        "rank_ic_positive_ratio": {"min_periods": 12},
+        "ic.rank.mean": {"min_periods": 8},
+    }
+    cpu = evaluate_many(
+        factors, labels, backend="cpu", metrics=metrics,
+        metric_parameters=parameters,
+    )
+    uploads = []
+    opens = []
+    original_stage = DeviceEvaluationSession.stage_factors
+    original_open = DeviceEvaluationSession._open
+
+    def stage(self, values, factor_ids, layout="T,F,N"):
+        uploads.append(tuple(factor_ids))
+        return original_stage(self, values, factor_ids, layout)
+
+    def opened(self):
+        opens.append(True)
+        return original_open(self)
+
+    monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", lambda *a, **k: 2)
+    monkeypatch.setattr(DeviceEvaluationSession, "stage_factors", stage)
+    monkeypatch.setattr(DeviceEvaluationSession, "_open", opened)
+    gpu = evaluate_many(
+        factors, labels, backend="cuda_strict", metrics=metrics,
+        metric_parameters=parameters,
+    )
+
+    assert len(opens) == 1
+    assert uploads == [("f0", "f1"), ("f2", "f3"), ("f4",)]
+    expected_h2d = factors.values.nbytes + len(labels) * 3 * labels[0].values.nbytes
+    for label in labels:
+        left, right = cpu[label.target_id], gpu[label.target_id]
+        assert right.config_hash == left.config_hash
+        assert right.metadata["metric_backends"] == {
+            "rank_ic_positive_ratio": "cuda", "ic.rank.mean": "cuda",
+        }
+        assert right.metadata["multi_label_factor_tile_reuse"] is True
+        assert right.metadata["shared_session_label_count"] == len(labels)
+        assert right.metadata["shared_session_factor_tiles_processed"] == 3
+        assert right.metadata["device_session_counter_scope"] == "shared_session_total"
+        assert right.metadata["h2d_bytes"] == expected_h2d
+        for metric in metrics:
+            expected, actual = left.artifacts[metric], right.artifacts[metric]
+            np.testing.assert_allclose(
+                actual.values, expected.values, rtol=0, atol=1e-12,
+                equal_nan=True,
+            )
+            np.testing.assert_array_equal(
+                actual.provenance["observation_counts"],
+                expected.provenance["observation_counts"],
+            )
+            for factor_id in factors.factor_ids:
+                cpu_value = left.get_metric(metric, factor_id)
+                gpu_value = right.get_metric(metric, factor_id)
+                assert gpu_value.metric_id == cpu_value.metric_id
+                assert gpu_value.valid == cpu_value.valid
+                assert gpu_value.observation_count == cpu_value.observation_count
+                if cpu_value.valid:
+                    assert gpu_value.value == pytest.approx(cpu_value.value, abs=1e-12)
+
+    # Distinct label streams must remain distinct despite sharing each tile.
+    assert not np.allclose(
+        gpu["h1"].artifacts["rank_ic_positive_ratio"].values,
+        gpu["h5"].artifacts["rank_ic_positive_ratio"].values,
+        rtol=0, atol=1e-12, equal_nan=True,
+    )
+
+
 @pytest.mark.parametrize("metric_id", ["quantile_spread", "ic.rank.mean"])
 def test_evaluate_many_auto_unverified_shape_keeps_cpu_without_device(monkeypatch, metric_id):
     factors, labels = _inputs(n=80)

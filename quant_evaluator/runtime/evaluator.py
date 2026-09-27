@@ -105,9 +105,11 @@ _AUTO_REAL_COS_F12_BATCH_NAMES = frozenset({"rank_chain", "quantile_chain"})
 _AUTO_REAL_COS_F13_PROFILE = "real_cos_f13_exact_20260927"
 _AUTO_REAL_COS_F13_SHAPE = (2586, 5461, 13)
 _AUTO_REAL_COS_F13_BATCH_NAMES = frozenset({"rank_chain", "quantile_chain"})
-_AUTO_REAL_COS_F13_SINGLE_METRICS = frozenset({"factor_turnover_rate"})
+_AUTO_REAL_COS_F13_SINGLE_METRICS = frozenset({"factor_turnover_rate", "rank_ic_positive_ratio"})
 _AUTO_REAL_COS_F13_RANK_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F13_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
+_AUTO_REAL_COS_F13_RANK_POSITIVE_RATIO_PEAK_VRAM_BYTES = 9_332_757_504
+_AUTO_REAL_COS_F13_RANK_POSITIVE_RATIO_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F24_PROFILE = "real_cos_f24_exact_20260927"
 _AUTO_REAL_COS_F24_SHAPE = (2586, 5461, 24)
 _AUTO_REAL_COS_F24_BATCH_NAMES = frozenset({"rank_chain", "quantile_chain"})
@@ -237,6 +239,7 @@ def _select_public_auto_backend(
     if len(canonical_metrics) == 1:
         if (canonical_metrics[0] not in _AUTO_CUDA_METRICS
                 and canonical_metrics[0] not in _AUTO_REAL_COS_F8_METRICS
+                and canonical_metrics[0] not in _AUTO_REAL_COS_F13_SINGLE_METRICS
                 and canonical_metrics[0] not in _AUTO_REAL_COS_F32_SINGLE_METRICS):
             return "cpu", "metric_not_certified"
     else:
@@ -398,6 +401,9 @@ def _select_public_auto_backend(
                   if canonical_metrics[0] == "quantile_spread"
                   else _AUTO_REAL_COS_F12_TURNOVER_MIN_EFFECTIVE_VRAM_BYTES)
         )
+    elif (profile == _AUTO_REAL_COS_F13_PROFILE
+          and canonical_metrics[0] == "rank_ic_positive_ratio"):
+        min_effective_vram = _AUTO_REAL_COS_F13_RANK_POSITIVE_RATIO_MIN_EFFECTIVE_VRAM_BYTES
     elif profile == _AUTO_REAL_COS_F8_PROFILE:
         min_effective_vram = (
             max(_AUTO_SINGLE_MIN_EFFECTIVE_VRAM_BYTES,
@@ -427,6 +433,8 @@ def _select_public_auto_backend(
     if profile == _AUTO_REAL_COS_F12_PROFILE:
         return "cuda_strict", "certified_single_metric_real_cos_f12"
     if profile == _AUTO_REAL_COS_F13_PROFILE:
+        if canonical_metrics[0] == "rank_ic_positive_ratio":
+            return "cuda_strict", "certified_single_metric_real_cos_f13_rank_ic_positive_ratio"
         return "cuda_strict", "certified_single_metric_real_cos_f13_turnover"
     if profile == _AUTO_REAL_COS_F8_PROFILE:
         return "cuda_strict", "certified_single_metric_real_cos_f8"

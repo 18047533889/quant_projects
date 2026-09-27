@@ -21,7 +21,7 @@ _PANEL_GPU_METRICS = frozenset({
     "quantile_spread", "quantile_monotonicity",
     "daily_quantile_monotonicity_series",
     "daily_quantile_monotonicity_rate", "turnover",
-    "factor_turnover_rate",
+    "factor_turnover_rate", "rank_ic_positive_ratio",
 })
 
 
