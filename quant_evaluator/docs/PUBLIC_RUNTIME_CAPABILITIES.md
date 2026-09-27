@@ -146,15 +146,35 @@ max_drawdown_by_factor = drawdown.artifacts["max_drawdown"].values
 省略 `ProbePortfolioArtifact` 会关闭式失败；运行层不会把 `LabelBundle` 的前向收益静默当作已构造的组合轨迹。
 
 
-## 多期限 IC 的 CUDA 因子 tile 复用
+## 多期限 CUDA 因子 tile 复用
 
 `evaluate_many` 和 `evaluate_horizons` 在每个期限的公开合约、样本掩码、
-sealed split 与后端选择均通过预校验后，对 CUDA IC 指标使用同一个
+sealed split 与后端选择均通过预校验后，对合格请求使用同一个
 `DeviceEvaluationSession`。执行器按因子 tile 上传一次，再逐个期限上传标签并计算；
 Spearman/Pearson 的秩与相关中间量每个期限独立生成，绝不跨不同 pairwise-finite
-掩码复用。当前复用范围是 `rank_ic`、`rank_ic_series`、`ic_ir`、
-`ic_std`、`ic_median` 及对应的 Pearson IC 家族；其他请求沿用原有路径。
+掩码复用。`evaluate_horizons` 保持 IC 家族；`evaluate_many` 还可复用
+自含的 quantile 链、`coverage`、`turnover` 和 `factor_turnover_rate`。
+每个期限仍必须独立通过原有 CUDA 准入；扩展共享上传不扩大 `auto` 的指标、形状或参数认证范围。
+需要组合/持有期收益或暴露面板等额外类型化输入的指标仍沿用原有路径。
 显式 CUDA 失败仍报错，OOM 只重切当前因子 tile。
+
+```python
+from quant_evaluator import evaluate_many
+
+metrics = ("quantile_returns_full", "quantile_returns_daily", "quantile_spread",
+           "quantile_monotonicity", "daily_quantile_monotonicity_rate")
+by_label = evaluate_many(batch, (h1_labels, h2_labels), metrics=metrics)
+# 省略 backend 等同 auto：仅在每个期限均获认证时选择共享 CUDA。
+forced = evaluate_many(batch, (h1_labels, h2_labels), metrics=metrics,
+                       backend="cuda_strict")
+custom = evaluate_many(batch, (h1_labels, h2_labels),
+                       metrics=("quantile_returns_daily",),
+                       metric_parameters={"quantile_returns_daily": {"n_quantiles": 1}},
+                       backend="cuda_strict")
+```
+
+`metric_parameters` 逐期限原样转交公开 `evaluate`；自定义参数不继承默认
+`auto` 的 CUDA 性能认证，需显式选择并自行核验设备预算。
 
 每个期限返回的 `h2d_bytes`、`d2h_bytes` 等设备会话计数在复用路径中属于
 **所有期限共享的会话总量**，由
@@ -175,11 +195,26 @@ Spearman/Pearson 的秩与相关中间量每个期限独立生成，绝不跨不
 小型源绑定、逐字段布尔对拍与性能证据见
 `quant_evaluator/docs/benchmarks/real_cos_multi_horizon_f2_20260927.json`。
 
+同一 COS manifest 的 F24 实测进一步覆盖 2586 日 × 5461 股 × 24 因子、
+两个 AdjVwap 期限与 `quantile_returns_full`、`quantile_returns_daily`、
+`quantile_spread`、`quantile_monotonicity`、
+`daily_quantile_monotonicity_rate` 五项组合。顺序 CUDA / 共享 CUDA 按
+ABBA 交错执行，两个共享轮次的制品逐字段、配置哈希与语义溯源均与首个顺序
+轮次一致；随后 `auto` 对两个期限都选择 CUDA，共享上传一次且同样对拍通过。
+顺序与共享路径的中位耗时为 35.753644 秒和 33.983173 秒，约快 5.2%；
+因子上传从 2 次、5,422,904,064 字节降为 1 次、2,711,452,032 字节，
+H2D 从 5,648,858,400 降为 2,937,406,368 字节。单轮 GPU 峰值约
+3.25 GB，进程 RSS 高水位约 25.0 GiB；数据载入另耗时 96.38 秒，不含于
+上述计算耗时。证据见
+`quant_evaluator/docs/benchmarks/real_cos_multi_horizon_f24_quantile_chain_20260927.json`；
+脚本可用 `--profile f24-quantile-chain` 复跑。这个结果只支持该 F24 双期限、
+默认参数、五项组合；不能推断 F32/F64、任意参数或全部指标都以 GPU 最快。
+
 ## 默认后端与 `backend="auto"` 的保守选择范围
 
 公开 `evaluate(...)`（省略 `backend` 或传入 `None`）和显式
 `evaluate(..., backend="auto")` 按整次请求选择 CPU 或 CUDA，并在返回的
-`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v15`。
+`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v16`。
 以下 701 日规则继续适用于短历史配置。
 它依据已注册 A 股日行情构造的 701 个交易日、5314 只股票、2 个因子输入，
 逐指标比较完整公开入口的 CPU/CUDA 结果。冷调用和交错顺序的热调用都更快、

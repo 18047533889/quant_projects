@@ -25,7 +25,11 @@ from quant_evaluator.scripts.load_real_cos_factor_batch import load_real_batch
 
 ROOT = Path("/home/sunhaiwei/quant_projects")
 DEFAULT_OUTPUT = ROOT / "quant_evaluator/docs/benchmarks/real_cos_multi_horizon_f2_20260927.json"
-METRICS = ("rank_ic_series",)
+F2_METRICS = ("rank_ic_series",)
+F24_QUANTILE_CHAIN = (
+    "quantile_returns_full", "quantile_returns_daily", "quantile_spread",
+    "quantile_monotonicity", "daily_quantile_monotonicity_rate",
+)
 ORDER = ("sequential", "shared", "shared", "sequential")
 
 
@@ -98,14 +102,20 @@ def _compare(reference, candidate, labels):
     return report
 
 
-def main(output: Path) -> None:
+def main(profile: str, output: Path) -> None:
+    factors = 2 if profile == "f2" else 24
+    metrics = F2_METRICS if profile == "f2" else F24_QUANTILE_CHAIN
+    max_object_mib = 64 if profile == "f2" else 128
+    max_total_mib = 128 if profile == "f2" else 2048
+    expected_shape = (2586, 5461, factors)
     started = time.perf_counter()
     batch, first, source = load_real_batch(
-        factors=2, days=0, assets=5500, max_object_mib=64,
-        max_total_mib=128, manifest_sha256=MANIFEST_SHA256,
+        factors=factors, days=0, assets=5500,
+        max_object_mib=max_object_mib, max_total_mib=max_total_mib,
+        manifest_sha256=MANIFEST_SHA256,
     )
     shape = (batch.num_times, batch.num_assets, batch.num_factors)
-    if shape != (2586, 5461, 2):
+    if shape != expected_shape:
         raise RuntimeError(f"unexpected bound shape: {shape}")
     load_seconds = time.perf_counter() - started
     second, adjacent_days, valid_cells = _second_horizon(first)
@@ -115,7 +125,10 @@ def main(output: Path) -> None:
     original_stage = DeviceEvaluationSession.stage_factors
 
     def stage(session, values, factor_ids, layout="T,F,N"):
-        uploads.append(len(factor_ids))
+        uploads.append({
+            "factor_count": len(factor_ids),
+            "bytes": int(np.asarray(values).nbytes),
+        })
         return original_stage(session, values, factor_ids, layout)
 
     DeviceEvaluationSession.stage_factors = stage
@@ -127,11 +140,11 @@ def main(output: Path) -> None:
         started = time.perf_counter()
         if route == "sequential":
             result = {
-                lb.target_id: evaluate(batch, lb, metrics=METRICS, backend="cuda_strict")
+                lb.target_id: evaluate(batch, lb, metrics=metrics, backend="cuda_strict")
                 for lb in labels
             }
         else:
-            result = evaluate_many(batch, labels, metrics=METRICS, backend="cuda_strict")
+            result = evaluate_many(batch, labels, metrics=metrics, backend="cuda_strict")
         seconds = time.perf_counter() - started
         parity = None if reference is None else _compare(reference, result, labels)
         if reference is None:
@@ -141,7 +154,10 @@ def main(output: Path) -> None:
             "route": route,
             "seconds": round(seconds, 6),
             "factor_uploads": len(uploads),
-            "factor_upload_widths": list(uploads),
+            "factor_upload_widths": [item["factor_count"] for item in uploads],
+            "factor_upload_bytes": sum(item["bytes"] for item in uploads),
+            "factor_uploads_detail": uploads.copy(),
+            "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
             "h2d_bytes": (
                 sum(item["h2d_bytes"] for item in metadata)
                 if route == "sequential" else metadata[0]["h2d_bytes"]),
@@ -161,12 +177,53 @@ def main(output: Path) -> None:
         if route == "shared":
             del result
 
+    if profile == "f24-quantile-chain":
+        uploads.clear()
+        gc.collect()
+        started = time.perf_counter()
+        auto_result = evaluate_many(batch, labels, metrics=metrics, backend="auto")
+        auto_seconds = time.perf_counter() - started
+        auto_parity = _compare(reference, auto_result, labels)
+        auto_metadata = {
+            lb.target_id: auto_result[lb.target_id].metadata for lb in labels
+        }
+        auto_run = {
+            "route": "auto_shared",
+            "seconds": round(auto_seconds, 6),
+            "factor_uploads": len(uploads),
+            "factor_upload_widths": [item["factor_count"] for item in uploads],
+            "factor_upload_bytes": sum(item["bytes"] for item in uploads),
+            "factor_uploads_detail": uploads.copy(),
+            "h2d_bytes": auto_metadata[labels[0].target_id]["h2d_bytes"],
+            "d2h_bytes": auto_metadata[labels[0].target_id]["d2h_bytes"],
+            "peak_vram_bytes": max(item["peak_vram"] for item in auto_metadata.values()),
+            "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+            "backend_by_label": {
+                lb.target_id: {
+                    "backend_used": auto_metadata[lb.target_id].get("backend_used"),
+                    "auto_backend_reason": auto_metadata[lb.target_id].get("auto_backend_reason"),
+                }
+                for lb in labels
+            },
+            "parity_with_first_sequential": auto_parity,
+        }
+        if not all(check["pass"] for check in auto_parity.values()):
+            raise AssertionError(f"full artifact parity failed in auto_shared: {auto_parity}")
+        runs.append(auto_run)
+
+    DeviceEvaluationSession.stage_factors = original_stage
     sequential = statistics.median(
         run["seconds"] for run in runs if run["route"] == "sequential")
     shared = statistics.median(
         run["seconds"] for run in runs if run["route"] == "shared")
     summary = {
+        "profile": profile,
+        "metrics": metrics,
         "manifest_sha256": MANIFEST_SHA256,
+        "manifest_object_limits": {
+            "max_object_mib": max_object_mib,
+            "max_total_mib": max_total_mib,
+        },
         "source_factors": [
             {key: item[key] for key in ("factor_id", "uri", "sha256", "bytes", "etag",
                                         "manifest_sha256", "source_status")}
@@ -179,7 +236,8 @@ def main(output: Path) -> None:
         "horizon2_adjacent_days": adjacent_days,
         "horizon2_valid_cells": valid_cells,
         "load_seconds": round(load_seconds, 6),
-        "run_order": ORDER,
+        "run_order": (ORDER + ("auto_shared",) if profile == "f24-quantile-chain"
+                      else ORDER),
         "runs": runs,
         "median_sequential_seconds": sequential,
         "median_shared_seconds": shared,
@@ -203,6 +261,11 @@ def main(output: Path) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--profile", choices=("f2", "f24-quantile-chain"), default="f2")
+    parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
-    main(args.output)
+    output = args.output
+    if output is None:
+        output = (DEFAULT_OUTPUT if args.profile == "f2" else
+                  ROOT / "quant_evaluator/docs/benchmarks/real_cos_multi_horizon_f24_quantile_chain_20260927.json")
+    main(args.profile, output)

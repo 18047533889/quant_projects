@@ -13,9 +13,14 @@ from quant_evaluator.runtime.evaluator import evaluate
 from quant_evaluator.contracts.label_bundle import LabelBundle
 
 
-_IC_METRICS = frozenset({
+_PANEL_GPU_METRICS = frozenset({
     "rank_ic", "ic_ir", "ic_std", "ic_median", "rank_ic_series",
     "pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir",
+    "coverage", "quantile_returns_full", "quantile_returns_daily",
+    "quantile_spread", "quantile_monotonicity",
+    "daily_quantile_monotonicity_series",
+    "daily_quantile_monotonicity_rate", "turnover",
+    "factor_turnover_rate",
 })
 
 
@@ -30,7 +35,7 @@ def _evaluate_ic_labels_shared_cuda(
     path. GPUExecutor.run() keeps pairwise rank caches local to each label.
     """
     selected_metrics = tuple(metrics)
-    if not labels or not set(selected_metrics) <= _IC_METRICS:
+    if not labels or not set(selected_metrics) <= _PANEL_GPU_METRICS:
         return None
     for label in labels:
         selected = evaluate(
@@ -66,6 +71,7 @@ def evaluate_many(
     backend=None,
     gpu_policy=None,
     split_ref=None,
+    metric_parameters=None,
 ) -> Dict[str, Any]:
     """Evaluate factor_batch against each LabelBundle.
 
@@ -75,17 +81,19 @@ def evaluate_many(
         metrics: metric ids requested for every horizon.
         context / backend / gpu_policy: forwarded to ``evaluate``.
         split_ref: optional sealed split ref.
+        metric_parameters: per-metric options forwarded to each evaluation.
 
     Returns:
         dict {label.target_id: bundle} where bundle is the result of
         ``evaluate(..., backend=backend)`` for that label.
     """
-    selected_metrics = metrics or ("rank_ic", "ic_ir")
+    selected_metrics = tuple(metrics or ("rank_ic", "ic_ir"))
     label_list = tuple(labels)
     if context is None:
         shared = _evaluate_ic_labels_shared_cuda(
             factor_batch, label_list, metrics=selected_metrics, backend=backend,
             gpu_policy=gpu_policy, split_ref=split_ref,
+            metric_parameters=metric_parameters,
         )
         if shared is not None:
             return {label.target_id: result for label, result in zip(label_list, shared)}
@@ -95,9 +103,10 @@ def evaluate_many(
             factor_batch,
             lb,
             context=context,
-            metrics=metrics or ("rank_ic", "ic_ir"),
+            metrics=selected_metrics,
             backend=backend,
             gpu_policy=gpu_policy,
             split_ref=split_ref,
+            metric_parameters=metric_parameters,
         )
     return out

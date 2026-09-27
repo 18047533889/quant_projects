@@ -12,9 +12,9 @@ from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.runtime.device_session import DeviceEvaluationSession
 
 
-def _inputs():
+def _inputs(n=40):
     rng = np.random.default_rng(20260927)
-    t, n, f = 24, 40, 5
+    t, f = 24, 5
     x = rng.integers(0, 12, size=(t, n, f)).astype(float)
     x[4, 3, 1] = np.nan
     times = np.arange(t)
@@ -82,6 +82,102 @@ def test_evaluate_many_cuda_reuses_tiles_and_isolates_pairwise_ranks(monkeypatch
             rtol=0, atol=1e-12, equal_nan=True,
         )
         assert gpu[lb.target_id].metadata["multi_label_factor_tile_reuse"] is True
+
+
+def test_evaluate_many_quantile_chain_reuses_uploads_and_matches_cpu(monkeypatch):
+    factors, labels = _inputs(n=80)
+    metrics = ("quantile_returns_full", "quantile_returns_daily",
+               "quantile_spread", "quantile_monotonicity",
+               "daily_quantile_monotonicity_rate")
+    cpu = evaluate_many(factors, labels, backend="cpu", metrics=metrics)
+    uploads = []
+    opens = []
+    original_stage = DeviceEvaluationSession.stage_factors
+    original_open = DeviceEvaluationSession._open
+
+    def stage(self, values, factor_ids, layout="T,F,N"):
+        uploads.append(tuple(factor_ids))
+        return original_stage(self, values, factor_ids, layout)
+
+    def opened(self):
+        opens.append(True)
+        return original_open(self)
+
+    monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", lambda *a, **k: 2)
+    monkeypatch.setattr(DeviceEvaluationSession, "stage_factors", stage)
+    monkeypatch.setattr(DeviceEvaluationSession, "_open", opened)
+    gpu = evaluate_many(factors, labels, backend="cuda_strict", metrics=metrics)
+    assert len(opens) == 1
+    assert uploads == [("f0", "f1"), ("f2", "f3"), ("f4",)]
+    assert any(np.isfinite(cpu["h1"].artifacts["quantile_returns_daily"].values.ravel()))
+    for label in labels:
+        left, right = cpu[label.target_id], gpu[label.target_id]
+        assert right.config_hash == left.config_hash
+        assert right.metadata["multi_label_factor_tile_reuse"] is True
+        assert right.metadata["shared_session_factor_tiles_processed"] == 3
+        for metric in metrics:
+            a, b = left.artifacts[metric], right.artifacts[metric]
+            np.testing.assert_allclose(b.values, a.values, rtol=1e-8,
+                                       atol=1e-10, equal_nan=True)
+            for field in ("counts", "valid_mask"):
+                expected, actual = getattr(a, field, None), getattr(b, field, None)
+                if expected is not None and actual is not None:
+                    np.testing.assert_array_equal(actual, expected)
+
+
+def test_evaluate_many_forwards_quantile_parameters_to_shared_gpu():
+    factors, labels = _inputs()
+    options = {"quantile_returns_daily": {"n_quantiles": 1}}
+    cpu = evaluate_many(
+        factors, labels, backend="cpu", metrics=("quantile_returns_daily",),
+        metric_parameters=options)
+    gpu = evaluate_many(
+        factors, labels, backend="cuda_strict", metrics=("quantile_returns_daily",),
+        metric_parameters=options)
+    for label in labels:
+        left = cpu[label.target_id].artifacts["quantile_returns_daily"]
+        right = gpu[label.target_id].artifacts["quantile_returns_daily"]
+        assert left.values.shape == (24, 1, 5)
+        np.testing.assert_allclose(right.values, left.values, equal_nan=True)
+        np.testing.assert_array_equal(right.counts, left.counts)
+        assert gpu[label.target_id].metadata["multi_label_factor_tile_reuse"] is True
+
+
+def test_evaluate_many_mixed_panel_metrics_share_cuda_and_match_cpu(monkeypatch):
+    factors, labels = _inputs(n=80)
+    metrics = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+    cpu = evaluate_many(factors, labels, backend="cpu", metrics=metrics)
+    uploads = []
+    original_stage = DeviceEvaluationSession.stage_factors
+
+    def stage(self, values, factor_ids, layout="T,F,N"):
+        uploads.append(tuple(factor_ids))
+        return original_stage(self, values, factor_ids, layout)
+
+    monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", lambda *a, **k: 2)
+    monkeypatch.setattr(DeviceEvaluationSession, "stage_factors", stage)
+    gpu = evaluate_many(factors, labels, backend="cuda_strict", metrics=metrics)
+    assert uploads == [("f0", "f1"), ("f2", "f3"), ("f4",)]
+    for label in labels:
+        left, right = cpu[label.target_id], gpu[label.target_id]
+        assert right.config_hash == left.config_hash
+        assert right.metadata["multi_label_factor_tile_reuse"] is True
+        for metric in metrics:
+            a, b = left.artifacts[metric], right.artifacts[metric]
+            np.testing.assert_allclose(b.values, a.values, rtol=1e-8,
+                                       atol=1e-10, equal_nan=True)
+
+
+def test_evaluate_many_auto_unverified_shape_keeps_cpu_without_device(monkeypatch):
+    factors, labels = _inputs(n=80)
+    monkeypatch.setattr(
+        DeviceEvaluationSession, "_open",
+        lambda self: (_ for _ in ()).throw(AssertionError("unexpected GPU session")))
+    results = evaluate_many(
+        factors, labels, backend="auto", metrics=("quantile_spread",))
+    assert set(results) == {"h1", "h5"}
+    assert all(result.metadata["backend_used"] == "cpu"
+               for result in results.values())
 
 
 @pytest.mark.parametrize("policy", ["common", "per_horizon"])
