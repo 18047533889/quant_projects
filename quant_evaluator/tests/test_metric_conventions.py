@@ -15,9 +15,15 @@ def test_cagr_and_calmar_share_one_numerator():
     assert compute_calmar_ratio(r) == pytest.approx(expected / compute_maximum_drawdown(r)[0])
 
 
-@pytest.mark.parametrize('r', [[.1,-1.2,-2.,10.], [-1.,5.,3.], [-1.01,-1.01,.3]])
+@pytest.mark.parametrize('r', [[-1.,5.,3.], [.1,-1.,10.]])
 def test_annual_return_cannot_recover_after_bankruptcy(r):
     assert compute_annualized_return(np.array(r)) == -1.
+
+
+@pytest.mark.parametrize('r', [[.1,-1.2,-2.,10.], [-1.01,-1.01,.3], [-1.2]])
+def test_annual_return_rejects_negative_capital(r):
+    with pytest.raises(ValueError, match="negative-capital"):
+        compute_annualized_return(np.array(r))
 
 
 def test_batch_mask_broadcast_matches_individual_factors():

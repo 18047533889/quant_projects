@@ -57,7 +57,7 @@ def _chunk_rows(n: int, dtype_bytes: int) -> int:
     return max(int(_MAX_CHUNK_BYTES // max(per_row, 1)), 1)
 
 
-def _rank_chunk(flat, nan_mask, cp):
+def _rank_chunk(flat, nan_mask, cp, *, return_distinct=False):
     """Average-tie rank for one chunk of (R, N) float32/float64 values.
 
     Returns (R, N) float64 ranks; NaN positions stay NaN.  Uses a segmented
@@ -76,6 +76,8 @@ def _rank_chunk(flat, nan_mask, cp):
     starts[:, 0] = True
     starts[:, 1:] = sv[:, 1:] != sv[:, :-1]
     gid = cp.cumsum(starts, axis=1, dtype=cp.int32) - 1
+    distinct = (cp.sum(starts & fin_sorted, axis=1, dtype=cp.int32)
+                if return_distinct else None)
 
     # 1-based positions in sorted order (pandas default rank before tie-average)
     pos1 = cp.arange(1, n + 1, dtype=cp.float64)[None, :]  # (1, N) float64
@@ -96,7 +98,8 @@ def _rank_chunk(flat, nan_mask, cp):
     # scatter back to original (unsorted) positions
     ranks = cp.empty_like(mean_rank_flat)
     ranks[cp.arange(R)[:, None], order] = mean_rank_flat
-    return cp.where(nan_mask, cp.nan, ranks)
+    ranks = cp.where(nan_mask, cp.nan, ranks)
+    return (ranks, distinct) if return_distinct else ranks
 
 
 def batched_rank(
@@ -104,6 +107,8 @@ def batched_rank(
     axis_n: int = -1,
     method: str = "average",
     pct: bool = False,
+    *,
+    return_distinct: bool = False,
 ):
     """Batched average-tie rank along the last axis (NaN excluded).
 
@@ -112,12 +117,18 @@ def batched_rank(
         method: "average" — ties get the mean of their 1-based positions among
             finite members (pandas ``rank(method='average')`` parity).
         pct: if True, ranks normalized by the count of valid (non-NaN) per row.
+        return_distinct: if True, also return distinct finite counts per row
+            from the same sort used to produce ranks.
 
     Returns:
-        ranks with same shape as values; NaN positions stay NaN.
+        ranks with same shape as values; NaN positions stay NaN. If
+        ``return_distinct`` is true, returns ``(ranks, counts)`` where counts
+        has the moved input shape with the ranked axis removed.
     """
     if method != "average":
         raise ValueError("batched_rank supports only method='average'")
+    if not isinstance(return_distinct, (bool, np.bool_)):
+        raise TypeError("return_distinct must be a boolean")
     cp = _import_cp()
     x = cp.asarray(values)
     if (isinstance(axis_n, (bool, np.bool_)) or not isinstance(axis_n, (int, np.integer))
@@ -128,7 +139,10 @@ def batched_rank(
     shape = x.shape
     n = shape[-1]
     if x.size == 0:
-        return cp.moveaxis(cp.empty(shape, dtype=cp.float64), -1, original_axis)
+        ranks = cp.moveaxis(cp.empty(shape, dtype=cp.float64), -1, original_axis)
+        if return_distinct:
+            return ranks, cp.zeros(shape[:-1], dtype=cp.int32)
+        return ranks
     flat = x.reshape(-1, n)
     R = flat.shape[0]
 
@@ -137,18 +151,33 @@ def batched_rank(
     chunk = _chunk_rows(n, dtype_bytes)
 
     if R <= chunk:
-        ranks = _rank_chunk(flat, nan_mask, cp)
+        result = _rank_chunk(flat, nan_mask, cp, return_distinct=return_distinct)
+        if return_distinct:
+            ranks, distinct = result
+        else:
+            ranks = result
     else:
         ranks = cp.empty(flat.shape, dtype=cp.float64)
+        distinct = cp.empty((R,), dtype=cp.int32) if return_distinct else None
         for s in range(0, R, chunk):
             e = min(s + chunk, R)
-            ranks[s:e] = _rank_chunk(flat[s:e], nan_mask[s:e], cp)
+            result = _rank_chunk(
+                flat[s:e], nan_mask[s:e], cp,
+                return_distinct=return_distinct,
+            )
+            if return_distinct:
+                ranks[s:e], distinct[s:e] = result
+            else:
+                ranks[s:e] = result
 
     if pct:
         vc = cp.sum(~nan_mask, axis=1, keepdims=True)
         ranks = ranks / cp.maximum(vc, 1.0)
 
-    return cp.moveaxis(ranks.reshape(shape), -1, original_axis)
+    ranks = cp.moveaxis(ranks.reshape(shape), -1, original_axis)
+    if return_distinct:
+        return ranks, distinct.reshape(shape[:-1])
+    return ranks
 
 
 def batched_distinct_level_count(values):

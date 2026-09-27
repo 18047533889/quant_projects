@@ -544,7 +544,7 @@ Calmar=\frac{(\prod_{t=1}^{T}(1+r_t))^{P/T}-1}{MDD}
 | `annualization` | `'cagr'` |
 | `missing_return_policy` | `'unknown'` |
 
-实现核对：[函数定义](../metrics/portfolio_stats.py#L812)；`quant_evaluator.metrics.portfolio_stats.compute_calmar_ratio`。
+实现核对：[函数定义](../metrics/portfolio_stats.py#L815)；`quant_evaluator.metrics.portfolio_stats.compute_calmar_ratio`。
 
 <a id="metric-change_point_score"></a>
 ## change_point_score — Change-Point Score
@@ -1436,7 +1436,7 @@ Decay_{h,f}=\mathrm{mean}_{t:\,IC_{t,f}^{(h)}\ finite}IC_{t,f}^{(h)}
 |---|---|
 | `horizons` | `None` |
 
-实现核对：[函数定义](../metrics/ic_summary.py#L1016)；`quant_evaluator.metrics.ic_summary.compute_ic_decay_from_mean_ics`。
+实现核对：[函数定义](../metrics/ic_summary.py#L1021)；`quant_evaluator.metrics.ic_summary.compute_ic_decay_from_mean_ics`。
 
 <a id="metric-ic_ir"></a>
 ## ic_ir — IC Information Ratio
@@ -2145,7 +2145,7 @@ R^{LS}_{tf}=\sum_i w_{tif}y_{ti},\qquad w_{tif}=\frac{\mathbf1[i\in L_{tf}]-\mat
 | `missing_return_policy` | `'zero_fill'` |
 | `tie_policy` | `'max'` |
 
-实现核对：[函数定义](../metrics/portfolio_stats.py#L388)；`quant_evaluator.metrics.portfolio_stats.compute_long_short_returns`。
+实现核对：[函数定义](../metrics/portfolio_stats.py#L391)；`quant_evaluator.metrics.portfolio_stats.compute_long_short_returns`。
 
 <a id="metric-max_absolute_style_exposure"></a>
 ## max_absolute_style_exposure — Max Absolute Style Exposure
@@ -2212,7 +2212,7 @@ D_{max}=-\min_t d_t,\qquad d_t=\frac{W_t}{\max_{0\le u\le t}W_u}-1,\quad W_0=1
 |---|---|
 | `missing_return_policy` | `'unknown'` |
 
-实现核对：[函数定义](../metrics/portfolio_stats.py#L636)；`quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown`。
+实现核对：[函数定义](../metrics/portfolio_stats.py#L639)；`quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown`。
 
 <a id="metric-max_underwater_duration"></a>
 ## max_underwater_duration — Max Underwater Duration
@@ -4128,7 +4128,7 @@ x_t=r_t-r_f/A,\qquad M=\sqrt A\,{\bar x\over s_x}
 | `periods_per_year` | `252` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/portfolio_stats.py#L593)；`quant_evaluator.metrics.portfolio_stats.compute_sharpe_ratio`。
+实现核对：[函数定义](../metrics/portfolio_stats.py#L596)；`quant_evaluator.metrics.portfolio_stats.compute_sharpe_ratio`。
 
 <a id="metric-sidak_correction"></a>
 ## sidak_correction — Sidak Correction
@@ -4255,7 +4255,7 @@ x_t=r_t-h,\quad d=\sqrt{{\sum_{x_t\lt 0}x_t^2\over D}},\quad M={\bar x\over d}\t
 | `mar` | `None` |
 | `annualization` | `'sqrt_frequency'` |
 
-实现核对：[函数定义](../metrics/portfolio_stats.py#L940)；`quant_evaluator.metrics.portfolio_stats.compute_sortino_ratio`。
+实现核对：[函数定义](../metrics/portfolio_stats.py#L943)；`quant_evaluator.metrics.portfolio_stats.compute_sortino_ratio`。
 
 <a id="metric-spearman_ic"></a>
 ## spearman_ic — spearman_ic
@@ -5121,7 +5121,7 @@ WinRate=\frac{\sum_{t\in V}\mathbf1(r_t\gt 0)}{|V|}
 $`V`$ 只含有限收益；等于0不算胜。至少一个有限值即可由低层函数计算，全无有效收益NaN。
 
 
-实现核对：[函数定义](../metrics/portfolio_stats.py#L1074)；`quant_evaluator.metrics.portfolio_stats.compute_win_rate`。
+实现核对：[函数定义](../metrics/portfolio_stats.py#L1077)；`quant_evaluator.metrics.portfolio_stats.compute_win_rate`。
 
 <a id="metric-worst_12m"></a>
 ## worst_12m — Worst Rolling 252 Periods (legacy ID)
@@ -5575,25 +5575,25 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.ic._spearman_rank_correlation](../metrics/ic.py#L186)
 - [quant_evaluator.metrics.ic.compute_daily_ic](../metrics/ic.py#L218)
 - [quant_evaluator.metrics.ic.compute_mean_ic](../metrics/ic.py#L611)
-- [quant_evaluator.metrics.ic_summary._check_min_periods](../metrics/ic_summary.py#L783)
-- [quant_evaluator.metrics.ic_summary._coerce_real_float_array](../metrics/ic_summary.py#L766)
-- [quant_evaluator.metrics.ic_summary._rolling_mean_nan](../metrics/ic_summary.py#L259)
-- [quant_evaluator.metrics.ic_summary.compute_ic_stability](../metrics/ic_summary.py#L150)
-- [quant_evaluator.metrics.ic_summary.compute_ic_stability_scalar](../metrics/ic_summary.py#L845)
-- [quant_evaluator.metrics.ic_summary.compute_ic_summary_stats](../metrics/ic_summary.py#L791)
+- [quant_evaluator.metrics.ic_summary._check_min_periods](../metrics/ic_summary.py#L788)
+- [quant_evaluator.metrics.ic_summary._coerce_real_float_array](../metrics/ic_summary.py#L771)
+- [quant_evaluator.metrics.ic_summary._rolling_mean_nan](../metrics/ic_summary.py#L264)
+- [quant_evaluator.metrics.ic_summary.compute_ic_stability](../metrics/ic_summary.py#L155)
+- [quant_evaluator.metrics.ic_summary.compute_ic_stability_scalar](../metrics/ic_summary.py#L850)
+- [quant_evaluator.metrics.ic_summary.compute_ic_summary_stats](../metrics/ic_summary.py#L796)
 - [quant_evaluator.metrics.ic_summary.compute_ic_tstat](../metrics/ic_summary.py#L64)
 - [quant_evaluator.metrics.ic_summary.compute_icir](../metrics/ic_summary.py#L20)
-- [quant_evaluator.metrics.ic_summary.compute_quantile_rank_stability](../metrics/ic_summary.py#L876)
-- [quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats](../metrics/ic_summary.py#L294)
+- [quant_evaluator.metrics.ic_summary.compute_quantile_rank_stability](../metrics/ic_summary.py#L881)
+- [quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats](../metrics/ic_summary.py#L299)
 - [quant_evaluator.metrics.label_panel.normalize_label_panel](../metrics/label_panel.py#L11)
 - [quant_evaluator.metrics.long_only._matrix](../metrics/long_only.py#L8)
 - [quant_evaluator.metrics.multiple_testing._validate_alpha](../metrics/multiple_testing.py#L59)
 - [quant_evaluator.metrics.multiple_testing._validate_p_values](../metrics/multiple_testing.py#L27)
-- [quant_evaluator.metrics.portfolio_stats._batched_linear_quantile_cutoffs](../metrics/portfolio_stats.py#L351)
-- [quant_evaluator.metrics.portfolio_stats._lerp_linear](../metrics/portfolio_stats.py#L340)
-- [quant_evaluator.metrics.portfolio_stats._rolling_sharpe_per_window](../metrics/portfolio_stats.py#L1104)
-- [quant_evaluator.metrics.portfolio_stats._validate_missing_return_policy](../metrics/portfolio_stats.py#L188)
-- [quant_evaluator.metrics.portfolio_stats.equal_gross_weights](../metrics/portfolio_stats.py#L123)
+- [quant_evaluator.metrics.portfolio_stats._batched_linear_quantile_cutoffs](../metrics/portfolio_stats.py#L354)
+- [quant_evaluator.metrics.portfolio_stats._lerp_linear](../metrics/portfolio_stats.py#L343)
+- [quant_evaluator.metrics.portfolio_stats._rolling_sharpe_per_window](../metrics/portfolio_stats.py#L1107)
+- [quant_evaluator.metrics.portfolio_stats._validate_missing_return_policy](../metrics/portfolio_stats.py#L191)
+- [quant_evaluator.metrics.portfolio_stats.equal_gross_weights](../metrics/portfolio_stats.py#L126)
 - [quant_evaluator.metrics.predictive._as_series](../metrics/predictive.py#L43)
 - [quant_evaluator.metrics.predictive._autocorr_lag](../metrics/predictive.py#L132)
 - [quant_evaluator.metrics.predictive._mean_of_period_means](../metrics/predictive.py#L91)
@@ -5732,7 +5732,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.ic_summary.compute_ic_stability` | `00b55885e134aaa673f623f4856add8b91e7db3ac12f413f22e0b958c4bd179e` |
 | `quant_evaluator.metrics.ic_summary.compute_ic_stability_scalar` | `dff8001b75d0bcb9cf1ed8916b3b04057ff0db69e7259be4d9d1777b33231871` |
 | `quant_evaluator.metrics.ic_summary.compute_ic_summary_stats` | `fb567fbda1d296482d1244675d8f949d8828783e2f9d060f6ee1d77fc55a6ee3` |
-| `quant_evaluator.metrics.ic_summary.compute_ic_tstat` | `f77ae9c58e54e2926bfc79850467a578f028fa6c228a71115cdcca12c3d494c3` |
+| `quant_evaluator.metrics.ic_summary.compute_ic_tstat` | `4030de7efc4657648c06150d75d773bd62fd5573417ae2fa49cc649eceb1ccd9` |
 | `quant_evaluator.metrics.ic_summary.compute_icir` | `513cc3fda0d2c2b9d8a7deab8a7c77b093882be51950b96148e9e6bfa8d110b6` |
 | `quant_evaluator.metrics.ic_summary.compute_quantile_rank_stability` | `f8547f665db427409c327dba4d785ba0eb66dede463c2e8dbdfbcaea8606a317` |
 | `quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats` | `7cb4e7572dcb99e4fc3f060237b531974d0a89bced5304d881e4ca373e7a2541` |

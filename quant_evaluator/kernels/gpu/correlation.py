@@ -116,16 +116,11 @@ def batched_spearman_ic(
     pairwise = cp.isfinite(x) & cp.isfinite(yb)  # (T,F,N)
     x_rank = cp.where(pairwise, x, cp.nan)
     y_rank = cp.where(pairwise, yb, cp.nan)  # (T,F,N)
-    rx = batched_rank(x_rank, pct=False)          # (T,F,N)
-    ry = batched_rank(y_rank, pct=False)          # (T,F,N)
+    rx, dlx = batched_rank(x_rank, pct=False, return_distinct=True)  # (T,F,N), (T,F)
+    ry, dly = batched_rank(y_rank, pct=False, return_distinct=True)  # (T,F,N), (T,F)
 
-    # distinct-level floor over the PAIRWISE-FINITE set (CPU reference)
-    from quant_evaluator.kernels.gpu.rank import batched_distinct_level_count
-    dlx = batched_distinct_level_count(x_rank)  # (T*F,)
-    dly = batched_distinct_level_count(y_rank)  # (T*F,)
+    # Distinct-level counts were collected during each rank's existing sort.
     T, F, N = x.shape
-    dlx = dlx.reshape(T, F)
-    dly = dly.reshape(T, F)
     # Mathematical definition, not a quality gate. Binary/ordinal signals
     # retain average-tie Spearman; confidence/applicability is separate.
     min_levels = 2

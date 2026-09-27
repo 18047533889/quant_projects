@@ -556,12 +556,12 @@ def test_f32_rank_and_quantile_chains_exact_shape_and_gpu_gate(monkeypatch):
                        8 * 1024 ** 3, 8 * 1024 ** 3]
     assert select(batch, labels, quantile_metrics[:-1], **options) == (
         "cpu", "metric_set_not_certified")
-    single_metrics = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+    single_metrics = ("rank_ic", "rank_ic_series", "quantile_spread", "factor_turnover_rate")
     for metric in single_metrics:
         assert select(batch, labels, (metric,), **options) == (
             "cuda_strict", f"certified_single_metric_real_cos_f32_{metric}")
-    assert budgets[-3:] == [14 * 1024 ** 3, 8 * 1024 ** 3,
-                            8 * 1024 ** 3]
+    assert budgets[-4:] == [14 * 1024 ** 3, 17 * 1024 ** 3,
+                            8 * 1024 ** 3, 8 * 1024 ** 3]
     assert select(batch, labels, ("coverage",), **options) == (
         "cpu", "metric_not_certified")
     mixed_metrics = ("rank_ic", "quantile_spread", "factor_turnover_rate")

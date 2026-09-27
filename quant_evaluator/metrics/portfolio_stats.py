@@ -23,6 +23,7 @@ def compute_compound_annualized_return(returns, periods_per_year=252, *, min_per
 
     Periods are equally spaced observations, not inferred calendar days.
     `drop` annualizes observed periods; callers must separately audit coverage.
+    Returns below -100% require an explicit negative-capital contract.
     """
     values = np.asarray(returns, dtype=float)
     if values.ndim != 1:
@@ -34,9 +35,11 @@ def compute_compound_annualized_return(returns, periods_per_year=252, *, min_per
     if missing_return_policy == "fail" and not finite.all():
         raise ValueError("returns contains non-finite values")
     values = values[finite] if missing_return_policy == "drop" else np.where(finite, values, 0.)
+    if np.any(values < -1.0):
+        raise ValueError("returns below -100% require an explicit negative-capital contract")
     if len(values) < min_periods:
         return float("nan")
-    if np.any(values <= -1):
+    if np.any(values == -1.0):
         return -1.0
     with np.errstate(over="ignore", invalid="ignore"):
         result = np.expm1(np.log1p(values).sum() * periods_per_year / len(values))

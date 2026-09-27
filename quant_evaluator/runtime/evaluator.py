@@ -78,7 +78,7 @@ def _resolve_alias(metric_id: str) -> str:
 # The 701-day x 5314-stock x 2-factor registered A-share panel showed full
 # CPU/CUDA output parity and a CUDA advantage in cold and alternating warm
 # public-facade runs for these metrics (2026-09-26). Other metrics retain CPU.
-_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260928_v18"
+_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260929_v19"
 _AUTO_SMALL_PROFILE = "ashare_701d_20260926"
 _AUTO_LARGE_PROFILE = "real_cos_region_20260927"
 _AUTO_LARGE_EXTRAP_PROFILE = "real_cos_bounded_headroom_20260927"
@@ -122,9 +122,10 @@ _AUTO_REAL_COS_F32_SHAPE = (2586, 5461, 32)
 _AUTO_REAL_COS_F32_BATCH_NAMES = frozenset({
     "rank_chain", "quantile_chain", "real_cos_mixed_three"})
 _AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
+_AUTO_REAL_COS_F32_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES = 17 * 1024 ** 3
 _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
 _AUTO_REAL_COS_F32_SINGLE_METRICS = frozenset(
-    {"rank_ic", "quantile_spread", "factor_turnover_rate"})
+    {"rank_ic", "rank_ic_series", "quantile_spread", "factor_turnover_rate"})
 _AUTO_REAL_COS_F2_RANK_SERIES_SHAPE = (2586, 5461, 2)
 _AUTO_REAL_COS_F2_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_LARGE_METRICS = frozenset({"rank_ic", "quantile_spread"})
@@ -391,9 +392,12 @@ def _select_public_auto_backend(
             return "cuda_strict", f"certified_batch_real_cos_f12_{batch_name}"
         return "cuda_strict", f"certified_batch_{batch_name}"
     if profile == _AUTO_REAL_COS_F32_PROFILE:
-        min_effective_vram = (_AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES
-                              if canonical_metrics[0] == "rank_ic"
-                              else _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES)
+        min_effective_vram = (
+            _AUTO_REAL_COS_F32_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES
+            if canonical_metrics[0] == "rank_ic_series"
+            else (_AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES
+                  if canonical_metrics[0] == "rank_ic"
+                  else _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES))
     elif profile == _AUTO_REAL_COS_F12_PROFILE:
         min_effective_vram = (
             _AUTO_REAL_COS_F12_RANK_MIN_EFFECTIVE_VRAM_BYTES

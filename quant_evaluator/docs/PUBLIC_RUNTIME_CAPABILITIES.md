@@ -246,13 +246,15 @@ H2D 从 5,648,858,400 降为 2,937,406,368 字节。单轮 GPU 峰值约
 37.768/38.546 秒。计时期间另有 CPU pytest 进程运行，因此 wall-time 结果不作速度结论。
 开始时 MemAvailable 为 71.94 GiB、L20 空闲显存 43.66 GiB，GPU 策略上限为当时空闲显存的
 30%；运行期间最低记录 MemAvailable 为 34.37 GiB，显存保持充足。输入仅在内存中生成，未写入文件。
-绑定 COS manifest 当前不可用，因此此项仅作为合成传输证据，不能证明真实行情批次性能或扩展自动路由范围。
+本项只提供合成传输证据，不能证明真实行情批次性能或扩展自动路由范围。
+2026-09-29 已通过 DataAccess 文档指定的 server-c CLI 与缓存根完成绑定 manifest 的只读预检；
+这不追认上面的合成 A/B 为真实数据测试。
 
 ## 默认后端与 `backend="auto"` 的保守选择范围
 
 公开 `evaluate(...)`（省略 `backend` 或传入 `None`）和显式
 `evaluate(..., backend="auto")` 按整次请求选择 CPU 或 CUDA，并在返回的
-`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v17`。
+`bundle.metadata` 中记录选择。策略版本以执行回执中的 `auto_backend_policy` 为准。
 以下 701 日规则继续适用于短历史配置。
 它依据已注册 A 股日行情构造的 701 个交易日、5314 只股票、2 个因子输入，
 逐指标比较完整公开入口的 CPU/CUDA 结果。冷调用和交错顺序的热调用都更快、
@@ -481,10 +483,14 @@ MetricValue 均对拍通过。改路由前两轮 `auto` 都留在 CPU；现在�
 F32 的完整 rank 链、完整分位链、默认三指标整批及三个单指标请求已分别认证自动 CUDA。只读预检命令：
 
 ```bash
+DATA_ACCESS_COS_CLI=/usr/local/bin/admin-cos \
+DATA_ACCESS_COS_CACHE_ROOT=/home/sunhaiwei/.cache/quant-dataaccess/research \
 python -m quant_evaluator.scripts.benchmark_real_cos_factor_batch --factor-count-profile 32 --preflight-only
 ```
 
-它只检查绑定 manifest、对象字节数及 RAM/VRAM 余量，不会载入因子数组或执行评估。
+这两个环境变量是 server-c DataAccess 文档规定的已授权读取配置；默认 CLI 缺席或
+默认 /tmp 缓存路径会使精确对象读取失败。预检只检查绑定 manifest、对象字节数
+及 RAM/VRAM 余量，不会载入因子数组或执行评估。
 `--max-working-gib` 默认 50；提高该上限不能绕过可用内存与预留余量检查。
 只有显式加 `--run`，且预检
 通过后，才会执行整批多指标 CPU/CUDA/auto 六轮 A/B；可选
@@ -570,6 +576,17 @@ CPU 冷调用 168.197/167.598 秒，CUDA 34.749/34.886 秒，
 单 NVIDIA L20 的精确 F32 形状之外仍用 CPU。详见
 `docs/benchmarks/real_cos_f32_single_routes_20260928.md`。
 
+同一绑定 COS manifest 的 F32 全市场面板又对单指标 `rank_ic_series` 完成六轮
+交错公开入口 A/B（CPU/CUDA/auto 各两轮）。路由调整前 CPU 热运行
+80.293、80.342 秒，CUDA 33.818、33.419 秒；完整序列值（容差
+rtol=1e-8、atol=1e-10）、有效掩码、计数和 provenance 均通过对拍。
+GPU 峰值为 16,053,793,792 字节，故该指标单独要求至少 17 GiB
+有效及实际空闲显存。仅精确 2586 日 × 5461 股 × 32 因子、float64、
+默认参数、无特殊输入、NVIDIA L20 的单指标请求选择 CUDA；其它情况
+仍走 CPU。原始证据见 `docs/benchmarks/real_cos_f32_rank_ic_series_post_rank_reuse_20260929.json`；
+路由调整后的实际 `auto` 复测见
+`docs/benchmarks/real_cos_f32_rank_ic_series_auto_v19_20260929.json`。
+
 新版 CPU 行块与加载器组合在同一 F24 rank 链上另完成六轮真实 COS
 公开入口复测，完整制品对拍通过；父进程 RSS 峰值 10,850,236 KiB，
 CPU worker RSS 峰值 19,223,060–19,248,388 KiB。两个 `auto` 均走 CUDA。
@@ -639,7 +656,7 @@ print(fastest_certified.metadata["auto_backend_reason"])
 `backend_used` 为 `"cpu"` 或 `"cuda"`，
 `auto_backend_policy` 为策略版本，
 `auto_backend_reason` 记录选路原因，
-`auto_backend_profile` 区分 701 日、COS 已测核心、有界外推区和精确 F8/F12/F13/F24 区，
+`auto_backend_profile` 区分 701 日、COS 已测核心、有界外推区和精确 F8/F12/F13/F24/F32 区，
 `metric_backends` 给出原请求指标名到实际后端的映射。
 `execution_receipt` 保存这些路由字段、语义 `config_hash` 及独立的
 `receipt_hash`，便于区分默认、显式 CPU 与显式 CUDA 的执行记录。

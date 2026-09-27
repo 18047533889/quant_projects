@@ -80,28 +80,33 @@ def compute_ic_tstat(
         ValueError: If ic_series is boolean (or contains Python bools)
     """
     _reject_boolean_ic_series(np.asarray(ic_series))
-
-    T, F = ic_series.shape
+    ic_series = _coerce_real_float_array(np.asarray(ic_series), "ic_series")
+    if ic_series.ndim != 2:
+        raise ValueError("ic_series must have shape (T, F)")
+    min_periods = _check_min_periods(min_periods, 2)
+    _, F = ic_series.shape
     t_stats = np.full(F, np.nan, dtype=np.float64)
     p_values = np.full(F, np.nan, dtype=np.float64)
 
     for f in range(F):
         ic_f = ic_series[:, f]
-        valid_ic = ic_f[~np.isnan(ic_f)]
+        valid_ic = ic_f[np.isfinite(ic_f)]
 
         if len(valid_ic) < min_periods:
             continue
 
         # Constant IC series (std=0) makes scipy return a degenerate
-        # t/p pair (t ~ 1e16, p = 0) — fake ultra-significance.
-        std_ic = np.std(valid_ic)
-        if not np.isfinite(std_ic) or std_ic < 1e-10:
+        # t/p pair. A fixed absolute tolerance would also reject a genuinely
+        # varying small-amplitude IC series, although its t-statistic is valid.
+        std_ic = np.std(valid_ic, ddof=1)
+        if np.all(valid_ic == valid_ic[0]) or not np.isfinite(std_ic) or std_ic == 0:
             continue
 
         # One-sample t-test against H0: mean = 0
         t_stat, p_val = stats.ttest_1samp(valid_ic, 0.0)
-        t_stats[f] = t_stat
-        p_values[f] = p_val
+        if np.isfinite(t_stat) and np.isfinite(p_val):
+            t_stats[f] = t_stat
+            p_values[f] = p_val
 
     return t_stats, p_values
 
