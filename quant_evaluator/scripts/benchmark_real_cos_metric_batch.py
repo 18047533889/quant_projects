@@ -242,8 +242,8 @@ def main():
                          "F2 permits rank_ic_series alone, F13 permits factor_turnover_rate "
                          "or rank_ic_positive_ratio alone, "
                          "and F32 permits rank_ic_series or quantile_returns_full alone")
-    if args.factors == 2 and requested != RANK_SERIES_SINGLE:
-        parser.error("F2 runs require rank_ic_series alone")
+    if args.factors == 2 and requested not in (RANK_SERIES_SINGLE, RANK_CHAIN, QUANTILE_CHAIN):
+        parser.error("F2 runs require rank_ic_series alone or an exact rank/quantile chain")
     if args.factors == 13 and requested not in (
             RANK_CHAIN, QUANTILE_CHAIN, TURNOVER_SINGLE, POSITIVE_RATIO_SINGLE):
         parser.error("F13 runs require the exact rank-chain, quantile-chain, "

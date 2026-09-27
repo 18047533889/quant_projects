@@ -279,6 +279,56 @@ def test_f2_rank_ic_series_exact_real_cos_route(monkeypatch):
         "cpu", "insufficient_cuda_memory")
 
 
+def test_f2_exact_rank_and_quantile_chains_route_and_guards(monkeypatch):
+    budgets = []
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda policy, minimum: budgets.append(minimum) or None)
+    batch = SimpleNamespace(num_times=2586, num_assets=5461, num_factors=2,
+                            values=np.empty(0, dtype=np.float64))
+    labels = SimpleNamespace(values=np.empty(0, dtype=np.float64))
+    options = dict(metric_parameters={}, context=None, quantile_builder_parameters={},
+                   portfolio_returns=None, holding_returns=None, trade_eligibility=None,
+                   calendar_snapshot=None, exposure_panel=None,
+                   generalization_evidence=None, evaluator=None)
+    select = module._select_public_auto_backend
+    for name, minimum in (("rank_chain", 14), ("quantile_chain", 8)):
+        metrics = _BATCHES[name]
+        expected = ("cuda_strict", f"certified_batch_real_cos_f2_{name}")
+        assert select(batch, labels, metrics, **options) == expected
+        assert select(batch, labels, tuple(reversed(metrics)), **options) == expected
+        assert budgets[-2:] == [minimum * 1024 ** 3] * 2
+        assert select(batch, labels, metrics[:-1], **options) == (
+            "cpu", "metric_set_not_certified")
+        assert select(batch, labels, metrics + (metrics[0],), **options) == (
+            "cpu", "metric_set_not_certified")
+        assert select(batch, labels, metrics,
+                      **(options | {"metric_parameters": {metrics[0]: {"min_assets": 20}}})) == (
+            "cpu", "special_input_or_parameters")
+    for field, adjacent in (("num_times", 2585), ("num_assets", 5460),
+                            ("num_factors", 3)):
+        original = getattr(batch, field)
+        setattr(batch, field, adjacent)
+        assert select(batch, labels, _BATCHES["rank_chain"], **options)[0] == "cpu"
+        setattr(batch, field, original)
+    batch.values = np.empty(0, dtype=np.float32)
+    assert select(batch, labels, _BATCHES["rank_chain"], **options) == (
+        "cpu", "dtype_outside_certified_range")
+    batch.values = np.empty(0, dtype=np.float64)
+    labels.values = np.empty(0, dtype=np.float32)
+    assert select(batch, labels, _BATCHES["quantile_chain"], **options) == (
+        "cpu", "dtype_outside_certified_range")
+    labels.values = np.empty(0, dtype=np.float64)
+    assert select(batch, labels, _BATCHES["rank_chain"],
+                  **(options | {"context": object()})) == (
+        "cpu", "special_input_or_parameters")
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda *args: "insufficient_cuda_memory")
+    for name in ("rank_chain", "quantile_chain"):
+        assert select(batch, labels, _BATCHES[name], **options) == (
+            "cpu", "insufficient_cuda_memory")
+
+
+
 def test_f12_pearson_ic_exact_auto_route_and_guards(monkeypatch):
     from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
 

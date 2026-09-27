@@ -1,0 +1,718 @@
+{
+  "created_utc": "2026-09-28T05:25:28.459145+08:00",
+  "script_sha256": "6cf50e5e776946cf0dd8500cb6b2fe4c9f11cf459405697aa11f7410e09eff62",
+  "request": {
+    "metrics": [
+      "quantile_returns_full",
+      "quantile_returns_daily",
+      "quantile_spread",
+      "quantile_monotonicity",
+      "daily_quantile_monotonicity_rate"
+    ],
+    "backend_order": [
+      "cpu",
+      "cuda_strict",
+      "auto",
+      "auto",
+      "cuda_strict",
+      "cpu"
+    ],
+    "factors": 2,
+    "repeats_per_child": 2,
+    "timeout_s": 300.0,
+    "shape": [
+      2586,
+      5461,
+      2
+    ],
+    "dtype": "float64",
+    "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+    "compact_artifacts": true
+  },
+  "source": {
+    "sources": [
+      {
+        "factor_id": "weekly_db5616cd85a477b3",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d/weekly_db5616cd85a477b3.parquet",
+        "sha256": "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+        "bytes": 3828456,
+        "etag": "5efb1f8070196661daabeb563740dff0",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      },
+      {
+        "factor_id": "weekly_4cbd7ca6dccc61dc",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59/weekly_4cbd7ca6dccc61dc.parquet",
+        "sha256": "35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59",
+        "bytes": 5400494,
+        "etag": "91da3ad8a2d54f3f35911e231bfcffa8",
+        "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "source_status": "evaluated_optimization_pending"
+      }
+    ],
+    "days": 2586,
+    "assets": 5461,
+    "date_span": [
+      "2016-01-04",
+      "2026-08-25"
+    ],
+    "calendar_sessions": 2588,
+    "missing_adj_vwap_partitions": [],
+    "label": "decision t; execution t+1; AdjVwap(t+2)/AdjVwap(t+1)-1",
+    "factor_finite_ratio": 0.7654643989659928,
+    "label_finite_ratio": 0.7738646803396594,
+    "limitations": "research lineage; no upstream PIT/investability certification"
+  },
+  "load_s": 20.72437392899883,
+  "parent_peak_rss_kib": 2489432,
+  "config_hashes": [
+    "d8ac8106942202d0d0f3ccad0ccd64f5be473ec68f424a16cf1a830738ddadae"
+  ],
+  "runs": [
+    {
+      "status": "ok",
+      "backend_requested": "cpu",
+      "seconds": [
+        6.06250972899943,
+        4.926074451001114
+      ],
+      "cold_s": 6.06250972899943,
+      "warm_median_s": 4.926074451001114,
+      "peak_rss_kib": 3049420,
+      "backend_used": "cpu",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "quantile_returns_full": "cpu",
+        "quantile_returns_daily": "cpu",
+        "quantile_spread": "cpu",
+        "quantile_monotonicity": "cpu",
+        "daily_quantile_monotonicity_rate": "cpu"
+      },
+      "peak_vram": null,
+      "factor_tile_size": null,
+      "factor_tiles_processed": null,
+      "vram_budget_bytes": null,
+      "config_hash": "d8ac8106942202d0d0f3ccad0ccd64f5be473ec68f424a16cf1a830738ddadae",
+      "execution_receipt": {
+        "backend_requested": "cpu",
+        "backend_strategy": "explicit",
+        "backend_used": "cpu",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "quantile_returns_full": "cpu",
+          "quantile_returns_daily": "cpu",
+          "quantile_spread": "cpu",
+          "quantile_monotonicity": "cpu",
+          "daily_quantile_monotonicity_rate": "cpu"
+        },
+        "config_hash": "d8ac8106942202d0d0f3ccad0ccd64f5be473ec68f424a16cf1a830738ddadae",
+        "receipt_hash": "462e53b37f31e4cbaa780112bf59df07e6275915cda72bf29153758f607c16e7"
+      },
+      "round": 1,
+      "artifact_sha256": "28490d0c0b1b553b6e4de17a56343afa6432830064f150b53e3e10c6955c1510"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cuda_strict",
+      "seconds": [
+        2.607010272999105,
+        1.38327758000014
+      ],
+      "cold_s": 2.607010272999105,
+      "warm_median_s": 1.38327758000014,
+      "peak_rss_kib": 3093440,
+      "backend_used": "cuda",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "quantile_returns_full": "cuda",
+        "quantile_returns_daily": "cuda",
+        "quantile_spread": "cuda",
+        "quantile_monotonicity": "cuda",
+        "daily_quantile_monotonicity_rate": "cuda"
+      },
+      "peak_vram": 757267456,
+      "factor_tile_size": 2,
+      "factor_tiles_processed": 1,
+      "vram_budget_bytes": 35155132416.0,
+      "config_hash": "d8ac8106942202d0d0f3ccad0ccd64f5be473ec68f424a16cf1a830738ddadae",
+      "execution_receipt": {
+        "backend_requested": "cuda_strict",
+        "backend_strategy": "explicit",
+        "backend_used": "cuda",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "quantile_returns_full": "cuda",
+          "quantile_returns_daily": "cuda",
+          "quantile_spread": "cuda",
+          "quantile_monotonicity": "cuda",
+          "daily_quantile_monotonicity_rate": "cuda"
+        },
+        "config_hash": "d8ac8106942202d0d0f3ccad0ccd64f5be473ec68f424a16cf1a830738ddadae",
+        "receipt_hash": "95fd936fbd343bdd696a8e0eb1d4a7393a994bf9f5a6cc80fedce8cdd2826d19"
+      },
+      "round": 2,
+      "artifact_sha256": "078d18ef8d490dc704d7e0a9cf1c3bcf34842e7eae1aea7123c5e0fa1009bcb8"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "auto",
+      "seconds": [
+        2.6805470139988756,
+        1.3873957659998268
+      ],
+      "cold_s": 2.6805470139988756,
+      "warm_median_s": 1.3873957659998268,
+      "peak_rss_kib": 3102728,
+      "backend_used": "cuda",
+      "auto_backend_reason": "certified_batch_real_cos_f2_quantile_chain",
+      "auto_backend_profile": "real_cos_region_20260927",
+      "metric_backends": {
+        "quantile_returns_full": "cuda",
+        "quantile_returns_daily": "cuda",
+        "quantile_spread": "cuda",
+        "quantile_monotonicity": "cuda",
+        "daily_quantile_monotonicity_rate": "cuda"
+      },
+      "peak_vram": 757267456,
+      "factor_tile_size": 2,
+      "factor_tiles_processed": 1,
+      "vram_budget_bytes": 35155132416.0,
+      "config_hash": "d8ac8106942202d0d0f3ccad0ccd64f5be473ec68f424a16cf1a830738ddadae",
+      "execution_receipt": {
+        "backend_requested": "auto",
+        "backend_strategy": "auto",
+        "backend_used": "cuda",
+        "auto_backend_policy": "ashare_public_routes_20260929_v21",
+        "auto_backend_profile": "real_cos_region_20260927",
+        "auto_backend_reason": "certified_batch_real_cos_f2_quantile_chain",
+        "metric_backends": {
+          "quantile_returns_full": "cuda",
+          "quantile_returns_daily": "cuda",
+          "quantile_spread": "cuda",
+          "quantile_monotonicity": "cuda",
+          "daily_quantile_monotonicity_rate": "cuda"
+        },
+        "config_hash": "d8ac8106942202d0d0f3ccad0ccd64f5be473ec68f424a16cf1a830738ddadae",
+        "receipt_hash": "fcb5ec9af4d5fcc4d398fe3d3ec34950977fb15def0a3abe3596c39ac7b39f65"
+      },
+      "round": 3,
+      "artifact_sha256": "078d18ef8d490dc704d7e0a9cf1c3bcf34842e7eae1aea7123c5e0fa1009bcb8"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "auto",
+      "seconds": [
+        2.6186358039994957,
+        1.3933865559993137
+      ],
+      "cold_s": 2.6186358039994957,
+      "warm_median_s": 1.3933865559993137,
+      "peak_rss_kib": 3111504,
+      "backend_used": "cuda",
+      "auto_backend_reason": "certified_batch_real_cos_f2_quantile_chain",
+      "auto_backend_profile": "real_cos_region_20260927",
+      "metric_backends": {
+        "quantile_returns_full": "cuda",
+        "quantile_returns_daily": "cuda",
+        "quantile_spread": "cuda",
+        "quantile_monotonicity": "cuda",
+        "daily_quantile_monotonicity_rate": "cuda"
+      },
+      "peak_vram": 757267456,
+      "factor_tile_size": 2,
+      "factor_tiles_processed": 1,
+      "vram_budget_bytes": 35155132416.0,
+      "config_hash": "d8ac8106942202d0d0f3ccad0ccd64f5be473ec68f424a16cf1a830738ddadae",
+      "execution_receipt": {
+        "backend_requested": "auto",
+        "backend_strategy": "auto",
+        "backend_used": "cuda",
+        "auto_backend_policy": "ashare_public_routes_20260929_v21",
+        "auto_backend_profile": "real_cos_region_20260927",
+        "auto_backend_reason": "certified_batch_real_cos_f2_quantile_chain",
+        "metric_backends": {
+          "quantile_returns_full": "cuda",
+          "quantile_returns_daily": "cuda",
+          "quantile_spread": "cuda",
+          "quantile_monotonicity": "cuda",
+          "daily_quantile_monotonicity_rate": "cuda"
+        },
+        "config_hash": "d8ac8106942202d0d0f3ccad0ccd64f5be473ec68f424a16cf1a830738ddadae",
+        "receipt_hash": "fcb5ec9af4d5fcc4d398fe3d3ec34950977fb15def0a3abe3596c39ac7b39f65"
+      },
+      "round": 4,
+      "artifact_sha256": "078d18ef8d490dc704d7e0a9cf1c3bcf34842e7eae1aea7123c5e0fa1009bcb8"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cuda_strict",
+      "seconds": [
+        2.6495915340001375,
+        1.3948900409995986
+      ],
+      "cold_s": 2.6495915340001375,
+      "warm_median_s": 1.3948900409995986,
+      "peak_rss_kib": 3120536,
+      "backend_used": "cuda",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "quantile_returns_full": "cuda",
+        "quantile_returns_daily": "cuda",
+        "quantile_spread": "cuda",
+        "quantile_monotonicity": "cuda",
+        "daily_quantile_monotonicity_rate": "cuda"
+      },
+      "peak_vram": 757267456,
+      "factor_tile_size": 2,
+      "factor_tiles_processed": 1,
+      "vram_budget_bytes": 35155132416.0,
+      "config_hash": "d8ac8106942202d0d0f3ccad0ccd64f5be473ec68f424a16cf1a830738ddadae",
+      "execution_receipt": {
+        "backend_requested": "cuda_strict",
+        "backend_strategy": "explicit",
+        "backend_used": "cuda",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "quantile_returns_full": "cuda",
+          "quantile_returns_daily": "cuda",
+          "quantile_spread": "cuda",
+          "quantile_monotonicity": "cuda",
+          "daily_quantile_monotonicity_rate": "cuda"
+        },
+        "config_hash": "d8ac8106942202d0d0f3ccad0ccd64f5be473ec68f424a16cf1a830738ddadae",
+        "receipt_hash": "95fd936fbd343bdd696a8e0eb1d4a7393a994bf9f5a6cc80fedce8cdd2826d19"
+      },
+      "round": 5,
+      "artifact_sha256": "078d18ef8d490dc704d7e0a9cf1c3bcf34842e7eae1aea7123c5e0fa1009bcb8"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cpu",
+      "seconds": [
+        6.054795250000097,
+        4.940655452999636
+      ],
+      "cold_s": 6.054795250000097,
+      "warm_median_s": 4.940655452999636,
+      "peak_rss_kib": 3096548,
+      "backend_used": "cpu",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "quantile_returns_full": "cpu",
+        "quantile_returns_daily": "cpu",
+        "quantile_spread": "cpu",
+        "quantile_monotonicity": "cpu",
+        "daily_quantile_monotonicity_rate": "cpu"
+      },
+      "peak_vram": null,
+      "factor_tile_size": null,
+      "factor_tiles_processed": null,
+      "vram_budget_bytes": null,
+      "config_hash": "d8ac8106942202d0d0f3ccad0ccd64f5be473ec68f424a16cf1a830738ddadae",
+      "execution_receipt": {
+        "backend_requested": "cpu",
+        "backend_strategy": "explicit",
+        "backend_used": "cpu",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "quantile_returns_full": "cpu",
+          "quantile_returns_daily": "cpu",
+          "quantile_spread": "cpu",
+          "quantile_monotonicity": "cpu",
+          "daily_quantile_monotonicity_rate": "cpu"
+        },
+        "config_hash": "d8ac8106942202d0d0f3ccad0ccd64f5be473ec68f424a16cf1a830738ddadae",
+        "receipt_hash": "462e53b37f31e4cbaa780112bf59df07e6275915cda72bf29153758f607c16e7"
+      },
+      "round": 6,
+      "artifact_sha256": "28490d0c0b1b553b6e4de17a56343afa6432830064f150b53e3e10c6955c1510"
+    }
+  ],
+  "comparisons_to_first_cpu": {
+    "cpu": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "quantile_returns_full": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_returns_daily": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_spread": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_monotonicity": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "daily_quantile_monotonicity_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "quantile_returns_full": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_returns_daily": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_spread": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_monotonicity": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "daily_quantile_monotonicity_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ],
+    "cuda_strict": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "quantile_returns_full": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_returns_daily": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_spread": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_monotonicity": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "daily_quantile_monotonicity_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "quantile_returns_full": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_returns_daily": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_spread": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_monotonicity": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "daily_quantile_monotonicity_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ],
+    "auto": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "quantile_returns_full": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_returns_daily": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_spread": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_monotonicity": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "daily_quantile_monotonicity_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "quantile_returns_full": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_returns_daily": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_spread": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "quantile_monotonicity": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          },
+          "daily_quantile_monotonicity_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ]
+  },
+  "parity_pass": true
+}

@@ -434,8 +434,27 @@ GPU pool 峰值 11,234,754,560 字节。基准前两次 `auto` 均因该指标
 `docs/benchmarks/real_cos_f2_rank_ic_series_auto_20260927.json`。
 现在仅对该精确形状、float64、默认参数、无特殊输入和 NVIDIA L20
 的单项请求选择 CUDA，并要求有效与实际空闲显存均至少 14 GiB。
-相邻形状、其他 F2 指标或组合不沿用此认证。原始证据见
+相邻形状、其他 F2 单指标或未列组合不沿用此认证。原始证据见
 `docs/benchmarks/real_cos_f2_rank_ic_series_20260927.json`。
+
+同一 F2 绑定面板的完整四指标 rank 链
+（`rank_ic`、`rank_ic_series`、`ic_std`、`ic_ir`）与完整五指标
+quantile 链（`quantile_returns_full`、`quantile_returns_daily`、
+`quantile_spread`、`quantile_monotonicity`、
+`daily_quantile_monotonicity_rate`）又各完成路由前后六轮交错 A/B。
+rank 链 CPU 热运行约 5.9–6.1 秒，CUDA 约 1.51 秒；
+quantile 链 CPU 约 4.9 秒，CUDA 约 1.40 秒。更新后两组
+`auto` 各两轮均实际使用 CUDA；四份报告的完整 artifact、掩码、
+计数、provenance、MetricValue 与配置哈希均对拍通过。
+只对精确 F2 形状、完整集合、float64、默认参数、无特殊输入和
+NVIDIA L20 自动选 CUDA；rank 链要求有效及实际空闲显存至少
+14 GiB（实测 GPU pool 峰值 11,234,754,560 字节），quantile 链
+至少 8 GiB（峰值 757,267,456 字节）。子集、重复项、其它组合
+及相邻形状继续走 CPU。证据：
+`docs/benchmarks/real_cos_f2_rank_chain_ab_20260929.json`、
+`docs/benchmarks/real_cos_f2_rank_chain_auto_v21_20260929.json`、
+`docs/benchmarks/real_cos_f2_quantile_chain_ab_20260929.json` 和
+`docs/benchmarks/real_cos_f2_quantile_chain_auto_v21_20260929.json`。
 
 F12 另有精确三指标混合请求 `rank_ic`、`quantile_spread`、
 `factor_turnover_rate` 的独立六轮公开入口 A/B：CPU 热运行约
@@ -670,6 +689,8 @@ print(fastest_certified.metadata["auto_backend_reason"])
 `auto_backend_reason` 记录选路原因，
 `auto_backend_profile` 区分 701 日、COS 已测核心、有界外推区和精确 F8/F12/F13/F24/F32 区，
 `metric_backends` 给出原请求指标名到实际后端的映射。
+例如显式 CUDA 请求中的 `adaptive_quantile_count` 仍由 CPU 规划并计算，
+其映射为 `cpu`；同请求的 GPU 指标可同时映射为 `cuda`。
 `execution_receipt` 保存这些路由字段、语义 `config_hash` 及独立的
 `receipt_hash`，便于区分默认、显式 CPU 与显式 CUDA 的执行记录。
 该记录不参与现有 `config_hash` 和指标制品内容哈希；同一输入和参数的

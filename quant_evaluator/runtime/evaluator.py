@@ -78,7 +78,7 @@ def _resolve_alias(metric_id: str) -> str:
 # The 701-day x 5314-stock x 2-factor registered A-share panel showed full
 # CPU/CUDA output parity and a CUDA advantage in cold and alternating warm
 # public-facade runs for these metrics (2026-09-26). Other metrics retain CPU.
-_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260929_v20"
+_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260929_v21"
 _AUTO_SMALL_PROFILE = "ashare_701d_20260926"
 _AUTO_LARGE_PROFILE = "real_cos_region_20260927"
 _AUTO_LARGE_EXTRAP_PROFILE = "real_cos_bounded_headroom_20260927"
@@ -128,6 +128,9 @@ _AUTO_REAL_COS_F32_SINGLE_METRICS = frozenset(
     {"rank_ic", "rank_ic_series", "quantile_returns_full", "quantile_spread", "factor_turnover_rate"})
 _AUTO_REAL_COS_F2_RANK_SERIES_SHAPE = (2586, 5461, 2)
 _AUTO_REAL_COS_F2_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
+_AUTO_REAL_COS_F2_BATCH_SHAPE = (2586, 5461, 2)
+_AUTO_REAL_COS_F2_RANK_BATCH_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
+_AUTO_REAL_COS_F2_QUANTILE_BATCH_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
 _AUTO_LARGE_METRICS = frozenset({"rank_ic", "quantile_spread"})
 _AUTO_LARGE_MIN_TIMES, _AUTO_LARGE_MAX_TIMES = 1000, 2600
 _AUTO_LARGE_MIN_ASSETS, _AUTO_LARGE_MAX_ASSETS = 5000, 5500
@@ -325,6 +328,12 @@ def _select_public_auto_backend(
         and (factor_batch.num_times, factor_batch.num_assets,
              factor_batch.num_factors) == _AUTO_REAL_COS_F2_RANK_SERIES_SHAPE
     )
+    real_cos_f2_certified_batch = (
+        profile == _AUTO_LARGE_PROFILE
+        and batch_name in ("rank_chain", "quantile_chain")
+        and (factor_batch.num_times, factor_batch.num_assets,
+             factor_batch.num_factors) == _AUTO_REAL_COS_F2_BATCH_SHAPE
+    )
     if real_cos_mixed_three and not (
         real_cos_f8_mixed_three or real_cos_f12_mixed_three or real_cos_f32_certified_batch) and (
         profile != _AUTO_LARGE_PROFILE or
@@ -334,6 +343,7 @@ def _select_public_auto_backend(
         return "cpu", "metric_not_certified_for_profile"
     if (profile in (_AUTO_LARGE_PROFILE, _AUTO_LARGE_EXTRAP_PROFILE)
             and (batch_name is not None and not real_cos_mixed_three
+                 and not real_cos_f2_certified_batch
                  or batch_name is None and canonical_metrics[0] not in _AUTO_LARGE_METRICS
                  and not real_cos_f2_rank_series)):
         return "cpu", "metric_not_certified_for_profile"
@@ -346,7 +356,11 @@ def _select_public_auto_backend(
             or evaluator is not None):
         return "cpu", "special_input_or_parameters"
     if batch_name is not None:
-        if real_cos_f32_certified_batch:
+        if real_cos_f2_certified_batch:
+            minimum = (_AUTO_REAL_COS_F2_RANK_BATCH_MIN_EFFECTIVE_VRAM_BYTES
+                       if batch_name == "rank_chain"
+                       else _AUTO_REAL_COS_F2_QUANTILE_BATCH_MIN_EFFECTIVE_VRAM_BYTES)
+        elif real_cos_f32_certified_batch:
             minimum = (_AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES
                        if batch_name in ("rank_chain", "real_cos_mixed_three")
                        else _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES)
@@ -374,6 +388,8 @@ def _select_public_auto_backend(
         rejection = _auto_batch_cuda_rejection(gpu_policy, minimum)
         if rejection is not None:
             return "cpu", rejection
+        if real_cos_f2_certified_batch:
+            return "cuda_strict", f"certified_batch_real_cos_f2_{batch_name}"
         if real_cos_f12_mixed_three:
             return "cuda_strict", "certified_batch_real_cos_f12_mixed_three"
         if real_cos_f8_mixed_three:
@@ -2954,6 +2970,16 @@ def evaluate(
         bundle_metadata.update(result.metadata)
     selected_backend = "cuda" if gpu_result is not None else "cpu"
     backend_strategy = "auto" if auto_route_reason is not None else "explicit"
+    metric_backends = {
+        mid: (
+            "cpu"
+            if (gpu_result is not None
+                and adaptive_resolution_artifact is not None
+                and _resolve_alias(mid) == "adaptive_quantile_count")
+            else selected_backend
+        )
+        for mid in metric_ids
+    }
     execution_route = {
         "backend_requested": requested_backend,
         "backend_strategy": backend_strategy,
@@ -2961,7 +2987,7 @@ def evaluate(
         "auto_backend_policy": _AUTO_CUDA_POLICY_VERSION if auto_route_reason is not None else None,
         "auto_backend_profile": _auto_public_shape_profile(factor_batch) if auto_route_reason is not None else None,
         "auto_backend_reason": auto_route_reason,
-        "metric_backends": {mid: selected_backend for mid in metric_ids},
+        "metric_backends": metric_backends,
     }
     bundle_metadata.update(execution_route)
     # Execution identity is separate from the semantic config_hash, which
