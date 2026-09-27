@@ -366,7 +366,7 @@ def test_f13_factor_turnover_rate_exact_single_route(monkeypatch):
         "cpu", "insufficient_cuda_memory")
 
 
-def test_f24_quantile_chain_exact_batch_only(monkeypatch):
+def test_f24_rank_and_quantile_chains_exact_batches_only(monkeypatch):
     budgets = []
     monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
                         lambda policy, minimum: budgets.append(minimum) or None)
@@ -382,15 +382,22 @@ def test_f24_quantile_chain_exact_batch_only(monkeypatch):
     expected = ("cuda_strict", "certified_batch_real_cos_f24_quantile_chain")
     assert select(batch, labels, metrics, **options) == expected
     assert select(batch, labels, tuple(reversed(metrics)), **options) == expected
-    assert budgets == [8 * 1024 ** 3, 8 * 1024 ** 3]
+    rank_metrics = _BATCHES["rank_chain"]
+    rank_expected = ("cuda_strict", "certified_batch_real_cos_f24_rank_chain")
+    assert select(batch, labels, rank_metrics, **options) == rank_expected
+    assert select(batch, labels, tuple(reversed(rank_metrics)), **options) == rank_expected
+    assert budgets == [8 * 1024 ** 3, 8 * 1024 ** 3,
+                       14 * 1024 ** 3, 14 * 1024 ** 3]
     assert select(batch, labels, metrics[:-1], **options) == (
         "cpu", "metric_set_not_certified")
-    assert select(batch, labels, _BATCHES["rank_chain"], **options) == (
-        "cpu", "metric_not_certified_for_profile")
+    assert select(batch, labels, rank_metrics[:-1], **options) == (
+        "cpu", "metric_set_not_certified")
     assert select(batch, labels, ("quantile_spread",), **options) == (
         "cpu", "metric_not_certified_for_profile")
     batch.num_factors = 23
     assert select(batch, labels, metrics, **options) == (
+        "cpu", "shape_outside_certified_range")
+    assert select(batch, labels, rank_metrics, **options) == (
         "cpu", "shape_outside_certified_range")
     batch.num_factors = 24
     batch.values = np.empty(0, dtype=np.float32)
@@ -402,6 +409,8 @@ def test_f24_quantile_chain_exact_batch_only(monkeypatch):
     monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
                         lambda *args: "insufficient_cuda_memory")
     assert select(batch, labels, metrics, **options) == (
+        "cpu", "insufficient_cuda_memory")
+    assert select(batch, labels, rank_metrics, **options) == (
         "cpu", "insufficient_cuda_memory")
 
 

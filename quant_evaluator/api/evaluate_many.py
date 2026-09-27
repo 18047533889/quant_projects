@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional, Sequence
 
 from quant_evaluator.runtime.evaluator import evaluate
 from quant_evaluator.contracts.label_bundle import LabelBundle
+from quant_evaluator.registry.metrics import resolve_alias
 
 
 _PANEL_GPU_METRICS = frozenset({
@@ -35,7 +36,9 @@ def _evaluate_ic_labels_shared_cuda(
     path. GPUExecutor.run() keeps pairwise rank caches local to each label.
     """
     selected_metrics = tuple(metrics)
-    if not labels or not set(selected_metrics) <= _PANEL_GPU_METRICS:
+    canonical_metrics = tuple(
+        dict.fromkeys(resolve_alias(mid) for mid in selected_metrics))
+    if not labels or not set(canonical_metrics) <= _PANEL_GPU_METRICS:
         return None
     for label in labels:
         selected = evaluate(
@@ -51,8 +54,24 @@ def _evaluate_ic_labels_shared_cuda(
 
     with DeviceEvaluationSession(gpu_policy or GPUExecutionPolicy()) as session:
         executor = GPUExecutor(session)
-        executor.metric_parameters = dict(metric_parameters or {})
-        gpu_bundles = executor.run_tiled_many(factor_batch, labels, selected_metrics)
+        executor.metric_parameters = {
+            resolve_alias(mid): dict(parameters)
+            for mid, parameters in (metric_parameters or {}).items()
+        }
+        gpu_bundles = executor.run_tiled_many(factor_batch, labels, canonical_metrics)
+    # GPUExecutor works with registry ids, while the public request and result
+    # retain the caller's requested names. Mirror evaluate()'s direct-CUDA
+    # alias projection before handing each bundle back through the facade.
+    for gpu_bundle in gpu_bundles:
+        for requested_id in selected_metrics:
+            canonical = resolve_alias(requested_id)
+            if canonical == requested_id:
+                continue
+            for field in ("scalar_metrics", "series_metrics", "vector_metrics",
+                          "observation_counts"):
+                group = getattr(gpu_bundle, field)
+                if canonical in group:
+                    group[requested_id] = group[canonical]
     return [
         evaluate(
             factor_batch, label, metrics=selected_metrics, backend=backend,

@@ -84,6 +84,53 @@ def test_evaluate_many_cuda_reuses_tiles_and_isolates_pairwise_ranks(monkeypatch
         assert gpu[lb.target_id].metadata["multi_label_factor_tile_reuse"] is True
 
 
+@pytest.mark.parametrize("metric_id", ["rank_ic_series", "ic.rank.daily"])
+def test_evaluate_many_metric_alias_shares_cuda_and_matches_cpu(monkeypatch, metric_id):
+    factors, labels = _inputs()
+    canonical_cpu = evaluate_many(
+        factors, labels, backend="cpu", metrics=("rank_ic_series",))
+    cpu = evaluate_many(factors, labels, backend="cpu", metrics=(metric_id,))
+
+    uploads = []
+    opens = []
+    original_stage = DeviceEvaluationSession.stage_factors
+    original_open = DeviceEvaluationSession._open
+
+    def stage(self, values, factor_ids, layout="T,F,N"):
+        uploads.append(tuple(factor_ids))
+        return original_stage(self, values, factor_ids, layout)
+
+    def opened(self):
+        opens.append(True)
+        return original_open(self)
+
+    monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", lambda *a, **k: 2)
+    monkeypatch.setattr(DeviceEvaluationSession, "stage_factors", stage)
+    monkeypatch.setattr(DeviceEvaluationSession, "_open", opened)
+    gpu = evaluate_many(factors, labels, backend="cuda_strict", metrics=(metric_id,))
+
+    assert len(opens) == 1
+    assert uploads == [("f0", "f1"), ("f2", "f3"), ("f4",)]
+    for lb in labels:
+        actual = gpu[lb.target_id]
+        alias_or_canonical_cpu = cpu[lb.target_id]
+        reference = canonical_cpu[lb.target_id]
+        assert actual.config_hash == alias_or_canonical_cpu.config_hash
+        assert metric_id in actual.artifacts
+        assert actual.metadata["metric_backends"] == {metric_id: "cuda"}
+        assert actual.metadata["multi_label_factor_tile_reuse"] is True
+        np.testing.assert_allclose(
+            actual.artifacts[metric_id].values,
+            alias_or_canonical_cpu.artifacts[metric_id].values,
+            rtol=0, atol=1e-12, equal_nan=True,
+        )
+        np.testing.assert_allclose(
+            actual.artifacts[metric_id].values,
+            reference.artifacts["rank_ic_series"].values,
+            rtol=0, atol=1e-12, equal_nan=True,
+        )
+
+
 def test_evaluate_many_quantile_chain_reuses_uploads_and_matches_cpu(monkeypatch):
     factors, labels = _inputs(n=80)
     metrics = ("quantile_returns_full", "quantile_returns_daily",
@@ -168,16 +215,20 @@ def test_evaluate_many_mixed_panel_metrics_share_cuda_and_match_cpu(monkeypatch)
                                        atol=1e-10, equal_nan=True)
 
 
-def test_evaluate_many_auto_unverified_shape_keeps_cpu_without_device(monkeypatch):
+@pytest.mark.parametrize("metric_id", ["quantile_spread", "ic.rank.mean"])
+def test_evaluate_many_auto_unverified_shape_keeps_cpu_without_device(monkeypatch, metric_id):
     factors, labels = _inputs(n=80)
     monkeypatch.setattr(
         DeviceEvaluationSession, "_open",
         lambda self: (_ for _ in ()).throw(AssertionError("unexpected GPU session")))
     results = evaluate_many(
-        factors, labels, backend="auto", metrics=("quantile_spread",))
+        factors, labels, backend="auto", metrics=(metric_id,))
     assert set(results) == {"h1", "h5"}
     assert all(result.metadata["backend_used"] == "cpu"
                for result in results.values())
+    assert all(result.metadata["auto_backend_reason"] == "shape_outside_certified_range"
+               for result in results.values())
+    assert all(metric_id in result.artifacts for result in results.values())
 
 
 @pytest.mark.parametrize("policy", ["common", "per_horizon"])

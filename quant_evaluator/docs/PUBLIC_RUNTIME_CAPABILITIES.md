@@ -154,6 +154,8 @@ sealed split 与后端选择均通过预校验后，对合格请求使用同一�
 Spearman/Pearson 的秩与相关中间量每个期限独立生成，绝不跨不同 pairwise-finite
 掩码复用。`evaluate_horizons` 保持 IC 家族；`evaluate_many` 还可复用
 自含的 quantile 链、`coverage`、`turnover` 和 `factor_turnover_rate`。
+注册别名先按规范指标 ID 判断共享资格，公开返回仍保留调用方的别名键；
+例如 `ic.rank.daily` 与 `rank_ic_series` 都可触发同一条共享路径。
 每个期限仍必须独立通过原有 CUDA 准入；扩展共享上传不扩大 `auto` 的指标、形状或参数认证范围。
 需要组合/持有期收益或暴露面板等额外类型化输入的指标仍沿用原有路径。
 显式 CUDA 失败仍报错，OOM 只重切当前因子 tile。
@@ -214,7 +216,7 @@ H2D 从 5,648,858,400 降为 2,937,406,368 字节。单轮 GPU 峰值约
 
 公开 `evaluate(...)`（省略 `backend` 或传入 `None`）和显式
 `evaluate(..., backend="auto")` 按整次请求选择 CPU 或 CUDA，并在返回的
-`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v16`。
+`bundle.metadata` 中记录选择。策略版本为 `ashare_public_routes_20260927_v17`。
 以下 701 日规则继续适用于短历史配置。
 它依据已注册 A 股日行情构造的 701 个交易日、5314 只股票、2 个因子输入，
 逐指标比较完整公开入口的 CPU/CUDA 结果。冷调用和交错顺序的热调用都更快、
@@ -404,6 +406,36 @@ CUDA 约 18.30–18.31 秒，约快 6.1 倍；CUDA GPU pool 峰值
 两端约 112 秒，完整指标对拍通过。GPU pool 峰值约 3.25 GB，仍低于会话预算。
 该经验估算不是对任意形状的显存保证：单行工作区另做 admission，CuPy OOM 仍按
 策略重切 tile。证据见 `docs/benchmarks/real_cos_f24_quantile_tile_ab_20260927.json`。
+
+同一精确 F24 面板的完整 `rank_chain`（`rank_ic`、`rank_ic_series`、
+`ic_std`、`ic_ir`）另完成 CPU/CUDA/auto/auto/CUDA/CPU 六轮交错 A/B，
+每轮各含冷、热调用。CPU 热调用为 57.97–58.22 秒，CUDA 为
+19.76–20.02 秒；CUDA 峰值 9,450,477,056 字节，按 8 因子 tile
+运行 3 次。六轮的配置哈希、数值、有效掩码、计数、来源和逐因子
+MetricValue 均对拍通过。改路由前两轮 `auto` 都留在 CPU；现在仅对
+精确 2586 日 × 5461 股 × 24 因子、float64、默认参数、无特殊输入、
+单 NVIDIA L20 且实际及有效空闲显存至少 14 GiB 的完整集合选 CUDA。
+子集、其它组合、F32、相邻形状或其它硬件均不继承此认证。改路由后另做完整
+六轮交错复测，两轮 `auto` 都实际选择 CUDA，热调用 19.73–20.18 秒，
+与强制 CUDA 相近，所有制品对拍通过。实测证据见
+`docs/benchmarks/real_cos_f24_rank_chain_20260927.json` 和
+`docs/benchmarks/real_cos_f24_rank_chain_auto_20260927.json`。
+
+F32（32 个因子）仍未获得自动 CUDA 认证。只读预检命令：
+
+```bash
+python -m quant_evaluator.scripts.benchmark_real_cos_factor_batch --factor-count-profile 32 --preflight-only
+```
+
+它只检查绑定 manifest、对象字节数及 RAM/VRAM 余量，不会载入因子数组或执行评估。
+`--max-working-gib` 默认 24；提高该上限不能绕过可用内存与预留余量检查。
+只有显式加 `--run`，且预检
+通过后，才会执行整批多指标 CPU/CUDA/auto 六轮 A/B；可选
+`--factor-profile-mode single` 改为逐指标诊断。当前绑定 manifest 有 61 个
+符合筛选条件的对象，最小 32 个合计 1,946,203,073 字节，但按本轮 F24
+实测内存峰值外推并预留 8 GiB 后，服务器资源门禁未放行；这是安全估算，
+不是 F32 性能或正确性结论。现有加载器最多支持 32 个因子，F64（64 因子）
+暂不能用该脚本验证。
 
 自定义分位参数：`n_quantiles=1` 是合法的单桶请求，有限因子值全部进入第 0 桶；
 形状单调性此时没有相邻桶，结果为缺失。CPU/CUDA 现在都支持这一口径。
