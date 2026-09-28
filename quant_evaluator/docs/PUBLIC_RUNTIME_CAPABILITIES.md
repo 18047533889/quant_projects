@@ -1012,3 +1012,22 @@ MetricInstance 聚合结果另以 `instance_execution_receipts` 按实例 ID 保
 cuda_strict 仍可供研究对拍。这不是 PIT 或所有指标的生产认证。A/B
 原始脱敏汇总见 docs/benchmarks/real_cos_f61_pearson_source_ab_20260930.json
 和 docs/benchmarks/real_cos_f61_pearson_source_ab_20260930_B.json。
+
+## 一次性来源的 GPU OOM 重分片
+
+来源型批量评估只读取每个因子区间一次。GPU 执行期间若发生 CUDA OOM 且
+GPUExecutionPolicy.oom_retile=True，会保留已读取的有界主机片，在内存中
+缩小子片重试；不会从 COS 或其它一次性来源回读已消费区间。若单因子子片
+仍 OOM，或 oom_retile=False，则直接报错，不静默切换 CPU。
+`factor_tiles_processed` 记录成功计算的子片数；OOM 后它可能大于来源读取次数。
+
+## F61 来源批次三指标整请求 A/B
+
+在同一真实 COS manifest、2,586 日 × 5,461 股 × 61 因子、float64、
+tile 16 上，rank_ic、quantile_spread、factor_turnover_rate 联合请求
+CPU 用时 444.44 秒，CUDA 用时 188.03 秒（约 2.36 倍吞吐）。
+183 个标量结果的有限值 mask 与逐因子观测数均一致；三项最大绝对误差
+依次为 1.18×10⁻¹⁶、4.77×10⁻¹⁸、3.89×10⁻¹⁶。
+这补充验证了已有的精确 F61 mixed-three `auto` 路由，但不外推到任意
+因子数量或指标组合。脱敏报告：
+docs/benchmarks/real_cos_f61_mixed_three_source_ab_20260930.json。

@@ -288,35 +288,47 @@ class GPUExecutor:
         start = 0
         count = 0
         while start < F:
-            stop = min(start + tile_width, F)
-            ids = metadata.factor_ids[start:stop]
-            self.session._final_tile = tile_width
-            try:
-                factor_tile = read_validated_factor_tile(factor_source, metadata, start, stop)
-                chunk = factor_tile.batch.values
-                if factor_tile.batch.validity is not None:
-                    chunk = np.where(factor_tile.batch.validity, chunk, np.nan)
-                self.session.stage_factors(chunk, ids, layout="T,N,F")
-                result = self.run(ids, metrics, label_bundle.target_id)
-            except cp.cuda.memory.OutOfMemoryError:
-                if not self.session.policy.oom_retile or stop - start <= 1:
-                    raise
-                tile_width = self.session.retile_on_oom(stop - start)
-                continue
-            finally:
-                self.session.release_factor_tile()
-            for field in ("scalar_metrics", "series_metrics", "vector_metrics", "observation_counts"):
-                destination = getattr(out, field)
-                for name, arr in getattr(result, field).items():
-                    if arr.ndim == 0 or arr.shape[-1] != stop - start:
-                        raise ValueError(f"GPU metric {name!r} has no trailing factor axis")
-                    if name not in destination:
-                        self._reserve_host_result(int(np.prod(arr.shape[:-1])) * F * arr.dtype.itemsize)
-                        destination[name] = np.empty((*arr.shape[:-1], F), dtype=arr.dtype)
-                    destination[name][..., start:stop] = arr
-                    self.session._d2h_bytes += arr.nbytes
-            start = stop
-            count += 1
+            source_stop = min(start + tile_width, F)
+            # Read a source range once. Some production sources stream from COS
+            # and reject rewinding; an OOM must only split this resident host tile.
+            factor_tile = read_validated_factor_tile(
+                factor_source, metadata, start, source_stop)
+            host_values = factor_tile.batch.values
+            host_validity = factor_tile.batch.validity
+            segment_start = start
+            while segment_start < source_stop:
+                stop = min(segment_start + tile_width, source_stop)
+                offset = segment_start - start
+                ids = metadata.factor_ids[segment_start:stop]
+                chunk = host_values[:, :, offset:offset + stop - segment_start]
+                if host_validity is not None:
+                    chunk = np.where(
+                        host_validity[:, :, offset:offset + stop - segment_start],
+                        chunk, np.nan)
+                self.session._final_tile = tile_width
+                try:
+                    self.session.stage_factors(chunk, ids, layout="T,N,F")
+                    result = self.run(ids, metrics, label_bundle.target_id)
+                except cp.cuda.memory.OutOfMemoryError:
+                    if not self.session.policy.oom_retile or stop - segment_start <= 1:
+                        raise
+                    tile_width = self.session.retile_on_oom(stop - segment_start)
+                    continue
+                finally:
+                    self.session.release_factor_tile()
+                for field in ("scalar_metrics", "series_metrics", "vector_metrics", "observation_counts"):
+                    destination = getattr(out, field)
+                    for name, arr in getattr(result, field).items():
+                        if arr.ndim == 0 or arr.shape[-1] != stop - segment_start:
+                            raise ValueError(f"GPU metric {name!r} has no trailing factor axis")
+                        if name not in destination:
+                            self._reserve_host_result(int(np.prod(arr.shape[:-1])) * F * arr.dtype.itemsize)
+                            destination[name] = np.empty((*arr.shape[:-1], F), dtype=arr.dtype)
+                        destination[name][..., segment_start:stop] = arr
+                        self.session._d2h_bytes += arr.nbytes
+                segment_start = stop
+                count += 1
+            start = source_stop
         out.metadata = self.session.metadata()
         out.metadata["factor_tiles_processed"] = count
         out.metadata["source_snapshot_id"] = metadata.snapshot_id

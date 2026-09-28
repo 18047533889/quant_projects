@@ -117,22 +117,37 @@ def test_source_label_axis_mismatch_rejected_before_read():
     assert source.reads == []
 
 
-def test_source_tiling_oom_retries_with_smaller_read(monkeypatch):
+def test_source_tiling_oom_retries_without_rereading_one_pass_source(monkeypatch):
     batch, label = _inputs()
-    source = ArraySource(batch)
+    class OnePassSource(ArraySource):
+        def __init__(self, batch):
+            super().__init__(batch)
+            self.next_start = 0
+
+        def read_tile(self, start, end):
+            assert start == self.next_start, "source was reread after OOM"
+            tile = super().read_tile(start, end)
+            self.next_start = end
+            return tile
+
+    source = OnePassSource(batch)
     metrics = ("rank_ic",)
     reference = _run_memory(batch, label, metrics)
     original = GPUExecutor.run
+    attempts = []
 
     def run(self, factor_ids, metric_ids, label_id="next_ret"):
+        attempts.append(tuple(factor_ids))
         if len(factor_ids) > 1:
             raise cp.cuda.memory.OutOfMemoryError(100, 100, 100)
         return original(self, factor_ids, metric_ids, label_id)
 
     monkeypatch.setattr(GPUExecutor, "run", run)
     result = _run_source(source, label, metrics, max_tile_size=2)
-    assert source.reads[0] == (0, 2)
-    assert source.reads[1] == (0, 1)
+    assert source.reads == [(0, 2), (2, 3), (3, 4), (4, 5)]
+    assert attempts == [("f0", "f1"), ("f0",), ("f1",),
+                        ("f2",), ("f3",), ("f4",)]
+    assert source.next_start == batch.num_factors
     assert result.metadata["factor_tiles_processed"] == 5
     np.testing.assert_allclose(result.scalar_metrics["rank_ic"],
                                reference.scalar_metrics["rank_ic"],
