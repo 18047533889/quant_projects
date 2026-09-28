@@ -199,3 +199,26 @@ def test_correlation_similarity_cache_no_collision():
 
     # Verify cache count is correct (2 unique results, stored symmetrically)
     assert similarity.count() == 2
+
+
+def test_optional_empty_cache_scope_is_distinct_from_unspecified_scope():
+    for provider_type in (QEPairwiseSimilarity, CorrelationSimilarity):
+        for field in ("universe_ref", "period_start", "period_end"):
+            similarity = provider_type()
+            unspecified = {field: None}
+            explicit_empty = {field: ""}
+            for options, score in ((unspecified, 0.25), (explicit_empty, 0.75)):
+                result = SimilarityResult(
+                    factor_id_a="factor_a", factor_id_b="factor_b",
+                    similarity_score=score, method=SimilarityMethod.PEARSON,
+                    timestamp="2024-01-01T00:00:00Z", sample_size=100,
+                    **options,
+                )
+                similarity.add_result(result)
+
+            assert similarity.compute_similarity(
+                "factor_a", "factor_b", **unspecified
+            ).similarity_score == 0.25
+            assert similarity.compute_similarity(
+                "factor_a", "factor_b", **explicit_empty
+            ).similarity_score == 0.75

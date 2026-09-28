@@ -188,7 +188,7 @@ class QEPairwiseSimilarity:
                        If None, falls back to stub mode.
         """
         self._qe_adapter = qe_adapter
-        self._cache: dict[tuple[str, str, str, str, str, str], SimilarityResult] = {}
+        self._cache: dict[tuple[str, str, str, Optional[str], Optional[str], Optional[str]], SimilarityResult] = {}
 
     def compute_similarity(
         self,
@@ -321,7 +321,7 @@ class QEPairwiseSimilarity:
         universe_ref: Optional[str],
         period_start: Optional[str],
         period_end: Optional[str],
-    ) -> tuple[str, str, str, str, str, str]:
+    ) -> tuple[str, str, str, Optional[str], Optional[str], Optional[str]]:
         """
         Build comprehensive cache key including all distinguishing parameters.
 
@@ -332,9 +332,9 @@ class QEPairwiseSimilarity:
             factor_id_a,
             factor_id_b,
             method.value,
-            universe_ref or "",
-            period_start or "",
-            period_end or "",
+            universe_ref,
+            period_start,
+            period_end,
         )
 
     def _get_from_cache(
@@ -412,7 +412,7 @@ class CorrelationSimilarity:
     """
 
     def __init__(self):
-        self._cache: dict[tuple[str, str, str, str, str, str], SimilarityResult] = {}
+        self._cache: dict[tuple[str, str, str, Optional[str], Optional[str], Optional[str]], SimilarityResult] = {}
 
     def add_result(self, result: SimilarityResult) -> None:
         """
@@ -442,7 +442,7 @@ class CorrelationSimilarity:
         universe_ref: Optional[str],
         period_start: Optional[str],
         period_end: Optional[str],
-    ) -> tuple[str, str, str, str, str, str]:
+    ) -> tuple[str, str, str, Optional[str], Optional[str], Optional[str]]:
         """
         Build comprehensive cache key including all distinguishing parameters.
 
@@ -453,9 +453,9 @@ class CorrelationSimilarity:
             factor_id_a,
             factor_id_b,
             method.value,
-            universe_ref or "",
-            period_start or "",
-            period_end or "",
+            universe_ref,
+            period_start,
+            period_end,
         )
 
     def compute_similarity(
