@@ -888,6 +888,24 @@ provenance、逐因子 MetricValue 与配置哈希均通过对拍，CUDA pool �
 原始证据见
 [`real_cos_f32_pearson_chain_auto_v22_20260929.json`](benchmarks/real_cos_f32_pearson_chain_auto_v22_20260929.json)。
 
+四个 Pearson 单指标现在各自支持使用同一有界 F32 基准脚本做
+CPU/CUDA/auto/auto/CUDA/CPU 六轮交错 A/B。例如：
+
+```bash
+python -m quant_evaluator.scripts.benchmark_real_cos_metric_batch \
+  --factors 32 --metrics pearson_ic --compact
+# 资源与 COS 授权预检通过后，显式加 --run --output <bounded-report.json>
+```
+
+`pearson_ic_series`、`pearson_ic_std` 和 `pearson_ic_ir` 可替换
+`--metrics` 值；未带 `--run` 时只预检，不加载完整面板。完整链的
+速度证据不能外推给单指标，单指标 `auto` 仍保守留在 CPU，
+待各自真实大批量对拍和交错计时通过后才可认证。2026-09-29
+本执行上下文的预检因缺少可用 COS/S3 授权而返回
+`unauthenticated`；没有绕过授权或强行加载整板。
+基准报告仍包含来源/因子标识；`--compact` 只压缩制品值，
+公开仓库只能收录经过脱敏核查的摘要。
+
 新版 CPU 行块与加载器组合在同一 F24 rank 链上另完成六轮真实 COS
 公开入口复测，完整制品对拍通过；父进程 RSS 峰值 10,850,236 KiB，
 CPU worker RSS 峰值 19,223,060–19,248,388 KiB。两个 `auto` 均走 CUDA。

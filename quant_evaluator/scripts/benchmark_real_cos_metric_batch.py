@@ -36,7 +36,9 @@ POSITIVE_RATIO_SINGLE = ("rank_ic_positive_ratio",)
 RANK_POSITIVE_PAIR = ("rank_ic", "rank_ic_positive_ratio")
 METRICS = DEFAULT_METRICS
 ALLOWED_BATCHES = (DEFAULT_METRICS, RANK_CHAIN, QUANTILE_CHAIN)
-F32_SINGLE_METRICS = (RANK_SERIES_SINGLE, QUANTILE_FULL_SINGLE, QUANTILE_DAILY_SINGLE)
+PEARSON_SINGLE_METRICS = tuple((metric,) for metric in PEARSON_CHAIN)
+F32_SINGLE_METRICS = (RANK_SERIES_SINGLE, QUANTILE_FULL_SINGLE,
+                      QUANTILE_DAILY_SINGLE, *PEARSON_SINGLE_METRICS)
 MANIFEST_SHA256 = "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864"
 _BATCH = None
 _LABELS = None
@@ -233,7 +235,7 @@ def main():
     parser.add_argument("--factors", type=int, choices=(2, 8, 12, 13, 24, 32), default=8)
     parser.add_argument("--compact", action="store_true", help="write artifact hashes, not value arrays")
     parser.add_argument("--run", action="store_true",
-                        help="run the F32 Pearson chain or daily quantile singleton after preflight")
+                        help="run the F32 Pearson chain/singleton or daily quantile singleton after preflight")
     args = parser.parse_args()
     if args.timeout_s <= 0:
         parser.error("timeout-s must be positive")
@@ -249,7 +251,7 @@ def main():
                          "F2 permits rank_ic_series alone, F13 permits factor_turnover_rate "
                          "or rank_ic_positive_ratio alone, or their exact rank-IC/positive-ratio pair, "
                          "and F32 permits rank_ic_series, quantile_returns_full, "
-                         "or quantile_returns_daily alone, or the exact Pearson chain")
+                         "quantile_returns_daily or a Pearson metric alone, or the exact Pearson chain")
     if args.factors == 2 and requested not in (RANK_SERIES_SINGLE, RANK_CHAIN, QUANTILE_CHAIN):
         parser.error("F2 runs require rank_ic_series alone or an exact rank/quantile chain")
     if args.factors == 13 and requested not in (
@@ -259,11 +261,13 @@ def main():
     if args.factors == 24 and requested not in (RANK_CHAIN, QUANTILE_CHAIN):
         parser.error("F24 runs require the exact rank-chain or quantile-chain request")
     if args.factors == 32 and requested not in (*F32_SINGLE_METRICS, PEARSON_CHAIN):
-        parser.error("F32 runs require rank_ic_series, quantile_returns_full, quantile_returns_daily, "
+        parser.error("F32 runs require a certified singleton (rank, quantile or Pearson) "
                      "or the exact Pearson chain")
-    preflight_request = requested in (PEARSON_CHAIN, QUANTILE_DAILY_SINGLE)
+    preflight_request = requested in (PEARSON_CHAIN, QUANTILE_DAILY_SINGLE,
+                                      *PEARSON_SINGLE_METRICS)
     if args.run and not (args.factors == 32 and preflight_request):
-        parser.error("--run applies only to the F32 Pearson chain or daily quantile singleton")
+        parser.error("--run applies only to the F32 Pearson chain/singleton "
+                     "or daily quantile singleton")
     if preflight_request:
         if args.factors != 32:
             parser.error("this request requires the exact F32 panel")
@@ -282,7 +286,9 @@ def main():
         if not args.run:
             print(json.dumps({"status": "preflight_only",
                               "note": "pass --run to start the F32 "
-                                      + ("Pearson chain" if requested == PEARSON_CHAIN else "daily quantile")
+                                      + ("Pearson chain" if requested == PEARSON_CHAIN else
+                                         "Pearson singleton" if requested in PEARSON_SINGLE_METRICS else
+                                         "daily quantile")
                                       + " benchmark"}), flush=True)
             return
     METRICS = requested

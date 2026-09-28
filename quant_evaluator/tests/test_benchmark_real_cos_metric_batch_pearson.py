@@ -87,3 +87,56 @@ def test_pearson_chain_rejects_other_factor_counts_before_loading(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         benchmark.main()
     assert exc.value.code == 2
+
+@pytest.mark.parametrize("metric", benchmark.PEARSON_CHAIN)
+def test_f32_pearson_singleton_preflights_without_loading(monkeypatch, capsys, metric):
+    monkeypatch.setattr(benchmark, "load_real_batch",
+                        lambda **kwargs: pytest.fail("preflight must precede COS loading"))
+    calls = []
+    monkeypatch.setattr(profile, "preflight_factor_count_profile",
+                        lambda args: calls.append(args) or {"status": "ready"})
+    monkeypatch.setattr(sys, "argv", ["benchmark_real_cos_metric_batch.py",
+                                      "--factors", "32", "--metrics", metric])
+    benchmark.main()
+    assert len(calls) == 1
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["status"] == "preflight_only"
+
+
+def test_f32_pearson_singleton_rejects_low_memory_before_loading(monkeypatch):
+    monkeypatch.setattr(benchmark, "load_real_batch",
+                        lambda **kwargs: pytest.fail("low-memory request must not load COS"))
+    monkeypatch.setattr(profile, "preflight_factor_count_profile",
+                        lambda args: {"status": "insufficient_resources"})
+    monkeypatch.setattr(sys, "argv", ["benchmark_real_cos_metric_batch.py",
+                                      "--factors", "32", "--metrics", "pearson_ic", "--run"])
+    with pytest.raises(SystemExit) as exc:
+        benchmark.main()
+    assert exc.value.code == 2
+
+
+def test_f32_pearson_singleton_runs_six_interleaved_workers_after_preflight(monkeypatch, capsys):
+    metric = "pearson_ic"
+    batch = SimpleNamespace(num_times=2586, num_assets=5461, num_factors=32,
+                            values=SimpleNamespace(dtype=np.dtype("float64")))
+    calls = []
+    monkeypatch.setattr(profile, "preflight_factor_count_profile",
+                        lambda args: calls.append(("preflight",)) or {"status": "ready"})
+    monkeypatch.setattr(benchmark, "load_real_batch",
+                        lambda **kwargs: calls.append(("load",)) or (batch, object(), {}))
+
+    def fake_run_one(context, backend, repeats, timeout_s):
+        calls.append(("run", backend, benchmark.METRICS))
+        return {"backend_requested": backend, "backend_used": backend,
+                "auto_backend_reason": None, "cold_s": 0.1,
+                "warm_median_s": 0.1, "peak_vram": None, "peak_rss_kib": 100,
+                "config_hash": "same", "artifacts": {metric: _artifact()}}
+
+    monkeypatch.setattr(benchmark, "_run_one", fake_run_one)
+    monkeypatch.setattr(sys, "argv", ["benchmark_real_cos_metric_batch.py",
+                                      "--factors", "32", "--metrics", metric, "--run", "--compact"])
+    benchmark.main()
+    assert [item[0] for item in calls] == ["preflight", "load"] + ["run"] * 6
+    assert [item[1] for item in calls if item[0] == "run"] == [
+        "cpu", "cuda_strict", "auto", "auto", "cuda_strict", "cpu"]
+    assert all(item[2] == (metric,) for item in calls if item[0] == "run")
+    assert json.loads(capsys.readouterr().out.splitlines()[-1])["parity_pass"]
