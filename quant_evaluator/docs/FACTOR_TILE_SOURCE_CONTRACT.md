@@ -2,8 +2,8 @@
 
 A full-history A-share panel can have thousands of dates and stocks; copying every
 factor into one (time, asset, factor) array can exhaust host RAM before evaluation
-starts. The tile-source contract establishes the input boundary for a future
-single-request evaluator that reads a bounded number of factors at a time.
+starts. The tile-source contract establishes the input boundary for the
+bounded public core-metric API described in [Factor-source batch evaluation](FACTOR_SOURCE_BATCH_API.md).
 
 The contract is in `quant_evaluator.contracts.factor_tile_source` and is also
 exported by `quant_evaluator.contracts`:
@@ -32,12 +32,13 @@ policy permits. The caller must validate label timing and metric admission
 before using this low-level primitive. CUDA tests compare scalar, series,
 vector and count results against the existing in-memory executor.
 
-The contract does not download COS objects, merge public `EvaluationBundle`
-objects, or implement a public `evaluate_source`/`auto` API yet. In particular,
-running `evaluate()` independently on each tile and concatenating the results
-is **not** a single batch evaluation: request identity, shared labels, metric
-artifacts, resource accounting, and provenance must be aggregated by one
-orchestrator before that claim is valid.
+The contract does not download COS objects or turn a columnar
+`BatchEvaluationBundle` into the richer public `EvaluationBundle`. The bounded
+`evaluate_factor_source_batch()` API supports only four factor-separable core
+metrics; see its options, auto route and limitations in the linked guide.
+Running `evaluate()` independently on each tile and concatenating the richer
+bundles is **not** a single `EvaluationBundle`: request identity, diagnostics,
+artifacts, resource accounting, and provenance need a separate orchestrator.
 
 Minimal source usage:
 
@@ -47,14 +48,14 @@ from quant_evaluator.contracts import iter_validated_factor_tiles
 try:
     for tile in iter_validated_factor_tiles(source):
         assert tile.batch.factor_ids == source.factor_ids[tile.start:tile.end]
-        # Feed the validated tile to a future single-request orchestrator.
+        # Inspect one validated range; the public batch API manages this loop itself.
 finally:
     source.close()
 ```
 
 The dedicated contract tests exercise complete coverage, immutable values,
 invalid ranges, reordered IDs, axis/dtype/snapshot mismatch, and metadata drift.
-They do not certify throughput or the correctness of a future batch evaluator.
+They do not by themselves certify throughput or the richer EvaluationBundle path.
 
 ## Bounded full-history smoke test (synthetic, not route certification)
 

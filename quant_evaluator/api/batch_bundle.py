@@ -49,6 +49,8 @@ class BatchEvaluationBundle:
             "factor_ids": list(self.factor_ids),
             "label_id": self.label_id,
             "scalar_metrics": {k: v.tolist() for k, v in self.scalar_metrics.items()},
+            "series_metrics": {k: v.tolist() for k, v in self.series_metrics.items()},
             "vector_metrics": {k: v.tolist() for k, v in self.vector_metrics.items()},
+            "observation_counts": {k: v.tolist() for k, v in self.observation_counts.items()},
             "metadata": self.metadata,
         }

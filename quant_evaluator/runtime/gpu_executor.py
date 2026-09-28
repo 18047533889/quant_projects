@@ -244,7 +244,8 @@ class GPUExecutor:
         out.metadata["exposure_kernel_no_fallback"] = bool(self.exposure_kernel_dispatches)
         return out
 
-    def run_source_tiled(self, factor_source, label_bundle, metrics, *, max_tile_size=None):
+    def run_source_tiled(self, factor_source, label_bundle, metrics, *, max_tile_size=None,
+                         source_metadata=None):
         """Evaluate one bounded factor source in a single GPU session.
 
         The caller owns and closes the source. This is a columnar GPU executor
@@ -253,10 +254,12 @@ class GPUExecutor:
         from quant_evaluator.contracts.errors import InvalidContractError
         from quant_evaluator.contracts.factor_tile_source import (
             capture_factor_tile_source, read_validated_factor_tile,
+            _assert_source_unchanged,
         )
 
         self.validate_metric_plan(metrics)
-        metadata = capture_factor_tile_source(factor_source)
+        metadata = source_metadata or capture_factor_tile_source(factor_source)
+        _assert_source_unchanged(factor_source, metadata)
         if max_tile_size is not None and (type(max_tile_size) is not int or max_tile_size <= 0):
             raise InvalidContractError("max_tile_size must be a positive integer")
         T, N, F = metadata.time_axis.size, metadata.asset_axis.size, len(metadata.factor_ids)

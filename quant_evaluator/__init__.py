@@ -13,6 +13,7 @@ from quant_evaluator.contracts.backend_policy import (
 from quant_evaluator.api.batch_bundle import BatchEvaluationBundle
 from quant_evaluator.api.evaluate_many import evaluate_many
 from quant_evaluator.api.ic_decay import ICDecayResult, compute_ic_decay
+from quant_evaluator.api.factor_source import evaluate_factor_source_batch
 from quant_evaluator.api.horizons import (
     HorizonEvaluationBundle, MultiHorizonSummary,
     evaluate_horizons, evaluate_factor_multi_horizon,
@@ -28,5 +29,6 @@ __all__ = [
     "evaluate_many",
     "HorizonEvaluationBundle", "MultiHorizonSummary",
     "ICDecayResult", "compute_ic_decay",
+    "evaluate_factor_source_batch",
     "evaluate_horizons", "evaluate_factor_multi_horizon",
 ]

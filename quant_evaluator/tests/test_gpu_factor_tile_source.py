@@ -117,3 +117,37 @@ def test_source_tiling_oom_retries_with_smaller_read(monkeypatch):
     np.testing.assert_allclose(result.scalar_metrics["rank_ic"],
                                reference.scalar_metrics["rank_ic"],
                                rtol=0, atol=1e-12, equal_nan=True)
+
+
+def test_source_gpu_values_match_independent_public_cpu_evaluation():
+    from quant_evaluator.runtime.evaluator import evaluate
+
+    batch, label = _inputs()
+    metrics = ("rank_ic", "rank_ic_series", "coverage", "quantile_spread")
+    cpu = evaluate(batch, label, metrics=metrics, backend="cpu")
+    gpu = _run_source(ArraySource(batch), label, metrics)
+    for metric in metrics:
+        actual = (gpu.series_metrics if metric == "rank_ic_series" else gpu.scalar_metrics)[metric]
+        np.testing.assert_allclose(actual, cpu.artifacts[metric].values,
+                                   rtol=1e-8, atol=1e-10, equal_nan=True)
+
+
+def test_source_gpu_cpu_parity_on_constant_nan_tied_and_masked_factors():
+    from quant_evaluator.runtime.evaluator import evaluate
+
+    original, label = _inputs()
+    values = np.array(original.values)
+    validity = np.array(original.validity)
+    values[:, :, 0] = 1.0
+    values[:, :, 1] = np.nan
+    values[:, :, 2] = np.round(values[:, :, 2], 1)
+    validity[:, :, 3] = False
+    batch = FactorBatch(original.factor_ids, original.time_axis,
+                        original.asset_axis, values, validity=validity)
+    metrics = ("rank_ic", "rank_ic_series", "coverage", "quantile_spread")
+    cpu = evaluate(batch, label, metrics=metrics, backend="cpu")
+    gpu = _run_source(ArraySource(batch), label, metrics)
+    for metric in metrics:
+        actual = (gpu.series_metrics if metric == "rank_ic_series" else gpu.scalar_metrics)[metric]
+        np.testing.assert_allclose(actual, cpu.artifacts[metric].values,
+                                   rtol=1e-8, atol=1e-10, equal_nan=True)
