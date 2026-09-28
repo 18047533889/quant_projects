@@ -189,6 +189,9 @@ class QEPairwiseSimilarity:
         """
         self._qe_adapter = qe_adapter
         self._cache: dict[tuple[str, str, str, Optional[str], Optional[str], Optional[str]], SimilarityResult] = {}
+        # Per-left-factor key maps preserve _cache insertion order while making
+        # find_similar proportional to this factor's degree, not total cache size.
+        self._factor_keys: dict[str, dict[tuple[str, str, str, Optional[str], Optional[str], Optional[str]], None]] = {}
 
     def compute_similarity(
         self,
@@ -268,8 +271,9 @@ class QEPairwiseSimilarity:
         # For now, use cache
         results = []
         seen_factor_ids = set()
-
-        for key, result in self._cache.items():
+        factor_keys = self._factor_keys.get(factor_id, {})
+        for key in factor_keys:
+            result = self._cache[key]
             # key is (fid_a, fid_b, method_val, universe, start, end)
             fid_a, fid_b, method_val, universe, start, end = key
 
@@ -310,8 +314,13 @@ class QEPairwiseSimilarity:
         )
 
         # Store with both orderings for symmetric lookup
-        self._cache[key_a] = result
-        self._cache[key_b] = result
+        for key in (key_a, key_b):
+            # Dict assignment to an existing cache key preserves its global
+            # insertion position; only first insertion belongs in the index.
+            if key not in self._cache:
+                factor_id = key[0]
+                self._factor_keys.setdefault(factor_id, {})[key] = None
+            self._cache[key] = result
 
     def _make_cache_key(
         self,
@@ -397,10 +406,12 @@ class QEPairwiseSimilarity:
     def clear(self) -> None:
         """Clear cache."""
         self._cache.clear()
+        self._factor_keys.clear()
 
     def count(self) -> int:
         """Get total number of cached results (accounting for symmetric storage)."""
-        return len(self._cache) // 2
+        self_pairs = sum(key[0] == key[1] for key in self._cache)
+        return (len(self._cache) + self_pairs) // 2
 
 
 class CorrelationSimilarity:
