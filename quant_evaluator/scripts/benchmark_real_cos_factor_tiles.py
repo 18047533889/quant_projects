@@ -10,7 +10,9 @@ import resource
 import shutil
 import tempfile
 import time
+from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Mapping
+from collections import deque
 from pathlib import Path
 
 import numpy as np
@@ -146,14 +148,102 @@ def iter_frames(records, manifest_sha, object_mib, reuse_manifest=False, *, load
         engine.close()
 
 
+def iter_frames_prefetched(records, manifest_sha, object_mib, *, load_phases=None):
+    """Read a shard in source order with at most two independent reads in flight.
+
+    Each read owns its DuckDBEngine and DataAccessStore. The controller holds a
+    separately verified manifest snapshot and verifies it again after the whole
+    shard has been consumed. Values and axes are still assembled by the caller.
+    """
+    uri = f"{BASE}/metadata/{manifest_sha}/landing_manifest.json"
+    md = _ds("source_manifest", uri.rsplit("/", 1)[0], "landing_manifest.json", "json")
+    manifest_engine = DuckDBEngine(threads=1)
+    executor = None
+    pending = deque()
+
+    def read_one(record, manifest_snapshot):
+        name, factor_uri, digest, size = record
+        engine = DuckDBEngine(threads=2)
+        try:
+            fd = _ds("factor_panel", factor_uri.rsplit("/", 1)[0],
+                     name + ".parquet", "parquet")
+            store = DataAccessStore(DatasetRegistry({md.name: md, fd.name: fd}), engine)
+            read_started = time.perf_counter()
+            bound = read_bound_factor(
+                store, md.name, fd.name, name, max_object_mib=object_mib,
+                allow_research=True, manifest_snapshot=manifest_snapshot)
+            read_elapsed = time.perf_counter() - read_started
+            obj = bound.factor
+            if (bound.manifest_sha256 != manifest_sha or obj.source_uri != factor_uri or
+                    obj.content_sha256 != digest or obj.downloaded_bytes != size):
+                raise ValueError("factor source changed or disagrees with selected manifest")
+            conversion_started = time.perf_counter()
+            frame = obj.table.to_pandas()
+            if "timestamp" not in frame:
+                raise ValueError("factor timestamp missing")
+            frame = frame.set_index("timestamp")
+            frame.index = pd.to_datetime(frame.index).normalize()
+            if frame.index.has_duplicates or frame.columns.has_duplicates:
+                raise ValueError("duplicate factor axis")
+            frame = frame.loc[:, [c for c in frame if c.endswith((".SZ", ".SH"))]].sort_index()
+            source = (name, factor_uri, digest, size, obj.source_etag, axis_hash(frame))
+            return frame, source, read_elapsed, time.perf_counter() - conversion_started
+        finally:
+            engine.close()
+
+    try:
+        manifest_store = DataAccessStore(DatasetRegistry({md.name: md}), manifest_engine)
+        executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="qe-tile-prefetch")
+        manifest_snapshot = read_bound_manifest(
+            manifest_store, md.name, allow_research=True)
+        if manifest_snapshot.manifest_sha256 != manifest_sha:
+            raise ValueError("manifest identity mismatch")
+        records_iter = iter(records)
+        exhausted = False
+        while pending or not exhausted:
+            while len(pending) < 2 and not exhausted:
+                try:
+                    record = next(records_iter)
+                except StopIteration:
+                    exhausted = True
+                    break
+                pending.append(executor.submit(read_one, record, manifest_snapshot))
+            if not pending:
+                break
+            future = pending.popleft()
+            frame, source, read_elapsed, conversion_elapsed = future.result()
+            if load_phases is not None:
+                load_phases["bound_factor_read_s"] += read_elapsed
+                load_phases["arrow_to_pandas_axis_s"] += conversion_elapsed
+            yield frame, source
+            del frame, source, read_elapsed, conversion_elapsed, future
+        verify_bound_manifest_unchanged(manifest_store, md.name, manifest_snapshot)
+    finally:
+        for future in pending:
+            future.cancel()
+        pending.clear()
+        if executor is not None:
+            executor.shutdown(wait=True, cancel_futures=True)
+        manifest_engine.close()
+
+
 def intersect_axes(stream, count):
     dates = assets = None
     sources = []
-    for frame, source in stream:
-        dates = frame.index if dates is None else dates.intersection(frame.index)
-        columns = set(frame.columns)
-        assets = columns if assets is None else assets.intersection(columns)
-        sources.append(source)
+    try:
+        for frame, source in stream:
+            try:
+                dates = frame.index if dates is None else dates.intersection(frame.index)
+                columns = set(frame.columns)
+                assets = columns if assets is None else assets.intersection(columns)
+                sources.append(source)
+            finally:
+                frame = None
+                source = None
+    finally:
+        close = getattr(stream, "close", None)
+        if close is not None:
+            close()
     if len(sources) != count or dates is None or dates.empty or not assets:
         raise ValueError("incomplete first pass or no common factor axes")
     return dates, assets, tuple(sources)
@@ -325,20 +415,27 @@ def make_tile(stream, expected, dates, assets, labels, *,
         raise ValueError("tile must contain 1..32 factors")
     values = np.empty((len(dates), len(assets), len(expected)), dtype=np.float64)
     seen = 0
-    for frame, source in stream:
-        if seen >= len(expected) or source != expected[seen]:
-            raise ValueError("factor source or axes changed between passes")
-        if (required_dates is not None and
-                (not required_dates.isin(frame.index).all() or
-                 not required_assets.issubset(frame.columns))):
-            raise ValueError("indexed shared axes changed between passes")
-        if not dates.isin(frame.index).all() or not set(assets).issubset(frame.columns):
-            raise ValueError("factor final axes changed between passes")
-        write_started = time.perf_counter()
-        values[:, :, seen] = frame.reindex(index=dates, columns=assets).to_numpy(dtype=np.float64, copy=False)
-        if load_phases is not None:
-            load_phases["reindex_write_s"] += time.perf_counter() - write_started
-        seen += 1
+    try:
+        for frame, source in stream:
+            if seen >= len(expected) or source != expected[seen]:
+                raise ValueError("factor source or axes changed between passes")
+            if (required_dates is not None and
+                    (not required_dates.isin(frame.index).all() or
+                     not required_assets.issubset(frame.columns))):
+                raise ValueError("indexed shared axes changed between passes")
+            if not dates.isin(frame.index).all() or not set(assets).issubset(frame.columns):
+                raise ValueError("factor final axes changed between passes")
+            write_started = time.perf_counter()
+            values[:, :, seen] = frame.reindex(index=dates, columns=assets).to_numpy(dtype=np.float64, copy=False)
+            if load_phases is not None:
+                load_phases["reindex_write_s"] += time.perf_counter() - write_started
+            seen += 1
+            frame = None
+            source = None
+    finally:
+        close = getattr(stream, "close", None)
+        if close is not None:
+            close()
     if seen != len(expected):
         raise ValueError("incomplete factor tile")
     times = dates.to_numpy(dtype="datetime64[ns]")
@@ -488,19 +585,34 @@ def compare_collections(reference, candidate, *, rtol=1e-8, atol=1e-10):
             "differences": differences}
 
 
-def memory_preflight(tile_size, object_mib, max_working_gib):
+def _current_process_rss_bytes():
+    with open("/proc/self/statm", encoding="ascii") as stream:
+        resident_pages = int(stream.read().split()[1])
+    return resident_pages * os.sysconf("SC_PAGE_SIZE")
+
+
+def memory_preflight(tile_size, object_mib, max_working_gib, initial=True):
     with open("/proc/meminfo", encoding="ascii") as stream:
         available = next(int(line.split()[1])*1024 for line in stream
                          if line.startswith("MemAvailable:"))
     peak = 50 * 1024**3  # conservative observed F32 parent plus worker envelope
+    rss = _current_process_rss_bytes()
+    guard = 8 * 1024**3
+    remaining_peak = max(0, peak - rss)
+    incremental_required = remaining_peak + guard
+    required = peak + guard if initial else incremental_required
     cache_path = cos_cache_root()
     while not cache_path.exists():
         cache_path = cache_path.parent
     free = shutil.disk_usage(cache_path).free
     disk_need = (2*object_mib + 1024) * 1024**2
     return {"pass": 1 <= tile_size <= 32 and peak <= max_working_gib*1024**3 and
-                    available >= peak + 8*1024**3 and free >= disk_need,
+                    available >= required and free >= disk_need,
             "estimated_tile_peak_bytes": peak, "mem_available_bytes": available,
+            "observed_process_rss_bytes": rss,
+            "remaining_incremental_peak_bytes": remaining_peak,
+            "required_incremental_headroom_bytes": incremental_required,
+            "required_mem_available_bytes": required,
             "cos_cache_disk_free_bytes": free, "required_disk_bytes": disk_need}
 
 
@@ -540,6 +652,8 @@ def main():
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--reuse-manifest", action="store_true",
                         help="reuse one verified landing manifest per factor pass")
+    parser.add_argument("--prefetch", action="store_true",
+                        help="prefetch up to two factor objects per pass; disabled by default")
     parser.add_argument("--axis-index", type=Path,
                         help="optional bounded shared-axis index; reuse still verifies every factor")
     parser.add_argument("--output", type=Path)
@@ -576,9 +690,12 @@ def main():
         index_reused = True
     else:
         first_pass_started = time.perf_counter()
+        frame_reader = iter_frames_prefetched if args.prefetch else iter_frames
+        frame_options = ({} if args.prefetch else
+                         {"reuse_manifest": args.reuse_manifest})
         common_dates, common_assets, sources = intersect_axes(
-            iter_frames(records, args.manifest_sha256, args.max_object_mib,
-                        args.reuse_manifest), len(records))
+            frame_reader(records, args.manifest_sha256, args.max_object_mib,
+                         **frame_options), len(records))
         first_pass_s = time.perf_counter() - first_pass_started
         index_reused = False
         if args.axis_index:
@@ -592,16 +709,21 @@ def main():
     load_phase_totals = {phase: 0.0 for phase in LOAD_PHASES}
     for start in range(0, len(records), args.tile_size):
         tile_started = time.perf_counter()
-        if not memory_preflight(args.tile_size, args.max_object_mib,
-                                args.max_working_gib)["pass"]:
-            raise RuntimeError("tile resources changed below the required headroom")
+        tile_preflight = memory_preflight(args.tile_size, args.max_object_mib,
+                                          args.max_working_gib, False)
+        if not tile_preflight["pass"]:
+            raise RuntimeError("tile resources changed below the required headroom: "
+                               + json.dumps(tile_preflight, sort_keys=True))
         selected = records[start:start+args.tile_size]
         expected = sources[start:start+args.tile_size]
         load_phases = {phase: 0.0 for phase in LOAD_PHASES}
         load_started = time.perf_counter()
-        batch = make_tile(iter_frames(selected, args.manifest_sha256,
-                                     args.max_object_mib, args.reuse_manifest,
-                                     load_phases=load_phases),
+        frame_reader = iter_frames_prefetched if args.prefetch else iter_frames
+        frame_options = ({"load_phases": load_phases} if args.prefetch else
+                         {"reuse_manifest": args.reuse_manifest,
+                          "load_phases": load_phases})
+        batch = make_tile(frame_reader(selected, args.manifest_sha256,
+                                     args.max_object_mib, **frame_options),
                           expected, dates, assets, labels,
                           load_phases=load_phases,
                           **({"required_dates": common_dates, "required_assets": common_assets}
@@ -620,6 +742,7 @@ def main():
         tiles.append(tile_result)
         del batch, bundle
         timing = {"factor_start": start, "factor_count": len(selected),
+                  "memory_preflight": tile_preflight,
                   "load_s": load_s, "load_phases_s": load_phases,
                   "evaluate_s": evaluate_s,
                   "total_s": time.perf_counter() - tile_started,
@@ -634,7 +757,11 @@ def main():
                    "load_phases_s": load_phase_totals,
                    "total_s": time.perf_counter() - started,
                    **({"axis_index_reused": index_reused} if args.axis_index else {}),
-                   **({"manifest_reused": args.reuse_manifest} if args.reuse_manifest else {}),
+                   **({"manifest_reused": True}
+                      if args.reuse_manifest or args.prefetch else {}),
+                   **({"object_prefetch": {
+                       "enabled": True, "max_unconsumed_objects": 2}}
+                      if args.prefetch else {}),
                    "peak_process_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
                    "total_scope": "CLI start through final tile; report serialization and write excluded",
                    "rss_note": "Linux process high-water mark; tile values are cumulative, not per-tile deltas"}

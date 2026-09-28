@@ -1,0 +1,346 @@
+{
+  "status": "complete",
+  "kind": "research_factor_tile_collection.v1",
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "label_content_hash": "42cdc998916cc284d739e0e1423441bee65f5e3a393c5ff6013efbd26363cf2b",
+  "decision_time_first": "2016-01-04 00:00:00",
+  "decision_time_last": "2026-08-25 00:00:00",
+  "asset_axis_sha256": "bea4ddbb9f10e8520aff7c8cf982eda9a29e51b65f91332bac6bf0d528840057",
+  "selected_source_sha256": "d023986fc77e4f24a181528798d50a434351640eadffcf660227efe7a5ec15ce",
+  "shape": [
+    2586,
+    5461,
+    8
+  ],
+  "backend_requested": "cpu",
+  "metric_ids": [
+    "rank_ic",
+    "quantile_spread",
+    "factor_turnover_rate"
+  ],
+  "sources": [
+    [
+      "weekly_db5616cd85a477b3",
+      "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d/weekly_db5616cd85a477b3.parquet",
+      "674763066b67e4ed032122b51545a183f8a851b2488ff43ba2a81ab25c07df5d",
+      3828456,
+      "5efb1f8070196661daabeb563740dff0",
+      "877ca46d0f3b4ee38107c33fdba28f880a5dad86dfe09a4bc7288eac96143971"
+    ],
+    [
+      "weekly_4cbd7ca6dccc61dc",
+      "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59/weekly_4cbd7ca6dccc61dc.parquet",
+      "35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59",
+      5400494,
+      "91da3ad8a2d54f3f35911e231bfcffa8",
+      "877ca46d0f3b4ee38107c33fdba28f880a5dad86dfe09a4bc7288eac96143971"
+    ],
+    [
+      "weekly_c83002810f9e5643",
+      "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/41ff2ef68d1be8e63399d239c4ef78ea321adc0eb1ae273d6ff28a2263298a70/weekly_c83002810f9e5643.parquet",
+      "41ff2ef68d1be8e63399d239c4ef78ea321adc0eb1ae273d6ff28a2263298a70",
+      9053391,
+      "b968dca3f6582b036b6c56cc28779e15",
+      "877ca46d0f3b4ee38107c33fdba28f880a5dad86dfe09a4bc7288eac96143971"
+    ],
+    [
+      "weekly_d4cc0b4a9424e834",
+      "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/b811614bbabf16d03a6019003bcf97a665c41d3affc17cb48f7e4250cf0ce332/weekly_d4cc0b4a9424e834.parquet",
+      "b811614bbabf16d03a6019003bcf97a665c41d3affc17cb48f7e4250cf0ce332",
+      9381300,
+      "07d03a12874fb17b4eafbc6c045d4934",
+      "877ca46d0f3b4ee38107c33fdba28f880a5dad86dfe09a4bc7288eac96143971"
+    ],
+    [
+      "weekly_23629be243c54739",
+      "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/c6ca9fef28f28fc85219d8c918e5c4829300058752c7977e7634b0a0d00651b1/weekly_23629be243c54739.parquet",
+      "c6ca9fef28f28fc85219d8c918e5c4829300058752c7977e7634b0a0d00651b1",
+      11865566,
+      "6625f9fe75281cb284c981ae543909c0",
+      "877ca46d0f3b4ee38107c33fdba28f880a5dad86dfe09a4bc7288eac96143971"
+    ],
+    [
+      "weekly_7632208952b859e5",
+      "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/357d7f86a7e2f9419e1bde16eb2e8467af4da5bf991dc1337751234f98348a3e/weekly_7632208952b859e5.parquet",
+      "357d7f86a7e2f9419e1bde16eb2e8467af4da5bf991dc1337751234f98348a3e",
+      12351702,
+      "3ad1d320b3d458b45c90f2ab3fd0cc33",
+      "877ca46d0f3b4ee38107c33fdba28f880a5dad86dfe09a4bc7288eac96143971"
+    ],
+    [
+      "weekly_6f27ea3106cc03c0",
+      "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/578f5f689cac5450d30c1d43245a21eddb557698f0291bcd63b8c6c8de6cb94f/weekly_6f27ea3106cc03c0.parquet",
+      "578f5f689cac5450d30c1d43245a21eddb557698f0291bcd63b8c6c8de6cb94f",
+      15808239,
+      "09fa342961b13558eb42f4ad289ac568",
+      "877ca46d0f3b4ee38107c33fdba28f880a5dad86dfe09a4bc7288eac96143971"
+    ],
+    [
+      "weekly_5c866fa073382822",
+      "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/5cd04a82f45120138aa775e2dfb41252124b75335f6b4786a9e56ad6be367c6c/weekly_5c866fa073382822.parquet",
+      "5cd04a82f45120138aa775e2dfb41252124b75335f6b4786a9e56ad6be367c6c",
+      16060978,
+      "a26122649b2142423e9c5f6e2023ec8d",
+      "877ca46d0f3b4ee38107c33fdba28f880a5dad86dfe09a4bc7288eac96143971"
+    ]
+  ],
+  "tiles": [
+    {
+      "factor_ids": [
+        "weekly_db5616cd85a477b3",
+        "weekly_4cbd7ca6dccc61dc",
+        "weekly_c83002810f9e5643",
+        "weekly_d4cc0b4a9424e834",
+        "weekly_23629be243c54739",
+        "weekly_7632208952b859e5",
+        "weekly_6f27ea3106cc03c0",
+        "weekly_5c866fa073382822"
+      ],
+      "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+      "execution_receipt": {
+        "backend_requested": "cpu",
+        "backend_strategy": "explicit",
+        "backend_used": "cpu",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "rank_ic": "cpu",
+          "quantile_spread": "cpu",
+          "factor_turnover_rate": "cpu"
+        },
+        "config_hash": "867b381441364470a53787c86bf25200d00b106a2267cbf52977c74e6213fd8c",
+        "receipt_hash": "8c59667edb83ce7795ece6c772ee7f0cef74fbe658fc598e2cdef43ba4f885cd"
+      },
+      "backend_requested": "cpu",
+      "backend_used": "cpu",
+      "metric_backends": {
+        "rank_ic": "cpu",
+        "quantile_spread": "cpu",
+        "factor_turnover_rate": "cpu"
+      },
+      "metrics": {
+        "rank_ic": {
+          "weekly_db5616cd85a477b3": {
+            "value": -0.003396402996946234,
+            "valid": true,
+            "observation_count": 2565,
+            "sample_unit": "daily_ic",
+            "metric_version": "4.0.0",
+            "warnings": []
+          },
+          "weekly_4cbd7ca6dccc61dc": {
+            "value": -0.003131996750469766,
+            "valid": true,
+            "observation_count": 2565,
+            "sample_unit": "daily_ic",
+            "metric_version": "4.0.0",
+            "warnings": []
+          },
+          "weekly_c83002810f9e5643": {
+            "value": 0.00031829061606043497,
+            "valid": true,
+            "observation_count": 2586,
+            "sample_unit": "daily_ic",
+            "metric_version": "4.0.0",
+            "warnings": []
+          },
+          "weekly_d4cc0b4a9424e834": {
+            "value": -0.0032162693570421176,
+            "valid": true,
+            "observation_count": 2584,
+            "sample_unit": "daily_ic",
+            "metric_version": "4.0.0",
+            "warnings": []
+          },
+          "weekly_23629be243c54739": {
+            "value": -0.019372921210558072,
+            "valid": true,
+            "observation_count": 2586,
+            "sample_unit": "daily_ic",
+            "metric_version": "4.0.0",
+            "warnings": []
+          },
+          "weekly_7632208952b859e5": {
+            "value": -0.013338293801802199,
+            "valid": true,
+            "observation_count": 2585,
+            "sample_unit": "daily_ic",
+            "metric_version": "4.0.0",
+            "warnings": []
+          },
+          "weekly_6f27ea3106cc03c0": {
+            "value": -0.04769853045496655,
+            "valid": true,
+            "observation_count": 2586,
+            "sample_unit": "daily_ic",
+            "metric_version": "4.0.0",
+            "warnings": []
+          },
+          "weekly_5c866fa073382822": {
+            "value": 0.031176181362737136,
+            "valid": true,
+            "observation_count": 2586,
+            "sample_unit": "daily_ic",
+            "metric_version": "4.0.0",
+            "warnings": []
+          }
+        },
+        "quantile_spread": {
+          "weekly_db5616cd85a477b3": {
+            "value": -3.550350001867705e-05,
+            "valid": true,
+            "observation_count": 2565,
+            "sample_unit": "daily_quantile_spread",
+            "metric_version": "3.0.0",
+            "warnings": []
+          },
+          "weekly_4cbd7ca6dccc61dc": {
+            "value": -3.904621844739756e-05,
+            "valid": true,
+            "observation_count": 2565,
+            "sample_unit": "daily_quantile_spread",
+            "metric_version": "3.0.0",
+            "warnings": []
+          },
+          "weekly_c83002810f9e5643": {
+            "value": 6.840793074810925e-05,
+            "valid": true,
+            "observation_count": 2404,
+            "sample_unit": "daily_quantile_spread",
+            "metric_version": "3.0.0",
+            "warnings": []
+          },
+          "weekly_d4cc0b4a9424e834": {
+            "value": -3.09447109750145e-05,
+            "valid": true,
+            "observation_count": 2574,
+            "sample_unit": "daily_quantile_spread",
+            "metric_version": "3.0.0",
+            "warnings": []
+          },
+          "weekly_23629be243c54739": {
+            "value": -0.0004099902639360646,
+            "valid": true,
+            "observation_count": 2585,
+            "sample_unit": "daily_quantile_spread",
+            "metric_version": "3.0.0",
+            "warnings": []
+          },
+          "weekly_7632208952b859e5": {
+            "value": -0.00013479926469865886,
+            "valid": true,
+            "observation_count": 2462,
+            "sample_unit": "daily_quantile_spread",
+            "metric_version": "3.0.0",
+            "warnings": []
+          },
+          "weekly_6f27ea3106cc03c0": {
+            "value": -0.0006166839187683048,
+            "valid": true,
+            "observation_count": 2586,
+            "sample_unit": "daily_quantile_spread",
+            "metric_version": "3.0.0",
+            "warnings": []
+          },
+          "weekly_5c866fa073382822": {
+            "value": 0.0010557031754216822,
+            "valid": true,
+            "observation_count": 2586,
+            "sample_unit": "daily_quantile_spread",
+            "metric_version": "3.0.0",
+            "warnings": []
+          }
+        },
+        "factor_turnover_rate": {
+          "weekly_db5616cd85a477b3": {
+            "value": 0.013840725831047417,
+            "valid": true,
+            "observation_count": 2410,
+            "sample_unit": "valid_transition",
+            "metric_version": "2.0.0",
+            "warnings": []
+          },
+          "weekly_4cbd7ca6dccc61dc": {
+            "value": 0.027120146431538976,
+            "valid": true,
+            "observation_count": 2535,
+            "sample_unit": "valid_transition",
+            "metric_version": "2.0.0",
+            "warnings": []
+          },
+          "weekly_c83002810f9e5643": {
+            "value": 0.07160452016796119,
+            "valid": true,
+            "observation_count": 2546,
+            "sample_unit": "valid_transition",
+            "metric_version": "2.0.0",
+            "warnings": []
+          },
+          "weekly_d4cc0b4a9424e834": {
+            "value": 0.00856034362362741,
+            "valid": true,
+            "observation_count": 2421,
+            "sample_unit": "valid_transition",
+            "metric_version": "2.0.0",
+            "warnings": []
+          },
+          "weekly_23629be243c54739": {
+            "value": 0.055880643397591925,
+            "valid": true,
+            "observation_count": 2573,
+            "sample_unit": "valid_transition",
+            "metric_version": "2.0.0",
+            "warnings": []
+          },
+          "weekly_7632208952b859e5": {
+            "value": 0.21708511759854754,
+            "valid": true,
+            "observation_count": 2561,
+            "sample_unit": "valid_transition",
+            "metric_version": "2.0.0",
+            "warnings": []
+          },
+          "weekly_6f27ea3106cc03c0": {
+            "value": 0.010998515928942925,
+            "valid": true,
+            "observation_count": 2538,
+            "sample_unit": "valid_transition",
+            "metric_version": "2.0.0",
+            "warnings": []
+          },
+          "weekly_5c866fa073382822": {
+            "value": 0.018143483137535946,
+            "valid": true,
+            "observation_count": 2522,
+            "sample_unit": "valid_transition",
+            "metric_version": "2.0.0",
+            "warnings": []
+          }
+        }
+      }
+    }
+  ],
+  "performance": {
+    "first_pass_s": 16.834181684000214,
+    "labels_s": 15.504054722001456,
+    "load_s": 16.938102495001658,
+    "load_phases_s": {
+      "bound_factor_read_s": 13.166779908002354,
+      "arrow_to_pandas_axis_s": 0.7148030589996779,
+      "reindex_write_s": 0.8218187959973875
+    },
+    "evaluate_s": 35.847188900999754,
+    "total_s": 85.79527051600235,
+    "peak_process_rss_kib": 8172992,
+    "prefetch": false,
+    "resource_preflight": {
+      "pass": true,
+      "estimated_tile_peak_bytes": 53687091200,
+      "mem_available_bytes": 73504096256,
+      "cos_cache_disk_free_bytes": 207314776064,
+      "required_disk_bytes": 1207959552
+    }
+  },
+  "limitations": "Non-CLI F8 bounded shard verification of existing benchmark functions; CPU only"
+}

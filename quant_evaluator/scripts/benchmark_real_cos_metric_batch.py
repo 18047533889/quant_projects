@@ -33,6 +33,7 @@ QUANTILE_FULL_SINGLE = ("quantile_returns_full",)
 QUANTILE_DAILY_SINGLE = ("quantile_returns_daily",)
 TURNOVER_SINGLE = ("factor_turnover_rate",)
 POSITIVE_RATIO_SINGLE = ("rank_ic_positive_ratio",)
+RANK_POSITIVE_PAIR = ("rank_ic", "rank_ic_positive_ratio")
 METRICS = DEFAULT_METRICS
 ALLOWED_BATCHES = (DEFAULT_METRICS, RANK_CHAIN, QUANTILE_CHAIN)
 F32_SINGLE_METRICS = (RANK_SERIES_SINGLE, QUANTILE_FULL_SINGLE, QUANTILE_DAILY_SINGLE)
@@ -241,19 +242,20 @@ def main():
     requested = tuple(args.metrics.split(","))
     if requested not in ALLOWED_BATCHES:
         if not ((args.factors == 2 and requested == RANK_SERIES_SINGLE)
-                or (args.factors == 13 and requested in (TURNOVER_SINGLE, POSITIVE_RATIO_SINGLE))
+                or (args.factors == 13 and requested in (
+                    TURNOVER_SINGLE, POSITIVE_RATIO_SINGLE, RANK_POSITIVE_PAIR))
                 or (args.factors == 32 and requested in (*F32_SINGLE_METRICS, PEARSON_CHAIN))):
             parser.error("metrics must be an exact default, rank-chain or quantile-chain set; "
                          "F2 permits rank_ic_series alone, F13 permits factor_turnover_rate "
-                         "or rank_ic_positive_ratio alone, "
+                         "or rank_ic_positive_ratio alone, or their exact rank-IC/positive-ratio pair, "
                          "and F32 permits rank_ic_series, quantile_returns_full, "
                          "or quantile_returns_daily alone, or the exact Pearson chain")
     if args.factors == 2 and requested not in (RANK_SERIES_SINGLE, RANK_CHAIN, QUANTILE_CHAIN):
         parser.error("F2 runs require rank_ic_series alone or an exact rank/quantile chain")
     if args.factors == 13 and requested not in (
-            RANK_CHAIN, QUANTILE_CHAIN, TURNOVER_SINGLE, POSITIVE_RATIO_SINGLE):
+            RANK_CHAIN, QUANTILE_CHAIN, TURNOVER_SINGLE, POSITIVE_RATIO_SINGLE, RANK_POSITIVE_PAIR):
         parser.error("F13 runs require the exact rank-chain, quantile-chain, "
-                     "factor_turnover_rate, or rank_ic_positive_ratio request")
+                     "factor_turnover_rate, rank_ic_positive_ratio, or rank-IC/positive-ratio pair")
     if args.factors == 24 and requested not in (RANK_CHAIN, QUANTILE_CHAIN):
         parser.error("F24 runs require the exact rank-chain or quantile-chain request")
     if args.factors == 32 and requested not in (*F32_SINGLE_METRICS, PEARSON_CHAIN):

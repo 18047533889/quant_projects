@@ -9,7 +9,11 @@ import pytest
 from quant_evaluator.scripts import benchmark_real_cos_metric_batch as benchmark
 
 
-def test_f13_accepts_exact_single_positive_ratio_request(monkeypatch, capsys):
+@pytest.mark.parametrize("metric_arg, expected", [
+    ("rank_ic_positive_ratio", ("rank_ic_positive_ratio",)),
+    ("rank_ic,rank_ic_positive_ratio", ("rank_ic", "rank_ic_positive_ratio")),
+])
+def test_f13_accepts_exact_positive_ratio_requests(monkeypatch, capsys, metric_arg, expected):
     batch = SimpleNamespace(
         num_times=2586,
         num_assets=5461,
@@ -47,7 +51,7 @@ def test_f13_accepts_exact_single_positive_ratio_request(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", [
         "benchmark_real_cos_metric_batch.py",
         "--factors", "13",
-        "--metrics", "rank_ic_positive_ratio",
+        "--metrics", metric_arg,
     ])
 
     benchmark.main()
@@ -63,7 +67,7 @@ def test_f13_accepts_exact_single_positive_ratio_request(monkeypatch, capsys):
     assert [run[0] for run in runs] == [
         "cpu", "cuda_strict", "auto", "auto", "cuda_strict", "cpu",
     ]
-    assert all(run[3] == ("rank_ic_positive_ratio",) for run in runs)
+    assert all(run[3] == expected for run in runs)
     report = json.loads(capsys.readouterr().out.splitlines()[-1])
     assert report["parity_pass"] is True
 

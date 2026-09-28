@@ -441,6 +441,24 @@ float64、默认参数、无特殊输入、单 NVIDIA L20 及至少 14 GiB
 实际和有效空闲显存下自动选 CUDA。证据见
 `docs/benchmarks/real_cos_f13_positive_ratio_20260927.md`。
 
+同一 F13 绑定面板上，精确双指标集合 `rank_ic` 与
+`rank_ic_positive_ratio` 完成 CPU/CUDA/auto/auto/CUDA/CPU 六轮交错真实
+COS 公开入口 A/B。两项完整制品、数值（rtol 1e-8、atol 1e-10）、
+有限及有效掩码、计数、provenance、逐因子 MetricValue 与配置哈希
+全部对拍通过。CPU 两轮热运行 31.50/31.98 秒，显式 CUDA 为
+9.50/9.51 秒；GPU pool 峰值 13,263,441,920 字节。原两轮
+`auto` 因 `metric_set_not_certified` 走 CPU。现在仅精确 2586 日 ×
+5461 股 × 13 因子、双端 float64、默认参数、无特殊输入、单 NVIDIA
+L20，且实际与策略有效空闲显存均至少 14 GiB 时，完整双指标请求
+自动选 CUDA，回执原因是 `certified_batch_real_cos_f13_rank_positive_pair`。
+单指标、其它组合及相邻形状不继承该认证。原始报告见
+[`real_cos_f13_rank_positive_pair_ab_20260928.json`](benchmarks/real_cos_f13_rank_positive_pair_ab_20260928.json)。
+路由后又完成六轮交错真实 COS 公开入口复测，完整对拍通过，六轮
+配置哈希相同；两次 `auto` 均实际使用 CUDA，热运行 9.596/9.368 秒，
+同期 CPU 为 31.424/31.344 秒，显式 CUDA 为 9.473/9.462 秒；
+GPU pool 峰值 13,263,441,920 字节。复测报告见
+[`real_cos_f13_rank_positive_pair_auto_v25_20260928.json`](benchmarks/real_cos_f13_rank_positive_pair_auto_v25_20260928.json)。
+
 同一绑定 COS manifest 的精确 2586 日 × 5461 股 × 2 因子面板上，
 `rank_ic_series` 单指标完成六轮交错 CPU/CUDA/auto 公开入口 A/B。
 每轮完整序列制品、有效掩码、计数、逐因子 MetricValue、来源与配置哈希
@@ -643,6 +661,36 @@ CPU/CUDA/auto/auto/CUDA/CPU 六轮公开入口 A/B。六轮完整制品、配置
 8/8 分片均走 CUDA，183/183 项与先前候选对拍通过；证据见
 [F61 装载分段报告](benchmarks/real_cos_f61_load_phase_reuse_20260928.json)。
 
+同一 F61 清单在复用已校验轴索引和绑定 manifest 的条件下，又以正式 CLI
+完成串行 A1 → 双对象预取 B → 反序串行 A2 的三轮独立进程测试。总耗时为
+271.399/177.257/251.644 秒，分片加载合计为 195.522/101.666/176.690 秒；
+B 相对两轮串行总耗时均值 261.522 秒缩短 32.2%。三轮均为 8/8 分片
+CUDA，三组两两 `compare_collections` 均通过 61 因子 × 3 指标的
+183/183 项对拍，包括来源、日期和资产轴身份。进程 RSS 高水位分别为
+9,650,140/9,493,148/9,814,320 KiB；这些观测不单独证明预取降低内存。
+绑定因子并行读取的分段耗时是任务时长求和，可能相互重叠，不能作为墙钟
+耗时解读。原始集合报告为
+[串行 A1](benchmarks/real_cos_f61_prefetch_aba_A1_20260928.json)、
+[双对象预取 B](benchmarks/real_cos_f61_prefetch_aba_B_20260928.json) 和
+[反序串行 A2](benchmarks/real_cos_f61_prefetch_aba_A2_20260928.json)。
+`--prefetch` 仍需显式启用；这些是因子分片集合，不是一次完整 F61
+`EvaluationBundle`，性能结论限定于该清单、缓存状态和同机负载。
+
+另对同一绑定清单按大小排序的前 8 个因子，直接调用研究脚本的验源、
+装载和评价函数完成串行 → 双对象预取 → 串行 A–B–A。由于正式 CLI
+要求至少 33 个因子，这是一组受限 F8 单分片验证，不是 CLI 全集合运行；
+三轮各自重读绑定 manifest、两遍核验对象和轴，均使用 CPU 与默认三指标。
+来源、标签、日期及资产轴一致；三组两两对拍均覆盖 8 因子 × 3 指标的
+24/24 项，数值容差 rtol=1e-8、atol=1e-10，有效性、观测数、版本和
+样本单位也一致。首遍扫描依次为 16.83/7.81/16.14 秒，分片载入为
+16.94/10.14/17.45 秒，整轮为 85.80/68.75/82.67 秒。三轮在同一进程
+执行，所报 RSS 8172992/8172992/8286608 KiB 是累计高水位，不能据此
+单独归因预取内存开销；同机还有其它计算负载。原始报告为
+[首轮串行](benchmarks/real_cos_f8_prefetch_aba_20260928_A1.json)、
+[双对象预取](benchmarks/real_cos_f8_prefetch_aba_20260928_B.json) 和
+[反序串行](benchmarks/real_cos_f8_prefetch_aba_20260928_A2.json)。
+`--prefetch` 默认保持关闭；该 F8 结果不外推到 F61。
+
 CPU 参考后端的 Spearman 日 IC 已改为每次最多处理 128 个
 `(交易日, 因子)` 行，避免整段历史的哨兵值与秩数组同时驻留；精确路径还直接
 把 validity 并入 pairwise mask，不再复制一整份 float64 因子面板。
@@ -837,8 +885,8 @@ print(fastest_certified.metadata["auto_backend_reason"])
 `required_capabilities` 会关闭式报错，不会假装启用。
 
 `rank_ic_positive_ratio` 现可显式请求 CUDA，且与 `rank_ic` 同批时复用
-设备上的日度 rank-IC 中间结果；其大面板整批性能尚未认证，`auto`
-仍按未认证请求回到 CPU。
+设备上的日度 rank-IC 中间结果；上述精确 F13 双指标集合已获得整批
+自动路由认证，其它未认证组合仍使用 CPU。
 
 默认调用的 `bundle.metadata["backend_requested"]` 为 `"default"`，显式
 `backend="auto"` 为 `"auto"`；显式 `backend="cpu"` 固定参考 CPU 路径。
