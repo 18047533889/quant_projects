@@ -154,3 +154,37 @@ def test_f8_extended_trial_honors_configured_timeout(monkeypatch, tmp_path):
     report = json.loads(output.read_text())
     assert report["request"]["timeout_s"] == 321
     assert report["pass"] is True
+
+
+@pytest.mark.parametrize("credential_error, expected_status, expected_category", [
+    (True, "unauthenticated", None),
+    (False, "unavailable", "object_metadata_unavailable"),
+])
+def test_f32_preflight_distinguishes_auth_from_unknown_metadata(
+    monkeypatch, credential_error, expected_status, expected_category
+):
+    from types import SimpleNamespace
+    from data_access.core.exceptions import ValidationError
+    from data_access.store import DataAccessStore
+    from data_access.cos import remote, research
+
+    monkeypatch.setattr(DataAccessStore, "authorize_dataset", lambda *_: None)
+    monkeypatch.setattr(DataAccessStore, "_authorize_factor_params", lambda *_: None)
+    calls = []
+    if credential_error:
+        def credential_probe():
+            raise ValidationError("missing credential")
+    else:
+        def credential_probe():
+            calls.append("credential")
+            return object()
+    def metadata_probe(*_args, **_kwargs):
+        calls.append("metadata")
+        raise ValidationError("exact object metadata is missing or mismatched")
+    monkeypatch.setattr(remote, "resolve_s3_credentials", credential_probe)
+    monkeypatch.setattr(research, "read_declared_cos_object", metadata_probe)
+    result = benchmark.preflight_factor_count_profile(SimpleNamespace(manifest_sha256=None))
+    assert result["status"] == expected_status
+    assert result.get("category") == expected_category
+    assert calls == ([] if credential_error else ["credential", "metadata"])
+    assert "credential" not in result.get("reason", "") or credential_error

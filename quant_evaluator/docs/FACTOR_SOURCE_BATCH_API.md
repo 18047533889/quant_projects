@@ -41,13 +41,15 @@ finally:
 VRAM fraction, OOM retiling and maximum host result bytes. Explicit
 `cuda_strict` never falls back. Explicit `cpu` processes bounded tiles with
 the existing public CPU evaluator and aggregates only factor-separable typed
-artifacts. `auto` is deterministic: it selects CUDA only for the exact
-2586-date × 5461-asset × 8-factor float64 shape, the two-metric
+artifacts. `auto` is deterministic: it selects CUDA only for exact
+2586-date × 5461-asset float64 panels with either 8 factors or 32 factors
+(the latter requires effective source tile width 2), the two-metric
 `rank_ic`/`rank_ic_series` set, a single NVIDIA L20, default-compatible
 precision policy, and at least 14 GiB effective free VRAM. Otherwise it uses
-CPU and records the reason. This is a bounded source-path extrapolation from prior
-real-COS in-memory F8 A/B plus the source-path synthetic A/B below; it is
-**not** a claim that all source shapes or metrics have a fastest GPU route.
+CPU and records the reason. The F8 route has prior real-COS in-memory and
+synthetic source-path evidence; the F32 source route has full-shape synthetic
+A/B/A evidence below plus separately certified real-COS in-memory F32 ranks.
+Neither result certifies arbitrary source snapshots or metric combinations.
 
 The source snapshot ID is caller-supplied, not an independently verified COS
 digest. Source adapters must bind it to a trusted manifest and object set.
@@ -82,6 +84,35 @@ Scalar, series and observation-count arrays matched CPU across all runs.
 The GPU reported 2,991,313,408 peak VRAM bytes. Process RSS high-water marks
 rose from 1,089,024 to 1,838,616 to 1,879,892 KiB; those are cumulative
 whole-process marks, not per-run isolated peaks. The synthetic source includes
-random factor generation in every time. The exact same-route real-COS source
-test remains pending because the current server account's read-only gateway
-rejects the existing factor objects. No route is widened based on this result.
+random factor generation in every run. The exact same-route real-COS source
+test remains pending: this execution context has no usable COS/S3 credential.
+The F8 route was not widened based on this result alone.
+
+## Full-history F32 source-path A/B/A (synthetic)
+
+The same deterministic on-demand approach was run at 2586 × 5461 × 32,
+with 16 reads of two factors and the `rank_ic`/`rank_ic_series` pair.
+Each factor is regenerated from a fixed independent seed for every run.
+No complete factor cube or COS object was materialized.
+
+| Run | Requested → used | Wall time |
+| --- | --- | ---: |
+| A1 | CPU → CPU | 77.855 s |
+| B | CUDA strict → CUDA | 10.789 s |
+| A2 | CPU → CPU | 77.660 s |
+
+Both metric arrays and their observation-count arrays matched CPU at
+rtol=1e-8, atol=1e-10. The CUDA run reported 2,991,313,408 peak VRAM
+bytes. A separate exact-shape `auto` run selected CUDA with reason
+`bounded_f32_rank_pair_gpu` and took 10.556 s. The source generated random
+factors during each read, so these wall times include source generation.
+This is not real COS source-path certification and does not establish
+the fastest backend for other metrics, dtypes, tile widths or factor counts.
+
+The reproducible [F32 synthetic benchmark report](benchmarks/synthetic_f32_source_aba_20260929.json)
+uses the checked-in `benchmark_f32_factor_source_synthetic.py` script.
+Its CPU/CUDA/CPU/auto sequence took 77.068/9.978/76.550/9.459 s; `auto`
+selected CUDA. Metric values and observation counts matched the first CPU run.
+Run the script without flags for a RAM/L20 preflight, or pass `--run-full`
+to repeat the bounded benchmark. Do not interpret the synthetic report as
+COS I/O performance or full `EvaluationBundle` parity.

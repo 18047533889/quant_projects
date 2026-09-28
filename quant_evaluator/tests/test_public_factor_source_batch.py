@@ -237,3 +237,33 @@ def test_extended_source_metrics_cpu_cuda_parity(case):
         np.testing.assert_allclose(group[metric], artifact.values, rtol=1e-8, atol=1e-10, equal_nan=True)
         np.testing.assert_allclose(gpu_group[metric], artifact.values, rtol=1e-8, atol=1e-10, equal_nan=True)
         np.testing.assert_array_equal(cpu.observation_counts[metric], cuda.observation_counts[metric])
+
+
+def test_auto_source_f32_pair_uses_cuda_only_for_certified_tile_width(monkeypatch):
+    pytest.importorskip("cupy")
+    import importlib
+    source_api = importlib.import_module("quant_evaluator.api.factor_source")
+    evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
+    batch, label = _inputs()
+    monkeypatch.setattr(source_api, "_F32_SHAPE", batch.values.shape)
+    monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection", lambda *_: None)
+    metrics = ("rank_ic", "rank_ic_series")
+    cuda = evaluate_factor_source_batch(Source(batch), label, metrics=metrics, backend="auto")
+    cpu = evaluate_factor_source_batch(Source(batch), label, metrics=metrics, backend="cpu")
+    _assert_against_full_cpu(cuda, evaluate(batch, label, metrics=metrics, backend="cpu"), metrics)
+    for metric in metrics:
+        group = cuda.series_metrics if metric.endswith("_series") else cuda.scalar_metrics
+        np.testing.assert_allclose(
+            group[metric], (cpu.series_metrics if metric.endswith("_series") else cpu.scalar_metrics)[metric],
+            rtol=1e-8, atol=1e-10, equal_nan=True)
+    assert cuda.metadata["backend_used"] == "cuda"
+    assert cuda.metadata["auto_backend_reason"] == "bounded_f32_rank_pair_gpu"
+    narrow = evaluate_factor_source_batch(Source(batch), label, metrics=metrics,
+                                          backend="auto", max_tile_size=1)
+    assert narrow.metadata["backend_used"] == "cpu"
+    assert narrow.metadata["auto_backend_reason"] == "source_shape_or_metrics_not_certified"
+    monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection",
+                        lambda *_: "insufficient_cuda_memory")
+    rejected = evaluate_factor_source_batch(Source(batch), label, metrics=metrics, backend="auto")
+    assert rejected.metadata["backend_used"] == "cpu"
+    assert rejected.metadata["auto_backend_reason"] == "insufficient_cuda_memory"

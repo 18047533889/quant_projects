@@ -25,9 +25,11 @@ _SOURCE_METRICS = frozenset({
     "coverage", "quantile_spread", "quantile_monotonicity",
     "daily_quantile_monotonicity_rate", "turnover", "factor_turnover_rate",
 })
-_F8_RANK_PAIR = frozenset({"rank_ic", "rank_ic_series"})
+_RANK_PAIR = frozenset({"rank_ic", "rank_ic_series"})
 _F8_SHAPE = (2586, 5461, 8)
 _F8_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
+_F32_SHAPE = (2586, 5461, 32)
+_F32_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 
 
 def _source_request_fingerprint(metadata, label_bundle, metrics):
@@ -159,17 +161,23 @@ def evaluate_factor_source_batch(
     reason = "explicit"
     if backend == "auto":
         shape = (metadata.time_axis.size, metadata.asset_axis.size, len(metadata.factor_ids))
-        if (shape == _F8_SHAPE and metadata.dtype == "float64"
+        tile_width = min(metadata.max_tile_size, max_tile_size or metadata.max_tile_size)
+        f8 = shape == _F8_SHAPE
+        f32 = shape == _F32_SHAPE and tile_width == 2
+        if ((f8 or f32) and metadata.dtype == "float64"
                 and label_bundle.values.dtype == np.float64
-                and len(selected) == 2 and frozenset(selected) == _F8_RANK_PAIR):
+                and len(selected) == 2 and frozenset(selected) == _RANK_PAIR):
             from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
 
             if policy.precision_policy != GPUExecutionPolicy().precision_policy:
                 rejection = "gpu_precision_policy_outside_certified_range"
             else:
-                rejection = _auto_batch_cuda_rejection(policy, _F8_MIN_EFFECTIVE_VRAM_BYTES)
+                minimum = (_F32_MIN_EFFECTIVE_VRAM_BYTES if f32
+                           else _F8_MIN_EFFECTIVE_VRAM_BYTES)
+                rejection = _auto_batch_cuda_rejection(policy, minimum)
             route = "cuda_strict" if rejection is None else "cpu"
-            reason = "bounded_f8_rank_pair_gpu" if rejection is None else rejection
+            reason = (("bounded_f32_rank_pair_gpu" if f32 else "bounded_f8_rank_pair_gpu")
+                      if rejection is None else rejection)
         else:
             route, reason = "cpu", "source_shape_or_metrics_not_certified"
     if route == "cuda_strict":
