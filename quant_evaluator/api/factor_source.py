@@ -26,6 +26,7 @@ _SOURCE_METRICS = frozenset({
     "daily_quantile_monotonicity_rate", "turnover", "factor_turnover_rate",
 })
 _RANK_PAIR = frozenset({"rank_ic", "rank_ic_series"})
+_F32_MIXED_THREE = frozenset({"rank_ic", "quantile_spread", "factor_turnover_rate"})
 _F8_SHAPE = (2586, 5461, 8)
 _F8_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _F32_SHAPE = (2586, 5461, 32)
@@ -164,9 +165,12 @@ def evaluate_factor_source_batch(
         tile_width = min(metadata.max_tile_size, max_tile_size or metadata.max_tile_size)
         f8 = shape == _F8_SHAPE
         f32 = shape == _F32_SHAPE and tile_width == 2
-        if ((f8 or f32) and metadata.dtype == "float64"
+        f32_mixed_three = (f32 and len(selected) == 3
+                           and frozenset(selected) == _F32_MIXED_THREE)
+        rank_pair = (f8 or f32) and len(selected) == 2 and frozenset(selected) == _RANK_PAIR
+        if (metadata.dtype == "float64"
                 and label_bundle.values.dtype == np.float64
-                and len(selected) == 2 and frozenset(selected) == _RANK_PAIR):
+                and (rank_pair or f32_mixed_three)):
             from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
 
             if policy.precision_policy != GPUExecutionPolicy().precision_policy:
@@ -176,7 +180,8 @@ def evaluate_factor_source_batch(
                            else _F8_MIN_EFFECTIVE_VRAM_BYTES)
                 rejection = _auto_batch_cuda_rejection(policy, minimum)
             route = "cuda_strict" if rejection is None else "cpu"
-            reason = (("bounded_f32_rank_pair_gpu" if f32 else "bounded_f8_rank_pair_gpu")
+            reason = (("bounded_f32_mixed_three_gpu" if f32_mixed_three else
+                       "bounded_f32_rank_pair_gpu" if f32 else "bounded_f8_rank_pair_gpu")
                       if rejection is None else rejection)
         else:
             route, reason = "cpu", "source_shape_or_metrics_not_certified"

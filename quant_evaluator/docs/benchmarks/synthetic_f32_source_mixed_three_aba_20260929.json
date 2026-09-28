@@ -1,0 +1,339 @@
+{
+  "status": "PASS",
+  "created_utc": "2026-09-28T11:36:13.466387+00:00",
+  "source_kind": "deterministic_synthetic_on_demand",
+  "real_cos_data_used": false,
+  "cos_accessed": false,
+  "shape_T_N_F": [
+    2586,
+    5461,
+    32
+  ],
+  "factor_dtype": "float64",
+  "tile_width": 2,
+  "metrics": [
+    "rank_ic",
+    "quantile_spread",
+    "factor_turnover_rate"
+  ],
+  "seed": 442,
+  "preflight": {
+    "pass": true,
+    "ram_available_bytes": 48695971840,
+    "ram_minimum_bytes": 25769803776,
+    "ram_pass": true,
+    "gpu_memory": {
+      "status": "ok",
+      "devices": [
+        {
+          "name": "NVIDIA L20",
+          "total_mib": 46068,
+          "free_mib": 45455,
+          "effective_free_mib": 18182,
+          "passes": true
+        }
+      ]
+    },
+    "gpu_pass": true,
+    "factor_tile_bytes": 225954336,
+    "factor_tensor_materialized": false,
+    "disk_panel_bytes": 0
+  },
+  "runs": [
+    {
+      "backend_requested": "cpu",
+      "backend_used": "cpu",
+      "auto_backend_reason": null,
+      "seconds": 164.5791707469998,
+      "factor_tiles_processed": 16,
+      "source_tile_reads": 16,
+      "peak_rss_kib": 1012160,
+      "metadata": {
+        "factor_tiles_processed": 16,
+        "source_snapshot_id": "synthetic-f32-seed-442",
+        "host_result_bytes_reserved": 1536,
+        "host_result_budget_bytes": 268435456,
+        "request_id": "b593b3fd-193c-42af-9908-5ebd7e615fac",
+        "source_request_fingerprint": "1e2967ea75ba004d17a135d0d235d7ce20409b7664c2a46c240761dbd92c3171",
+        "backend_requested": "cpu",
+        "backend_used": "cpu",
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "rank_ic": "cpu",
+          "quantile_spread": "cpu",
+          "factor_turnover_rate": "cpu"
+        },
+        "execution_receipt": {
+          "source_request_fingerprint": "1e2967ea75ba004d17a135d0d235d7ce20409b7664c2a46c240761dbd92c3171",
+          "backend_requested": "cpu",
+          "backend_used": "cpu",
+          "auto_backend_reason": null,
+          "metric_backends": {
+            "rank_ic": "cpu",
+            "quantile_spread": "cpu",
+            "factor_turnover_rate": "cpu"
+          },
+          "gpu_device_ids": [
+            0
+          ],
+          "gpu_precision_policy": "gpu_mixed",
+          "max_vram_fraction": 0.75,
+          "max_host_result_bytes": 268435456,
+          "oom_retile": true,
+          "pinned_host_memory": true,
+          "async_transfer": true,
+          "double_buffer": true,
+          "required_capabilities": [],
+          "max_tile_size": 2,
+          "receipt_hash": "e24098b3274c36824ae2bfa6041c64f7a966a3c4780255c09562533c8be91b33"
+        },
+        "source_api": "columnar_factor_source_v1",
+        "source_identity_trust": "caller_supplied_snapshot_id"
+      }
+    },
+    {
+      "backend_requested": "cuda_strict",
+      "backend_used": "cuda",
+      "auto_backend_reason": null,
+      "seconds": 11.390426345000378,
+      "factor_tiles_processed": 16,
+      "source_tile_reads": 16,
+      "peak_rss_kib": 1789684,
+      "metadata": {
+        "backend_requested": "cuda_strict",
+        "backend_used": "cuda",
+        "gpu_device": 0,
+        "precision": "gpu_mixed",
+        "factor_tile_size": 2,
+        "oom_retries": 0,
+        "h2d_bytes": 3728246544,
+        "d2h_bytes": 1536,
+        "peak_vram": 2991313408,
+        "vram_budget_bytes": 35517923328.0,
+        "intermediate_reuse_count": 0,
+        "intermediate_entries": 0,
+        "pool_reserved_peak_bytes": 2991313408,
+        "pool_active_bytes_at_receipt": 112977408,
+        "pool_reserved_bytes_at_receipt": 112977408,
+        "storage_dtypes": {
+          "labels": "float64",
+          "factors": "float64"
+        },
+        "compute_dtype": "per_metric_implementation",
+        "accumulator_dtype": "per_metric_implementation",
+        "requested_transfer": {
+          "async": true,
+          "pinned": true,
+          "double_buffer": true
+        },
+        "effective_transfer": "synchronous",
+        "effective_pinned": false,
+        "effective_buffers": 1,
+        "transfer_fallback_reason": "async pinned double-buffer pipeline is not implemented",
+        "factor_tiles_processed": 16,
+        "source_snapshot_id": "synthetic-f32-seed-442",
+        "host_result_bytes_reserved": 1536,
+        "host_result_budget_bytes": 268435456,
+        "request_id": "bebdb786-2715-4610-ad8f-9d7a6872777f",
+        "source_request_fingerprint": "1e2967ea75ba004d17a135d0d235d7ce20409b7664c2a46c240761dbd92c3171",
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "rank_ic": "cuda",
+          "quantile_spread": "cuda",
+          "factor_turnover_rate": "cuda"
+        },
+        "execution_receipt": {
+          "source_request_fingerprint": "1e2967ea75ba004d17a135d0d235d7ce20409b7664c2a46c240761dbd92c3171",
+          "backend_requested": "cuda_strict",
+          "backend_used": "cuda",
+          "auto_backend_reason": null,
+          "metric_backends": {
+            "rank_ic": "cuda",
+            "quantile_spread": "cuda",
+            "factor_turnover_rate": "cuda"
+          },
+          "gpu_device_ids": [
+            0
+          ],
+          "gpu_precision_policy": "gpu_mixed",
+          "max_vram_fraction": 0.75,
+          "max_host_result_bytes": 268435456,
+          "oom_retile": true,
+          "pinned_host_memory": true,
+          "async_transfer": true,
+          "double_buffer": true,
+          "required_capabilities": [],
+          "max_tile_size": 2,
+          "receipt_hash": "9ead261ffbacb406baff4278042bdacd250a1b83a796dfa0846dcb7be96cfa7b"
+        },
+        "source_api": "columnar_factor_source_v1",
+        "source_identity_trust": "caller_supplied_snapshot_id"
+      }
+    },
+    {
+      "backend_requested": "cpu",
+      "backend_used": "cpu",
+      "auto_backend_reason": null,
+      "seconds": 163.69744911899943,
+      "factor_tiles_processed": 16,
+      "source_tile_reads": 16,
+      "peak_rss_kib": 1817484,
+      "metadata": {
+        "factor_tiles_processed": 16,
+        "source_snapshot_id": "synthetic-f32-seed-442",
+        "host_result_bytes_reserved": 1536,
+        "host_result_budget_bytes": 268435456,
+        "request_id": "e2de982e-9935-4ded-82f8-08b0053ad09f",
+        "source_request_fingerprint": "1e2967ea75ba004d17a135d0d235d7ce20409b7664c2a46c240761dbd92c3171",
+        "backend_requested": "cpu",
+        "backend_used": "cpu",
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "rank_ic": "cpu",
+          "quantile_spread": "cpu",
+          "factor_turnover_rate": "cpu"
+        },
+        "execution_receipt": {
+          "source_request_fingerprint": "1e2967ea75ba004d17a135d0d235d7ce20409b7664c2a46c240761dbd92c3171",
+          "backend_requested": "cpu",
+          "backend_used": "cpu",
+          "auto_backend_reason": null,
+          "metric_backends": {
+            "rank_ic": "cpu",
+            "quantile_spread": "cpu",
+            "factor_turnover_rate": "cpu"
+          },
+          "gpu_device_ids": [
+            0
+          ],
+          "gpu_precision_policy": "gpu_mixed",
+          "max_vram_fraction": 0.75,
+          "max_host_result_bytes": 268435456,
+          "oom_retile": true,
+          "pinned_host_memory": true,
+          "async_transfer": true,
+          "double_buffer": true,
+          "required_capabilities": [],
+          "max_tile_size": 2,
+          "receipt_hash": "e24098b3274c36824ae2bfa6041c64f7a966a3c4780255c09562533c8be91b33"
+        },
+        "source_api": "columnar_factor_source_v1",
+        "source_identity_trust": "caller_supplied_snapshot_id"
+      }
+    }
+  ],
+  "parity": {
+    "cpu_repeat": {
+      "rank_ic": {
+        "metric_values": {
+          "shape": [
+            32
+          ],
+          "allclose": true,
+          "rtol": 1e-08,
+          "atol": 1e-10,
+          "max_abs_error": 0.0
+        },
+        "observation_counts": {
+          "shape": [
+            32
+          ],
+          "equal": true
+        }
+      },
+      "quantile_spread": {
+        "metric_values": {
+          "shape": [
+            32
+          ],
+          "allclose": true,
+          "rtol": 1e-08,
+          "atol": 1e-10,
+          "max_abs_error": 0.0
+        },
+        "observation_counts": {
+          "shape": [
+            32
+          ],
+          "equal": true
+        }
+      },
+      "factor_turnover_rate": {
+        "metric_values": {
+          "shape": [
+            32
+          ],
+          "allclose": true,
+          "rtol": 1e-08,
+          "atol": 1e-10,
+          "max_abs_error": 0.0
+        },
+        "observation_counts": {
+          "shape": [
+            32
+          ],
+          "equal": true
+        }
+      }
+    },
+    "cuda_vs_cpu": {
+      "rank_ic": {
+        "metric_values": {
+          "shape": [
+            32
+          ],
+          "allclose": true,
+          "rtol": 1e-08,
+          "atol": 1e-10,
+          "max_abs_error": 1.5720931501039814e-18
+        },
+        "observation_counts": {
+          "shape": [
+            32
+          ],
+          "equal": true
+        }
+      },
+      "quantile_spread": {
+        "metric_values": {
+          "shape": [
+            32
+          ],
+          "allclose": true,
+          "rtol": 1e-08,
+          "atol": 1e-10,
+          "max_abs_error": 3.7947076036992655e-18
+        },
+        "observation_counts": {
+          "shape": [
+            32
+          ],
+          "equal": true
+        }
+      },
+      "factor_turnover_rate": {
+        "metric_values": {
+          "shape": [
+            32
+          ],
+          "allclose": true,
+          "rtol": 1e-08,
+          "atol": 1e-10,
+          "max_abs_error": 4.107825191113079e-15
+        },
+        "observation_counts": {
+          "shape": [
+            32
+          ],
+          "equal": true
+        }
+      }
+    }
+  },
+  "pass": true,
+  "limitations": [
+    "Synthetic timings do not represent COS I/O or production throughput.",
+    "RAM is host available-memory snapshot; RSS is process high-water.",
+    "VRAM preflight reserves only 40% of current free memory."
+  ]
+}

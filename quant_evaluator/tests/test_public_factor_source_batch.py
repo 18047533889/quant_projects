@@ -267,3 +267,64 @@ def test_auto_source_f32_pair_uses_cuda_only_for_certified_tile_width(monkeypatc
     rejected = evaluate_factor_source_batch(Source(batch), label, metrics=metrics, backend="auto")
     assert rejected.metadata["backend_used"] == "cpu"
     assert rejected.metadata["auto_backend_reason"] == "insufficient_cuda_memory"
+
+
+def test_auto_source_f32_mixed_three_uses_cuda_under_exact_gate(monkeypatch):
+    pytest.importorskip("cupy")
+    import importlib
+    source_api = importlib.import_module("quant_evaluator.api.factor_source")
+    evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
+    batch, label = _inputs()
+    monkeypatch.setattr(source_api, "_F32_SHAPE", batch.values.shape)
+    admitted = []
+    monkeypatch.setattr(
+        evaluator, "_auto_batch_cuda_rejection",
+        lambda _policy, minimum: admitted.append(minimum) or None,
+    )
+    metrics = ("factor_turnover_rate", "rank_ic", "quantile_spread")
+    source = Source(batch)
+    result = evaluate_factor_source_batch(
+        source, label, metrics=metrics, backend="auto", max_tile_size=2)
+    reference = evaluate(batch, label, metrics=metrics, backend="cpu")
+    _assert_against_full_cpu(result, reference, metrics)
+    assert source.reads == [(0, 2), (2, 4), (4, 5)]
+    assert admitted == [14 * 1024 ** 3]
+    assert result.metadata["backend_used"] == "cuda"
+    assert result.metadata["auto_backend_reason"] == "bounded_f32_mixed_three_gpu"
+
+
+def test_auto_source_f32_mixed_three_fails_closed_outside_gate(monkeypatch):
+    import importlib
+    from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy, PrecisionPolicy
+    source_api = importlib.import_module("quant_evaluator.api.factor_source")
+    evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
+    batch, label = _inputs()
+    monkeypatch.setattr(source_api, "_F32_SHAPE", batch.values.shape)
+    monkeypatch.setattr(
+        evaluator, "_auto_batch_cuda_rejection",
+        lambda *_: pytest.fail("uncertified request must not probe CUDA admission"),
+    )
+    metrics = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+    narrow = evaluate_factor_source_batch(
+        Source(batch), label, metrics=metrics, backend="auto", max_tile_size=1)
+    assert narrow.metadata["backend_used"] == "cpu"
+    assert narrow.metadata["auto_backend_reason"] == "source_shape_or_metrics_not_certified"
+
+    wrong_metrics = evaluate_factor_source_batch(
+        Source(batch), label, metrics=("rank_ic", "quantile_spread"), backend="auto")
+    assert wrong_metrics.metadata["backend_used"] == "cpu"
+    assert wrong_metrics.metadata["auto_backend_reason"] == "source_shape_or_metrics_not_certified"
+
+    nondefault = evaluate_factor_source_batch(
+        Source(batch), label, metrics=metrics, backend="auto",
+        gpu_policy=GPUExecutionPolicy(precision_policy=PrecisionPolicy.GPU_FP64),
+    )
+    assert nondefault.metadata["backend_used"] == "cpu"
+    assert nondefault.metadata["auto_backend_reason"] == "gpu_precision_policy_outside_certified_range"
+
+    monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection",
+                        lambda *_: "insufficient_cuda_memory")
+    rejected = evaluate_factor_source_batch(
+        Source(batch), label, metrics=metrics, backend="auto")
+    assert rejected.metadata["backend_used"] == "cpu"
+    assert rejected.metadata["auto_backend_reason"] == "insufficient_cuda_memory"
