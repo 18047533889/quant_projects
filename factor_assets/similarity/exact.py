@@ -267,6 +267,8 @@ class QEPairwiseSimilarity:
         Returns:
             List of SimilarityResult ordered by descending similarity
         """
+        if max_results < 0:
+            raise ValueError("max_results must be non-negative")
         # In production, would delegate to QE batch correlation
         # For now, use cache
         results = []
@@ -504,6 +506,8 @@ class CorrelationSimilarity:
 
         In production, this would query a similarity index.
         """
+        if max_results < 0:
+            raise ValueError("max_results must be non-negative")
         results = []
         seen_factor_ids = set()
 

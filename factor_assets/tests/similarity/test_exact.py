@@ -7,6 +7,7 @@ import pytest
 from factor_assets.similarity import (
     SimilarityMethod,
     SimilarityResult,
+    QEPairwiseSimilarity,
     CorrelationSimilarity,
 )
 
@@ -310,6 +311,14 @@ def test_correlation_similarity_find_similar_max_results():
 
     similar = similarity.find_similar("F001", threshold=0.7, max_results=5)
     assert len(similar) == 5
+
+
+@pytest.mark.parametrize("similarity_class", [CorrelationSimilarity, QEPairwiseSimilarity])
+def test_find_similar_rejects_negative_max_results(similarity_class):
+    similarity = similarity_class()
+
+    with pytest.raises(ValueError, match="max_results must be non-negative"):
+        similarity.find_similar("F001", max_results=-1)
 
 
 def test_correlation_similarity_find_similar_by_method():
