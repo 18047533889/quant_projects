@@ -14,14 +14,14 @@ from quant_evaluator.runtime.gpu_executor import GPUExecutor
 
 
 class ArraySource:
-    def __init__(self, batch):
+    def __init__(self, batch, max_tile_size=2):
         self.batch = batch
         self.factor_ids = batch.factor_ids
         self.time_axis = batch.time_axis
         self.asset_axis = batch.asset_axis
         self.dtype = batch.dtype
         self.snapshot_id = "verified-test-snapshot"
-        self.max_tile_size = 2
+        self.max_tile_size = max_tile_size
         self.reads = []
 
     def read_tile(self, start, end):
@@ -29,7 +29,8 @@ class ArraySource:
         batch = FactorBatch(
             self.factor_ids[start:end], self.time_axis, self.asset_axis,
             self.batch.values[:, :, start:end],
-            validity=self.batch.validity[:, :, start:end],
+            validity=(None if self.batch.validity is None
+                      else self.batch.validity[:, :, start:end]),
         )
         return FactorTile(start, end, batch, self.snapshot_id)
 
@@ -55,6 +56,25 @@ def _inputs():
         label_start_time=tuple(times),
         label_end_time=tuple(times + np.timedelta64(1, "D")),
         validity=lvalid, asset_axis=asset_axis,
+    )
+    return batch, label
+
+
+def _many_factor_inputs():
+    rng = np.random.default_rng(20260929)
+    x = rng.normal(size=(8, 48, 48))
+    y = rng.normal(size=(8, 48))
+    times = np.arange("2024-01-01", "2024-01-09", dtype="datetime64[D]")
+    assets = np.arange(48, dtype=np.int64)
+    time_axis = AxisRef("time", "datetime64[D]", 8, times)
+    asset_axis = AxisRef("asset", "int64", 48, assets)
+    batch = FactorBatch(tuple(f"f{i}" for i in range(48)), time_axis,
+                        asset_axis, x)
+    label = LabelBundle(
+        "ret", y, 1, decision_time=tuple(times),
+        label_start_time=tuple(times),
+        label_end_time=tuple(times + np.timedelta64(1, "D")),
+        asset_axis=asset_axis,
     )
     return batch, label
 
@@ -151,3 +171,28 @@ def test_source_gpu_cpu_parity_on_constant_nan_tied_and_masked_factors():
         actual = (gpu.series_metrics if metric == "rank_ic_series" else gpu.scalar_metrics)[metric]
         np.testing.assert_allclose(actual, cpu.artifacts[metric].values,
                                    rtol=1e-8, atol=1e-10, equal_nan=True)
+
+
+def test_many_factor_source_tiles_aggregate_to_one_cpu_request():
+    from quant_evaluator.runtime.evaluator import evaluate
+
+    batch, label = _many_factor_inputs()
+    source = ArraySource(batch, max_tile_size=8)
+    metrics = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+    cpu = evaluate(batch, label, metrics=metrics, backend="cpu")
+    gpu = _run_source(source, label, metrics, max_tile_size=8)
+
+    assert source.reads == [(start, start + 8) for start in range(0, 48, 8)]
+    assert gpu.metadata["factor_tiles_processed"] == 6
+    assert gpu.factor_ids == batch.factor_ids
+    assert gpu.metadata["source_snapshot_id"] == source.snapshot_id
+    for metric in metrics:
+        np.testing.assert_allclose(
+            gpu.scalar_metrics[metric], cpu.artifacts[metric].values,
+            rtol=1e-8, atol=1e-10, equal_nan=True,
+        )
+        np.testing.assert_array_equal(
+            gpu.observation_counts[metric],
+            [cpu.grouped_metrics[fid][metric].observation_count
+             for fid in batch.factor_ids],
+        )
