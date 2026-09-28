@@ -165,10 +165,11 @@ def create_fe_adapter() -> FactorEngineAdapter:
         import sys
         import os
 
-        # Add factor_engine to path if in expected location
-        fe_path = os.path.join(os.path.dirname(__file__), "../../../factor_engine")
-        if os.path.exists(fe_path) and fe_path not in sys.path:
-            sys.path.insert(0, os.path.abspath(fe_path))
+        # Import a sibling package from its parent, not its own directory.
+        # Normalize before membership testing to avoid duplicate path entries.
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+        if os.path.isdir(os.path.join(repo_root, "factor_engine")) and repo_root not in sys.path:
+            sys.path.insert(0, repo_root)
 
         import factor_engine.api  # FE top-level public API
         from factor_engine.mining.campaign import candidate_semantic_hash  # For canonical identity

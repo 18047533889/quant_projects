@@ -113,3 +113,17 @@ def test_operator_metadata_uses_fe_canonical_names(adapter):
     metadata = adapter.get_operator_metadata(["CS_RANK", "rank", "not_a_real_operator"])
     assert tuple(metadata) == ("rank",)
     assert metadata["rank"]["status"] in {"implemented", "production"}
+
+
+def test_adapter_adds_only_sibling_package_parent_once(monkeypatch):
+    import sys
+    from pathlib import Path
+
+    repo_root = str(Path(__file__).resolve().parents[2])
+    package_dir = str(Path(repo_root) / "factor_engine")
+    monkeypatch.setattr(sys, "path", [entry for entry in sys.path
+                                     if entry not in {repo_root, package_dir}])
+    create_fe_adapter()
+    create_fe_adapter()
+    assert sys.path.count(repo_root) == 1
+    assert package_dir not in sys.path
