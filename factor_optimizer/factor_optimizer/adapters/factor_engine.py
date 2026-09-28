@@ -173,7 +173,10 @@ def create_fe_adapter() -> FactorEngineAdapter:
         import factor_engine.api  # FE top-level public API
         from factor_engine.mining.campaign import candidate_semantic_hash  # For canonical identity
         from factor_engine.cleaned_operators.registry import OperatorRegistry
+        from factor_engine.backend.parameter_aliases import normalize_parameter_aliases
         from factor_engine.expr.base import Expr
+        from factor_engine.ir.analyzer import Analyzer
+        import pandas as pd
 
         # Concrete adapter implementation
         class ConcreteFEAdapter:
@@ -189,46 +192,117 @@ def create_fe_adapter() -> FactorEngineAdapter:
                 return candidate_semantic_hash(factor_definition)
 
             def validate_mutation(self, mutation: Any, spec: Any) -> Dict[str, Any]:
-                """Validate mutation through FE operator catalog."""
-                # Check if mutation involves operators that exist in catalog
+                """Validate referenced operators and any supplied FE parameters."""
                 metadata = {}
+                parameters = getattr(mutation, "parameters", None)
+                if parameters is None and isinstance(mutation, dict):
+                    parameters = mutation
+                if parameters is None:
+                    parameters = {}
+                elif not isinstance(parameters, dict):
+                    return {"is_legal": False,
+                            "reason": "mutation parameters must be a mapping",
+                            "metadata": metadata}
 
-                # Extract operator names from mutation
-                # Support both dict format and object format with .parameters
-                if hasattr(mutation, 'parameters'):
-                    target_operator = mutation.parameters.get("target_operator")
-                elif isinstance(mutation, dict):
-                    target_operator = mutation.get("operator") or mutation.get("target_operator")
-                else:
-                    target_operator = None
+                operator_refs = []
+                for key in ("target_operator", "replacement_operator", "operator_name", "operator"):
+                    if key not in parameters or parameters[key] is None:
+                        continue
+                    name = parameters[key]
+                    if isinstance(name, str) and not name:
+                        continue
+                    if not isinstance(name, str):
+                        return {"is_legal": False,
+                                "reason": f"{key} must be a string",
+                                "metadata": metadata}
+                    operator_refs.append((key, name))
+                if not operator_refs:
+                    metadata["operator_check"] = "not_applicable"
+                    return {"is_legal": True,
+                            "reason": "No FE operator reference; operator check not applicable",
+                            "metadata": metadata}
 
-                if target_operator:
-                    # Check if operator exists
-                    catalog = self.operator_registry.catalog()
-                    if target_operator not in catalog:
-                        return {
-                            "is_legal": False,
-                            "reason": f"Operator '{target_operator}' not found in FE catalog",
-                            "metadata": metadata,
-                        }
+                catalog = self.operator_registry.catalog()
+                canonical_operators, resolved = {}, {}
+                for key, name in operator_refs:
+                    if not isinstance(name, str):
+                        return {"is_legal": False, "reason": f"{key} must be a string", "metadata": metadata}
+                    try:
+                        canonical = OperatorRegistry.resolve_canonical_strict(name)
+                    except (KeyError, ValueError) as exc:
+                        return {"is_legal": False,
+                                "reason": f"Operator {name!r} not found in FE catalog: {exc}",
+                                "metadata": metadata}
+                    op_meta = catalog.get(canonical)
+                    if not op_meta or op_meta.get("status") not in {"implemented", "production"}:
+                        status = op_meta.get("status") if op_meta else "unknown"
+                        return {"is_legal": False,
+                                "reason": f"Operator {name!r} resolves to {canonical!r} with status {status!r}",
+                                "metadata": metadata}
+                    canonical_operators[key] = canonical
+                    resolved[key] = op_meta
 
-                    # Check operator status
-                    op_meta = catalog[target_operator]
-                    if op_meta.get("status") != "implemented":
-                        return {
-                            "is_legal": False,
-                            "reason": f"Operator '{target_operator}' status: {op_meta.get('status')}",
-                            "metadata": metadata,
-                        }
-
-                    metadata["operator_meta"] = op_meta
-
-                # All checks passed
+                metadata["canonical_operators"] = canonical_operators
+                metadata["operator_meta"] = resolved[operator_refs[-1][0]]
+                normalized_parameters = {}
+                for key, canonical in canonical_operators.items():
+                    kwargs = parameters.get(f"{key}_parameters", {})
+                    if not isinstance(kwargs, dict):
+                        return {"is_legal": False,
+                                "reason": f"Parameters for {canonical!r} must be a mapping",
+                                "metadata": metadata}
+                    if (key == "replacement_operator" or len(canonical_operators) == 1) and not kwargs:
+                        kwargs = parameters.get("operator_parameters", {})
+                    if not isinstance(kwargs, dict):
+                        return {"is_legal": False,
+                                "reason": f"Parameters for {canonical!r} must be a mapping",
+                                "metadata": metadata}
+                    if key == "operator_name" and parameters.get("parameter_name") is not None:
+                        parameter_name = parameters["parameter_name"]
+                        if not isinstance(parameter_name, str) or not parameter_name:
+                            return {"is_legal": False,
+                                    "reason": "parameter_name must be a nonempty string",
+                                    "metadata": metadata}
+                        kwargs = {**kwargs, parameter_name: parameters.get("new_value")}
+                    if not kwargs:
+                        continue
+                    try:
+                        normalized = normalize_parameter_aliases(canonical, kwargs)
+                        self._validate_operator_parameters(canonical, normalized)
+                    except (TypeError, ValueError, KeyError, RuntimeError) as exc:
+                        return {"is_legal": False,
+                                "reason": f"Invalid parameters for FE operator {canonical!r}: {exc}",
+                                "metadata": metadata}
+                    normalized_parameters[key] = normalized
+                if normalized_parameters:
+                    metadata["normalized_operator_parameters"] = normalized_parameters
                 return {
                     "is_legal": True,
-                    "reason": "Mutation passed FE validation",
+                    "reason": "Mutation passed FE operator validation",
                     "metadata": metadata,
                 }
+
+            def _validate_operator_parameters(self, canonical: str, kwargs: Dict[str, Any]) -> None:
+                """Run FE's registered call-contract validator without executing a kernel."""
+                backends = self.operator_registry.backends_for(canonical)
+                operator = None
+                for backend in ("pandas_numpy", *backends):
+                    if backend in backends:
+                        operator = self.operator_registry.get(canonical, backend=backend, mode="any")
+                        if operator is not None:
+                            break
+                if operator is None:
+                    raise ValueError("no registered FE operator implementation is available")
+                meta = operator.metadata
+                names = list(getattr(meta, "param_names", ()) or ())
+                specs = getattr(meta, "param_specs", {}) or {}
+                inputs = list(getattr(meta, "panel_params", ()) or ())
+                if not inputs:
+                    scalar_names = set(getattr(meta, "scalar_params", ()) or ())
+                    inputs = [name for name in names if name not in specs and name not in scalar_names]
+                inputs = [name for name in inputs if name not in kwargs]
+                placeholder = pd.DataFrame([[0.0]])
+                operator._prepare_call(tuple(placeholder for _ in inputs), kwargs)
 
             def estimate_complexity(self, factor_definition: Any) -> Dict[str, Any]:
                 """Estimate complexity through FE analyzer."""
@@ -246,6 +320,23 @@ def create_fe_adapter() -> FactorEngineAdapter:
                 # Simple cost heuristic: combine operator count and lookback
                 estimated_cost = float(operator_count) * (1.0 + lookback_periods / 20.0)
 
+                # Preserve the legacy score: FE Analyzer history has different
+                # semantics, so expose its typed evidence additively.
+                fe_analysis = None
+                if isinstance(expr, Expr):
+                    try:
+                        analysis = Analyzer().lower(expr)
+                        fe_analysis = {
+                            "available": True,
+                            "lookback": analysis.lookback,
+                            "has_ts_op": analysis.has_ts_op,
+                            "has_cs_op": analysis.has_cs_op,
+                            "referenced_columns": sorted(analysis.referenced_columns),
+                            "requires_full_history": analysis.requires_full_history,
+                        }
+                    except (TypeError, ValueError, KeyError, RuntimeError) as exc:
+                        fe_analysis = {"available": False, "reason": str(exc)}
+
                 return {
                     "operator_count": operator_count,
                     "max_depth": max_depth,
@@ -253,6 +344,7 @@ def create_fe_adapter() -> FactorEngineAdapter:
                     "estimated_cost": estimated_cost,
                     "domains": [],  # Would require deeper analysis
                     "sources": [],  # Would require deeper analysis
+                    "fe_analysis": fe_analysis,
                 }
 
             def get_operator_metadata(
