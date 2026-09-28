@@ -697,6 +697,13 @@ float64 因子和标签、单 NVIDIA L20、实际及有效空闲显存至少 14 
 结果是列式 `BatchEvaluationBundle`，不含完整 `EvaluationBundle` 的组合/探针
 制品；这次单清单结果不证明其它股票池、指标集合或生产 PIT 资格。
 
+同一 manifest 和 F61 轴索引再以 `max_tile_size=16` 做整批来源 A/B：CPU
+453.31 秒、CUDA 188.33 秒，4 个 tile 的 183/183 项数值及观测数对拍通过。
+与上述 tile=8 的单次运行相比，CPU 变慢约 4.9%，CUDA 快约 3.3%；
+跨时运行受缓存和同机负载影响，这不是稳定胜出的证明。当前 `auto` 仍只认证
+tile=8，tile=16 须显式选 `cuda_strict`；待同机交错复测后再决定是否扩展路由。
+[tile=16 原始报告](benchmarks/real_cos_f61_whole_source_tile16_ab_20260929.json)。
+
 另对同一绑定清单按大小排序的前 8 个因子，直接调用研究脚本的验源、
 装载和评价函数完成串行 → 双对象预取 → 串行 A–B–A。由于正式 CLI
 要求至少 33 个因子，这是一组受限 F8 单分片验证，不是 CLI 全集合运行；
