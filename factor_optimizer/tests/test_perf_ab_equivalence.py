@@ -384,3 +384,27 @@ def test_pair_ic_matches_oracle_with_label_validity_and_sparse_factors(seed):
     np.testing.assert_array_equal(actual[0], expected[0])
     np.testing.assert_array_equal(actual[1], expected[1])
     assert actual[2] == expected[2]
+
+
+def test_cached_raw_reference_only_constructs_candidate_column(monkeypatch):
+    import quant_evaluator.metrics.ic as ic_module
+
+    raw, cand, batch, labels, idx, cfg = make_pair_inputs(seed=31)
+    cache = PairICCache()
+    widths = []
+    original = ic_module.compute_daily_ic
+
+    def record_width(factors, *args, **kwargs):
+        widths.append(factors.factor_ids)
+        return original(factors, *args, **kwargs)
+
+    monkeypatch.setattr(ic_module, "compute_daily_ic", record_width)
+    _pair_ic(raw, cand, batch, labels, idx, cfg, reference_cache=cache)
+    candidate = -cand
+    actual = _pair_ic(raw, candidate, batch, labels, idx, cfg,
+                      reference_cache=cache)
+    assert widths[-1] == ("CANDIDATE",)
+    reference = _pair_ic_evaluate_reference(raw, candidate, batch, labels, idx, cfg)
+    np.testing.assert_array_equal(actual[0], reference[0])
+    np.testing.assert_array_equal(actual[1], reference[1])
+    assert actual[2] == reference[2]

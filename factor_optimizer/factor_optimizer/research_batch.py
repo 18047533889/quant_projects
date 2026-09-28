@@ -316,9 +316,6 @@ def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=
     time_axis = AxisRef("time", batch.time_axis.dtype, len(idx), batch.time_axis.values[idx])
     # Third series anchors valid-day coverage to RAW's original universe.
     # A candidate must not improve by silently dropping difficult/constant days.
-    pair = np.stack((a, b, a), axis=-1)
-    validity = np.stack((common, common, available), axis=-1)
-    factors = FactorBatch(("RAW", "CANDIDATE", "RAW_FULL"), time_axis, batch.asset_axis, pair, validity=validity)
     columns, keys, pending = [0, 1, 2], {}, {}
     ic = np.full((len(idx), 3), np.nan)
     if reference_cache is not None:
@@ -336,7 +333,8 @@ def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=
         columns = [1]
         for column in (0, 2):
             state = digest.copy()
-            masked = np.ascontiguousarray(np.where(validity[:, :, column], a, np.nan))
+            reference_mask = common if column == 0 else available
+            masked = np.ascontiguousarray(np.where(reference_mask, a, np.nan))
             state.update(masked.dtype.str.encode())
             state.update(masked.tobytes())
             key = state.digest()
@@ -347,8 +345,16 @@ def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=
             elif key not in pending:
                 pending[key] = column
                 columns.append(column)
-        factors = replace(factors, factor_ids=tuple(factors.factor_ids[c] for c in columns),
-                          values=pair[:, :, columns], validity=validity[:, :, columns])
+    # Build only the columns that still need computation. In a candidate search
+    # RAW is normally cached; avoid allocating/fingerprinting the full 3-column
+    # panel on every subsequent candidate.
+    factor_ids = ("RAW", "CANDIDATE", "RAW_FULL")
+    value_columns = (a, b, a)
+    validity_columns = (common, common, available)
+    factors = FactorBatch(tuple(factor_ids[c] for c in columns), time_axis,
+                          batch.asset_axis,
+                          np.stack([value_columns[c] for c in columns], axis=-1),
+                          validity=np.stack([validity_columns[c] for c in columns], axis=-1))
     # Bit-identical to quant_evaluator.evaluate("rank_ic_series") (verified
     # MAX_ABS_DIFF == 0.0 across seeds, NaN/validity masks and minimum_assets),
     # but avoids the heavier evaluator facade + evidence-store hashing overhead
