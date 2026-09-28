@@ -1,0 +1,47 @@
+{
+  "status": "complete",
+  "kind": "real_cos_f61_source_auto_tile16_verification.v1",
+  "shape": [
+    2586,
+    5461,
+    61
+  ],
+  "metric_ids": [
+    "rank_ic",
+    "quantile_spread",
+    "factor_turnover_rate"
+  ],
+  "seconds": 187.9094461249988,
+  "backend_requested": "auto",
+  "backend_used": "cuda",
+  "auto_backend_reason": "bounded_f61_mixed_three_gpu_tile16",
+  "effective_max_tile_size": 16,
+  "factor_tiles_processed": 4,
+  "tile_ranges": [
+    [
+      0,
+      16
+    ],
+    [
+      16,
+      32
+    ],
+    [
+      32,
+      48
+    ],
+    [
+      48,
+      61
+    ]
+  ],
+  "source_fingerprint_match": true,
+  "strict_cuda_values_match": true,
+  "strict_cuda_observation_counts_match": true,
+  "strict_cuda_exact_value_hashes_match": true,
+  "reference": "real_cos_f61_gpu_tile_width_ab_20260929.json",
+  "limitations": [
+    "One verified real-COS manifest and one L20 host only.",
+    "Source API columnar metrics; not a full EvaluationBundle or production/PIT certification."
+  ]
+}

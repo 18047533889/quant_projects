@@ -162,15 +162,18 @@ def evaluate_factor_source_batch(
     request_fingerprint = _source_request_fingerprint(metadata, label_bundle, selected)
     route = backend
     reason = "explicit"
+    requested_tile_width = min(metadata.max_tile_size, max_tile_size or metadata.max_tile_size)
+    effective_tile_size = requested_tile_width
     if backend == "auto":
         shape = (metadata.time_axis.size, metadata.asset_axis.size, len(metadata.factor_ids))
-        tile_width = min(metadata.max_tile_size, max_tile_size or metadata.max_tile_size)
+        f61_mixed_three = (shape == _F61_SHAPE and len(selected) == 3
+                           and frozenset(selected) == _F32_MIXED_THREE
+                           and requested_tile_width >= 8)
+        # A tile cap is an upper bound: use the faster certified width within it.
+        tile_width = (16 if requested_tile_width >= 16 else 8) if f61_mixed_three else requested_tile_width
         f8 = shape == _F8_SHAPE
         f32 = shape == _F32_SHAPE and tile_width == 2
-        f61 = shape == _F61_SHAPE and tile_width == 8
         f32_mixed_three = (f32 and len(selected) == 3
-                           and frozenset(selected) == _F32_MIXED_THREE)
-        f61_mixed_three = (f61 and len(selected) == 3
                            and frozenset(selected) == _F32_MIXED_THREE)
         rank_pair = (f8 or f32) and len(selected) == 2 and frozenset(selected) == _RANK_PAIR
         if (metadata.dtype == "float64"
@@ -186,19 +189,22 @@ def evaluate_factor_source_batch(
                            _F8_MIN_EFFECTIVE_VRAM_BYTES)
                 rejection = _auto_batch_cuda_rejection(policy, minimum)
             route = "cuda_strict" if rejection is None else "cpu"
-            reason = (("bounded_f61_mixed_three_gpu" if f61_mixed_three else
+            reason = ((("bounded_f61_mixed_three_gpu_tile16" if tile_width == 16
+                        else "bounded_f61_mixed_three_gpu") if f61_mixed_three else
                        "bounded_f32_mixed_three_gpu" if f32_mixed_three else
                        "bounded_f32_rank_pair_gpu" if f32 else "bounded_f8_rank_pair_gpu")
                       if rejection is None else rejection)
         else:
             route, reason = "cpu", "source_shape_or_metrics_not_certified"
     if route == "cuda_strict":
+        if backend == "auto":
+            effective_tile_size = tile_width
         from quant_evaluator.runtime.device_session import DeviceEvaluationSession
         from quant_evaluator.runtime.gpu_executor import GPUExecutor
 
         with DeviceEvaluationSession(policy) as session:
             out = GPUExecutor(session).run_source_tiled(
-                source, label_bundle, selected, max_tile_size=max_tile_size,
+                source, label_bundle, selected, max_tile_size=effective_tile_size,
                 source_metadata=metadata)
     else:
         out = _cpu_source_batch(source, metadata, label_bundle, selected, policy, max_tile_size)
@@ -220,6 +226,7 @@ def evaluate_factor_source_batch(
         "double_buffer": policy.double_buffer,
         "required_capabilities": policy.required_capabilities,
         "max_tile_size": max_tile_size,
+        "effective_max_tile_size": effective_tile_size,
     }
     receipt["receipt_hash"] = stable_content_hex(
         tag="FactorSourceBatchExecutionReceipt.v1", fields=receipt)
@@ -231,6 +238,7 @@ def evaluate_factor_source_batch(
         "auto_backend_reason": receipt["auto_backend_reason"],
         "metric_backends": metric_backends,
         "execution_receipt": receipt,
+        "effective_max_tile_size": effective_tile_size,
         "source_snapshot_id": metadata.snapshot_id,
         "source_api": "columnar_factor_source_v1",
         "source_identity_trust": "caller_supplied_snapshot_id",

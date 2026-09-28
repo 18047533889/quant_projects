@@ -352,6 +352,37 @@ def test_auto_source_f61_mixed_three_uses_cuda_under_exact_gate(monkeypatch):
     assert admitted == [14 * 1024 ** 3]
     assert result.metadata["backend_used"] == "cuda"
     assert result.metadata["auto_backend_reason"] == "bounded_f61_mixed_three_gpu"
+    assert result.metadata["effective_max_tile_size"] == 8
+
+
+@pytest.mark.parametrize("cap,expected", [(8, 8), (15, 8), (16, 16), (32, 16)])
+def test_auto_source_f61_selects_certified_width_within_cap(monkeypatch, cap, expected):
+    pytest.importorskip("cupy")
+    import importlib
+    source_api = importlib.import_module("quant_evaluator.api.factor_source")
+    evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
+    seed, label = _inputs()
+    batch = FactorBatch(
+        tuple(f"wide_{i}" for i in range(21)), seed.time_axis, seed.asset_axis,
+        np.tile(seed.values, (1, 1, 5))[:, :, :21],
+        validity=np.tile(seed.validity, (1, 1, 5))[:, :, :21],
+    )
+    monkeypatch.setattr(source_api, "_F61_SHAPE", batch.values.shape)
+    monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection", lambda *_: None)
+    source = Source(batch)
+    source.max_tile_size = 32
+    result = evaluate_factor_source_batch(
+        source, label, metrics=("rank_ic", "quantile_spread", "factor_turnover_rate"),
+        backend="auto", max_tile_size=cap)
+    assert source.reads == [(start, min(start + expected, 21)) for start in range(0, 21, expected)]
+    assert result.metadata["backend_used"] == "cuda"
+    assert result.metadata["effective_max_tile_size"] == expected
+    assert result.metadata["execution_receipt"]["effective_max_tile_size"] == expected
+    assert result.metadata["execution_receipt"]["max_tile_size"] == cap
+    assert all(end - start <= expected for start, end in source.reads)
+    assert result.metadata["auto_backend_reason"] == (
+        "bounded_f61_mixed_three_gpu_tile16" if expected == 16
+        else "bounded_f61_mixed_three_gpu")
 
 
 def test_auto_source_f61_mixed_three_fails_closed_outside_gate(monkeypatch):

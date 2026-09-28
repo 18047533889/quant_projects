@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import numpy as np
@@ -128,3 +129,57 @@ def test_compare_reads_fingerprint_from_public_bundle_metadata():
     assert result["compared_metric_count"] == 6
     with pytest.raises(ValueError, match="fingerprints differ"):
         harness.compare(bundle(), bundle("b" * 64))
+
+
+def test_gpu_tile_width_ab_interleaves_and_checks_every_run(monkeypatch, tmp_path):
+    reports, widths = [], []
+    monkeypatch.setattr("sys.argv", ["benchmark", "--factors", "61",
+                                  "--gpu-tile-widths", "8", "16",
+                                  "--output", str(tmp_path / "summary.json")])
+
+    def fake_run(command, **kwargs):
+        width = int(command[command.index("--tile-size") + 1])
+        widths.append(width)
+        output = harness.Path(command[command.index("--output") + 1])
+        receipt = {
+            "kind": "real_cos_source_gpu_worker.v1",
+            "tile_size": width, "manifest_sha256": "a" * 64,
+            "shape": [3, 4, 2], "factor_ids": ["f0", "f1"],
+            "source_request_fingerprint": "b" * 64,
+            "run": {"seconds": width / 10, "backend_used": "cuda"},
+            "scalar_metrics": {name: [0.1, 0.2] for name in harness.METRICS},
+            "observation_counts": {name: [3, 3] for name in harness.METRICS},
+        }
+        output.write_text(json.dumps(receipt), encoding="utf-8")
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(harness.subprocess, "run", fake_run)
+    monkeypatch.setattr(harness, "emit_report",
+                        lambda report, output: reports.append(json.loads(json.dumps(report))))
+    harness.main()
+    assert widths == [8, 16, 16, 8]
+    assert [item["status"] for item in reports] == ["partial"] * 4 + ["complete"]
+    assert len(reports[-1]["comparisons_to_first_run"]) == 3
+    assert all(item["pass"] for item in reports[-1]["comparisons_to_first_run"])
+    assert reports[-1]["median_seconds_by_width"] == {"8": 0.8, "16": 1.6}
+    assert all("factor_ids" not in item and "scalar_metrics" not in item
+               and "observation_counts" not in item for item in reports[-1]["runs"])
+
+
+def test_gpu_tile_width_ab_failure_keeps_partial_receipt(monkeypatch, tmp_path):
+    args = SimpleNamespace(
+        gpu_tile_widths=(8, 16), factors=61, days=0, assets=5500,
+        max_object_mib=128, max_total_mib=4096, axis_index=None,
+        output=tmp_path / "summary.json",
+    )
+    monkeypatch.setattr(
+        harness.subprocess, "run",
+        lambda *a, **k: SimpleNamespace(returncode=9),
+    )
+    with pytest.raises(SystemExit) as error:
+        harness.run_gpu_tile_width_ab(args)
+    assert error.value.code == 1
+    receipt = json.loads(args.output.read_text(encoding="utf-8"))
+    assert receipt["status"] == "interrupted"
+    assert receipt["runs"] == []
+    assert "median_seconds_by_width" not in receipt

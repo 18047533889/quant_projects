@@ -1,6 +1,6 @@
 # 公开运行能力与输入/输出契约
 
-> 最后更新：2026-09-28（Asia/Hong_Kong）。文档维护规则：代码行为变更必须同一轮同步本文档并更新此时间戳。
+> 最后更新：2026-09-29（Asia/Hong_Kong）。文档维护规则：代码行为变更必须同一轮同步本文档并更新此时间戳。
 
 本页补充 `METRIC_REFERENCE.md` 的调用层说明。指标是否可请求以当前注册表为准；
 `METRIC_REGISTRY_COVERAGE.csv` 是迁移追踪表，不能把其中历史遗留的 `NOT_IMPLEMENTED` 当作当前运行结论。
@@ -688,21 +688,42 @@ rtol=1e-8、atol=1e-10 对拍。原始有界报告见
 `bounded_f61_mixed_three_gpu`，8 个 tile 全部完成，三个指标的输出字节哈希
 与严格 CUDA 完全一致；见[auto 复测](benchmarks/real_cos_f61_whole_source_auto_20260928.json)。
 
-该来源 API 的 `auto` 只在上述精确形状、tile 宽度、三指标集合、默认精度、
-float64 因子和标签、单 NVIDIA L20、实际及有效空闲显存至少 14 GiB 时选 CUDA；
-其它请求回退 CPU，并在 `metadata["auto_backend_reason"]` 写明原因。
-调用时可设 `backend="cpu"` 固定参考路径，或设 `backend="cuda_strict"`
-要求 CUDA（条件不满足则报错）；`max_tile_size=8` 控制来源读取宽度，
+该来源 API 的 `auto` 只在上述精确形状、三指标集合、默认精度、
+float64 因子和标签、来源与调用方的 tile 上限至少 8、显卡通过
+14 GiB 有效空闲显存准入时选 CUDA；这一显存门槛是后端准入，
+并不保证实际 tile 宽度。其它请求回退 CPU，并在
+`metadata["auto_backend_reason"]` 写明原因。调用时可设
+`backend="cpu"` 固定参考路径，或设 `backend="cuda_strict"`
+要求 CUDA（条件不满足则报错）；`max_tile_size` 是来源读取上限，
 `gpu_policy=GPUExecutionPolicy(...)` 控制显存比例、重分片和输出预算。
 结果是列式 `BatchEvaluationBundle`，不含完整 `EvaluationBundle` 的组合/探针
 制品；这次单清单结果不证明其它股票池、指标集合或生产 PIT 资格。
 
-同一 manifest 和 F61 轴索引再以 `max_tile_size=16` 做整批来源 A/B：CPU
-453.31 秒、CUDA 188.33 秒，4 个 tile 的 183/183 项数值及观测数对拍通过。
-与上述 tile=8 的单次运行相比，CPU 变慢约 4.9%，CUDA 快约 3.3%；
-跨时运行受缓存和同机负载影响，这不是稳定胜出的证明。当前 `auto` 仍只认证
-tile=8，tile=16 须显式选 `cuda_strict`；待同机交错复测后再决定是否扩展路由。
+同一 manifest 和 F61 轴索引以 `max_tile_size=16` 做整批来源 A/B：CPU
+453.31 秒、CUDA 188.33 秒，4 个 tile 的 183/183 项数值及观测数对拍通过；
+单次跨时比较不足以认定稳定优势。
 [tile=16 原始报告](benchmarks/real_cos_f61_whole_source_tile16_ab_20260929.json)。
+
+随后在相同真实 COS 清单（2,586 日 × 5,461 股 × 61 因子）上隔离进程，
+按 tile 8 → 16 → 16 → 8 交错运行严格 CUDA。耗时分别为 192.655、
+184.831、188.612、190.332 秒；两个宽度的中位数为 191.493 和
+186.721 秒，tile 16 快约 2.5%。三次与首轮的 183/183 项数值及观测数
+对拍全部通过。该结论只覆盖此机器、清单及三指标，不是所有指标的最优后端证明。
+见[交错 A/B 脱敏摘要](benchmarks/real_cos_f61_gpu_tile_width_ab_20260929.json)。
+
+因此此精确 F61 三指标请求的 `auto`：来源和调用方 tile 上限均至少 16
+时，传给 CUDA 执行器的上限选 16；上限 8–15 时选 8；小于 8 则不按
+F61 证据放行 CUDA。其它形状、指标集合、精度或资源条件不扩展。
+`metadata["effective_max_tile_size"]` 和执行回执中的同名字段记录所选
+上限，`max_tile_size` 保留调用方原值。执行器仍可因当前显存预算或 OOM
+重分片，实际读取宽度须以 `factor_tiles_processed` 等执行证据判断，
+不能将 `...tile16` 路由理由解释为每片必定 16。
+真实 COS 公共入口复测进一步确认 `backend="auto"` 的实际路径：
+用时 187.91 秒，回执为 `bounded_f61_mixed_three_gpu_tile16`，
+执行 16/16/16/13 四片；来源指纹与严格 CUDA 基准相同，
+三指标的值、观测数及值字节哈希全部一致。见
+[auto tile16 复测摘要](benchmarks/real_cos_f61_source_auto_tile16_20260929.json)。
+
 
 另对同一绑定清单按大小排序的前 8 个因子，直接调用研究脚本的验源、
 装载和评价函数完成串行 → 双对象预取 → 串行 A–B–A。由于正式 CLI

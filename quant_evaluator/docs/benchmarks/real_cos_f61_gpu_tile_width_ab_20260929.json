@@ -1,0 +1,272 @@
+{
+  "status": "complete",
+  "kind": "real_cos_gpu_tile_width_ab.v2",
+  "run_order": [
+    8,
+    16,
+    16,
+    8
+  ],
+  "metric_ids": [
+    "rank_ic",
+    "quantile_spread",
+    "factor_turnover_rate"
+  ],
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "shape": [
+    2586,
+    5461,
+    61
+  ],
+  "median_seconds_by_width": {
+    "8": 191.49315117399965,
+    "16": 186.721224596502
+  },
+  "runs": [
+    {
+      "tile_size": 8,
+      "run": {
+        "seconds": 192.65469226099958,
+        "backend_used": "cuda",
+        "factor_tiles_processed": 8,
+        "tile_ranges": [
+          [
+            0,
+            8
+          ],
+          [
+            8,
+            16
+          ],
+          [
+            16,
+            24
+          ],
+          [
+            24,
+            32
+          ],
+          [
+            32,
+            40
+          ],
+          [
+            40,
+            48
+          ],
+          [
+            48,
+            56
+          ],
+          [
+            56,
+            61
+          ]
+        ]
+      }
+    },
+    {
+      "tile_size": 16,
+      "run": {
+        "seconds": 184.83086550699954,
+        "backend_used": "cuda",
+        "factor_tiles_processed": 4,
+        "tile_ranges": [
+          [
+            0,
+            16
+          ],
+          [
+            16,
+            32
+          ],
+          [
+            32,
+            48
+          ],
+          [
+            48,
+            61
+          ]
+        ]
+      }
+    },
+    {
+      "tile_size": 16,
+      "run": {
+        "seconds": 188.61158368600445,
+        "backend_used": "cuda",
+        "factor_tiles_processed": 4,
+        "tile_ranges": [
+          [
+            0,
+            16
+          ],
+          [
+            16,
+            32
+          ],
+          [
+            32,
+            48
+          ],
+          [
+            48,
+            61
+          ]
+        ]
+      }
+    },
+    {
+      "tile_size": 8,
+      "run": {
+        "seconds": 190.33161008699972,
+        "backend_used": "cuda",
+        "factor_tiles_processed": 8,
+        "tile_ranges": [
+          [
+            0,
+            8
+          ],
+          [
+            8,
+            16
+          ],
+          [
+            16,
+            24
+          ],
+          [
+            24,
+            32
+          ],
+          [
+            32,
+            40
+          ],
+          [
+            40,
+            48
+          ],
+          [
+            48,
+            56
+          ],
+          [
+            56,
+            61
+          ]
+        ]
+      }
+    }
+  ],
+  "comparisons_to_first_run": [
+    {
+      "pass": true,
+      "compared_factor_count": 61,
+      "compared_metric_count": 183,
+      "metrics": {
+        "rank_ic": {
+          "pass": true,
+          "factor_count": 61,
+          "finite_value_count": 61,
+          "max_abs_error": 1.3877787807814457E-17,
+          "observation_counts_equal": true,
+          "cpu_values_sha256": "977fcfd5424a2383abfc2f7be7b8967540a440a1a0d95517d0688ecd9aa5c26e",
+          "cuda_values_sha256": "82256f93e2ee4e95d5631224c7f896cb7b8d797b80acaf6735d2b3899551bfe3"
+        },
+        "quantile_spread": {
+          "pass": true,
+          "factor_count": 61,
+          "finite_value_count": 61,
+          "max_abs_error": 4.336808689942018E-19,
+          "observation_counts_equal": true,
+          "cpu_values_sha256": "a2cad9318b55eb7a645ae75d839c9e6d8189dba41a48ed7a5dced71d449c9cc9",
+          "cuda_values_sha256": "57db46b1379d12f6cdacf6fcfa57b6daf1b5ee97de87cc8d21f80148e39b3fbc"
+        },
+        "factor_turnover_rate": {
+          "pass": true,
+          "factor_count": 61,
+          "finite_value_count": 61,
+          "max_abs_error": 1.3877787807814457E-17,
+          "observation_counts_equal": true,
+          "cpu_values_sha256": "52abc70f2d0303cd49a671038dd6993123c61b40a10d6375869eab383c98731d",
+          "cuda_values_sha256": "db0021ec12303fa64fc5dfd90172a8d9c5a53b148c4e66802a67f94dd8ad71e3"
+        }
+      }
+    },
+    {
+      "pass": true,
+      "compared_factor_count": 61,
+      "compared_metric_count": 183,
+      "metrics": {
+        "rank_ic": {
+          "pass": true,
+          "factor_count": 61,
+          "finite_value_count": 61,
+          "max_abs_error": 1.3877787807814457E-17,
+          "observation_counts_equal": true,
+          "cpu_values_sha256": "977fcfd5424a2383abfc2f7be7b8967540a440a1a0d95517d0688ecd9aa5c26e",
+          "cuda_values_sha256": "82256f93e2ee4e95d5631224c7f896cb7b8d797b80acaf6735d2b3899551bfe3"
+        },
+        "quantile_spread": {
+          "pass": true,
+          "factor_count": 61,
+          "finite_value_count": 61,
+          "max_abs_error": 4.336808689942018E-19,
+          "observation_counts_equal": true,
+          "cpu_values_sha256": "a2cad9318b55eb7a645ae75d839c9e6d8189dba41a48ed7a5dced71d449c9cc9",
+          "cuda_values_sha256": "57db46b1379d12f6cdacf6fcfa57b6daf1b5ee97de87cc8d21f80148e39b3fbc"
+        },
+        "factor_turnover_rate": {
+          "pass": true,
+          "factor_count": 61,
+          "finite_value_count": 61,
+          "max_abs_error": 1.3877787807814457E-17,
+          "observation_counts_equal": true,
+          "cpu_values_sha256": "52abc70f2d0303cd49a671038dd6993123c61b40a10d6375869eab383c98731d",
+          "cuda_values_sha256": "db0021ec12303fa64fc5dfd90172a8d9c5a53b148c4e66802a67f94dd8ad71e3"
+        }
+      }
+    },
+    {
+      "pass": true,
+      "compared_factor_count": 61,
+      "compared_metric_count": 183,
+      "metrics": {
+        "rank_ic": {
+          "pass": true,
+          "factor_count": 61,
+          "finite_value_count": 61,
+          "max_abs_error": 0.0,
+          "observation_counts_equal": true,
+          "cpu_values_sha256": "977fcfd5424a2383abfc2f7be7b8967540a440a1a0d95517d0688ecd9aa5c26e",
+          "cuda_values_sha256": "977fcfd5424a2383abfc2f7be7b8967540a440a1a0d95517d0688ecd9aa5c26e"
+        },
+        "quantile_spread": {
+          "pass": true,
+          "factor_count": 61,
+          "finite_value_count": 61,
+          "max_abs_error": 0.0,
+          "observation_counts_equal": true,
+          "cpu_values_sha256": "a2cad9318b55eb7a645ae75d839c9e6d8189dba41a48ed7a5dced71d449c9cc9",
+          "cuda_values_sha256": "a2cad9318b55eb7a645ae75d839c9e6d8189dba41a48ed7a5dced71d449c9cc9"
+        },
+        "factor_turnover_rate": {
+          "pass": true,
+          "factor_count": 61,
+          "finite_value_count": 61,
+          "max_abs_error": 0.0,
+          "observation_counts_equal": true,
+          "cpu_values_sha256": "52abc70f2d0303cd49a671038dd6993123c61b40a10d6375869eab383c98731d",
+          "cuda_values_sha256": "52abc70f2d0303cd49a671038dd6993123c61b40a10d6375869eab383c98731d"
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "One real COS manifest and host; research use only.",
+    "Separate CPU/CUDA reports establish CPU parity.",
+    "Partial runs must not select an auto backend."
+  ]
+}
