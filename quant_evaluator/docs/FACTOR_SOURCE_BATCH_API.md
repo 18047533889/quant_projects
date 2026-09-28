@@ -51,6 +51,15 @@ can only reduce the source's declared maximum. An OOM retry may re-read a
 failed range at a smaller width. Results retain the ordered factor axis and
 expose backend choice and route reason in `metadata`.
 
+`metadata["source_request_fingerprint"]` is stable across CPU/CUDA and tile
+width for the same ordered factor IDs, full axes, factor dtype, supplied
+snapshot ID, label content hash and metric order. It is a semantic request
+fingerprint **relative to the caller-supplied snapshot ID**, not a cryptographic
+verification of COS values. `metadata["execution_receipt"]` records the chosen
+backend and GPU/tile options with its own hash; execution choices can change
+that receipt without changing the request fingerprint. `request_id` is a fresh
+per-call identifier, not a durable content ID.
+
 ## Full-history source-path A/B/A (synthetic)
 
 A deterministic on-demand source, not a materialized factor cube, was tested

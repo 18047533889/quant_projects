@@ -90,6 +90,7 @@ def test_public_source_batch_matches_full_cpu(backend):
 def test_public_source_batch_invalid_options_fail_before_reads():
     batch, label = _inputs()
     source = Source(batch)
+    from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
     for kwargs, error in (
         ({"metrics": ("rank_ic", "rank_ic")}, InvalidContractError),
         ({"metrics": "rank_ic"}, InvalidContractError),
@@ -98,6 +99,7 @@ def test_public_source_batch_invalid_options_fail_before_reads():
         ({"backend": "cuda"}, InvalidContractError),
         ({"max_tile_size": 0}, InvalidContractError),
         ({"gpu_policy": False}, InvalidContractError),
+        ({"gpu_policy": GPUExecutionPolicy(precision_policy="invalid")}, InvalidContractError),
     ):
         with pytest.raises(error):
             evaluate_factor_source_batch(source, label, **kwargs)
@@ -156,3 +158,50 @@ def test_source_batch_requires_typed_label_before_read():
     with pytest.raises(InvalidContractError, match="typed LabelBundle"):
         evaluate_factor_source_batch(source, object())
     assert source.reads == []
+
+
+def test_source_request_fingerprint_is_backend_and_tile_invariant():
+    batch, label = _inputs()
+    first = evaluate_factor_source_batch(
+        Source(batch), label, metrics=("rank_ic", "rank_ic_series"),
+        backend="cpu", max_tile_size=1)
+    second = evaluate_factor_source_batch(
+        Source(batch), label, metrics=("rank_ic", "rank_ic_series"),
+        backend="cpu", max_tile_size=2)
+    assert first.metadata["source_request_fingerprint"] == second.metadata["source_request_fingerprint"]
+    assert first.metadata["execution_receipt"]["receipt_hash"] != second.metadata["execution_receipt"]["receipt_hash"]
+    assert first.metadata["request_id"] != second.metadata["request_id"]
+
+    changed = Source(batch)
+    changed.snapshot_id = "another-verified-test-source"
+    third = evaluate_factor_source_batch(
+        changed, label, metrics=("rank_ic", "rank_ic_series"), backend="cpu")
+    assert third.metadata["source_request_fingerprint"] != first.metadata["source_request_fingerprint"]
+
+
+def test_source_request_fingerprint_accepts_datetime_axes():
+    batch, _ = _inputs()
+    dates = np.arange("2024-01-01", "2024-01-09", dtype="datetime64[D]")
+    time_axis = AxisRef("time", "datetime64[D]", len(dates), dates)
+    dated = FactorBatch(batch.factor_ids, time_axis, batch.asset_axis,
+                        batch.values, validity=batch.validity)
+    label = LabelBundle(
+        "ret", np.ones((8, 48)), 1, decision_time=tuple(dates),
+        label_start_time=tuple(dates),
+        label_end_time=tuple(dates + np.timedelta64(1, "D")),
+        asset_axis=batch.asset_axis,
+    )
+    result = evaluate_factor_source_batch(
+        Source(dated), label, metrics=("rank_ic",), backend="cpu")
+    assert len(result.metadata["source_request_fingerprint"]) == 64
+
+
+def test_source_request_fingerprint_matches_cpu_and_cuda():
+    pytest.importorskip("cupy")
+    batch, label = _inputs()
+    cpu = evaluate_factor_source_batch(
+        Source(batch), label, metrics=("rank_ic", "rank_ic_series"), backend="cpu")
+    cuda = evaluate_factor_source_batch(
+        Source(batch), label, metrics=("rank_ic", "rank_ic_series"), backend="cuda_strict")
+    assert cpu.metadata["source_request_fingerprint"] == cuda.metadata["source_request_fingerprint"]
+    assert cpu.metadata["execution_receipt"]["receipt_hash"] != cuda.metadata["execution_receipt"]["receipt_hash"]

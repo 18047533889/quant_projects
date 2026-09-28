@@ -10,7 +10,8 @@ from uuid import uuid4
 import numpy as np
 
 from quant_evaluator.api.batch_bundle import BatchEvaluationBundle
-from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
+from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy, PrecisionPolicy
+from quant_evaluator.contracts._hashutil import stable_content_hex
 from quant_evaluator.contracts.errors import InvalidContractError, UnsupportedMetricError
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.contracts.factor_tile_source import (
@@ -22,6 +23,27 @@ _SOURCE_METRICS = frozenset({"rank_ic", "rank_ic_series", "coverage", "quantile_
 _F8_RANK_PAIR = frozenset({"rank_ic", "rank_ic_series"})
 _F8_SHAPE = (2586, 5461, 8)
 _F8_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
+
+
+def _source_request_fingerprint(metadata, label_bundle, metrics):
+    """Semantic request identity relative to a caller-supplied source snapshot."""
+    def axis_fields(axis):
+        return {"name": axis.name, "dtype": axis.dtype,
+                "storage_dtype": str(axis.values.dtype), "size": axis.size,
+                "values": axis.values.tolist()}
+
+    return stable_content_hex(
+        tag="FactorSourceBatchRequest.v1",
+        fields={
+            "factor_ids": metadata.factor_ids,
+            "time_axis": axis_fields(metadata.time_axis),
+            "asset_axis": axis_fields(metadata.asset_axis),
+            "factor_dtype": metadata.dtype,
+            "source_snapshot_id": metadata.snapshot_id,
+            "label_content_hash": label_bundle.content_hash,
+            "metrics": metrics,
+        },
+    )
 
 
 def _validate_source_label(metadata, label_bundle):
@@ -121,10 +143,13 @@ def evaluate_factor_source_batch(
     policy = GPUExecutionPolicy() if gpu_policy is None else gpu_policy
     if not isinstance(policy, GPUExecutionPolicy):
         raise InvalidContractError("gpu_policy must be GPUExecutionPolicy")
+    if not isinstance(policy.precision_policy, PrecisionPolicy):
+        raise InvalidContractError("gpu precision_policy must be PrecisionPolicy")
     if not isinstance(label_bundle, LabelBundle):
         raise InvalidContractError("label_bundle must be a typed LabelBundle")
     metadata = capture_factor_tile_source(source)
     _validate_source_label(metadata, label_bundle)
+    request_fingerprint = _source_request_fingerprint(metadata, label_bundle, selected)
     route = backend
     reason = "explicit"
     if backend == "auto":
@@ -152,14 +177,35 @@ def evaluate_factor_source_batch(
                 source_metadata=metadata)
     else:
         out = _cpu_source_batch(source, metadata, label_bundle, selected, policy, max_tile_size)
+    backend_used = "cuda" if route == "cuda_strict" else "cpu"
+    metric_backends = {metric: backend_used for metric in selected}
+    receipt = {
+        "source_request_fingerprint": request_fingerprint,
+        "backend_requested": backend,
+        "backend_used": backend_used,
+        "auto_backend_reason": reason if backend == "auto" else None,
+        "metric_backends": metric_backends,
+        "gpu_device_ids": policy.device_ids,
+        "gpu_precision_policy": policy.precision_policy.value,
+        "max_vram_fraction": policy.max_vram_fraction,
+        "max_host_result_bytes": policy.max_host_result_bytes,
+        "oom_retile": policy.oom_retile,
+        "pinned_host_memory": policy.pinned_host_memory,
+        "async_transfer": policy.async_transfer,
+        "double_buffer": policy.double_buffer,
+        "required_capabilities": policy.required_capabilities,
+        "max_tile_size": max_tile_size,
+    }
+    receipt["receipt_hash"] = stable_content_hex(
+        tag="FactorSourceBatchExecutionReceipt.v1", fields=receipt)
     out.metadata.update({
         "request_id": str(uuid4()),
+        "source_request_fingerprint": request_fingerprint,
         "backend_requested": backend,
-        "backend_used": "cuda" if route == "cuda_strict" else "cpu",
-        "auto_backend_reason": reason if backend == "auto" else None,
-        "metric_backends": {
-            metric: "cuda" if route == "cuda_strict" else "cpu" for metric in selected
-        },
+        "backend_used": backend_used,
+        "auto_backend_reason": receipt["auto_backend_reason"],
+        "metric_backends": metric_backends,
+        "execution_receipt": receipt,
         "source_snapshot_id": metadata.snapshot_id,
         "source_api": "columnar_factor_source_v1",
         "source_identity_trust": "caller_supplied_snapshot_id",
