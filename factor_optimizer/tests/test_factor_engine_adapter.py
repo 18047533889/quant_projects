@@ -107,3 +107,9 @@ def test_malformed_parameter_name_fails_closed(adapter):
     )
     assert not result["is_legal"]
     assert "parameter_name must be a nonempty string" in result["reason"]
+
+
+def test_operator_metadata_uses_fe_canonical_names(adapter):
+    metadata = adapter.get_operator_metadata(["CS_RANK", "rank", "not_a_real_operator"])
+    assert tuple(metadata) == ("rank",)
+    assert metadata["rank"]["status"] in {"implemented", "production"}

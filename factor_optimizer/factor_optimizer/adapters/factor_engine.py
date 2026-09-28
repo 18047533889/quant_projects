@@ -357,11 +357,19 @@ def create_fe_adapter() -> FactorEngineAdapter:
                     # Return all operators
                     return catalog
 
-                # Return specific operators
+                # Resolve aliases to the same canonical FE names used by
+                # mutation validation. Unknown names retain the old omission
+                # behavior; result keys are always canonical names.
                 result = {}
                 for name in operator_names:
-                    if name in catalog:
-                        result[name] = catalog[name]
+                    if not isinstance(name, str):
+                        continue
+                    try:
+                        canonical = OperatorRegistry.resolve_canonical_strict(name)
+                    except (KeyError, ValueError):
+                        continue
+                    if canonical in catalog:
+                        result[canonical] = catalog[canonical]
 
                 return result
 
