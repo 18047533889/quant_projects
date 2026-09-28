@@ -271,9 +271,10 @@ def _freeze_array(
 ) -> np.ndarray:
     """Validate ``value`` and return a read-only ndarray the artifact owns.
 
-    Default (QE-P0-02): the caller's buffer is COPIED (``copy=True``,
-    C-contiguous) so mutating the original afterwards never changes the
-    artifact.  A zero-copy escape is available only by passing an
+    Default (QE-P0-02): the caller's buffer is copied into immutable bytes,
+    so mutating the original afterwards never changes the artifact. For an
+    ndarray, serialize directly from the caller's view to avoid a redundant
+    intermediate C-contiguous copy. A zero-copy escape is available only by passing an
     :class:`ImmutableBufferRef` (the caller asserts it will not mutate the
     buffer; it is still marked read-only).
 
@@ -315,7 +316,10 @@ def _freeze_array(
             f"MetricArtifact.{name} must be a numpy ndarray, "
             f"got {type(value).__name__}"
         )
-    array = np.array(value, copy=True, order="C")
+    # ndarray.tobytes(order="C") already copies to an immutable bytes owner.
+    # Materializing np.array(copy=True) first doubles peak transient memory for
+    # large factor panels without strengthening the ownership boundary.
+    array = np.asarray(value) if isinstance(value, np.ndarray) else np.array(value, copy=True, order="C")
     if not array.dtype.hasobject:
         # A read-only owning ndarray can re-enable WRITEABLE. An immutable
         # bytes owner cannot, including through its exposed base/view chain.
