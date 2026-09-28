@@ -68,19 +68,69 @@ def test_mutation_without_operator_remains_not_applicable_to_fe(adapter):
     assert result["metadata"]["operator_check"] == "not_applicable"
 
 
-def test_analyzer_evidence_is_additive_and_legacy_score_is_unchanged(adapter):
+def test_analyzer_lookback_is_authoritative_for_complexity(adapter):
     from factor_engine.expr.cleaned_call import CleanedCall
     from factor_engine.expr.column import ColumnRef
 
     expr = CleanedCall("ts_mean", (ColumnRef("close"),), (("window", 5),))
     result = adapter.estimate_complexity(expr)
     assert result["operator_count"] == 1
-    assert result["lookback_periods"] == 0
-    assert result["estimated_cost"] == 1.0
+    assert result["lookback_periods"] == 4
+    assert result["estimated_cost"] == 1.2
     assert result["fe_analysis"]["available"]
     assert result["fe_analysis"]["lookback"] == 4
     assert result["fe_analysis"]["has_ts_op"]
     assert result["fe_analysis"]["referenced_columns"] == ["close"]
+
+
+def test_analyzer_lookback_uses_fe_canonical_lag_parameter_n(adapter):
+    from factor_engine.expr.cleaned_call import CleanedCall
+    from factor_engine.expr.column import ColumnRef
+
+    expr = CleanedCall("ts_delay", (ColumnRef("close"),), (("n", 5),))
+    result = adapter.estimate_complexity(expr)
+    assert result["lookback_periods"] == 5
+    assert result["estimated_cost"] == 1.25
+    assert result["fe_analysis"]["lookback"] == 5
+
+
+def test_analyzer_preserves_two_row_floor_for_stateless_call(adapter):
+    from factor_engine.expr.cleaned_call import CleanedCall
+    from factor_engine.expr.column import ColumnRef
+
+    result = adapter.estimate_complexity(CleanedCall("rank", (ColumnRef("close"),)))
+    assert result["lookback_periods"] == 2
+    assert result["estimated_cost"] == 1.1
+    assert result["fe_analysis"]["lookback"] == 2
+
+
+def test_analyzer_failure_uses_cleaned_call_kwargs_fallback(adapter, monkeypatch):
+    from factor_engine.expr.cleaned_call import CleanedCall
+    from factor_engine.expr.column import ColumnRef
+    from factor_engine.ir.analyzer import Analyzer
+
+    def fail_lower(self, expr):
+        raise ValueError("analyzer unavailable")
+
+    monkeypatch.setattr(Analyzer, "lower", fail_lower)
+    expr = CleanedCall("ts_mean", (ColumnRef("close"),), (("window", 5),))
+    result = adapter.estimate_complexity(expr)
+    assert result["lookback_periods"] == 5
+    assert result["estimated_cost"] == 1.25
+    assert result["fe_analysis"] == {
+        "available": False, "reason": "analyzer unavailable",
+    }
+
+
+def test_analyzer_window_one_preserves_two_row_floor(adapter):
+    from factor_engine.expr.cleaned_call import CleanedCall
+    from factor_engine.expr.column import ColumnRef
+
+    expr = CleanedCall("ts_mean", (ColumnRef("close"),), (("window", 1),))
+    result = adapter.estimate_complexity(expr)
+    assert result["lookback_periods"] == 2
+    assert result["estimated_cost"] == 1.1
+    assert result["fe_analysis"]["lookback"] == 2
 
 
 def test_malformed_mutation_parameters_fail_closed(adapter):

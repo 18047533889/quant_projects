@@ -131,13 +131,15 @@ def _extract_lookback(expr: Any) -> int:
         return 0
 
     if isinstance(expr, CleanedCall):
-        # Check for window parameter
+        # FE CleanedCall.kwargs is an immutable tuple of pairs, not a mapping.
+        # Include canonical lag names used by FE (for example ts_delay(n=...))
+        # for the fallback path when Analyzer cannot lower an expression.
         max_lookback = 0
 
-        # Common window parameter names
-        for param_name in ["window", "period", "span", "lookback"]:
-            if param_name in expr.kwargs:
-                value = expr.kwargs[param_name]
+        kwargs = expr.kwargs_dict()
+        for param_name in ["window", "period", "span", "lookback", "n", "d"]:
+            if param_name in kwargs:
+                value = kwargs[param_name]
                 if isinstance(value, int) and value > 0:
                     max_lookback = max(max_lookback, value)
 
@@ -318,15 +320,16 @@ def create_fe_adapter() -> FactorEngineAdapter:
                 max_depth = _compute_max_depth(expr)
                 lookback_periods = _extract_lookback(expr)
 
-                # Simple cost heuristic: combine operator count and lookback
-                estimated_cost = float(operator_count) * (1.0 + lookback_periods / 20.0)
-
-                # Preserve the legacy score: FE Analyzer history has different
-                # semantics, so expose its typed evidence additively.
+                # FE Analyzer history is authoritative; keep its evidence
+                # alongside the complexity estimate for auditability.
                 fe_analysis = None
                 if isinstance(expr, Expr):
                     try:
                         analysis = Analyzer().lower(expr)
+                        # FE's composed history requirement is authoritative;
+                        # parameter-name heuristics are only a fallback when
+                        # FE cannot analyze this expression.
+                        lookback_periods = analysis.lookback
                         fe_analysis = {
                             "available": True,
                             "lookback": analysis.lookback,
@@ -337,6 +340,10 @@ def create_fe_adapter() -> FactorEngineAdapter:
                         }
                     except (TypeError, ValueError, KeyError, RuntimeError) as exc:
                         fe_analysis = {"available": False, "reason": str(exc)}
+
+                # Cost must use the final FE-authoritative lookback, or the
+                # corrected CleanedCall kwargs fallback when analysis fails.
+                estimated_cost = float(operator_count) * (1.0 + lookback_periods / 20.0)
 
                 return {
                     "operator_count": operator_count,
