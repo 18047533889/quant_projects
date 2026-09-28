@@ -31,6 +31,8 @@ _F8_SHAPE = (2586, 5461, 8)
 _F8_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _F32_SHAPE = (2586, 5461, 32)
 _F32_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
+_F61_SHAPE = (2586, 5461, 61)
+_F61_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 
 
 def _source_request_fingerprint(metadata, label_bundle, metrics):
@@ -165,22 +167,27 @@ def evaluate_factor_source_batch(
         tile_width = min(metadata.max_tile_size, max_tile_size or metadata.max_tile_size)
         f8 = shape == _F8_SHAPE
         f32 = shape == _F32_SHAPE and tile_width == 2
+        f61 = shape == _F61_SHAPE and tile_width == 8
         f32_mixed_three = (f32 and len(selected) == 3
+                           and frozenset(selected) == _F32_MIXED_THREE)
+        f61_mixed_three = (f61 and len(selected) == 3
                            and frozenset(selected) == _F32_MIXED_THREE)
         rank_pair = (f8 or f32) and len(selected) == 2 and frozenset(selected) == _RANK_PAIR
         if (metadata.dtype == "float64"
                 and label_bundle.values.dtype == np.float64
-                and (rank_pair or f32_mixed_three)):
+                and (rank_pair or f32_mixed_three or f61_mixed_three)):
             from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
 
             if policy.precision_policy != GPUExecutionPolicy().precision_policy:
                 rejection = "gpu_precision_policy_outside_certified_range"
             else:
-                minimum = (_F32_MIN_EFFECTIVE_VRAM_BYTES if f32
-                           else _F8_MIN_EFFECTIVE_VRAM_BYTES)
+                minimum = (_F61_MIN_EFFECTIVE_VRAM_BYTES if f61_mixed_three else
+                           _F32_MIN_EFFECTIVE_VRAM_BYTES if f32 else
+                           _F8_MIN_EFFECTIVE_VRAM_BYTES)
                 rejection = _auto_batch_cuda_rejection(policy, minimum)
             route = "cuda_strict" if rejection is None else "cpu"
-            reason = (("bounded_f32_mixed_three_gpu" if f32_mixed_three else
+            reason = (("bounded_f61_mixed_three_gpu" if f61_mixed_three else
+                       "bounded_f32_mixed_three_gpu" if f32_mixed_three else
                        "bounded_f32_rank_pair_gpu" if f32 else "bounded_f8_rank_pair_gpu")
                       if rejection is None else rejection)
         else:

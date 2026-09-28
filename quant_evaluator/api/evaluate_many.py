@@ -40,14 +40,17 @@ def _evaluate_ic_labels_shared_cuda(
         dict.fromkeys(resolve_alias(mid) for mid in selected_metrics))
     if not labels or not set(canonical_metrics) <= _PANEL_GPU_METRICS:
         return None
+    route_decisions = []
     for label in labels:
-        selected = evaluate(
+        selected, reason = evaluate(
             factor_batch, label, metrics=selected_metrics, backend=backend,
             gpu_policy=gpu_policy, split_ref=split_ref,
             metric_parameters=metric_parameters, _prepare_only=True,
+            _include_auto_route_reason=True,
         )
         if selected not in {"cuda", "cuda_strict", "gpu"}:
             return None
+        route_decisions.append((selected, reason))
     from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
     from quant_evaluator.runtime.device_session import DeviceEvaluationSession
     from quant_evaluator.runtime.gpu_executor import GPUExecutor
@@ -76,9 +79,10 @@ def _evaluate_ic_labels_shared_cuda(
         evaluate(
             factor_batch, label, metrics=selected_metrics, backend=backend,
             gpu_policy=gpu_policy, split_ref=split_ref,
-            metric_parameters=metric_parameters, _gpu_result_override=gpu_bundle,
+            metric_parameters=metric_parameters,
+            _auto_route_override=route_decision, _gpu_result_override=gpu_bundle,
         )
-        for label, gpu_bundle in zip(labels, gpu_bundles)
+        for label, gpu_bundle, route_decision in zip(labels, gpu_bundles, route_decisions)
     ]
 
 def evaluate_many(

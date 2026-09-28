@@ -676,6 +676,27 @@ CUDA，三组两两 `compare_collections` 均通过 61 因子 × 3 指标的
 `--prefetch` 仍需显式启用；这些是因子分片集合，不是一次完整 F61
 `EvaluationBundle`，性能结论限定于该清单、缓存状态和同机负载。
 
+
+同一绑定 F61 清单又通过公开 `evaluate_factor_source_batch` 完成一次整批来源请求，
+而非把 8 个独立 `EvaluationBundle` 事后拼接。固定 2,586 日 × 5,461 股 ×
+61 因子、float64、每次读 8 因子，以及 `rank_ic`、`quantile_spread`、
+`factor_turnover_rate` 三指标。CPU 432.32 秒，显式 CUDA 194.77 秒，
+端到端约快 2.22 倍；61 因子 × 3 指标的 183/183 个数值与观测计数均通过
+rtol=1e-8、atol=1e-10 对拍。原始有界报告见
+[整批 CPU/CUDA A/B](benchmarks/real_cos_f61_whole_source_ab_20260928.json)。
+路由后在同一真实来源复测 `backend="auto"` 用时 200.37 秒，执行回执为
+`bounded_f61_mixed_three_gpu`，8 个 tile 全部完成，三个指标的输出字节哈希
+与严格 CUDA 完全一致；见[auto 复测](benchmarks/real_cos_f61_whole_source_auto_20260928.json)。
+
+该来源 API 的 `auto` 只在上述精确形状、tile 宽度、三指标集合、默认精度、
+float64 因子和标签、单 NVIDIA L20、实际及有效空闲显存至少 14 GiB 时选 CUDA；
+其它请求回退 CPU，并在 `metadata["auto_backend_reason"]` 写明原因。
+调用时可设 `backend="cpu"` 固定参考路径，或设 `backend="cuda_strict"`
+要求 CUDA（条件不满足则报错）；`max_tile_size=8` 控制来源读取宽度，
+`gpu_policy=GPUExecutionPolicy(...)` 控制显存比例、重分片和输出预算。
+结果是列式 `BatchEvaluationBundle`，不含完整 `EvaluationBundle` 的组合/探针
+制品；这次单清单结果不证明其它股票池、指标集合或生产 PIT 资格。
+
 另对同一绑定清单按大小排序的前 8 个因子，直接调用研究脚本的验源、
 装载和评价函数完成串行 → 双对象预取 → 串行 A–B–A。由于正式 CLI
 要求至少 33 个因子，这是一组受限 F8 单分片验证，不是 CLI 全集合运行；

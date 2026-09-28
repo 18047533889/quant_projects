@@ -330,6 +330,34 @@ def test_evaluate_many_auto_unverified_shape_keeps_cpu_without_device(monkeypatc
     assert all(metric_id in result.artifacts for result in results.values())
 
 
+def test_evaluate_many_auto_shared_cuda_reuses_preflight_decision(monkeypatch):
+    factors, labels = _inputs()
+    from quant_evaluator.runtime import evaluator as evaluator_module
+
+    selector_calls = []
+
+    def select(*args, **kwargs):
+        selector_calls.append(args[1].target_id)
+        return "cuda_strict", "test_preflight_route"
+
+    monkeypatch.setattr(evaluator_module, "_select_public_auto_backend", select)
+    cpu = evaluate_many(factors, labels, backend="cpu", metrics=("rank_ic_series",))
+    result = evaluate_many(factors, labels, backend="auto", metrics=("rank_ic_series",))
+
+    # One routing/admission decision per label, with no second probe while
+    # wrapping the shared GPU result.
+    assert selector_calls == ["h1", "h5"]
+    for label in labels:
+        np.testing.assert_allclose(
+            result[label.target_id].artifacts["rank_ic_series"].values,
+            cpu[label.target_id].artifacts["rank_ic_series"].values,
+            rtol=0, atol=1e-12, equal_nan=True,
+        )
+        assert result[label.target_id].metadata["backend_used"] == "cuda"
+        assert result[label.target_id].metadata["backend_strategy"] == "auto"
+        assert result[label.target_id].metadata["auto_backend_reason"] == "test_preflight_route"
+
+
 @pytest.mark.parametrize("policy", ["common", "per_horizon"])
 @pytest.mark.parametrize("ic_method", ["spearman", "pearson"])
 def test_evaluate_horizons_cuda_reuses_tiles_with_selected_masks(monkeypatch, policy, ic_method):

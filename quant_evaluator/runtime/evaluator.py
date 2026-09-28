@@ -1688,6 +1688,8 @@ def evaluate(
     quantile_builder_parameters=None,
     generalization_evidence=None,
     _prepare_only=False,
+    _include_auto_route_reason=False,
+    _auto_route_override=None,
     _gpu_result_override=None,
 ):
     """Evaluate explicit factor and label contracts through the runtime.
@@ -1996,20 +1998,26 @@ def evaluate(
     # An omitted backend follows the certified whole-request auto policy;
     # callers requiring the reference path can explicitly request "cpu".
     requested_backend = "default" if backend_name is None else backend_name
+    if _auto_route_override is not None and _gpu_result_override is None:
+        raise ValueError("_auto_route_override requires a shared GPU result")
     auto_route_reason = None
     if backend_name is None or backend_name == "auto":
-        backend_name, auto_route_reason = _select_public_auto_backend(
-            factor_batch, label_bundle, canonical_metrics,
-            metric_parameters=metric_parameters, context=context,
-            quantile_builder_parameters=quantile_builder_parameters,
-            portfolio_returns=portfolio_returns, holding_returns=holding_returns,
-            trade_eligibility=trade_eligibility, calendar_snapshot=calendar_snapshot,
-            exposure_panel=exposure_panel,
-            generalization_evidence=generalization_evidence, evaluator=evaluator,
-            gpu_policy=gpu_policy,
-        )
+        if _auto_route_override is not None:
+            backend_name, auto_route_reason = _auto_route_override
+        else:
+            backend_name, auto_route_reason = _select_public_auto_backend(
+                factor_batch, label_bundle, canonical_metrics,
+                metric_parameters=metric_parameters, context=context,
+                quantile_builder_parameters=quantile_builder_parameters,
+                portfolio_returns=portfolio_returns, holding_returns=holding_returns,
+                trade_eligibility=trade_eligibility, calendar_snapshot=calendar_snapshot,
+                exposure_panel=exposure_panel,
+                generalization_evidence=generalization_evidence, evaluator=evaluator,
+                gpu_policy=gpu_policy,
+            )
     if _prepare_only:
-        return backend_name
+        return ((backend_name, auto_route_reason) if _include_auto_route_reason
+                else backend_name)
     gpu_result = _gpu_result_override
     gpu_risk_results = {}
     # "gpu" is normalized to the cuda dispatch instead of silently falling

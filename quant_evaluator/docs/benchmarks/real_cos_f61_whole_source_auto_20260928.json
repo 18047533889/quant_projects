@@ -1,0 +1,65 @@
+{
+  "status": "complete",
+  "kind": "real_cos_whole_source_auto_cuda_match.v1",
+  "reference_report": "real_cos_f61_whole_source_ab_20260928.json",
+  "shape": [
+    2586,
+    5461,
+    61
+  ],
+  "factor_dtype": "float64",
+  "tile_size": 8,
+  "metric_ids": [
+    "rank_ic",
+    "quantile_spread",
+    "factor_turnover_rate"
+  ],
+  "backend_used": "cuda",
+  "auto_backend_reason": "bounded_f61_mixed_three_gpu",
+  "seconds": 200.37011644899758,
+  "factor_tiles_processed": 8,
+  "tile_ranges": [
+    [
+      0,
+      8
+    ],
+    [
+      8,
+      16
+    ],
+    [
+      16,
+      24
+    ],
+    [
+      24,
+      32
+    ],
+    [
+      32,
+      40
+    ],
+    [
+      40,
+      48
+    ],
+    [
+      48,
+      56
+    ],
+    [
+      56,
+      61
+    ]
+  ],
+  "auto_matches_strict_cuda_value_hashes": {
+    "rank_ic": true,
+    "quantile_spread": true,
+    "factor_turnover_rate": true
+  },
+  "finite_values_each_metric": 61,
+  "limitations": [
+    "One verified real-COS manifest and one L20 host only.",
+    "Source API columnar metrics, not a full EvaluationBundle or production/PIT certification."
+  ]
+}

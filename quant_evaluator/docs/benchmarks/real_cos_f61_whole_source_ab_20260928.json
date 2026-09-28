@@ -1,0 +1,168 @@
+{
+  "status": "complete",
+  "kind": "real_cos_whole_source_batch_ab.v1",
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "shape": [
+    2586,
+    5461,
+    61
+  ],
+  "factor_dtype": "float64",
+  "tile_size": 8,
+  "metric_ids": [
+    "rank_ic",
+    "quantile_spread",
+    "factor_turnover_rate"
+  ],
+  "preflight_before_cpu": {
+    "pass": true,
+    "available_ram_bytes": 48615407616,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 190244233216,
+    "required_disk_bytes": 7516192768
+  },
+  "preflight_before_cuda": {
+    "pass": true,
+    "available_ram_bytes": 42071760896,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 190239637504,
+    "required_disk_bytes": 7516192768
+  },
+  "runs": [
+    {
+      "backend_requested": "cpu",
+      "backend_used": "cpu",
+      "seconds": 432.3168077980008,
+      "factor_tiles_processed": 8,
+      "tile_ranges": [
+        [
+          0,
+          8
+        ],
+        [
+          8,
+          16
+        ],
+        [
+          16,
+          24
+        ],
+        [
+          24,
+          32
+        ],
+        [
+          32,
+          40
+        ],
+        [
+          40,
+          48
+        ],
+        [
+          48,
+          56
+        ],
+        [
+          56,
+          61
+        ]
+      ],
+      "peak_process_rss_kib": 4886588,
+      "preflight": {
+        "pass": true,
+        "available_ram_bytes": 48615407616,
+        "minimum_available_ram_bytes": 34359738368,
+        "cos_cache_disk_free_bytes": 190244233216,
+        "required_disk_bytes": 7516192768
+      }
+    },
+    {
+      "backend_requested": "cuda_strict",
+      "backend_used": "cuda",
+      "seconds": 194.7650496999995,
+      "factor_tiles_processed": 8,
+      "tile_ranges": [
+        [
+          0,
+          8
+        ],
+        [
+          8,
+          16
+        ],
+        [
+          16,
+          24
+        ],
+        [
+          24,
+          32
+        ],
+        [
+          32,
+          40
+        ],
+        [
+          40,
+          48
+        ],
+        [
+          48,
+          56
+        ],
+        [
+          56,
+          61
+        ]
+      ],
+      "peak_process_rss_kib": 6959524,
+      "preflight": {
+        "pass": true,
+        "available_ram_bytes": 42071760896,
+        "minimum_available_ram_bytes": 34359738368,
+        "cos_cache_disk_free_bytes": 190239637504,
+        "required_disk_bytes": 7516192768
+      }
+    }
+  ],
+  "comparison": {
+    "pass": true,
+    "compared_factor_count": 61,
+    "compared_metric_count": 183,
+    "metrics": {
+      "rank_ic": {
+        "pass": true,
+        "factor_count": 61,
+        "finite_value_count": 61,
+        "max_abs_error": 1.3183898417423734e-16,
+        "observation_counts_equal": true,
+        "cpu_values_sha256": "9176a72b7d6aff8934c09aa8b9abff0618bc2d2bb2937c7fb425d54716ae3ef5",
+        "cuda_values_sha256": "977fcfd5424a2383abfc2f7be7b8967540a440a1a0d95517d0688ecd9aa5c26e"
+      },
+      "quantile_spread": {
+        "pass": true,
+        "factor_count": 61,
+        "finite_value_count": 61,
+        "max_abs_error": 5.204170427930421e-18,
+        "observation_counts_equal": true,
+        "cpu_values_sha256": "83ff06976a871a0cad4aed322da568e4e6457865e08b1cbb88272c0ddc0c3eae",
+        "cuda_values_sha256": "a2cad9318b55eb7a645ae75d839c9e6d8189dba41a48ed7a5dced71d449c9cc9"
+      },
+      "factor_turnover_rate": {
+        "pass": true,
+        "factor_count": 61,
+        "finite_value_count": 61,
+        "max_abs_error": 3.885780586188048e-16,
+        "observation_counts_equal": true,
+        "cpu_values_sha256": "ce248f693efe18859af67e7d3d275501c028d3a11b5b7a717bf8c4b950b6d8ca",
+        "cuda_values_sha256": "52abc70f2d0303cd49a671038dd6993123c61b40a10d6375869eab383c98731d"
+      }
+    }
+  },
+  "source_api": "columnar_factor_source_v1",
+  "limitations": [
+    "Research-source metrics only; no PIT or production certification.",
+    "This A/B does not itself enable automatic backend routing."
+  ]
+}
