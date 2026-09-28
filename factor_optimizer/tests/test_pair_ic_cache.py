@@ -154,3 +154,30 @@ def test_candidate_cache_context_and_work_reuse(monkeypatch, change):
     second = _pair_ic(x, -x, batch, other, idx, config, candidate_cache=c)
     equal(first, second)
     assert calls == ([3, 2] if change is None else [3, 3])
+
+
+def test_prepared_train_split_reuses_label_slice_without_changing_ic(monkeypatch):
+    import factor_optimizer.research_batch as rb
+
+    batch, labels = fixture()
+    raw = batch.values[:, :, 0]
+    indices = tuple(range(40, 100))
+    config = rb.BatchOptimizationConfig()
+    expected = rb._pair_ic(raw, -raw, batch, labels, indices, config)
+    prepared = rb._prepare_pair_ic_split(batch, labels, indices)
+
+    def unexpected_slice(*_args, **_kwargs):
+        pytest.fail("prepared TRAIN split must not rebuild LabelBundle")
+
+    monkeypatch.setattr(rb, "_subset_labels", unexpected_slice)
+    actual = rb._pair_ic(
+        raw, -raw, batch, labels, indices, config, prepared_split=prepared)
+    equal(actual, expected)
+    with pytest.raises(ValueError, match="does not match"):
+        rb._pair_ic(
+            raw, -raw, batch, labels, indices[:-1], config,
+            prepared_split=prepared)
+    with pytest.raises(ValueError, match="does not match"):
+        rb._pair_ic(
+            raw, -raw, batch, replace(labels, target_id="different"),
+            indices, config, prepared_split=prepared)

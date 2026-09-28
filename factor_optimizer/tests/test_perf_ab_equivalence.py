@@ -209,7 +209,11 @@ def _run_optimize(use_oracle):
     batch, labels = make_optimize_inputs(seed=82)
     if use_oracle:
         original = rb._pair_ic
-        rb._pair_ic = rb._pair_ic_evaluate_reference
+        def oracle(*args, **kwargs):
+            # The legacy oracle predates reusable prepared TRAIN slices.
+            kwargs.pop("prepared_split", None)
+            return rb._pair_ic_evaluate_reference(*args, **kwargs)
+        rb._pair_ic = oracle
         try:
             result = optimize_factor_batch(
                 batch, labels,

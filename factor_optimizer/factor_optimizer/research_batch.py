@@ -210,6 +210,28 @@ class PairICCache:
             self._entries.popitem(last=False)
 
 
+@dataclass(frozen=True)
+class _PairICPreparedSplit:
+    """One immutable QE label/time slice shared by a TRAIN candidate search."""
+
+    source_batch: Any
+    source_labels: Any
+    indices: tuple[int, ...]
+    time_axis: Any
+    target: Any
+
+
+def _prepare_pair_ic_split(batch, labels, indices) -> _PairICPreparedSplit:
+    from quant_evaluator.contracts.factor_batch import AxisRef
+
+    ordered = tuple(int(index) for index in indices)
+    idx = np.asarray(ordered, dtype=np.intp)
+    time_axis = AxisRef(
+        "time", batch.time_axis.dtype, len(ordered), batch.time_axis.values[idx])
+    return _PairICPreparedSplit(
+        batch, labels, ordered, time_axis, _subset_labels(labels, ordered))
+
+
 def _candidate_ic_key(values, target, minimum_assets):
     """Exact effective Spearman inputs; shared by coverage and joint scoring."""
     valid = np.isfinite(values) & np.isfinite(target.values)
@@ -303,13 +325,23 @@ def _pair_ic_evaluate_reference(raw, candidate, batch, labels, indices, config, 
 
 
 def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=None,
-             candidate_cache=None):
+             candidate_cache=None, prepared_split: _PairICPreparedSplit | None = None):
     from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
     from quant_evaluator.metrics.ic import compute_daily_ic
 
     idx = np.asarray(indices)
     a, b = raw[idx], candidate[idx]
-    target = _subset_labels(labels, indices)
+    if prepared_split is None:
+        target = _subset_labels(labels, indices)
+        time_axis = AxisRef("time", batch.time_axis.dtype, len(idx), batch.time_axis.values[idx])
+    else:
+        if (type(prepared_split) is not _PairICPreparedSplit
+                or prepared_split.source_batch is not batch
+                or prepared_split.source_labels is not labels
+                or prepared_split.indices != tuple(indices)):
+            raise ValueError("prepared pair-IC split does not match this request")
+        target = prepared_split.target
+        time_axis = prepared_split.time_axis
     available = np.isfinite(a) & np.isfinite(target.values)
     if target.validity is not None:
         available &= target.validity
@@ -323,7 +355,6 @@ def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=
         candidate_key = _candidate_ic_key(np.where(common, b, np.nan), target,
                                           config.minimum_assets)
         cached_candidate = candidate_cache.get(candidate_key)
-    time_axis = AxisRef("time", batch.time_axis.dtype, len(idx), batch.time_axis.values[idx])
     # Third series anchors valid-day coverage to RAW's original universe.
     # A candidate must not improve by silently dropping difficult/constant days.
     columns, keys, pending = [0, 1, 2], {}, {}
@@ -500,6 +531,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     import pandas as pd
 
     outputs, results = [], {}
+    train_pair_ic_split = _prepare_pair_ic_split(
+        batch, labels, split.train_indices)
     for k, factor_id in enumerate(batch.factor_ids):
         train_raw_cache = RawSeriesCache()
         train_ic_cache = PairICCache()
@@ -662,14 +695,17 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                 raise ValueError(f"TRAIN candidate budget exceeded: required {len(proposals)}, "
                                  f"maximum {config.maximum_candidates}; no partial search")
             _, raw_good, _ = _pair_ic(prefix, prefix, batch, labels, split.train_indices, config,
-                                      reference_cache=train_ic_cache)
+                                      reference_cache=train_ic_cache,
+                                      prepared_split=train_pair_ic_split)
             if raw_good.sum() < config.minimum_train_days:
                 status, reason = "invalid_raw", "insufficient valid RAW training IC"
             else:
                 best = None
                 if baseline_active:
                     delta, _, _ = _pair_ic(prefix, baseline_values, batch, labels, split.train_indices, config,
-                                           reference_cache=train_ic_cache, candidate_cache=train_candidate_ic_cache)
+                                           reference_cache=train_ic_cache,
+                                           candidate_cache=train_candidate_ic_cache,
+                                           prepared_split=train_pair_ic_split)
                     folds = [np.nanmean(x) for x in np.array_split(delta, 3)]
                     baseline_gain = float(np.mean(folds) - np.std(folds))
                     frozen_baseline = BaselineRepairPlan(baseline_plan, raw_plan)
@@ -713,7 +749,9 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                             plan = BaselineRepairPlan(baseline_plan, plan)
                         record["plan_identity"] = plan.identity
                         delta, good, coverage = _pair_ic(prefix, values, batch, labels, split.train_indices, config,
-                                                       reference_cache=train_ic_cache, candidate_cache=train_candidate_ic_cache)
+                                                       reference_cache=train_ic_cache,
+                                                       candidate_cache=train_candidate_ic_cache,
+                                                       prepared_split=train_pair_ic_split)
                         record.update(coverage=coverage, valid_train_days=int(good.sum()))
                         if coverage < config.minimum_coverage or good.sum() < config.minimum_train_days:
                             raise ValueError("insufficient common coverage or training IC")
