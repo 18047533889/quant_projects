@@ -3,6 +3,10 @@ Core contracts for quant_evaluator.
 """
 
 from quant_evaluator.contracts.factor_batch import FactorBatch, AxisRef
+from quant_evaluator.contracts.factor_tile_source import (
+    FactorTile, FactorTileSource, FactorTileSourceMetadata,
+    capture_factor_tile_source, read_validated_factor_tile, iter_validated_factor_tiles,
+)
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.contracts.artifact_types import (
     ICSeriesArtifact,
@@ -44,6 +48,12 @@ from quant_evaluator.contracts.qualification import NumericalQualificationReceip
 
 __all__ = [
     "FactorBatch",
+    "FactorTile",
+    "FactorTileSource",
+    "FactorTileSourceMetadata",
+    "capture_factor_tile_source",
+    "read_validated_factor_tile",
+    "iter_validated_factor_tiles",
     "AxisRef",
     "LabelBundle",
     "ICSeriesArtifact",
