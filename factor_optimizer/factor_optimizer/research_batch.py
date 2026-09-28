@@ -227,10 +227,83 @@ def _candidate_ic_key(values, target, minimum_assets):
     return digest.digest()
 
 
+def _pair_ic_evaluate_reference(raw, candidate, batch, labels, indices, config, *,
+                                reference_cache=None, candidate_cache=None):
+    """Private oracle: the pre-optimization evaluate()-based paired-IC path.
+
+    Kept verbatim so the compute_daily_ic optimization can be proven bit-level
+    equivalent. Values are identical to quant_evaluator.evaluate("rank_ic_series")
+    (verified MAX_ABS_DIFF == 0.0); this is the reference, not the fast path.
+    """
+    from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
+    from quant_evaluator.runtime.evaluator import evaluate
+
+    idx = np.asarray(indices)
+    a, b = raw[idx], candidate[idx]
+    target = _subset_labels(labels, indices)
+    available = np.isfinite(a) & np.isfinite(target.values)
+    if target.validity is not None:
+        available &= target.validity
+    common = available & np.isfinite(b)
+    retention = float(common.sum() / max(1, available.sum()))
+    time_axis = AxisRef("time", batch.time_axis.dtype, len(idx), batch.time_axis.values[idx])
+    pair = np.stack((a, b, a), axis=-1)
+    validity = np.stack((common, common, available), axis=-1)
+    factors = FactorBatch(("RAW", "CANDIDATE", "RAW_FULL"), time_axis, batch.asset_axis, pair, validity=validity)
+    columns, keys, pending = [0, 1, 2], {}, {}
+    ic = np.full((len(idx), 3), np.nan)
+    if reference_cache is not None:
+        if not isinstance(reference_cache, PairICCache):
+            raise TypeError("reference_cache must be PairICCache")
+        digest = hashlib.sha256()
+        digest.update(repr((a.shape, config.minimum_assets)).encode())
+        y = np.ascontiguousarray(target.values)
+        digest.update(y.dtype.str.encode())
+        digest.update(y.tobytes())
+        digest.update(b"none" if target.validity is None
+                      else np.ascontiguousarray(target.validity).tobytes())
+        columns = [1]
+        for column in (0, 2):
+            state = digest.copy()
+            masked = np.ascontiguousarray(np.where(validity[:, :, column], a, np.nan))
+            state.update(masked.dtype.str.encode())
+            state.update(masked.tobytes())
+            key = state.digest()
+            keys[column] = key
+            cached = reference_cache.get(key)
+            if cached is not None:
+                ic[:, column] = cached
+            elif key not in pending:
+                pending[key] = column
+                columns.append(column)
+        factors = replace(factors, factor_ids=tuple(factors.factor_ids[c] for c in columns),
+                          values=pair[:, :, columns], validity=validity[:, :, columns])
+    result = evaluate(factors, target, metrics=["rank_ic_series"], backend="cpu",
+                      metric_parameters={"rank_ic_series": {"min_assets": config.minimum_assets}})
+    computed = np.asarray(result.artifacts["rank_ic_series"].values)
+    ic[:, columns] = computed
+    if reference_cache is not None:
+        for key, column in pending.items():
+            reference_cache.put(key, ic[:, column])
+        for column, key in keys.items():
+            if key in pending:
+                ic[:, column] = ic[:, pending[key]]
+    if candidate_cache is not None:
+        if not isinstance(candidate_cache, PairICCache):
+            raise TypeError('candidate_cache must be PairICCache')
+        key = _candidate_ic_key(np.where(common, b, np.nan), target, config.minimum_assets)
+        candidate_cache.put(key, ic[:, 1])
+    good = np.isfinite(ic[:, :2]).all(axis=1)
+    day_retention = float(good.sum() / max(1, np.isfinite(ic[:, 2]).sum()))
+    retention = min(retention, day_retention)
+    diff = ic[:, 1] - ic[:, 0]
+    return diff, good, retention
+
+
 def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=None,
              candidate_cache=None):
     from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
-    from quant_evaluator.runtime.evaluator import evaluate
+    from quant_evaluator.metrics.ic import compute_daily_ic
 
     idx = np.asarray(indices)
     a, b = raw[idx], candidate[idx]
@@ -276,9 +349,13 @@ def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=
                 columns.append(column)
         factors = replace(factors, factor_ids=tuple(factors.factor_ids[c] for c in columns),
                           values=pair[:, :, columns], validity=validity[:, :, columns])
-    result = evaluate(factors, target, metrics=["rank_ic_series"], backend="cpu",
-                      metric_parameters={"rank_ic_series": {"min_assets": config.minimum_assets}})
-    computed = np.asarray(result.artifacts["rank_ic_series"].values)
+    # Bit-identical to quant_evaluator.evaluate("rank_ic_series") (verified
+    # MAX_ABS_DIFF == 0.0 across seeds, NaN/validity masks and minimum_assets),
+    # but avoids the heavier evaluator facade + evidence-store hashing overhead
+    # on every per-candidate TRAIN evaluation. The original facade path is kept as
+    # the private oracle _pair_ic_evaluate_reference for equivalence testing.
+    computed, _ = compute_daily_ic(factors, target, method="spearman",
+                                  min_assets=config.minimum_assets)
     ic[:, columns] = computed
     if reference_cache is not None:
         for key, column in pending.items():

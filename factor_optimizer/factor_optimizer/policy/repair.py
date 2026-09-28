@@ -401,6 +401,15 @@ class RepairMapper:
         for i, strategy in enumerate(strategies[:max_proposals]):
             if strategy == RepairStrategy.ABANDON:
                 continue
+            if strategy == RepairStrategy.OPERATOR_SWAP:
+                # Never emit a fake FE operator as an executable mutation.
+                source = diagnosis.evidence.get("operator")
+                replacement = diagnosis.evidence.get("replacement_operator")
+                if (not isinstance(source, str) or not source.strip()
+                        or not isinstance(replacement, str) or not replacement.strip()
+                        or source == replacement):
+                    continue
+
 
             mutation_type, parameters = self._strategy_to_mutation(strategy, diagnosis)
             confidence = self._estimate_confidence(strategy, diagnosis, rank=i)
@@ -460,8 +469,10 @@ class RepairMapper:
             return "threshold_adjust", {"new_threshold": new_threshold}
 
         elif strategy == RepairStrategy.OPERATOR_SWAP:
-            current_op = diagnosis.evidence.get("operator", "unknown")
-            return "operator_swap", {"target_operator": "alternative", "current_operator": current_op}
+            return "operator_swap", {
+                "target_operator": diagnosis.evidence["operator"],
+                "replacement_operator": diagnosis.evidence["replacement_operator"],
+            }
 
         elif strategy == RepairStrategy.ADD_REGULARIZATION:
             return "add_regularization", {"regularization_strength": 0.1}

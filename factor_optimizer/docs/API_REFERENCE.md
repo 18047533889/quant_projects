@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**77 个 Python 模块、940 个公开函数/类/方法定义**。
+扫描实际包目录：**77 个 Python 模块、943 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -64,7 +64,7 @@
 | [factor_optimizer/research_diagnostics.py](../factor_optimizer/research_diagnostics.py) | 1 | TRAIN-only multi-dimensional research diagnosis using QE metric authorities. |
 | [factor_optimizer/research_final_report.py](../factor_optimizer/research_final_report.py) | 3 | Authority-side final research reporting; never called by candidate search. |
 | [factor_optimizer/research_fitness.py](../factor_optimizer/research_fitness.py) | 12 | QE-owned research portfolio metrics and joint paired selection policy. |
-| [factor_optimizer/research_manifest.py](../factor_optimizer/research_manifest.py) | 3 | Bind declared COS factor values to their exact research landing record. |
+| [factor_optimizer/research_manifest.py](../factor_optimizer/research_manifest.py) | 6 | Bind declared COS factor values to their exact research landing record. |
 | [factor_optimizer/search/__init__.py](../factor_optimizer/search/__init__.py) | 0 | Search orchestration for factor mutation optimization. |
 | [factor_optimizer/search/categorical_strategy.py](../factor_optimizer/search/categorical_strategy.py) | 10 | Categorical search strategy (TPE-style) for treatment auto-optimization. |
 | [factor_optimizer/search/conditional_search.py](../factor_optimizer/search/conditional_search.py) | 24 | Hierarchical conditional search over (repair-family, parameters) (R61-FI-035). |
@@ -5514,7 +5514,7 @@ Generate repair proposals for a diagnosis.
 
 ### RepairMapper.rank_repairs
 
-[实际实现](../factor_optimizer/policy/repair.py#L525)。
+[实际实现](../factor_optimizer/policy/repair.py#L536)。
 
 Rank repair proposals by priority.
 
@@ -5524,7 +5524,7 @@ Rank repair proposals by priority.
 
 ### RepairMapper.generate_mutation_spec
 
-[实际实现](../factor_optimizer/policy/repair.py#L543)。
+[实际实现](../factor_optimizer/policy/repair.py#L554)。
 
 Generate MutationSpec from repair proposal.
 
@@ -6658,7 +6658,7 @@ At most two IC references, private to one factor's TRAIN search.
 
 ### optimize_factor_batch
 
-[实际实现](../factor_optimizer/research_batch.py#L362)。
+[实际实现](../factor_optimizer/research_batch.py#L439)。
 
 Optimize aligned QE contracts automatically, preserving every input ID.
 
@@ -6829,7 +6829,7 @@ Bind declared COS factor values to their exact research landing record.
 
 ### BoundResearchFactor
 
-[实际实现](../factor_optimizer/research_manifest.py#L11)。
+[实际实现](../factor_optimizer/research_manifest.py#L14)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -6849,19 +6849,49 @@ Bind declared COS factor values to their exact research landing record.
 
 ### BoundResearchFactor.treatment_signature
 
-[实际实现](../factor_optimizer/research_manifest.py#L23)。
+[实际实现](../factor_optimizer/research_manifest.py#L26)。
 
 Carry positive rank evidence even when full DSL lineage is unknown.
 
 参数：`(self)`。
 
+### BoundResearchManifest
+
+[实际实现](../factor_optimizer/research_manifest.py#L41)。
+
+One DataAccess-verified landing manifest reusable within a bounded read.
+
+本类声明字段（继承字段见基类；实际限制仍需合同校验）：
+
+| 字段 | 类型 | 默认值/值 |
+|---|---|---|
+| `manifest_uri` | `str` | `必填/未声明默认` |
+| `manifest_sha256` | `str` | `必填/未声明默认` |
+| `factors` | `object` | `必填/未声明默认` |
+
+### read_bound_manifest
+
+[实际实现](../factor_optimizer/research_manifest.py#L198)。
+
+Read and bind one landing manifest for reuse across its factor reads.
+
+参数：`(store, manifest_dataset, *, manifest_params=None, allow_research=False)`。
+
+### verify_bound_manifest_unchanged
+
+[实际实现](../factor_optimizer/research_manifest.py#L224)。
+
+Require the declared manifest identity to remain stable across a pass.
+
+参数：`(store, manifest_dataset, snapshot, *, manifest_params=None)`。
+
 ### read_bound_factor
 
-[实际实现](../factor_optimizer/research_manifest.py#L152)。
+[实际实现](../factor_optimizer/research_manifest.py#L250)。
 
 Read declared datasets through DataAccess; enforce URI, bytes and SHA256.
 
-参数：`(store, manifest_dataset, factor_dataset, factor_id, *, manifest_params=None, factor_params=None, allow_research=False)`。
+参数：`(store, manifest_dataset, factor_dataset, factor_id, *, manifest_params=None, factor_params=None, allow_research=False, max_object_mib=64, manifest_snapshot=None)`。
 
 ## factor_optimizer/search/__init__.py
 
@@ -10661,17 +10691,17 @@ Import seen records from dictionaries.
 | `factor_optimizer/llm/records.py` | `92cb8ffd2aa99686057fd91fc3cdf415f3c49aadabab09a11d6f65fb19ce7b8e` |
 | `factor_optimizer/policy/__init__.py` | `ddba38b9e34581d134c45902fd04db8e8fc540fd5b2438e4a3a46e3753888caf` |
 | `factor_optimizer/policy/decisions.py` | `832c06ae174ab078f518a9ee8237efe89cd88849c2f42e48e250dc6b676d16d3` |
-| `factor_optimizer/policy/repair.py` | `193d142a9cd970b4e9a055fe60642d09514145868107cb25e039f956a9501570` |
+| `factor_optimizer/policy/repair.py` | `71c666acc21d6375a3188b61515e511b76a3efcafe6f159a7b268a94692b5889` |
 | `factor_optimizer/policy/repair_registry.py` | `5d8102d9f897c93db9c920f81e622eddef9bd91403dbba27ab250d236bd3246f` |
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
-| `factor_optimizer/research_batch.py` | `23449addee6e9378c36c05a5c57d98498067df95321ede754bb2c3cb0b13c9bd` |
+| `factor_optimizer/research_batch.py` | `6ac38b2b80a58de5904ae900847985acf50ddfe95210b145a27aecbf2c275ab0` |
 | `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
 | `factor_optimizer/research_diagnostics.py` | `26c82a50b2edcaa4eff8911da11a4fcd52fbad2f5235148202a300d396ced23d` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |
 | `factor_optimizer/research_fitness.py` | `c7021a482a74b691f68ae6b706355b7f7c9544e8658d5aa81a921cceef4e6494` |
-| `factor_optimizer/research_manifest.py` | `3fd7d09903279223dfff281fdf2ed4f835d0258e715c6dd53ebfaca0cf1bd1dc` |
+| `factor_optimizer/research_manifest.py` | `5a816ac445604d7676e86db4c4918de2d75592ae52973593c07a3ddb76a071a3` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |
 | `factor_optimizer/search/conditional_search.py` | `4b6dfeceacd797ad16f2406d0cd8c5cc1a4146c59c65c611f875356ce7251731` |
