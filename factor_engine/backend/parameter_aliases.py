@@ -67,6 +67,26 @@ _COMPAT_ONLY_ALIAS_CANONICALS: frozenset[str] = (
 )
 
 
+def _merge_backend_aliases(canonical: str, implementations: Mapping[str, Any]) -> dict[str, str]:
+    """Merge backend declarations, rejecting backend-dependent alias meaning."""
+    targets: dict[str, str] = {}
+    declared_by: dict[str, str] = {}
+    for backend, op in implementations.items():
+        aliases = getattr(getattr(op, "metadata", None), "param_aliases", None)
+        if not aliases:
+            continue
+        for alias, target in aliases.items():
+            previous = targets.get(alias)
+            if alias in targets and previous != target:
+                raise ParameterAliasError(
+                    f"{canonical}: parameter alias {alias!r} has conflicting targets "
+                    f"across backends: {declared_by[alias]!r} -> {previous!r}, "
+                    f"{backend!r} -> {target!r}"
+                )
+            targets[alias] = target
+            declared_by[alias] = backend
+    return {alias: targets[alias] for alias in sorted(targets)}
+
 def _metadata_aliases_for(canonical: str) -> dict[str, str] | None:
     """Return the operator's ``metadata.param_aliases``, or ``None`` when the
     registry is not loaded (bootstrap/planning-before-load_all) so the caller
@@ -82,20 +102,14 @@ def _metadata_aliases_for(canonical: str) -> dict[str, str] | None:
         return None
     try:
         operators = OperatorRegistry._operators
-        if not operators:
-            return None  # registry not loaded -> compat fallback
-        implementations = operators.get(canonical)
-        if not implementations:
-            return None  # not registered -> compat fallback
-        merged: dict[str, str] = {}
-        for op in implementations.values():
-            meta = getattr(op, "metadata", None)
-            aliases = getattr(meta, "param_aliases", None)
-            if aliases:
-                merged.update(aliases)
-        return merged
     except Exception:  # pragma: no cover - defensive
         return None
+    if not operators:
+        return None  # registry not loaded -> compat fallback
+    implementations = operators.get(canonical)
+    if not implementations:
+        return None  # not registered -> compat fallback
+    return _merge_backend_aliases(canonical, implementations)
 
 
 def derive_alias_map_from_metadata() -> dict[str, dict[str, str]]:
@@ -116,12 +130,7 @@ def derive_alias_map_from_metadata() -> dict[str, dict[str, str]]:
         return {}
     out: dict[str, dict[str, str]] = {}
     for canonical, implementations in (operators or {}).items():
-        merged: dict[str, str] = {}
-        for op in implementations.values():
-            meta = getattr(op, "metadata", None)
-            aliases = getattr(meta, "param_aliases", None)
-            if aliases:
-                merged.update(aliases)
+        merged = _merge_backend_aliases(canonical, implementations)
         if merged:
             out[canonical] = merged
     return out

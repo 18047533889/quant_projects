@@ -324,6 +324,48 @@ def test_r19_006_alias_single_authority_derived_from_metadata(_registry):
     assert global_alias_map()["ts_argmax"] == derived["ts_argmax"]
 
 
+def test_r19_006_conflicting_backend_alias_targets_fail_closed(monkeypatch):
+    from factor_engine.backend.parameter_aliases import (
+        ParameterAliasError,
+        derive_alias_map_from_metadata,
+        normalize_parameter_aliases,
+    )
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    def implementation(target):
+        return SimpleNamespace(metadata=SimpleNamespace(param_aliases={"d": target}))
+
+    monkeypatch.setattr(OperatorRegistry, "_operators", {
+        "__test_alias_conflict": {
+            "pandas_numpy": implementation("window"),
+            "polars": implementation("n"),
+        },
+    })
+    with pytest.raises(ParameterAliasError, match="conflicting targets"):
+        derive_alias_map_from_metadata()
+    with pytest.raises(ParameterAliasError, match="conflicting targets"):
+        normalize_parameter_aliases("__test_alias_conflict", {"d": 5})
+
+
+def test_r19_006_matching_backend_alias_targets_are_order_independent(monkeypatch):
+    from factor_engine.backend.parameter_aliases import derive_alias_map_from_metadata
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    aliases = {"d": "window", "lag": "n"}
+    pandas_impl = SimpleNamespace(metadata=SimpleNamespace(param_aliases=aliases))
+    polars_impl = SimpleNamespace(metadata=SimpleNamespace(param_aliases=aliases))
+    implementations = {"pandas_numpy": pandas_impl, "polars": polars_impl}
+    monkeypatch.setattr(OperatorRegistry, "_operators", {
+        "__test_alias_order": implementations,
+    })
+    forward = derive_alias_map_from_metadata()["__test_alias_order"]
+    monkeypatch.setattr(OperatorRegistry, "_operators", {
+        "__test_alias_order": dict(reversed(tuple(implementations.items()))),
+    })
+    reverse = derive_alias_map_from_metadata()["__test_alias_order"]
+    assert forward == reverse == {"d": "window", "lag": "n"}
+
+
 # ---------------------------------------------------------------------------
 # R19-007/008: active_when / relations / hash / kernel read ONE normalized bound
 # ---------------------------------------------------------------------------
