@@ -19,7 +19,12 @@ from quant_evaluator.contracts.factor_tile_source import (
 )
 
 
-_SOURCE_METRICS = frozenset({"rank_ic", "rank_ic_series", "coverage", "quantile_spread"})
+_SOURCE_METRICS = frozenset({
+    "rank_ic", "rank_ic_series", "ic_ir", "ic_std", "ic_median",
+    "pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir",
+    "coverage", "quantile_spread", "quantile_monotonicity",
+    "daily_quantile_monotonicity_rate", "turnover", "factor_turnover_rate",
+})
 _F8_RANK_PAIR = frozenset({"rank_ic", "rank_ic_series"})
 _F8_SHAPE = (2586, 5461, 8)
 _F8_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
@@ -94,7 +99,7 @@ def _cpu_source_batch(source, metadata, label, metrics, policy, max_tile_size):
                     raise MemoryError("source batch counts exceed max_host_result_bytes")
                 out.observation_counts[metric] = np.empty(total, dtype=np.int64)
             for index, factor_id in enumerate(tile.batch.factor_ids):
-                if metric == "rank_ic_series":
+                if artifact.artifact_kind == "series":
                     observations = int(np.isfinite(values[:, index]).sum())
                 else:
                     group_metrics = bundle.grouped_metrics or {}

@@ -205,3 +205,35 @@ def test_source_request_fingerprint_matches_cpu_and_cuda():
         Source(batch), label, metrics=("rank_ic", "rank_ic_series"), backend="cuda_strict")
     assert cpu.metadata["source_request_fingerprint"] == cuda.metadata["source_request_fingerprint"]
     assert cpu.metadata["execution_receipt"]["receipt_hash"] != cuda.metadata["execution_receipt"]["receipt_hash"]
+
+_EXTENDED_SOURCE_METRICS = (
+    "ic_ir", "ic_std", "ic_median", "pearson_ic", "pearson_ic_series",
+    "pearson_ic_std", "pearson_ic_ir", "factor_turnover_rate", "turnover",
+    "quantile_monotonicity", "daily_quantile_monotonicity_rate",
+)
+
+@pytest.mark.parametrize("case", ["mixed", "all_missing", "tied", "masked"])
+def test_extended_source_metrics_cpu_cuda_parity(case):
+    pytest.importorskip("cupy")
+    batch, label = _inputs()
+    if case != "mixed":
+        values = batch.values.copy()
+        validity = batch.validity.copy()
+        if case == "all_missing":
+            values[:] = np.nan
+        elif case == "tied":
+            values[:] = 1.0
+        else:
+            validity[:, :, 0] = False
+        batch = FactorBatch(batch.factor_ids, batch.time_axis, batch.asset_axis,
+                            values, validity=validity)
+    reference = evaluate(batch, label, metrics=_EXTENDED_SOURCE_METRICS, backend="cpu")
+    cpu = evaluate_factor_source_batch(Source(batch), label, metrics=_EXTENDED_SOURCE_METRICS, backend="cpu")
+    cuda = evaluate_factor_source_batch(Source(batch), label, metrics=_EXTENDED_SOURCE_METRICS, backend="cuda_strict")
+    for metric in _EXTENDED_SOURCE_METRICS:
+        artifact = reference.artifacts[metric]
+        group = cpu.series_metrics if artifact.artifact_kind == "series" else cpu.scalar_metrics
+        gpu_group = cuda.series_metrics if artifact.artifact_kind == "series" else cuda.scalar_metrics
+        np.testing.assert_allclose(group[metric], artifact.values, rtol=1e-8, atol=1e-10, equal_nan=True)
+        np.testing.assert_allclose(gpu_group[metric], artifact.values, rtol=1e-8, atol=1e-10, equal_nan=True)
+        np.testing.assert_array_equal(cpu.observation_counts[metric], cuda.observation_counts[metric])

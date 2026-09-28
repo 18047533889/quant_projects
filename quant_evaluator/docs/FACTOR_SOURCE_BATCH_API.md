@@ -6,8 +6,14 @@ covers every declared factor exactly once and returns one columnar
 `BatchEvaluationBundle` with arrays indexed by the source's ordered factor IDs.
 The caller owns the source and closes it in `finally`.
 
-Current supported metrics are `rank_ic`, `rank_ic_series`, `coverage`, and
-`quantile_spread`. Unsupported metrics or special inputs fail closed. This API
+Current supported metrics are `rank_ic`, `rank_ic_series`, `ic_ir`, `ic_std`,
+`ic_median`, `pearson_ic`, `pearson_ic_series`, `pearson_ic_std`,
+`pearson_ic_ir`, `coverage`, `quantile_spread`, `quantile_monotonicity`,
+`daily_quantile_monotonicity_rate`, `turnover`, and
+`factor_turnover_rate`. These scalar/series metrics were checked against the
+public CPU evaluator in a combined CPU/CUDA source-batch request and in
+missing-value, all-missing, tied-value and factor-masked cases. Unsupported
+metrics or special inputs fail closed. This API
 does **not** replace the richer `evaluate()` / `EvaluationBundle` contract:
 portfolio trajectories, diagnostics, domain artifacts, qualification receipts,
 and durable request identity are not present in the columnar result. Do not
