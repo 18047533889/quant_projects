@@ -116,6 +116,70 @@ def stable_content_hex(*, tag: str, fields: Mapping[str, Any]) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+
+def stable_content_hex_streamed_arrays(
+    *, tag: str, fields: Mapping[str, Any], array_keys: tuple[str, ...],
+    chunk_bytes: int = 3 * 1024 * 1024,
+) -> str:
+    """Hash large top-level arrays with the existing canonical JSON codec.
+
+    C-contiguous arrays are base64-encoded in bounded chunks while preserving
+    the exact digest of stable_content_hex. Other fields retain canonicalize's
+    fail-closed rules. Non-contiguous arrays use the original allocating codec.
+    """
+    if not isinstance(fields, Mapping) or not isinstance(array_keys, tuple):
+        raise TypeError("fields must be a mapping and array_keys a tuple")
+    if (isinstance(chunk_bytes, bool) or not isinstance(chunk_bytes, int)
+            or chunk_bytes < 3):
+        raise ValueError("chunk_bytes must be an integer >= 3")
+    if any(not isinstance(key, str) for key in fields):
+        raise TypeError("canonicalize: mapping keys must be str (fail-closed)")
+    if any(not isinstance(key, str) for key in array_keys):
+        raise TypeError("array_keys must contain only str")
+    reserved = {'__ndarray__', '__datetime__', '__date__', '__timedelta__',
+                '__decimal__', '__enum__', '__bytes__', '__mapping__'}
+    if reserved.intersection(fields):
+        return stable_content_hex(tag=tag, fields=fields)
+
+    digest = hashlib.sha256()
+    def emit(value: str | bytes) -> None:
+        digest.update(value.encode("utf-8") if isinstance(value, str) else value)
+
+    emit('[')
+    emit(json.dumps(tag, ensure_ascii=True))
+    emit(',{')
+    selected = frozenset(array_keys)
+    stride = chunk_bytes - chunk_bytes % 3
+    for index, key in enumerate(sorted(fields)):
+        if index:
+            emit(',')
+        emit(json.dumps(key, ensure_ascii=True))
+        emit(':')
+        value = fields[key]
+        if key not in selected or not isinstance(value, np.ndarray):
+            emit(json.dumps(canonicalize(value), sort_keys=True,
+                            separators=(',', ':'), ensure_ascii=True))
+            continue
+        if value.dtype.hasobject or value.dtype.fields is not None:
+            raise TypeError(
+                "canonicalize: object-dtype or structured-dtype ndarray is not supported (fail-closed)"
+            )
+        array = np.asarray(value)
+        if not array.flags.c_contiguous or not array.size or array.dtype.kind in "Mm":
+            emit(json.dumps(canonicalize(array), sort_keys=True,
+                            separators=(',', ':'), ensure_ascii=True))
+            continue
+        emit('{"__ndarray__":true,"data_b64":"')
+        raw = memoryview(array).cast('B')
+        for offset in range(0, len(raw), stride):
+            emit(base64.b64encode(raw[offset:offset + stride]))
+        emit('","dtype":')
+        emit(json.dumps(array.dtype.str, ensure_ascii=True))
+        emit(',"shape":')
+        emit(json.dumps(list(array.shape), separators=(',', ':')))
+        emit('}')
+    emit('}]')
+    return digest.hexdigest()
 #: Largest value CPython allows ``hash()`` to return (``sys.hash_info.modulus``).
 _HASH_MODULUS = getattr(sys.hash_info, "modulus", 2**63 - 1)
 

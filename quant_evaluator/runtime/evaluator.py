@@ -2557,10 +2557,12 @@ def evaluate(
         ScalarMetricArtifact, SeriesMetricArtifact, VectorMetricArtifact,
     )
     from quant_evaluator.contracts.axis_refs import FactorAxisRef, TimeAxisRef, QuantileAxisRef
-    from quant_evaluator.contracts._hashutil import stable_content_hex
+    from quant_evaluator.contracts._hashutil import (
+        stable_content_hex, stable_content_hex_streamed_arrays,
+    )
 
     versions = {mid: get_metric(_resolve_alias(mid)).metric_version for mid in metric_ids}
-    config_hash = stable_content_hex(tag="EvaluationConfig.v2", fields={
+    config_hash = stable_content_hex_streamed_arrays(tag="EvaluationConfig.v2", fields={
         "metrics": metric_ids, "versions": versions, "parameters": metric_parameters,
         "label_hash": label_bundle.content_hash,
         "factor_ids": factor_batch.factor_ids,
@@ -2581,7 +2583,7 @@ def evaluate(
         "generalization_evidence": generalization_evidence.to_dict() if generalization_evidence is not None else None,
         "split_ref": split_ref.to_dict() if split_ref is not None else None,
         **request_fields,
-    })
+    }, array_keys=("factor_values", "factor_validity"))
     artifacts = {}
     factor_artifacts = {fid: {} for fid in factor_batch.factor_ids}
     if adaptive_resolution_artifact is not None:

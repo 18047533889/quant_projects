@@ -691,6 +691,20 @@ CUDA，三组两两 `compare_collections` 均通过 61 因子 × 3 指标的
 [反序串行](benchmarks/real_cos_f8_prefetch_aba_20260928_A2.json)。
 `--prefetch` 默认保持关闭；该 F8 结果不外推到 F61。
 
+公开 `evaluate()` 的 `EvaluationConfig.v2` 内容哈希现对连续的
+`factor_values`/`factor_validity` 分块编码，保持原 JSON/base64 字节
+序列和 SHA-256 身份不变，避免同时物化整块 base64、JSON 和 UTF-8
+副本。64 MiB 合成面板的独立进程微基准中，旧/新哈希耗时为
+0.454/0.156 秒，进程 RSS 高水位为 542652/242736 KiB，摘要一致。
+同一绑定 F13 COS 面板上的六轮复测与此前报告来源、配置哈希和六轮
+artifact 摘要逐项一致；新轮 CPU 两端热调用 28.20/27.95 秒，
+CUDA 为 6.43/6.44 秒，两轮 `auto` 均走 CUDA、热调用
+6.39/6.41 秒，整份报告完整对拍通过。CPU 进程 RSS 高水位约
+4.64 GB，CUDA 约 7.07 GB；旧轮分别约 11.9/14.4 GB。
+这是同机不同时段的端到端比较，负载可能影响耗时；哈希的独立进程
+微基准和完全相同的结果身份是较直接的改动证据。
+[F13 分块哈希复测](benchmarks/real_cos_f13_rank_positive_pair_stream_hash_20260928.json)。
+
 CPU 参考后端的 Spearman 日 IC 已改为每次最多处理 128 个
 `(交易日, 因子)` 行，避免整段历史的哨兵值与秩数组同时驻留；精确路径还直接
 把 validity 并入 pairwise mask，不再复制一整份 float64 因子面板。
