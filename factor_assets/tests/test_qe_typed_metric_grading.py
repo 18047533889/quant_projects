@@ -207,7 +207,7 @@ def test_v5_policy_required_metric_compiles_to_real_qe_runtime_capability():
     )
     compiled = validate_policy_runtime_capability(predictive_only, use_case="CAPABILITY_TEST")
     assert compiled["rank_ic"] == {
-        "runtime_metric_id": "rank_ic", "metric_version": "3.0.0", "status": "stable"
+        "runtime_metric_id": "rank_ic", "metric_version": "4.0.0", "status": "stable"
     }
     from quant_evaluator.registry.metrics import resolve_alias, get_metric
     for alias in ("rank_icir_raw", "rank_ic_ir", "rankicir", "icir"):
