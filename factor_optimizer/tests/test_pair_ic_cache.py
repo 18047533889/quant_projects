@@ -124,3 +124,33 @@ def test_joint_metric_cache_also_preserves_extended_precision_labels():
     actual = paired_series(x, -x, batch, changed, idx, raw_cache=c)
     np.testing.assert_array_equal(actual[0], expected[0])
     np.testing.assert_array_equal(actual[1], expected[1])
+
+
+@pytest.mark.parametrize("change", [None, "target_id", "decision_time", "asset_axis"])
+def test_candidate_cache_context_and_work_reuse(monkeypatch, change):
+    from factor_optimizer.research_batch import _pair_ic, BatchOptimizationConfig
+    from quant_evaluator.metrics import ic as ic_module
+    from quant_evaluator.contracts.factor_batch import AxisRef
+    batch, labels = fixture()
+    x = batch.values[:, :, 0]
+    idx, c, config = tuple(range(40, 100)), cache(), BatchOptimizationConfig()
+    calls, compute = [], ic_module.compute_daily_ic
+    def counted(factors, *args, **kwargs):
+        calls.append(factors.num_factors)
+        return compute(factors, *args, **kwargs)
+    monkeypatch.setattr(ic_module, "compute_daily_ic", counted)
+    first = _pair_ic(x, -x, batch, labels, idx, config, candidate_cache=c)
+    other = labels
+    if change == "target_id":
+        other = replace(labels, target_id="other")
+    elif change == "decision_time":
+        other = replace(labels,
+                        decision_time=tuple(t + 1000 for t in labels.decision_time),
+                        label_start_time=tuple(t + 1000 for t in labels.label_start_time),
+                        label_end_time=tuple(t + 1000 for t in labels.label_end_time))
+    elif change == "asset_axis":
+        coords = np.asarray(labels.asset_axis.values).copy(); coords[0] = "other"
+        other = replace(labels, asset_axis=AxisRef("asset", labels.asset_axis.dtype, len(coords), coords))
+    second = _pair_ic(x, -x, batch, other, idx, config, candidate_cache=c)
+    equal(first, second)
+    assert calls == ([3, 2] if change is None else [3, 3])

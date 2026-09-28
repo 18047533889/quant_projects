@@ -218,6 +218,8 @@ def _candidate_ic_key(values, target, minimum_assets):
     effective = np.where(valid, values, np.nan)
     digest = hashlib.sha256(b'candidate-ic.v1')
     digest.update(repr((effective.shape, minimum_assets)).encode())
+    # LabelBundle binds values, validity, all timing fields and asset coordinates.
+    digest.update(target.content_hash.encode("ascii"))
     for panel in (effective, target.values):
         panel = np.ascontiguousarray(panel)
         digest.update(panel.dtype.str.encode())
@@ -313,11 +315,21 @@ def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=
         available &= target.validity
     common = available & np.isfinite(b)
     retention = float(common.sum() / max(1, available.sum()))
+    candidate_key = None
+    cached_candidate = None
+    if candidate_cache is not None:
+        if not isinstance(candidate_cache, PairICCache):
+            raise TypeError('candidate_cache must be PairICCache')
+        candidate_key = _candidate_ic_key(np.where(common, b, np.nan), target,
+                                          config.minimum_assets)
+        cached_candidate = candidate_cache.get(candidate_key)
     time_axis = AxisRef("time", batch.time_axis.dtype, len(idx), batch.time_axis.values[idx])
     # Third series anchors valid-day coverage to RAW's original universe.
     # A candidate must not improve by silently dropping difficult/constant days.
     columns, keys, pending = [0, 1, 2], {}, {}
     ic = np.full((len(idx), 3), np.nan)
+    if cached_candidate is not None:
+        ic[:, 1] = cached_candidate
     if reference_cache is not None:
         if not isinstance(reference_cache, PairICCache):
             raise TypeError("reference_cache must be PairICCache")
@@ -330,7 +342,7 @@ def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=
         digest.update(y.tobytes())
         digest.update(b"none" if target.validity is None
                       else np.ascontiguousarray(target.validity).tobytes())
-        columns = [1]
+        columns = [] if cached_candidate is not None else [1]
         for column in (0, 2):
             state = digest.copy()
             reference_mask = common if column == 0 else available
@@ -351,18 +363,21 @@ def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=
     factor_ids = ("RAW", "CANDIDATE", "RAW_FULL")
     value_columns = (a, b, a)
     validity_columns = (common, common, available)
-    factors = FactorBatch(tuple(factor_ids[c] for c in columns), time_axis,
-                          batch.asset_axis,
-                          np.stack([value_columns[c] for c in columns], axis=-1),
-                          validity=np.stack([validity_columns[c] for c in columns], axis=-1))
-    # Bit-identical to quant_evaluator.evaluate("rank_ic_series") (verified
-    # MAX_ABS_DIFF == 0.0 across seeds, NaN/validity masks and minimum_assets),
-    # but avoids the heavier evaluator facade + evidence-store hashing overhead
-    # on every per-candidate TRAIN evaluation. The original facade path is kept as
-    # the private oracle _pair_ic_evaluate_reference for equivalence testing.
-    computed, _ = compute_daily_ic(factors, target, method="spearman",
-                                  min_assets=config.minimum_assets)
-    ic[:, columns] = computed
+    if cached_candidate is not None and reference_cache is None:
+        columns.remove(1)
+    if columns:
+        factors = FactorBatch(tuple(factor_ids[c] for c in columns), time_axis,
+                              batch.asset_axis,
+                              np.stack([value_columns[c] for c in columns], axis=-1),
+                              validity=np.stack([validity_columns[c] for c in columns], axis=-1))
+        # Bit-identical to quant_evaluator.evaluate("rank_ic_series") (verified
+        # MAX_ABS_DIFF == 0.0 across seeds, NaN/validity masks and minimum_assets),
+        # but avoids the heavier evaluator facade + evidence-store hashing overhead
+        # on every per-candidate TRAIN evaluation. The original facade path is kept as
+        # the private oracle _pair_ic_evaluate_reference for equivalence testing.
+        computed, _ = compute_daily_ic(factors, target, method="spearman",
+                                      min_assets=config.minimum_assets)
+        ic[:, columns] = computed
     if reference_cache is not None:
         for key, column in pending.items():
             reference_cache.put(key, ic[:, column])
@@ -370,10 +385,7 @@ def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=
             if key in pending:
                 ic[:, column] = ic[:, pending[key]]
     if candidate_cache is not None:
-        if not isinstance(candidate_cache, PairICCache):
-            raise TypeError('candidate_cache must be PairICCache')
-        key = _candidate_ic_key(np.where(common, b, np.nan), target, config.minimum_assets)
-        candidate_cache.put(key, ic[:, 1])
+        candidate_cache.put(candidate_key, ic[:, 1])
     good = np.isfinite(ic[:, :2]).all(axis=1)
     day_retention = float(good.sum() / max(1, np.isfinite(ic[:, 2]).sum()))
     retention = min(retention, day_retention)
