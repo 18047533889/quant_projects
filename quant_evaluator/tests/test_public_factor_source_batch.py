@@ -385,6 +385,49 @@ def test_auto_source_f61_selects_certified_width_within_cap(monkeypatch, cap, ex
         else "bounded_f61_mixed_three_gpu")
 
 
+def test_auto_source_f61_pearson_single_uses_certified_tile_and_fails_closed(monkeypatch):
+    pytest.importorskip("cupy")
+    import importlib
+    source_api = importlib.import_module("quant_evaluator.api.factor_source")
+    evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
+    batch, label = _inputs()
+    monkeypatch.setattr(source_api, "_F61_SHAPE", batch.values.shape)
+    admitted = []
+    monkeypatch.setattr(
+        evaluator, "_auto_batch_cuda_rejection",
+        lambda _policy, minimum: admitted.append(minimum) or None,
+    )
+    source = Source(batch)
+    source.max_tile_size = 32
+    result = evaluate_factor_source_batch(
+        source, label, metrics=("pearson_ic",), backend="auto", max_tile_size=32)
+    reference = evaluate(batch, label, metrics=("pearson_ic",), backend="cpu")
+    _assert_against_full_cpu(result, reference, ("pearson_ic",))
+    assert admitted == [14 * 1024 ** 3]
+    assert result.metadata["backend_used"] == "cuda"
+    assert result.metadata["auto_backend_reason"] == "bounded_f61_pearson_ic_gpu_tile16"
+    assert result.metadata["effective_max_tile_size"] == 16
+
+    narrow = evaluate_factor_source_batch(
+        Source(batch), label, metrics=("pearson_ic",), backend="auto",
+        max_tile_size=8)
+    assert narrow.metadata["backend_used"] == "cpu"
+    assert narrow.metadata["auto_backend_reason"] == "source_shape_or_metrics_not_certified"
+    assert admitted == [14 * 1024 ** 3]
+
+    monkeypatch.setattr(
+        evaluator, "_auto_batch_cuda_rejection",
+        lambda _policy, _minimum: "insufficient_cuda_memory",
+    )
+    rejected_source = Source(batch)
+    rejected_source.max_tile_size = 16
+    rejected = evaluate_factor_source_batch(
+        rejected_source, label, metrics=("pearson_ic",), backend="auto",
+        max_tile_size=16)
+    assert rejected.metadata["backend_used"] == "cpu"
+    assert rejected.metadata["auto_backend_reason"] == "insufficient_cuda_memory"
+
+
 def test_auto_source_f61_mixed_three_fails_closed_outside_gate(monkeypatch):
     import importlib
     from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy, PrecisionPolicy

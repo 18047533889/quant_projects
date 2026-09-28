@@ -992,3 +992,23 @@ MetricInstance 聚合结果另以 `instance_execution_receipts` 按实例 ID 保
 每个子结果的 `instance_execution_receipt` 与聚合映射对应；聚合
 `execution_receipt` 绑定所有实例回执哈希和聚合 `config_hash`。
 聚合层不提供单一 `backend_used`，因为不同实例可能采用不同后端。
+
+## F61 来源批次单 Pearson IC：真实 COS 复测（2026-09-30）
+
+在 NVIDIA L20、2,586 个交易日 × 5,461 只股票 × 61 个因子、float64、
+默认 GPUExecutionPolicy 与 tile 16 下，使用同一 COS manifest 和标签，
+串行两轮 CPU→CUDA 全请求对拍：
+
+| 轮次 | CPU | CUDA | CUDA 节省 | 61 个值及观测数对拍 |
+| --- | ---: | ---: | ---: | --- |
+| A | 223.01 s | 182.97 s | 17.95% | 通过 |
+| B | 223.18 s | 194.63 s | 12.79% | 通过 |
+
+两轮最大绝对误差都是 1.67×10⁻¹⁶，61 个有限值的 mask 与逐因子观测数相同；
+浮点字节哈希不同，不应宣称 bitwise 一致。自动 CUDA 只开放此精确形状、
+单 Pearson IC、float64 输入/标签、默认精度、请求 tile 上限至少 16 且
+通过 14 GiB 有效显存门禁的 evaluate_factor_source_batch 请求，实际 tile
+固定为 16。其它来源形状、指标组合和资源不足情况仍走 CPU；显式
+cuda_strict 仍可供研究对拍。这不是 PIT 或所有指标的生产认证。A/B
+原始脱敏汇总见 docs/benchmarks/real_cos_f61_pearson_source_ab_20260930.json
+和 docs/benchmarks/real_cos_f61_pearson_source_ab_20260930_B.json。

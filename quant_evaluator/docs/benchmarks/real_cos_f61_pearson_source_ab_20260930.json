@@ -1,0 +1,116 @@
+{
+  "status": "complete",
+  "kind": "real_cos_whole_source_batch_ab.v1",
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "shape": [
+    2586,
+    5461,
+    61
+  ],
+  "factor_dtype": "float64",
+  "tile_size": 16,
+  "metric_ids": [
+    "pearson_ic"
+  ],
+  "preflight_before_cpu": {
+    "pass": true,
+    "available_ram_bytes": 41750876160,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 189194297344,
+    "required_disk_bytes": 7516192768
+  },
+  "preflight_before_cuda": {
+    "pass": true,
+    "available_ram_bytes": 44105953280,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 189189795840,
+    "required_disk_bytes": 7516192768
+  },
+  "runs": [
+    {
+      "backend_requested": "cpu",
+      "backend_used": "cpu",
+      "seconds": 223.00741091700183,
+      "factor_tiles_processed": 4,
+      "tile_ranges": [
+        [
+          0,
+          16
+        ],
+        [
+          16,
+          32
+        ],
+        [
+          32,
+          48
+        ],
+        [
+          48,
+          61
+        ]
+      ],
+      "peak_process_rss_kib": 7369348,
+      "preflight": {
+        "pass": true,
+        "available_ram_bytes": 41750876160,
+        "minimum_available_ram_bytes": 34359738368,
+        "cos_cache_disk_free_bytes": 189194297344,
+        "required_disk_bytes": 7516192768
+      }
+    },
+    {
+      "backend_requested": "cuda_strict",
+      "backend_used": "cuda",
+      "seconds": 182.96816381900135,
+      "factor_tiles_processed": 4,
+      "tile_ranges": [
+        [
+          0,
+          16
+        ],
+        [
+          16,
+          32
+        ],
+        [
+          32,
+          48
+        ],
+        [
+          48,
+          61
+        ]
+      ],
+      "peak_process_rss_kib": 11591888,
+      "preflight": {
+        "pass": true,
+        "available_ram_bytes": 44105953280,
+        "minimum_available_ram_bytes": 34359738368,
+        "cos_cache_disk_free_bytes": 189189795840,
+        "required_disk_bytes": 7516192768
+      }
+    }
+  ],
+  "comparison": {
+    "pass": true,
+    "compared_factor_count": 61,
+    "compared_metric_count": 61,
+    "metrics": {
+      "pearson_ic": {
+        "pass": true,
+        "factor_count": 61,
+        "finite_value_count": 61,
+        "max_abs_error": 1.6653345369377348e-16,
+        "observation_counts_equal": true,
+        "cpu_values_sha256": "645c9886a22996b48c440716ea3d3e0c183d421d7deaf2bfe51ff5a186e94a88",
+        "cuda_values_sha256": "c419b6074992c6a5ef2042298b15d6d3d86f66f251c7ee4e98db8b6959b84747"
+      }
+    }
+  },
+  "source_api": "columnar_factor_source_v1",
+  "limitations": [
+    "Research-source metrics only; no PIT or production certification.",
+    "This A/B does not itself enable automatic backend routing."
+  ]
+}

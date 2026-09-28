@@ -175,25 +175,30 @@ def evaluate_factor_source_batch(
         f32 = shape == _F32_SHAPE and tile_width == 2
         f32_mixed_three = (f32 and len(selected) == 3
                            and frozenset(selected) == _F32_MIXED_THREE)
+        f61_pearson_single = (shape == _F61_SHAPE and selected == ("pearson_ic",)
+                              and requested_tile_width >= 16)
         rank_pair = (f8 or f32) and len(selected) == 2 and frozenset(selected) == _RANK_PAIR
         if (metadata.dtype == "float64"
                 and label_bundle.values.dtype == np.float64
-                and (rank_pair or f32_mixed_three or f61_mixed_three)):
+                and (rank_pair or f32_mixed_three or f61_mixed_three or f61_pearson_single)):
             from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
 
             if policy.precision_policy != GPUExecutionPolicy().precision_policy:
                 rejection = "gpu_precision_policy_outside_certified_range"
             else:
-                minimum = (_F61_MIN_EFFECTIVE_VRAM_BYTES if f61_mixed_three else
+                minimum = (_F61_MIN_EFFECTIVE_VRAM_BYTES if (f61_mixed_three or f61_pearson_single) else
                            _F32_MIN_EFFECTIVE_VRAM_BYTES if f32 else
                            _F8_MIN_EFFECTIVE_VRAM_BYTES)
                 rejection = _auto_batch_cuda_rejection(policy, minimum)
             route = "cuda_strict" if rejection is None else "cpu"
-            reason = ((("bounded_f61_mixed_three_gpu_tile16" if tile_width == 16
+            reason = (("bounded_f61_pearson_ic_gpu_tile16" if f61_pearson_single else
+                       ("bounded_f61_mixed_three_gpu_tile16" if tile_width == 16
                         else "bounded_f61_mixed_three_gpu") if f61_mixed_three else
                        "bounded_f32_mixed_three_gpu" if f32_mixed_three else
                        "bounded_f32_rank_pair_gpu" if f32 else "bounded_f8_rank_pair_gpu")
                       if rejection is None else rejection)
+            if f61_pearson_single and rejection is None:
+                tile_width = 16
         else:
             route, reason = "cpu", "source_shape_or_metrics_not_certified"
     if route == "cuda_strict":

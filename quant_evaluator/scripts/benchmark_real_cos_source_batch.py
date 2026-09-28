@@ -28,7 +28,8 @@ from quant_evaluator.contracts.errors import InvalidContractError
 from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
 from quant_evaluator.scripts import benchmark_real_cos_factor_tiles as tiles
 
-METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+DEFAULT_METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+PEARSON_SINGLE = ("pearson_ic",)
 MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024**3
 MIN_AVAILABLE_RAM_BYTES = 32 * 1024**3
 
@@ -102,14 +103,14 @@ class RealCosSource:
         return None
 
 
-def compare(cpu, cuda) -> dict:
+def compare(cpu, cuda, selected_metrics) -> dict:
     if cpu.factor_ids != cuda.factor_ids:
         raise ValueError("CPU/CUDA whole-request factor axes differ")
     if (cpu.metadata.get("source_request_fingerprint") !=
             cuda.metadata.get("source_request_fingerprint")):
         raise ValueError("CPU/CUDA source request fingerprints differ")
-    metrics = {}
-    for metric in METRICS:
+    metric_results = {}
+    for metric in selected_metrics:
         cpu_values = np.asarray(cpu.scalar_metrics[metric])
         cuda_values = np.asarray(cuda.scalar_metrics[metric])
         if cpu_values.shape != (len(cpu.factor_ids),) or cuda_values.shape != cpu_values.shape:
@@ -122,7 +123,7 @@ def compare(cpu, cuda) -> dict:
             cpu.observation_counts[metric], cuda.observation_counts[metric])
         passed = same_mask and counts_equal and np.allclose(
             cpu_values, cuda_values, rtol=1e-8, atol=1e-10, equal_nan=True)
-        metrics[metric] = {
+        metric_results[metric] = {
             "pass": bool(passed),
             "factor_count": len(cpu.factor_ids),
             "finite_value_count": int(finite.sum()),
@@ -134,20 +135,20 @@ def compare(cpu, cuda) -> dict:
                 np.ascontiguousarray(cuda_values).tobytes()).hexdigest(),
         }
     return {
-        "pass": all(item["pass"] for item in metrics.values()),
+        "pass": all(item["pass"] for item in metric_results.values()),
         "compared_factor_count": len(cpu.factor_ids),
-        "compared_metric_count": len(metrics) * len(cpu.factor_ids),
-        "metrics": metrics,
+        "compared_metric_count": len(metric_results) * len(cpu.factor_ids),
+        "metrics": metric_results,
     }
 
 
 def run_backend(backend, records, source_rows, dates, assets, labels,
-                manifest_sha, tile_size, max_object_mib, policy):
+                manifest_sha, tile_size, max_object_mib, policy, selected_metrics):
     source = RealCosSource(records, source_rows, dates, assets, labels,
                            manifest_sha, tile_size, max_object_mib)
     started = time.perf_counter()
     result = evaluate_factor_source_batch(
-        source, labels, metrics=METRICS, backend=backend,
+        source, labels, metrics=selected_metrics, backend=backend,
         max_tile_size=tile_size, gpu_policy=policy,
     )
     elapsed = time.perf_counter() - started
@@ -183,23 +184,23 @@ def emit_report(report, output):
     print(payload, flush=True)
 
 
-def _bundle_from_gpu_worker(report):
+def _bundle_from_gpu_worker(report, selected_metrics):
     return SimpleNamespace(
         factor_ids=tuple(report["factor_ids"]),
         metadata={"source_request_fingerprint": report["source_request_fingerprint"]},
         scalar_metrics={name: np.asarray(report["scalar_metrics"][name], dtype=np.float64)
-                        for name in METRICS},
+                        for name in selected_metrics},
         observation_counts={name: np.asarray(report["observation_counts"][name], dtype=np.int64)
-                            for name in METRICS},
+                            for name in selected_metrics},
     )
 
 
-def run_gpu_tile_width_ab(args):
+def run_gpu_tile_width_ab(args, selected_metrics):
     """Interleave widths in isolated workers so source memory is reclaimed."""
     width_a, width_b = args.gpu_tile_widths
     order = (width_a, width_b, width_b, width_a)
     report = {"status": "partial", "kind": "real_cos_gpu_tile_width_ab.v2",
-              "run_order": list(order), "metric_ids": list(METRICS),
+              "run_order": list(order), "metric_ids": list(selected_metrics),
               "runs": [], "comparisons_to_first_run": [],
               "limitations": ["One real COS manifest and host; research use only.",
                               "Separate CPU/CUDA reports establish CPU parity.",
@@ -211,6 +212,7 @@ def run_gpu_tile_width_ab(args):
             command = [sys.executable, "-m",
                        "quant_evaluator.scripts.benchmark_real_cos_source_batch",
                        "--factors", str(args.factors), "--tile-size", str(width),
+                       "--metrics", ",".join(selected_metrics),
                        "--days", str(args.days), "--assets", str(args.assets),
                        "--max-object-mib", str(args.max_object_mib),
                        "--max-total-mib", str(args.max_total_mib),
@@ -235,7 +237,9 @@ def run_gpu_tile_width_ab(args):
             item = json.loads(output.read_text(encoding="utf-8"))
             if item["kind"] != "real_cos_source_gpu_worker.v1" or item["tile_size"] != width:
                 raise ValueError("GPU worker receipt identity mismatch")
-            bundle = _bundle_from_gpu_worker(item)
+            if tuple(item.get("metric_ids", ())) != tuple(selected_metrics):
+                raise ValueError("GPU worker metric identity mismatch")
+            bundle = _bundle_from_gpu_worker(item, selected_metrics)
             public_item = {key: value for key, value in item.items()
                            if key not in {"factor_ids", "scalar_metrics", "observation_counts"}}
             if first is None:
@@ -246,7 +250,7 @@ def run_gpu_tile_width_ab(args):
                 if (item["manifest_sha256"] != report["manifest_sha256"]
                         or item["shape"] != report["shape"]):
                     raise ValueError("GPU workers used different source identities")
-                parity = compare(first, bundle)
+                parity = compare(first, bundle, selected_metrics)
                 report["comparisons_to_first_run"].append(parity)
                 if not parity["pass"]:
                     report["runs"].append(public_item)
@@ -267,6 +271,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--factors", type=int, choices=(48, 61), required=True)
     parser.add_argument("--tile-size", type=int, default=8)
+    parser.add_argument("--metrics", default=",".join(DEFAULT_METRICS),
+                        help="exact default three metrics or pearson_ic alone")
     parser.add_argument("--gpu-tile-widths", nargs=2, type=int,
                         metavar=("WIDTH_A", "WIDTH_B"))
     parser.add_argument("--gpu-worker", action="store_true", help=argparse.SUPPRESS)
@@ -277,6 +283,9 @@ def main():
     parser.add_argument("--axis-index", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    selected = tuple(args.metrics.split(","))
+    if selected not in (DEFAULT_METRICS, PEARSON_SINGLE):
+        parser.error("--metrics must be the exact default three metrics or pearson_ic alone")
     if not 1 <= args.tile_size <= 32:
         parser.error("--tile-size must be 1..32")
     if args.gpu_tile_widths and (len(set(args.gpu_tile_widths)) != 2
@@ -285,7 +294,7 @@ def main():
     if args.gpu_tile_widths:
         if args.gpu_worker or args.output is None:
             parser.error("--gpu-tile-widths requires --output and cannot use --gpu-worker")
-        run_gpu_tile_width_ab(args)
+        run_gpu_tile_width_ab(args, selected)
         return
     if args.gpu_worker and args.output is None:
         parser.error("--gpu-worker requires --output")
@@ -322,11 +331,11 @@ def main():
             raise SystemExit("RAM or COS cache disk headroom fell below preflight")
         result, run = run_backend(
             "cuda_strict", records, source_rows, dates, assets, labels,
-            manifest_sha, args.tile_size, args.max_object_mib, policy)
+            manifest_sha, args.tile_size, args.max_object_mib, policy, selected)
         run["tile_size"] = args.tile_size
         run["preflight"] = gate
         scalar_metrics, observation_counts = {}, {}
-        for metric in METRICS:
+        for metric in selected:
             values = np.asarray(result.scalar_metrics[metric], dtype=np.float64)
             counts = np.asarray(result.observation_counts[metric], dtype=np.int64)
             if values.shape != (len(records),) or counts.shape != values.shape:
@@ -340,7 +349,7 @@ def main():
             "shape": [len(dates), len(assets), len(records)],
             "factor_ids": list(result.factor_ids),
             "source_request_fingerprint": result.metadata["source_request_fingerprint"],
-            "tile_size": args.tile_size, "metric_ids": list(METRICS),
+            "tile_size": args.tile_size, "metric_ids": list(selected),
             "run": run, "scalar_metrics": scalar_metrics,
             "observation_counts": observation_counts,
         }
@@ -352,7 +361,7 @@ def main():
         raise SystemExit("RAM or COS cache disk headroom fell below preflight before CPU run")
     cpu, cpu_run = run_backend(
         "cpu", records, source_rows, dates, assets, labels, manifest_sha,
-        args.tile_size, args.max_object_mib, policy)
+        args.tile_size, args.max_object_mib, policy, selected)
     cpu_run["preflight"] = cpu_preflight
     between_preflight = preflight(args.max_object_mib, args.max_total_mib)
     if not between_preflight["pass"]:
@@ -362,9 +371,9 @@ def main():
         raise SystemExit(f"CUDA A/B preflight rejected: {rejection}")
     cuda, cuda_run = run_backend(
         "cuda_strict", records, source_rows, dates, assets, labels,
-        manifest_sha, args.tile_size, args.max_object_mib, policy)
+        manifest_sha, args.tile_size, args.max_object_mib, policy, selected)
     cuda_run["preflight"] = between_preflight
-    comparison = compare(cpu, cuda)
+    comparison = compare(cpu, cuda, selected)
     report = {
         "status": "complete" if comparison["pass"] else "parity_failed",
         "kind": "real_cos_whole_source_batch_ab.v1",
@@ -372,7 +381,7 @@ def main():
         "shape": [len(dates), len(assets), len(records)],
         "factor_dtype": "float64",
         "tile_size": args.tile_size,
-        "metric_ids": list(METRICS),
+        "metric_ids": list(selected),
         "preflight_before_cpu": cpu_run["preflight"],
         "preflight_before_cuda": cuda_run["preflight"],
         "runs": [cpu_run, cuda_run],

@@ -87,6 +87,7 @@ def test_run_backend_forwards_object_cap_and_validates_receipt(monkeypatch):
         result, timing = harness.run_backend(
             backend, records, source_rows, pd.date_range("2024-01-01", periods=3, freq="B"),
             asset_axis.values, label, "a" * 64, 1, 16, GPUExecutionPolicy(),
+            harness.DEFAULT_METRICS,
         )
         results.append((result, timing))
 
@@ -118,37 +119,39 @@ def test_compare_reads_fingerprint_from_public_bundle_metadata():
             factor_ids=("f0", "f1"),
             metadata={"source_request_fingerprint": fingerprint},
             scalar_metrics={name: np.array([0.1, 0.2])
-                            for name in harness.METRICS},
+                            for name in ("pearson_ic",)},
             observation_counts={name: np.array([3, 3])
-                                for name in harness.METRICS},
+                                for name in ("pearson_ic",)},
         )
 
-    result = harness.compare(bundle(), bundle())
+    result = harness.compare(bundle(), bundle(), harness.PEARSON_SINGLE)
     assert result["pass"] is True
     assert result["compared_factor_count"] == 2
-    assert result["compared_metric_count"] == 6
+    assert result["compared_metric_count"] == 2
     with pytest.raises(ValueError, match="fingerprints differ"):
-        harness.compare(bundle(), bundle("b" * 64))
+        harness.compare(bundle(), bundle("b" * 64), harness.PEARSON_SINGLE)
 
 
 def test_gpu_tile_width_ab_interleaves_and_checks_every_run(monkeypatch, tmp_path):
     reports, widths = [], []
+    assert harness.DEFAULT_METRICS == ("rank_ic", "quantile_spread", "factor_turnover_rate")
     monkeypatch.setattr("sys.argv", ["benchmark", "--factors", "61",
                                   "--gpu-tile-widths", "8", "16",
-                                  "--output", str(tmp_path / "summary.json")])
+                                  "--metrics", "pearson_ic", "--output", str(tmp_path / "summary.json")])
 
     def fake_run(command, **kwargs):
+        assert command[command.index("--metrics") + 1] == "pearson_ic"
         width = int(command[command.index("--tile-size") + 1])
         widths.append(width)
         output = harness.Path(command[command.index("--output") + 1])
         receipt = {
             "kind": "real_cos_source_gpu_worker.v1",
-            "tile_size": width, "manifest_sha256": "a" * 64,
+            "tile_size": width, "metric_ids": ["pearson_ic"], "manifest_sha256": "a" * 64,
             "shape": [3, 4, 2], "factor_ids": ["f0", "f1"],
             "source_request_fingerprint": "b" * 64,
             "run": {"seconds": width / 10, "backend_used": "cuda"},
-            "scalar_metrics": {name: [0.1, 0.2] for name in harness.METRICS},
-            "observation_counts": {name: [3, 3] for name in harness.METRICS},
+            "scalar_metrics": {name: [0.1, 0.2] for name in ("pearson_ic",)},
+            "observation_counts": {name: [3, 3] for name in ("pearson_ic",)},
         }
         output.write_text(json.dumps(receipt), encoding="utf-8")
         return SimpleNamespace(returncode=0)
@@ -162,6 +165,7 @@ def test_gpu_tile_width_ab_interleaves_and_checks_every_run(monkeypatch, tmp_pat
     assert len(reports[-1]["comparisons_to_first_run"]) == 3
     assert all(item["pass"] for item in reports[-1]["comparisons_to_first_run"])
     assert reports[-1]["median_seconds_by_width"] == {"8": 0.8, "16": 1.6}
+    assert reports[-1]["metric_ids"] == ["pearson_ic"]
     assert all("factor_ids" not in item and "scalar_metrics" not in item
                and "observation_counts" not in item for item in reports[-1]["runs"])
 
@@ -177,7 +181,7 @@ def test_gpu_tile_width_ab_failure_keeps_partial_receipt(monkeypatch, tmp_path):
         lambda *a, **k: SimpleNamespace(returncode=9),
     )
     with pytest.raises(SystemExit) as error:
-        harness.run_gpu_tile_width_ab(args)
+        harness.run_gpu_tile_width_ab(args, harness.DEFAULT_METRICS)
     assert error.value.code == 1
     receipt = json.loads(args.output.read_text(encoding="utf-8"))
     assert receipt["status"] == "interrupted"
