@@ -351,6 +351,11 @@ provenance、MetricValue 与配置哈希均对拍通过，GPU 峰值均为 9,332
 和 [F8 日分位收益 A/B](benchmarks/real_cos_f8_quantile_returns_daily_ab_20260929.json)；
 结论仍限于该精确形状、默认参数、L20 与当时的资源条件。
 
+另一次同形状的六轮 CPU/CUDA/auto 交错复测中，`rank_ic_series` 的 CPU 热调用为
+22.816–22.880 秒、`auto`（实际 CUDA）为 8.727–8.742 秒；`ic_ir` 分别为
+23.122–23.414 秒和 8.832–8.881 秒。两项六轮完整产物对拍均通过，记录见
+[F8 rank IC 日序列与 IC IR 复测](benchmarks/real_cos_f8_rank_series_ic_ir_ab_20260928.json)。
+
 同一 F8 COS 面板的两组完整多指标请求另有六轮交错 CPU/CUDA A/B：
 `rank_chain`（`rank_ic`、`rank_ic_series`、`ic_std`、`ic_ir`）的 CPU
 热运行约 20.48–20.89 秒，CUDA 约 6.00–6.03 秒；`quantile_chain`
@@ -631,6 +636,12 @@ CPU/CUDA/auto/auto/CUDA/CPU 六轮公开入口 A/B。六轮完整制品、配置
 [反序基线](benchmarks/real_cos_f61_manifest_baseline_warm_20260928.json)。
 `--reuse-manifest` 默认关闭；这些数值只覆盖该清单和当前缓存状态，不代表
 其它清单或一次完整 F61 `EvaluationBundle` 的性能。
+
+相同清单在 `--reuse-manifest` 下增加只读装载分段计时后复跑，总耗时 262.42 秒，
+分片加载合计 186.93 秒；其中绑定因子读取 148.25 秒、Arrow 转 pandas 与轴处理
+8.67 秒、重排写入分片 7.01 秒，其余约 23.00 秒未由这三段单独归因。
+8/8 分片均走 CUDA，183/183 项与先前候选对拍通过；证据见
+[F61 装载分段报告](benchmarks/real_cos_f61_load_phase_reuse_20260928.json)。
 
 CPU 参考后端的 Spearman 日 IC 已改为每次最多处理 128 个
 `(交易日, 因子)` 行，避免整段历史的哨兵值与秩数组同时驻留；精确路径还直接

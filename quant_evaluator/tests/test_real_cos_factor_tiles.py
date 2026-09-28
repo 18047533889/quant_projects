@@ -71,12 +71,12 @@ def test_report_contains_phase_and_tile_timings(monkeypatch, tmp_path, capsys,
                     for i in range(33))
     monkeypatch.setattr(tiles, "read_manifest", lambda sha: _mapping(33))
     monkeypatch.setattr(tiles, "memory_preflight", lambda *args: {"pass": True})
-    monkeypatch.setattr(tiles, "iter_frames", lambda *args: iter(()))
+    monkeypatch.setattr(tiles, "iter_frames", lambda *args, **kwargs: iter(()))
     monkeypatch.setattr(tiles, "intersect_axes", lambda stream, count:
                         (dates, {"A.SZ"}, sources))
     monkeypatch.setattr(tiles, "load_labels", lambda *args:
                         (dates, ["A.SZ"], SimpleNamespace(content_hash="label-hash")))
-    monkeypatch.setattr(tiles, "make_tile", lambda *args: object())
+    monkeypatch.setattr(tiles, "make_tile", lambda *args, **kwargs: object())
     calls = []
     def fake_evaluate(*args, **kwargs):
         calls.append(kwargs["backend"])
@@ -105,6 +105,12 @@ def test_report_contains_phase_and_tile_timings(monkeypatch, tmp_path, capsys,
     assert all(perf[key] >= 0 for key in
                ("manifest_preflight_s", "first_pass_s", "labels_s", "total_s"))
     assert perf["peak_process_rss_kib"] > 0
+    assert set(perf["load_phases_s"]) == set(tiles.LOAD_PHASES)
+    assert all(perf["load_phases_s"][phase] == sum(
+        tile["load_phases_s"][phase] for tile in perf["tiles"])
+        for phase in tiles.LOAD_PHASES)
+    assert all(set(tile["load_phases_s"]) == set(tiles.LOAD_PHASES)
+               for tile in perf["tiles"])
     assert all(tile["load_s"] >= 0 and tile["evaluate_s"] >= 0 and
                tile["total_s"] >= tile["load_s"] + tile["evaluate_s"] and
                tile["peak_process_rss_kib"] > 0 for tile in perf["tiles"])
@@ -191,6 +197,35 @@ def test_two_pass_axes_and_source_drift():
     with pytest.raises(ValueError, match="changed"):
         tiles.make_tile(iter([(a, source_a), (b, source_b[:-1] + ("new",))]),
                         sources, common_dates, ["A.SZ"], Labels())
+
+
+def test_load_phase_timing_preserves_factor_values_and_axis_checks(monkeypatch):
+    dates = pd.date_range("2024-01-01", periods=2)
+    table = SimpleNamespace(to_pandas=lambda: pd.DataFrame(
+        {"timestamp": dates, "A.SZ": [1.0, np.nan]}))
+    record = ("factor", "cos://declared/factor.parquet", "a" * 64, 123)
+    factor = SimpleNamespace(table=table, source_uri=record[1],
+                             content_sha256=record[2], downloaded_bytes=record[3],
+                             source_etag="etag")
+    monkeypatch.setattr(tiles, "_ds", lambda name, *args: SimpleNamespace(name=name))
+    monkeypatch.setattr(tiles, "DuckDBEngine", lambda **kwargs:
+                        SimpleNamespace(close=lambda: None))
+    monkeypatch.setattr(tiles, "DatasetRegistry", lambda mapping: mapping)
+    monkeypatch.setattr(tiles, "DataAccessStore", lambda *args: object())
+    monkeypatch.setattr(tiles, "read_bound_factor", lambda *args, **kwargs:
+                        SimpleNamespace(factor=factor, manifest_sha256="m" * 64))
+    phases = {phase: 0.0 for phase in tiles.LOAD_PHASES}
+    expected_frame = table.to_pandas().set_index("timestamp")
+    expected_source = (*record, "etag", tiles.axis_hash(expected_frame))
+    labels = SimpleNamespace(asset_axis=AxisRef(
+        "asset", "str", 1, np.array(["A.SZ"])))
+    batch = tiles.make_tile(tiles.iter_frames([record], "m" * 64, 128,
+                                             load_phases=phases),
+                            (expected_source,), dates, ["A.SZ"], labels,
+                            load_phases=phases)
+    np.testing.assert_array_equal(batch.values[:, 0, 0], [1.0, np.nan])
+    assert all(phases[phase] > 0 for phase in tiles.LOAD_PHASES)
+    assert set(phases) == set(tiles.LOAD_PHASES)
 
 
 def test_default_metrics_tile_values_match_full_batch_cpu():
@@ -301,7 +336,7 @@ def test_axis_index_reuse_skips_first_pass_and_preserves_report(monkeypatch, tmp
     source_rows = tuple((*record, "etag", tiles.axis_hash(frame))
                         for record, frame in zip(records, frames))
     reads = []
-    def frames_for(selected, *args):
+    def frames_for(selected, *args, **kwargs):
         reads.extend(row[0] for row in selected)
         for row in selected:
             idx = records.index(row)

@@ -33,6 +33,7 @@ from quant_evaluator.scripts.benchmark_real_cos_metric_batch import MANIFEST_SHA
 from quant_evaluator.scripts.load_real_cos_factor_batch import BASE, MIRROR, POOL, _ds
 
 METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+LOAD_PHASES = ("bound_factor_read_s", "arrow_to_pandas_axis_s", "reindex_write_s")
 AXIS_INDEX_MAX_BYTES = 1024**2
 AXIS_INDEX_MAX_DATES = 10000
 AXIS_INDEX_MAX_ASSETS = 5500
@@ -98,7 +99,7 @@ def axis_hash(frame):
     return h.hexdigest()
 
 
-def iter_frames(records, manifest_sha, object_mib, reuse_manifest=False):
+def iter_frames(records, manifest_sha, object_mib, reuse_manifest=False, *, load_phases=None):
     uri = f"{BASE}/metadata/{manifest_sha}/landing_manifest.json"
     md = _ds("source_manifest", uri.rsplit("/", 1)[0], "landing_manifest.json", "json")
     engine = DuckDBEngine(threads=2)
@@ -113,14 +114,18 @@ def iter_frames(records, manifest_sha, object_mib, reuse_manifest=False):
         for name, uri, digest, size in records:
             fd = _ds("factor_panel", uri.rsplit("/", 1)[0], name + ".parquet", "parquet")
             store = DataAccessStore(DatasetRegistry({md.name: md, fd.name: fd}), engine)
+            read_started = time.perf_counter()
             bound = read_bound_factor(store, md.name, fd.name, name,
                                       max_object_mib=object_mib, allow_research=True,
                                       **({"manifest_snapshot": manifest_snapshot}
                                          if manifest_snapshot is not None else {}))
+            if load_phases is not None:
+                load_phases["bound_factor_read_s"] += time.perf_counter() - read_started
             obj = bound.factor
             if (bound.manifest_sha256 != manifest_sha or obj.source_uri != uri or
                     obj.content_sha256 != digest or obj.downloaded_bytes != size):
                 raise ValueError("factor source changed or disagrees with selected manifest")
+            conversion_started = time.perf_counter()
             frame = obj.table.to_pandas()
             if "timestamp" not in frame:
                 raise ValueError("factor timestamp missing")
@@ -130,6 +135,8 @@ def iter_frames(records, manifest_sha, object_mib, reuse_manifest=False):
                 raise ValueError("duplicate factor axis")
             frame = frame.loc[:, [c for c in frame if c.endswith((".SZ", ".SH"))]].sort_index()
             source = (name, uri, digest, size, obj.source_etag, axis_hash(frame))
+            if load_phases is not None:
+                load_phases["arrow_to_pandas_axis_s"] += time.perf_counter() - conversion_started
             yield frame, source
             del frame, bound, obj, store
         if manifest_snapshot is not None:
@@ -313,7 +320,7 @@ def write_axis_index_atomic(path, index):
 
 
 def make_tile(stream, expected, dates, assets, labels, *,
-              required_dates=None, required_assets=None):
+              required_dates=None, required_assets=None, load_phases=None):
     if not 1 <= len(expected) <= 32:
         raise ValueError("tile must contain 1..32 factors")
     values = np.empty((len(dates), len(assets), len(expected)), dtype=np.float64)
@@ -327,7 +334,10 @@ def make_tile(stream, expected, dates, assets, labels, *,
             raise ValueError("indexed shared axes changed between passes")
         if not dates.isin(frame.index).all() or not set(assets).issubset(frame.columns):
             raise ValueError("factor final axes changed between passes")
+        write_started = time.perf_counter()
         values[:, :, seen] = frame.reindex(index=dates, columns=assets).to_numpy(dtype=np.float64, copy=False)
+        if load_phases is not None:
+            load_phases["reindex_write_s"] += time.perf_counter() - write_started
         seen += 1
     if seen != len(expected):
         raise ValueError("incomplete factor tile")
@@ -579,6 +589,7 @@ def main():
     labels_s = time.perf_counter() - labels_started
     tiles = []
     tile_timings = []
+    load_phase_totals = {phase: 0.0 for phase in LOAD_PHASES}
     for start in range(0, len(records), args.tile_size):
         tile_started = time.perf_counter()
         if not memory_preflight(args.tile_size, args.max_object_mib,
@@ -586,13 +597,18 @@ def main():
             raise RuntimeError("tile resources changed below the required headroom")
         selected = records[start:start+args.tile_size]
         expected = sources[start:start+args.tile_size]
+        load_phases = {phase: 0.0 for phase in LOAD_PHASES}
         load_started = time.perf_counter()
         batch = make_tile(iter_frames(selected, args.manifest_sha256,
-                                     args.max_object_mib, args.reuse_manifest),
+                                     args.max_object_mib, args.reuse_manifest,
+                                     load_phases=load_phases),
                           expected, dates, assets, labels,
+                          load_phases=load_phases,
                           **({"required_dates": common_dates, "required_assets": common_assets}
                              if args.axis_index else {}))
         load_s = time.perf_counter() - load_started
+        for phase in LOAD_PHASES:
+            load_phase_totals[phase] += load_phases[phase]
         evaluate_started = time.perf_counter()
         bundle = evaluate(batch, labels, metrics=METRICS, backend=args.backend)
         evaluate_s = time.perf_counter() - evaluate_started
@@ -604,7 +620,8 @@ def main():
         tiles.append(tile_result)
         del batch, bundle
         timing = {"factor_start": start, "factor_count": len(selected),
-                  "load_s": load_s, "evaluate_s": evaluate_s,
+                  "load_s": load_s, "load_phases_s": load_phases,
+                  "evaluate_s": evaluate_s,
                   "total_s": time.perf_counter() - tile_started,
                   "peak_process_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss}
         tile_timings.append(timing)
@@ -614,6 +631,7 @@ def main():
                           "backend_used": tile_result["backend_used"], **timing}), flush=True)
     performance = {"manifest_preflight_s": preflight_s, "first_pass_s": first_pass_s,
                    "labels_s": labels_s, "tiles": tile_timings,
+                   "load_phases_s": load_phase_totals,
                    "total_s": time.perf_counter() - started,
                    **({"axis_index_reused": index_reused} if args.axis_index else {}),
                    **({"manifest_reused": args.reuse_manifest} if args.reuse_manifest else {}),
