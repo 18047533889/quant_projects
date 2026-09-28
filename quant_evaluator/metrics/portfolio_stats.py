@@ -626,8 +626,9 @@ def compute_sharpe_ratio(
     if T == 0:
         return float("nan") if squeeze else np.full(F, np.nan, dtype=np.float64)
     rf_per_period = risk_free_rate / periods_per_year
-    excess = returns - rf_per_period  # NaN propagate for non-finite returns
-    n_valid = np.sum(np.isfinite(returns), axis=0)
+    valid = np.isfinite(returns)
+    n_valid = np.sum(valid, axis=0)
+    excess = np.where(valid, returns, np.nan) - rf_per_period
     mean_excess = np.nanmean(excess, axis=0)
     std_excess = np.nanstd(excess, axis=0, ddof=1)
     sharpe = np.full(F, np.nan)
@@ -990,7 +991,7 @@ def compute_sortino_ratio(
 
     valid = np.isfinite(returns)
     n_valid = np.sum(valid, axis=0)
-    excess = returns - rf_per_period  # NaN propagate for non-finite returns
+    excess = np.where(valid, returns, np.nan) - rf_per_period
     mean_excess = np.nanmean(excess, axis=0)
     # Downside deviation: only negative excess returns contribute.  Zero-filling
     # the squared excess at non-negative / non-finite positions is bit-exact

@@ -78,10 +78,13 @@ def _resolve_alias(metric_id: str) -> str:
 # The 701-day x 5314-stock x 2-factor registered A-share panel showed full
 # CPU/CUDA output parity and a CUDA advantage in cold and alternating warm
 # public-facade runs for these metrics (2026-09-26). Other metrics retain CPU.
-_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260929_v21"
+_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260929_v24"
 _AUTO_SMALL_PROFILE = "ashare_701d_20260926"
 _AUTO_LARGE_PROFILE = "real_cos_region_20260927"
 _AUTO_LARGE_EXTRAP_PROFILE = "real_cos_bounded_headroom_20260927"
+_AUTO_REAL_COS_F5_PROFILE = "real_cos_f5_exact_20260929"
+_AUTO_REAL_COS_F5_SHAPE = (2586, 5461, 5)
+_AUTO_REAL_COS_F5_MIXED_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 # The independent eight-factor COS A/B supports only this exact single-panel
 # shape; do not widen the gate based on the two-factor COS region.
 _AUTO_REAL_COS_F8_PROFILE = "real_cos_f8_exact_20260927"
@@ -120,12 +123,13 @@ _AUTO_REAL_COS_F24_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
 _AUTO_REAL_COS_F32_PROFILE = "real_cos_f32_exact_20260928"
 _AUTO_REAL_COS_F32_SHAPE = (2586, 5461, 32)
 _AUTO_REAL_COS_F32_BATCH_NAMES = frozenset({
-    "rank_chain", "quantile_chain", "real_cos_mixed_three"})
+    "rank_chain", "quantile_chain", "real_cos_mixed_three", "pearson_chain"})
+_AUTO_REAL_COS_F32_PEARSON_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F32_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES = 17 * 1024 ** 3
 _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
 _AUTO_REAL_COS_F32_SINGLE_METRICS = frozenset(
-    {"rank_ic", "rank_ic_series", "quantile_returns_full", "quantile_spread", "factor_turnover_rate"})
+    {"rank_ic", "rank_ic_series", "quantile_returns_full", "quantile_returns_daily", "quantile_spread", "factor_turnover_rate"})
 _AUTO_REAL_COS_F2_RANK_SERIES_SHAPE = (2586, 5461, 2)
 _AUTO_REAL_COS_F2_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F2_BATCH_SHAPE = (2586, 5461, 2)
@@ -158,6 +162,9 @@ _AUTO_CUDA_BATCHES = {
     frozenset(("rank_ic", "rank_ic_series", "ic_ir", "quantile_spread",
                "turnover", "factor_turnover_rate")): "mixed_core",
 }
+# This chain has only the exact F32 public-facade whole-request A/B certificate.
+_AUTO_REAL_COS_F32_PEARSON_CHAIN = frozenset(
+    ("pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir"))
 # This exact three-metric request passed whole-request CPU/CUDA A/B on the
 # bound real COS panel. Its shape gate is narrower than the single-metric
 # real-COS region and does not include headroom extrapolation.
@@ -175,6 +182,8 @@ def _auto_public_shape_profile(factor_batch):
         return _AUTO_REAL_COS_F32_PROFILE
     if shape == _AUTO_REAL_COS_F24_SHAPE:
         return _AUTO_REAL_COS_F24_PROFILE
+    if shape == _AUTO_REAL_COS_F5_SHAPE:
+        return _AUTO_REAL_COS_F5_PROFILE
     if shape == _AUTO_REAL_COS_F13_SHAPE:
         return _AUTO_REAL_COS_F13_PROFILE
     if shape == _AUTO_REAL_COS_F12_SHAPE:
@@ -254,11 +263,18 @@ def _select_public_auto_backend(
         if (batch_name is None
                 and frozenset(canonical_metrics) == _AUTO_REAL_COS_MIXED_THREE):
             batch_name = "real_cos_mixed_three"
+        if (batch_name is None and
+                frozenset(canonical_metrics) == _AUTO_REAL_COS_F32_PEARSON_CHAIN):
+            batch_name = "pearson_chain"
         if batch_name is None or len(canonical_metrics) != len(set(canonical_metrics)):
             return "cpu", "metric_set_not_certified"
     profile = _auto_public_shape_profile(factor_batch)
     if profile is None:
         return "cpu", "shape_outside_certified_range"
+    if batch_name == "pearson_chain" and profile != _AUTO_REAL_COS_F32_PROFILE:
+        return "cpu", "metric_not_certified_for_profile"
+    if profile == _AUTO_REAL_COS_F5_PROFILE and batch_name != "real_cos_mixed_three":
+        return "cpu", "metric_not_certified_for_profile"
     if (profile == _AUTO_REAL_COS_F32_PROFILE
             and batch_name not in _AUTO_REAL_COS_F32_BATCH_NAMES
             and not (len(canonical_metrics) == 1
@@ -292,6 +308,11 @@ def _select_public_auto_backend(
             and canonical_metrics[0] not in _AUTO_CUDA_METRICS):
         return "cpu", "metric_not_certified"
     real_cos_mixed_three = batch_name == "real_cos_mixed_three"
+    real_cos_f5_mixed_three = (
+        real_cos_mixed_three and profile == _AUTO_REAL_COS_F5_PROFILE
+        and (factor_batch.num_times, factor_batch.num_assets, factor_batch.num_factors)
+            == _AUTO_REAL_COS_F5_SHAPE
+    )
     real_cos_f8_mixed_three = (
         real_cos_mixed_three and profile == _AUTO_REAL_COS_F8_PROFILE
         and (factor_batch.num_times, factor_batch.num_assets, factor_batch.num_factors)
@@ -335,7 +356,8 @@ def _select_public_auto_backend(
              factor_batch.num_factors) == _AUTO_REAL_COS_F2_BATCH_SHAPE
     )
     if real_cos_mixed_three and not (
-        real_cos_f8_mixed_three or real_cos_f12_mixed_three or real_cos_f32_certified_batch) and (
+        real_cos_f5_mixed_three or real_cos_f8_mixed_three or
+        real_cos_f12_mixed_three or real_cos_f32_certified_batch) and (
         profile != _AUTO_LARGE_PROFILE or
         (factor_batch.num_times, factor_batch.num_assets, factor_batch.num_factors)
             != _AUTO_REAL_COS_MIXED_THREE_SHAPE
@@ -356,14 +378,18 @@ def _select_public_auto_backend(
             or evaluator is not None):
         return "cpu", "special_input_or_parameters"
     if batch_name is not None:
-        if real_cos_f2_certified_batch:
+        if real_cos_f5_mixed_three:
+            minimum = _AUTO_REAL_COS_F5_MIXED_MIN_EFFECTIVE_VRAM_BYTES
+        elif real_cos_f2_certified_batch:
             minimum = (_AUTO_REAL_COS_F2_RANK_BATCH_MIN_EFFECTIVE_VRAM_BYTES
                        if batch_name == "rank_chain"
                        else _AUTO_REAL_COS_F2_QUANTILE_BATCH_MIN_EFFECTIVE_VRAM_BYTES)
         elif real_cos_f32_certified_batch:
-            minimum = (_AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES
-                       if batch_name in ("rank_chain", "real_cos_mixed_three")
-                       else _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES)
+            minimum = (_AUTO_REAL_COS_F32_PEARSON_MIN_EFFECTIVE_VRAM_BYTES
+                       if batch_name == "pearson_chain"
+                       else (_AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES
+                             if batch_name in ("rank_chain", "real_cos_mixed_three")
+                             else _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES))
         elif real_cos_f24_certified_batch:
             minimum = (_AUTO_REAL_COS_F24_RANK_MIN_EFFECTIVE_VRAM_BYTES
                        if batch_name == "rank_chain"
@@ -388,6 +414,8 @@ def _select_public_auto_backend(
         rejection = _auto_batch_cuda_rejection(gpu_policy, minimum)
         if rejection is not None:
             return "cpu", rejection
+        if real_cos_f5_mixed_three:
+            return "cuda_strict", "certified_batch_real_cos_f5_mixed_three"
         if real_cos_f2_certified_batch:
             return "cuda_strict", f"certified_batch_real_cos_f2_{batch_name}"
         if real_cos_f12_mixed_three:
@@ -1731,6 +1759,8 @@ def evaluate(
         raise UnsupportedMetricError("where slicing is not supported by public evaluate")
     if not isinstance(factor_batch, FactorBatch) or not isinstance(label_bundle, LabelBundle):
         raise TypeError("evaluate requires a FactorBatch and LabelBundle")
+    if len(metric_ids) != len(set(metric_ids)):
+        raise InvalidContractError("Public evaluate metric IDs must be unique")
     canonical_metrics = tuple(dict.fromkeys(_resolve_alias(mid) for mid in metric_ids))
     generalization_ids={"train_predictive_dimension","validation_predictive_dimension",
         "validation_retention","train_validation_rankic_delta","train_validation_icir_delta",

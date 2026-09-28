@@ -3,6 +3,7 @@ import importlib.util
 import json
 import subprocess
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pyarrow as pa
@@ -40,10 +41,12 @@ def declared_source(tmp_path, monkeypatch):
     engine = DuckDBEngine(threads=1)
     store = DataAccessStore(DatasetRegistry(datasets), engine)
     transfers = []
+    heads = []
     def payload(uri):
         return (json.dumps({"factors": {"f": record}}).encode()
                 if uri.endswith(".json") else factor)
     def head(uri, **kwargs):
+        heads.append(uri)
         data = payload(uri)
         return dict(key=uri.removeprefix("cos://bucket/"), size=len(data),
                     etag=hashlib.md5(data).hexdigest())
@@ -54,7 +57,7 @@ def declared_source(tmp_path, monkeypatch):
     from data_access.cos import remote
     monkeypatch.setattr(remote, "cos_cli_head", head)
     monkeypatch.setattr(subprocess, "run", gateway)
-    yield store, record, transfers, tmp_path
+    yield store, record, transfers, tmp_path, heads
     engine.close()
 
 
@@ -73,6 +76,109 @@ def test_bound_reader_verifies_actual_data_and_reports_rank_scope(declared_sourc
     assert bound.manifest_sha256
     assert not list((declared_source[3] / "cache").rglob("object.*"))
 
+
+
+def test_reused_manifest_keeps_each_factor_head_get_head_and_binding_checks(declared_source):
+    from factor_optimizer.research_manifest import read_bound_factor, read_bound_manifest
+
+    store, record, transfers, _, heads = declared_source
+    snapshot = read_bound_manifest(store, "manifest", allow_research=True)
+    manifest_uri = "cos://bucket/pool/landing_manifest.json"
+    assert snapshot.manifest_uri == manifest_uri
+    assert snapshot.manifest_sha256 == hashlib.sha256(
+        json.dumps({"factors": {"f": record}}).encode()).hexdigest()
+    assert transfers == [manifest_uri]
+    assert heads == [manifest_uri, manifest_uri]
+
+    heads.clear()
+    transfers.clear()
+    for _ in range(2):
+        bound = read_bound_factor(store, "manifest", "factor", "f",
+                                  allow_research=True, manifest_snapshot=snapshot)
+        assert bound.manifest_sha256 == snapshot.manifest_sha256
+        assert bound.source_status == record["status"]
+        assert bound.expression == record["fe_dsl"]
+    factor_uri = "cos://bucket/pool/f.parquet"
+    assert transfers == [factor_uri, factor_uri]
+    assert heads == [factor_uri] * 4
+
+
+def test_reused_manifest_rejects_invalid_status_or_uri_before_factor_get(declared_source):
+    from factor_optimizer.research_manifest import read_bound_factor, read_bound_manifest
+
+    store, record, transfers, _, _ = declared_source
+    record["status"] = "materialized_quality_blocked"
+    snapshot = read_bound_manifest(store, "manifest", allow_research=True)
+    transfers.clear()
+    with pytest.raises(ValueError, match="status"):
+        read_bound_factor(store, "manifest", "factor", "f", allow_research=True,
+                          manifest_snapshot=snapshot)
+    assert transfers == []
+
+    record["status"] = "evaluated_optimization_pending"
+    record["uri"] = "cos://bucket/pool/other.parquet"
+    snapshot = read_bound_manifest(store, "manifest", allow_research=True)
+    transfers.clear()
+    with pytest.raises(ValueError, match="URI"):
+        read_bound_factor(store, "manifest", "factor", "f", allow_research=True,
+                          manifest_snapshot=snapshot)
+    assert transfers == []
+
+
+def test_reused_manifest_must_match_registered_manifest_dataset(declared_source):
+    from dataclasses import replace
+    from factor_optimizer.research_manifest import read_bound_factor, read_bound_manifest
+
+    store, _, transfers, _, _ = declared_source
+    snapshot = read_bound_manifest(store, "manifest", allow_research=True)
+    transfers.clear()
+    with pytest.raises(ValueError, match="snapshot identity"):
+        read_bound_factor(store, "manifest", "factor", "f", allow_research=True,
+                          manifest_snapshot=replace(snapshot, manifest_uri="cos://other/manifest.json"))
+    assert transfers == []
+
+
+def test_manifest_snapshot_digest_normalizes_type_tagged_datetimes():
+    from factor_optimizer.research_manifest import _manifest_factors_sha256
+
+    naive = datetime(2026, 9, 29, 12, 34, 56, 123456)
+    aware = datetime(2026, 9, 29, 12, 34, 56, 123456,
+                     tzinfo=timezone.utc, fold=1)
+    assert _manifest_factors_sha256({"when": naive}) == _manifest_factors_sha256(
+        {"when": datetime(2026, 9, 29, 12, 34, 56, 123456)})
+    assert _manifest_factors_sha256({"when": naive}) != _manifest_factors_sha256(
+        {"when": naive.isoformat(timespec="microseconds")})
+    assert _manifest_factors_sha256({"when": aware}) != _manifest_factors_sha256(
+        {"when": datetime(2026, 9, 29, 12, 34, 56, 123456, tzinfo=timezone.utc)})
+    with pytest.raises(ValueError, match="unsupported value type"):
+        _manifest_factors_sha256({"when": object()})
+
+
+def test_forged_reused_manifest_snapshot_is_rejected(declared_source):
+    from dataclasses import replace
+    from factor_optimizer.research_manifest import read_bound_factor, read_bound_manifest
+
+    store, _, transfers, _, _ = declared_source
+    snapshot = read_bound_manifest(store, "manifest", allow_research=True)
+    forged_factors = {"f": dict(snapshot.factors["f"], status="materialized_quality_blocked")}
+    forged = replace(snapshot, factors=forged_factors)
+    transfers.clear()
+    with pytest.raises(ValueError, match="snapshot identity"):
+        read_bound_factor(store, "manifest", "factor", "f", allow_research=True,
+                          manifest_snapshot=forged)
+    assert transfers == []
+
+
+def test_manifest_change_during_factor_pass_is_detected(declared_source):
+    from factor_optimizer.research_manifest import (
+        read_bound_manifest, verify_bound_manifest_unchanged,
+    )
+
+    store, record, _, _, _ = declared_source
+    snapshot = read_bound_manifest(store, "manifest", allow_research=True)
+    record["fe_dsl"] = "rank(col('changed'))"
+    with pytest.raises(ValueError, match="identity changed"):
+        verify_bound_manifest_unchanged(store, "manifest", snapshot)
 
 
 def test_bound_reader_passes_object_opt_in_only_to_factor_read(declared_source, monkeypatch):

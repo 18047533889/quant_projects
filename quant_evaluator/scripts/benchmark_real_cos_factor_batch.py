@@ -34,7 +34,7 @@ def run_extended(ctx, requested_metrics, factors, labels, provenance, args, load
         full.METRICS = (metric,)
         runs = []
         for index, backend in enumerate(order):
-            run = full._run_one(ctx, backend, repeats=args.repeats + 1, timeout_s=180)
+            run = full._run_one(ctx, backend, repeats=args.repeats + 1, timeout_s=args.timeout_s)
             runs.append(run)
             print(f"{metric} round={index+1} {backend} cold={run['cold_s']:.3f}s "
                   f"warm={run['warm_median_s']:.3f}s route={run['backend_used']} "
@@ -53,7 +53,7 @@ def run_extended(ctx, requested_metrics, factors, labels, provenance, args, load
         "created_utc": datetime.now(timezone.utc).isoformat(),
         "source": "DataAccess bound COS landing manifest and registered A-share calendar/AdjVwap",
         "request": {"metrics": requested_metrics, "backend_order": order,
-                    "warm_repeats_per_child": args.repeats,
+                    "warm_repeats_per_child": args.repeats, "timeout_s": args.timeout_s,
                     "shape": list(factors.values.shape),
                     "manifest_sha256": args.manifest_sha256},
         "load_s": load_s,

@@ -36,9 +36,21 @@ _SOURCES = None
 
 def metric_groups():
     from quant_evaluator.runtime.gpu_executor import GPUExecutor
-    base = tuple(sorted(GPUExecutor.SUPPORTED_METRICS - set(PORTFOLIO) - set(EXPOSURE)))
-    if len(base) != 18 or len(GPUExecutor.SUPPORTED_METRICS) != 32:
-        raise RuntimeError("GPUExecutor capability matrix changed; inspect before benchmarking")
+    from quant_evaluator.registry.metrics import list_metrics
+
+    supported = set(GPUExecutor.SUPPORTED_METRICS)
+    registered = set(list_metrics())
+    special = set(PORTFOLIO) | set(EXPOSURE)
+    overlap = set(PORTFOLIO) & set(EXPOSURE)
+    missing = special - supported
+    extra = supported - registered
+    if overlap or missing or extra:
+        raise RuntimeError(
+            "CUDA benchmark metric groups disagree with the GPU executor and registry: "
+            f"overlap={sorted(overlap)}, missing_cuda={sorted(missing)}, "
+            f"unregistered_cuda={sorted(extra)}"
+        )
+    base = tuple(sorted(supported - special))
     return {"base": base, "portfolio": PORTFOLIO, "risk": RISK, "exposure": EXPOSURE}
 
 

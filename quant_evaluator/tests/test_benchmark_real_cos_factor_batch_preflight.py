@@ -116,3 +116,41 @@ def test_f32_whole_batch_uses_complete_metric_batch_worker(monkeypatch, capsys):
     ]
     assert all(call[1] == 2 for call in calls)
     assert '"profile_mode": "whole_batch"' in capsys.readouterr().out
+
+
+def test_f8_extended_trial_honors_configured_timeout(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    import numpy as np
+
+    calls = []
+    batch = SimpleNamespace(values=np.zeros((2, 3, 8), dtype=np.float64))
+    output = tmp_path / "extended.json"
+    args = SimpleNamespace(
+        factors=8, days=0, assets=5500,
+        manifest_sha256=benchmark.full.MANIFEST_SHA256,
+        max_object_mib=64, max_total_mib=256,
+        repeats=1, timeout_s=321, output=output,
+    )
+
+    def fake_run(ctx, backend, repeats, timeout_s):
+        calls.append((backend, repeats, timeout_s))
+        return {
+            "backend_requested": backend,
+            "backend_used": "cpu" if backend == "cpu" else "cuda",
+            "peak_vram": None, "cold_s": 0.1, "warm_median_s": 0.1,
+            "peak_rss_kib": 100, "config_hash": "same", "artifacts": {},
+        }
+
+    monkeypatch.setattr(benchmark.full, "_run_one", fake_run)
+    monkeypatch.setattr(benchmark.full, "_compare", lambda *_: {"pass": True})
+    benchmark.run_extended(
+        None, ("rank_ic_series",), batch, object(), {}, args, 0.0)
+
+    assert [backend for backend, _, _ in calls] == [
+        "cpu", "cuda_strict", "auto", "auto", "cuda_strict", "cpu",
+    ]
+    assert all(repeats == 2 and timeout_s == 321
+               for _, repeats, timeout_s in calls)
+    report = json.loads(output.read_text())
+    assert report["request"]["timeout_s"] == 321
+    assert report["pass"] is True

@@ -540,3 +540,42 @@ def test_G_performance_guardrail_T2000():
         t_new = best_time(lambda: new_fn(R))
         t_ref = best_time(lambda: ref_fn(R))
         assert t_new < t_ref, f"G-{name} new {t_new:.4g} not faster than ref {t_ref:.4g}"
+
+
+@pytest.mark.parametrize(
+    "metric,reference",
+    [
+        (ps.compute_sharpe_ratio, ps._compute_sharpe_ratio_reference),
+        (ps.compute_sortino_ratio, ps._compute_sortino_ratio_reference),
+    ],
+)
+@pytest.mark.parametrize("bad_value", [np.inf, -np.inf])
+def test_G_nonfinite_return_is_excluded_from_1d_ratios(metric, reference, bad_value):
+    returns = np.array([0.01, -0.02, 0.03, 0.04, bad_value, 0.02])
+    got = metric(returns, min_periods=5)
+    expected = reference(returns, min_periods=5)
+    assert np.isfinite(expected)
+    np.testing.assert_allclose(got, expected, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    "metric,reference",
+    [
+        (ps.compute_sharpe_ratio, ps._compute_sharpe_ratio_reference),
+        (ps.compute_sortino_ratio, ps._compute_sortino_ratio_reference),
+    ],
+)
+def test_G_nonfinite_return_is_excluded_per_column(metric, reference):
+    returns = np.array([
+        [0.01, -0.04, 0.01],
+        [-0.02, 0.01, -0.02],
+        [0.03, 0.02, 0.03],
+        [0.04, 0.03, np.inf],
+        [np.inf, -np.inf, np.nan],
+        [0.02, 0.01, 0.02],
+    ])
+    got = metric(returns, min_periods=5)
+    expected = reference(returns, min_periods=5)
+    np.testing.assert_allclose(got, expected, rtol=1e-12, atol=1e-12, equal_nan=True)
+    assert np.all(np.isfinite(got[:2]))
+    assert np.isnan(got[2])  # Only four finite observations remain.

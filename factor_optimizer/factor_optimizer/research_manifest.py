@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
+import hashlib
+import json
 import math
 import re
 
@@ -32,6 +35,49 @@ class BoundResearchFactor:
         if self.lineage is not None:
             return build_signature_from_lineage(self.lineage)
         return ExistingTreatmentSignature(cs_rank=self.contains_cs_rank, status='incomplete')
+
+
+@dataclass(frozen=True)
+class BoundResearchManifest:
+    """One DataAccess-verified landing manifest reusable within a bounded read."""
+    manifest_uri: str
+    manifest_sha256: str
+    factors: object
+    _verification_token: object = field(repr=False, compare=False)
+    _factors_sha256: str = field(repr=False)
+
+
+_MANIFEST_SNAPSHOT_TOKEN = object()
+
+
+def _manifest_factors_sha256(factors):
+    def normalize(value):
+        if isinstance(value, datetime):
+            return ["datetime", value.isoformat(timespec="microseconds"), value.fold]
+        if type(value) is dict:
+            if any(type(key) is not str for key in value):
+                raise ValueError("landing manifest mapping keys must be strings")
+            return ["dict", [[key, normalize(item)]
+                             for key, item in sorted(value.items())]]
+        if type(value) is list:
+            return ["list", [normalize(item) for item in value]]
+        if value is None:
+            return ["none"]
+        if type(value) is bool:
+            return ["bool", value]
+        if type(value) is int:
+            return ["int", value]
+        if type(value) is str:
+            return ["str", value]
+        raise ValueError("landing manifest contains an unsupported value type")
+
+    normalized = normalize(factors)
+    try:
+        payload = json.dumps(normalized, ensure_ascii=False,
+                             separators=(",", ":"), allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("landing manifest factors are not canonical") from exc
+    return hashlib.sha256(payload).hexdigest()
 
 
 def _declared_lineage(expression):
@@ -149,9 +195,61 @@ def _rank_scope(expression):
     return any(is_rank(n) for n in nodes), is_rank(tree.body)
 
 
+def read_bound_manifest(store, manifest_dataset, *, manifest_params=None,
+                        allow_research=False):
+    """Read and bind one landing manifest for reuse across its factor reads."""
+    from data_access.cos.research import read_declared_cos_object
+    from data_access.cos.remote import resolve_remote_paths
+
+    if allow_research is not True:
+        raise ValueError("explicit allow_research=True required")
+    store.authorize_dataset(manifest_dataset)
+    store._authorize_factor_params(manifest_dataset, manifest_params)
+    paths = resolve_remote_paths(store.get_dataset(manifest_dataset), params=manifest_params)
+    manifest = read_declared_cos_object(store, manifest_dataset,
+        params=manifest_params, allow_research=True)
+    uri = paths[0].replace("s3://", "cos://", 1) if len(paths) == 1 else None
+    if (not isinstance(uri, str) or manifest.source_uri != uri or
+            not isinstance(manifest.content_sha256, str) or
+            not re.fullmatch("[0-9a-f]{64}", manifest.content_sha256)):
+        raise ValueError("landing manifest URI or content identity is invalid")
+    rows = manifest.table.to_pylist()
+    if len(rows) != 1 or not isinstance(rows[0].get("factors"), dict):
+        raise ValueError("one landing manifest with a factors mapping is required")
+    factors = rows[0]["factors"]
+    return BoundResearchManifest(uri, manifest.content_sha256, factors,
+        _MANIFEST_SNAPSHOT_TOKEN, _manifest_factors_sha256(factors))
+
+
+def verify_bound_manifest_unchanged(store, manifest_dataset, snapshot, *,
+                                    manifest_params=None):
+    """Require the declared manifest identity to remain stable across a pass."""
+    from data_access.cos.remote import resolve_remote_paths
+
+    if not isinstance(snapshot, BoundResearchManifest):
+        raise ValueError("manifest_snapshot must be a DataAccess-bound landing manifest")
+    store.authorize_dataset(manifest_dataset)
+    store._authorize_factor_params(manifest_dataset, manifest_params)
+    paths = resolve_remote_paths(store.get_dataset(manifest_dataset), params=manifest_params)
+    uri = paths[0].replace("s3://", "cos://", 1) if len(paths) == 1 else None
+    if (snapshot._verification_token is not _MANIFEST_SNAPSHOT_TOKEN or
+            snapshot.manifest_uri != uri or
+            not isinstance(snapshot.manifest_sha256, str) or
+            not re.fullmatch("[0-9a-f]{64}", snapshot.manifest_sha256) or
+            not isinstance(snapshot.factors, dict) or
+            snapshot._factors_sha256 != _manifest_factors_sha256(snapshot.factors)):
+        raise ValueError("landing manifest snapshot identity is invalid")
+    current = read_bound_manifest(store, manifest_dataset,
+        manifest_params=manifest_params, allow_research=True)
+    if (current.manifest_uri != snapshot.manifest_uri or
+            current.manifest_sha256 != snapshot.manifest_sha256):
+        raise ValueError("landing manifest identity changed during factor reads")
+    return current
+
+
 def read_bound_factor(store, manifest_dataset, factor_dataset, factor_id, *,
                       manifest_params=None, factor_params=None, allow_research=False,
-                      max_object_mib=64):
+                      max_object_mib=64, manifest_snapshot=None):
     """Read declared datasets through DataAccess; enforce URI, bytes and SHA256.
 
     Only known nonblocked research landing statuses are admitted. This is not
@@ -167,12 +265,26 @@ def read_bound_factor(store, manifest_dataset, factor_dataset, factor_id, *,
         raise ValueError("max_object_mib must be an integer in 1..128")
     if not isinstance(factor_id, str) or not factor_id:
         raise ValueError("factor_id is required")
-    manifest = read_declared_cos_object(store, manifest_dataset,
-        params=manifest_params, allow_research=True)
-    rows = manifest.table.to_pylist()
-    if len(rows) != 1 or not isinstance(rows[0].get("factors"), dict):
-        raise ValueError("one landing manifest with a factors mapping is required")
-    record = rows[0]["factors"].get(factor_id)
+    if manifest_snapshot is None:
+        manifest_snapshot = read_bound_manifest(
+            store, manifest_dataset, manifest_params=manifest_params,
+            allow_research=True)
+    if not isinstance(manifest_snapshot, BoundResearchManifest):
+        raise ValueError("manifest_snapshot must be a DataAccess-bound landing manifest")
+    store.authorize_dataset(manifest_dataset)
+    store._authorize_factor_params(manifest_dataset, manifest_params)
+    manifest_paths = resolve_remote_paths(store.get_dataset(manifest_dataset), params=manifest_params)
+    manifest_uri = (manifest_paths[0].replace("s3://", "cos://", 1)
+                    if len(manifest_paths) == 1 else None)
+    if (manifest_snapshot._verification_token is not _MANIFEST_SNAPSHOT_TOKEN or
+            manifest_snapshot.manifest_uri != manifest_uri or
+            not isinstance(manifest_snapshot.manifest_sha256, str) or
+            not re.fullmatch("[0-9a-f]{64}", manifest_snapshot.manifest_sha256) or
+            not isinstance(manifest_snapshot.factors, dict) or
+            manifest_snapshot._factors_sha256 !=
+            _manifest_factors_sha256(manifest_snapshot.factors)):
+        raise ValueError("landing manifest snapshot identity is invalid")
+    record = manifest_snapshot.factors.get(factor_id)
     if not isinstance(record, dict) or record.get("verified") is not True:
         raise ValueError("factor record is missing or not verified")
     status = record.get("status")
@@ -199,6 +311,6 @@ def read_bound_factor(store, manifest_dataset, factor_dataset, factor_id, *,
     if (factor.source_uri != record["uri"] or factor.content_sha256 != sha
             or factor.downloaded_bytes != size):
         raise ValueError("factor URI, content SHA256 or byte count differs from manifest")
-    return BoundResearchFactor(factor_id, factor, manifest.source_uri,
-        manifest.content_sha256, record["fe_dsl"], status, contains_rank, output_rank,
+    return BoundResearchFactor(factor_id, factor, manifest_snapshot.manifest_uri,
+        manifest_snapshot.manifest_sha256, record["fe_dsl"], status, contains_rank, output_rank,
         _declared_lineage(record["fe_dsl"]))

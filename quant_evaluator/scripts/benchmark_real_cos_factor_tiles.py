@@ -1,4 +1,4 @@
-"""Bounded research COS factor tiles; emits a collection of genuine QE receipts."""
+"""Bounded research COS factor tiles; optional verified axis reuse for repeat runs."""
 from __future__ import annotations
 
 import argparse
@@ -23,7 +23,9 @@ from data_access.cos.remote import cos_cache_root
 from data_access.read.query_budget import QueryBudget
 from data_access.registry.loader import DatasetRegistry
 from data_access.store import DataAccessStore
-from factor_optimizer.research_manifest import read_bound_factor
+from factor_optimizer.research_manifest import (
+    read_bound_factor, read_bound_manifest, verify_bound_manifest_unchanged,
+)
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.runtime.evaluator import evaluate
@@ -31,13 +33,17 @@ from quant_evaluator.scripts.benchmark_real_cos_metric_batch import MANIFEST_SHA
 from quant_evaluator.scripts.load_real_cos_factor_batch import BASE, MIRROR, POOL, _ds
 
 METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+AXIS_INDEX_MAX_BYTES = 1024**2
+AXIS_INDEX_MAX_DATES = 10000
+AXIS_INDEX_MAX_ASSETS = 5500
 
 
 def select_records(mapping, count, object_mib, total_mib):
+    """Select verified factors; explicit total cap may reach 6144 MiB (CLI default 4096)."""
     if not (type(count) is int and 33 <= count <= 64 and
             type(object_mib) is int and 1 <= object_mib <= 128 and
-            type(total_mib) is int and 1 <= total_mib <= 4096):
-        raise ValueError("count 33..64, object 1..128 MiB, total 1..4096 MiB required")
+            type(total_mib) is int and 1 <= total_mib <= 6144):
+        raise ValueError("count 33..64, object 1..128 MiB, total 1..6144 MiB required")
     if not isinstance(mapping, dict):
         raise ValueError("manifest factors mapping required")
     eligible = []
@@ -92,16 +98,25 @@ def axis_hash(frame):
     return h.hexdigest()
 
 
-def iter_frames(records, manifest_sha, object_mib):
+def iter_frames(records, manifest_sha, object_mib, reuse_manifest=False):
     uri = f"{BASE}/metadata/{manifest_sha}/landing_manifest.json"
     md = _ds("source_manifest", uri.rsplit("/", 1)[0], "landing_manifest.json", "json")
     engine = DuckDBEngine(threads=2)
     try:
+        manifest_snapshot = None
+        if reuse_manifest:
+            manifest_store = DataAccessStore(DatasetRegistry({md.name: md}), engine)
+            manifest_snapshot = read_bound_manifest(
+                manifest_store, md.name, allow_research=True)
+            if manifest_snapshot.manifest_sha256 != manifest_sha:
+                raise ValueError("manifest identity mismatch")
         for name, uri, digest, size in records:
             fd = _ds("factor_panel", uri.rsplit("/", 1)[0], name + ".parquet", "parquet")
             store = DataAccessStore(DatasetRegistry({md.name: md, fd.name: fd}), engine)
             bound = read_bound_factor(store, md.name, fd.name, name,
-                                      max_object_mib=object_mib, allow_research=True)
+                                      max_object_mib=object_mib, allow_research=True,
+                                      **({"manifest_snapshot": manifest_snapshot}
+                                         if manifest_snapshot is not None else {}))
             obj = bound.factor
             if (bound.manifest_sha256 != manifest_sha or obj.source_uri != uri or
                     obj.content_sha256 != digest or obj.downloaded_bytes != size):
@@ -117,6 +132,9 @@ def iter_frames(records, manifest_sha, object_mib):
             source = (name, uri, digest, size, obj.source_etag, axis_hash(frame))
             yield frame, source
             del frame, bound, obj, store
+        if manifest_snapshot is not None:
+            verify_bound_manifest_unchanged(
+                manifest_store, md.name, manifest_snapshot)
     finally:
         engine.close()
 
@@ -187,7 +205,115 @@ def load_labels(common_dates, common_assets, days, assets):
     return dates, names, labels
 
 
-def make_tile(stream, expected, dates, assets, labels):
+def _axis_index_bytes(body):
+    payload = json.dumps(body, ensure_ascii=False, sort_keys=True,
+                         separators=(",", ":")).encode("utf-8")
+    if len(payload) > AXIS_INDEX_MAX_BYTES:
+        raise ValueError("axis index exceeds 1 MiB bound")
+    return payload
+
+
+def build_axis_index(manifest_sha, records, dates, assets, sources):
+    """Capture the complete intersection only after a verified first pass."""
+    if (len(dates) < 1 or len(dates) > AXIS_INDEX_MAX_DATES or
+            len(assets) < 1 or len(assets) > AXIS_INDEX_MAX_ASSETS or
+            len(sources) != len(records)):
+        raise ValueError("axis index coordinate bound or source count violated")
+    date_values = np.asarray(dates, dtype="datetime64[ns]").view("int64").tolist()
+    asset_values = sorted(assets)
+    if (len(set(date_values)) != len(date_values) or date_values != sorted(date_values) or
+            len(set(asset_values)) != len(asset_values) or
+            any(not isinstance(x, str) or not x for x in asset_values)):
+        raise ValueError("axis index coordinates are invalid")
+    body = {"kind": "research_factor_axis_index.v1",
+            "manifest_sha256": manifest_sha,
+            "records": [list(row) for row in records],
+            "dates_ns": date_values, "assets": asset_values,
+            "sources": [list(row) for row in sources]}
+    _validate_axis_index_body(body, manifest_sha, records)
+    digest = hashlib.sha256(_axis_index_bytes(body)).hexdigest()
+    return {**body, "body_sha256": digest}
+
+
+def _validate_axis_index_body(body, manifest_sha, records):
+    if (set(body) != {"kind", "manifest_sha256", "records", "dates_ns", "assets", "sources"} or
+            body["kind"] != "research_factor_axis_index.v1" or
+            body["manifest_sha256"] != manifest_sha or
+            body["records"] != [list(row) for row in records]):
+        raise ValueError("axis index selection or manifest changed")
+    dates, assets, sources = body["dates_ns"], body["assets"], body["sources"]
+    if (not isinstance(dates, list) or not 1 <= len(dates) <= AXIS_INDEX_MAX_DATES or
+            any(type(x) is not int or x < 0 for x in dates) or
+            dates != sorted(set(dates)) or
+            not isinstance(assets, list) or not 1 <= len(assets) <= AXIS_INDEX_MAX_ASSETS or
+            any(not isinstance(x, str) or not x for x in assets) or
+            assets != sorted(set(assets)) or
+            not isinstance(sources, list) or len(sources) != len(records)):
+        raise ValueError("axis index coordinates or source count invalid")
+    try:
+        date_axis = pd.DatetimeIndex(pd.to_datetime(dates, unit="ns"))
+    except (ValueError, OverflowError, TypeError) as exc:
+        raise ValueError("axis index dates invalid") from exc
+    if not date_axis.equals(date_axis.normalize()):
+        raise ValueError("axis index dates are not normalized")
+    for record, source in zip(records, sources):
+        if (not isinstance(source, list) or len(source) != 6 or
+                source[:4] != list(record) or
+                (source[4] is not None and not isinstance(source[4], str)) or
+                not isinstance(source[5], str) or len(source[5]) != 64 or
+                any(c not in "0123456789abcdef" for c in source[5])):
+            raise ValueError("axis index factor source invalid")
+    _axis_index_bytes(body)
+    return date_axis, set(assets), tuple(tuple(row) for row in sources)
+
+
+def read_axis_index(path, manifest_sha, records):
+    if path.stat().st_size > AXIS_INDEX_MAX_BYTES:
+        raise ValueError("axis index file exceeds 1 MiB bound")
+    with path.open("rb") as stream:
+        raw = stream.read(AXIS_INDEX_MAX_BYTES + 1)
+    if len(raw) > AXIS_INDEX_MAX_BYTES:
+        raise ValueError("axis index file exceeds 1 MiB bound")
+    try:
+        index = json.loads(raw)
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise ValueError("axis index JSON invalid") from exc
+    if not isinstance(index, dict) or set(index) != {
+            "kind", "manifest_sha256", "records", "dates_ns", "assets",
+            "sources", "body_sha256"}:
+        raise ValueError("axis index schema invalid")
+    body = {key: value for key, value in index.items() if key != "body_sha256"}
+    if index["body_sha256"] != hashlib.sha256(_axis_index_bytes(body)).hexdigest():
+        raise ValueError("axis index checksum mismatch")
+    return _validate_axis_index_body(body, manifest_sha, records)
+
+
+def write_axis_index_atomic(path, index):
+    body = {key: value for key, value in index.items() if key != "body_sha256"}
+    _validate_axis_index_body(body, index["manifest_sha256"],
+                              tuple(tuple(row) for row in index["records"]))
+    if index.get("body_sha256") != hashlib.sha256(_axis_index_bytes(body)).hexdigest():
+        raise ValueError("axis index checksum mismatch")
+    payload = _axis_index_bytes(index) + b"\n"
+    if len(payload) > AXIS_INDEX_MAX_BYTES:
+        raise ValueError("axis index exceeds 1 MiB bound")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="wb", dir=path.parent,
+                prefix=".qe-axis-index-", suffix=".json", delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def make_tile(stream, expected, dates, assets, labels, *,
+              required_dates=None, required_assets=None):
     if not 1 <= len(expected) <= 32:
         raise ValueError("tile must contain 1..32 factors")
     values = np.empty((len(dates), len(assets), len(expected)), dtype=np.float64)
@@ -195,6 +321,10 @@ def make_tile(stream, expected, dates, assets, labels):
     for frame, source in stream:
         if seen >= len(expected) or source != expected[seen]:
             raise ValueError("factor source or axes changed between passes")
+        if (required_dates is not None and
+                (not required_dates.isin(frame.index).all() or
+                 not required_assets.issubset(frame.columns))):
+            raise ValueError("indexed shared axes changed between passes")
         if not dates.isin(frame.index).all() or not set(assets).issubset(frame.columns):
             raise ValueError("factor final axes changed between passes")
         values[:, :, seen] = frame.reindex(index=dates, columns=assets).to_numpy(dtype=np.float64, copy=False)
@@ -398,8 +528,14 @@ def main():
     parser.add_argument("--max-working-gib", type=int, default=50)
     parser.add_argument("--backend", choices=("cpu", "cuda_strict", "auto"), default="auto")
     parser.add_argument("--run", action="store_true")
+    parser.add_argument("--reuse-manifest", action="store_true",
+                        help="reuse one verified landing manifest per factor pass")
+    parser.add_argument("--axis-index", type=Path,
+                        help="optional bounded shared-axis index; reuse still verifies every factor")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if args.axis_index and args.output and args.axis_index.resolve() == args.output.resolve():
+        parser.error("--axis-index and --output must be different paths")
     started = time.perf_counter()
     try:
         records = select_records(read_manifest(args.manifest_sha256), args.factors,
@@ -422,10 +558,22 @@ def main():
         return
     if not preflight["pass"]:
         raise SystemExit("insufficient tile memory or temporary disk headroom")
-    first_pass_started = time.perf_counter()
-    common_dates, common_assets, sources = intersect_axes(
-        iter_frames(records, args.manifest_sha256, args.max_object_mib), len(records))
-    first_pass_s = time.perf_counter() - first_pass_started
+    index_to_write = None
+    if args.axis_index and args.axis_index.exists():
+        common_dates, common_assets, sources = read_axis_index(
+            args.axis_index, args.manifest_sha256, records)
+        first_pass_s = 0.0
+        index_reused = True
+    else:
+        first_pass_started = time.perf_counter()
+        common_dates, common_assets, sources = intersect_axes(
+            iter_frames(records, args.manifest_sha256, args.max_object_mib,
+                        args.reuse_manifest), len(records))
+        first_pass_s = time.perf_counter() - first_pass_started
+        index_reused = False
+        if args.axis_index:
+            index_to_write = build_axis_index(
+                args.manifest_sha256, records, common_dates, common_assets, sources)
     labels_started = time.perf_counter()
     dates, assets, labels = load_labels(common_dates, common_assets, args.days, args.assets)
     labels_s = time.perf_counter() - labels_started
@@ -440,7 +588,10 @@ def main():
         expected = sources[start:start+args.tile_size]
         load_started = time.perf_counter()
         batch = make_tile(iter_frames(selected, args.manifest_sha256,
-                                     args.max_object_mib), expected, dates, assets, labels)
+                                     args.max_object_mib, args.reuse_manifest),
+                          expected, dates, assets, labels,
+                          **({"required_dates": common_dates, "required_assets": common_assets}
+                             if args.axis_index else {}))
         load_s = time.perf_counter() - load_started
         evaluate_started = time.perf_counter()
         bundle = evaluate(batch, labels, metrics=METRICS, backend=args.backend)
@@ -464,6 +615,8 @@ def main():
     performance = {"manifest_preflight_s": preflight_s, "first_pass_s": first_pass_s,
                    "labels_s": labels_s, "tiles": tile_timings,
                    "total_s": time.perf_counter() - started,
+                   **({"axis_index_reused": index_reused} if args.axis_index else {}),
+                   **({"manifest_reused": args.reuse_manifest} if args.reuse_manifest else {}),
                    "peak_process_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
                    "total_scope": "CLI start through final tile; report serialization and write excluded",
                    "rss_note": "Linux process high-water mark; tile values are cumulative, not per-tile deltas"}
@@ -481,6 +634,8 @@ def main():
         write_collection_atomic(args.output, result)
     else:
         print(json.dumps(result, ensure_ascii=False), flush=True)
+    if index_to_write is not None:
+        write_axis_index_atomic(args.axis_index, index_to_write)
     print(json.dumps({"status": "complete", "tiles": len(tiles), "factors": len(records),
                       "total_wall_s": time.perf_counter() - started,
                       "peak_process_rss_kib": performance["peak_process_rss_kib"],

@@ -466,16 +466,23 @@ def compute_yearly_quarterly_dispersion(
             raise ValueError(
                 f"time_index has length {ti.shape[0]}, expected {T}"
             )
-        try:
-            dt = np.asarray(ti, dtype="datetime64[D]")
-            years = dt.astype("datetime64[Y]").astype(int)
-            months = (dt.astype("datetime64[M]").astype(int) % 12) + 1
-            quarters = ((months - 1) // 3) + 1
-        except (TypeError, ValueError):
-            # Integer position labels.
+        # NumPy accepts integer arrays as datetime64[D] (days since the
+        # epoch), so recognize positional labels before datetime conversion.
+        if np.issubdtype(ti.dtype, np.integer):
             pos = np.asarray(ti, dtype=np.int64)
             years = pos // 252
             quarters = pos // 63
+        else:
+            try:
+                dt = np.asarray(ti, dtype="datetime64[D]")
+                years = dt.astype("datetime64[Y]").astype(int)
+                months = (dt.astype("datetime64[M]").astype(int) % 12) + 1
+                quarters = ((months - 1) // 3) + 1
+            except (TypeError, ValueError):
+                # Integer-like labels supplied as strings or objects.
+                pos = np.asarray(ti, dtype=np.int64)
+                years = pos // 252
+                quarters = pos // 63
         year_keys = years
         quarter_keys = years * 10 + quarters
     else:

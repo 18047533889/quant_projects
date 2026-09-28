@@ -16,6 +16,7 @@ import statistics
 import time
 import traceback
 from collections.abc import Mapping
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -23,16 +24,18 @@ from quant_evaluator.scripts.load_real_cos_factor_batch import load_real_batch
 
 DEFAULT_METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
 RANK_CHAIN = ("rank_ic", "rank_ic_series", "ic_std", "ic_ir")
+PEARSON_CHAIN = ("pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir")
 QUANTILE_CHAIN = ("quantile_returns_full", "quantile_returns_daily",
                   "quantile_spread", "quantile_monotonicity",
                   "daily_quantile_monotonicity_rate")
 RANK_SERIES_SINGLE = ("rank_ic_series",)
 QUANTILE_FULL_SINGLE = ("quantile_returns_full",)
+QUANTILE_DAILY_SINGLE = ("quantile_returns_daily",)
 TURNOVER_SINGLE = ("factor_turnover_rate",)
 POSITIVE_RATIO_SINGLE = ("rank_ic_positive_ratio",)
 METRICS = DEFAULT_METRICS
 ALLOWED_BATCHES = (DEFAULT_METRICS, RANK_CHAIN, QUANTILE_CHAIN)
-F32_SINGLE_METRICS = (RANK_SERIES_SINGLE, QUANTILE_FULL_SINGLE)
+F32_SINGLE_METRICS = (RANK_SERIES_SINGLE, QUANTILE_FULL_SINGLE, QUANTILE_DAILY_SINGLE)
 MANIFEST_SHA256 = "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864"
 _BATCH = None
 _LABELS = None
@@ -228,6 +231,8 @@ def main():
     parser.add_argument("--metrics", default=",".join(DEFAULT_METRICS))
     parser.add_argument("--factors", type=int, choices=(2, 8, 12, 13, 24, 32), default=8)
     parser.add_argument("--compact", action="store_true", help="write artifact hashes, not value arrays")
+    parser.add_argument("--run", action="store_true",
+                        help="run the F32 Pearson chain or daily quantile singleton after preflight")
     args = parser.parse_args()
     if args.timeout_s <= 0:
         parser.error("timeout-s must be positive")
@@ -237,11 +242,12 @@ def main():
     if requested not in ALLOWED_BATCHES:
         if not ((args.factors == 2 and requested == RANK_SERIES_SINGLE)
                 or (args.factors == 13 and requested in (TURNOVER_SINGLE, POSITIVE_RATIO_SINGLE))
-                or (args.factors == 32 and requested in F32_SINGLE_METRICS)):
+                or (args.factors == 32 and requested in (*F32_SINGLE_METRICS, PEARSON_CHAIN))):
             parser.error("metrics must be an exact default, rank-chain or quantile-chain set; "
                          "F2 permits rank_ic_series alone, F13 permits factor_turnover_rate "
                          "or rank_ic_positive_ratio alone, "
-                         "and F32 permits rank_ic_series or quantile_returns_full alone")
+                         "and F32 permits rank_ic_series, quantile_returns_full, "
+                         "or quantile_returns_daily alone, or the exact Pearson chain")
     if args.factors == 2 and requested not in (RANK_SERIES_SINGLE, RANK_CHAIN, QUANTILE_CHAIN):
         parser.error("F2 runs require rank_ic_series alone or an exact rank/quantile chain")
     if args.factors == 13 and requested not in (
@@ -250,8 +256,33 @@ def main():
                      "factor_turnover_rate, or rank_ic_positive_ratio request")
     if args.factors == 24 and requested not in (RANK_CHAIN, QUANTILE_CHAIN):
         parser.error("F24 runs require the exact rank-chain or quantile-chain request")
-    if args.factors == 32 and requested not in F32_SINGLE_METRICS:
-        parser.error("F32 runs require exactly rank_ic_series or quantile_returns_full")
+    if args.factors == 32 and requested not in (*F32_SINGLE_METRICS, PEARSON_CHAIN):
+        parser.error("F32 runs require rank_ic_series, quantile_returns_full, quantile_returns_daily, "
+                     "or the exact Pearson chain")
+    preflight_request = requested in (PEARSON_CHAIN, QUANTILE_DAILY_SINGLE)
+    if args.run and not (args.factors == 32 and preflight_request):
+        parser.error("--run applies only to the F32 Pearson chain or daily quantile singleton")
+    if preflight_request:
+        if args.factors != 32:
+            parser.error("this request requires the exact F32 panel")
+        from quant_evaluator.scripts.benchmark_real_cos_factor_batch import (
+            preflight_factor_count_profile,
+        )
+        preflight = preflight_factor_count_profile(SimpleNamespace(
+            manifest_sha256=MANIFEST_SHA256,
+            profile_max_object_mib=128,
+            profile_max_total_mib=2048,
+            max_working_gib=50,
+        ))
+        print(json.dumps({"preflight": preflight}, ensure_ascii=False), flush=True)
+        if preflight["status"] != "ready":
+            raise SystemExit(2)
+        if not args.run:
+            print(json.dumps({"status": "preflight_only",
+                              "note": "pass --run to start the F32 "
+                                      + ("Pearson chain" if requested == PEARSON_CHAIN else "daily quantile")
+                                      + " benchmark"}), flush=True)
+            return
     METRICS = requested
     load_start = time.perf_counter()
     _BATCH, _LABELS, source = load_real_batch(

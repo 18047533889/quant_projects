@@ -291,6 +291,9 @@ H2D 从 5,648,858,400 降为 2,937,406,368 字节。单轮 GPU 峰值约
 例如 `ic.rank.mean` 采用 `rank_ic` 的选择规则。设备不可用时自动走 CPU。
 多年路径同样要求 float64、默认指标参数及无上述特殊输入。
 
+公开 `evaluate()` 在选择后端前拒绝完全相同的 metric ID 重复请求，并抛出
+`InvalidContractError`。不同别名可分别请求、保留各自输出键；配置哈希仍绑定原始指标列表。
+
 多年大盘路径对单指标 `rank_ic` 和 `quantile_spread` 开放；
 `factor_turnover_rate` 单独请求保持 CPU。上述精确三指标组合是独立的整批认证例外，
 不适用单指标区域外推。公开入口在真实 COS 因子面板的六种形状
@@ -357,7 +360,7 @@ provenance、MetricValue 与配置哈希均对拍通过，GPU 峰值均为 9,332
 计数、provenance、标量结果与配置哈希逐字段对拍通过。自动路由仅对精确
 2586 日 × 5461 股 × 8 因子、默认参数及 L20 放行这两个完整集合，
 顺序不限；rank 至少要求 14 GiB、quantile 至少要求 8 GiB 有效空闲显存。
-子集、含重复项、其它组合和相邻形状继续使用 CPU；F12 需另看下文的独立证据。证据：
+子集、其它组合和相邻形状继续使用 CPU；F12 需另看下文的独立证据。证据：
 `docs/benchmarks/real_cos_f8_rank_chain_20260927.json` 与
 `docs/benchmarks/real_cos_f8_quantile_chain_20260927.json`。
 独立 F12 COS 面板在精确 2586 日 × 5461 股 × 12 因子形状上，单指标
@@ -390,7 +393,7 @@ CUDA 约 9.66–9.67 秒，峰值显存 9,332,757,504 字节；quantile 链 CPU 
 仅在精确 2586 日 × 5461 股 × 12 因子、float64、默认参数、无特殊输入和
 NVIDIA L20 上，对这两个完整指标集合自动选择 CUDA；rank 至少要求 14 GiB、
 quantile 至少要求 8 GiB 有效空闲显存，且实际空闲显存也不得低于门槛。
-子集、重复项、其它未认证 F12 组合和相邻形状仍走 CPU。证据见
+子集、其它未认证 F12 组合和相邻形状仍走 CPU。证据见
 `docs/benchmarks/real_cos_f12_rank_chain_20260927.json` 与
 `docs/benchmarks/real_cos_f12_quantile_chain_20260927.json`。
 
@@ -405,7 +408,7 @@ GPU 峰值 9,332,757,504 字节；quantile 链 CPU 53.23–53.28 秒、CUDA
 `docs/benchmarks/real_cos_f13_quantile_chain_auto_20260927.json`。
 现在仅在此精确形状、float64、默认参数、无特殊输入和 NVIDIA L20 下，
 对上述两个完整集合自动选 CUDA；rank 要求至少 14 GiB、quantile 至少
-8 GiB 有效及实际空闲显存。单指标、子集、重复项、其他组合和相邻形状
+8 GiB 有效及实际空闲显存。单指标、子集、其他组合和相邻形状
 不沿用 F13 批次认证。原始证据见
 `docs/benchmarks/real_cos_f13_rank_chain_20260927.json` 与
 `docs/benchmarks/real_cos_f13_quantile_chain_20260927.json`。
@@ -457,7 +460,7 @@ quantile 链 CPU 约 4.9 秒，CUDA 约 1.40 秒。更新后两组
 只对精确 F2 形状、完整集合、float64、默认参数、无特殊输入和
 NVIDIA L20 自动选 CUDA；rank 链要求有效及实际空闲显存至少
 14 GiB（实测 GPU pool 峰值 11,234,754,560 字节），quantile 链
-至少 8 GiB（峰值 757,267,456 字节）。子集、重复项、其它组合
+至少 8 GiB（峰值 757,267,456 字节）。子集、其它组合
 及相邻形状继续走 CPU。证据：
 `docs/benchmarks/real_cos_f2_rank_chain_ab_20260929.json`、
 `docs/benchmarks/real_cos_f2_rank_chain_auto_v21_20260929.json`、
@@ -470,7 +473,7 @@ F12 另有精确三指标混合请求 `rank_ic`、`quantile_spread`、
 9,332,757,504 字节；三项的数值、制品、掩码、计数、provenance、
 MetricValue 和配置哈希均与 CPU 对拍通过。只在相同精确 F12 面板、
 float64、默认参数、无特殊输入及 NVIDIA L20 下，对此完整集合自动选 CUDA；
-有效空闲显存和实际空闲显存均至少 14 GiB。指标顺序不限，但子集、重复项
+有效空闲显存和实际空闲显存均至少 14 GiB。指标顺序不限，但子集
 或其它组合不沿用此认证。证据见
 `docs/benchmarks/real_cos_f12_mixed_three_20260927.json`。
 
@@ -507,7 +510,8 @@ MetricValue 均对拍通过。改路由前两轮 `auto` 都留在 CPU；现在�
 `docs/benchmarks/real_cos_f24_rank_chain_20260927.json` 和
 `docs/benchmarks/real_cos_f24_rank_chain_auto_20260927.json`。
 
-F32 的完整 rank 链、完整分位链、默认三指标整批及三个单指标请求已分别认证自动 CUDA。只读预检命令：
+F32 的完整 rank 链、完整分位链、完整 Pearson 链、默认三指标整批及已测
+单指标请求各有独立的自动 CUDA 认证。只读预检命令：
 
 ```bash
 DATA_ACCESS_COS_CLI=/usr/local/bin/admin-cos \
@@ -532,12 +536,19 @@ F32 样本按已测最大父/worker RSS 合计加 20% 后上取整为 50 GiB，
 
 `scripts/benchmark_real_cos_factor_tiles.py` 是另一条 33–64 因子的研究路径，
 不改变上面的单次完整请求限制。它先读取绑定的 landing manifest，并按对象字节数和
-因子 ID 固定排序；每个因子对象最多 128 MiB，所选对象每遍合计最多 4096 MiB。
-第一遍经 DataAccess 的 `read_bound_factor` 校验对象身份并求所有因子的共同日期、资产轴；
-再按注册交易日历和 AdjVwap 构造一次共同标签；第二遍重新校验每个对象的来源及轴，
-按最多 32 因子一组（默认 8）调用公开 `evaluate`。运行前及每组前检查主机可用内存
-和 DataAccess COS 临时缓存所在文件系统的剩余空间。该两遍读取降低常驻因子面板规模，
-代价是对每个所选对象读取两次。
+因子 ID 固定排序；每个因子对象最多 128 MiB，所选对象每遍合计默认最多 4096 MiB，
+可显式以 `--max-total-mib 6144` 提高上限以覆盖当前 61 个合格因子；单对象及每组
+内存限制不变。默认运行的第一遍经 DataAccess 的 `read_bound_factor` 校验对象身份并求
+所有因子的共同日期、资产轴；再按注册交易日历和 AdjVwap 构造一次共同标签；
+第二遍重新校验每个对象的来源及轴，按最多 32 因子一组（默认 8）调用公开 `evaluate`。
+运行前及每组前检查主机可用内存和 DataAccess COS 临时缓存所在文件系统的剩余空间。
+两遍读取降低常驻因子面板规模，代价是对每个所选对象读取两次。
+
+可选 `--axis-index PATH` 将完整共同日期和资产坐标、绑定 manifest、所选因子的顺序与
+每个来源的 SHA-256、字节数、ETag、轴哈希写入最多 1 MiB 的索引。索引只在首遍完整校验、
+所有分片完成后原子写入。后续使用同一路径时可跳过首遍 COS 读取；脚本先核对索引校验和、
+manifest 与因子选择，第二遍仍逐因子核对来源和轴哈希，并确认索引的全部共同坐标仍在
+每个当前因子帧中。标签每次从注册日历和 AdjVwap 重新读取；索引损坏或身份漂移会报错。
 
 以下命令在总仓库根目录运行。第一条只读 manifest 并做资源预检；第二条显式执行 CPU
 分片评估并写入有界 JSON 报告。执行时省略 `--backend` 默认选择 `auto`：
@@ -575,6 +586,51 @@ python -m quant_evaluator.scripts.benchmark_real_cos_factor_tiles --factors 48 -
 不是一次完整 F48 `EvaluationBundle`；尚无 F48 单次完整请求的性能或最快后端认证。
 当前绑定 manifest 的合格对象数为 61，因此该清单不能提供 64 个因子的实测请求；
 即便另一清单有足够对象，F64 单次完整请求仍未获支持或最快后端认证。
+
+另一次 F48 `--tile-size 12 --backend auto` 的
+[真实 COS 报告](benchmarks/real_cos_f48_factor_tiles_auto_t12_20260929.json)
+分为 4 组，均走 CUDA；与上述默认 8 因子分片的 auto 集合对拍通过 144/144 个
+逐因子指标。t12 从命令开始到最后一组完成为 390.08 秒，t8 为 373.60 秒；
+当前默认分片大小仍为 8，不从这一次结果外推其它形状的最优分片大小。
+
+当前 61 个合格对象另以显式 `--max-total-mib 6144` 完成 2586 日 × 5461 股 ×
+61 因子的 8 组实测。[首轮 auto 集合](benchmarks/real_cos_f61_factor_tiles_auto_20260929.json)
+总耗时 496.15 秒，其中首遍来源/轴扫描 187.91 秒；前七个 F8 分片使用 CUDA，
+最后 F5 分片使用 CPU，后者评估耗时 23.96 秒。
+[完整轴索引](benchmarks/real_cos_f61_axis_index_20260929.json) 由已完成首轮生成。
+[索引复用的严格 CUDA 集合](benchmarks/real_cos_f61_factor_tiles_cuda_indexed_20260929.json)
+跳过首遍扫描（记录为 0 秒），总耗时 273.94 秒，最后 F5 分片评估耗时 4.74 秒。
+两份集合的来源、标签及输出证据对拍通过 183/183 个逐因子指标。
+F5 的独立[混合三指标诊断](benchmarks/real_cos_f61_tail5_mixed_three_20260929.json)
+在 F61 绑定共同轴的最后五个因子上，以精确 2586 日 × 5461 股 × 5 因子、
+`rank_ic`、`quantile_spread`、`factor_turnover_rate` 完成
+CPU/CUDA/auto/auto/CUDA/CPU 六轮公开入口 A/B。六轮完整制品、配置哈希
+和执行回执对拍通过；CPU 两轮热运行 21.69/21.68 秒，严格 CUDA
+3.81/3.78 秒，GPU pool 峰值 5,734,665,216 字节。原两轮 `auto`
+仍走 CPU。现仅对此精确形状和完整规范三指标集合、float64、默认参数、
+无特殊输入、单 NVIDIA L20 且实际及有效空闲显存均至少 14 GiB
+开放自动 CUDA，回执原因 `certified_batch_real_cos_f5_mixed_three`。
+相邻形状、子集和其他组合不继承；路由后的真实 `auto` 复测见下文。
+两轮总耗时还同时受 COS 缓存状态和后端选择影响，不能把差值全归因于轴索引。
+这些分片报告均不代表一次完整 F61 `EvaluationBundle`。
+
+路由后又在同一 61 因子清单上复用已校验轴索引，以 `auto` 完成 8/8 分片；
+最后 F5 也走 CUDA，评估 4.67 秒，整批命令耗时 275.45 秒，
+首遍轴扫描为 0 秒。与上述索引复用的显式 CUDA 集合逐因子对拍，
+183/183 项通过，来源与标签身份一致。
+[F61 路由后 auto 报告](benchmarks/real_cos_f61_factor_tiles_auto_indexed_v23_20260929.json)
+是此精确形状的证据；两个总耗时仍受缓存与机器负载影响，
+不能推断所有指标或任意股票池规模都应走 CUDA。
+
+同一 F61 清单又按基线 → `--reuse-manifest` → 反序基线完成 A–B–A：
+三轮均复用轴索引、8/8 分片走 CUDA，61 因子 × 3 指标的 183/183 项对拍通过。
+整批命令耗时依次为 282.71、262.80、279.02 秒；分片加载合计依次为
+209.69、186.83、205.44 秒。原始报告为
+[首轮基线](benchmarks/real_cos_f61_manifest_baseline_v2_20260928.json)、
+[manifest 复用](benchmarks/real_cos_f61_manifest_reuse_20260928.json) 和
+[反序基线](benchmarks/real_cos_f61_manifest_baseline_warm_20260928.json)。
+`--reuse-manifest` 默认关闭；这些数值只覆盖该清单和当前缓存状态，不代表
+其它清单或一次完整 F61 `EvaluationBundle` 的性能。
 
 CPU 参考后端的 Spearman 日 IC 已改为每次最多处理 128 个
 `(交易日, 因子)` 行，避免整段历史的哨兵值与秩数组同时驻留；精确路径还直接
@@ -673,6 +729,42 @@ MetricValue 与配置哈希均通过对拍。实测 GPU 峰值 2,341,843,456
 单指标请求要求有效及实际空闲显存至少 8 GiB，其它形状/参数仍用 CPU。
 证据见 `docs/benchmarks/real_cos_f32_quantile_returns_full_ab_20260929.json`
 和 `docs/benchmarks/real_cos_f32_quantile_returns_full_auto_v20_20260929.json`。
+
+同一绑定 COS manifest 的 F32 全市场面板还对单指标
+`quantile_returns_daily` 完成六轮公开入口 CPU/CUDA/auto 交错 A/B
+（CPU/CUDA/auto/auto/CUDA/CPU），每轮含冷、热调用。两轮 CPU 热运行
+49.57/49.67 秒，严格 CUDA 27.10/27.28 秒；完整 artifact 值
+（rtol=1e-8、atol=1e-10）、有效掩码、计数、provenance、MetricValue
+和配置哈希通过对拍。原两轮 `auto` 留在 CPU，热运行 49.69/49.56 秒。
+GPU pool 峰值 2,341,843,456 字节。证据见
+[`real_cos_f32_quantile_returns_daily_ab_20260929.json`](benchmarks/real_cos_f32_quantile_returns_daily_ab_20260929.json)。
+策略 v24 仅对精确 2586 日 × 5461 股 × 32 因子、float64、默认参数、
+无特殊输入、单 NVIDIA L20 的该单指标请求自动选择 CUDA，回执原因是
+`certified_single_metric_real_cos_f32_quantile_returns_daily`；
+实际与策略有效空闲显存均至少需 8 GiB。相邻形状、其它参数或其它指标
+不继承此认证。
+
+路由后同一绑定清单的六轮复测全部对拍通过，两个 `auto` 均走 CUDA，
+热调用 30.83/31.27 秒；同期 CPU 52.99/53.80 秒，严格 CUDA
+30.58/31.67 秒。绝对耗时受同机负载影响，只在交错轮次内比较。
+[路由后 F32 daily 报告](benchmarks/real_cos_f32_quantile_returns_daily_auto_v24_20260929.json)。
+
+同一 F32 绑定面板的完整 Pearson 链（`pearson_ic`、`pearson_ic_series`、
+`pearson_ic_std`、`pearson_ic_ir`）完成 CPU/CUDA/auto/auto/CUDA/CPU
+六轮公开入口 A/B，每轮含冷、热调用。CPU 两轮热运行 35.03/35.40 秒，
+严格 CUDA 26.39/26.37 秒；四项完整制品、有效掩码、计数、
+provenance、逐因子 MetricValue 与配置哈希均通过对拍，CUDA pool 峰值
+7,809,549,312 字节。原两轮 `auto` 因 `metric_set_not_certified` 留在 CPU，
+热运行 34.74/35.06 秒；原始报告见
+[`real_cos_f32_pearson_chain_ab_20260929.json`](benchmarks/real_cos_f32_pearson_chain_ab_20260929.json)。
+据此，当前策略仅为精确 2586 日 × 5461 股 × 32 因子、float64、
+默认参数、无特殊输入、单 NVIDIA L20，且实际及有效空闲显存均至少
+14 GiB 的完整四指标集合选择 CUDA，回执原因是
+`certified_batch_real_cos_f32_pearson_chain`。子集、其它组合和相邻形状不继承；
+路由后又完成六轮交错 A/B，完整对拍通过，两轮 `auto` 均走 CUDA，
+热运行 26.72/26.82 秒；同期 CPU 为 35.34/35.82 秒。
+原始证据见
+[`real_cos_f32_pearson_chain_auto_v22_20260929.json`](benchmarks/real_cos_f32_pearson_chain_auto_v22_20260929.json)。
 
 新版 CPU 行块与加载器组合在同一 F24 rank 链上另完成六轮真实 COS
 公开入口复测，完整制品对拍通过；父进程 RSS 峰值 10,850,236 KiB，

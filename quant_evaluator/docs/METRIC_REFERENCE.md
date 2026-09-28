@@ -544,7 +544,7 @@ Calmar=\frac{(\prod_{t=1}^{T}(1+r_t))^{P/T}-1}{MDD}
 | `annualization` | `'cagr'` |
 | `missing_return_policy` | `'unknown'` |
 
-实现核对：[函数定义](../metrics/portfolio_stats.py#L815)；`quant_evaluator.metrics.portfolio_stats.compute_calmar_ratio`。
+实现核对：[函数定义](../metrics/portfolio_stats.py#L816)；`quant_evaluator.metrics.portfolio_stats.compute_calmar_ratio`。
 
 <a id="metric-change_point_score"></a>
 ## change_point_score — Change-Point Score
@@ -1436,7 +1436,7 @@ Decay_{h,f}=\mathrm{mean}_{t:\,IC_{t,f}^{(h)}\ finite}IC_{t,f}^{(h)}
 |---|---|
 | `horizons` | `None` |
 
-实现核对：[函数定义](../metrics/ic_summary.py#L1021)；`quant_evaluator.metrics.ic_summary.compute_ic_decay_from_mean_ics`。
+实现核对：[函数定义](../metrics/ic_summary.py#L1028)；`quant_evaluator.metrics.ic_summary.compute_ic_decay_from_mean_ics`。
 
 <a id="metric-ic_ir"></a>
 ## ic_ir — IC Information Ratio
@@ -2212,7 +2212,7 @@ D_{max}=-\min_t d_t,\qquad d_t=\frac{W_t}{\max_{0\le u\le t}W_u}-1,\quad W_0=1
 |---|---|
 | `missing_return_policy` | `'unknown'` |
 
-实现核对：[函数定义](../metrics/portfolio_stats.py#L639)；`quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown`。
+实现核对：[函数定义](../metrics/portfolio_stats.py#L640)；`quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown`。
 
 <a id="metric-max_underwater_duration"></a>
 ## max_underwater_duration — Max Underwater Duration
@@ -4255,7 +4255,7 @@ x_t=r_t-h,\quad d=\sqrt{{\sum_{x_t\lt 0}x_t^2\over D}},\quad M={\bar x\over d}\t
 | `mar` | `None` |
 | `annualization` | `'sqrt_frequency'` |
 
-实现核对：[函数定义](../metrics/portfolio_stats.py#L943)；`quant_evaluator.metrics.portfolio_stats.compute_sortino_ratio`。
+实现核对：[函数定义](../metrics/portfolio_stats.py#L944)；`quant_evaluator.metrics.portfolio_stats.compute_sortino_ratio`。
 
 <a id="metric-spearman_ic"></a>
 ## spearman_ic — spearman_ic
@@ -5121,7 +5121,7 @@ WinRate=\frac{\sum_{t\in V}\mathbf1(r_t\gt 0)}{|V|}
 $`V`$ 只含有限收益；等于0不算胜。至少一个有限值即可由低层函数计算，全无有效收益NaN。
 
 
-实现核对：[函数定义](../metrics/portfolio_stats.py#L1077)；`quant_evaluator.metrics.portfolio_stats.compute_win_rate`。
+实现核对：[函数定义](../metrics/portfolio_stats.py#L1078)；`quant_evaluator.metrics.portfolio_stats.compute_win_rate`。
 
 <a id="metric-worst_12m"></a>
 ## worst_12m — Worst Rolling 252 Periods (legacy ID)
@@ -5575,15 +5575,15 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.ic._spearman_rank_correlation](../metrics/ic.py#L186)
 - [quant_evaluator.metrics.ic.compute_daily_ic](../metrics/ic.py#L218)
 - [quant_evaluator.metrics.ic.compute_mean_ic](../metrics/ic.py#L611)
-- [quant_evaluator.metrics.ic_summary._check_min_periods](../metrics/ic_summary.py#L788)
-- [quant_evaluator.metrics.ic_summary._coerce_real_float_array](../metrics/ic_summary.py#L771)
+- [quant_evaluator.metrics.ic_summary._check_min_periods](../metrics/ic_summary.py#L795)
+- [quant_evaluator.metrics.ic_summary._coerce_real_float_array](../metrics/ic_summary.py#L778)
 - [quant_evaluator.metrics.ic_summary._rolling_mean_nan](../metrics/ic_summary.py#L264)
 - [quant_evaluator.metrics.ic_summary.compute_ic_stability](../metrics/ic_summary.py#L155)
-- [quant_evaluator.metrics.ic_summary.compute_ic_stability_scalar](../metrics/ic_summary.py#L850)
-- [quant_evaluator.metrics.ic_summary.compute_ic_summary_stats](../metrics/ic_summary.py#L796)
+- [quant_evaluator.metrics.ic_summary.compute_ic_stability_scalar](../metrics/ic_summary.py#L857)
+- [quant_evaluator.metrics.ic_summary.compute_ic_summary_stats](../metrics/ic_summary.py#L803)
 - [quant_evaluator.metrics.ic_summary.compute_ic_tstat](../metrics/ic_summary.py#L64)
 - [quant_evaluator.metrics.ic_summary.compute_icir](../metrics/ic_summary.py#L20)
-- [quant_evaluator.metrics.ic_summary.compute_quantile_rank_stability](../metrics/ic_summary.py#L881)
+- [quant_evaluator.metrics.ic_summary.compute_quantile_rank_stability](../metrics/ic_summary.py#L888)
 - [quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats](../metrics/ic_summary.py#L299)
 - [quant_evaluator.metrics.label_panel.normalize_label_panel](../metrics/label_panel.py#L11)
 - [quant_evaluator.metrics.long_only._matrix](../metrics/long_only.py#L8)
@@ -5591,7 +5591,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.multiple_testing._validate_p_values](../metrics/multiple_testing.py#L27)
 - [quant_evaluator.metrics.portfolio_stats._batched_linear_quantile_cutoffs](../metrics/portfolio_stats.py#L354)
 - [quant_evaluator.metrics.portfolio_stats._lerp_linear](../metrics/portfolio_stats.py#L343)
-- [quant_evaluator.metrics.portfolio_stats._rolling_sharpe_per_window](../metrics/portfolio_stats.py#L1107)
+- [quant_evaluator.metrics.portfolio_stats._rolling_sharpe_per_window](../metrics/portfolio_stats.py#L1108)
 - [quant_evaluator.metrics.portfolio_stats._validate_missing_return_policy](../metrics/portfolio_stats.py#L191)
 - [quant_evaluator.metrics.portfolio_stats.equal_gross_weights](../metrics/portfolio_stats.py#L126)
 - [quant_evaluator.metrics.predictive._as_series](../metrics/predictive.py#L43)
@@ -5651,12 +5651,12 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.temporal.compute_half_life](../metrics/temporal.py#L389)
 - [quant_evaluator.metrics.temporal.compute_mean_rank_stability](../metrics/temporal.py#L280)
 - [quant_evaluator.metrics.temporal.compute_rank_stability](../metrics/temporal.py#L173)
-- [quant_evaluator.metrics.turnover._coerce_real_float_matrix](../metrics/turnover.py#L540)
+- [quant_evaluator.metrics.turnover._coerce_real_float_matrix](../metrics/turnover.py#L545)
 - [quant_evaluator.metrics.turnover._rank_weights_matrix](../metrics/turnover.py#L206)
-- [quant_evaluator.metrics.turnover.compute_turnover_adjusted_ic_from_series](../metrics/turnover.py#L593)
+- [quant_evaluator.metrics.turnover.compute_turnover_adjusted_ic_from_series](../metrics/turnover.py#L598)
 - [quant_evaluator.metrics.turnover.compute_turnover_series](../metrics/turnover.py#L125)
-- [quant_evaluator.metrics.turnover.compute_turnover_stability_from_series](../metrics/turnover.py#L552)
-- [quant_evaluator.metrics.turnover.estimate_turnover_from_ranks](../metrics/turnover.py#L254)
+- [quant_evaluator.metrics.turnover.compute_turnover_stability_from_series](../metrics/turnover.py#L557)
+- [quant_evaluator.metrics.turnover.estimate_turnover_from_ranks](../metrics/turnover.py#L253)
 - [quant_evaluator.metrics.underwater._as_1d](../metrics/underwater.py#L65)
 - [quant_evaluator.metrics.underwater._path_events](../metrics/underwater.py#L73)
 
@@ -5755,8 +5755,8 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.portfolio_stats.compute_calmar_ratio` | `4d36a055d9d591f93e01f68063eda22a443d5409edccce044a89285089092969` |
 | `quant_evaluator.metrics.portfolio_stats.compute_long_short_returns` | `46426230d461108f255f798b76fee8664af2a0a5bd99efb3bebc70085e1d397f` |
 | `quant_evaluator.metrics.portfolio_stats.compute_maximum_drawdown` | `23e459f1640b225414ede3b31077e077f493bf04e0cab41982809c9b55ad9d0d` |
-| `quant_evaluator.metrics.portfolio_stats.compute_sharpe_ratio` | `206d27600fc376a55fd499aaafbbecc2b16efefc46c596175785232f3af47cf3` |
-| `quant_evaluator.metrics.portfolio_stats.compute_sortino_ratio` | `96a6e0ef16465d8cc1852a2eb82834a1b72f3f486f7c6e7362567209d99960ed` |
+| `quant_evaluator.metrics.portfolio_stats.compute_sharpe_ratio` | `3cd15428f519769d2132441e1d44e7a2198b835aedcf14ec3c751f05de49de10` |
+| `quant_evaluator.metrics.portfolio_stats.compute_sortino_ratio` | `95236154dcfe6f3e0e891f805684800b5c626a4f2728bc6d1ec21c58eb2cdf47` |
 | `quant_evaluator.metrics.portfolio_stats.compute_win_rate` | `e7b0cd50717a8af9ed1ad2246f768ac5ea20e2b1ba29053f931c289c86d622a3` |
 | `quant_evaluator.metrics.portfolio_stats.equal_gross_weights` | `bd21f497ac7f3bb3bab5b8e949cd5cc84b71d231f1897a4361d53d7efd12f3ce` |
 | `quant_evaluator.metrics.predictive._as_series` | `64761316903f12723e1e1942e0a28a2f60e8ddabbeb12a26ab9b1be4250ea939` |
@@ -5890,11 +5890,11 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.temporal.compute_mean_rank_stability` | `88bb6005dd8f4e979212c8ffe343ad826e470747631f7ec69956805bfec94860` |
 | `quant_evaluator.metrics.temporal.compute_rank_stability` | `757546d599b2e0e23193df55444c4777d922e83d5dfed2c5e3b6a554fe2480a6` |
 | `quant_evaluator.metrics.turnover._coerce_real_float_matrix` | `678b2c3a994aea1f51a021fd99ffadac41669d6490861d20cc949a0b2849b488` |
-| `quant_evaluator.metrics.turnover._rank_weights_matrix` | `8f99a6e9e83b7981d805c8b39cba719c76fe40120d0e8c5b8c3d5f7d523d181d` |
+| `quant_evaluator.metrics.turnover._rank_weights_matrix` | `1c53b412dd4d4cab9af47224785b4101a48263754e0eb6ae7b255d9681b5dbfd` |
 | `quant_evaluator.metrics.turnover.compute_turnover_adjusted_ic_from_series` | `a27069779fc49d3f668c27c279fc5f52a25fe51d5387506dac9b4197685cdb5e` |
 | `quant_evaluator.metrics.turnover.compute_turnover_series` | `bb63754a8a8f7167f4395ab85004135c5f29215c87c648f42cf8935f61884327` |
 | `quant_evaluator.metrics.turnover.compute_turnover_stability_from_series` | `63ca4874a2216b7680700f806885b3694d0786fdb51836cd439a4db98a153c2d` |
-| `quant_evaluator.metrics.turnover.estimate_turnover_from_ranks` | `ca7351ca15992e6da00b6894783ab9ada5eff6c945731e1342f0149eec5a9ab0` |
+| `quant_evaluator.metrics.turnover.estimate_turnover_from_ranks` | `4cc39bc9f3b946a0300424add1278451c89f42ab5ed68815385d93bb9f13550e` |
 | `quant_evaluator.metrics.turnover_cost.compute_turnover_cost` | `4393d560afd261dbd62c3125b68d735ef23cb7ef52b6b7bbad6ea92346eb3d6a` |
 | `quant_evaluator.metrics.underwater._as_1d` | `ab58eec4852a0657ae29653d7e83673e82e220fde3315fe1eacda1095cf442f6` |
 | `quant_evaluator.metrics.underwater._path_events` | `def3f0eee4c144e32872e1fa7fa87f90c7fb9870222887a6099fc715d663be38` |

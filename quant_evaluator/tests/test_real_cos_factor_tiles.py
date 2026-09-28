@@ -232,3 +232,123 @@ def test_default_metrics_tile_values_match_full_batch_cpu():
             assert actual["value"] == pytest.approx(expected.value, nan_ok=True)
             assert actual["valid"] == expected.valid
             assert actual["observation_count"] == expected.observation_count
+
+
+def test_max_total_mib_can_explicitly_cover_f61():
+    mapping = _mapping(61)
+    for row in mapping.values():
+        row["bytes"] = 80 * 1024**2
+    with pytest.raises(ValueError, match="sample unavailable"):
+        tiles.select_records(mapping, 61, 128, 4096)
+    assert len(tiles.select_records(mapping, 61, 128, 6144)) == 61
+    with pytest.raises(ValueError, match="6144"):
+        tiles.select_records(mapping, 61, 128, 6145)
+
+
+def _small_axis_index():
+    records = tiles.select_records(_mapping(33), 33, 128, 1)
+    dates = pd.date_range("2024-01-01", periods=3)
+    assets = {"A.SZ", "B.SH"}
+    sources = tuple((*record, "etag", "a" * 64) for record in records)
+    return records, dates, assets, sources
+
+
+def test_axis_index_round_trip_identity_and_tamper(tmp_path):
+    records, dates, assets, sources = _small_axis_index()
+    index = tiles.build_axis_index("m" * 64, records, dates, assets, sources)
+    path = tmp_path / "axes.json"
+    tiles.write_axis_index_atomic(path, index)
+    loaded_dates, loaded_assets, loaded_sources = tiles.read_axis_index(
+        path, "m" * 64, records)
+    assert loaded_dates.equals(dates)
+    assert loaded_assets == assets
+    assert loaded_sources == sources
+    with pytest.raises(ValueError, match="selection or manifest"):
+        tiles.read_axis_index(path, "n" * 64, records)
+    with pytest.raises(ValueError, match="selection or manifest"):
+        tiles.read_axis_index(path, "m" * 64, records[::-1])
+    changed = json.loads(path.read_text())
+    changed["dates_ns"].pop()
+    path.write_text(json.dumps(changed))
+    with pytest.raises(ValueError, match="checksum"):
+        tiles.read_axis_index(path, "m" * 64, records)
+
+
+def test_axis_index_bounded_and_atomic(monkeypatch, tmp_path):
+    records, dates, assets, sources = _small_axis_index()
+    with pytest.raises(ValueError, match="bound"):
+        tiles.build_axis_index("m" * 64, records,
+                               pd.date_range("2024-01-01", periods=10001), assets, sources)
+    index = tiles.build_axis_index("m" * 64, records, dates, assets, sources)
+    path = tmp_path / "axes.json"
+    tiles.write_axis_index_atomic(path, index)
+    old = path.read_bytes()
+    monkeypatch.setattr(tiles.os, "replace", lambda *args: (_ for _ in ()).throw(OSError("disk error")))
+    with pytest.raises(OSError, match="disk error"):
+        tiles.write_axis_index_atomic(path, index)
+    assert path.read_bytes() == old
+    assert list(tmp_path.iterdir()) == [path]
+    path.write_bytes(b"x" * (tiles.AXIS_INDEX_MAX_BYTES + 1))
+    with pytest.raises(ValueError, match="bound"):
+        tiles.read_axis_index(path, "m" * 64, records)
+
+
+def test_axis_index_reuse_skips_first_pass_and_preserves_report(monkeypatch, tmp_path):
+    records, dates, assets, _ = _small_axis_index()
+    columns = sorted(assets)
+    frames = [pd.DataFrame({name: [1., 2., 3.] for name in columns}, index=dates)
+              for _ in records]
+    source_rows = tuple((*record, "etag", tiles.axis_hash(frame))
+                        for record, frame in zip(records, frames))
+    reads = []
+    def frames_for(selected, *args):
+        reads.extend(row[0] for row in selected)
+        for row in selected:
+            idx = records.index(row)
+            yield frames[idx], source_rows[idx]
+    monkeypatch.setattr(tiles, "read_manifest", lambda sha: _mapping(33))
+    monkeypatch.setattr(tiles, "memory_preflight", lambda *args: {"pass": True})
+    monkeypatch.setattr(tiles, "iter_frames", frames_for)
+    label = SimpleNamespace(content_hash="label",
+                            asset_axis=AxisRef("asset", "str", 2, np.array(columns)))
+    label_reads = []
+    def fresh_labels(*args):
+        label_reads.append(True)
+        return dates, columns, label
+    monkeypatch.setattr(tiles, "load_labels", fresh_labels)
+    monkeypatch.setattr(tiles, "evaluate", lambda *args, **kwargs: object())
+    monkeypatch.setattr(tiles, "summarize_tile", lambda bundle, ids:
+                        {"factor_ids": list(ids), "backend_requested": "cpu",
+                         "backend_used": "cpu", "config_hash": "same",
+                         "execution_receipt": {"backend_requested": "cpu",
+                                               "backend_used": "cpu",
+                                               "config_hash": "same"}})
+    index_path = tmp_path / "axes.json"
+    def run(output):
+        monkeypatch.setattr(sys, "argv", ["tiles", "--factors", "33", "--run",
+                                        "--backend", "cpu", "--axis-index", str(index_path),
+                                        "--output", str(output)])
+        tiles.main()
+        return json.loads(output.read_text())
+    first = run(tmp_path / "first.json")
+    assert len(reads) == 66
+    assert index_path.exists()
+    reads.clear()
+    monkeypatch.setattr(tiles, "intersect_axes", lambda *args:
+                        pytest.fail("reused index started first pass"))
+    second = run(tmp_path / "second.json")
+    assert len(reads) == 33
+    assert len(label_reads) == 2
+    assert first["performance"]["axis_index_reused"] is False
+    assert second["performance"]["axis_index_reused"] is True
+    first.pop("performance")
+    second.pop("performance")
+    assert first == second
+    frames[0] = frames[0].drop(columns="B.SH")
+    with pytest.raises(ValueError, match="changed"):
+        run(tmp_path / "drift.json")
+    frames[0] = pd.DataFrame({name: [1., 2., 3.] for name in columns}, index=dates)
+    source_rows = ((source_rows[0][0], source_rows[0][1], source_rows[0][2],
+                    source_rows[0][3], "different-etag", source_rows[0][5]), *source_rows[1:])
+    with pytest.raises(ValueError, match="source or axes changed"):
+        run(tmp_path / "source-drift.json")

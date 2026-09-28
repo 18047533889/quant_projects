@@ -238,10 +238,9 @@ def _rank_weights_matrix(values: np.ndarray, min_obs: int = 10) -> np.ndarray:
     n_finite = np.sum(finite_mask, axis=1)
     valid_row = (n_finite >= min_obs) & (n_finite >= 2)
 
-    # Finite sentinel (row max + 1) ranks last without disturbing finite ranks;
-    # a finite value avoids the scipy ``rankdata(axis=1)`` quirk with +inf.
-    row_max = np.where(finite_mask, flat, -np.inf).max(axis=1, keepdims=True)
-    sentinel = np.where(finite_mask, flat, row_max + 1.0)
+    # +inf always ranks after finite values. A finite row_max + 1 sentinel
+    # can round back to row_max for large signals and tie with a valid asset.
+    sentinel = np.where(finite_mask, flat, np.inf)
     ranks_full = rankdata(sentinel, axis=1)  # (T*F, N)
     sum_finite = np.sum(np.where(finite_mask, ranks_full, 0.0), axis=1, keepdims=True)
     norm = ranks_full / sum_finite
@@ -278,6 +277,9 @@ def estimate_turnover_from_ranks(
         raise ValueError(f"window must be >= 1, got {window}")
 
     values = np.asarray(factor_batch.values, dtype=np.float64)
+    validity = getattr(factor_batch, "validity", None)
+    if validity is not None:
+        values = np.where(validity, values, np.nan)
     T, N, F = values.shape
 
     if T <= window:
@@ -313,6 +315,9 @@ def _estimate_turnover_from_ranks_reference(
         raise ValueError(f"window must be >= 1, got {window}")
 
     values = np.asarray(factor_batch.values, dtype=np.float64)
+    validity = getattr(factor_batch, "validity", None)
+    if validity is not None:
+        values = np.where(validity, values, np.nan)
     T, N, F = values.shape
 
     if T <= window:

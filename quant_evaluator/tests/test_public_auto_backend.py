@@ -8,6 +8,7 @@ import sys
 
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
+from quant_evaluator.contracts.errors import InvalidContractError
 from quant_evaluator.runtime.evaluator import evaluate
 
 module = import_module("quant_evaluator.runtime.evaluator")
@@ -606,12 +607,13 @@ def test_f32_rank_and_quantile_chains_exact_shape_and_gpu_gate(monkeypatch):
                        8 * 1024 ** 3, 8 * 1024 ** 3]
     assert select(batch, labels, quantile_metrics[:-1], **options) == (
         "cpu", "metric_set_not_certified")
-    single_metrics = ("rank_ic", "rank_ic_series", "quantile_returns_full", "quantile_spread", "factor_turnover_rate")
+    single_metrics = ("rank_ic", "rank_ic_series", "quantile_returns_full", "quantile_returns_daily", "quantile_spread", "factor_turnover_rate")
     for metric in single_metrics:
         assert select(batch, labels, (metric,), **options) == (
             "cuda_strict", f"certified_single_metric_real_cos_f32_{metric}")
-    assert budgets[-5:] == [14 * 1024 ** 3, 17 * 1024 ** 3,
-                            8 * 1024 ** 3, 8 * 1024 ** 3, 8 * 1024 ** 3]
+    assert budgets[-6:] == [14 * 1024 ** 3, 17 * 1024 ** 3,
+                            8 * 1024 ** 3, 8 * 1024 ** 3, 8 * 1024 ** 3,
+                            8 * 1024 ** 3]
     assert select(batch, labels, ("coverage",), **options) == (
         "cpu", "metric_not_certified")
     mixed_metrics = ("rank_ic", "quantile_spread", "factor_turnover_rate")
@@ -634,16 +636,22 @@ def test_f32_rank_and_quantile_chains_exact_shape_and_gpu_gate(monkeypatch):
     for field, adjacent in (("num_times", 2585), ("num_assets", 5460)):
         original = getattr(batch, field)
         setattr(batch, field, adjacent)
-        assert select(batch, labels, ("quantile_returns_full",), **options) == (
-            "cpu", "shape_outside_certified_range")
+        for metric in ("quantile_returns_full", "quantile_returns_daily"):
+            assert select(batch, labels, (metric,), **options) == (
+                "cpu", "shape_outside_certified_range")
         setattr(batch, field, original)
     assert select(batch, labels, ("quantile_returns_full",),
                   **(options | {"metric_parameters": {
                       "quantile_returns_full": {"n_quantiles": 4}}})) == (
         "cpu", "special_input_or_parameters")
+    assert select(batch, labels, ("quantile_returns_daily",),
+                  **(options | {"metric_parameters": {
+                      "quantile_returns_daily": {"n_quantiles": 4}}})) == (
+        "cpu", "special_input_or_parameters")
     labels.values = np.empty(0, dtype=np.float32)
-    assert select(batch, labels, ("quantile_returns_full",), **options) == (
-        "cpu", "dtype_outside_certified_range")
+    for metric in ("quantile_returns_full", "quantile_returns_daily"):
+        assert select(batch, labels, (metric,), **options) == (
+            "cpu", "dtype_outside_certified_range")
     labels.values = np.empty(0, dtype=np.float64)
     batch.values = np.empty(0, dtype=np.float32)
     assert select(batch, labels, metrics, **options) == (
@@ -756,6 +764,33 @@ def test_auto_alias_uses_canonical_policy_and_preserves_requested_name(monkeypat
     assert out.metadata["auto_backend_reason"] == "shape_outside_certified_range"
     assert out.metadata["metric_backends"] == {"ic.rank.mean": "cpu"}
     assert "ic.rank.mean" in out.artifacts
+
+
+@pytest.mark.parametrize("backend", ("cpu", "auto", "cuda_strict"))
+def test_public_duplicate_metric_id_is_rejected_before_backend_dispatch(backend):
+    batch, labels = _inputs(30, 60)
+    with pytest.raises(InvalidContractError, match="metric IDs must be unique"):
+        evaluate(batch, labels, metrics=("rank_ic", "rank_ic"), backend=backend)
+
+
+def test_public_distinct_alias_ids_keep_both_output_keys_and_request_hash():
+    batch, labels = _inputs(30, 60)
+    single = evaluate(batch, labels, metrics=("rank_ic",), backend="cpu")
+    pair = evaluate(
+        batch, labels, metrics=("rank_ic", "ic.rank.mean"), backend="cpu")
+    reverse = evaluate(
+        batch, labels, metrics=("ic.rank.mean", "rank_ic"), backend="cpu")
+
+    assert tuple(pair.artifacts) == ("rank_ic", "ic.rank.mean")
+    assert pair.metadata["execution_plan"]["metric_nodes"] == ("rank_ic",)
+    assert pair.metadata["metric_backends"] == {
+        "rank_ic": "cpu", "ic.rank.mean": "cpu"}
+    np.testing.assert_equal(
+        pair.artifacts["rank_ic"].values,
+        pair.artifacts["ic.rank.mean"].values)
+    assert pair.config_hash != single.config_hash
+    assert pair.config_hash != reverse.config_hash
+    assert pair.metadata["execution_receipt"]["config_hash"] == pair.config_hash
 
 
 def test_auto_mixed_public_request_uses_one_cpu_plan(monkeypatch):
