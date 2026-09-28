@@ -244,6 +244,83 @@ class GPUExecutor:
         out.metadata["exposure_kernel_no_fallback"] = bool(self.exposure_kernel_dispatches)
         return out
 
+    def run_source_tiled(self, factor_source, label_bundle, metrics, *, max_tile_size=None):
+        """Evaluate one bounded factor source in a single GPU session.
+
+        The caller owns and closes the source. This is a columnar GPU executor
+        primitive, not a public EvaluationBundle or auto-route decision.
+        """
+        from quant_evaluator.contracts.errors import InvalidContractError
+        from quant_evaluator.contracts.factor_tile_source import (
+            capture_factor_tile_source, read_validated_factor_tile,
+        )
+
+        self.validate_metric_plan(metrics)
+        metadata = capture_factor_tile_source(factor_source)
+        if max_tile_size is not None and (type(max_tile_size) is not int or max_tile_size <= 0):
+            raise InvalidContractError("max_tile_size must be a positive integer")
+        T, N, F = metadata.time_axis.size, metadata.asset_axis.size, len(metadata.factor_ids)
+        if label_bundle.values.shape != (T, N):
+            raise InvalidContractError("label shape must match the complete factor source axes")
+        if (label_bundle.asset_axis is None or label_bundle.asset_axis.values is None
+                or label_bundle.asset_axis.name != metadata.asset_axis.name
+                or label_bundle.asset_axis.dtype != metadata.asset_axis.dtype
+                or not np.array_equal(label_bundle.asset_axis.values, metadata.asset_axis.values)):
+            raise InvalidContractError("label asset coordinates must match the factor source")
+        if (len(label_bundle.decision_time) != T
+                or not np.array_equal(np.asarray(label_bundle.decision_time),
+                                      metadata.time_axis.values)):
+            raise InvalidContractError("label decision times must match the factor source")
+        tile_width = min(
+            self._factor_tile_size(metrics, T, N, F, np.dtype(metadata.dtype).itemsize),
+            metadata.max_tile_size,
+            max_tile_size or metadata.max_tile_size,
+        )
+        cp = _import_cp()
+        labels = label_bundle.values
+        if label_bundle.validity is not None:
+            labels = np.where(label_bundle.validity, labels, np.nan)
+        self.session.stage_labels(labels, label_bundle.target_id)
+        out = BatchEvaluationBundle(metadata.factor_ids, label_bundle.target_id)
+        start = 0
+        count = 0
+        while start < F:
+            stop = min(start + tile_width, F)
+            ids = metadata.factor_ids[start:stop]
+            self.session._final_tile = tile_width
+            try:
+                factor_tile = read_validated_factor_tile(factor_source, metadata, start, stop)
+                chunk = factor_tile.batch.values
+                if factor_tile.batch.validity is not None:
+                    chunk = np.where(factor_tile.batch.validity, chunk, np.nan)
+                self.session.stage_factors(chunk, ids, layout="T,N,F")
+                result = self.run(ids, metrics, label_bundle.target_id)
+            except cp.cuda.memory.OutOfMemoryError:
+                if not self.session.policy.oom_retile or stop - start <= 1:
+                    raise
+                tile_width = self.session.retile_on_oom(stop - start)
+                continue
+            finally:
+                self.session.release_factor_tile()
+            for field in ("scalar_metrics", "series_metrics", "vector_metrics", "observation_counts"):
+                destination = getattr(out, field)
+                for name, arr in getattr(result, field).items():
+                    if arr.ndim == 0 or arr.shape[-1] != stop - start:
+                        raise ValueError(f"GPU metric {name!r} has no trailing factor axis")
+                    if name not in destination:
+                        self._reserve_host_result(int(np.prod(arr.shape[:-1])) * F * arr.dtype.itemsize)
+                        destination[name] = np.empty((*arr.shape[:-1], F), dtype=arr.dtype)
+                    destination[name][..., start:stop] = arr
+                    self.session._d2h_bytes += arr.nbytes
+            start = stop
+            count += 1
+        out.metadata = self.session.metadata()
+        out.metadata["factor_tiles_processed"] = count
+        out.metadata["source_snapshot_id"] = metadata.snapshot_id
+        out.metadata["host_result_bytes_reserved"] = self._host_result_bytes
+        out.metadata["host_result_budget_bytes"] = self.session.policy.max_host_result_bytes
+        return out
+
     def _factor_tile_size_with_resident_labels(self, metrics, T, N, F, dtype_bytes, candidate_limit):
         """Size against both live labels and one tile's metric working set."""
         plan = tuple(metrics)
