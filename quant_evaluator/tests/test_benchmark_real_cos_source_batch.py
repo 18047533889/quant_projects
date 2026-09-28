@@ -132,6 +132,60 @@ def test_compare_reads_fingerprint_from_public_bundle_metadata():
         harness.compare(bundle(), bundle("b" * 64), harness.PEARSON_SINGLE)
 
 
+def test_compare_pearson_chain_checks_full_series_counts_masks_and_fingerprint():
+    factors = ("f0", "f1")
+    scalars = {
+        metric: np.asarray([0.1, 0.2])
+        for metric in ("pearson_ic", "pearson_ic_std", "pearson_ic_ir")
+    }
+    series = np.asarray([[0.1, np.nan], [0.2, 0.3], [np.nan, 0.4]])
+    def bundle(*, values=series, counts=None, fingerprint="a" * 64):
+        return SimpleNamespace(
+            factor_ids=factors,
+            metadata={"source_request_fingerprint": fingerprint},
+            scalar_metrics=scalars,
+            series_metrics={"pearson_ic_series": values},
+            observation_counts={
+                metric: np.asarray([2, 2]) for metric in harness.PEARSON_CHAIN
+            } if counts is None else counts,
+        )
+
+    result = harness.compare(
+        bundle(), bundle(), harness.PEARSON_CHAIN, expected_days=3)
+    assert result["pass"]
+    assert result["compared_metric_count"] == 12
+    assert result["metrics"]["pearson_ic_series"]["artifact_kind"] == "series"
+    assert result["metrics"]["pearson_ic_series"]["cpu_shape"] == [3, 2]
+    assert result["metrics"]["pearson_ic_series"]["finite_value_count"] == 4
+    assert len(result["metrics"]["pearson_ic_series"]["cpu_values_sha256"]) == 64
+
+    wrong_mask = series.copy()
+    wrong_mask[0, 1] = 0.0
+    assert not harness.compare(
+        bundle(), bundle(values=wrong_mask), harness.PEARSON_CHAIN,
+        expected_days=3)["pass"]
+    assert not harness.compare(
+        bundle(), bundle(values=series[:2]), harness.PEARSON_CHAIN,
+        expected_days=3)["pass"]
+    wrong_counts = {metric: np.asarray([2, 2]) for metric in harness.PEARSON_CHAIN}
+    wrong_counts["pearson_ic_series"] = np.asarray([2, 1])
+    assert not harness.compare(
+        bundle(), bundle(counts=wrong_counts), harness.PEARSON_CHAIN,
+        expected_days=3)["pass"]
+    with pytest.raises(ValueError, match="fingerprints differ"):
+        harness.compare(
+            bundle(fingerprint="z" * 64), bundle(fingerprint="z" * 64),
+            harness.PEARSON_CHAIN, expected_days=3)
+
+
+def test_pearson_chain_rejects_gpu_worker_mode(monkeypatch):
+    monkeypatch.setattr("sys.argv", [
+        "benchmark", "--factors", "61", "--metrics",
+        ",".join(harness.PEARSON_CHAIN), "--gpu-worker", "--output", "/tmp/unused.json"])
+    with pytest.raises(SystemExit):
+        harness.main()
+
+
 def test_gpu_tile_width_ab_interleaves_and_checks_every_run(monkeypatch, tmp_path):
     reports, widths = [], []
     assert harness.DEFAULT_METRICS == ("rank_ic", "quantile_spread", "factor_turnover_rate")

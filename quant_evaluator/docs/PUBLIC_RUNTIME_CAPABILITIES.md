@@ -1013,6 +1013,32 @@ cuda_strict 仍可供研究对拍。这不是 PIT 或所有指标的生产认证
 原始脱敏汇总见 docs/benchmarks/real_cos_f61_pearson_source_ab_20260930.json
 和 docs/benchmarks/real_cos_f61_pearson_source_ab_20260930_B.json。
 
+## F61 Pearson 四指标整批来源请求（2026-09-30）
+
+同一 COS manifest、2,586 日 × 5,461 股 × 61 因子、float64、tile 16，
+对 `pearson_ic`、`pearson_ic_series`、`pearson_ic_std`、`pearson_ic_ir`
+做整请求 CPU/CUDA 双顺序 A/B；每轮均核对 157,929 个结果元素，
+包括 `(2586, 61)` 日序列、有限值 mask、逐因子观测数及来源指纹。
+
+| 顺序 | CPU | CUDA | CUDA 节省 | 对拍 |
+| --- | ---: | ---: | ---: | --- |
+| CPU→CUDA | 228.99 s | 178.52 s | 22.0% | 通过 |
+| CUDA→CPU | 220.59 s | 176.65 s | 19.9% | 通过 |
+
+四指标最大绝对误差分别为 1.67×10⁻¹⁶、8.33×10⁻¹⁶、
+1.67×10⁻¹⁶、1.11×10⁻¹⁶；两轮各后端的结果哈希一致，
+但 CPU/CUDA 之间不要求 bitwise 一致。`evaluate_factor_source_batch`
+的 `auto` 仅对上述精确形状、四指标原顺序完整集合、float64 因子及标签、
+默认精度、来源和调用方 tile 上限均至少 16、有效显存至少 14 GiB
+自动选择 CUDA 并固定 tile 16。子集、重排、相邻形状、非默认精度或资源不足
+保持 CPU。此认证不外推到其它指标，也不构成 PIT/生产因子认证。
+脱敏证据：
+[`CPU→CUDA`](benchmarks/real_cos_f61_pearson_chain_source_ab_20260930.json)、
+[`CUDA→CPU`](benchmarks/real_cos_f61_pearson_chain_source_ab_reverse_20260930.json)。
+路由后又以相同真实来源运行显式 CUDA→CPU→`auto`：183.71 s、
+224.11 s、180.14 s；`auto` 回执为 CUDA/tile 16，四指标全部再次与 CPU
+对拍通过，见[自动路由验收](benchmarks/real_cos_f61_pearson_chain_source_auto_20260930.json)。
+
 ## 一次性来源的 GPU OOM 重分片
 
 来源型批量评估只读取每个因子区间一次。GPU 执行期间若发生 CUDA OOM 且

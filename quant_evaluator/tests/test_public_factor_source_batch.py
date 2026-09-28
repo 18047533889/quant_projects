@@ -428,6 +428,60 @@ def test_auto_source_f61_pearson_single_uses_certified_tile_and_fails_closed(mon
     assert rejected.metadata["auto_backend_reason"] == "insufficient_cuda_memory"
 
 
+def test_auto_source_f61_pearson_chain_exact_route_and_negative_cases(monkeypatch):
+    pytest.importorskip("cupy")
+    import importlib
+    from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy, PrecisionPolicy
+    source_api = importlib.import_module("quant_evaluator.api.factor_source")
+    evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
+    batch, label = _inputs()
+    monkeypatch.setattr(source_api, "_F61_SHAPE", batch.values.shape)
+    gates = []
+    monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection",
+                        lambda _policy, minimum: gates.append(minimum) or None)
+    metrics = ("pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir")
+    source = Source(batch)
+    source.max_tile_size = 32
+    routed = evaluate_factor_source_batch(
+        source, label, metrics=metrics, backend="auto", max_tile_size=32)
+    cpu = evaluate_factor_source_batch(Source(batch), label, metrics=metrics, backend="cpu")
+    for metric in metrics:
+        group = "series_metrics" if metric.endswith("_series") else "scalar_metrics"
+        np.testing.assert_allclose(getattr(routed, group)[metric], getattr(cpu, group)[metric],
+                                   rtol=1e-8, atol=1e-10, equal_nan=True)
+        np.testing.assert_array_equal(routed.observation_counts[metric], cpu.observation_counts[metric])
+    assert gates == [14 * 1024 ** 3]
+    assert routed.metadata["backend_used"] == "cuda"
+    assert routed.metadata["effective_max_tile_size"] == 16
+    assert routed.metadata["auto_backend_reason"] == "bounded_f61_pearson_chain_gpu_tile16"
+
+    for changed_metrics, width in ((metrics, 8), (metrics[:-1], 16),
+                                   (tuple(reversed(metrics)), 16)):
+        case = Source(batch)
+        case.max_tile_size = 32
+        rejected = evaluate_factor_source_batch(
+            case, label, metrics=changed_metrics, backend="auto", max_tile_size=width)
+        assert rejected.metadata["backend_used"] == "cpu"
+        assert rejected.metadata["auto_backend_reason"] == "source_shape_or_metrics_not_certified"
+    assert gates == [14 * 1024 ** 3]
+
+    policy = GPUExecutionPolicy(precision_policy=PrecisionPolicy.GPU_FP64)
+    case = Source(batch)
+    case.max_tile_size = 32
+    rejected = evaluate_factor_source_batch(
+        case, label, metrics=metrics, backend="auto", max_tile_size=16, gpu_policy=policy)
+    assert rejected.metadata["backend_used"] == "cpu"
+    assert rejected.metadata["auto_backend_reason"] == "gpu_precision_policy_outside_certified_range"
+    monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection",
+                        lambda *_: "insufficient_cuda_memory")
+    case = Source(batch)
+    case.max_tile_size = 32
+    rejected = evaluate_factor_source_batch(
+        case, label, metrics=metrics, backend="auto", max_tile_size=16)
+    assert rejected.metadata["backend_used"] == "cpu"
+    assert rejected.metadata["auto_backend_reason"] == "insufficient_cuda_memory"
+
+
 def test_auto_source_f61_mixed_three_fails_closed_outside_gate(monkeypatch):
     import importlib
     from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy, PrecisionPolicy

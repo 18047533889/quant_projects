@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import resource
 import shutil
 import subprocess
@@ -30,6 +31,7 @@ from quant_evaluator.scripts import benchmark_real_cos_factor_tiles as tiles
 
 DEFAULT_METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
 PEARSON_SINGLE = ("pearson_ic",)
+PEARSON_CHAIN = ("pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir")
 MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024**3
 MIN_AVAILABLE_RAM_BYTES = 32 * 1024**3
 
@@ -103,32 +105,75 @@ class RealCosSource:
         return None
 
 
-def compare(cpu, cuda, selected_metrics) -> dict:
+def _metric_array(bundle, metric):
+    """Resolve one scalar or series artifact without assuming both maps exist."""
+    scalar = getattr(bundle, "scalar_metrics", {})
+    series = getattr(bundle, "series_metrics", {})
+    if metric in scalar and metric in series:
+        raise ValueError(f"{metric} appears in both scalar and series metrics")
+    if metric in scalar:
+        return "scalar", np.asarray(scalar[metric])
+    if metric in series:
+        return "series", np.asarray(series[metric])
+    return None, np.asarray([])
+
+
+def compare(cpu, cuda, selected_metrics, *, expected_days=None) -> dict:
     if cpu.factor_ids != cuda.factor_ids:
         raise ValueError("CPU/CUDA whole-request factor axes differ")
-    if (cpu.metadata.get("source_request_fingerprint") !=
-            cuda.metadata.get("source_request_fingerprint")):
+    cpu_fingerprint = cpu.metadata.get("source_request_fingerprint")
+    cuda_fingerprint = cuda.metadata.get("source_request_fingerprint")
+    if (not isinstance(cpu_fingerprint, str)
+            or re.fullmatch(r"[0-9a-f]{64}", cpu_fingerprint) is None
+            or cpu_fingerprint != cuda_fingerprint):
         raise ValueError("CPU/CUDA source request fingerprints differ")
     metric_results = {}
     for metric in selected_metrics:
-        cpu_values = np.asarray(cpu.scalar_metrics[metric])
-        cuda_values = np.asarray(cuda.scalar_metrics[metric])
-        if cpu_values.shape != (len(cpu.factor_ids),) or cuda_values.shape != cpu_values.shape:
-            raise ValueError(f"{metric} does not cover the complete factor axis")
-        finite = np.isfinite(cpu_values) & np.isfinite(cuda_values)
-        same_mask = np.array_equal(np.isfinite(cpu_values), np.isfinite(cuda_values))
+        cpu_group, cpu_values = _metric_array(cpu, metric)
+        cuda_group, cuda_values = _metric_array(cuda, metric)
+        factors = len(cpu.factor_ids)
+        if cpu_group == "scalar":
+            cpu_shape_valid = cpu_values.shape == (factors,)
+        elif cpu_group == "series":
+            cpu_shape_valid = (cpu_values.ndim == 2 and cpu_values.shape[1] == factors
+                               and (expected_days is None or cpu_values.shape[0] == expected_days))
+        else:
+            cpu_shape_valid = False
+        if cuda_group == "scalar":
+            cuda_shape_valid = cuda_values.shape == (factors,)
+        elif cuda_group == "series":
+            cuda_shape_valid = (cuda_values.ndim == 2 and cuda_values.shape[1] == factors
+                                and (expected_days is None or cuda_values.shape[0] == expected_days))
+        else:
+            cuda_shape_valid = False
+        shapes_equal = cpu_group == cuda_group and cpu_values.shape == cuda_values.shape
+        valid_shape = cpu_shape_valid and cuda_shape_valid and shapes_equal
+        masks_equal = (valid_shape and
+                       np.array_equal(np.isfinite(cpu_values), np.isfinite(cuda_values)))
+        finite = (np.isfinite(cpu_values) & np.isfinite(cuda_values)
+                  if shapes_equal else np.asarray([], dtype=bool))
         max_abs = (float(np.max(np.abs(cpu_values[finite] - cuda_values[finite])))
                    if finite.any() else 0.0)
-        counts_equal = np.array_equal(
-            cpu.observation_counts[metric], cuda.observation_counts[metric])
-        passed = same_mask and counts_equal and np.allclose(
-            cpu_values, cuda_values, rtol=1e-8, atol=1e-10, equal_nan=True)
+        cpu_counts = np.asarray(cpu.observation_counts.get(metric, []))
+        cuda_counts = np.asarray(cuda.observation_counts.get(metric, []))
+        counts_shape_valid = cpu_counts.shape == (factors,) and cuda_counts.shape == (factors,)
+        counts_equal = counts_shape_valid and np.array_equal(cpu_counts, cuda_counts)
+        values_close = (valid_shape and np.allclose(
+            cpu_values, cuda_values, rtol=1e-8, atol=1e-10, equal_nan=True))
+        passed = masks_equal and counts_equal and values_close
         metric_results[metric] = {
             "pass": bool(passed),
-            "factor_count": len(cpu.factor_ids),
+            "artifact_kind": cpu_group if cpu_group == cuda_group else None,
+            "cpu_shape": list(cpu_values.shape),
+            "cuda_shape": list(cuda_values.shape),
+            "shape_valid": bool(valid_shape),
+            "factor_count": factors,
+            "compared_value_count": int(cpu_values.size) if valid_shape else 0,
             "finite_value_count": int(finite.sum()),
+            "finite_mask_equal": bool(masks_equal),
             "max_abs_error": max_abs,
             "observation_counts_equal": bool(counts_equal),
+            "observation_counts_shape_valid": bool(counts_shape_valid),
             "cpu_values_sha256": hashlib.sha256(
                 np.ascontiguousarray(cpu_values).tobytes()).hexdigest(),
             "cuda_values_sha256": hashlib.sha256(
@@ -137,13 +182,15 @@ def compare(cpu, cuda, selected_metrics) -> dict:
     return {
         "pass": all(item["pass"] for item in metric_results.values()),
         "compared_factor_count": len(cpu.factor_ids),
-        "compared_metric_count": len(metric_results) * len(cpu.factor_ids),
+        "compared_metric_count": sum(item["compared_value_count"]
+                                     for item in metric_results.values()),
         "metrics": metric_results,
     }
 
 
 def run_backend(backend, records, source_rows, dates, assets, labels,
-                manifest_sha, tile_size, max_object_mib, policy, selected_metrics):
+                manifest_sha, tile_size, max_object_mib, policy, selected_metrics,
+                *, expected_auto_cuda=False):
     source = RealCosSource(records, source_rows, dates, assets, labels,
                            manifest_sha, tile_size, max_object_mib)
     started = time.perf_counter()
@@ -161,7 +208,8 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
     if result.metadata.get("factor_tiles_processed") != len(expected_reads):
         raise ValueError("source API tile receipt does not cover the whole request")
     if result.metadata.get("backend_used") != (
-            "cuda" if backend == "cuda_strict" else "cpu"):
+            "cuda" if backend == "cuda_strict" or (backend == "auto" and expected_auto_cuda)
+            else "cpu"):
         raise ValueError("source API used a different backend than requested")
     return result, {
         "backend_requested": backend,
@@ -272,10 +320,14 @@ def main():
     parser.add_argument("--factors", type=int, choices=(48, 61), required=True)
     parser.add_argument("--tile-size", type=int, default=8)
     parser.add_argument("--metrics", default=",".join(DEFAULT_METRICS),
-                        help="exact default three metrics or pearson_ic alone")
+                        help="default three metrics, pearson_ic alone, or exact Pearson chain")
     parser.add_argument("--gpu-tile-widths", nargs=2, type=int,
                         metavar=("WIDTH_A", "WIDTH_B"))
     parser.add_argument("--gpu-worker", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--run-order", choices=("cpu-first", "cuda-first"),
+                        default="cpu-first", help="order for whole-source CPU/CUDA A/B")
+    parser.add_argument("--verify-auto", action="store_true",
+                        help="also verify the exact certified F61 Pearson chain auto route")
     parser.add_argument("--days", type=int, default=0)
     parser.add_argument("--assets", type=int, default=5500)
     parser.add_argument("--max-object-mib", type=int, default=128)
@@ -284,14 +336,22 @@ def main():
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     selected = tuple(args.metrics.split(","))
-    if selected not in (DEFAULT_METRICS, PEARSON_SINGLE):
-        parser.error("--metrics must be the exact default three metrics or pearson_ic alone")
+    if selected not in (DEFAULT_METRICS, PEARSON_SINGLE, PEARSON_CHAIN):
+        parser.error("--metrics must be the exact default three, pearson_ic alone, or Pearson chain")
     if not 1 <= args.tile_size <= 32:
         parser.error("--tile-size must be 1..32")
     if args.gpu_tile_widths and (len(set(args.gpu_tile_widths)) != 2
                                  or any(not 1 <= width <= 32 for width in args.gpu_tile_widths)):
         parser.error("--gpu-tile-widths requires two distinct widths in 1..32")
+    if args.gpu_worker and selected == PEARSON_CHAIN:
+        parser.error("Pearson chain is supported only by whole-source CPU/CUDA A/B")
+    if args.verify_auto and (args.factors != 61 or selected != PEARSON_CHAIN
+                             or args.tile_size < 16 or args.gpu_worker
+                             or args.gpu_tile_widths):
+        parser.error("--verify-auto requires F61 Pearson chain, tile >=16, whole-source mode")
     if args.gpu_tile_widths:
+        if selected == PEARSON_CHAIN:
+            parser.error("Pearson chain is supported only by whole-source CPU/CUDA A/B")
         if args.gpu_worker or args.output is None:
             parser.error("--gpu-tile-widths requires --output and cannot use --gpu-worker")
         run_gpu_tile_width_ab(args, selected)
@@ -356,36 +416,57 @@ def main():
         emit_report(report, args.output)
         return
 
-    cpu_preflight = preflight(args.max_object_mib, args.max_total_mib)
-    if not cpu_preflight["pass"]:
-        raise SystemExit("RAM or COS cache disk headroom fell below preflight before CPU run")
-    cpu, cpu_run = run_backend(
-        "cpu", records, source_rows, dates, assets, labels, manifest_sha,
-        args.tile_size, args.max_object_mib, policy, selected)
-    cpu_run["preflight"] = cpu_preflight
-    between_preflight = preflight(args.max_object_mib, args.max_total_mib)
-    if not between_preflight["pass"]:
-        raise SystemExit("RAM or COS cache disk headroom fell below preflight before CUDA run")
-    rejection = _auto_batch_cuda_rejection(policy, MIN_EFFECTIVE_VRAM_BYTES)
-    if rejection:
-        raise SystemExit(f"CUDA A/B preflight rejected: {rejection}")
-    cuda, cuda_run = run_backend(
-        "cuda_strict", records, source_rows, dates, assets, labels,
-        manifest_sha, args.tile_size, args.max_object_mib, policy, selected)
-    cuda_run["preflight"] = between_preflight
-    comparison = compare(cpu, cuda, selected)
+    runs = {}
+    order = ("cpu", "cuda_strict") if args.run_order == "cpu-first" else ("cuda_strict", "cpu")
+    for backend in order:
+        gate = preflight(args.max_object_mib, args.max_total_mib)
+        if not gate["pass"]:
+            raise SystemExit(f"RAM or COS cache disk headroom fell below preflight before {backend} run")
+        if backend == "cuda_strict":
+            rejection = _auto_batch_cuda_rejection(policy, MIN_EFFECTIVE_VRAM_BYTES)
+            if rejection:
+                raise SystemExit(f"CUDA A/B preflight rejected: {rejection}")
+        bundle, receipt = run_backend(
+            backend, records, source_rows, dates, assets, labels, manifest_sha,
+            args.tile_size, args.max_object_mib, policy, selected)
+        receipt["preflight"] = gate
+        runs[backend] = (bundle, receipt)
+    cpu, cpu_run = runs["cpu"]
+    cuda, cuda_run = runs["cuda_strict"]
+    comparison = compare(cpu, cuda, selected, expected_days=len(dates))
+    auto_run = None
+    auto_comparison = None
+    if args.verify_auto and comparison["pass"]:
+        gate = preflight(args.max_object_mib, args.max_total_mib)
+        if not gate["pass"]:
+            raise SystemExit("RAM or COS cache disk headroom fell below preflight before auto run")
+        auto, auto_run = run_backend(
+            "auto", records, source_rows, dates, assets, labels, manifest_sha,
+            args.tile_size, args.max_object_mib, policy, selected,
+            expected_auto_cuda=True)
+        auto_run["preflight"] = gate
+        auto_run["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
+        auto_run["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
+        if (auto_run["auto_backend_reason"] != "bounded_f61_pearson_chain_gpu_tile16"
+                or auto_run["effective_max_tile_size"] != 16):
+            raise ValueError("auto did not use the certified F61 Pearson chain route")
+        auto_comparison = compare(cpu, auto, selected, expected_days=len(dates))
     report = {
-        "status": "complete" if comparison["pass"] else "parity_failed",
+        "status": "complete" if comparison["pass"] and
+                  (auto_comparison is None or auto_comparison["pass"]) else "parity_failed",
         "kind": "real_cos_whole_source_batch_ab.v1",
         "manifest_sha256": manifest_sha,
         "shape": [len(dates), len(assets), len(records)],
         "factor_dtype": "float64",
         "tile_size": args.tile_size,
+        "run_order": list(order),
         "metric_ids": list(selected),
         "preflight_before_cpu": cpu_run["preflight"],
         "preflight_before_cuda": cuda_run["preflight"],
         "runs": [cpu_run, cuda_run],
         "comparison": comparison,
+        "auto_run": auto_run,
+        "auto_comparison": auto_comparison,
         "source_api": "columnar_factor_source_v1",
         "limitations": [
             "Research-source metrics only; no PIT or production certification.",
@@ -393,7 +474,7 @@ def main():
         ],
     }
     emit_report(report, args.output)
-    if not comparison["pass"]:
+    if report["status"] != "complete":
         raise SystemExit(1)
 
 
