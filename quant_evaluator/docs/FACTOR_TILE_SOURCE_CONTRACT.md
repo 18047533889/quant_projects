@@ -62,14 +62,40 @@ They do not by themselves certify throughput or the richer EvaluationBundle path
 
 `quant_evaluator.adapters.cos_factor_tile_source.CosFactorTileSource.from_data_access`
 is a research COS-specific implementation of this source contract. The caller
-supplies ordered factor IDs, full axes, dtype, a tile assembler, and factories
-for registered DataAccess read contexts. The manifest factory supplies one
-controller `DataAccessReadContext`; the factor factory creates a fresh context
-with its own store/engine for each factor read. Neither factory may invent a
-bucket or bypass dataset authorization. The adapter uses the existing
-`read_bound_manifest`, `read_bound_factor` and
-`verify_bound_manifest_unchanged` helpers, compares selected object URI,
-SHA-256 and byte count, and verifies the manifest again on completion/close.
+supplies ordered factor IDs, full axes, dtype, a tile assembler, factories for
+registered DataAccess read contexts, and a `BoundManifestHelpers` value. The
+manifest factory creates one controller context; the factor factory creates a
+fresh context with its own store/engine per read. Neither factory may invent a
+bucket or bypass dataset authorization. QE contains no dependency on the
+library that implements bound-manifest reads;
+the integration layer injects that library's existing
+`read_bound_manifest`, `read_bound_factor` and `verify_bound_manifest_unchanged`
+callables. The adapter delegates binding and source validation to those helpers,
+then compares selected object URI, SHA-256 and byte count and verifies the
+manifest again on completion/close. No binding validation logic is duplicated
+in QE.
+
+For an integration that already uses factor_optimizer, bind its existing
+helpers at the boundary:
+
+```python
+from factor_optimizer.research_manifest import (
+    read_bound_factor, read_bound_manifest, verify_bound_manifest_unchanged,
+)
+from quant_evaluator.adapters.cos_factor_tile_source import (
+    BoundManifestHelpers, CosFactorTileSource,
+)
+
+bound_helpers = BoundManifestHelpers(
+    read_bound_manifest=read_bound_manifest,
+    read_bound_factor=read_bound_factor,
+    verify_bound_manifest_unchanged=verify_bound_manifest_unchanged,
+)
+```
+
+Other integrations can inject equivalent helpers without installing or
+importing factor_optimizer. The lower-level `CosFactorTileSource` constructor
+also remains independent of both factor_optimizer and DataAccess.
 
 The factory's `prefetch` option is `"auto"` (default), `"on"` or `"off"`.
 For this COS adapter, `auto` and `on` both use at most two independent reads
@@ -82,6 +108,7 @@ from quant_evaluator.adapters.cos_factor_tile_source import CosFactorTileSource
 from quant_evaluator.api.factor_source import evaluate_factor_source_batch
 
 source = CosFactorTileSource.from_data_access(
+    bound_manifest_helpers=bound_helpers,
     factor_ids=selected_factor_ids,
     time_axis=time_axis,
     asset_axis=asset_axis,

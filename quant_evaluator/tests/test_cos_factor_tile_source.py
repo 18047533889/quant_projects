@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from quant_evaluator.adapters.cos_factor_tile_source import (
-    BoundCosFactor, CosFactorTileSource, DataAccessReadContext,
+    BoundCosFactor, BoundManifestHelpers, CosFactorTileSource, DataAccessReadContext,
 )
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.factor_tile_source import iter_validated_factor_tiles
@@ -53,6 +53,11 @@ def _source(prefetch="auto", *, tamper=False):
         make_tile=make_tile, prefetch=prefetch,
     )
     return source, calls, verified, lambda: maximum
+
+
+def test_bound_manifest_helpers_reject_noncallables():
+    with pytest.raises(TypeError, match="must be callable"):
+        BoundManifestHelpers(None, lambda *_: None, lambda *_: None)
 
 
 def test_prefetch_auto_is_bounded_ordered_and_preserves_tiles():
@@ -135,8 +140,8 @@ def test_source_enforces_tile_plus_prefetch_memory_budget():
             make_tile=lambda *_: None, max_prefetch_memory_bytes=1)
 
 
-def test_data_access_builder_uses_bound_helpers_and_closes_contexts(monkeypatch):
-    import factor_optimizer.research_manifest as research_manifest
+def test_data_access_builder_uses_injected_helpers_without_factor_optimizer(monkeypatch):
+    import builtins
 
     times = AxisRef("time", "int64", 2, np.array([1, 2], dtype=np.int64))
     assets = AxisRef("asset", "str", 2, np.array(["A", "B"]))
@@ -154,9 +159,14 @@ def test_data_access_builder_uses_bound_helpers_and_closes_contexts(monkeypatch)
         return DataAccessReadContext(object(), "manifest", "factor", factor_params={"id": record.factor_id},
                                      close=lambda: worker_closed.append(True))
 
-    monkeypatch.setattr(research_manifest, "read_bound_manifest", lambda *a, **k: manifest)
-    monkeypatch.setattr(research_manifest, "verify_bound_manifest_unchanged",
-                        lambda *a, **k: verify_calls.append(True))
+    def read_bound_manifest(store, dataset, **kwargs):
+        assert dataset == "manifest"
+        assert kwargs["allow_research"] is True
+        return manifest
+
+    def verify_bound_manifest_unchanged(store, dataset, snapshot, **kwargs):
+        assert snapshot is manifest
+        verify_calls.append(True)
 
     class Factor:
         source_uri, content_sha256, downloaded_bytes = "cos://bucket/f0", "a" * 64, 8
@@ -167,7 +177,15 @@ def test_data_access_builder_uses_bound_helpers_and_closes_contexts(monkeypatch)
         assert kwargs["manifest_snapshot"] is manifest
         assert kwargs["allow_research"] is True
         return bound
-    monkeypatch.setattr(research_manifest, "read_bound_factor", read_bound)
+    helpers = BoundManifestHelpers(
+        read_bound_manifest=read_bound_manifest, read_bound_factor=read_bound,
+        verify_bound_manifest_unchanged=verify_bound_manifest_unchanged)
+    original_import = builtins.__import__
+    def reject_factor_optimizer(name, *args, **kwargs):
+        if name == "factor_optimizer" or name.startswith("factor_optimizer."):
+            raise AssertionError("QE adapter attempted to import optional factor_optimizer")
+        return original_import(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, "__import__", reject_factor_optimizer)
 
     def make_tile(start, end, records, payloads):
         assert [item.payload for item in payloads] == [7]
@@ -176,7 +194,8 @@ def test_data_access_builder_uses_bound_helpers_and_closes_contexts(monkeypatch)
 
     source = CosFactorTileSource.from_data_access(
         factor_ids=("f0",), time_axis=times, asset_axis=assets, dtype="float64",
-        make_tile=make_tile, manifest_context_factory=controller_factory,
+        make_tile=make_tile, bound_manifest_helpers=helpers,
+        manifest_context_factory=controller_factory,
         factor_context_factory=factor_factory, max_tile_size=1, prefetch="off")
     tile = source.read_tile(0, 1)
     assert tile.snapshot_id != "m" * 64
@@ -237,6 +256,7 @@ def test_final_manifest_failure_still_closes_source_context():
 ])
 def test_data_access_builder_relies_on_bound_manifest_uri_sha_and_status(
         monkeypatch, status, factor_uri_matches):
+    research_manifest = pytest.importorskip("factor_optimizer.research_manifest")
     import data_access.cos.remote as remote
     import data_access.cos.research as cos_research
 
@@ -302,6 +322,10 @@ def test_data_access_builder_relies_on_bound_manifest_uri_sha_and_status(
     source = CosFactorTileSource.from_data_access(
         factor_ids=("f0",), time_axis=time_axis, asset_axis=asset_axis,
         dtype="float64", make_tile=make_tile,
+        bound_manifest_helpers=BoundManifestHelpers(
+            read_bound_manifest=research_manifest.read_bound_manifest,
+            read_bound_factor=research_manifest.read_bound_factor,
+            verify_bound_manifest_unchanged=research_manifest.verify_bound_manifest_unchanged),
         manifest_context_factory=manifest_context_factory,
         factor_context_factory=factor_context_factory,
         expected_manifest_sha256=manifest_sha, max_tile_size=1, prefetch="off")

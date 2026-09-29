@@ -29,7 +29,7 @@ from quant_evaluator.contracts.factor_batch import AxisRef
 from quant_evaluator.contracts.errors import InvalidContractError
 from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
 from quant_evaluator.adapters.cos_factor_tile_source import (
-    CosFactorTileSource, DataAccessReadContext,
+    BoundManifestHelpers, CosFactorTileSource, DataAccessReadContext,
 )
 from quant_evaluator.scripts import benchmark_real_cos_factor_tiles as tiles
 
@@ -84,6 +84,9 @@ def _make_cos_source(records, source_rows, dates, assets, labels,
     from data_access.core.engine import DuckDBEngine
     from data_access.registry.loader import DatasetRegistry
     from data_access.store import DataAccessStore
+    from factor_optimizer.research_manifest import (
+        read_bound_factor, read_bound_manifest, verify_bound_manifest_unchanged,
+    )
 
     manifest_uri = f"{tiles.BASE}/metadata/{manifest_sha}/landing_manifest.json"
     manifest_ds = tiles._ds("source_manifest", manifest_uri.rsplit("/", 1)[0],
@@ -143,6 +146,10 @@ def _make_cos_source(records, source_rows, dates, assets, labels,
             "time", "datetime64[ns]", len(dates),
             dates.to_numpy(dtype="datetime64[ns]")),
         asset_axis=labels.asset_axis, dtype="float64", make_tile=make_tile,
+        bound_manifest_helpers=BoundManifestHelpers(
+            read_bound_manifest=read_bound_manifest,
+            read_bound_factor=read_bound_factor,
+            verify_bound_manifest_unchanged=verify_bound_manifest_unchanged),
         manifest_context_factory=manifest_context_factory,
         factor_context_factory=factor_context_factory,
         max_object_mib=max_object_mib, max_tile_size=tile_size,

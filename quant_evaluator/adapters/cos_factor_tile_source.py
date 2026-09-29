@@ -1,9 +1,10 @@
 """Bounded ordered COS FactorTileSource backed by DataAccess bound reads.
 
-``from_data_access`` binds a manifest, validates each factor through the
-factor_optimizer research-manifest helpers, and uses explicit DataAccess
-context factories for registered dataset descriptors. At most two independent
-worker contexts read ahead; tile assembly stays ordered and caller supplied.
+``from_data_access`` binds a manifest through explicitly injected helpers and
+uses DataAccess context factories for registered dataset descriptors. QE has
+no runtime dependency on the library providing those helpers. At most two
+independent worker contexts read ahead; tile assembly stays ordered and caller
+supplied.
 This module does not import benchmark scripts.
 """
 from __future__ import annotations
@@ -31,6 +32,26 @@ class BoundCosFactor:
     sha256: str
     size_bytes: int
     params: Mapping[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class BoundManifestHelpers:
+    """Existing bound-manifest operations supplied by an integration layer.
+
+    QE defines this small callable contract so its COS adapter stays usable
+    without depending on a particular manifest-owning library. The injected
+    functions remain responsible for all binding and identity validation.
+    """
+
+    read_bound_manifest: Callable[..., object]
+    read_bound_factor: Callable[..., object]
+    verify_bound_manifest_unchanged: Callable[..., object]
+
+    def __post_init__(self):
+        if not all(callable(helper) for helper in (
+                self.read_bound_manifest, self.read_bound_factor,
+                self.verify_bound_manifest_unchanged)):
+            raise TypeError("bound manifest helpers must be callable")
 
 
 @dataclass
@@ -66,8 +87,9 @@ class CosFactorTileSource:
     assembles the ordered payloads into a FactorBatch.
 
     Prefer ``from_data_access`` for the production path. It binds and verifies
-    the manifest through factor_optimizer's existing helpers and creates one
-    DataAccess store/engine context per read.
+    the manifest through explicitly injected bound-manifest helpers and creates
+    one DataAccess store/engine context per read. QE does not depend on the
+    library that provides those helpers.
     """
 
     def __init__(self, *, records: Sequence[BoundCosFactor], time_axis,
@@ -163,22 +185,26 @@ class CosFactorTileSource:
     @classmethod
     def from_data_access(cls, *, factor_ids: Sequence[str], time_axis, asset_axis,
                          dtype: str, make_tile: Callable,
+                         bound_manifest_helpers: BoundManifestHelpers,
                          manifest_context_factory: Callable[[], DataAccessReadContext],
                          factor_context_factory: Callable[[BoundCosFactor], DataAccessReadContext],
                          max_object_mib: int = 128, max_tile_size: int = 16,
                          max_source_memory_bytes: int = 4 * 1024**3,
                          max_prefetch_memory_bytes: int = 512 * 1024**2,
                          prefetch: str = "auto", expected_manifest_sha256: str | None = None):
-        """Build a COS source using the existing bound-manifest/factor helpers.
+        """Build a COS source using caller-injected bound-manifest helpers.
 
         The context factories provide explicit registered dataset descriptors;
         each factor context owns a thread-local store/engine and cleanup method.
         The selected factor URI, SHA and byte count are taken from the captured
         manifest, never accepted as caller-authored identity claims.
         """
-        from factor_optimizer.research_manifest import (
-            read_bound_factor, read_bound_manifest, verify_bound_manifest_unchanged,
-        )
+        if not isinstance(bound_manifest_helpers, BoundManifestHelpers):
+            raise TypeError("bound_manifest_helpers must be BoundManifestHelpers")
+        read_bound_factor = bound_manifest_helpers.read_bound_factor
+        read_bound_manifest = bound_manifest_helpers.read_bound_manifest
+        verify_bound_manifest_unchanged = (
+            bound_manifest_helpers.verify_bound_manifest_unchanged)
 
         if type(max_object_mib) is not int or not 1 <= max_object_mib <= 128:
             raise ValueError("max_object_mib must be in 1..128")
