@@ -809,8 +809,12 @@ class TransformRegistry:
             return "FE_OPERATOR"
         return "FP_NATIVE"
 
-    def get_execution(self, name: str):
+    def get_execution(self, name: str, *, allow_research: bool = False):
         """Return the callable to execute for a transform.
+
+        Registered execution is production-admitted by default. Offline and
+        research transforms require the explicit ``allow_research=True`` opt-in;
+        their plain functions remain available through the research API.
 
         For ``FE_OPERATOR``-origin transforms the FP registry does NOT
         hard-import FE (dependency isolation): execution goes through the
@@ -820,6 +824,13 @@ class TransformRegistry:
         (deprecated but retained fallback — plan §26 F3) is used so the
         registry remains executable in any environment.
         """
+        if type(allow_research) is not bool:
+            raise TypeError("allow_research must be a bool")
+        if not allow_research:
+            self.validate_production(name)
+        elif name not in self._transforms:
+            raise ValueError(f"Transform '{name}' is not registered")
+
         if self.resolve_origin(name) == "FE_OPERATOR":
             try:
                 from factor_preprocess.adapters.fe_operator import get_fe_executor
@@ -870,7 +881,11 @@ class TransformRegistry:
         fitted_state_refs=(), allow_research=False,
     ):
         """Compile an FE recipe with explicit execution authority."""
-        recipe.compile(self, fitted_state_refs=fitted_state_refs)
+        recipe.compile(
+            self,
+            fitted_state_refs=fitted_state_refs,
+            allow_research=allow_research,
+        )
         for step in recipe.ordered_steps:
             metadata = self.get(step.implementation_ref)
             if metadata.requires_fit != bool(step.requires_fit):

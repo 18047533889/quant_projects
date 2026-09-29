@@ -292,7 +292,7 @@ FactorEngineAdapter: protocol for FE integration (optional dependency).
 
 ### FactorEngineAdapter
 
-[实际实现](../factor_optimizer/adapters/factor_engine.py#L8)。
+[实际实现](../factor_optimizer/adapters/factor_engine.py#L9)。
 
 Protocol for FactorEngine integration.
 
@@ -300,7 +300,7 @@ Protocol for FactorEngine integration.
 
 ### FactorEngineAdapter.compute_canonical_hash
 
-[实际实现](../factor_optimizer/adapters/factor_engine.py#L22)。
+[实际实现](../factor_optimizer/adapters/factor_engine.py#L23)。
 
 Compute FE canonical identity hash.
 
@@ -310,7 +310,7 @@ Compute FE canonical identity hash.
 
 ### FactorEngineAdapter.validate_mutation
 
-[实际实现](../factor_optimizer/adapters/factor_engine.py#L37)。
+[实际实现](../factor_optimizer/adapters/factor_engine.py#L38)。
 
 Validate mutation legality through FE.
 
@@ -320,7 +320,7 @@ Validate mutation legality through FE.
 
 ### FactorEngineAdapter.estimate_complexity
 
-[实际实现](../factor_optimizer/adapters/factor_engine.py#L53)。
+[实际实现](../factor_optimizer/adapters/factor_engine.py#L54)。
 
 Estimate factor complexity through FE analyzer.
 
@@ -330,7 +330,7 @@ Estimate factor complexity through FE analyzer.
 
 ### FactorEngineAdapter.get_operator_metadata
 
-[实际实现](../factor_optimizer/adapters/factor_engine.py#L71)。
+[实际实现](../factor_optimizer/adapters/factor_engine.py#L72)。
 
 Get operator metadata for mutation grammar.
 
@@ -340,7 +340,7 @@ Get operator metadata for mutation grammar.
 
 ### OptionalDependencyMissing
 
-[实际实现](../factor_optimizer/adapters/factor_engine.py#L89)。
+[实际实现](../factor_optimizer/adapters/factor_engine.py#L90)。
 
 Raised when optional FE dependency is not available.
 
@@ -348,7 +348,7 @@ Raised when optional FE dependency is not available.
 
 ### create_fe_adapter
 
-[实际实现](../factor_optimizer/adapters/factor_engine.py#L156)。
+[实际实现](../factor_optimizer/adapters/factor_engine.py#L157)。
 
 Create FE adapter if factor-engine is installed.
 
@@ -10650,7 +10650,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/__init__.py` | `c56006f3491a1795bc0dc673f116e214f4f20e2965ba1d468a452c9f0cc1d76d` |
 | `factor_optimizer/adapters/__init__.py` | `d2cd050fc93d62119ef592d8d663e985e5218554c6cb289d839e384a49b40a23` |
 | `factor_optimizer/adapters/factor_assets.py` | `6a2ad44b43710199fd6eed901de2974fb8a66314f525be016c2f4796bf8af6d4` |
-| `factor_optimizer/adapters/factor_engine.py` | `a26d2be039dda962033b914f57ae0475ce893d47e61918f7a06fa5242bf4b921` |
+| `factor_optimizer/adapters/factor_engine.py` | `de24ad77fc2408851497d93836c40d744d37907151bb8d96fd03a767c279e2e5` |
 | `factor_optimizer/adapters/fitness.py` | `4486884657f730c65064fe6e1aebc7555a515fbc3cba41c71c1bf8c9e4c48ce5` |
 | `factor_optimizer/adapters/layered_decay.py` | `86ac91175c82eef473abef116a7a67802872a0da96ce0fa7a6022bf783bb3e26` |
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |

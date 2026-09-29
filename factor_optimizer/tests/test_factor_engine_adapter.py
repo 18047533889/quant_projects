@@ -274,3 +274,54 @@ def test_semantic_hash_rejects_wrong_expression_input_arity(adapter):
     )
     with pytest.raises((TypeError, ValueError), match="rank.*(positional|arguments|arity)"):
         adapter.compute_canonical_hash(malformed_rank)
+
+
+def test_catalog_is_reused_without_exposing_cached_state(monkeypatch):
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    original = OperatorRegistry.catalog.__func__
+    calls = []
+
+    def counted_catalog(cls):
+        calls.append(cls.version())
+        return original(cls)
+
+    monkeypatch.setattr(OperatorRegistry, "catalog", classmethod(counted_catalog))
+    instance = create_fe_adapter()
+    mutation = {"target_operator": "ts_mean", "target_operator_parameters": {"window": 20}}
+
+    assert instance.validate_mutation(mutation, spec=None)["is_legal"]
+    assert instance.validate_mutation(mutation, spec=None)["is_legal"]
+    version = OperatorRegistry.version()
+    assert calls == [version]
+
+    metadata = instance.get_operator_metadata(["ts_mean"])
+    metadata["ts_mean"]["status"] = "corrupted by caller"
+    assert instance.validate_mutation(mutation, spec=None)["is_legal"]
+    assert calls == [version]
+
+
+def test_catalog_cache_invalidates_on_registry_version_change(monkeypatch):
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    original_catalog = OperatorRegistry.catalog.__func__
+    original_version = OperatorRegistry.version.__func__
+    calls = []
+    version_bump = [0]
+
+    def counted_catalog(cls):
+        calls.append(cls.version())
+        return original_catalog(cls)
+
+    monkeypatch.setattr(OperatorRegistry, "catalog", classmethod(counted_catalog))
+    monkeypatch.setattr(
+        OperatorRegistry, "version",
+        classmethod(lambda cls: original_version(cls) + version_bump[0]),
+    )
+    instance = create_fe_adapter()
+    mutation = {"target_operator": "ts_mean"}
+
+    assert instance.validate_mutation(mutation, spec=None)["is_legal"]
+    version_bump[0] = 1
+    assert instance.validate_mutation(mutation, spec=None)["is_legal"]
+    assert len(calls) == 2

@@ -18,6 +18,7 @@ This test file proves two things:
 """
 import numpy as np
 import pandas as pd
+from factor_preprocess.contracts.treatment_recipe import RecipeStep, TreatmentRecipe
 import pytest
 
 from factor_preprocess.transforms.smoothing import (
@@ -143,6 +144,34 @@ def test_hp_filters_are_offline_only_not_production_causal():
     assert "hp_decompose" not in names
 
 
+def test_registry_execution_fails_closed_for_hp_but_allows_explicit_research():
+    registry = create_default_registry()
+
+    # A production-admitted transform still resolves and executes normally.
+    smoother = registry.get_execution("trailing_sma")
+    assert smoother(_make_single_asset(seed=2, n=6), window=3).notna().any()
+
+    # The normal registry execution route must not bypass OFFLINE_ONLY admission.
+    for name in ("hp_filter", "hp_decompose"):
+        with pytest.raises(ValueError, match="OFFLINE_ONLY"):
+            registry.get_execution(name)
+
+    # Offline HP math and its definition remain available with an explicit
+    # research opt-in through the registry execution API.
+    hp = registry.get_execution("hp_filter", allow_research=True)
+    output = hp(_make_single_asset(seed=9, n=8), lambda_param=1600.0)
+    assert output.notna().any()
+
+
+
+    recipe = TreatmentRecipe(
+        recipe_id="offline-hp", source_factor_definition_ref="definition",
+        source_factor_value_ref="values",
+        ordered_steps=(RecipeStep("hp", "HP_FILTER", "hp_filter", "temporal"),),
+    )
+    with pytest.raises(ValueError, match="OFFLINE_ONLY"):
+        recipe.compile(registry)
+    assert len(recipe.compile(registry, allow_research=True)) == 1
 # ---------------------------------------------------------------------------
 # 4. Batch-causal smoother metadata remains factual and production-admissible.
 # ---------------------------------------------------------------------------

@@ -377,7 +377,7 @@ class TreatmentRecipe:
         data["ordered_steps"] = tuple(RecipeStep(**step) for step in data["ordered_steps"])
         return cls(**data)
 
-    def compile(self, registry, *, fitted_state_refs=()) -> tuple:
+    def compile(self, registry, *, fitted_state_refs=(), allow_research=False) -> tuple:
         """Resolve every actual step against the registry, failing closed."""
         available_states = set(fitted_state_refs)
         executors = []
@@ -410,7 +410,12 @@ class TreatmentRecipe:
                     raise InvalidContractError(
                         f"missing fitted state ref for step {step.step_id!r}"
                     )
-            executors.append(registry.get_execution(step.implementation_ref))
+            executors.append(
+                registry.get_execution(
+                    step.implementation_ref,
+                    allow_research=allow_research,
+                )
+            )
         return tuple(executors)
 
     def _validate_lineage_guard(self) -> None:

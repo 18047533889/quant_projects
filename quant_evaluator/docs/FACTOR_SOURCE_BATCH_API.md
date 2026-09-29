@@ -41,15 +41,53 @@ finally:
 VRAM fraction, OOM retiling and maximum host result bytes. Explicit
 `cuda_strict` never falls back. Explicit `cpu` processes bounded tiles with
 the existing public CPU evaluator and aggregates only factor-separable typed
-artifacts. `auto` is deterministic: it selects CUDA only for exact
-2586-date × 5461-asset float64 panels with either 8 factors or 32 factors
-(the latter requires effective source tile width 2), the two-metric
-`rank_ic`/`rank_ic_series` set, a single NVIDIA L20, default-compatible
-precision policy, and at least 14 GiB effective free VRAM. Otherwise it uses
-CPU and records the reason. The F8 route has prior real-COS in-memory and
-synthetic source-path evidence; the F32 source route has full-shape synthetic
-A/B/A evidence below plus separately certified real-COS in-memory F32 ranks.
-Neither result certifies arbitrary source snapshots or metric combinations.
+artifacts. `backend="auto"` selects a compute backend; it does not create,
+replace, or configure `source`, and it does not implicitly enable COS reads or
+prefetch. The caller chooses and owns the source adapter, including its read
+policy.
+
+Auto routing is deterministic and fail-closed. The current certified CUDA
+profiles require float64 factors and labels, the default-compatible precision
+policy, one NVIDIA L20 device with no extra capability requirements, and at
+least 14 GiB effective free VRAM. They are:
+
+- 2586 × 5461 × 8 factors with exactly `rank_ic` and `rank_ic_series`.
+- 2586 × 5461 × 32 factors with that same metric pair and an effective source
+  tile width of 2, or with the exact three-metric set `rank_ic`,
+  `quantile_spread`, and `factor_turnover_rate` at tile width 2.
+- 2586 × 5461 × 61 factors with the exact 15-metric set listed above, with
+  `rank_ic` plus `quantile_spread` plus `factor_turnover_rate`, with the single
+  metric `pearson_ic`, or with the four-metric Pearson chain
+  (`pearson_ic`, `pearson_ic_series`, `pearson_ic_std`, `pearson_ic_ir`).
+  The 15-metric route and Pearson routes require a requested tile width of at
+  least 16 and use effective width 16. The three-metric route requires a
+  requested width of at least 8 and uses width 16 when available, otherwise 8.
+- 2400 × 5000 × 61 factors with the exact 15-metric set; requested tile width
+  must be at least 16 and the effective width is 16.
+
+Other shapes, metrics, dtypes, precision policies, devices, or resource
+conditions use CPU and record the rejection reason. These are narrow profiles,
+not a claim that CUDA is best for arbitrary source snapshots. The F8 route has
+real-COS in-memory and synthetic source-path evidence; the F32 source route
+has full-shape synthetic A/B/A evidence below plus separately certified
+real-COS in-memory F32 ranks. The F61 all-source route also has a real-COS
+source-adapter comparison for its exact 2400 × 5000 × 61 profile; this does
+not certify other source snapshots or combinations.
+
+For COS input, the optional
+`quant_evaluator.adapters.cos_factor_tile_source.CosFactorTileSource.from_data_access`
+factory binds reads through caller-injected DataAccess context factories and
+verified manifest helpers. Its `prefetch="auto"` default uses at most two
+independent reads in flight, preserves source order, and enforces its source
+and prefetch memory budgets. `prefetch="off"` reads serially. This adapter
+default applies only when the caller explicitly constructs and passes this
+COS source; `evaluate_factor_source_batch(..., backend="auto")` never
+discovers COS credentials, selects a manifest, or switches another source to
+this adapter. The caller must close the source in `finally` as shown above.
+The measured F61 COS adapter comparison is documented in
+[`PUBLIC_RUNTIME_CAPABILITIES.md`](PUBLIC_RUNTIME_CAPABILITIES.md#f61-全部-15-项来源指标整批请求-2026-09-30)
+and its machine-readable [prefetch-off report](benchmarks/real_cos_f61_all_source_15_2400d_5000a_cos_adapter_off_20260929.json)
+and [prefetch-auto report](benchmarks/real_cos_f61_all_source_15_2400d_5000a_cos_adapter_auto_counts_20260929.json).
 
 The source snapshot ID is caller-supplied, not an independently verified COS
 digest. Source adapters must bind it to a trusted manifest and object set.
@@ -84,9 +122,10 @@ Scalar, series and observation-count arrays matched CPU across all runs.
 The GPU reported 2,991,313,408 peak VRAM bytes. Process RSS high-water marks
 rose from 1,089,024 to 1,838,616 to 1,879,892 KiB; those are cumulative
 whole-process marks, not per-run isolated peaks. The synthetic source includes
-random factor generation in every run. The exact same-route real-COS source
-test remains pending: this execution context has no usable COS/S3 credential.
-The F8 route was not widened based on this result alone.
+random factor generation in every run. The exact same-route real-COS source test
+for this F8 source profile remains pending in this synthetic benchmark context.
+The F8 route was not widened based on this result alone; separate F61 COS
+evidence does not extend the F8 profile.
 
 ## Full-history F32 source-path A/B/A (synthetic)
 

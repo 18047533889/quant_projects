@@ -1968,7 +1968,7 @@ Parse the canonical representation and revalidate its content hash.
 
 Resolve every actual step against the registry, failing closed.
 
-参数：`(self, registry, *, fitted_state_refs=())`。
+参数：`(self, registry, *, fitted_state_refs=(), allow_research=False)`。
 
 返回类型：`tuple`。
 
@@ -3915,11 +3915,11 @@ Resolve the effective implementation origin for a transform.
 
 Return the callable to execute for a transform.
 
-参数：`(self, name: str)`。
+参数：`(self, name: str, *, allow_research: bool=False)`。
 
 ### TransformRegistry.get_function
 
-[实际实现](../factor_preprocess/registry/transforms.py#L838)。
+[实际实现](../factor_preprocess/registry/transforms.py#L849)。
 
 Reject the retired unvalidated native-kernel execution bypass.
 
@@ -3929,7 +3929,7 @@ Reject the retired unvalidated native-kernel execution bypass.
 
 ### TransformRegistry.get_research_reference_function
 
-[实际实现](../factor_preprocess/registry/transforms.py#L854)。
+[实际实现](../factor_preprocess/registry/transforms.py#L865)。
 
 Return a retained native parity kernel only with explicit consent.
 
@@ -3939,7 +3939,7 @@ Return a retained native parity kernel only with explicit consent.
 
 ### TransformRegistry.get_recipe_execution
 
-[实际实现](../factor_preprocess/registry/transforms.py#L868)。
+[实际实现](../factor_preprocess/registry/transforms.py#L879)。
 
 Compile an FE recipe with explicit execution authority.
 
@@ -3947,7 +3947,7 @@ Compile an FE recipe with explicit execution authority.
 
 ### TransformRegistry.list_by_category
 
-[实际实现](../factor_preprocess/registry/transforms.py#L890)。
+[实际实现](../factor_preprocess/registry/transforms.py#L905)。
 
 List isolated deep-frozen transform metadata snapshots in a category.
 
@@ -3957,7 +3957,7 @@ List isolated deep-frozen transform metadata snapshots in a category.
 
 ### TransformRegistry.list_by_tag
 
-[实际实现](../factor_preprocess/registry/transforms.py#L895)。
+[实际实现](../factor_preprocess/registry/transforms.py#L910)。
 
 List isolated deep-frozen snapshots with a given tag.
 
@@ -3967,7 +3967,7 @@ List isolated deep-frozen snapshots with a given tag.
 
 ### TransformRegistry.list_causal_safe
 
-[实际实现](../factor_preprocess/registry/transforms.py#L900)。
+[实际实现](../factor_preprocess/registry/transforms.py#L915)。
 
 List isolated deep-frozen snapshots of all causal-safe transforms.
 
@@ -3977,7 +3977,7 @@ List isolated deep-frozen snapshots of all causal-safe transforms.
 
 ### TransformRegistry.all_transforms
 
-[实际实现](../factor_preprocess/registry/transforms.py#L907)。
+[实际实现](../factor_preprocess/registry/transforms.py#L922)。
 
 Get isolated deep-frozen snapshots of all registered transforms.
 
@@ -3987,7 +3987,7 @@ Get isolated deep-frozen snapshots of all registered transforms.
 
 ### TransformRegistry.get_signature_hash
 
-[实际实现](../factor_preprocess/registry/transforms.py#L911)。
+[实际实现](../factor_preprocess/registry/transforms.py#L926)。
 
 Get signature hash for reproducibility tracking.
 
@@ -3997,7 +3997,7 @@ Get signature hash for reproducibility tracking.
 
 ### TransformRegistry.seal
 
-[实际实现](../factor_preprocess/registry/transforms.py#L916)。
+[实际实现](../factor_preprocess/registry/transforms.py#L931)。
 
 Freeze the registry into an immutable snapshot identity (FP-P1-05).
 
@@ -4007,7 +4007,7 @@ Freeze the registry into an immutable snapshot identity (FP-P1-05).
 
 ### TransformRegistry.diagnostic_events
 
-[实际实现](../factor_preprocess/registry/transforms.py#L938)。
+[实际实现](../factor_preprocess/registry/transforms.py#L953)。
 
 Stable ordered audit trail of registry lifecycle events.
 
@@ -4017,7 +4017,7 @@ Stable ordered audit trail of registry lifecycle events.
 
 ### TransformRegistry.snapshot_identity
 
-[实际实现](../factor_preprocess/registry/transforms.py#L950)。
+[实际实现](../factor_preprocess/registry/transforms.py#L965)。
 
 Content-derived identity of the sealed snapshot (None if not sealed).
 
@@ -4027,7 +4027,7 @@ Content-derived identity of the sealed snapshot (None if not sealed).
 
 ### TransformRegistry.is_sealed
 
-[实际实现](../factor_preprocess/registry/transforms.py#L955)。
+[实际实现](../factor_preprocess/registry/transforms.py#L970)。
 
 Whether the registry has been frozen.
 
@@ -4037,7 +4037,7 @@ Whether the registry has been frozen.
 
 ### create_default_registry
 
-[实际实现](../factor_preprocess/registry/transforms.py#L960)。
+[实际实现](../factor_preprocess/registry/transforms.py#L975)。
 
 Create registry with all built-in transforms.
 
@@ -4047,7 +4047,7 @@ Create registry with all built-in transforms.
 
 ### get_default_registry
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1525)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1540)。
 
 Get or create the default global registry.
 
@@ -5203,7 +5203,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/contracts/policy.py` | `cf43779e26d6a6cfc40ddd7e1aa1f9a4b37f0bb53071263611a572f9da3d0f5f` |
 | `factor_preprocess/contracts/state.py` | `06e1a99e68b64ff3156f7c3269a145c6a120fad5e76e29233ebed004f651e181` |
 | `factor_preprocess/contracts/treatment_lineage.py` | `5c2d7375d1330237d0e3135f82520af68e75f70eeb1863eba08dcfaeb88beee2` |
-| `factor_preprocess/contracts/treatment_recipe.py` | `3e0e68d11eeb519dc53a9dff373c737721e59222ec26b65df9a4d9bbe08c32c6` |
+| `factor_preprocess/contracts/treatment_recipe.py` | `f8ea2826c6563c5d9730d3f966db7a8b819d70429ac11b1de501efd9015e6125` |
 | `factor_preprocess/contracts/treatment_spec.py` | `52decec3275815743bb29f12f84c8bdb2e52f5d78e577777f8d4b8358eafac6f` |
 | `factor_preprocess/eligibility/__init__.py` | `8518c047fb259bff9903eef05e374b97bde20a705e0350609ae96c5be09ca3dd` |
 | `factor_preprocess/eligibility/engine.py` | `56b2717e2114719f56cbdd4d0ec95b84e0b20d8509d2134be832337d2e7655f1` |
@@ -5233,7 +5233,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/regime/switching.py` | `a6114ab07de853206d2d705d79946a162efb5d8cb04a8c7352e87ca5e5c8c43a` |
 | `factor_preprocess/registry/__init__.py` | `f7d6d9c9d84116aa51d6c7d38695d2b439f63c69cb01d54327a998d970936329` |
 | `factor_preprocess/registry/policies.py` | `6f0c776875e25205ce2e8f072dfdb70ae15caacdb6f9dc516a6151cace7fd202` |
-| `factor_preprocess/registry/transforms.py` | `539102cf0ffc6280b8f7ce450c07b2f4cf955524cd97102567702bb9d0ed753a` |
+| `factor_preprocess/registry/transforms.py` | `b69b2b12497d8b326f12c9baf34c0e7c123728d89d1cc034e7d1aa5b60ba8604` |
 | `factor_preprocess/representation/__init__.py` | `5b62691fd8b68400db3bcc025ec528ed68240d3dd127d5e036fe3e08fb58942d` |
 | `factor_preprocess/representation/linear_ready.py` | `c0f394448c6be34cc02bf83000e182da18d4f022fe83c82cd524b5582f20c81e` |
 | `factor_preprocess/representation/multichannel.py` | `f9edaba509c7bf1c12a1534eb9ca758e523f7efc62f955e09b8609bc6c346dfe` |

@@ -1,5 +1,6 @@
 """FactorEngineAdapter: protocol for FE integration (optional dependency)."""
 
+import copy
 import numbers
 from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
@@ -189,6 +190,16 @@ def create_fe_adapter() -> FactorEngineAdapter:
             def __init__(self):
                 """Initialize with FE operator registry."""
                 self.operator_registry = OperatorRegistry()
+                self._catalog_version = None
+                self._catalog_snapshot = None
+
+            def _operator_catalog(self):
+                """Reuse the detached catalog until FE changes its registry version."""
+                version = OperatorRegistry.version()
+                if self._catalog_snapshot is None or version != self._catalog_version:
+                    self._catalog_snapshot = OperatorRegistry.catalog()
+                    self._catalog_version = version
+                return self._catalog_snapshot
 
             def compute_canonical_hash(self, factor_definition: Any) -> str:
                 """Hash FE-normalized expression structure; reject invalid call contracts."""
@@ -249,7 +260,7 @@ def create_fe_adapter() -> FactorEngineAdapter:
                             "reason": "No FE operator reference; operator check not applicable",
                             "metadata": metadata}
 
-                catalog = self.operator_registry.catalog()
+                catalog = self._operator_catalog()
                 canonical_operators, resolved = {}, {}
                 for key, name in operator_refs:
                     if not isinstance(name, str):
@@ -403,11 +414,11 @@ def create_fe_adapter() -> FactorEngineAdapter:
                 self, operator_names: Optional[List[str]] = None
             ) -> Dict[str, Dict[str, Any]]:
                 """Get operator metadata from FE catalog."""
-                catalog = self.operator_registry.catalog()
+                catalog = self._operator_catalog()
 
                 if operator_names is None:
                     # Return all operators
-                    return catalog
+                    return copy.deepcopy(catalog)
 
                 # Resolve aliases to the same canonical FE names used by
                 # mutation validation. Unknown names retain the old omission
@@ -421,7 +432,9 @@ def create_fe_adapter() -> FactorEngineAdapter:
                     except (KeyError, ValueError):
                         continue
                     if canonical in catalog:
-                        result[canonical] = catalog[canonical]
+                        # Keep the adapter's cached snapshot private to this
+                        # instance; callers may freely edit returned metadata.
+                        result[canonical] = copy.deepcopy(catalog[canonical])
 
                 return result
 

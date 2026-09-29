@@ -155,8 +155,8 @@ def test_new_registry_entry_defaults_research_and_runtime_domain_is_enforced():
     )
     assert registry.get("new").admission == "RESEARCH_ONLY"
     with pytest.raises(ValueError, match="below"):
-        registry.get_execution("new")(values=1, halflife=0)
-    assert registry.get_execution("new")(values=1, halflife=2) == 1
+        registry.get_execution("new", allow_research=True)(values=1, halflife=0)
+    assert registry.get_execution("new", allow_research=True)(values=1, halflife=2) == 1
 
 
 def test_recipe_canonical_roundtrip_and_compile_fail_closed():
@@ -187,8 +187,8 @@ def test_fitted_recipe_requires_bound_state_ref_at_compile():
         ordered_steps=(RecipeStep("s", "FIT", "fitop", "temporal", requires_fit=True, state_ref="state:1"),),
     )
     with pytest.raises(Exception, match="missing fitted state"):
-        recipe.compile(registry)
-    assert len(recipe.compile(registry, fitted_state_refs=("state:1",))) == 1
+        recipe.compile(registry, allow_research=True)
+    assert len(recipe.compile(registry, fitted_state_refs=("state:1",), allow_research=True)) == 1
 
 
 @pytest.mark.parametrize(
@@ -226,7 +226,7 @@ def test_recipe_compile_rejects_registered_fitted_operator_claimed_stateless():
         ordered_steps=(RecipeStep("s", "FIT", "fitop", "temporal"),),
     )
     with pytest.raises(InvalidContractError, match="fit requirement"):
-        recipe.compile(registry)
+        recipe.compile(registry, allow_research=True)
 
 
 def test_public_recipe_execution_uses_single_panel_boundary():
