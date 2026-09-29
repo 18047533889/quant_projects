@@ -244,3 +244,22 @@ def test_semantic_hash_rejects_invalid_fe_parameters(adapter):
     unknown_operator = CleanedCall("not_a_real_operator", (ColumnRef("close"),))
     with pytest.raises((KeyError, ValueError)):
         adapter.compute_canonical_hash(unknown_operator)
+
+
+def test_fallback_counts_numpy_integer_lookback(adapter, monkeypatch):
+    import numpy as np
+    from factor_engine.expr.cleaned_call import CleanedCall
+    from factor_engine.expr.column import ColumnRef
+    from factor_engine.ir.analyzer import Analyzer
+
+    def fail_lower(self, expr):
+        raise ValueError("analyzer unavailable")
+
+    monkeypatch.setattr(Analyzer, "lower", fail_lower)
+    expr = CleanedCall("ts_mean", (ColumnRef("close"),), (("window", np.int64(5)),))
+    result = adapter.estimate_complexity(expr)
+    assert result["lookback_periods"] == 5
+    assert type(result["lookback_periods"]) is int
+    assert result["estimated_cost"] == 1.25
+    import json
+    json.dumps(result)

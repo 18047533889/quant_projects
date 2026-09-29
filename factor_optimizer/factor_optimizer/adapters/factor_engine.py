@@ -1,5 +1,6 @@
 """FactorEngineAdapter: protocol for FE integration (optional dependency)."""
 
+import numbers
 from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
 
@@ -140,8 +141,8 @@ def _extract_lookback(expr: Any) -> int:
         for param_name in ["window", "period", "span", "lookback", "n", "d"]:
             if param_name in kwargs:
                 value = kwargs[param_name]
-                if isinstance(value, int) and value > 0:
-                    max_lookback = max(max_lookback, value)
+                if isinstance(value, numbers.Integral) and not isinstance(value, bool) and value > 0:
+                    max_lookback = max(max_lookback, int(value))
 
         # Recursively check args
         for arg in expr.args:
