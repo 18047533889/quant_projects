@@ -4985,7 +4985,7 @@ Rolling (time-series) transforms with explicit causality.
 
 ### rolling_mean
 
-[实际实现](../factor_preprocess/transforms/rolling.py#L25)。
+[实际实现](../factor_preprocess/transforms/rolling.py#L129)。
 
 Causal rolling mean per asset.
 
@@ -4995,7 +4995,7 @@ Causal rolling mean per asset.
 
 ### rolling_std
 
-[实际实现](../factor_preprocess/transforms/rolling.py#L81)。
+[实际实现](../factor_preprocess/transforms/rolling.py#L183)。
 
 Causal rolling standard deviation per asset.
 
@@ -5005,7 +5005,7 @@ Causal rolling standard deviation per asset.
 
 ### rolling_zscore
 
-[实际实现](../factor_preprocess/transforms/rolling.py#L136)。
+[实际实现](../factor_preprocess/transforms/rolling.py#L238)。
 
 Causal rolling z-score normalization per asset.
 
@@ -5015,7 +5015,7 @@ Causal rolling z-score normalization per asset.
 
 ### ewma
 
-[实际实现](../factor_preprocess/transforms/rolling.py#L207)。
+[实际实现](../factor_preprocess/transforms/rolling.py#L304)。
 
 Causal exponentially-weighted moving average per asset.
 
@@ -5029,7 +5029,7 @@ Causal one-sided signal smoothers.
 
 ### trailing_sma
 
-[实际实现](../factor_preprocess/transforms/smoothing.py#L30)。
+[实际实现](../factor_preprocess/transforms/smoothing.py#L57)。
 
 Lagged trailing simple moving average (SMA).
 
@@ -5039,7 +5039,7 @@ Lagged trailing simple moving average (SMA).
 
 ### trailing_median
 
-[实际实现](../factor_preprocess/transforms/smoothing.py#L93)。
+[实际实现](../factor_preprocess/transforms/smoothing.py#L153)。
 
 Trailing rolling median (robust to spikes/outliers).
 
@@ -5049,7 +5049,7 @@ Trailing rolling median (robust to spikes/outliers).
 
 ### robust_ewma
 
-[实际实现](../factor_preprocess/transforms/smoothing.py#L148)。
+[实际实现](../factor_preprocess/transforms/smoothing.py#L240)。
 
 Lagged EWMA computed on winsorized values (robust to outliers).
 
@@ -5059,7 +5059,7 @@ Lagged EWMA computed on winsorized values (robust to outliers).
 
 ### kama
 
-[实际实现](../factor_preprocess/transforms/smoothing.py#L215)。
+[实际实现](../factor_preprocess/transforms/smoothing.py#L317)。
 
 Kaufman Adaptive Moving Average (KAMA), built recursively forward only.
 
@@ -5069,7 +5069,7 @@ Kaufman Adaptive Moving Average (KAMA), built recursively forward only.
 
 ### one_sided_iir_lowpass
 
-[实际实现](../factor_preprocess/transforms/smoothing.py#L347)。
+[实际实现](../factor_preprocess/transforms/smoothing.py#L449)。
 
 One-pole IIR low-pass filter applied forward only.
 
@@ -5079,7 +5079,7 @@ One-pole IIR low-pass filter applied forward only.
 
 ### kalman_local_level
 
-[实际实现](../factor_preprocess/transforms/smoothing.py#L409)。
+[实际实现](../factor_preprocess/transforms/smoothing.py#L511)。
 
 One-sided Kalman local-level smoother.
 
@@ -5252,8 +5252,8 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/transforms/layered_decay.py` | `eef9c4dae3e963e69fea4534b94879c4c04dd3379a6a2a59d80efde8fcaf650f` |
 | `factor_preprocess/transforms/missingness.py` | `42dcbf19613e38f7be1e18283ca4a67e208332b88a6a0fe625b6a86c0724ea4d` |
 | `factor_preprocess/transforms/repair_shapes.py` | `dccea81e1c00e68e144f530eb103e7c217677cc1ae82c5bd5b3ee12695cacea5` |
-| `factor_preprocess/transforms/rolling.py` | `e7b9cc19a0e32c62b2f2d1d216e998ed49c72a3579404efd735f25f1c04e288b` |
-| `factor_preprocess/transforms/smoothing.py` | `fbafbadf888bc48685bee30c0624943c406c7cb0340116b17c30b21b80d31054` |
+| `factor_preprocess/transforms/rolling.py` | `f9106f767d764ce58131eb381abcbff3cd59235db9c69b9faca672017392fc07` |
+| `factor_preprocess/transforms/smoothing.py` | `333b97914ec970a8b9a4156bb965630147d9847d4d63139b44fd392bd870f796` |
 | `factor_preprocess/transforms/temporal_representation.py` | `bde5f0f504b38e4b8721786a217bf395dd31ac10cf8b31434a94807ce16c72c5` |
 | `factor_preprocess/transforms/treatment_variants.py` | `5d3a3dd9c7c0e014be750edcf9e37c628113acd17d8ec3dc09076e13aa3b2b4b` |
 | `factor_preprocess/transforms/volatility.py` | `5361592b9fc419a82fb6201b9bf0ce68ff81c48adc4f34762af411bd6e4b5d12` |

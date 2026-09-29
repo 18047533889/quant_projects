@@ -12,13 +12,117 @@ import pandas as pd
 from typing import Optional
 
 
-def _groupwise_lagged_stat(values, window, min_periods, asset_col, value_col, operation):
-    """Apply a lagged window operation independently for each asset."""
+def _groupwise_lagged_stat_reference(values, window, min_periods, asset_col, value_col, operation):
+    """Apply a lagged window operation independently for each asset.
+
+    Reference (scalar, per-asset Python loop) implementation retained as the
+    numerical oracle for the vectorized paths in this module. Output is
+    bit-for-bit equivalent to the vectorized kernels on sorted input.
+    """
     result = pd.Series(np.nan, index=values.index, dtype=float)
     for positions in values.groupby(asset_col, sort=False).indices.values():
         positions = list(positions)
         lagged = values.iloc[positions][value_col].shift(1)
         result.iloc[positions] = operation(lagged, window, min_periods)
+    return result
+
+
+def _lagged_rolling_stat(values, window, min_periods, asset_col, value_col, stat, ddof=1):
+    """Vectorized per-asset lagged rolling statistic.
+
+    Numerically equivalent to ``_groupwise_lagged_stat_reference`` but groups
+    with pandas ``groupby`` + ``rolling`` instead of a Python loop over assets.
+    A positional index is used while grouping so duplicate input index labels
+    do not disturb alignment; results are scattered back to the original row
+    order afterwards (mirrors the vectorized ``trailing_sma`` pattern).
+    """
+    keys = values[asset_col].reset_index(drop=True)
+    lagged = values[value_col].reset_index(drop=True).groupby(
+        keys, sort=False, observed=True
+    ).shift(1)
+    if stat == "mean":
+        rolled = lagged.groupby(keys, sort=False, observed=True).rolling(
+            window=window, min_periods=min_periods
+        ).mean()
+    elif stat == "std":
+        rolled = lagged.groupby(keys, sort=False, observed=True).rolling(
+            window=window, min_periods=min_periods
+        ).std(ddof=ddof)
+    else:
+        raise ValueError(f"unknown stat {stat!r}")
+    result = np.full(len(values), np.nan, dtype=float)
+    if len(rolled):
+        positions = rolled.index.get_level_values(-1).to_numpy()
+        result[positions] = rolled.to_numpy()
+    return result
+
+
+def _lagged_ewm(values, halflife, min_periods, asset_col, value_col):
+    """Vectorized per-asset lagged EWMA (see :func:`_lagged_rolling_stat`)."""
+    keys = values[asset_col].reset_index(drop=True)
+    lagged = values[value_col].reset_index(drop=True).groupby(
+        keys, sort=False, observed=True
+    ).shift(1)
+    ewmr = lagged.groupby(keys, sort=False, observed=True).ewm(
+        halflife=halflife, min_periods=min_periods, adjust=False
+    ).mean()
+    result = np.full(len(values), np.nan, dtype=float)
+    if len(ewmr):
+        positions = ewmr.index.get_level_values(-1).to_numpy()
+        result[positions] = ewmr.to_numpy()
+    return result
+
+
+# --- Reference (scalar) oracles retained for A/B equivalence tests -----------
+
+def _rolling_mean_reference(values, window, min_periods=None, asset_col="asset_id",
+                            time_col="date", value_col="value"):
+    if min_periods is None:
+        min_periods = window
+    return _groupwise_lagged_stat_reference(
+        values, window, min_periods, asset_col, value_col,
+        lambda series, w, mp: series.rolling(window=w, min_periods=mp).mean().to_numpy(),
+    )
+
+
+def _rolling_std_reference(values, window, min_periods=None, ddof=1, asset_col="asset_id",
+                           time_col="date", value_col="value"):
+    if min_periods is None:
+        min_periods = window
+    return _groupwise_lagged_stat_reference(
+        values, window, min_periods, asset_col, value_col,
+        lambda series, w, mp: series.rolling(window=w, min_periods=mp).std(ddof=ddof).to_numpy(),
+    )
+
+
+def _rolling_zscore_reference(values, window, min_periods=None, ddof=1, asset_col="asset_id",
+                              time_col="date", value_col="value"):
+    if min_periods is None:
+        min_periods = window
+    mean = _groupwise_lagged_stat_reference(
+        values, window, min_periods, asset_col, value_col,
+        lambda series, w, mp: series.rolling(window=w, min_periods=mp).mean().to_numpy(),
+    )
+    std = _groupwise_lagged_stat_reference(
+        values, window, min_periods, asset_col, value_col,
+        lambda series, w, mp: series.rolling(window=w, min_periods=mp).std(ddof=ddof).to_numpy(),
+    )
+    current = values[value_col]
+    return (current - mean) / std
+
+
+def _ewma_reference(values, halflife, min_periods=1, asset_col="asset_id",
+                    time_col="date", value_col="value"):
+    result = pd.Series(np.nan, index=values.index, dtype=float)
+    for positions in values.groupby(asset_col, sort=False).indices.values():
+        positions = list(positions)
+        result.iloc[positions] = (
+            values.iloc[positions][value_col]
+            .shift(1)
+            .ewm(halflife=halflife, min_periods=min_periods, adjust=False)
+            .mean()
+            .to_numpy()
+        )
     return result
 
 
@@ -69,13 +173,11 @@ def rolling_mean(
     if not values.groupby(asset_col, sort=False)[time_col].is_monotonic_increasing.all():
         raise ValueError("DataFrame must be sorted by [asset_col, time_col]")
 
-    # Shift to exclude current observation, then rolling
-    result = _groupwise_lagged_stat(
-        values, window, min_periods, asset_col, value_col,
-        lambda series, w, mp: series.rolling(window=w, min_periods=mp).mean().to_numpy(),
+    # Shift to exclude current observation, then rolling (vectorized per-asset).
+    return pd.Series(
+        _lagged_rolling_stat(values, window, min_periods, asset_col, value_col, stat="mean"),
+        index=values.index,
     )
-
-    return result
 
 
 def rolling_std(
@@ -124,13 +226,13 @@ def rolling_std(
     if not values.groupby(asset_col, sort=False)[time_col].is_monotonic_increasing.all():
         raise ValueError("DataFrame must be sorted by [asset_col, time_col]")
 
-    # Shift to exclude current observation, then rolling
-    result = _groupwise_lagged_stat(
-        values, window, min_periods, asset_col, value_col,
-        lambda series, w, mp: series.rolling(window=w, min_periods=mp).std(ddof=ddof).to_numpy(),
+    # Shift to exclude current observation, then rolling (vectorized per-asset).
+    return pd.Series(
+        _lagged_rolling_stat(
+            values, window, min_periods, asset_col, value_col, stat="std", ddof=ddof
+        ),
+        index=values.index,
     )
-
-    return result
 
 
 def rolling_zscore(
@@ -184,17 +286,12 @@ def rolling_zscore(
     if not values.groupby(asset_col, sort=False)[time_col].is_monotonic_increasing.all():
         raise ValueError("DataFrame must be sorted by [asset_col, time_col]")
 
-    grouped = values.groupby(asset_col, sort=False)[value_col]
-
-    # Compute lagged statistics (excluding current)
-    lagged = grouped.shift(1)
-    rolling_mean_val = _groupwise_lagged_stat(
-        values, window, min_periods, asset_col, value_col,
-        lambda series, w, mp: series.rolling(window=w, min_periods=mp).mean().to_numpy(),
+    # Compute lagged statistics (excluding current), vectorized per-asset.
+    rolling_mean_val = _lagged_rolling_stat(
+        values, window, min_periods, asset_col, value_col, stat="mean"
     )
-    rolling_std_val = _groupwise_lagged_stat(
-        values, window, min_periods, asset_col, value_col,
-        lambda series, w, mp: series.rolling(window=w, min_periods=mp).std(ddof=ddof).to_numpy(),
+    rolling_std_val = _lagged_rolling_stat(
+        values, window, min_periods, asset_col, value_col, stat="std", ddof=ddof
     )
 
     # Z-score: (current - mean) / std
@@ -243,20 +340,20 @@ def ewma(
     if halflife <= 0:
         raise ValueError(f"halflife must be > 0, got {halflife}")
 
+    valid_min_periods = (
+        isinstance(min_periods, (int, np.integer))
+        and not isinstance(min_periods, (bool, np.bool_))
+        and min_periods >= 0
+    )
+    if not valid_min_periods:
+        raise ValueError("min_periods must be a non-negative integer")
+
     # Verify sort order
     if not values.groupby(asset_col, sort=False)[time_col].is_monotonic_increasing.all():
         raise ValueError("DataFrame must be sorted by [asset_col, time_col]")
 
-    # Shift to exclude current observation, then EWMA
-    result = pd.Series(np.nan, index=values.index, dtype=float)
-    for positions in values.groupby(asset_col, sort=False).indices.values():
-        positions = list(positions)
-        result.iloc[positions] = (
-            values.iloc[positions][value_col]
-            .shift(1)
-            .ewm(halflife=halflife, min_periods=min_periods, adjust=False)
-            .mean()
-            .to_numpy()
-        )
-
-    return result
+    # Shift to exclude current observation, then EWMA (vectorized per-asset).
+    return pd.Series(
+        _lagged_ewm(values, halflife, min_periods, asset_col, value_col),
+        index=values.index,
+    )

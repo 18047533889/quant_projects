@@ -27,6 +27,33 @@ def _verified_series(values):
     return pd.Series(np.nan, index=values.index, dtype=float)
 
 
+def _lagged_rolling(values, window, min_periods, asset_col, value_col, stat="median"):
+    """Vectorized per-asset lagged rolling statistic.
+
+    Mirrors ``trailing_sma``: shift(1) per asset via groupby, then a grouped
+    ``rolling`` op, scattered back to the original row order by positional
+    index so duplicate input labels are harmless. Bit-for-bit equivalent to a
+    per-asset Python loop on sorted input.
+    """
+    keys = values[asset_col].reset_index(drop=True)
+    if not keys.notna().any():
+        return _verified_series(values)
+    lagged = values[value_col].reset_index(drop=True).groupby(
+        keys, sort=False, observed=True
+    ).shift(1)
+    if stat == "median":
+        rolled = lagged.groupby(keys, sort=False, observed=True).rolling(
+            window=window, min_periods=min_periods
+        ).median()
+    else:
+        raise ValueError(f"unknown stat {stat!r}")
+    result = np.full(len(values), np.nan, dtype=float)
+    if len(rolled):
+        positions = rolled.index.get_level_values(-1).to_numpy()
+        result[positions] = rolled.to_numpy()
+    return pd.Series(result, index=values.index)
+
+
 def trailing_sma(
     values: pd.DataFrame,
     window: int,
@@ -90,6 +117,39 @@ def trailing_sma(
     return pd.Series(result, index=values.index)
 
 
+def _trailing_median_reference(
+    values: pd.DataFrame,
+    window: int,
+    min_periods: Optional[int] = None,
+    asset_col: str = "asset_id",
+    time_col: str = "date",
+    value_col: str = "value",
+) -> pd.Series:
+    """
+    Scalar per-asset reference oracle for :func:`trailing_median`.
+
+    Bit-for-bit equivalent to the vectorized public implementation on sorted
+    input; retained only for A/B equivalence testing.
+    """
+    if window < 1:
+        raise ValueError(f"window must be >= 1, got {window}")
+    if min_periods is None:
+        min_periods = window
+
+    _check_sort(values, asset_col, time_col)
+    result = _verified_series(values)
+    for positions in values.groupby(asset_col, sort=False).indices.values():
+        positions = list(positions)
+        result.iloc[positions] = (
+            values.iloc[positions][value_col]
+            .shift(1)
+            .rolling(window=window, min_periods=min_periods)
+            .median()
+            .to_numpy()
+        )
+    return result
+
+
 def trailing_median(
     values: pd.DataFrame,
     window: int,
@@ -132,14 +192,46 @@ def trailing_median(
         min_periods = window
 
     _check_sort(values, asset_col, time_col)
+    return _lagged_rolling(values, window, min_periods, asset_col, value_col, stat="median")
+
+
+def _robust_ewma_reference(
+    values: pd.DataFrame,
+    halflife: float,
+    winsor_std: float = 4.0,
+    min_periods: int = 1,
+    asset_col: str = "asset_id",
+    time_col: str = "date",
+    value_col: str = "value",
+) -> pd.Series:
+    """
+    Scalar per-asset reference oracle for :func:`robust_ewma`.
+
+    Bit-for-bit equivalent to the vectorized public implementation on sorted
+    input; retained only for A/B equivalence testing.
+    """
+    if halflife <= 0:
+        raise ValueError(f"halflife must be > 0, got {halflife}")
+    if winsor_std <= 0:
+        winsor_std = 1e-12
+
+    _check_sort(values, asset_col, time_col)
     result = _verified_series(values)
     for positions in values.groupby(asset_col, sort=False).indices.values():
         positions = list(positions)
+        asset_df = values.iloc[positions]
+        lagged = asset_df[value_col].shift(1)
+
+        # Winsorize the lagged series using lagged rolling stats (still causal).
+        rmean = lagged.rolling(window=10, min_periods=2).mean()
+        rstd = lagged.rolling(window=10, min_periods=2).std()
+        rstd = rstd.clip(lower=1e-12)
+        robust = lagged.clip(lower=rmean - winsor_std * rstd, upper=rmean + winsor_std * rstd)
+
         result.iloc[positions] = (
-            values.iloc[positions][value_col]
-            .shift(1)
-            .rolling(window=window, min_periods=min_periods)
-            .median()
+            robust
+            .ewm(halflife=halflife, min_periods=min_periods, adjust=False)
+            .mean()
             .to_numpy()
         )
     return result
@@ -187,29 +279,39 @@ def robust_ewma(
     """
     if halflife <= 0:
         raise ValueError(f"halflife must be > 0, got {halflife}")
+    valid_min_periods = (
+        isinstance(min_periods, (int, np.integer))
+        and not isinstance(min_periods, (bool, np.bool_))
+        and min_periods >= 0
+    )
+    if not valid_min_periods:
+        raise ValueError("min_periods must be a non-negative integer")
+
     if winsor_std <= 0:
         winsor_std = 1e-12
 
     _check_sort(values, asset_col, time_col)
-    result = _verified_series(values)
-    for positions in values.groupby(asset_col, sort=False).indices.values():
-        positions = list(positions)
-        asset_df = values.iloc[positions]
-        lagged = asset_df[value_col].shift(1)
-
-        # Winsorize the lagged series using lagged rolling stats (still causal).
-        rmean = lagged.rolling(window=10, min_periods=2).mean()
-        rstd = lagged.rolling(window=10, min_periods=2).std()
-        rstd = rstd.clip(lower=1e-12)
-        robust = lagged.clip(lower=rmean - winsor_std * rstd, upper=rmean + winsor_std * rstd)
-
-        result.iloc[positions] = (
-            robust
-            .ewm(halflife=halflife, min_periods=min_periods, adjust=False)
-            .mean()
-            .to_numpy()
-        )
-    return result
+    keys = values[asset_col].reset_index(drop=True)
+    val = values[value_col].reset_index(drop=True)
+    lagged = val.groupby(keys, sort=False, observed=True).shift(1)
+    rm = lagged.groupby(keys, sort=False, observed=True).rolling(10, 2).mean()
+    rs = lagged.groupby(keys, sort=False, observed=True).rolling(10, 2).std()
+    rmean_s = pd.Series(np.nan, index=range(len(values)))
+    rs_s = pd.Series(np.nan, index=range(len(values)))
+    if len(rm):
+        rmean_s[rm.index.get_level_values(-1).to_numpy()] = rm.to_numpy()
+        rs_s[rs.index.get_level_values(-1).to_numpy()] = rs.to_numpy()
+    rs_s = rs_s.clip(lower=1e-12)  # pandas clip leaves NaN untouched
+    lower = rmean_s - winsor_std * rs_s
+    upper = rmean_s + winsor_std * rs_s
+    robust = lagged.clip(lower=lower, upper=upper)  # NaN bound -> NaN
+    ewmr = robust.groupby(keys, sort=False, observed=True).ewm(
+        halflife=halflife, min_periods=min_periods, adjust=False
+    ).mean()
+    result = np.full(len(values), np.nan, dtype=float)
+    if len(ewmr):
+        result[ewmr.index.get_level_values(-1).to_numpy()] = ewmr.to_numpy()
+    return pd.Series(result, index=values.index)
 
 
 def kama(
