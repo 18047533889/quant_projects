@@ -207,7 +207,7 @@ class TestPersistentSeenIndex:
         index = PersistentSeenIndex(":memory:")
         index.record("hash1", "factor1")
 
-        with pytest.raises(sqlite3.IntegrityError):
+        with pytest.raises(ValueError, match="factor_id already recorded with canonical_hash hash1"):
             index.record("hash2", "factor1")
 
         assert index.count() == 1

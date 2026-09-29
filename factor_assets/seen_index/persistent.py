@@ -142,6 +142,22 @@ class PersistentSeenIndex:
                 if not self._is_busy_error(exc) or attempt == self.max_busy_retries:
                     raise
                 time.sleep(min(0.01 * (2 ** attempt), 0.1))
+            except sqlite3.IntegrityError as exc:
+                # Match SeenIndex: factor IDs are immutable, so attempting to
+                # associate an existing ID with a different canonical hash is
+                # an API-level validation error, not a backend-specific error.
+                if "seen_factors.factor_id" not in str(exc):
+                    raise
+                with self._lock:
+                    row = self._conn.execute(
+                        "SELECT canonical_hash FROM seen_factors WHERE factor_id = ?",
+                        (factor_id,),
+                    ).fetchone()
+                if row is None:
+                    raise
+                raise ValueError(
+                    f"factor_id already recorded with canonical_hash {row[0]}"
+                ) from exc
 
         raise RuntimeError("unreachable")
 

@@ -182,30 +182,34 @@ def evaluate_factor_source_batch(
         f61_pearson_chain = (shape == _F61_SHAPE and len(selected) == len(_F61_PEARSON_CHAIN)
                              and frozenset(selected) == _F61_PEARSON_CHAIN_SET
                              and requested_tile_width >= 16)
+        f61_all_source = (shape == _F61_SHAPE and len(selected) == len(_SOURCE_METRICS)
+                          and frozenset(selected) == _SOURCE_METRICS
+                          and requested_tile_width >= 16)
         rank_pair = (f8 or f32) and len(selected) == 2 and frozenset(selected) == _RANK_PAIR
         if (metadata.dtype == "float64"
                 and label_bundle.values.dtype == np.float64
                 and (rank_pair or f32_mixed_three or f61_mixed_three
-                     or f61_pearson_single or f61_pearson_chain)):
+                     or f61_pearson_single or f61_pearson_chain or f61_all_source)):
             from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
 
             if policy.precision_policy != GPUExecutionPolicy().precision_policy:
                 rejection = "gpu_precision_policy_outside_certified_range"
             else:
                 minimum = (_F61_MIN_EFFECTIVE_VRAM_BYTES if (f61_mixed_three or f61_pearson_single
-                                                            or f61_pearson_chain) else
+                                                            or f61_pearson_chain or f61_all_source) else
                            _F32_MIN_EFFECTIVE_VRAM_BYTES if f32 else
                            _F8_MIN_EFFECTIVE_VRAM_BYTES)
                 rejection = _auto_batch_cuda_rejection(policy, minimum)
             route = "cuda_strict" if rejection is None else "cpu"
-            reason = (("bounded_f61_pearson_chain_gpu_tile16" if f61_pearson_chain else
+            reason = (("bounded_f61_all_source_15_gpu_tile16" if f61_all_source else
+                       "bounded_f61_pearson_chain_gpu_tile16" if f61_pearson_chain else
                        "bounded_f61_pearson_ic_gpu_tile16" if f61_pearson_single else
                        ("bounded_f61_mixed_three_gpu_tile16" if tile_width == 16
                         else "bounded_f61_mixed_three_gpu") if f61_mixed_three else
                        "bounded_f32_mixed_three_gpu" if f32_mixed_three else
                        "bounded_f32_rank_pair_gpu" if f32 else "bounded_f8_rank_pair_gpu")
                       if rejection is None else rejection)
-            if (f61_pearson_single or f61_pearson_chain) and rejection is None:
+            if (f61_pearson_single or f61_pearson_chain or f61_all_source) and rejection is None:
                 tile_width = 16
         else:
             route, reason = "cpu", "source_shape_or_metrics_not_certified"

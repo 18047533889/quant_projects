@@ -1044,6 +1044,32 @@ cuda_strict 仍可供研究对拍。这不是 PIT 或所有指标的生产认证
 `auto` 回执仍为 CUDA/tile 16。证据见[逆序 A/B](benchmarks/real_cos_f61_pearson_chain_reordered_ab_20260930.json)
 和[逆序自动路由验收](benchmarks/real_cos_f61_pearson_chain_reordered_auto_20260930.json)。
 
+## F61 全部 15 项来源指标整批请求（2026-09-30）
+
+在同一真实 COS manifest、2,586 日 × 5,461 股 × 61 因子、float64、
+tile 16 上，将 `evaluate_factor_source_batch` 支持的 15 项指标放入同一请求，
+包括 rank/Pearson IC 及序列、IC 统计、覆盖率、分位收益与单调性、换手。
+两轮相反顺序的 CPU/CUDA A/B 均对拍 316,285 个结果元素，涵盖指标形状、
+有限值 mask、逐因子观测数及数值容差；同一后端跨两轮的逐指标值哈希也相同。
+
+| 运行顺序 | CPU | CUDA | CUDA 相对 CPU 加速 | 对拍 |
+| --- | ---: | ---: | ---: | --- |
+| CUDA→CPU | 600.32 s | 187.45 s | 3.20× | 15/15 通过 |
+| CPU→CUDA | 599.92 s | 188.22 s | 3.19× | 15/15 通过 |
+
+最大绝对误差约 8.33×10⁻¹⁶；CPU/CUDA 之间不要求浮点字节相同。
+`auto` 仅对该精确形状、15 项完整集合、float64 因子及标签、默认精度、
+来源和调用方 tile 上限均至少 16、有效显存至少 14 GiB 的请求选择 CUDA，
+实际 tile 固定为 16。其它形状、指标子集和资源不足时仍按保守路由处理。
+本结果不外推到任意股票池、任意批量大小或生产 PIT 数据。
+脱敏原始证据：[CUDA→CPU](benchmarks/real_cos_f61_all_source_15_ab_20260930.json)、
+[CPU→CUDA](benchmarks/real_cos_f61_all_source_15_reverse_ab_20260930.json)。
+随后同一真实来源的独立 `auto` 请求用时 191.18 秒，回执确认为
+CUDA/tile 16，15 项共 316,285 个元素的值哈希均与两轮显式 CUDA 一致，
+见[自动路由验收](benchmarks/real_cos_f61_all_source_15_auto_20260930.json)。
+两份 A/B 回执未保存观测数哈希，故这次独立 `auto` 验收仅检查其计数形状，
+不能声称逐因子计数字节再次对拍；A/B 两轮本身已逐因子比较计数。
+
 ## 一次性来源的 GPU OOM 重分片
 
 来源型批量评估只读取每个因子区间一次。GPU 执行期间若发生 CUDA OOM 且

@@ -212,6 +212,76 @@ _EXTENDED_SOURCE_METRICS = (
     "quantile_monotonicity", "daily_quantile_monotonicity_rate",
 )
 
+
+def test_all_public_source_metrics_can_share_one_cpu_cuda_request():
+    pytest.importorskip("cupy")
+    from quant_evaluator.scripts.benchmark_real_cos_source_batch import ALL_SOURCE_METRICS
+
+    batch, label = _inputs()
+    cpu = evaluate_factor_source_batch(
+        Source(batch), label, metrics=ALL_SOURCE_METRICS, backend="cpu")
+    cuda = evaluate_factor_source_batch(
+        Source(batch), label, metrics=ALL_SOURCE_METRICS, backend="cuda_strict")
+    for metric in ALL_SOURCE_METRICS:
+        cpu_values = (cpu.series_metrics if metric in cpu.series_metrics
+                      else cpu.scalar_metrics)[metric]
+        cuda_values = (cuda.series_metrics if metric in cuda.series_metrics
+                       else cuda.scalar_metrics)[metric]
+        np.testing.assert_allclose(cpu_values, cuda_values, rtol=1e-8, atol=1e-10,
+                                   equal_nan=True)
+        np.testing.assert_array_equal(cpu.observation_counts[metric],
+                                      cuda.observation_counts[metric])
+    assert cpu.metadata["source_request_fingerprint"] == cuda.metadata["source_request_fingerprint"]
+
+
+def test_auto_f61_all_source_profile_uses_cuda_only_with_certified_gate(monkeypatch):
+    pytest.importorskip("cupy")
+    import importlib
+    from quant_evaluator.scripts.benchmark_real_cos_source_batch import ALL_SOURCE_METRICS
+
+    source_api = importlib.import_module("quant_evaluator.api.factor_source")
+    evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
+    batch, label = _inputs()
+    monkeypatch.setattr(source_api, "_F61_SHAPE", batch.values.shape)
+    admitted = []
+    monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection",
+                        lambda _policy, minimum: admitted.append(minimum) or None)
+    source = Source(batch)
+    source.max_tile_size = 32
+    metrics = tuple(reversed(ALL_SOURCE_METRICS))
+    routed = evaluate_factor_source_batch(
+        source, label, metrics=metrics, backend="auto", max_tile_size=32)
+    cpu = evaluate_factor_source_batch(Source(batch), label, metrics=metrics, backend="cpu")
+    assert routed.metadata["backend_used"] == "cuda"
+    assert routed.metadata["auto_backend_reason"] == "bounded_f61_all_source_15_gpu_tile16"
+    assert routed.metadata["effective_max_tile_size"] == 16
+    assert admitted == [14 * 1024 ** 3]
+    for metric in metrics:
+        cpu_values = (cpu.series_metrics if metric in cpu.series_metrics else cpu.scalar_metrics)[metric]
+        gpu_values = (routed.series_metrics if metric in routed.series_metrics
+                      else routed.scalar_metrics)[metric]
+        np.testing.assert_allclose(cpu_values, gpu_values, rtol=1e-8, atol=1e-10,
+                                   equal_nan=True)
+        np.testing.assert_array_equal(cpu.observation_counts[metric],
+                                      routed.observation_counts[metric])
+
+    for changed_metrics, width in ((metrics[:-1], 16), (metrics, 8)):
+        candidate = Source(batch)
+        candidate.max_tile_size = 32
+        rejected = evaluate_factor_source_batch(
+            candidate, label, metrics=changed_metrics, backend="auto", max_tile_size=width)
+        assert rejected.metadata["backend_used"] == "cpu"
+    assert admitted == [14 * 1024 ** 3]
+
+    monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection",
+                        lambda *_: "insufficient_cuda_memory")
+    candidate = Source(batch)
+    candidate.max_tile_size = 32
+    rejected = evaluate_factor_source_batch(
+        candidate, label, metrics=metrics, backend="auto", max_tile_size=16)
+    assert rejected.metadata["backend_used"] == "cpu"
+    assert rejected.metadata["auto_backend_reason"] == "insufficient_cuda_memory"
+
 @pytest.mark.parametrize("case", ["mixed", "all_missing", "tied", "masked"])
 def test_extended_source_metrics_cpu_cuda_parity(case):
     pytest.importorskip("cupy")

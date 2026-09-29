@@ -98,6 +98,63 @@ def test_run_backend_forwards_object_cap_and_validates_receipt(monkeypatch):
     assert [timing["factor_tiles_processed"] for _, timing in results] == [2, 2]
 
 
+def test_run_backend_auto_validates_effective_not_requested_tile_width(monkeypatch):
+    _, asset_axis, _, label, _, _ = _fixtures()
+    records = tuple((f"f{i}", f"cos://test/f{i}", "0" * 64, 1) for i in range(5))
+    source_rows = tuple((*row, "etag", "2" * 64) for row in records)
+
+    def fake_evaluate(source, labels, *, metrics, backend, max_tile_size, gpu_policy):
+        source.reads.extend([(0, 2), (2, 4), (4, 5)])
+        return SimpleNamespace(metadata={
+            "factor_tiles_processed": 3, "backend_used": "cuda",
+            "effective_max_tile_size": 2,
+        })
+
+    monkeypatch.setattr(harness, "evaluate_factor_source_batch", fake_evaluate)
+    _, receipt = harness.run_backend(
+        "auto", records, source_rows,
+        pd.date_range("2024-01-01", periods=3, freq="B"),
+        asset_axis.values, label, "a" * 64, 4, 16, GPUExecutionPolicy(),
+        harness.DEFAULT_METRICS, expected_auto_cuda=True,
+    )
+    assert receipt["tile_ranges"] == [(0, 2), (2, 4), (4, 5)]
+
+
+def test_auto_reference_requires_opposite_order_and_matching_hashes(tmp_path):
+    metric = "pearson_ic"
+    digest = "a" * 64
+
+    def report(order):
+        return {
+            "status": "complete", "kind": "real_cos_whole_source_batch_ab.v1",
+            "manifest_sha256": "b" * 64, "metric_ids": [metric],
+            "factor_dtype": "float64", "tile_size": 16,
+            "shape": [2586, 5461, 61], "run_order": list(order),
+            "runs": [{"backend_used": "cpu"}, {"backend_used": "cuda"}],
+            "comparison": {"pass": True, "compared_metric_count": 61,
+                           "metrics": {metric: {
+                               "pass": True, "artifact_kind": "scalar",
+                               "cuda_values_sha256": digest,
+                               "cpu_values_sha256": "c" * 64,
+                               "cuda_shape": [61], "finite_value_count": 61,
+                           }}},
+        }
+
+    left, right = tmp_path / "left.json", tmp_path / "right.json"
+    left.write_text(json.dumps(report(("cpu", "cuda_strict"))), encoding="utf-8")
+    right.write_text(json.dumps(report(("cuda_strict", "cpu"))), encoding="utf-8")
+    assert harness.certified_cuda_hashes((left, right), (metric,), "b" * 64)["shape"] == [2586, 5461, 61]
+    bad = report(("cpu", "cuda_strict"))
+    right.write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(ValueError, match="opposite-order"):
+        harness.certified_cuda_hashes((left, right), (metric,), "b" * 64)
+    bad["run_order"] = ["cuda_strict", "cpu"]
+    bad["comparison"]["metrics"][metric]["cuda_values_sha256"] = "d" * 64
+    right.write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(ValueError, match="disagree"):
+        harness.certified_cuda_hashes((left, right), (metric,), "b" * 64)
+
+
 def test_preflight_enforces_ram_and_bounded_disk_headroom(monkeypatch, tmp_path):
     monkeypatch.setattr(harness.tiles, "cos_cache_root", lambda: tmp_path)
     monkeypatch.setattr(
@@ -191,6 +248,13 @@ def test_pearson_chain_benchmark_accepts_only_complete_permutations():
     assert harness.is_pearson_chain(tuple(reversed(harness.PEARSON_CHAIN)))
     assert not harness.is_pearson_chain(harness.PEARSON_CHAIN[:-1])
     assert not harness.is_pearson_chain(("pearson_ic",) * 4)
+
+
+def test_all_source_benchmark_profile_covers_public_source_metric_set():
+    from quant_evaluator.api.factor_source import _SOURCE_METRICS
+
+    assert len(harness.ALL_SOURCE_METRICS) == len(_SOURCE_METRICS) == 15
+    assert frozenset(harness.ALL_SOURCE_METRICS) == _SOURCE_METRICS
 
 
 def test_gpu_tile_width_ab_interleaves_and_checks_every_run(monkeypatch, tmp_path):

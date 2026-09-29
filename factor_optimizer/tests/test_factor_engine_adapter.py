@@ -150,6 +150,39 @@ def test_empty_wrong_type_operator_parameters_fail_closed(adapter):
     assert "must be a mapping" in result["reason"]
 
 
+def test_target_operator_scalar_parameter_is_validated(adapter):
+    result = adapter.validate_mutation(
+        {"target_operator": "ts_mean", "parameter_name": "window", "new_value": 0},
+        spec=None,
+    )
+    assert not result["is_legal"]
+    assert "window must be >= 1" in result["reason"]
+
+
+def test_target_operator_scalar_parameter_is_canonicalized(adapter):
+    result = adapter.validate_mutation(
+        {"target_operator": "ts_sma", "parameter_name": "d", "new_value": 5},
+        spec=None,
+    )
+    assert result["is_legal"], result
+    assert result["metadata"]["canonical_operators"]["target_operator"] == "ts_mean"
+    assert result["metadata"]["normalized_operator_parameters"]["target_operator"] == {"window": 5}
+
+
+def test_scalar_parameter_is_rejected_when_target_and_replacement_are_both_named(adapter):
+    result = adapter.validate_mutation(
+        {
+            "target_operator": "ts_mean",
+            "replacement_operator": "ts_delay",
+            "parameter_name": "window",
+            "new_value": 5,
+        },
+        spec=None,
+    )
+    assert not result["is_legal"]
+    assert "ambiguous" in result["reason"]
+
+
 def test_malformed_parameter_name_fails_closed(adapter):
     result = adapter.validate_mutation(
         {"operator_name": "ts_mean", "parameter_name": ["window"], "new_value": 5},

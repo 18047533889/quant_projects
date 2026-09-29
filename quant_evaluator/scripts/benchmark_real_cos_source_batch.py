@@ -32,6 +32,12 @@ from quant_evaluator.scripts import benchmark_real_cos_factor_tiles as tiles
 DEFAULT_METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
 PEARSON_SINGLE = ("pearson_ic",)
 PEARSON_CHAIN = ("pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir")
+ALL_SOURCE_METRICS = (
+    "rank_ic", "rank_ic_series", "ic_ir", "ic_std", "ic_median",
+    "pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir",
+    "coverage", "quantile_spread", "quantile_monotonicity",
+    "daily_quantile_monotonicity_rate", "turnover", "factor_turnover_rate",
+)
 
 
 def is_pearson_chain(metrics):
@@ -203,9 +209,13 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         max_tile_size=tile_size, gpu_policy=policy,
     )
     elapsed = time.perf_counter() - started
+    effective_tile_size = (result.metadata.get("effective_max_tile_size", tile_size)
+                           if backend == "auto" else tile_size)
+    if not isinstance(effective_tile_size, int) or not 1 <= effective_tile_size <= tile_size:
+        raise ValueError("source API reported an invalid effective tile width")
     expected_reads = [
-        (start, min(start + tile_size, len(records)))
-        for start in range(0, len(records), tile_size)
+        (start, min(start + effective_tile_size, len(records)))
+        for start in range(0, len(records), effective_tile_size)
     ]
     if source.reads != expected_reads:
         raise ValueError("source API did not read exact ordered tile coverage")
@@ -319,19 +329,84 @@ def run_gpu_tile_width_ab(args, selected_metrics):
     emit_report(report, args.output)
 
 
+def certified_cuda_hashes(paths, selected_metrics, manifest_sha):
+    """Bind auto-only verification to two complete, opposite-order real A/B receipts."""
+    if len(paths) != 2:
+        raise ValueError("auto-only verification requires two reference reports")
+    reports = []
+    for path in paths:
+        if path.stat().st_size > 1024**2:
+            raise ValueError("reference report exceeds 1 MiB")
+        report = json.loads(path.read_text(encoding="utf-8"))
+        if (report.get("status") != "complete"
+                or report.get("kind") != "real_cos_whole_source_batch_ab.v1"
+                or not report.get("comparison", {}).get("pass")
+                or report.get("manifest_sha256") != manifest_sha
+                or tuple(report.get("metric_ids", ())) != selected_metrics
+                or report.get("factor_dtype") != "float64"
+                or report.get("tile_size") != 16
+                or {run.get("backend_used") for run in report.get("runs", ())}
+                != {"cpu", "cuda"}):
+            raise ValueError("reference report is not a matching completed CPU/CUDA A/B")
+        reports.append(report)
+    first, second = reports
+    if ({tuple(first.get("run_order", ())), tuple(second.get("run_order", ()))}
+            != {("cpu", "cuda_strict"), ("cuda_strict", "cpu")}
+            or first.get("shape") != second.get("shape")
+            or first.get("shape") != [2586, 5461, 61]
+            or first["comparison"].get("compared_metric_count")
+            != second["comparison"].get("compared_metric_count")):
+        raise ValueError("reference reports lack opposite-order matched coverage")
+    for metric in selected_metrics:
+        left = first["comparison"]["metrics"][metric]
+        right = second["comparison"]["metrics"][metric]
+        if (not left.get("pass") or not right.get("pass")
+                or left.get("cuda_values_sha256") != right.get("cuda_values_sha256")
+                or left.get("cpu_values_sha256") != right.get("cpu_values_sha256")
+                or left.get("cuda_shape") != right.get("cuda_shape")
+                or left.get("finite_value_count") != right.get("finite_value_count")):
+            raise ValueError(f"reference reports disagree for {metric}")
+    return first
+
+
+def verify_auto_against_reference(auto, selected_metrics, reference):
+    checks = {}
+    factors = len(auto.factor_ids)
+    for metric in selected_metrics:
+        expected = reference["comparison"]["metrics"][metric]
+        kind, values = _metric_array(auto, metric)
+        counts = np.asarray(auto.observation_counts.get(metric, ()))
+        digest = hashlib.sha256(np.ascontiguousarray(values).tobytes()).hexdigest()
+        passed = (kind == expected["artifact_kind"]
+                  and list(values.shape) == expected["cuda_shape"]
+                  and int(np.isfinite(values).sum()) == expected["finite_value_count"]
+                  and counts.shape == (factors,)
+                  and digest == expected["cuda_values_sha256"])
+        checks[metric] = {"pass": bool(passed), "artifact_kind": kind,
+                          "shape": list(values.shape), "finite_value_count": int(np.isfinite(values).sum()),
+                          "observation_counts_shape_valid": counts.shape == (factors,),
+                          "values_sha256": digest}
+    return {"pass": all(item["pass"] for item in checks.values()),
+            "compared_value_count": sum(int(np.prod(item["shape"])) for item in checks.values()),
+            "metrics": checks}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--factors", type=int, choices=(48, 61), required=True)
     parser.add_argument("--tile-size", type=int, default=8)
     parser.add_argument("--metrics", default=",".join(DEFAULT_METRICS),
-                        help="default three metrics, pearson_ic alone, or exact Pearson chain")
+                        help="default three, pearson_ic, Pearson chain, or all_source")
     parser.add_argument("--gpu-tile-widths", nargs=2, type=int,
                         metavar=("WIDTH_A", "WIDTH_B"))
     parser.add_argument("--gpu-worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--run-order", choices=("cpu-first", "cuda-first"),
                         default="cpu-first", help="order for whole-source CPU/CUDA A/B")
     parser.add_argument("--verify-auto", action="store_true",
-                        help="also verify the exact certified F61 Pearson chain auto route")
+                        help="also verify the exact certified F61 Pearson or all-source auto route")
+    parser.add_argument("--auto-references", nargs=2, type=Path,
+                        metavar=("CUDA_CPU_REPORT", "CPU_CUDA_REPORT"),
+                        help="run only auto against two opposite-order, matching F61 all-source A/B reports")
     parser.add_argument("--days", type=int, default=0)
     parser.add_argument("--assets", type=int, default=5500)
     parser.add_argument("--max-object-mib", type=int, default=128)
@@ -339,29 +414,41 @@ def main():
     parser.add_argument("--axis-index", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
-    selected = tuple(args.metrics.split(","))
-    if selected not in (DEFAULT_METRICS, PEARSON_SINGLE) and not is_pearson_chain(selected):
-        parser.error("--metrics must be the exact default three, pearson_ic alone, or Pearson chain")
+    selected = ALL_SOURCE_METRICS if args.metrics == "all_source" else tuple(args.metrics.split(","))
+    if (selected not in (DEFAULT_METRICS, PEARSON_SINGLE, ALL_SOURCE_METRICS)
+            and not is_pearson_chain(selected)):
+        parser.error("--metrics must be default three, pearson_ic, Pearson chain, or all_source")
     if not 1 <= args.tile_size <= 32:
         parser.error("--tile-size must be 1..32")
     if args.gpu_tile_widths and (len(set(args.gpu_tile_widths)) != 2
                                  or any(not 1 <= width <= 32 for width in args.gpu_tile_widths)):
         parser.error("--gpu-tile-widths requires two distinct widths in 1..32")
-    if args.gpu_worker and is_pearson_chain(selected):
-        parser.error("Pearson chain is supported only by whole-source CPU/CUDA A/B")
-    if args.verify_auto and (args.factors != 61 or not is_pearson_chain(selected)
+    if args.gpu_worker and (is_pearson_chain(selected) or selected == ALL_SOURCE_METRICS):
+        parser.error("series metrics are supported only by whole-source CPU/CUDA A/B")
+    if args.verify_auto and (args.factors != 61
+                             or not (is_pearson_chain(selected) or selected == ALL_SOURCE_METRICS)
                              or args.tile_size < 16 or args.gpu_worker
                              or args.gpu_tile_widths):
-        parser.error("--verify-auto requires F61 Pearson chain, tile >=16, whole-source mode")
+        parser.error("--verify-auto requires F61 Pearson or all-source, tile >=16, whole-source mode")
+    if args.auto_references and (args.factors != 61 or selected != ALL_SOURCE_METRICS
+                                  or args.tile_size != 16 or args.gpu_worker
+                                  or args.gpu_tile_widths or args.verify_auto
+                                  or args.output is None):
+        parser.error("--auto-references requires F61 all_source, tile 16, --output, and no other mode")
     if args.gpu_tile_widths:
-        if is_pearson_chain(selected):
-            parser.error("Pearson chain is supported only by whole-source CPU/CUDA A/B")
+        if is_pearson_chain(selected) or selected == ALL_SOURCE_METRICS:
+            parser.error("series metrics are supported only by whole-source CPU/CUDA A/B")
         if args.gpu_worker or args.output is None:
             parser.error("--gpu-tile-widths requires --output and cannot use --gpu-worker")
         run_gpu_tile_width_ab(args, selected)
         return
     if args.gpu_worker and args.output is None:
         parser.error("--gpu-worker requires --output")
+
+    reference = None
+    if args.auto_references:
+        reference = certified_cuda_hashes(args.auto_references, selected,
+                                          tiles.MANIFEST_SHA256)
 
     initial_preflight = preflight(args.max_object_mib, args.max_total_mib)
     print(json.dumps({"preflight": initial_preflight}), flush=True)
@@ -388,6 +475,41 @@ def main():
     rejection = _auto_batch_cuda_rejection(policy, MIN_EFFECTIVE_VRAM_BYTES)
     if rejection:
         raise SystemExit(f"CUDA A/B preflight rejected: {rejection}")
+
+    if reference is not None:
+        if reference["shape"] != [len(dates), len(assets), len(records)]:
+            raise ValueError("auto request shape differs from certified A/B coverage")
+        gate = preflight(args.max_object_mib, args.max_total_mib)
+        if not gate["pass"]:
+            raise SystemExit("RAM or COS cache disk headroom fell below preflight before auto run")
+        auto, receipt = run_backend(
+            "auto", records, source_rows, dates, assets, labels, manifest_sha,
+            args.tile_size, args.max_object_mib, policy, selected,
+            expected_auto_cuda=True)
+        receipt["preflight"] = gate
+        receipt["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
+        receipt["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
+        comparison = verify_auto_against_reference(auto, selected, reference)
+        route_pass = (receipt["auto_backend_reason"] ==
+                      "bounded_f61_all_source_15_gpu_tile16"
+                      and receipt["effective_max_tile_size"] == 16)
+        report = {
+            "status": "complete" if route_pass and comparison["pass"] else "parity_failed",
+            "kind": "real_cos_whole_source_auto_reference.v1",
+            "manifest_sha256": manifest_sha,
+            "shape": [len(dates), len(assets), len(records)],
+            "factor_dtype": "float64", "tile_size": args.tile_size,
+            "metric_ids": list(selected), "run": receipt,
+            "route_pass": route_pass, "comparison": comparison,
+            "reference_reports": [str(path) for path in args.auto_references],
+            "limitations": ["Auto hashes match two opposite-order CPU/CUDA A/B reports; "
+                            "reference receipts do not retain observation-count hashes.",
+                            "Research-source metrics only; no PIT or production certification."],
+        }
+        emit_report(report, args.output)
+        if report["status"] != "complete":
+            raise SystemExit(1)
+        return
 
     if args.gpu_worker:
         gate = preflight(args.max_object_mib, args.max_total_mib)
@@ -451,9 +573,12 @@ def main():
         auto_run["preflight"] = gate
         auto_run["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
         auto_run["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
-        if (auto_run["auto_backend_reason"] != "bounded_f61_pearson_chain_gpu_tile16"
+        expected_reason = ("bounded_f61_all_source_15_gpu_tile16"
+                           if selected == ALL_SOURCE_METRICS else
+                           "bounded_f61_pearson_chain_gpu_tile16")
+        if (auto_run["auto_backend_reason"] != expected_reason
                 or auto_run["effective_max_tile_size"] != 16):
-            raise ValueError("auto did not use the certified F61 Pearson chain route")
+            raise ValueError("auto did not use the certified F61 source route")
         auto_comparison = compare(cpu, auto, selected, expected_days=len(dates))
     report = {
         "status": "complete" if comparison["pass"] and

@@ -248,6 +248,20 @@ def create_fe_adapter() -> FactorEngineAdapter:
                 metadata["canonical_operators"] = canonical_operators
                 metadata["operator_meta"] = resolved[operator_refs[-1][0]]
                 normalized_parameters = {}
+                if (
+                    "parameter_name" in parameters
+                    and parameters["parameter_name"] is not None
+                    and "target_operator" in canonical_operators
+                    and "replacement_operator" in canonical_operators
+                ):
+                    return {
+                        "is_legal": False,
+                        "reason": (
+                            "parameter_name/new_value is ambiguous when both target_operator "
+                            "and replacement_operator are specified; use operator-specific parameters"
+                        ),
+                        "metadata": metadata,
+                    }
                 for key, canonical in canonical_operators.items():
                     kwargs = parameters.get(f"{key}_parameters", {})
                     if not isinstance(kwargs, dict):
@@ -260,7 +274,7 @@ def create_fe_adapter() -> FactorEngineAdapter:
                         return {"is_legal": False,
                                 "reason": f"Parameters for {canonical!r} must be a mapping",
                                 "metadata": metadata}
-                    if key == "operator_name" and parameters.get("parameter_name") is not None:
+                    if key in {"operator_name", "target_operator"} and parameters.get("parameter_name") is not None:
                         parameter_name = parameters["parameter_name"]
                         if not isinstance(parameter_name, str) or not parameter_name:
                             return {"is_legal": False,
