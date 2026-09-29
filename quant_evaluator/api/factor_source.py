@@ -32,6 +32,7 @@ _F8_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _F32_SHAPE = (2586, 5461, 32)
 _F32_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _F61_SHAPE = (2586, 5461, 61)
+_F61_ALL_SOURCE_SHAPES = frozenset({_F61_SHAPE, (2400, 5000, 61)})
 _F61_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _F61_PEARSON_CHAIN = ("pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir")
 _F61_PEARSON_CHAIN_SET = frozenset(_F61_PEARSON_CHAIN)
@@ -182,7 +183,7 @@ def evaluate_factor_source_batch(
         f61_pearson_chain = (shape == _F61_SHAPE and len(selected) == len(_F61_PEARSON_CHAIN)
                              and frozenset(selected) == _F61_PEARSON_CHAIN_SET
                              and requested_tile_width >= 16)
-        f61_all_source = (shape == _F61_SHAPE and len(selected) == len(_SOURCE_METRICS)
+        f61_all_source = (shape in _F61_ALL_SOURCE_SHAPES and len(selected) == len(_SOURCE_METRICS)
                           and frozenset(selected) == _SOURCE_METRICS
                           and requested_tile_width >= 16)
         rank_pair = (f8 or f32) and len(selected) == 2 and frozenset(selected) == _RANK_PAIR

@@ -21,7 +21,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from quant_evaluator.api.factor_source import evaluate_factor_source_batch
+from quant_evaluator.api.factor_source import _F61_ALL_SOURCE_SHAPES, evaluate_factor_source_batch
 from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
 from quant_evaluator.contracts.factor_tile_source import FactorTile
 from quant_evaluator.contracts.factor_batch import AxisRef
@@ -350,10 +350,11 @@ def certified_cuda_hashes(paths, selected_metrics, manifest_sha):
             raise ValueError("reference report is not a matching completed CPU/CUDA A/B")
         reports.append(report)
     first, second = reports
+    profile_shape = tuple(first.get("shape", ()))
     if ({tuple(first.get("run_order", ())), tuple(second.get("run_order", ()))}
             != {("cpu", "cuda_strict"), ("cuda_strict", "cpu")}
             or first.get("shape") != second.get("shape")
-            or first.get("shape") != [2586, 5461, 61]
+            or profile_shape not in _F61_ALL_SOURCE_SHAPES
             or first["comparison"].get("compared_metric_count")
             != second["comparison"].get("compared_metric_count")):
         raise ValueError("reference reports lack opposite-order matched coverage")

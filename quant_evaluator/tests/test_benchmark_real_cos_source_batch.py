@@ -124,12 +124,12 @@ def test_auto_reference_requires_opposite_order_and_matching_hashes(tmp_path):
     metric = "pearson_ic"
     digest = "a" * 64
 
-    def report(order):
+    def report(order, shape=(2586, 5461, 61)):
         return {
             "status": "complete", "kind": "real_cos_whole_source_batch_ab.v1",
             "manifest_sha256": "b" * 64, "metric_ids": [metric],
             "factor_dtype": "float64", "tile_size": 16,
-            "shape": [2586, 5461, 61], "run_order": list(order),
+            "shape": list(shape), "run_order": list(order),
             "runs": [{"backend_used": "cpu"}, {"backend_used": "cuda"}],
             "comparison": {"pass": True, "compared_metric_count": 61,
                            "metrics": {metric: {
@@ -144,7 +144,18 @@ def test_auto_reference_requires_opposite_order_and_matching_hashes(tmp_path):
     left.write_text(json.dumps(report(("cpu", "cuda_strict"))), encoding="utf-8")
     right.write_text(json.dumps(report(("cuda_strict", "cpu"))), encoding="utf-8")
     assert harness.certified_cuda_hashes((left, right), (metric,), "b" * 64)["shape"] == [2586, 5461, 61]
+    second_shape = (2400, 5000, 61)
+    left.write_text(json.dumps(report(("cpu", "cuda_strict"), second_shape)), encoding="utf-8")
+    right.write_text(json.dumps(report(("cuda_strict", "cpu"), second_shape)), encoding="utf-8")
+    assert harness.certified_cuda_hashes(
+        (left, right), (metric,), "b" * 64)["shape"] == list(second_shape)
+    unsupported_shape = (2400, 5001, 61)
+    left.write_text(json.dumps(report(("cpu", "cuda_strict"), unsupported_shape)), encoding="utf-8")
+    right.write_text(json.dumps(report(("cuda_strict", "cpu"), unsupported_shape)), encoding="utf-8")
+    with pytest.raises(ValueError, match="opposite-order"):
+        harness.certified_cuda_hashes((left, right), (metric,), "b" * 64)
     bad = report(("cpu", "cuda_strict"))
+    left.write_text(json.dumps(report(("cpu", "cuda_strict"))), encoding="utf-8")
     right.write_text(json.dumps(bad), encoding="utf-8")
     with pytest.raises(ValueError, match="opposite-order"):
         harness.certified_cuda_hashes((left, right), (metric,), "b" * 64)

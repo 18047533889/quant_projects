@@ -242,7 +242,11 @@ def test_auto_f61_all_source_profile_uses_cuda_only_with_certified_gate(monkeypa
     source_api = importlib.import_module("quant_evaluator.api.factor_source")
     evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
     batch, label = _inputs()
+    assert source_api._F61_ALL_SOURCE_SHAPES == frozenset({
+        (2586, 5461, 61), (2400, 5000, 61),
+    })
     monkeypatch.setattr(source_api, "_F61_SHAPE", batch.values.shape)
+    monkeypatch.setattr(source_api, "_F61_ALL_SOURCE_SHAPES", frozenset({batch.values.shape}))
     admitted = []
     monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection",
                         lambda _policy, minimum: admitted.append(minimum) or None)
@@ -281,6 +285,15 @@ def test_auto_f61_all_source_profile_uses_cuda_only_with_certified_gate(monkeypa
         candidate, label, metrics=metrics, backend="auto", max_tile_size=16)
     assert rejected.metadata["backend_used"] == "cpu"
     assert rejected.metadata["auto_backend_reason"] == "insufficient_cuda_memory"
+
+    monkeypatch.setattr(source_api, "_F61_ALL_SOURCE_SHAPES",
+                        frozenset({(batch.values.shape[0] + 1, *batch.values.shape[1:])}))
+    candidate = Source(batch)
+    candidate.max_tile_size = 32
+    rejected = evaluate_factor_source_batch(
+        candidate, label, metrics=metrics, backend="auto", max_tile_size=16)
+    assert rejected.metadata["backend_used"] == "cpu"
+    assert rejected.metadata["auto_backend_reason"] == "source_shape_or_metrics_not_certified"
 
 @pytest.mark.parametrize("case", ["mixed", "all_missing", "tied", "masked"])
 def test_extended_source_metrics_cpu_cuda_parity(case):
