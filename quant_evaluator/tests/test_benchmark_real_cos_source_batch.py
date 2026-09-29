@@ -137,6 +137,182 @@ def test_run_backend_auto_validates_effective_not_requested_tile_width(monkeypat
     assert receipt["tile_ranges"] == [(0, 2), (2, 4), (4, 5)]
 
 
+@pytest.mark.parametrize("source_adapter", ("legacy", "cos"))
+@pytest.mark.parametrize("fail_evaluation", (False, True))
+def test_run_backend_closes_both_source_adapters_on_success_and_failure(
+        monkeypatch, source_adapter, fail_evaluation):
+    _, asset_axis, _, label, _, _ = _fixtures()
+    records = (("f0", "cos://test/f0", "0" * 64, 1),
+               ("f1", "cos://test/f1", "1" * 64, 1))
+    source_rows = tuple((*row, "etag", "2" * 64) for row in records)
+    sources = []
+
+    class Source:
+        def __init__(self, *args, **kwargs):
+            self.factor_ids = tuple(row[0] for row in records)
+            self.snapshot_id = "a" * 64
+            self.manifest_sha256 = "b" * 64
+            self.max_tile_size = 1
+            self.prefetch_mode = "auto"
+            self.prefetch_window = 2
+            self.prefetch_objects = False
+            self.reads = []
+            self.tile_read_timings = []
+            self.closed = 0
+            sources.append(self)
+        def close(self):
+            self.closed += 1
+
+    if source_adapter == "cos":
+        def make_cos(*args, **kwargs):
+            source = Source()
+            source.prefetch_mode = kwargs["prefetch"]
+            return source
+        monkeypatch.setattr(harness, "_make_cos_source", make_cos)
+    else:
+        monkeypatch.setattr(harness, "RealCosSource", Source)
+
+    def fake_evaluate(source, labels, *, metrics, backend, max_tile_size, gpu_policy):
+        if fail_evaluation:
+            raise RuntimeError("evaluation failed")
+        source.reads.extend([(0, 1), (1, 2)])
+        return SimpleNamespace(metadata={"factor_tiles_processed": 2,
+            "backend_used": "cpu", "effective_max_tile_size": 1})
+
+    monkeypatch.setattr(harness, "evaluate_factor_source_batch", fake_evaluate)
+    call = lambda: harness.run_backend(
+        "cpu", records, source_rows, pd.date_range("2024-01-01", periods=3, freq="B"),
+        asset_axis.values, label, "a" * 64, 1, 16, GPUExecutionPolicy(),
+        harness.DEFAULT_METRICS, source_adapter=source_adapter)
+    if fail_evaluation:
+        with pytest.raises(RuntimeError, match="evaluation failed"):
+            call()
+    else:
+        _, receipt = call()
+        assert receipt["source_adapter"] == source_adapter
+        assert receipt["source_snapshot_id"] == "a" * 64
+        assert receipt["source_request_identity_sha256"]
+        assert receipt["prefetch_mode"] == ("auto" if source_adapter == "cos" else "off")
+    assert len(sources) == 1 and sources[0].closed == 1
+
+
+def test_cos_builder_uses_registered_descriptors_and_existing_make_tile_semantics(monkeypatch):
+    import data_access.core.engine as engine_module
+    import data_access.registry.loader as registry_module
+    import data_access.store as store_module
+    from quant_evaluator.adapters.cos_factor_tile_source import (
+        BoundCosFactor, DataAccessReadContext, VerifiedFactorPayload,
+    )
+
+    _, asset_axis, _, label, _, _ = _fixtures()
+    dates = pd.date_range("2024-01-01", periods=3, freq="B")
+    records = (("f0", "cos://test/path/f0.parquet", "0" * 64, 12),)
+    source_assets = ("A.SZ", "B.SH", "C.SZ", "D.SH")
+    frame = pd.DataFrame({"timestamp": dates,
+                          **{name: [1.0, 2.0, 3.0] for name in source_assets}})
+    axis_frame = frame.set_index("timestamp")
+    row = (*records[0], "etag-f0", harness.tiles.axis_hash(axis_frame))
+    contexts = []
+
+    class Engine:
+        def __init__(self, **kwargs): self.kwargs, self.closed = kwargs, False
+        def close(self): self.closed = True
+    class Registry(dict): pass
+    class Store:
+        def __init__(self, registry, engine): self.registry, self.engine = registry, engine
+    monkeypatch.setattr(engine_module, "DuckDBEngine", Engine)
+    monkeypatch.setattr(registry_module, "DatasetRegistry", Registry)
+    monkeypatch.setattr(store_module, "DataAccessStore", Store)
+    monkeypatch.setattr(harness.tiles, "_ds",
+        lambda name, uri, filename, fmt: SimpleNamespace(name=name, uri=uri,
+                                                          filename=filename, fmt=fmt))
+
+    captured = {}
+    class FakeSource:
+        pass
+    def fake_from_data_access(cls, **kwargs):
+        captured.update(kwargs)
+        manifest_ctx = kwargs["manifest_context_factory"]()
+        factor_ctx = kwargs["factor_context_factory"](
+            BoundCosFactor("f0", records[0][1], records[0][2], records[0][3]))
+        contexts.extend([manifest_ctx, factor_ctx])
+        assert manifest_ctx.manifest_dataset == factor_ctx.manifest_dataset == "source_manifest"
+        assert factor_ctx.factor_dataset == "factor_panel"
+        assert factor_ctx.store.registry["factor_panel"].uri == "cos://test/path"
+        return FakeSource()
+    monkeypatch.setattr(harness.CosFactorTileSource, "from_data_access",
+                        classmethod(fake_from_data_access))
+    captured_tile = {}
+    monkeypatch.setattr(harness.tiles, "make_tile",
+        lambda stream, expected, received_dates, received_assets, received_labels:
+            captured_tile.update(stream=list(stream), expected=expected,
+                                 dates=received_dates, assets=received_assets,
+                                 labels=received_labels) or "batch")
+
+    source = harness._make_cos_source(
+        records, (row,), dates, asset_axis.values, label, "a" * 64, 1, 16,
+        prefetch="auto")
+    batch = captured["make_tile"](
+        0, 1, [BoundCosFactor("f0", row[1], row[2], row[3])],
+        [VerifiedFactorPayload(frame, {"source_etag": "etag-f0"})])
+    assert batch == "batch"
+    assert captured_tile["expected"] == (row,)
+    assert captured_tile["stream"][0][1] == row
+    pd.testing.assert_frame_equal(captured_tile["stream"][0][0], axis_frame,
+                                  check_freq=False)
+    assert captured["prefetch"] == "auto" and captured["max_tile_size"] == 1
+    assert [ctx.store.engine.kwargs for ctx in contexts] == [{"threads": 1}, {"threads": 2}]
+    for context in contexts:
+        context.close()
+        assert context.store.engine.closed
+
+
+@pytest.mark.parametrize("mode", ("off", "on", "auto"))
+def test_run_backend_forwards_explicit_cos_prefetch_policy(monkeypatch, mode):
+    _, asset_axis, _, label, _, _ = _fixtures()
+    records = (("f0", "cos://test/f0", "0" * 64, 1),)
+    source_rows = ((*records[0], "etag", "2" * 64),)
+    source = SimpleNamespace(
+        factor_ids=("f0",), snapshot_id="a" * 64, manifest_sha256="b" * 64,
+        max_tile_size=1, prefetch_mode=mode, prefetch_window=2 if mode != "off" else 1,
+        reads=[(0, 1)], tile_read_timings=[], close=lambda: None,
+        max_source_memory_bytes=1024, estimated_peak_source_bytes=512)
+    seen = []
+    monkeypatch.setattr(harness, "_make_cos_source",
+                        lambda *args, **kwargs: seen.append(kwargs["prefetch"]) or source)
+    monkeypatch.setattr(harness, "evaluate_factor_source_batch",
+        lambda *args, **kwargs: SimpleNamespace(metadata={
+            "factor_tiles_processed": 1, "backend_used": "cpu",
+            "effective_max_tile_size": 1}))
+    _, receipt = harness.run_backend(
+        "cpu", records, source_rows, pd.date_range("2024-01-01", periods=3, freq="B"),
+        asset_axis.values, label, "a" * 64, 1, 16, GPUExecutionPolicy(),
+        harness.DEFAULT_METRICS, source_adapter="cos", cos_prefetch=mode)
+    assert seen == [mode]
+    assert receipt["cos_prefetch"] == mode
+    assert receipt["prefetch_mode"] == mode
+    assert receipt["prefetch_objects"] is (mode != "off")
+    assert harness._source_prefetch_report_fields(receipt) == {
+        "prefetch_objects": mode != "off", "prefetch_mode": mode,
+        "prefetch_window": 1 if mode == "off" else 2,
+    }
+
+
+def test_top_level_prefetch_fields_are_projected_from_effective_run_receipt():
+    fields = harness._source_prefetch_report_fields({
+        "prefetch_objects": True, "prefetch_mode": "auto", "prefetch_window": 2,
+    })
+    assert fields == {"prefetch_objects": True, "prefetch_mode": "auto",
+                      "prefetch_window": 2}
+
+
+def test_cos_prefetch_cli_conflicts_with_legacy_prefetch_flag(monkeypatch):
+    monkeypatch.setattr("sys.argv", ["benchmark", "--factors", "61",
+        "--source-adapter", "cos", "--prefetch-objects"])
+    with pytest.raises(SystemExit):
+        harness.main()
+
+
 def test_auto_reference_requires_opposite_order_and_matching_hashes(tmp_path):
     metric = "pearson_ic"
     digest = "a" * 64
@@ -181,6 +357,39 @@ def test_auto_reference_requires_opposite_order_and_matching_hashes(tmp_path):
     right.write_text(json.dumps(bad), encoding="utf-8")
     with pytest.raises(ValueError, match="disagree"):
         harness.certified_cuda_hashes((left, right), (metric,), "b" * 64)
+
+
+
+def test_observation_count_hashes_and_auto_reference_compatibility():
+    counts = np.asarray([3, 2], dtype=np.int64)
+    bundle = SimpleNamespace(
+        factor_ids=("f0", "f1"),
+        metadata={"source_request_fingerprint": "a" * 64},
+        scalar_metrics={"pearson_ic": np.asarray([0.1, 0.2])},
+        observation_counts={"pearson_ic": counts},
+    )
+    compared = harness.compare(bundle, bundle, harness.PEARSON_SINGLE)
+    metric = compared["metrics"]["pearson_ic"]
+    expected_hash = harness.hashlib.sha256(counts.tobytes()).hexdigest()
+    assert metric["cpu_observation_counts_sha256"] == expected_hash
+    assert metric["cuda_observation_counts_sha256"] == expected_hash
+
+    reference_metric = {
+        "artifact_kind": "scalar", "cuda_shape": [2], "finite_value_count": 2,
+        "cuda_values_sha256": harness.hashlib.sha256(
+            np.ascontiguousarray(bundle.scalar_metrics["pearson_ic"]).tobytes()
+        ).hexdigest(),
+        "cuda_observation_counts_sha256": expected_hash,
+    }
+    reference = {"comparison": {"metrics": {"pearson_ic": reference_metric}}}
+    assert harness.verify_auto_against_reference(
+        bundle, harness.PEARSON_SINGLE, reference)["pass"]
+    reference_metric["cuda_observation_counts_sha256"] = "0" * 64
+    assert not harness.verify_auto_against_reference(
+        bundle, harness.PEARSON_SINGLE, reference)["pass"]
+    del reference_metric["cuda_observation_counts_sha256"]
+    assert harness.verify_auto_against_reference(
+        bundle, harness.PEARSON_SINGLE, reference)["pass"]
 
 
 def test_preflight_enforces_ram_and_bounded_disk_headroom(monkeypatch, tmp_path):
@@ -319,7 +528,9 @@ def test_gpu_tile_width_ab_interleaves_and_checks_every_run(monkeypatch, tmp_pat
             "tile_size": width, "metric_ids": ["pearson_ic"], "manifest_sha256": "a" * 64,
             "shape": [3, 4, 2], "factor_ids": ["f0", "f1"],
             "source_request_fingerprint": "b" * 64,
-            "run": {"seconds": width / 10, "backend_used": "cuda"},
+            "run": {"seconds": width / 10, "backend_used": "cuda",
+                    "prefetch_objects": True, "prefetch_mode": "auto",
+                    "prefetch_window": 2},
             "scalar_metrics": {name: [0.1, 0.2] for name in ("pearson_ic",)},
             "observation_counts": {name: [3, 3] for name in ("pearson_ic",)},
         }
@@ -336,6 +547,9 @@ def test_gpu_tile_width_ab_interleaves_and_checks_every_run(monkeypatch, tmp_pat
     assert all(item["pass"] for item in reports[-1]["comparisons_to_first_run"])
     assert reports[-1]["median_seconds_by_width"] == {"8": 0.8, "16": 1.6}
     assert reports[-1]["metric_ids"] == ["pearson_ic"]
+    assert reports[-1]["prefetch_objects"] is True
+    assert reports[-1]["prefetch_mode"] == "auto"
+    assert reports[-1]["prefetch_window"] == 2
     assert all("factor_ids" not in item and "scalar_metrics" not in item
                and "observation_counts" not in item for item in reports[-1]["runs"])
 

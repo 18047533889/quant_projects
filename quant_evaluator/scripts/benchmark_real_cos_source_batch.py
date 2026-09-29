@@ -20,6 +20,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pandas as pd
 
 from quant_evaluator.api.factor_source import _F61_ALL_SOURCE_SHAPES, evaluate_factor_source_batch
 from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
@@ -27,6 +28,9 @@ from quant_evaluator.contracts.factor_tile_source import FactorTile
 from quant_evaluator.contracts.factor_batch import AxisRef
 from quant_evaluator.contracts.errors import InvalidContractError
 from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
+from quant_evaluator.adapters.cos_factor_tile_source import (
+    CosFactorTileSource, DataAccessReadContext,
+)
 from quant_evaluator.scripts import benchmark_real_cos_factor_tiles as tiles
 
 DEFAULT_METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
@@ -38,6 +42,12 @@ ALL_SOURCE_METRICS = (
     "coverage", "quantile_spread", "quantile_monotonicity",
     "daily_quantile_monotonicity_rate", "turnover", "factor_turnover_rate",
 )
+
+
+def _int64_sha256(values) -> str:
+    """Hash observation counts in the canonical contiguous int64 encoding."""
+    array = np.ascontiguousarray(values, dtype=np.int64)
+    return hashlib.sha256(array.tobytes()).hexdigest()
 
 
 def is_pearson_chain(metrics):
@@ -66,6 +76,77 @@ def preflight(max_object_mib: int, max_total_mib: int) -> dict:
         "cos_cache_disk_free_bytes": disk_free,
         "required_disk_bytes": disk_required,
     }
+
+
+def _make_cos_source(records, source_rows, dates, assets, labels,
+                     manifest_sha, tile_size, max_object_mib, *, prefetch):
+    """Use the production adapter with the research descriptors used by this harness."""
+    from data_access.core.engine import DuckDBEngine
+    from data_access.registry.loader import DatasetRegistry
+    from data_access.store import DataAccessStore
+
+    manifest_uri = f"{tiles.BASE}/metadata/{manifest_sha}/landing_manifest.json"
+    manifest_ds = tiles._ds("source_manifest", manifest_uri.rsplit("/", 1)[0],
+                            "landing_manifest.json", "json")
+
+    def manifest_context_factory():
+        engine = DuckDBEngine(threads=1)
+        try:
+            store = DataAccessStore(DatasetRegistry({manifest_ds.name: manifest_ds}), engine)
+        except BaseException:
+            engine.close()
+            raise
+        return DataAccessReadContext(store, manifest_ds.name, close=engine.close)
+
+    def factor_context_factory(record):
+        factor_ds = tiles._ds(
+            "factor_panel", record.uri.rsplit("/", 1)[0],
+            record.factor_id + ".parquet", "parquet")
+        engine = DuckDBEngine(threads=2)
+        try:
+            store = DataAccessStore(
+                DatasetRegistry({manifest_ds.name: manifest_ds,
+                                 factor_ds.name: factor_ds}), engine)
+        except BaseException:
+            engine.close()
+            raise
+        return DataAccessReadContext(
+            store, manifest_ds.name, factor_ds.name, close=engine.close)
+
+    def make_tile(start, end, bound_records, payloads):
+        expected = source_rows[start:end]
+        if len(payloads) != len(expected) or len(bound_records) != len(expected):
+            raise ValueError("COS source did not return the selected tile width")
+        stream = []
+        for record, item, row in zip(bound_records, payloads, expected):
+            identity = item.identity
+            frame = item.payload
+            if "timestamp" not in frame.columns:
+                raise ValueError("factor timestamp missing after bound COS read")
+            frame = frame.set_index("timestamp")
+            frame.index = pd.to_datetime(frame.index).normalize()
+            if frame.index.has_duplicates or frame.columns.has_duplicates:
+                raise ValueError("duplicate factor axis")
+            frame = frame.loc[:, [column for column in frame
+                                  if column.endswith((".SZ", ".SH"))]].sort_index()
+            if ((record.factor_id, record.uri, record.sha256, record.size_bytes)
+                    != (row[0], row[1], row[2], row[3])):
+                raise ValueError("COS bound identity differs from the axis preflight")
+            if (identity.get("source_etag") != row[4]
+                    or tiles.axis_hash(frame) != row[5]):
+                raise ValueError("COS source ETag or panel axes changed after preflight")
+            stream.append((frame, row))
+        return tiles.make_tile(stream, expected, dates, assets, labels)
+
+    return CosFactorTileSource.from_data_access(
+        factor_ids=tuple(row[0] for row in records), time_axis=AxisRef(
+            "time", "datetime64[ns]", len(dates),
+            dates.to_numpy(dtype="datetime64[ns]")),
+        asset_axis=labels.asset_axis, dtype="float64", make_tile=make_tile,
+        manifest_context_factory=manifest_context_factory,
+        factor_context_factory=factor_context_factory,
+        max_object_mib=max_object_mib, max_tile_size=tile_size,
+        prefetch=prefetch)
 
 
 class RealCosSource:
@@ -203,6 +284,8 @@ def compare(cpu, cuda, selected_metrics, *, expected_days=None) -> dict:
             "max_abs_error": max_abs,
             "observation_counts_equal": bool(counts_equal),
             "observation_counts_shape_valid": bool(counts_shape_valid),
+            "cpu_observation_counts_sha256": _int64_sha256(cpu_counts),
+            "cuda_observation_counts_sha256": _int64_sha256(cuda_counts),
             "cpu_values_sha256": hashlib.sha256(
                 np.ascontiguousarray(cpu_values).tobytes()).hexdigest(),
             "cuda_values_sha256": hashlib.sha256(
@@ -219,43 +302,82 @@ def compare(cpu, cuda, selected_metrics, *, expected_days=None) -> dict:
 
 def run_backend(backend, records, source_rows, dates, assets, labels,
                 manifest_sha, tile_size, max_object_mib, policy, selected_metrics,
-                *, expected_auto_cuda=False, prefetch_objects=False):
-    source = RealCosSource(records, source_rows, dates, assets, labels,
-                           manifest_sha, tile_size, max_object_mib,
-                           prefetch_objects=prefetch_objects)
+                *, expected_auto_cuda=False, prefetch_objects=False,
+                source_adapter="legacy", cos_prefetch="auto"):
+    if source_adapter == "legacy":
+        if cos_prefetch != "auto":
+            raise ValueError("cos_prefetch applies only to source_adapter='cos'")
+        source = RealCosSource(records, source_rows, dates, assets, labels,
+                               manifest_sha, tile_size, max_object_mib,
+                               prefetch_objects=prefetch_objects)
+        prefetch_mode = "on" if prefetch_objects else "off"
+    elif source_adapter == "cos":
+        if prefetch_objects:
+            raise ValueError("prefetch_objects is legacy-only; pass cos_prefetch")
+        source = _make_cos_source(
+            records, source_rows, dates, assets, labels, manifest_sha,
+            tile_size, max_object_mib,
+            prefetch=cos_prefetch)
+        prefetch_mode = source.prefetch_mode
+    else:
+        raise ValueError("source_adapter must be 'legacy' or 'cos'")
     started = time.perf_counter()
-    result = evaluate_factor_source_batch(
-        source, labels, metrics=selected_metrics, backend=backend,
-        max_tile_size=tile_size, gpu_policy=policy,
-    )
-    elapsed = time.perf_counter() - started
-    effective_tile_size = (result.metadata.get("effective_max_tile_size", tile_size)
-                           if backend == "auto" else tile_size)
-    if not isinstance(effective_tile_size, int) or not 1 <= effective_tile_size <= tile_size:
-        raise ValueError("source API reported an invalid effective tile width")
-    expected_reads = [
-        (start, min(start + effective_tile_size, len(records)))
-        for start in range(0, len(records), effective_tile_size)
-    ]
-    if source.reads != expected_reads:
-        raise ValueError("source API did not read exact ordered tile coverage")
-    if result.metadata.get("factor_tiles_processed") != len(expected_reads):
-        raise ValueError("source API tile receipt does not cover the whole request")
-    if result.metadata.get("backend_used") != (
-            "cuda" if backend == "cuda_strict" or (backend == "auto" and expected_auto_cuda)
-            else "cpu"):
-        raise ValueError("source API used a different backend than requested")
+    try:
+        result = evaluate_factor_source_batch(
+            source, labels, metrics=selected_metrics, backend=backend,
+            max_tile_size=tile_size, gpu_policy=policy,
+        )
+        elapsed = time.perf_counter() - started
+        effective_tile_size = (result.metadata.get("effective_max_tile_size", tile_size)
+                               if backend == "auto" else tile_size)
+        if not isinstance(effective_tile_size, int) or not 1 <= effective_tile_size <= tile_size:
+            raise ValueError("source API reported an invalid effective tile width")
+        expected_reads = [
+            (start, min(start + effective_tile_size, len(records)))
+            for start in range(0, len(records), effective_tile_size)
+        ]
+        if tuple(source.factor_ids) != tuple(row[0] for row in records):
+            raise ValueError("source factor identity order differs from the selected request")
+        if source.reads != expected_reads:
+            raise ValueError("source API did not read exact ordered tile coverage")
+        if result.metadata.get("factor_tiles_processed") != len(expected_reads):
+            raise ValueError("source API tile receipt does not cover the whole request")
+        if result.metadata.get("backend_used") != (
+                "cuda" if backend == "cuda_strict" or (backend == "auto" and expected_auto_cuda)
+                else "cpu"):
+            raise ValueError("source API used a different backend than requested")
+    finally:
+        source.close()
+    identity_payload = json.dumps(
+        [list(row) for row in source_rows], separators=(",", ":"), default=str).encode()
+    request_sources_payload = json.dumps(
+        [list(row) for row in records], separators=(",", ":"), default=str).encode()
     return result, {
+        "source_adapter": source_adapter,
         "backend_requested": backend,
         "backend_used": result.metadata["backend_used"],
         "seconds": elapsed,
         "total_wall_seconds": elapsed,
         "factor_tiles_processed": len(source.reads),
         "tile_ranges": source.reads,
-        "prefetch_objects": source.prefetch_objects,
+        "factor_ids_sha256": hashlib.sha256(
+            json.dumps([row[0] for row in records], separators=(",", ":")).encode()).hexdigest(),
+        "source_request_identity_sha256": hashlib.sha256(request_sources_payload + identity_payload).hexdigest(),
+        "source_snapshot_id": source.snapshot_id,
+        "source_manifest_sha256": getattr(source, "manifest_sha256", manifest_sha),
+        "prefetch_objects": bool(getattr(source, "prefetch_objects", prefetch_mode != "off")),
+        "prefetch_mode": prefetch_mode,
+        "cos_prefetch": cos_prefetch if source_adapter == "cos" else None,
+        "prefetch_window": getattr(source, "prefetch_window", 2 if prefetch_mode == "on" else 1),
+        "estimated_peak_source_bytes": getattr(source, "estimated_peak_source_bytes", None),
+        "max_source_memory_bytes": getattr(source, "max_source_memory_bytes", None),
         "tile_read_timings": source.tile_read_timings,
         "source_read_wall_seconds": sum(item["wall_seconds"]
                                         for item in source.tile_read_timings),
+        "observation_counts_sha256": {
+            name: _int64_sha256(getattr(result, "observation_counts", {}).get(name, ()))
+            for name in selected_metrics
+        },
         "peak_process_rss_kib": resource.getrusage(
             resource.RUSAGE_SELF).ru_maxrss,
     }
@@ -282,12 +404,24 @@ def _bundle_from_gpu_worker(report, selected_metrics):
     )
 
 
+def _source_prefetch_report_fields(run_receipt):
+    """Project effective source-read settings, never CLI request flags."""
+    return {
+        "prefetch_objects": bool(run_receipt["prefetch_objects"]),
+        "prefetch_mode": run_receipt["prefetch_mode"],
+        "prefetch_window": int(run_receipt["prefetch_window"]),
+    }
+
+
 def run_gpu_tile_width_ab(args, selected_metrics):
     """Interleave widths in isolated workers so source memory is reclaimed."""
     width_a, width_b = args.gpu_tile_widths
     order = (width_a, width_b, width_b, width_a)
     report = {"status": "partial", "kind": "real_cos_gpu_tile_width_ab.v2",
               "run_order": list(order), "metric_ids": list(selected_metrics),
+              "source_adapter": getattr(args, "source_adapter", "legacy"),
+              "cos_prefetch": getattr(args, "cos_prefetch", "auto"),
+              "prefetch_objects": None, "prefetch_mode": None, "prefetch_window": None,
               "runs": [], "comparisons_to_first_run": [],
               "limitations": ["One real COS manifest and host; research use only.",
                               "Separate CPU/CUDA reports establish CPU parity.",
@@ -299,6 +433,8 @@ def run_gpu_tile_width_ab(args, selected_metrics):
             command = [sys.executable, "-m",
                        "quant_evaluator.scripts.benchmark_real_cos_source_batch",
                        "--factors", str(args.factors), "--tile-size", str(width),
+                       "--source-adapter", getattr(args, "source_adapter", "legacy"),
+                       "--cos-prefetch", getattr(args, "cos_prefetch", "auto"),
                        "--metrics", ",".join(selected_metrics),
                        "--days", str(args.days), "--assets", str(args.assets),
                        "--max-object-mib", str(args.max_object_mib),
@@ -328,6 +464,8 @@ def run_gpu_tile_width_ab(args, selected_metrics):
                 raise ValueError("GPU worker receipt identity mismatch")
             if tuple(item.get("metric_ids", ())) != tuple(selected_metrics):
                 raise ValueError("GPU worker metric identity mismatch")
+            if not report["runs"]:
+                report.update(_source_prefetch_report_fields(item["run"]))
             bundle = _bundle_from_gpu_worker(item, selected_metrics)
             public_item = {key: value for key, value in item.items()
                            if key not in {"factor_ids", "scalar_metrics", "observation_counts"}}
@@ -405,14 +543,19 @@ def verify_auto_against_reference(auto, selected_metrics, reference):
         kind, values = _metric_array(auto, metric)
         counts = np.asarray(auto.observation_counts.get(metric, ()))
         digest = hashlib.sha256(np.ascontiguousarray(values).tobytes()).hexdigest()
+        counts_digest = _int64_sha256(counts)
+        expected_counts_digest = expected.get("cuda_observation_counts_sha256")
         passed = (kind == expected["artifact_kind"]
                   and list(values.shape) == expected["cuda_shape"]
                   and int(np.isfinite(values).sum()) == expected["finite_value_count"]
                   and counts.shape == (factors,)
-                  and digest == expected["cuda_values_sha256"])
+                  and digest == expected["cuda_values_sha256"]
+                  and (expected_counts_digest is None
+                       or counts_digest == expected_counts_digest))
         checks[metric] = {"pass": bool(passed), "artifact_kind": kind,
                           "shape": list(values.shape), "finite_value_count": int(np.isfinite(values).sum()),
                           "observation_counts_shape_valid": counts.shape == (factors,),
+                          "observation_counts_sha256": counts_digest,
                           "values_sha256": digest}
     return {"pass": all(item["pass"] for item in checks.values()),
             "compared_value_count": sum(int(np.prod(item["shape"])) for item in checks.values()),
@@ -431,7 +574,11 @@ def main():
     parser.add_argument("--run-order", choices=("cpu-first", "cuda-first"),
                         default="cpu-first", help="order for whole-source CPU/CUDA A/B")
     parser.add_argument("--prefetch-objects", action="store_true",
-                        help="prefetch at most two COS factor objects while assembling each source tile")
+                        help="legacy source only: prefetch at most two COS factor objects")
+    parser.add_argument("--source-adapter", choices=("legacy", "cos"), default="legacy",
+                        help="source implementation; cos uses DataAccess bound reads and bounded auto prefetch")
+    parser.add_argument("--cos-prefetch", choices=("off", "on", "auto"), default="auto",
+                        help="COS adapter object prefetch policy (default: bounded auto)")
     parser.add_argument("--verify-auto", action="store_true",
                         help="also verify the exact certified F61 Pearson or all-source auto route")
     parser.add_argument("--auto-references", nargs=2, type=Path,
@@ -444,6 +591,10 @@ def main():
     parser.add_argument("--axis-index", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
+    if args.source_adapter == "cos" and args.prefetch_objects:
+        parser.error("--prefetch-objects is legacy-only; use --cos-prefetch for the COS adapter")
+    if args.source_adapter == "legacy" and args.cos_prefetch != "auto":
+        parser.error("--cos-prefetch requires --source-adapter cos")
     selected = ALL_SOURCE_METRICS if args.metrics == "all_source" else tuple(args.metrics.split(","))
     if (selected not in (DEFAULT_METRICS, PEARSON_SINGLE, ALL_SOURCE_METRICS)
             and not is_pearson_chain(selected)):
@@ -515,7 +666,8 @@ def main():
         auto, receipt = run_backend(
             "auto", records, source_rows, dates, assets, labels, manifest_sha,
             args.tile_size, args.max_object_mib, policy, selected,
-            expected_auto_cuda=True, prefetch_objects=args.prefetch_objects)
+            expected_auto_cuda=True, prefetch_objects=args.prefetch_objects,
+            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch)
         receipt["preflight"] = gate
         receipt["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
         receipt["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
@@ -529,7 +681,8 @@ def main():
         cuda, cuda_receipt = run_backend(
             "cuda_strict", records, source_rows, dates, assets, labels, manifest_sha,
             args.tile_size, args.max_object_mib, policy, selected,
-            prefetch_objects=args.prefetch_objects)
+            prefetch_objects=args.prefetch_objects,
+            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch)
         cuda_receipt["preflight"] = cuda_gate
         direct_comparison = compare(auto, cuda, selected, expected_days=len(dates))
         route_pass = (receipt["auto_backend_reason"] ==
@@ -542,8 +695,11 @@ def main():
             "manifest_sha256": manifest_sha,
             "shape": [len(dates), len(assets), len(records)],
             "factor_dtype": "float64", "tile_size": args.tile_size,
+            "source_adapter": args.source_adapter,
+            "cos_prefetch": args.cos_prefetch if args.source_adapter == "cos" else None,
             "metric_ids": list(selected),
-            "prefetch_objects": args.prefetch_objects, "run": receipt,
+            **_source_prefetch_report_fields(receipt),
+            "run": receipt,
             "explicit_cuda_run": cuda_receipt,
             "route_pass": route_pass,
             "reference_comparison": reference_comparison,
@@ -563,7 +719,8 @@ def main():
         result, run = run_backend(
             "cuda_strict", records, source_rows, dates, assets, labels,
             manifest_sha, args.tile_size, args.max_object_mib, policy, selected,
-            prefetch_objects=args.prefetch_objects)
+            prefetch_objects=args.prefetch_objects,
+            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch)
         run["tile_size"] = args.tile_size
         run["preflight"] = gate
         scalar_metrics, observation_counts = {}, {}
@@ -582,7 +739,9 @@ def main():
             "factor_ids": list(result.factor_ids),
             "source_request_fingerprint": result.metadata["source_request_fingerprint"],
             "tile_size": args.tile_size, "metric_ids": list(selected),
-            "prefetch_objects": args.prefetch_objects,
+            "source_adapter": args.source_adapter,
+            "cos_prefetch": args.cos_prefetch if args.source_adapter == "cos" else None,
+            **_source_prefetch_report_fields(run),
             "run": run, "scalar_metrics": scalar_metrics,
             "observation_counts": observation_counts,
         }
@@ -602,13 +761,15 @@ def main():
         bundle, receipt = run_backend(
             backend, records, source_rows, dates, assets, labels, manifest_sha,
             args.tile_size, args.max_object_mib, policy, selected,
-            prefetch_objects=args.prefetch_objects)
+            prefetch_objects=args.prefetch_objects,
+            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch)
         receipt["preflight"] = gate
         runs[backend] = (bundle, receipt)
     cpu, cpu_run = runs["cpu"]
     cuda, cuda_run = runs["cuda_strict"]
-    if cpu_run["prefetch_objects"] != cuda_run["prefetch_objects"]:
-        raise ValueError("CPU/CUDA A/B runs used different object prefetch settings")
+    if (cpu_run["source_adapter"] != cuda_run["source_adapter"]
+            or cpu_run["prefetch_mode"] != cuda_run["prefetch_mode"]):
+        raise ValueError("CPU/CUDA A/B runs used different source adapter or prefetch settings")
     comparison = compare(cpu, cuda, selected, expected_days=len(dates))
     auto_run = None
     auto_comparison = None
@@ -619,7 +780,8 @@ def main():
         auto, auto_run = run_backend(
             "auto", records, source_rows, dates, assets, labels, manifest_sha,
             args.tile_size, args.max_object_mib, policy, selected,
-            expected_auto_cuda=True, prefetch_objects=args.prefetch_objects)
+            expected_auto_cuda=True, prefetch_objects=args.prefetch_objects,
+            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch)
         auto_run["preflight"] = gate
         auto_run["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
         auto_run["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
@@ -638,7 +800,9 @@ def main():
         "shape": [len(dates), len(assets), len(records)],
         "factor_dtype": "float64",
         "tile_size": args.tile_size,
-        "prefetch_objects": args.prefetch_objects,
+        "source_adapter": args.source_adapter,
+        "cos_prefetch": args.cos_prefetch if args.source_adapter == "cos" else None,
+        **_source_prefetch_report_fields(cpu_run),
         "run_order": list(order),
         "metric_ids": list(selected),
         "preflight_before_cpu": cpu_run["preflight"],

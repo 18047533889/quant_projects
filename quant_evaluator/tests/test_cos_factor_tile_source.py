@@ -1,0 +1,317 @@
+import threading
+import time
+
+import numpy as np
+import pytest
+
+from quant_evaluator.adapters.cos_factor_tile_source import (
+    BoundCosFactor, CosFactorTileSource, DataAccessReadContext,
+)
+from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
+from quant_evaluator.contracts.factor_tile_source import iter_validated_factor_tiles
+
+
+def _source(prefetch="auto", *, tamper=False):
+    records = tuple(BoundCosFactor(f"f{i}", f"cos://bucket/{i}", f"{i}" * 64,
+                                   100) for i in range(5))
+    times = AxisRef("time", "int64", 2, np.array([1, 2], dtype=np.int64))
+    assets = AxisRef("asset", "str", 2, np.array(["A", "B"]))
+    active = maximum = 0
+    lock = threading.Lock()
+    calls = []
+
+    def read_factor(record, snapshot):
+        nonlocal active, maximum
+        with lock:
+            active += 1
+            maximum = max(maximum, active)
+        time.sleep(0.005)
+        with lock:
+            active -= 1
+            calls.append(record.factor_id)
+        identity = {"uri": record.uri, "sha256": record.sha256,
+                    "size_bytes": record.size_bytes, "manifest_sha256": "m" * 64}
+        if tamper and record.factor_id == "f1":
+            identity["sha256"] = "x" * 64
+        return int(record.factor_id[1:]), identity
+
+    verified = []
+    def verify(snapshot):
+        assert snapshot == {"immutable": True}
+        verified.append(True)
+
+    def make_tile(start, end, selected, payloads):
+        assert [r.factor_id for r in selected] == [f"f{i}" for i in range(start, end)]
+        values = np.stack([np.full((2, 2), p.payload, dtype=np.float64)
+                           for p in payloads], axis=-1)
+        return FactorBatch(tuple(r.factor_id for r in selected), times, assets, values)
+
+    source = CosFactorTileSource(
+        records=records, time_axis=times, asset_axis=assets, dtype="float64",
+        manifest_snapshot={"immutable": True}, manifest_sha256="m" * 64,
+        max_tile_size=2, read_factor=read_factor, verify_manifest=verify,
+        make_tile=make_tile, prefetch=prefetch,
+    )
+    return source, calls, verified, lambda: maximum
+
+
+def test_prefetch_auto_is_bounded_ordered_and_preserves_tiles():
+    source, calls, verified, maximum = _source()
+    try:
+        tiles = list(iter_validated_factor_tiles(source))
+        assert [tile.batch.factor_ids for tile in tiles] == [("f0", "f1"), ("f2", "f3"), ("f4",)]
+        assert sorted(calls) == ["f0", "f1", "f2", "f3", "f4"]
+        assert maximum() <= 2
+        assert source.prefetch_mode == "auto" and source.prefetch_window == 2
+        assert len(verified) == 2
+    finally:
+        source.close()
+    source.close()
+
+
+def test_prefetch_off_is_serial():
+    source, calls, _, maximum = _source("off")
+    try:
+        list(iter_validated_factor_tiles(source))
+        assert calls == ["f0", "f1", "f2", "f3", "f4"]
+        assert maximum() == 1
+        assert source.prefetch_window == 1
+    finally:
+        source.close()
+
+
+def test_identity_failure_fails_closed_and_close_is_idempotent():
+    source, _, _, _ = _source(tamper=True)
+    with pytest.raises(ValueError, match="identity"):
+        source.read_tile(0, 2)
+    source.close()
+    source.close()
+    with pytest.raises(RuntimeError, match="closed"):
+        source.read_tile(0, 1)
+
+
+def test_source_rejects_out_of_order_reads():
+    source, _, _, _ = _source()
+    try:
+        with pytest.raises(ValueError, match="next bounded"):
+            source.read_tile(1, 2)
+    finally:
+        source.close()
+
+
+def test_close_after_partial_read_performs_final_manifest_verification():
+    source, _, verified, _ = _source()
+    source.read_tile(0, 2)
+    source.close()
+    assert len(verified) == 2
+
+
+def test_request_snapshot_id_includes_selected_source_axes():
+    left, *_ = _source()
+    right, *_ = _source()
+    assert left.snapshot_id == right.snapshot_id
+    records = tuple(BoundCosFactor(f"g{i}", f"cos://bucket/{i}", f"{i}" * 64,
+                                   100) for i in range(5))
+    right.factor_ids = tuple(r.factor_id for r in records)
+    right.records = records
+    assert left.snapshot_id != CosFactorTileSource._request_snapshot_id(
+        right.manifest_sha256, right.factor_ids, right.time_axis, right.asset_axis,
+        right.dtype, right.records)
+    left.close()
+    right.close()
+
+
+def test_source_enforces_tile_plus_prefetch_memory_budget():
+    source, *_ = _source()
+    source.close()
+    times = AxisRef("time", "int64", 100, np.arange(100, dtype=np.int64))
+    assets = AxisRef("asset", "str", 100, np.asarray([f"A{i}" for i in range(100)]))
+    with pytest.raises(MemoryError, match="max_prefetch_memory_bytes"):
+        CosFactorTileSource(
+            records=(BoundCosFactor("f", "cos://b/f", "a" * 64, 1),),
+            time_axis=times, asset_axis=assets, dtype="float64",
+            manifest_snapshot={}, manifest_sha256="m" * 64, max_tile_size=1,
+            read_factor=lambda *_: None, verify_manifest=lambda *_: None,
+            make_tile=lambda *_: None, max_prefetch_memory_bytes=1)
+
+
+def test_data_access_builder_uses_bound_helpers_and_closes_contexts(monkeypatch):
+    import factor_optimizer.research_manifest as research_manifest
+
+    times = AxisRef("time", "int64", 2, np.array([1, 2], dtype=np.int64))
+    assets = AxisRef("asset", "str", 2, np.array(["A", "B"]))
+    manifest = type("Snapshot", (), {"manifest_sha256": "m" * 64,
+        "factors": {"f0": {"uri": "cos://bucket/f0", "sha256": "a" * 64,
+                            "bytes": 8, "verified": True}}})()
+    controller_closed = []
+    worker_closed = []
+    verify_calls = []
+
+    def controller_factory():
+        return DataAccessReadContext(object(), "manifest", close=lambda: controller_closed.append(True))
+
+    def factor_factory(record):
+        return DataAccessReadContext(object(), "manifest", "factor", factor_params={"id": record.factor_id},
+                                     close=lambda: worker_closed.append(True))
+
+    monkeypatch.setattr(research_manifest, "read_bound_manifest", lambda *a, **k: manifest)
+    monkeypatch.setattr(research_manifest, "verify_bound_manifest_unchanged",
+                        lambda *a, **k: verify_calls.append(True))
+
+    class Factor:
+        source_uri, content_sha256, downloaded_bytes = "cos://bucket/f0", "a" * 64, 8
+        source_etag = "etag-f0"
+        table = type("Table", (), {"to_pandas": lambda self: 7})()
+    bound = type("Bound", (), {"factor": Factor(), "manifest_sha256": "m" * 64})()
+    def read_bound(*args, **kwargs):
+        assert kwargs["manifest_snapshot"] is manifest
+        assert kwargs["allow_research"] is True
+        return bound
+    monkeypatch.setattr(research_manifest, "read_bound_factor", read_bound)
+
+    def make_tile(start, end, records, payloads):
+        assert [item.payload for item in payloads] == [7]
+        return FactorBatch(("f0",), times, assets,
+                           np.ones((2, 2, 1), dtype=np.float64))
+
+    source = CosFactorTileSource.from_data_access(
+        factor_ids=("f0",), time_axis=times, asset_axis=assets, dtype="float64",
+        make_tile=make_tile, manifest_context_factory=controller_factory,
+        factor_context_factory=factor_factory, max_tile_size=1, prefetch="off")
+    tile = source.read_tile(0, 1)
+    assert tile.snapshot_id != "m" * 64
+    assert worker_closed == [True]
+    source.close()
+    assert controller_closed == [True]
+    assert len(verify_calls) == 2  # first read and final post-read snapshot check
+
+
+def test_prefetch_future_failure_waits_for_and_retires_other_reads():
+    records = tuple(BoundCosFactor(f"f{i}", f"cos://bucket/{i}", f"{i}" * 64, 100)
+                    for i in range(4))
+    times = AxisRef("time", "int64", 1, np.array([1], dtype=np.int64))
+    assets = AxisRef("asset", "str", 1, np.array(["A"]))
+    lock = threading.Lock()
+    active = 0
+
+    def read_factor(record, _snapshot):
+        nonlocal active
+        with lock:
+            active += 1
+        try:
+            time.sleep(0.01)
+            if record.factor_id == "f1":
+                raise OSError("read failed")
+            return 1, {"uri": record.uri, "sha256": record.sha256,
+                       "size_bytes": record.size_bytes, "manifest_sha256": "m" * 64}
+        finally:
+            with lock:
+                active -= 1
+
+    source = CosFactorTileSource(
+        records=records, time_axis=times, asset_axis=assets, dtype="float64",
+        manifest_snapshot={}, manifest_sha256="m" * 64, max_tile_size=2,
+        read_factor=read_factor, verify_manifest=lambda *_: None,
+        make_tile=lambda *_: None, max_source_memory_bytes=1024**3)
+    with pytest.raises(OSError, match="read failed"):
+        source.read_tile(0, 2)
+    assert active == 0
+    assert source._closed and source._executor is None and not source._pending
+
+
+def test_final_manifest_failure_still_closes_source_context():
+    closed = []
+    source, *_ = _source()
+    source._controller_close = lambda: closed.append(True)
+    source.verify_manifest = lambda *_: (_ for _ in ()).throw(RuntimeError("manifest changed"))
+    with pytest.raises(RuntimeError, match="manifest changed"):
+        source.close()
+    assert closed == [True]
+    assert source._executor is None and source._closed
+
+
+@pytest.mark.parametrize("status,factor_uri_matches", [
+    ("materialized_not_evaluated", True),
+    ("blocked", True),
+    ("materialized_not_evaluated", False),
+])
+def test_data_access_builder_relies_on_bound_manifest_uri_sha_and_status(
+        monkeypatch, status, factor_uri_matches):
+    import data_access.cos.remote as remote
+    import data_access.cos.research as cos_research
+
+    from types import SimpleNamespace
+
+    manifest_uri = "cos://bucket/manifest.json"
+    factor_uri = "cos://bucket/factor.parquet"
+    manifest_sha = "c" * 64
+    factor_sha = "a" * 64
+    time_axis = AxisRef("time", "int64", 2, np.asarray([1, 2], dtype=np.int64))
+    asset_axis = AxisRef("asset", "str", 1, np.asarray(["A"]))
+    frame = SimpleNamespace()
+    row = {"uri": factor_uri, "sha256": factor_sha, "bytes": 8,
+           "verified": True, "status": status, "fe_dsl": "col('close')"}
+    factors = {"f0": row}
+    closes = []
+
+    class Table:
+        def __init__(self, kind): self.kind = kind
+        def to_pylist(self): return [{"factors": factors}]
+        def to_pandas(self): return frame
+
+    class Store:
+        def __init__(self, descriptors): self.descriptors = descriptors
+        def authorize_dataset(self, _dataset): pass
+        def _authorize_factor_params(self, _dataset, _params): pass
+        def get_dataset(self, name): return self.descriptors[name]
+
+    def resolve_paths(dataset, *, params=None):
+        if dataset.name == "source_manifest": return [manifest_uri]
+        return [factor_uri if factor_uri_matches else "cos://bucket/other.parquet"]
+
+    def read_object(store, dataset, *, params=None, allow_research=False,
+                    max_object_mib=64, **kwargs):
+        if dataset == "source_manifest":
+            return SimpleNamespace(source_uri=manifest_uri, content_sha256=manifest_sha,
+                                   table=Table("manifest"))
+        return SimpleNamespace(source_uri=factor_uri, source_etag="etag",
+                               content_sha256=factor_sha, downloaded_bytes=8,
+                               table=Table("factor"))
+
+    monkeypatch.setattr(remote, "resolve_remote_paths", resolve_paths)
+    monkeypatch.setattr(cos_research, "read_declared_cos_object", read_object)
+
+    def manifest_context_factory():
+        descriptor = SimpleNamespace(name="source_manifest")
+        return DataAccessReadContext(Store({"source_manifest": descriptor}),
+                                     "source_manifest", close=lambda: closes.append("manifest"))
+
+    def factor_context_factory(record):
+        assert record.sha256 == factor_sha and record.size_bytes == 8
+        descriptor = SimpleNamespace(name="source_manifest")
+        factor_descriptor = SimpleNamespace(name="factor_panel")
+        return DataAccessReadContext(
+            Store({"source_manifest": descriptor, "factor_panel": factor_descriptor}),
+            "source_manifest", "factor_panel", factor_params={"id": "f0"},
+            close=lambda: closes.append("factor"))
+
+    def make_tile(start, end, records, payloads):
+        return FactorBatch(("f0",), time_axis, asset_axis,
+                           np.ones((2, 1, 1), dtype=np.float64))
+
+    source = CosFactorTileSource.from_data_access(
+        factor_ids=("f0",), time_axis=time_axis, asset_axis=asset_axis,
+        dtype="float64", make_tile=make_tile,
+        manifest_context_factory=manifest_context_factory,
+        factor_context_factory=factor_context_factory,
+        expected_manifest_sha256=manifest_sha, max_tile_size=1, prefetch="off")
+    if status == "materialized_not_evaluated" and factor_uri_matches:
+        tile = source.read_tile(0, 1)
+        assert tile.snapshot_id != manifest_sha
+        source.close()
+        assert closes == ["factor", "manifest"]
+    else:
+        with pytest.raises(ValueError):
+            source.read_tile(0, 1)
+        assert source._closed
+        assert closes == ["factor", "manifest"]

@@ -1116,8 +1116,37 @@ tile 组装和评估；不开启时仍是串行读取。两种模式都在同一
 [双对象预取](benchmarks/real_cos_f61_all_source_15_2400d_5000a_prefetch_auto_direct_20260929.json)、
 [串行](benchmarks/real_cos_f61_all_source_15_2400d_5000a_serial_auto_direct_20260929.json)。
 这是同机同来源的预取→串行对照，不是完整反序重复；缓存和并发负载仍可能影响
-耗时。当前开关只在研究基准的来源适配器中，不能声称公共 API 已默认预取；
-生产接入须另行保留有界内存、一次性读取、manifest/内容验证和失败关闭合同。
+耗时。这个 `--prefetch-objects` 开关只属于旧研究基准 adapter；后续新增的
+DataAccess 绑定 COS source 见下一节。通用公共 API 不会对任意来源默认预取。
+
+### DataAccess 绑定的 COS source adapter
+
+独立的 `CosFactorTileSource.from_data_access(...)` 使用已经注册的 DataAccess
+dataset/context factory、绑定 manifest 和逐对象 URI/SHA-256/字节数验证，
+默认 `prefetch="auto"` 对 COS 最多并发两个读取；可明确设置 `"off"`
+或 `"on"`。通用 `FactorTileSource` 与 CPU/CUDA `backend="auto"` 不会因此
+对任意来源开启并发。构造、资源预算和关闭方法见
+[来源合同](FACTOR_TILE_SOURCE_CONTRACT.md)。研究基准用
+`--source-adapter cos --cos-prefetch off|on|auto` 选择；旧研究读取器仍为
+基准命令的默认 adapter。
+
+同一 2400 × 5000 × 61、完整 15 项请求，COS adapter 的先关闭预取、后
+默认预取对照如下。两次 `auto` 都选择 CUDA/tile 16，并各自直接对拍显式 CUDA。
+
+| COS adapter 读取 | `auto` 整批 | 显式 CUDA 整批 | `auto` 来源读取墙钟 | 来源内预取窗口 |
+| --- | ---: | ---: | ---: | ---: |
+| `off` | 163.10 s | 154.65 s | 153.56 s | 1 |
+| `auto` | 95.00 s | 86.91 s | 85.61 s | 2 |
+
+两份报告的来源行摘要、snapshot ID、15 项值哈希和逐因子观测数哈希均相同；
+每份报告的 293,593 个元素均通过参考值与本轮直接对拍。`auto` 整批在此次
+对照约快 1.72 倍，改善主要落在来源读取阶段。证据：
+[关闭预取](benchmarks/real_cos_f61_all_source_15_2400d_5000a_cos_adapter_off_20260929.json)、
+[默认预取](benchmarks/real_cos_f61_all_source_15_2400d_5000a_cos_adapter_auto_counts_20260929.json)。
+另一轮默认预取的 `auto`/显式 CUDA 为 93.64/88.63 秒，直接对拍也通过；
+见[重复运行](benchmarks/real_cos_f61_all_source_15_2400d_5000a_cos_adapter_auto_20260929.json)。
+运行顺序、COS 缓存和同机负载仍可能影响时长；这是研究来源及这一精确
+形状的结果，不是所有来源、股票池或指标组合的全域最快证明。
 
 ## 一次性来源的 GPU OOM 重分片
 
