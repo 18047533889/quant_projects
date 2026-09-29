@@ -634,7 +634,7 @@ Versioned, research-only execution plans for value-level repair families.
 
 ### IneligibleValueRepair
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L16)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L17)。
 
 A valid registry candidate has no exact executable value primitive.
 
@@ -642,7 +642,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### ValueRepairPlan
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L34)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L68)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -659,7 +659,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### ValueRepairPlan.identity
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L43)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L77)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -669,7 +669,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### ValueRepairPlan.execute
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L54)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L88)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -679,7 +679,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### compile_value_repair
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L100)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L137)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -10655,7 +10655,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/adapters/layered_decay.py` | `86ac91175c82eef473abef116a7a67802872a0da96ce0fa7a6022bf783bb3e26` |
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
-| `factor_optimizer/adapters/repair_execution.py` | `77a9d99788f297132dc90a9827d00d6bf1b321860b7934429090774f9b9ab78f` |
+| `factor_optimizer/adapters/repair_execution.py` | `a6f0c8391585639479143286b9a0b636961c2b0ba7d8e0a4159af983ec1fa8ad` |
 | `factor_optimizer/capabilities.py` | `efb1fbf1b54b1b14f128ffe63c74f54f7a22f99a409a0761aac67fc1b6e3ed28` |
 | `factor_optimizer/complexity/__init__.py` | `79c8daf01ef8071b77eb7cbb8df4ae45fc9e2d4a4349f35d402a12f79936e696` |
 | `factor_optimizer/complexity/budget.py` | `d797ada6f52d0ccab3820450fb12e8f84f3f3dbb4e9f1e53f64eb5bb21a3469d` |
@@ -10692,7 +10692,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/policy/__init__.py` | `ddba38b9e34581d134c45902fd04db8e8fc540fd5b2438e4a3a46e3753888caf` |
 | `factor_optimizer/policy/decisions.py` | `832c06ae174ab078f518a9ee8237efe89cd88849c2f42e48e250dc6b676d16d3` |
 | `factor_optimizer/policy/repair.py` | `71c666acc21d6375a3188b61515e511b76a3efcafe6f159a7b268a94692b5889` |
-| `factor_optimizer/policy/repair_registry.py` | `5d8102d9f897c93db9c920f81e622eddef9bd91403dbba27ab250d236bd3246f` |
+| `factor_optimizer/policy/repair_registry.py` | `401c0c3955b4ffd3f2273b36f80017f7b54a981d8d287fd4fd05707b6bca2fc1` |
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |

@@ -8,6 +8,7 @@ import math
 import numbers
 from typing import Mapping, Tuple
 
+import numpy as np
 import pandas as pd
 
 from factor_optimizer.search.conditional_search import build_conditional_tree
@@ -28,6 +29,39 @@ def _validate_frame(values) -> pd.DataFrame:
     if values.duplicated(["date", "asset_id"]).any():
         raise ValueError("duplicate (date, asset_id) identities are ambiguous")
     return values
+
+
+def _execute_fe_neg(values: pd.Series) -> pd.Series:
+    """Apply FE's canonical unary negation, preferring its native Polars backend."""
+    try:
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+    except ImportError as exc:
+        raise RuntimeError(
+            "SIGN_ORIENTATION is FE-owned, but FactorEngine is unavailable"
+        ) from exc
+
+    expected = values.to_numpy(dtype=float, copy=True)
+    operator = OperatorRegistry.get("neg", backend="polars", mode="any")
+    if operator is not None:
+        import polars as pl
+
+        result = operator.calculate(pl.DataFrame({"x": expected}))
+        actual = result.get_column("x").to_numpy()
+    else:
+        operator = OperatorRegistry.get("neg", backend="pandas_numpy", mode="any")
+        if operator is None:
+            raise RuntimeError(
+                "FactorEngine canonical 'neg' has no executable backend"
+            )
+        result = operator.calculate(pd.DataFrame({"x": expected}))
+        if not isinstance(result, pd.DataFrame) or result.shape != (len(expected), 1):
+            raise ValueError("FactorEngine 'neg' returned an unexpected pandas result shape")
+        actual = result.iloc[:, 0].to_numpy()
+
+    actual = np.asarray(actual, dtype=float)
+    if actual.shape != expected.shape:
+        raise ValueError("FactorEngine 'neg' returned an unexpected result shape")
+    return pd.Series(actual, index=values.index, name=values.name)
 
 
 @dataclass(frozen=True)
@@ -59,7 +93,10 @@ class ValueRepairPlan:
         if self.transform == "raw":
             return frame["value"].copy()
         if self.transform == "sign":
-            return (frame["value"] * kwargs["multiplier"]).rename("value")
+            source = frame["value"]
+            if kwargs["multiplier"] == -1.0:
+                return _execute_fe_neg(source).rename("value")
+            return (source * kwargs["multiplier"]).rename("value")
         if self.transform == "rank_shape":
             from factor_preprocess.transforms.repair_shapes import rank_shape
             return rank_shape(frame, **kwargs)

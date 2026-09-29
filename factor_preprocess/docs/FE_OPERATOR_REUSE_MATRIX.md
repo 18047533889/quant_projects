@@ -29,7 +29,8 @@ Columns:
 - **FP-native reason** — why the transform stays FP (fitted / degenerate-row
   divergence / FE has no equivalent / offline-only / exposure-vs-fitted).
 - **implementation_origin** — `FE_OPERATOR` (routed through
-  `adapters/fe_operator.py`; FP kernel retained as deprecated fallback) or
+  `adapters/fe_operator.py`; production fails closed when FE is unavailable,
+  and FP kernel fallback requires explicit research opt-in) or
   `FP_NATIVE`.
 
 Parity evidence: `tests/test_fe_operator_parity.py` (per-FE-backed-transform
@@ -110,11 +111,10 @@ parity test; tolerance contract explicit — cross-sectional and ffill exact
 
 - **FE_OPERATOR (8):** `cs_rank`, `cs_demean`, `cs_winsor`, `forward_fill`,
   `ols_neutralize`, `industry_neutral`, `size_neutral`, `dual_neutral`.
-- **FP_NATIVE (35):** everything else.  Each FE-backed transform keeps its
-  FP-native kernel as a retained deprecated fallback (plan §26 F3) — no
-  kernel was deleted.  The FE adapter (`adapters/fe_operator.py`) is lazy:
-  FE is not a hard FP dependency; when FE is unavailable the registry
-  executes the FP-native kernel.
+- **FP_NATIVE (35):** everything else. Each FE-backed transform retains its
+  FP-native kernel for explicit research fallback (plan §26 F3). Production
+  execution requires FE and fails closed when FE is unavailable; FE remains
+  an optional dependency of FP.
 
 Parity note on `cs_zscore` (the one *near*-exact that is deliberately NOT
 routed): FE `zscore` equals FP `cs_zscore` with maxabs 0.0 on all normal

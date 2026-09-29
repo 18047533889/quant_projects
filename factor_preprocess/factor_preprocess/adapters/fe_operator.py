@@ -18,9 +18,9 @@ factor_engine lives at the monorepo root and is not a declared FP wheel
 dependency), so this adapter never imports FE at module scope.  The FE
 registry is loaded lazily through the bridge and a ``(canonical_id, kwargs)
 -> panel`` executor is built on first use; when FE is unavailable, the
-executor is ``None`` and the registry falls back to the retained FP-native
-kernel (deprecated fallback — plan §26 F3 migration period; never deleted in
-one shot).
+executor is ``None``. Production registry execution fails closed; only an
+explicit ``allow_research=True`` call may fall back to the retained FP-native
+kernel (plan §26 F3 migration path).
 
 Calling convention
 ------------------
@@ -134,8 +134,9 @@ def _stack_back(panel: pd.DataFrame, template: pd.DataFrame, time_col, asset_col
 class FeOperatorExecutor:
     """Callable executor for one FE canonical operator.
 
-    ``fallback`` is the retained FP-native kernel used only when FE is
-    unavailable at call time (never deleted — plan §26 F3).
+    ``fallback`` is the retained FP-native kernel. It is used only when FE is
+    unavailable and the executor was explicitly created with
+    ``allow_research_fallback=True`` (never deleted — plan §26 F3).
     """
 
     _PARAM_ALIASES = {"max_lag": "max_periods", "min_observations": "min_obs"}
@@ -293,9 +294,10 @@ class FeRecipeExecutor:
 def get_fe_executor(canonical: str, fallback: Optional[Callable] = None, *, allow_research_fallback: bool = False) -> Optional[FeOperatorExecutor]:
     """Return a lazily-FE-backed executor for ``canonical``.
 
-    Returns ``None`` when FE cannot be imported (so the registry falls back to
-    the retained FP-native kernel).  Raises only on an *unexpected* registry
-    error; a missing operator surfaces at first call.
+    Returns ``None`` when FE cannot be imported. The registry fails closed for
+    production execution and may use the retained FP-native kernel only when
+    research fallback was explicitly requested. Raises unexpected registry
+    errors; a missing operator surfaces at first call.
     """
     try:
         _fe_operator_registry()  # import + load probe

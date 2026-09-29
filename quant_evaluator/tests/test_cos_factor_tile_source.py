@@ -74,6 +74,23 @@ def test_prefetch_auto_is_bounded_ordered_and_preserves_tiles():
     source.close()
 
 
+def test_prefetch_retains_two_reads_ahead_at_tile_boundary():
+    source, _, _, maximum = _source()
+    try:
+        first = source.read_tile(0, 2)
+        assert first.batch.factor_ids == ("f0", "f1")
+        assert [index for index, _ in source._pending] == [2, 3]
+        assert source._submitted == 4
+        assert maximum() <= 2
+
+        second = source.read_tile(2, 4)
+        assert second.batch.factor_ids == ("f2", "f3")
+        np.testing.assert_array_equal(second.batch.values[0, 0], [2.0, 3.0])
+        assert [index for index, _ in source._pending] == [4]
+    finally:
+        source.close()
+
+
 def test_prefetch_off_is_serial():
     source, calls, _, maximum = _source("off")
     try:

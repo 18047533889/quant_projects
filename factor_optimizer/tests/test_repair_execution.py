@@ -28,6 +28,90 @@ def test_raw_and_sign_are_explicit_and_identity_is_stable():
     assert raw.identity != flip.identity
 
 
+def test_sign_flip_routes_through_fe_neg_and_is_chunk_stable(monkeypatch):
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    operator = OperatorRegistry.get("neg", backend="polars", mode="any")
+    assert operator is not None
+    original = operator.calculate
+    calls = []
+
+    def tracked(frame):
+        calls.append(frame.height)
+        return original(frame)
+
+    monkeypatch.setattr(operator, "calculate", tracked)
+    values = panel([1.0, np.nan, -3.0], [2.0, 4.0, np.nan])
+    plan = compile_("SIGN_ORIENTATION", {"direction": "flip"})
+    expected = plan.execute(values, allow_research=True)
+    assert calls == [len(values)]
+    chunked = pd.concat([
+        plan.execute(values.iloc[:3], allow_research=True),
+        plan.execute(values.iloc[3:], allow_research=True),
+    ])
+    assert calls == [len(values), 3, 3]
+    pd.testing.assert_series_equal(chunked, expected)
+
+
+@pytest.mark.parametrize("backend", ["polars", "pandas_numpy"])
+def test_sign_flip_matches_fe_backends_and_unary_minus_edge_cases(monkeypatch, backend):
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    operator = OperatorRegistry.get("neg", backend=backend, mode="any")
+    assert operator is not None
+    values = pd.DataFrame({
+        "asset_id": ["A"] * 8,
+        "date": pd.date_range("2026-01-01", periods=8),
+        "value": pd.Series([0.0, -0.0, np.nan, np.inf, -np.inf, 1.25, -2.5, 3.0], dtype="float64"),
+    })
+    plan = compile_("SIGN_ORIENTATION", {"direction": "flip"})
+    expected = -values["value"]
+    if backend == "pandas_numpy":
+        original_get = OperatorRegistry.get
+
+        def pandas_only(name, *, backend, mode):
+            if name == "neg" and backend == "polars":
+                return None
+            return original_get(name, backend=backend, mode=mode)
+
+        monkeypatch.setattr(OperatorRegistry, "get", pandas_only)
+    result = plan.execute(values, allow_research=True)
+    assert result.dtype == expected.dtype
+    np.testing.assert_array_equal(result.to_numpy(), expected.to_numpy())
+    assert np.signbit(result.iloc[0])  # +0.0 becomes -0.0
+    assert not np.signbit(result.iloc[1])  # -0.0 becomes +0.0
+
+    empty = values.iloc[:0]
+    empty_result = plan.execute(empty, allow_research=True)
+    assert empty_result.empty
+    assert empty_result.dtype == values["value"].dtype
+
+
+def test_sign_flip_fails_closed_when_fe_is_unavailable(monkeypatch):
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    original_get = OperatorRegistry.get
+
+    def without_neg(name, *, backend, mode):
+        return None if name == "neg" else original_get(name, backend=backend, mode=mode)
+
+    monkeypatch.setattr(OperatorRegistry, "get", without_neg)
+    values = panel([1.0], [2.0])
+    with pytest.raises(RuntimeError, match="no executable backend"):
+        compile_("SIGN_ORIENTATION", {"direction": "flip"}).execute(
+            values, allow_research=True
+        )
+
+
+def test_sign_orientation_declares_fe_owner():
+    from factor_optimizer.policy.repair_registry import (
+        ExecutionDomain, RepairFamily, RepairFamilyRegistry,
+    )
+
+    declaration = RepairFamilyRegistry.default().get(RepairFamily.SIGN_ORIENTATION)
+    assert declaration.owner is ExecutionDomain.FE
+
+
 @pytest.mark.parametrize("family, sign", [("U_SHAPE_REPAIR", 1), ("INVERTED_U_REPAIR", -1)])
 def test_u_repairs_use_same_date_percentile_rank_coordinates(family, sign):
     values = panel([1.0, 4.0], [3.0, 2.0])

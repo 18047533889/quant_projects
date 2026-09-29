@@ -37,6 +37,8 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from factor_preprocess.errors import GovernanceError
+import factor_preprocess.adapters.fe_operator as fe_adapter
 import pytest
 
 from factor_preprocess.registry.transforms import get_default_registry
@@ -368,12 +370,48 @@ def test_fitted_and_unmapped_transforms_are_fp_native():
         assert registry.resolve_origin(name) == "FP_NATIVE", name
 
 
-def test_fe_operator_execution_is_lazy_and_falls_back():
-    """Registry execution must not hard-import FE; fallback = FP kernel."""
+def test_fe_operator_execution_fails_closed_but_research_fallback_is_explicit(monkeypatch):
+    """Missing FE authority blocks production; research can opt into FP math."""
     registry = get_default_registry()
-    # get_execution should return a callable in any env.  When FE is present
-    # it is the adapter executor, otherwise the retained FP kernel.
-    fn = registry.get_execution("cs_rank")
-    assert callable(fn)
-    fn2 = registry.get_execution("ols_neutralize")
-    assert callable(fn2)
+    monkeypatch.setattr(fe_adapter, "get_fe_executor", lambda *args, **kwargs: None)
+
+    with pytest.raises(GovernanceError, match="FE operator authority unavailable"):
+        registry.get_execution("cs_rank")
+
+    values = np.array([[1.0, 2.0, 2.0]])
+    fn = registry.get_execution("cs_rank", allow_research=True)
+    actual = fn(values, pct=True)
+    expected = registry.get("cs_rank").func(values, pct=True)
+    np.testing.assert_array_equal(actual, expected)
+
+
+def test_fe_operator_executor_is_preferred_when_available_in_research_mode(monkeypatch):
+    registry = get_default_registry()
+    calls = {}
+
+    def fake_fe_executor(canonical, fallback=None, *, allow_research_fallback=False):
+        calls["canonical"] = canonical
+        calls["fallback"] = fallback
+        calls["allow_research_fallback"] = allow_research_fallback
+        return lambda values, **kwargs: "FE"
+
+    monkeypatch.setattr(fe_adapter, "get_fe_executor", fake_fe_executor)
+    fn = registry.get_execution("cs_rank", allow_research=True)
+    assert calls["canonical"] == "rank"
+    assert calls["fallback"] is registry.get("cs_rank").func
+    assert calls["allow_research_fallback"] is True
+    assert fn(np.array([[1.0, 2.0]]), pct=True) == "FE"
+
+
+def test_fe_runtime_errors_are_not_swallowed_by_research_fallback(monkeypatch):
+    registry = get_default_registry()
+
+    def failing_fe_executor(canonical, fallback=None, *, allow_research_fallback=False):
+        def fail(*args, **kwargs):
+            raise RuntimeError("FE calculation failed")
+        return fail
+
+    monkeypatch.setattr(fe_adapter, "get_fe_executor", failing_fe_executor)
+    fn = registry.get_execution("cs_rank", allow_research=True)
+    with pytest.raises(RuntimeError, match="FE calculation failed"):
+        fn(np.array([[1.0, 2.0]]), pct=True)

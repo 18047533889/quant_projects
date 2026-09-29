@@ -310,13 +310,15 @@ class CosFactorTileSource:
                     self._verified_manifest = True
                 payloads = []
                 if self.prefetch_enabled:
-                    self._fill(min(len(self.records), end + self.prefetch_window - 1))
+                    # Keep one full worker window beyond this tile so these
+                    # bounded reads can finish while the consumer evaluates it.
+                    self._fill(min(len(self.records), end + self.prefetch_window))
                     for expected_index in range(start, end):
                         index, future = self._pending.popleft()
                         if index != expected_index:
                             raise RuntimeError("prefetch queue order was corrupted")
                         payloads.append(future.result())
-                        self._fill(min(len(self.records), end + self.prefetch_window - 1))
+                        self._fill(min(len(self.records), end + self.prefetch_window))
                 else:
                     for index in range(start, end):
                         payloads.append(self._read_one(index))

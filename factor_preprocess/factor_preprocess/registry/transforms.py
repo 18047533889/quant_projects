@@ -820,9 +820,8 @@ class TransformRegistry:
         hard-import FE (dependency isolation): execution goes through the
         adapter hook installed in
         :mod:`factor_preprocess.adapters.fe_operator` (lazy-injected).  When
-        the adapter is unavailable (FE not importable), the FP-native kernel
-        (deprecated but retained fallback — plan §26 F3) is used so the
-        registry remains executable in any environment.
+        FE is unavailable, production execution fails closed; the retained
+        FP-native kernel is available only with the explicit research opt-in.
         """
         if type(allow_research) is not bool:
             raise TypeError("allow_research must be a bool")
@@ -834,13 +833,18 @@ class TransformRegistry:
         if self.resolve_origin(name) == "FE_OPERATOR":
             try:
                 from factor_preprocess.adapters.fe_operator import get_fe_executor
-            except Exception:
+            except (ImportError, ModuleNotFoundError):
                 get_fe_executor = None
             if get_fe_executor is not None:
                 meta = self._transforms[name]
-                executor = get_fe_executor(meta.fe_operator_id, fallback=meta.func)
+                executor = get_fe_executor(
+                    meta.fe_operator_id, fallback=meta.func,
+                    allow_research_fallback=allow_research,
+                )
                 if executor is not None:
                     return _ValidatedExecutor(self._transforms[name], executor)
+            if allow_research:
+                return _ValidatedExecutor(self._transforms[name], self._transforms[name].func)
             raise GovernanceError(
                 f"FE operator authority unavailable for {name!r}; no implicit FP-native fallback"
             )
@@ -1465,8 +1469,8 @@ def create_default_registry() -> TransformRegistry:
     # (T, N) panels with NaN/tie/Inf cases; explicit tolerances recorded).
     # Their execution therefore routes through the FE adapter
     # (adapters/fe_operator.py, lazy-injected — FE is not a hard FP
-    # dependency); the FP-native kernel is RETAINED as the deprecated
-    # fallback (never deleted in one shot — plan §26 F3 migration period).
+    # dependency); the FP-native kernel is RETAINED for explicit research
+    # fallback only. Production execution requires the FE operator.
     #
     # Cross-sectional exact duplicates:
     #   cs_rank    <- FE rank        (0-1 pct rank, singleton 0.5, average ties)

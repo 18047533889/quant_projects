@@ -336,7 +336,7 @@ _REPAIR_FAMILY_DECLARATIONS: Tuple[RepairFamilyDeclaration, ...] = (
         eligible_diagnoses=frozenset(
             {"LOW_PREDICTIVE", "LOW_SIGNAL", "LOW_STATISTICAL_CONFIDENCE"}
         ),
-        owner=ExecutionDomain.FP,
+        owner=ExecutionDomain.FE,
         parameter_schema=_schema(("direction", "choice:flip|keep")),
         parameter_prior=_prior(direction="flip"),
         maximum_candidates=2,
