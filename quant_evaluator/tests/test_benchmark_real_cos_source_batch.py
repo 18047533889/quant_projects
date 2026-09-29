@@ -36,9 +36,18 @@ def _fixtures():
 
 def test_real_cos_source_repeats_share_snapshot_and_preserve_tile_axes(monkeypatch):
     times, asset_axis, batch, label, records, source_rows = _fixtures()
-    monkeypatch.setattr(harness.tiles, "iter_frames", lambda *args, **kwargs: iter(()))
+    reader_calls = []
 
-    def make_tile(stream, expected, dates, assets, labels):
+    def fake_reader(name):
+        def read(rows, *args, **kwargs):
+            reader_calls.append((name, tuple(row[0] for row in rows)))
+            return iter(())
+        return read
+
+    monkeypatch.setattr(harness.tiles, "iter_frames", fake_reader("serial"))
+    monkeypatch.setattr(harness.tiles, "iter_frames_prefetched", fake_reader("prefetch"))
+
+    def make_tile(stream, expected, dates, assets, labels, *, load_phases=None):
         ids = tuple(row[0] for row in expected)
         indices = [batch.factor_ids.index(fid) for fid in ids]
         tile_batch = FactorBatch(
@@ -51,9 +60,9 @@ def test_real_cos_source_repeats_share_snapshot_and_preserve_tile_axes(monkeypat
     sources = [
         harness.RealCosSource(
             records, source_rows, pd.DatetimeIndex(times), asset_axis.values,
-            label, "a" * 64, 1, 16,
+            label, "a" * 64, 1, 16, prefetch_objects=bool(index),
         )
-        for _ in range(2)
+        for index in range(2)
     ]
     assert sources[0] is not sources[1]
     assert sources[0].snapshot_id == sources[1].snapshot_id
@@ -65,6 +74,11 @@ def test_real_cos_source_repeats_share_snapshot_and_preserve_tile_axes(monkeypat
             assert np.array_equal(tile.batch.time_axis.values, source.time_axis.values)
             assert np.array_equal(tile.batch.asset_axis.values, source.asset_axis.values)
         assert source.reads == [(0, 1), (1, 2)]
+        assert [item["tile_range"] for item in source.tile_read_timings] == [[0, 1], [1, 2]]
+    assert reader_calls == [
+        ("serial", ("f0",)), ("serial", ("f1",)),
+        ("prefetch", ("f0",)), ("prefetch", ("f1",)),
+    ]
 
 
 def test_run_backend_forwards_object_cap_and_validates_receipt(monkeypatch):
@@ -87,7 +101,7 @@ def test_run_backend_forwards_object_cap_and_validates_receipt(monkeypatch):
         result, timing = harness.run_backend(
             backend, records, source_rows, pd.date_range("2024-01-01", periods=3, freq="B"),
             asset_axis.values, label, "a" * 64, 1, 16, GPUExecutionPolicy(),
-            harness.DEFAULT_METRICS,
+            harness.DEFAULT_METRICS, prefetch_objects=True,
         )
         results.append((result, timing))
 
@@ -96,6 +110,9 @@ def test_run_backend_forwards_object_cap_and_validates_receipt(monkeypatch):
     assert all(source.reads == [(0, 1), (1, 2)] for source in sources)
     assert [timing["backend_used"] for _, timing in results] == ["cpu", "cuda"]
     assert [timing["factor_tiles_processed"] for _, timing in results] == [2, 2]
+    assert [timing["prefetch_objects"] for _, timing in results] == [True, True]
+    assert [timing["total_wall_seconds"] for _, timing in results] == [
+        timing["seconds"] for _, timing in results]
 
 
 def test_run_backend_auto_validates_effective_not_requested_tile_width(monkeypatch):

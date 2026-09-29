@@ -10,6 +10,32 @@ from enum import Enum
 from typing import Protocol, Optional
 
 
+def _similarity_scope_key(result: "SimilarityResult") -> tuple[tuple[bool, str], ...]:
+    """Return a stable ordering key for otherwise tied scope measurements."""
+    return tuple(
+        (value is not None, value or "")
+        for value in (result.universe_ref, result.period_start, result.period_end)
+    )
+
+
+def _deduplicate_similar_neighbors(
+    candidates: list[tuple[str, "SimilarityResult"]],
+) -> list["SimilarityResult"]:
+    """Keep each neighbor's strongest score with deterministic scope tie breaks."""
+    best_by_neighbor: dict[str, tuple[tuple[float, tuple[tuple[bool, str], ...]], "SimilarityResult"]] = {}
+    for neighbor_id, result in candidates:
+        rank = (-abs(result.similarity_score), _similarity_scope_key(result))
+        current = best_by_neighbor.get(neighbor_id)
+        if current is None or rank < current[0]:
+            best_by_neighbor[neighbor_id] = (rank, result)
+
+    ordered = sorted(
+        best_by_neighbor.items(),
+        key=lambda item: (item[1][0][0], item[0], item[1][0][1]),
+    )
+    return [result for _, (_, result) in ordered]
+
+
 class SimilarityMethod(Enum):
     """Similarity computation methods."""
     PEARSON = "pearson"
@@ -271,8 +297,7 @@ class QEPairwiseSimilarity:
             raise ValueError("max_results must be non-negative")
         # In production, would delegate to QE batch correlation
         # For now, use cache
-        results = []
-        seen_factor_ids = set()
+        candidates = []
         factor_keys = self._factor_keys.get(factor_id, {})
         for key in factor_keys:
             result = self._cache[key]
@@ -288,15 +313,10 @@ class QEPairwiseSimilarity:
             if period_end is not None and end != period_end:
                 continue
 
-            # Avoid duplicates (we store symmetric pairs)
-            if fid_b in seen_factor_ids:
-                continue
-
             if result.is_high_similarity(threshold):
-                results.append(result)
-                seen_factor_ids.add(fid_b)
+                candidates.append((fid_b, result))
 
-        results.sort(key=lambda r: abs(r.similarity_score), reverse=True)
+        results = _deduplicate_similar_neighbors(candidates)
         return results[:max_results]
 
     def add_result(self, result: SimilarityResult) -> None:
@@ -508,8 +528,7 @@ class CorrelationSimilarity:
         """
         if max_results < 0:
             raise ValueError("max_results must be non-negative")
-        results = []
-        seen_factor_ids = set()
+        candidates = []
 
         for key, result in self._cache.items():
             # key is (fid_a, fid_b, method_val, universe, start, end)
@@ -524,16 +543,10 @@ class CorrelationSimilarity:
             if period_end is not None and end != period_end:
                 continue
 
-            # Avoid duplicates (we store symmetric pairs)
-            if fid_b in seen_factor_ids:
-                continue
-
             if result.is_high_similarity(threshold):
-                results.append(result)
-                seen_factor_ids.add(fid_b)
+                candidates.append((fid_b, result))
 
-        # Sort by descending similarity score
-        results.sort(key=lambda r: abs(r.similarity_score), reverse=True)
+        results = _deduplicate_similar_neighbors(candidates)
 
         return results[:max_results]
 

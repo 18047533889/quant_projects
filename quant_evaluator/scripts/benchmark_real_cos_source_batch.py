@@ -72,7 +72,7 @@ class RealCosSource:
     """Immutable source adapter that materializes only one factor tile."""
 
     def __init__(self, records, source_rows, dates, assets, label, manifest_sha,
-                 tile_size, max_object_mib):
+                 tile_size, max_object_mib, prefetch_objects=False):
         self.records = tuple(records)
         self.source_rows = tuple(tuple(row) for row in source_rows)
         self.factor_ids = tuple(row[0] for row in self.records)
@@ -90,10 +90,12 @@ class RealCosSource:
         self.snapshot_id = hashlib.sha256(body).hexdigest()
         self.max_tile_size = tile_size
         self.max_object_mib = max_object_mib
+        self.prefetch_objects = bool(prefetch_objects)
         self.next_start = 0
         self.dates, self.assets, self.label = dates, tuple(assets), label
         self.manifest_sha = manifest_sha
         self.reads = []
+        self.tile_read_timings = []
 
     def read_tile(self, start: int, end: int) -> FactorTile:
         if not (0 <= start < end <= len(self.factor_ids)
@@ -102,11 +104,28 @@ class RealCosSource:
         if start != self.next_start:
             raise InvalidContractError("source tiles must be read once in factor order")
         expected = self.source_rows[start:end]
-        stream = tiles.iter_frames(
-            self.records[start:end], self.manifest_sha, self.max_object_mib,
-            reuse_manifest=True,
+        load_phases = {"bound_factor_read_s": 0.0, "arrow_to_pandas_axis_s": 0.0,
+                       "reindex_write_s": 0.0}
+        read_started = time.perf_counter()
+        if self.prefetch_objects:
+            stream = tiles.iter_frames_prefetched(
+                self.records[start:end], self.manifest_sha, self.max_object_mib,
+                load_phases=load_phases,
+            )
+        else:
+            stream = tiles.iter_frames(
+                self.records[start:end], self.manifest_sha, self.max_object_mib,
+                reuse_manifest=True, load_phases=load_phases,
+            )
+        batch = tiles.make_tile(
+            stream, expected, self.dates, self.assets, self.label,
+            load_phases=load_phases,
         )
-        batch = tiles.make_tile(stream, expected, self.dates, self.assets, self.label)
+        self.tile_read_timings.append({
+            "tile_range": [start, end],
+            "wall_seconds": time.perf_counter() - read_started,
+            "load_phases_seconds": load_phases,
+        })
         self.reads.append((start, end))
         self.next_start = end
         return FactorTile(start, end, batch, self.snapshot_id)
@@ -200,9 +219,10 @@ def compare(cpu, cuda, selected_metrics, *, expected_days=None) -> dict:
 
 def run_backend(backend, records, source_rows, dates, assets, labels,
                 manifest_sha, tile_size, max_object_mib, policy, selected_metrics,
-                *, expected_auto_cuda=False):
+                *, expected_auto_cuda=False, prefetch_objects=False):
     source = RealCosSource(records, source_rows, dates, assets, labels,
-                           manifest_sha, tile_size, max_object_mib)
+                           manifest_sha, tile_size, max_object_mib,
+                           prefetch_objects=prefetch_objects)
     started = time.perf_counter()
     result = evaluate_factor_source_batch(
         source, labels, metrics=selected_metrics, backend=backend,
@@ -229,8 +249,13 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         "backend_requested": backend,
         "backend_used": result.metadata["backend_used"],
         "seconds": elapsed,
+        "total_wall_seconds": elapsed,
         "factor_tiles_processed": len(source.reads),
         "tile_ranges": source.reads,
+        "prefetch_objects": source.prefetch_objects,
+        "tile_read_timings": source.tile_read_timings,
+        "source_read_wall_seconds": sum(item["wall_seconds"]
+                                        for item in source.tile_read_timings),
         "peak_process_rss_kib": resource.getrusage(
             resource.RUSAGE_SELF).ru_maxrss,
     }
@@ -279,6 +304,8 @@ def run_gpu_tile_width_ab(args, selected_metrics):
                        "--max-object-mib", str(args.max_object_mib),
                        "--max-total-mib", str(args.max_total_mib),
                        "--gpu-worker", "--output", str(output)]
+            if getattr(args, "prefetch_objects", False):
+                command.append("--prefetch-objects")
             if args.axis_index:
                 command.extend(("--axis-index", str(args.axis_index)))
             try:
@@ -403,6 +430,8 @@ def main():
     parser.add_argument("--gpu-worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--run-order", choices=("cpu-first", "cuda-first"),
                         default="cpu-first", help="order for whole-source CPU/CUDA A/B")
+    parser.add_argument("--prefetch-objects", action="store_true",
+                        help="prefetch at most two COS factor objects while assembling each source tile")
     parser.add_argument("--verify-auto", action="store_true",
                         help="also verify the exact certified F61 Pearson or all-source auto route")
     parser.add_argument("--auto-references", nargs=2, type=Path,
@@ -486,7 +515,7 @@ def main():
         auto, receipt = run_backend(
             "auto", records, source_rows, dates, assets, labels, manifest_sha,
             args.tile_size, args.max_object_mib, policy, selected,
-            expected_auto_cuda=True)
+            expected_auto_cuda=True, prefetch_objects=args.prefetch_objects)
         receipt["preflight"] = gate
         receipt["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
         receipt["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
@@ -499,7 +528,8 @@ def main():
             raise SystemExit(f"CUDA A/B preflight rejected before explicit CUDA run: {rejection}")
         cuda, cuda_receipt = run_backend(
             "cuda_strict", records, source_rows, dates, assets, labels, manifest_sha,
-            args.tile_size, args.max_object_mib, policy, selected)
+            args.tile_size, args.max_object_mib, policy, selected,
+            prefetch_objects=args.prefetch_objects)
         cuda_receipt["preflight"] = cuda_gate
         direct_comparison = compare(auto, cuda, selected, expected_days=len(dates))
         route_pass = (receipt["auto_backend_reason"] ==
@@ -512,7 +542,8 @@ def main():
             "manifest_sha256": manifest_sha,
             "shape": [len(dates), len(assets), len(records)],
             "factor_dtype": "float64", "tile_size": args.tile_size,
-            "metric_ids": list(selected), "run": receipt,
+            "metric_ids": list(selected),
+            "prefetch_objects": args.prefetch_objects, "run": receipt,
             "explicit_cuda_run": cuda_receipt,
             "route_pass": route_pass,
             "reference_comparison": reference_comparison,
@@ -531,7 +562,8 @@ def main():
             raise SystemExit("RAM or COS cache disk headroom fell below preflight")
         result, run = run_backend(
             "cuda_strict", records, source_rows, dates, assets, labels,
-            manifest_sha, args.tile_size, args.max_object_mib, policy, selected)
+            manifest_sha, args.tile_size, args.max_object_mib, policy, selected,
+            prefetch_objects=args.prefetch_objects)
         run["tile_size"] = args.tile_size
         run["preflight"] = gate
         scalar_metrics, observation_counts = {}, {}
@@ -550,6 +582,7 @@ def main():
             "factor_ids": list(result.factor_ids),
             "source_request_fingerprint": result.metadata["source_request_fingerprint"],
             "tile_size": args.tile_size, "metric_ids": list(selected),
+            "prefetch_objects": args.prefetch_objects,
             "run": run, "scalar_metrics": scalar_metrics,
             "observation_counts": observation_counts,
         }
@@ -568,11 +601,14 @@ def main():
                 raise SystemExit(f"CUDA A/B preflight rejected: {rejection}")
         bundle, receipt = run_backend(
             backend, records, source_rows, dates, assets, labels, manifest_sha,
-            args.tile_size, args.max_object_mib, policy, selected)
+            args.tile_size, args.max_object_mib, policy, selected,
+            prefetch_objects=args.prefetch_objects)
         receipt["preflight"] = gate
         runs[backend] = (bundle, receipt)
     cpu, cpu_run = runs["cpu"]
     cuda, cuda_run = runs["cuda_strict"]
+    if cpu_run["prefetch_objects"] != cuda_run["prefetch_objects"]:
+        raise ValueError("CPU/CUDA A/B runs used different object prefetch settings")
     comparison = compare(cpu, cuda, selected, expected_days=len(dates))
     auto_run = None
     auto_comparison = None
@@ -583,7 +619,7 @@ def main():
         auto, auto_run = run_backend(
             "auto", records, source_rows, dates, assets, labels, manifest_sha,
             args.tile_size, args.max_object_mib, policy, selected,
-            expected_auto_cuda=True)
+            expected_auto_cuda=True, prefetch_objects=args.prefetch_objects)
         auto_run["preflight"] = gate
         auto_run["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
         auto_run["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
@@ -602,6 +638,7 @@ def main():
         "shape": [len(dates), len(assets), len(records)],
         "factor_dtype": "float64",
         "tile_size": args.tile_size,
+        "prefetch_objects": args.prefetch_objects,
         "run_order": list(order),
         "metric_ids": list(selected),
         "preflight_before_cpu": cpu_run["preflight"],

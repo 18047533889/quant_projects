@@ -456,6 +456,55 @@ def test_correlation_similarity_find_similar_partial_filter_is_exact():
     assert [r.factor_id_b for r in similarity.find_similar("F001", period_start="2024-01-01")] == ["DATED"]
 
 
+@pytest.mark.parametrize("similarity_type", [QEPairwiseSimilarity, CorrelationSimilarity])
+@pytest.mark.parametrize(
+    "scoped_scores",
+    [
+        [("US", -0.91), ("EU", 0.82)],
+        [("EU", 0.82), ("US", -0.91)],
+    ],
+)
+def test_find_similar_chooses_strongest_scope_independent_of_insertion_order(
+    similarity_type, scoped_scores
+):
+    similarity = similarity_type()
+    for universe, score in scoped_scores:
+        similarity.add_result(SimilarityResult(
+            factor_id_a="F001", factor_id_b="F002", similarity_score=score,
+            method=SimilarityMethod.PEARSON, timestamp="2025-01-01T00:00:00Z",
+            sample_size=100, universe_ref=universe,
+        ))
+
+    results = similarity.find_similar("F001")
+    assert len(results) == 1
+    assert results[0].similarity_score == -0.91
+    assert results[0].universe_ref == "US"
+
+
+@pytest.mark.parametrize("similarity_type", [QEPairwiseSimilarity, CorrelationSimilarity])
+@pytest.mark.parametrize(
+    "scoped_scores",
+    [
+        [("Z_SCOPE", 0.9), ("A_SCOPE", -0.9)],
+        [("A_SCOPE", -0.9), ("Z_SCOPE", 0.9)],
+    ],
+)
+def test_find_similar_breaks_scope_score_ties_deterministically(
+    similarity_type, scoped_scores
+):
+    similarity = similarity_type()
+    for universe, score in scoped_scores:
+        similarity.add_result(SimilarityResult(
+            factor_id_a="F001", factor_id_b="F002", similarity_score=score,
+            method=SimilarityMethod.PEARSON, timestamp="2025-01-01T00:00:00Z",
+            sample_size=100, universe_ref=universe,
+        ))
+
+    results = similarity.find_similar("F001")
+    assert len(results) == 1
+    assert results[0].universe_ref == "A_SCOPE"
+
+
 def test_similarity_method_enum():
     """Test SimilarityMethod enum values."""
     assert SimilarityMethod.PEARSON.value == "pearson"
