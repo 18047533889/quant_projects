@@ -14,30 +14,30 @@
     "cpu"
   ],
   "metric_ids": [
-    "pearson_ic",
-    "pearson_ic_series",
+    "pearson_ic_ir",
     "pearson_ic_std",
-    "pearson_ic_ir"
+    "pearson_ic_series",
+    "pearson_ic"
   ],
   "preflight_before_cpu": {
     "pass": true,
-    "available_ram_bytes": 37488046080,
+    "available_ram_bytes": 37968056320,
     "minimum_available_ram_bytes": 34359738368,
-    "cos_cache_disk_free_bytes": 189214793728,
+    "cos_cache_disk_free_bytes": 189181292544,
     "required_disk_bytes": 7516192768
   },
   "preflight_before_cuda": {
     "pass": true,
-    "available_ram_bytes": 46882865152,
+    "available_ram_bytes": 47241969664,
     "minimum_available_ram_bytes": 34359738368,
-    "cos_cache_disk_free_bytes": 189223636992,
+    "cos_cache_disk_free_bytes": 189183537152,
     "required_disk_bytes": 7516192768
   },
   "runs": [
     {
       "backend_requested": "cpu",
       "backend_used": "cpu",
-      "seconds": 224.11133403100393,
+      "seconds": 220.69233835600608,
       "factor_tiles_processed": 4,
       "tile_ranges": [
         [
@@ -57,19 +57,19 @@
           61
         ]
       ],
-      "peak_process_rss_kib": 13026940,
+      "peak_process_rss_kib": 12226268,
       "preflight": {
         "pass": true,
-        "available_ram_bytes": 37488046080,
+        "available_ram_bytes": 37968056320,
         "minimum_available_ram_bytes": 34359738368,
-        "cos_cache_disk_free_bytes": 189214793728,
+        "cos_cache_disk_free_bytes": 189181292544,
         "required_disk_bytes": 7516192768
       }
     },
     {
       "backend_requested": "cuda_strict",
       "backend_used": "cuda",
-      "seconds": 183.7114913960031,
+      "seconds": 176.01027049899858,
       "factor_tiles_processed": 4,
       "tile_ranges": [
         [
@@ -89,12 +89,12 @@
           61
         ]
       ],
-      "peak_process_rss_kib": 13026940,
+      "peak_process_rss_kib": 12226268,
       "preflight": {
         "pass": true,
-        "available_ram_bytes": 46882865152,
+        "available_ram_bytes": 47241969664,
         "minimum_available_ram_bytes": 34359738368,
-        "cos_cache_disk_free_bytes": 189223636992,
+        "cos_cache_disk_free_bytes": 189183537152,
         "required_disk_bytes": 7516192768
       }
     }
@@ -104,7 +104,27 @@
     "compared_factor_count": 61,
     "compared_metric_count": 157929,
     "metrics": {
-      "pearson_ic": {
+      "pearson_ic_ir": {
+        "pass": true,
+        "artifact_kind": "scalar",
+        "cpu_shape": [
+          61
+        ],
+        "cuda_shape": [
+          61
+        ],
+        "shape_valid": true,
+        "factor_count": 61,
+        "compared_value_count": 61,
+        "finite_value_count": 61,
+        "finite_mask_equal": true,
+        "max_abs_error": 1.1102230246251565e-16,
+        "observation_counts_equal": true,
+        "observation_counts_shape_valid": true,
+        "cpu_values_sha256": "f7d18b62dc035b6b5bb65781242f1809cd963366911e695856075598dcf044bd",
+        "cuda_values_sha256": "cba4a2f7579d8ef6257fd5f316298d3fb03abca0b3e365579d6a24576f8bdad5"
+      },
+      "pearson_ic_std": {
         "pass": true,
         "artifact_kind": "scalar",
         "cpu_shape": [
@@ -121,8 +141,8 @@
         "max_abs_error": 1.6653345369377348e-16,
         "observation_counts_equal": true,
         "observation_counts_shape_valid": true,
-        "cpu_values_sha256": "645c9886a22996b48c440716ea3d3e0c183d421d7deaf2bfe51ff5a186e94a88",
-        "cuda_values_sha256": "c419b6074992c6a5ef2042298b15d6d3d86f66f251c7ee4e98db8b6959b84747"
+        "cpu_values_sha256": "d35371018387cde67db964b541dfc72f82df248777e9d9d1545f336c20c89f95",
+        "cuda_values_sha256": "523668fbc1ffceaf9fe43a3e4793365a1a72b63aa3f7d4744127b968beaa3191"
       },
       "pearson_ic_series": {
         "pass": true,
@@ -146,7 +166,7 @@
         "cpu_values_sha256": "8897d79222d0a81ca40a94b7e280774592a0d6a2e31f79c6c06871738ffeffb4",
         "cuda_values_sha256": "1c3694a7658e9e423e3ceb92ffb7343467d0c5ea87b883ece0d643904f889c8e"
       },
-      "pearson_ic_std": {
+      "pearson_ic": {
         "pass": true,
         "artifact_kind": "scalar",
         "cpu_shape": [
@@ -163,35 +183,15 @@
         "max_abs_error": 1.6653345369377348e-16,
         "observation_counts_equal": true,
         "observation_counts_shape_valid": true,
-        "cpu_values_sha256": "d35371018387cde67db964b541dfc72f82df248777e9d9d1545f336c20c89f95",
-        "cuda_values_sha256": "523668fbc1ffceaf9fe43a3e4793365a1a72b63aa3f7d4744127b968beaa3191"
-      },
-      "pearson_ic_ir": {
-        "pass": true,
-        "artifact_kind": "scalar",
-        "cpu_shape": [
-          61
-        ],
-        "cuda_shape": [
-          61
-        ],
-        "shape_valid": true,
-        "factor_count": 61,
-        "compared_value_count": 61,
-        "finite_value_count": 61,
-        "finite_mask_equal": true,
-        "max_abs_error": 1.1102230246251565e-16,
-        "observation_counts_equal": true,
-        "observation_counts_shape_valid": true,
-        "cpu_values_sha256": "f7d18b62dc035b6b5bb65781242f1809cd963366911e695856075598dcf044bd",
-        "cuda_values_sha256": "cba4a2f7579d8ef6257fd5f316298d3fb03abca0b3e365579d6a24576f8bdad5"
+        "cpu_values_sha256": "645c9886a22996b48c440716ea3d3e0c183d421d7deaf2bfe51ff5a186e94a88",
+        "cuda_values_sha256": "c419b6074992c6a5ef2042298b15d6d3d86f66f251c7ee4e98db8b6959b84747"
       }
     }
   },
   "auto_run": {
     "backend_requested": "auto",
     "backend_used": "cuda",
-    "seconds": 180.14148076700076,
+    "seconds": 178.0472110949995,
     "factor_tiles_processed": 4,
     "tile_ranges": [
       [
@@ -211,12 +211,12 @@
         61
       ]
     ],
-    "peak_process_rss_kib": 13193908,
+    "peak_process_rss_kib": 12226268,
     "preflight": {
       "pass": true,
-      "available_ram_bytes": 34673025024,
+      "available_ram_bytes": 35618762752,
       "minimum_available_ram_bytes": 34359738368,
-      "cos_cache_disk_free_bytes": 189213478912,
+      "cos_cache_disk_free_bytes": 189179875328,
       "required_disk_bytes": 7516192768
     },
     "auto_backend_reason": "bounded_f61_pearson_chain_gpu_tile16",
@@ -227,7 +227,27 @@
     "compared_factor_count": 61,
     "compared_metric_count": 157929,
     "metrics": {
-      "pearson_ic": {
+      "pearson_ic_ir": {
+        "pass": true,
+        "artifact_kind": "scalar",
+        "cpu_shape": [
+          61
+        ],
+        "cuda_shape": [
+          61
+        ],
+        "shape_valid": true,
+        "factor_count": 61,
+        "compared_value_count": 61,
+        "finite_value_count": 61,
+        "finite_mask_equal": true,
+        "max_abs_error": 1.1102230246251565e-16,
+        "observation_counts_equal": true,
+        "observation_counts_shape_valid": true,
+        "cpu_values_sha256": "f7d18b62dc035b6b5bb65781242f1809cd963366911e695856075598dcf044bd",
+        "cuda_values_sha256": "cba4a2f7579d8ef6257fd5f316298d3fb03abca0b3e365579d6a24576f8bdad5"
+      },
+      "pearson_ic_std": {
         "pass": true,
         "artifact_kind": "scalar",
         "cpu_shape": [
@@ -244,8 +264,8 @@
         "max_abs_error": 1.6653345369377348e-16,
         "observation_counts_equal": true,
         "observation_counts_shape_valid": true,
-        "cpu_values_sha256": "645c9886a22996b48c440716ea3d3e0c183d421d7deaf2bfe51ff5a186e94a88",
-        "cuda_values_sha256": "c419b6074992c6a5ef2042298b15d6d3d86f66f251c7ee4e98db8b6959b84747"
+        "cpu_values_sha256": "d35371018387cde67db964b541dfc72f82df248777e9d9d1545f336c20c89f95",
+        "cuda_values_sha256": "523668fbc1ffceaf9fe43a3e4793365a1a72b63aa3f7d4744127b968beaa3191"
       },
       "pearson_ic_series": {
         "pass": true,
@@ -269,7 +289,7 @@
         "cpu_values_sha256": "8897d79222d0a81ca40a94b7e280774592a0d6a2e31f79c6c06871738ffeffb4",
         "cuda_values_sha256": "1c3694a7658e9e423e3ceb92ffb7343467d0c5ea87b883ece0d643904f889c8e"
       },
-      "pearson_ic_std": {
+      "pearson_ic": {
         "pass": true,
         "artifact_kind": "scalar",
         "cpu_shape": [
@@ -286,28 +306,8 @@
         "max_abs_error": 1.6653345369377348e-16,
         "observation_counts_equal": true,
         "observation_counts_shape_valid": true,
-        "cpu_values_sha256": "d35371018387cde67db964b541dfc72f82df248777e9d9d1545f336c20c89f95",
-        "cuda_values_sha256": "523668fbc1ffceaf9fe43a3e4793365a1a72b63aa3f7d4744127b968beaa3191"
-      },
-      "pearson_ic_ir": {
-        "pass": true,
-        "artifact_kind": "scalar",
-        "cpu_shape": [
-          61
-        ],
-        "cuda_shape": [
-          61
-        ],
-        "shape_valid": true,
-        "factor_count": 61,
-        "compared_value_count": 61,
-        "finite_value_count": 61,
-        "finite_mask_equal": true,
-        "max_abs_error": 1.1102230246251565e-16,
-        "observation_counts_equal": true,
-        "observation_counts_shape_valid": true,
-        "cpu_values_sha256": "f7d18b62dc035b6b5bb65781242f1809cd963366911e695856075598dcf044bd",
-        "cuda_values_sha256": "cba4a2f7579d8ef6257fd5f316298d3fb03abca0b3e365579d6a24576f8bdad5"
+        "cpu_values_sha256": "645c9886a22996b48c440716ea3d3e0c183d421d7deaf2bfe51ff5a186e94a88",
+        "cuda_values_sha256": "c419b6074992c6a5ef2042298b15d6d3d86f66f251c7ee4e98db8b6959b84747"
       }
     }
   },

@@ -186,6 +186,13 @@ def test_pearson_chain_rejects_gpu_worker_mode(monkeypatch):
         harness.main()
 
 
+def test_pearson_chain_benchmark_accepts_only_complete_permutations():
+    assert harness.is_pearson_chain(harness.PEARSON_CHAIN)
+    assert harness.is_pearson_chain(tuple(reversed(harness.PEARSON_CHAIN)))
+    assert not harness.is_pearson_chain(harness.PEARSON_CHAIN[:-1])
+    assert not harness.is_pearson_chain(("pearson_ic",) * 4)
+
+
 def test_gpu_tile_width_ab_interleaves_and_checks_every_run(monkeypatch, tmp_path):
     reports, widths = [], []
     assert harness.DEFAULT_METRICS == ("rank_ic", "quantile_spread", "factor_turnover_rate")

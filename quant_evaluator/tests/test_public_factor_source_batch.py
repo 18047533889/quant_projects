@@ -455,15 +455,36 @@ def test_auto_source_f61_pearson_chain_exact_route_and_negative_cases(monkeypatc
     assert routed.metadata["effective_max_tile_size"] == 16
     assert routed.metadata["auto_backend_reason"] == "bounded_f61_pearson_chain_gpu_tile16"
 
-    for changed_metrics, width in ((metrics, 8), (metrics[:-1], 16),
-                                   (tuple(reversed(metrics)), 16)):
+    reversed_metrics = tuple(reversed(metrics))
+    reversed_source = Source(batch)
+    reversed_source.max_tile_size = 32
+    reversed_routed = evaluate_factor_source_batch(
+        reversed_source, label, metrics=reversed_metrics, backend="auto", max_tile_size=32)
+    reversed_cpu = evaluate_factor_source_batch(
+        Source(batch), label, metrics=reversed_metrics, backend="cpu")
+    for metric in reversed_metrics:
+        group = "series_metrics" if metric.endswith("_series") else "scalar_metrics"
+        np.testing.assert_allclose(getattr(reversed_routed, group)[metric],
+                                   getattr(reversed_cpu, group)[metric],
+                                   rtol=1e-8, atol=1e-10, equal_nan=True)
+        np.testing.assert_array_equal(reversed_routed.observation_counts[metric],
+                                      reversed_cpu.observation_counts[metric])
+    assert reversed_routed.metadata["backend_used"] == "cuda"
+    assert reversed_routed.metadata["auto_backend_reason"] == "bounded_f61_pearson_chain_gpu_tile16"
+
+    assert reversed_routed.metadata["execution_receipt"]["metric_backends"] == {
+        metric: "cuda" for metric in reversed_metrics
+    }
+    assert routed.metadata["source_request_fingerprint"] != reversed_routed.metadata["source_request_fingerprint"]
+    assert routed.metadata["execution_receipt"]["receipt_hash"] != reversed_routed.metadata["execution_receipt"]["receipt_hash"]
+    for changed_metrics, width in ((metrics, 8), (metrics[:-1], 16)):
         case = Source(batch)
         case.max_tile_size = 32
         rejected = evaluate_factor_source_batch(
             case, label, metrics=changed_metrics, backend="auto", max_tile_size=width)
         assert rejected.metadata["backend_used"] == "cpu"
         assert rejected.metadata["auto_backend_reason"] == "source_shape_or_metrics_not_certified"
-    assert gates == [14 * 1024 ** 3]
+    assert gates == [14 * 1024 ** 3, 14 * 1024 ** 3]
 
     policy = GPUExecutionPolicy(precision_policy=PrecisionPolicy.GPU_FP64)
     case = Source(batch)

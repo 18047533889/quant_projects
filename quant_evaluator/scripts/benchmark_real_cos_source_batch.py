@@ -32,6 +32,10 @@ from quant_evaluator.scripts import benchmark_real_cos_factor_tiles as tiles
 DEFAULT_METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
 PEARSON_SINGLE = ("pearson_ic",)
 PEARSON_CHAIN = ("pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir")
+
+
+def is_pearson_chain(metrics):
+    return len(metrics) == len(PEARSON_CHAIN) and frozenset(metrics) == frozenset(PEARSON_CHAIN)
 MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024**3
 MIN_AVAILABLE_RAM_BYTES = 32 * 1024**3
 
@@ -336,21 +340,21 @@ def main():
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     selected = tuple(args.metrics.split(","))
-    if selected not in (DEFAULT_METRICS, PEARSON_SINGLE, PEARSON_CHAIN):
+    if selected not in (DEFAULT_METRICS, PEARSON_SINGLE) and not is_pearson_chain(selected):
         parser.error("--metrics must be the exact default three, pearson_ic alone, or Pearson chain")
     if not 1 <= args.tile_size <= 32:
         parser.error("--tile-size must be 1..32")
     if args.gpu_tile_widths and (len(set(args.gpu_tile_widths)) != 2
                                  or any(not 1 <= width <= 32 for width in args.gpu_tile_widths)):
         parser.error("--gpu-tile-widths requires two distinct widths in 1..32")
-    if args.gpu_worker and selected == PEARSON_CHAIN:
+    if args.gpu_worker and is_pearson_chain(selected):
         parser.error("Pearson chain is supported only by whole-source CPU/CUDA A/B")
-    if args.verify_auto and (args.factors != 61 or selected != PEARSON_CHAIN
+    if args.verify_auto and (args.factors != 61 or not is_pearson_chain(selected)
                              or args.tile_size < 16 or args.gpu_worker
                              or args.gpu_tile_widths):
         parser.error("--verify-auto requires F61 Pearson chain, tile >=16, whole-source mode")
     if args.gpu_tile_widths:
-        if selected == PEARSON_CHAIN:
+        if is_pearson_chain(selected):
             parser.error("Pearson chain is supported only by whole-source CPU/CUDA A/B")
         if args.gpu_worker or args.output is None:
             parser.error("--gpu-tile-widths requires --output and cannot use --gpu-worker")
@@ -470,7 +474,9 @@ def main():
         "source_api": "columnar_factor_source_v1",
         "limitations": [
             "Research-source metrics only; no PIT or production certification.",
-            "This A/B does not itself enable automatic backend routing.",
+            ("Auto exercised only for the exact certified F61 Pearson chain profile."
+             if args.verify_auto else
+             "This A/B alone does not establish automatic backend routing."),
         ],
     }
     emit_report(report, args.output)

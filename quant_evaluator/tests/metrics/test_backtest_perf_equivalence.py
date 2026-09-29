@@ -579,3 +579,12 @@ def test_G_nonfinite_return_is_excluded_per_column(metric, reference):
     np.testing.assert_allclose(got, expected, rtol=1e-12, atol=1e-12, equal_nan=True)
     assert np.all(np.isfinite(got[:2]))
     assert np.isnan(got[2])  # Only four finite observations remain.
+
+
+def test_G_sharpe_zero_variance_column_never_divides_by_zero():
+    returns = np.column_stack((np.ones(30), np.linspace(-0.02, 0.03, 30)))
+    with np.errstate(divide="raise", invalid="raise"):
+        actual = ps.compute_sharpe_ratio(returns)
+    expected = ps._compute_sharpe_ratio_reference(returns)
+    np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12, equal_nan=True)
+    assert np.isnan(actual[0]) and np.isfinite(actual[1])

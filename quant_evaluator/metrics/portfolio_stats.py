@@ -633,7 +633,9 @@ def compute_sharpe_ratio(
     std_excess = np.nanstd(excess, axis=0, ddof=1)
     sharpe = np.full(F, np.nan)
     good = (n_valid >= min_periods) & np.isfinite(std_excess) & (std_excess > 1e-10)
-    sharpe = np.where(good, mean_excess / std_excess * np.sqrt(periods_per_year), np.nan)
+    # np.where evaluates both branches first; never divide zero-variance columns.
+    np.divide(mean_excess, std_excess, out=sharpe, where=good)
+    sharpe[good] *= np.sqrt(periods_per_year)
     return sharpe[0] if squeeze else sharpe
 
 

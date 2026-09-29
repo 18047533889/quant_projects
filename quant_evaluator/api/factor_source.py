@@ -34,6 +34,7 @@ _F32_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _F61_SHAPE = (2586, 5461, 61)
 _F61_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _F61_PEARSON_CHAIN = ("pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir")
+_F61_PEARSON_CHAIN_SET = frozenset(_F61_PEARSON_CHAIN)
 
 
 def _source_request_fingerprint(metadata, label_bundle, metrics):
@@ -178,7 +179,8 @@ def evaluate_factor_source_batch(
                            and frozenset(selected) == _F32_MIXED_THREE)
         f61_pearson_single = (shape == _F61_SHAPE and selected == ("pearson_ic",)
                               and requested_tile_width >= 16)
-        f61_pearson_chain = (shape == _F61_SHAPE and selected == _F61_PEARSON_CHAIN
+        f61_pearson_chain = (shape == _F61_SHAPE and len(selected) == len(_F61_PEARSON_CHAIN)
+                             and frozenset(selected) == _F61_PEARSON_CHAIN_SET
                              and requested_tile_width >= 16)
         rank_pair = (f8 or f32) and len(selected) == 2 and frozenset(selected) == _RANK_PAIR
         if (metadata.dtype == "float64"
