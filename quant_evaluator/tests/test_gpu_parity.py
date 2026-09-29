@@ -24,7 +24,7 @@ from quant_evaluator.kernels.gpu.quantile import batched_quantile_returns
 from quant_evaluator.kernels.gpu.turnover import batched_turnover
 from quant_evaluator.kernels.gpu.stability import batched_rank_stability
 from quant_evaluator.metrics.quantile import assign_quantiles, compute_quantile_returns
-from quant_evaluator.metrics.turnover import compute_turnover
+from quant_evaluator.metrics.turnover import compute_turnover, estimate_turnover_from_ranks
 from quant_evaluator.metrics.temporal import compute_rank_stability
 from quant_evaluator.contracts.factor_batch import FactorBatch, AxisRef
 from quant_evaluator.contracts.label_bundle import LabelBundle
@@ -260,6 +260,24 @@ def test_gpu_turnover_parity(data):
         turn_cpu.append(np.nanmean(vals))
     turn_cpu = np.array(turn_cpu)
     assert np.abs(turn_gpu - turn_cpu).max() < 1e-8
+
+
+@pytest.mark.parametrize("n_assets", [2, 9, 10, 11])
+def test_gpu_turnover_matches_cpu_minimum_cross_section_contract(n_assets):
+    """Rank turnover remains unknown below CPU's 10-asset floor."""
+    x = np.empty((4, n_assets, 1), dtype=np.float64)
+    base = np.arange(n_assets, dtype=np.float64)
+    x[:, :, 0] = np.stack((base, base[::-1], np.roll(base, 1), base), axis=0)
+    # One non-finite value takes a 10-asset cross-section below the floor.
+    if n_assets >= 10:
+        x[2, 0, 0] = np.inf
+    fb, _ = _make_batch(x, np.zeros((4, n_assets), dtype=np.float64))
+
+    cpu = estimate_turnover_from_ranks(fb, window=1)
+    gpu = cp.asnumpy(
+        batched_turnover(np.transpose(x, (0, 2, 1)), return_series=True)
+    )
+    np.testing.assert_allclose(gpu, cpu, equal_nan=True)
 
 
 def test_gpu_rank_stability_parity(data):

@@ -1,7 +1,9 @@
 """GPU turnover (spec §12.4, Wave 2).
 
-Turnover_t = 0.5 * sum_i |w_{t,i} - w_{t-1,i}| on rank weights
-(w = rank_pct - 0.5, NaN→0).  Reuses the shared batched rank.
+For an eligible cross-section (at least 10 finite signals), average-tie ranks
+are normalized to sum one over finite assets; missing signals receive zero
+proxy weight. Turnover_t = 0.5 * sum_i |w_{t,i} - w_{t-1,i}|. An ineligible
+date has unknown weights and turnover, not a zero-cost cash position.
 """
 
 from __future__ import annotations
@@ -27,7 +29,10 @@ def batched_turnover(factor_values, return_series: bool = False):
     cp = _import_cp()
     x = cp.asarray(factor_values)
     w = batched_rank_weights(x)  # (T, F, N), NaN→0
-    eligible = cp.isfinite(x).sum(axis=2) >= 2
+    # Match metrics.turnover._rank_weights_matrix: its default min_obs=10 is
+    # part of the published rank-turnover contract. With fewer observations,
+    # the CPU reference leaves that date unknown, so GPU must do the same.
+    eligible = cp.isfinite(x).sum(axis=2) >= 10
     w = cp.where(eligible[..., None], cp.where(cp.isfinite(w), w, 0.), cp.nan)
     # turnover_t = 0.5 * sum_i |w_t - w_{t-1}|
     joint = cp.isfinite(w[1:]) & cp.isfinite(w[:-1])
