@@ -44,6 +44,232 @@ _BATCH = None
 _LABELS = None
 
 
+def _validate_f24_mixed_three_request(*, factors, metrics, run, output,
+                                      verify_auto_reference=False):
+    """Require a persisted run for the full-history F24 profile."""
+    if factors != 24 or tuple(metrics) != DEFAULT_METRICS:
+        return False
+    if not run and not verify_auto_reference:
+        raise ValueError("F24 mixed-three requires --run before full benchmark execution")
+    if output is None:
+        raise ValueError("F24 mixed-three requires --output to persist the receipt")
+    return True
+
+
+F24_SHAPE = (2586, 5461, 24)
+F24_BACKEND_ORDER = ("cpu", "cuda_strict", "auto", "auto", "cuda_strict", "cpu")
+F24_REFERENCE_DEFAULT = Path(__file__).resolve().parents[1] / "docs" / "benchmarks" / \
+    "real_cos_f24_mixed_three_ab_20260929.json"
+
+
+def _source_identity(source):
+    """Return a public, stable binding for the full private loader identities."""
+    if not isinstance(source, Mapping) or not isinstance(source.get("sources"), list):
+        raise ValueError("source.sources must be a list")
+    identities = []
+    for item in source["sources"]:
+        if not isinstance(item, Mapping):
+            raise ValueError("each source identity must be an object")
+        identity = {key: item.get(key) for key in (
+            "factor_id", "uri", "sha256", "bytes", "etag", "manifest_sha256",
+            "source_status")}
+        factor_id, uri, digest = identity["factor_id"], identity["uri"], identity["sha256"]
+        if (not isinstance(factor_id, str) or not factor_id
+                or not isinstance(uri, str) or not uri.startswith("cos://")
+                or not isinstance(digest, str) or len(digest) != 64
+                or any(char not in "0123456789abcdef" for char in digest)
+                or digest not in uri or not uri.endswith(f"/{factor_id}.parquet")
+                or type(identity["bytes"]) is not int or identity["bytes"] <= 0
+                or not isinstance(identity["etag"], str) or not identity["etag"]
+                or identity["manifest_sha256"] != MANIFEST_SHA256
+                or not isinstance(identity["source_status"], str)):
+            raise ValueError(f"invalid COS source identity for {factor_id!r}")
+        identities.append(identity)
+    factor_ids = [item["factor_id"] for item in identities]
+    object_digests = [item["sha256"] for item in identities]
+    if (len(identities) != 24 or len(set(factor_ids)) != 24
+            or len(set(object_digests)) != 24):
+        raise ValueError("F24 binding must contain 24 unique source identities and objects")
+    identities.sort(key=lambda item: item["factor_id"])
+    canonical = json.dumps(identities, sort_keys=True, separators=(",", ":"),
+                           ensure_ascii=False, allow_nan=False).encode()
+    public_rows = sorted(({
+        "source_identity_sha256": hashlib.sha256(json.dumps(
+            item, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+            allow_nan=False).encode()).hexdigest(),
+        "object_sha256": item["sha256"],
+        "bytes": item["bytes"],
+        "manifest_sha256": item["manifest_sha256"],
+    } for item in identities), key=lambda item: item["source_identity_sha256"])
+    public_canonical = json.dumps(public_rows, sort_keys=True, separators=(",", ":"),
+                                  ensure_ascii=False, allow_nan=False).encode()
+    return {
+        "count": len(identities),
+        "manifest_sha256": MANIFEST_SHA256,
+        "total_bytes": sum(item["bytes"] for item in identities),
+        "canonical_sha256": hashlib.sha256(canonical).hexdigest(),
+        "summary_sha256": hashlib.sha256(public_canonical).hexdigest(),
+        "sources": public_rows,
+    }
+
+
+def _validate_source_binding(binding):
+    """Validate the sanitized F24 binding summary without exposing source locators."""
+    if not isinstance(binding, Mapping):
+        raise ValueError("source.source_binding is missing")
+    rows = binding.get("sources")
+    if (binding.get("count") != 24 or binding.get("manifest_sha256") != MANIFEST_SHA256
+            or not isinstance(rows, list) or len(rows) != 24):
+        raise ValueError("F24 source binding count or manifest mismatch")
+    identities = []
+    object_digests = []
+    total_bytes = 0
+    for row in rows:
+        if not isinstance(row, Mapping):
+            raise ValueError("source binding row must be an object")
+        identity_digest = row.get("source_identity_sha256")
+        object_digest = row.get("object_sha256")
+        object_bytes = row.get("bytes")
+        if (not isinstance(identity_digest, str) or len(identity_digest) != 64
+                or any(char not in "0123456789abcdef" for char in identity_digest)
+                or not isinstance(object_digest, str) or len(object_digest) != 64
+                or any(char not in "0123456789abcdef" for char in object_digest)
+                or type(object_bytes) is not int or object_bytes <= 0
+                or row.get("manifest_sha256") != MANIFEST_SHA256):
+            raise ValueError("invalid sanitized source binding row")
+        identities.append(identity_digest)
+        object_digests.append(object_digest)
+        total_bytes += object_bytes
+    if len(set(identities)) != 24 or len(set(object_digests)) != 24:
+        raise ValueError("F24 source binding must contain 24 unique identities and objects")
+    if binding.get("total_bytes") != total_bytes:
+        raise ValueError("F24 source binding byte total mismatch")
+    public_canonical = json.dumps(rows, sort_keys=True, separators=(",", ":"),
+                                  ensure_ascii=False, allow_nan=False).encode()
+    summary_digest = hashlib.sha256(public_canonical).hexdigest()
+    if binding.get("summary_sha256") != summary_digest:
+        raise ValueError("F24 source binding summary digest mismatch")
+    canonical_digest = binding.get("canonical_sha256")
+    if (not isinstance(canonical_digest, str) or len(canonical_digest) != 64
+            or any(char not in "0123456789abcdef" for char in canonical_digest)):
+        raise ValueError("F24 source binding canonical digest is malformed")
+    return dict(binding)
+
+
+def _public_source_report(source):
+    """Keep useful public metadata and replace private per-object locators with hashes."""
+    safe_fields = (
+        "days", "assets", "date_span", "calendar_sessions",
+        "missing_adj_vwap_partitions", "label", "factor_finite_ratio",
+        "label_finite_ratio", "limitations",
+    )
+    public = {key: _plain(source[key]) for key in safe_fields if key in source}
+    public["source_binding"] = _source_identity(source)
+    return public
+
+def _validate_auto_reference(reference):
+    """Validate the archived F24 baseline before any COS data is loaded."""
+    if not isinstance(reference, Mapping):
+        raise ValueError("reference report must be a JSON object")
+    request = reference.get("request")
+    if not isinstance(request, Mapping):
+        raise ValueError("reference request is missing")
+    expected_request = {
+        "metrics": list(DEFAULT_METRICS), "backend_order": list(F24_BACKEND_ORDER),
+        "factors": 24, "shape": list(F24_SHAPE), "dtype": "float64",
+        "repeats_per_child": 2, "manifest_sha256": MANIFEST_SHA256,
+        "compact_artifacts": True,
+    }
+    for key, expected in expected_request.items():
+        if request.get(key) != expected:
+            raise ValueError(f"reference request.{key} mismatch")
+    if reference.get("parity_pass") is not True:
+        raise ValueError("reference parity_pass must be true")
+    runs = reference.get("runs")
+    if not isinstance(runs, list) or len(runs) != 6:
+        raise ValueError("reference must contain exactly six runs")
+    for index, (run, backend) in enumerate(zip(runs, F24_BACKEND_ORDER), start=1):
+        if (not isinstance(run, Mapping) or run.get("status") != "ok"
+                or run.get("round") != index or run.get("backend_requested") != backend):
+            raise ValueError(f"reference run {index} status/order mismatch")
+        digest = run.get("artifact_sha256")
+        if (not isinstance(digest, str) or len(digest) != 64
+                or any(char not in "0123456789abcdef" for char in digest)):
+            raise ValueError(f"reference run {index} lacks a compact artifact hash")
+        expected_backend = "cuda" if backend == "cuda_strict" else "cpu"
+        expected_metric_backends = {metric: expected_backend for metric in DEFAULT_METRICS}
+        if (run.get("backend_used") != expected_backend
+                or run.get("metric_backends") != expected_metric_backends):
+            raise ValueError(f"reference run {index} backend result mismatch")
+    configs = reference.get("config_hashes")
+    run_configs = [run.get("config_hash") for run in runs]
+    if (not isinstance(configs, list) or len(configs) != 1
+            or not isinstance(configs[0], str) or len(configs[0]) != 64
+            or any(value != configs[0] for value in run_configs)):
+        raise ValueError("reference config hashes are inconsistent")
+    if runs[1]["backend_used"] != "cuda" or runs[4]["backend_used"] != "cuda":
+        raise ValueError("reference explicit CUDA rounds did not use CUDA")
+    cuda_hashes = {runs[1]["artifact_sha256"], runs[4]["artifact_sha256"]}
+    if len(cuda_hashes) != 1:
+        raise ValueError("reference explicit CUDA artifact hashes disagree")
+    for index in (2, 3):
+        if (runs[index]["backend_used"] != "cpu"
+                or runs[index].get("auto_backend_reason") != "metric_not_certified_for_profile"):
+            raise ValueError("reference must identify the known CPU auto fallback")
+    comparisons = reference.get("comparisons_to_first_cpu")
+    if not isinstance(comparisons, Mapping):
+        raise ValueError("reference parity comparisons are missing")
+    required_metric_checks = (
+        "descriptor", "values_rtol_1e-8_atol_1e-10", "finite_mask", "valid_mask",
+        "counts", "provenance_observation_counts", "provenance", "metric_values",
+    )
+    for backend in ("cpu", "cuda_strict"):
+        checks = comparisons.get(backend)
+        if not isinstance(checks, list) or len(checks) != 2:
+            raise ValueError(f"reference {backend} parity checks are incomplete")
+        for check in checks:
+            if not isinstance(check, Mapping):
+                raise ValueError(f"reference {backend} parity checks are malformed")
+            metric_checks = check.get("metrics")
+            if (check.get("pass") is not True or check.get("config_hash") is not True
+                    or not isinstance(metric_checks, Mapping)
+                    or any(not isinstance(metric_checks.get(metric), Mapping)
+                           or metric_checks[metric].get("pass") is not True
+                           or any(metric_checks[metric].get(field) is not True
+                                  for field in required_metric_checks)
+                           for metric in DEFAULT_METRICS)):
+                raise ValueError(f"reference {backend} parity checks failed or are incomplete")
+    source = reference.get("source")
+    if not isinstance(source, Mapping):
+        raise ValueError("reference source summary is missing")
+    source_identity = _validate_source_binding(source.get("source_binding"))
+    return {"config_hash": configs[0], "cuda_artifact_sha256": next(iter(cuda_hashes)),
+            "source_identity": source_identity}
+
+
+def _artifact_sha256(artifacts):
+    return hashlib.sha256(json.dumps(
+        _plain(artifacts), sort_keys=True, separators=(",", ":"),
+        allow_nan=False).encode()).hexdigest()
+
+
+def _auto_cuda_route_matches(run):
+    return (
+        run.get("backend_used") == "cuda"
+        and run.get("auto_backend_reason") == "certified_batch_real_cos_f24_mixed_three"
+        and run.get("metric_backends") == {metric: "cuda" for metric in DEFAULT_METRICS}
+    )
+
+
+def _auto_reference_run_passes(run):
+    return (
+        _auto_cuda_route_matches(run)
+        and run.get("artifact_hash_matches_explicit_cuda") is True
+        and run.get("config_hash_matches_reference") is True
+        and run.get("source_identity_matches_reference") is True
+    )
+
+
 def _plain(value):
     if isinstance(value, float) and not math.isfinite(value):
         return None
@@ -132,6 +358,10 @@ def _worker(connection, backend, repeats):
             "auto_backend_reason": meta.get("auto_backend_reason"),
             "auto_backend_profile": meta.get("auto_backend_profile"),
             "metric_backends": _plain(meta.get("metric_backends")),
+            "metric_observation_counts": {
+                metric: [None if item is None else item.get("observation_count")
+                        for item in artifacts[metric]["metric_values"]]
+                for metric in METRICS},
             "peak_vram": meta.get("peak_vram"),
             "factor_tile_size": meta.get("factor_tile_size"),
             "factor_tiles_processed": meta.get("factor_tiles_processed"),
@@ -235,7 +465,14 @@ def main():
     parser.add_argument("--factors", type=int, choices=(2, 8, 12, 13, 24, 32), default=8)
     parser.add_argument("--compact", action="store_true", help="write artifact hashes, not value arrays")
     parser.add_argument("--run", action="store_true",
-                        help="run the F32 Pearson chain/singleton or daily quantile singleton after preflight")
+                        help="run a preflight-approved F32 request or the exact F24 mixed-three request")
+    parser.add_argument("--verify-auto-reference", action="store_true",
+                        help="validate the archived F24 baseline, then run only 1-2 auto requests")
+    parser.add_argument("--reference-report", type=Path, default=F24_REFERENCE_DEFAULT)
+    parser.add_argument("--auto-runs", type=int, choices=(1, 2), default=1,
+                        help="number of auto requests in reference verification")
+    parser.add_argument("--repeats", type=int, choices=(1, 2), default=1,
+                        help="evaluations per auto request in reference verification")
     args = parser.parse_args()
     if args.timeout_s <= 0:
         parser.error("timeout-s must be positive")
@@ -258,16 +495,27 @@ def main():
             RANK_CHAIN, QUANTILE_CHAIN, TURNOVER_SINGLE, POSITIVE_RATIO_SINGLE, RANK_POSITIVE_PAIR):
         parser.error("F13 runs require the exact rank-chain, quantile-chain, "
                      "factor_turnover_rate, rank_ic_positive_ratio, or rank-IC/positive-ratio pair")
-    if args.factors == 24 and requested not in (RANK_CHAIN, QUANTILE_CHAIN):
-        parser.error("F24 runs require the exact rank-chain or quantile-chain request")
+    if args.factors == 24 and requested not in (RANK_CHAIN, QUANTILE_CHAIN, DEFAULT_METRICS):
+        parser.error("F24 runs require the exact rank-chain, quantile-chain, or mixed-three request")
     if args.factors == 32 and requested not in (*F32_SINGLE_METRICS, PEARSON_CHAIN):
         parser.error("F32 runs require a certified singleton (rank, quantile or Pearson) "
                      "or the exact Pearson chain")
+    if args.verify_auto_reference:
+        if args.run:
+            parser.error("--verify-auto-reference cannot be combined with --run")
+        if args.factors != 24 or requested != DEFAULT_METRICS:
+            parser.error("--verify-auto-reference requires the exact F24 mixed-three request")
+    try:
+        f24_mixed_request = _validate_f24_mixed_three_request(
+            factors=args.factors, metrics=requested, run=args.run, output=args.output,
+            verify_auto_reference=args.verify_auto_reference)
+    except ValueError as exc:
+        parser.error(str(exc))
     preflight_request = requested in (PEARSON_CHAIN, QUANTILE_DAILY_SINGLE,
                                       *PEARSON_SINGLE_METRICS)
-    if args.run and not (args.factors == 32 and preflight_request):
-        parser.error("--run applies only to the F32 Pearson chain/singleton "
-                     "or daily quantile singleton")
+    if args.run and not ((args.factors == 32 and preflight_request) or f24_mixed_request):
+        parser.error("--run applies only to a preflight-approved F32 request "
+                     "or the exact F24 mixed-three request")
     if preflight_request:
         if args.factors != 32:
             parser.error("this request requires the exact F32 panel")
@@ -291,6 +539,14 @@ def main():
                                          "daily quantile")
                                       + " benchmark"}), flush=True)
             return
+    reference = None
+    reference_meta = None
+    if args.verify_auto_reference:
+        try:
+            reference = json.loads(args.reference_report.read_text())
+            reference_meta = _validate_auto_reference(reference)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            parser.error(f"invalid auto reference report: {exc}")
     METRICS = requested
     load_start = time.perf_counter()
     _BATCH, _LABELS, source = load_real_batch(
@@ -304,6 +560,69 @@ def main():
     if shape != (2586, 5461, args.factors):
         raise RuntimeError(f"unexpected bound panel shape: {shape}")
 
+    if args.verify_auto_reference:
+        if shape != F24_SHAPE or _BATCH.values.dtype != np.dtype("float64"):
+            raise RuntimeError("loaded panel does not match F24 reference shape/dtype")
+        current_source_identity = _source_identity(source)
+        source_match = current_source_identity == reference_meta["source_identity"]
+        if not source_match:
+            raise RuntimeError("loaded COS source identities do not match reference report")
+        context = mp.get_context("fork")
+        expected_cuda_hash = reference_meta["cuda_artifact_sha256"]
+        runs = []
+        for index in range(args.auto_runs):
+            run = _run_one(context, "auto", repeats=args.repeats, timeout_s=args.timeout_s)
+            artifact_hash = _artifact_sha256(run["artifacts"])
+            run["round"] = index + 1
+            run["artifact_sha256"] = artifact_hash
+            run["artifact_hash_matches_explicit_cuda"] = artifact_hash == expected_cuda_hash
+            run["config_hash_matches_reference"] = (
+                run["config_hash"] == reference_meta["config_hash"])
+            run["source_identity_matches_reference"] = source_match
+            run["auto_cuda_route_matches_reference"] = _auto_cuda_route_matches(run)
+            del run["artifacts"]
+            runs.append(run)
+            print(json.dumps({
+                "verify_auto_round": index + 1, "backend_used": run["backend_used"],
+                "auto_backend_reason": run["auto_backend_reason"],
+                "auto_cuda_route_matches_reference": run["auto_cuda_route_matches_reference"],
+                "metric_backends": run["metric_backends"],
+                "metric_observation_counts": run["metric_observation_counts"],
+                "peak_vram": run["peak_vram"],
+                "artifact_hash_matches_explicit_cuda": run["artifact_hash_matches_explicit_cuda"],
+                "config_hash_matches_reference": run["config_hash_matches_reference"]},
+                ensure_ascii=False), flush=True)
+        report = {
+            "created_utc": datetime.now().astimezone().isoformat(),
+            "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "mode": "verify_auto_reference",
+            "reference_report": str(args.reference_report),
+            "reference_validation_pass": True,
+            "request": {"metrics": METRICS, "backend": "auto", "auto_runs": args.auto_runs,
+                        "repeats_per_run": args.repeats, "factors": 24,
+                        "shape": shape, "dtype": str(_BATCH.values.dtype),
+                        "manifest_sha256": MANIFEST_SHA256},
+            "source": _public_source_report(source), "source_identity_matches_reference": source_match,
+            "reference_config_hash": reference_meta["config_hash"],
+            "reference_explicit_cuda_artifact_sha256": expected_cuda_hash,
+            "runs": runs,
+            "parity_pass": bool(runs) and source_match and all(
+                _auto_reference_run_passes(run) for run in runs),
+        }
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(report, indent=2, ensure_ascii=False,
+                                              allow_nan=False) + "\n")
+        print(json.dumps({"parity_pass": report["parity_pass"],
+                          "auto_routes": [run["backend_used"] for run in runs],
+                          "output": str(args.output) if args.output else None},
+                         ensure_ascii=False), flush=True)
+        if not report["parity_pass"]:
+            raise SystemExit(2)
+        return
+
+    if f24_mixed_request and _BATCH.values.dtype != np.dtype("float64"):
+        raise RuntimeError(f"F24 mixed-three requires float64 input, got {_BATCH.values.dtype}")
     # Symmetric interleaving reduces order and cache bias across backends.
     order = ("cpu", "cuda_strict", "auto", "auto", "cuda_strict", "cpu")
     context = mp.get_context("fork")
@@ -329,9 +648,7 @@ def main():
     config_hashes = sorted({run["config_hash"] for run in runs})
     report_runs = runs if not args.compact else [
         {key: value for key, value in run.items() if key != "artifacts"} | {
-            "artifact_sha256": hashlib.sha256(json.dumps(
-                _plain(run["artifacts"]), sort_keys=True, separators=(",", ":"),
-                allow_nan=False).encode()).hexdigest()}
+            "artifact_sha256": _artifact_sha256(run["artifacts"])}
         for run in runs
     ]
     report = {
@@ -342,7 +659,7 @@ def main():
                     "repeats_per_child": 2, "timeout_s": args.timeout_s,
                     "shape": shape, "dtype": str(_BATCH.values.dtype),
                     "manifest_sha256": MANIFEST_SHA256, "compact_artifacts": args.compact},
-        "source": _plain(source), "load_s": load_s,
+        "source": _public_source_report(source), "load_s": load_s,
         "parent_peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
         "config_hashes": config_hashes,
         "runs": report_runs, "comparisons_to_first_cpu": comparisons,

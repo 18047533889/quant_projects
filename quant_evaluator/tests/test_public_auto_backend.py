@@ -658,7 +658,49 @@ def test_f24_rank_and_quantile_chains_exact_batches_only(monkeypatch):
         "cpu", "insufficient_cuda_memory")
 
 
+def test_f24_mixed_three_exact_route_fail_closed(monkeypatch):
+    budgets = []
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda policy, minimum: budgets.append(minimum) or None)
+    batch = SimpleNamespace(num_times=2586, num_assets=5461, num_factors=24,
+                            values=np.empty(0, dtype=np.float64))
+    labels = SimpleNamespace(values=np.empty(0, dtype=np.float64))
+    options = dict(metric_parameters={}, context=None, quantile_builder_parameters={},
+                   portfolio_returns=None, holding_returns=None, trade_eligibility=None,
+                   calendar_snapshot=None, exposure_panel=None,
+                   generalization_evidence=None, evaluator=None)
+    select = module._select_public_auto_backend
+    metrics = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+    expected = ("cuda_strict", "certified_batch_real_cos_f24_mixed_three")
+
+    assert select(batch, labels, metrics, **options) == expected
+    assert select(batch, labels, tuple(reversed(metrics)), **options) == expected
+    assert budgets == [20 * 1024 ** 3, 20 * 1024 ** 3]
+    assert select(batch, labels, metrics[:-1], **options) == (
+        "cpu", "metric_set_not_certified")
+
+    batch.num_times = 2585
+    assert select(batch, labels, metrics, **options) == (
+        "cpu", "shape_outside_certified_range")
+    batch.num_times = 2586
+    batch.values = np.empty(0, dtype=np.float32)
+    assert select(batch, labels, metrics, **options) == (
+        "cpu", "dtype_outside_certified_range")
+    batch.values = np.empty(0, dtype=np.float64)
+    for field, value in (("metric_parameters", {"rank_ic": {"min_obs": 2}}),
+                         ("quantile_builder_parameters", {"n_quantiles": 5}),
+                         ("context", object())):
+        assert select(batch, labels, metrics, **(options | {field: value})) == (
+            "cpu", "special_input_or_parameters")
+
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda policy, minimum: "insufficient_cuda_memory")
+    assert select(batch, labels, metrics, **options) == (
+        "cpu", "insufficient_cuda_memory")
+
+
 def test_f32_rank_and_quantile_chains_exact_shape_and_gpu_gate(monkeypatch):
+
     budgets = []
     monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
                         lambda policy, minimum: budgets.append(minimum) or None)

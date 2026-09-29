@@ -533,6 +533,21 @@ MetricValue 均对拍通过。改路由前两轮 `auto` 都留在 CPU；现在�
 `docs/benchmarks/real_cos_f24_rank_chain_20260927.json` 和
 `docs/benchmarks/real_cos_f24_rank_chain_auto_20260927.json`。
 
+同一精确 F24 面板的默认三指标整批 `rank_ic`、`quantile_spread`、
+`factor_turnover_rate` 又完成六轮交错 CPU/CUDA/auto 基线对拍（每轮冷、热各一次）。
+基线的两轮 CPU 冷调用为 115.37/119.97 秒，强制 CUDA 为
+17.28/17.26 秒；完整制品数值、有限/有效掩码、计数、来源、逐因子
+MetricValue 和配置哈希均通过对拍。GPU pool 峰值为 16,050,598,912 字节。
+基线时两轮 `auto` 均因尚未认证而走 CPU，不把强制 CUDA 的速度误称为自动路由。
+现仅对此完整规范指标集合（顺序不限）、精确 2586 日 × 5461 股 × 24 因子、
+float64、默认参数、无特殊输入、单 NVIDIA L20，且实际及有效空闲显存
+均至少 20 GiB 时自动选 CUDA；子集、相邻形状及其它硬件不继承认证。
+接入后在相同绑定 COS 来源上单独运行 `auto`：实际三项全走 CUDA，
+脱敏报告复验的冷调用 17.03 秒，GPU 峰值相同，完整制品哈希和配置哈希与两轮强制
+CUDA 基线一致。证据见
+`docs/benchmarks/real_cos_f24_mixed_three_ab_20260929.json` 和
+`docs/benchmarks/real_cos_f24_mixed_three_auto_verify_20260929.json`。
+
 F32 的完整 rank 链、完整分位链、完整 Pearson 链、默认三指标整批及已测
 单指标请求各有独立的自动 CUDA 认证。只读预检命令：
 
@@ -1122,7 +1137,8 @@ DataAccess 绑定 COS source 见下一节。通用公共 API 不会对任意来�
 ### DataAccess 绑定的 COS source adapter
 
 独立的 `CosFactorTileSource.from_data_access(...)` 使用已经注册的 DataAccess
-dataset/context factory、绑定 manifest 和逐对象 URI/SHA-256/字节数验证，
+dataset/context factory，并由调用方注入绑定 manifest helper；QE 不依赖
+`factor_optimizer`。绑定读取和逐对象 URI/SHA-256/字节数验证由注入的既有 helper 负责，
 默认 `prefetch="auto"` 对 COS 最多并发两个读取；可明确设置 `"off"`
 或 `"on"`。通用 `FactorTileSource` 与 CPU/CUDA `backend="auto"` 不会因此
 对任意来源开启并发。构造、资源预算和关闭方法见
