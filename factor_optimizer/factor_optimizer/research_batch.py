@@ -187,7 +187,7 @@ def _subset_labels(labels, indices):
 
 
 class PairICCache:
-    """At most two IC references, private to one factor's TRAIN search.
+    """At most two IC references, private to one batch's TRAIN search.
 
     Effective value/mask/label contents and minimum assets define reuse.
     No mutable input or returned array aliases cached evidence.
@@ -533,10 +533,13 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     outputs, results = [], {}
     train_pair_ic_split = _prepare_pair_ic_split(
         batch, labels, split.train_indices)
+    # These exact-content caches are bounded and local to this invocation.
+    # Duplicate factor columns can reuse TRAIN evidence, while no cache crosses
+    # a batch/split boundary.
+    train_raw_cache = RawSeriesCache()
+    train_ic_cache = PairICCache()
+    train_candidate_ic_cache = PairICCache()
     for k, factor_id in enumerate(batch.factor_ids):
-        train_raw_cache = RawSeriesCache()
-        train_ic_cache = PairICCache()
-        train_candidate_ic_cache = PairICCache()
         raw = np.array(batch.values[:, :, k], dtype=float, copy=True)
         if batch.validity is not None:
             raw[~batch.validity[:, :, k]] = np.nan

@@ -6630,7 +6630,7 @@ Frozen sign after a temporal repair; both decisions are chosen on TRAIN.
 
 [实际实现](../factor_optimizer/research_batch.py#L189)。
 
-At most two IC references, private to one factor's TRAIN search.
+At most two IC references, private to one batch's TRAIN search.
 
 ### PairICCache.__init__
 
@@ -10696,7 +10696,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
-| `factor_optimizer/research_batch.py` | `afab08313e65138041c811d5fac831282084edcd807b4885b0d4b1db9c570ecd` |
+| `factor_optimizer/research_batch.py` | `b3bc61ff3bfffa709bba80ebe109f125f415797ed793c0009847141fe7d401a9` |
 | `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
 | `factor_optimizer/research_diagnostics.py` | `26c82a50b2edcaa4eff8911da11a4fcd52fbad2f5235148202a300d396ced23d` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |

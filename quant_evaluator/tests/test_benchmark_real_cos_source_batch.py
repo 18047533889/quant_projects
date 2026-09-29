@@ -189,6 +189,23 @@ def test_compare_reads_fingerprint_from_public_bundle_metadata():
         harness.compare(bundle(), bundle("b" * 64), harness.PEARSON_SINGLE)
 
 
+def test_auto_direct_comparison_rejects_same_shape_count_mismatch():
+    def bundle(counts):
+        return SimpleNamespace(
+            factor_ids=("f0", "f1"),
+            metadata={"source_request_fingerprint": "a" * 64},
+            scalar_metrics={"pearson_ic": np.asarray([0.1, 0.2])},
+            observation_counts={"pearson_ic": np.asarray(counts, dtype=np.int64)},
+        )
+
+    result = harness.compare(
+        bundle([3, 3]), bundle([3, 2]), harness.PEARSON_SINGLE)
+    metric = result["metrics"]["pearson_ic"]
+    assert metric["observation_counts_shape_valid"] is True
+    assert metric["observation_counts_equal"] is False
+    assert result["pass"] is False
+
+
 def test_compare_pearson_chain_checks_full_series_counts_masks_and_fingerprint():
     factors = ("f0", "f1")
     scalars = {

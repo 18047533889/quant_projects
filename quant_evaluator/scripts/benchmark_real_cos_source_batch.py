@@ -489,22 +489,35 @@ def main():
         receipt["preflight"] = gate
         receipt["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
         receipt["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
-        comparison = verify_auto_against_reference(auto, selected, reference)
+        reference_comparison = verify_auto_against_reference(auto, selected, reference)
+        cuda_gate = preflight(args.max_object_mib, args.max_total_mib)
+        if not cuda_gate["pass"]:
+            raise SystemExit("RAM or COS cache disk headroom fell below preflight before explicit CUDA run")
+        rejection = _auto_batch_cuda_rejection(policy, MIN_EFFECTIVE_VRAM_BYTES)
+        if rejection:
+            raise SystemExit(f"CUDA A/B preflight rejected before explicit CUDA run: {rejection}")
+        cuda, cuda_receipt = run_backend(
+            "cuda_strict", records, source_rows, dates, assets, labels, manifest_sha,
+            args.tile_size, args.max_object_mib, policy, selected)
+        cuda_receipt["preflight"] = cuda_gate
+        direct_comparison = compare(auto, cuda, selected, expected_days=len(dates))
         route_pass = (receipt["auto_backend_reason"] ==
                       "bounded_f61_all_source_15_gpu_tile16"
                       and receipt["effective_max_tile_size"] == 16)
+        complete = route_pass and reference_comparison["pass"] and direct_comparison["pass"]
         report = {
-            "status": "complete" if route_pass and comparison["pass"] else "parity_failed",
+            "status": "complete" if complete else "verification_failed",
             "kind": "real_cos_whole_source_auto_reference.v1",
             "manifest_sha256": manifest_sha,
             "shape": [len(dates), len(assets), len(records)],
             "factor_dtype": "float64", "tile_size": args.tile_size,
             "metric_ids": list(selected), "run": receipt,
-            "route_pass": route_pass, "comparison": comparison,
+            "explicit_cuda_run": cuda_receipt,
+            "route_pass": route_pass,
+            "reference_comparison": reference_comparison,
+            "direct_comparison": direct_comparison,
             "reference_reports": [str(path) for path in args.auto_references],
-            "limitations": ["Auto hashes match two opposite-order CPU/CUDA A/B reports; "
-                            "reference receipts do not retain observation-count hashes.",
-                            "Research-source metrics only; no PIT or production certification."],
+            "limitations": ["Research-source metrics only; no PIT or production certification."],
         }
         emit_report(report, args.output)
         if report["status"] != "complete":

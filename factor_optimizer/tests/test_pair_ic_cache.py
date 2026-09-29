@@ -181,3 +181,55 @@ def test_prepared_train_split_reuses_label_slice_without_changing_ic(monkeypatch
         rb._pair_ic(
             raw, -raw, batch, replace(labels, target_id="different"),
             indices, config, prepared_split=prepared)
+
+
+def test_batch_scope_pair_ic_caches_reuse_identical_factor_panels(monkeypatch):
+    from factor_optimizer.research_batch import _pair_ic, BatchOptimizationConfig
+    from quant_evaluator.metrics import ic as ic_module
+
+    batch, labels = fixture()
+    raw = batch.values[:, :, 0]
+    candidate = -raw
+    indices = tuple(range(40, 100))
+    config = BatchOptimizationConfig()
+    expected = _pair_ic(raw, candidate, batch, labels, indices, config)
+    reference_cache, candidate_cache = cache(), cache()
+    real_compute = ic_module.compute_daily_ic
+    computed_columns = []
+
+    def counted(factors, *args, **kwargs):
+        computed_columns.append(factors.num_factors)
+        return real_compute(factors, *args, **kwargs)
+
+    monkeypatch.setattr(ic_module, "compute_daily_ic", counted)
+    first = _pair_ic(raw, candidate, batch, labels, indices, config,
+                     reference_cache=reference_cache, candidate_cache=candidate_cache)
+    second = _pair_ic(raw.copy(), candidate.copy(), batch, labels, indices, config,
+                      reference_cache=reference_cache, candidate_cache=candidate_cache)
+    equal(first, expected)
+    equal(second, expected)
+    assert computed_columns == [2]
+
+
+@pytest.mark.parametrize("change", ["candidate", "labels"])
+def test_batch_scope_pair_ic_caches_miss_changed_values_or_labels(monkeypatch, change):
+    from factor_optimizer.research_batch import _pair_ic, BatchOptimizationConfig
+    from quant_evaluator.metrics import ic as ic_module
+
+    batch, labels = fixture()
+    raw = batch.values[:, :, 0]
+    candidate = -raw.copy()
+    other_labels = labels
+    indices = tuple(range(40, 100))
+    config = BatchOptimizationConfig()
+    reference_cache, candidate_cache = cache(), cache()
+    _pair_ic(raw, candidate, batch, labels, indices, config,
+             reference_cache=reference_cache, candidate_cache=candidate_cache)
+    if change == "candidate":
+        candidate[40:80, :25] *= -1
+    else:
+        other_labels = replace(labels, values=-labels.values)
+    expected = _pair_ic(raw, candidate, batch, other_labels, indices, config)
+
+    real_compute = ic_module.compute_daily_ic
+    computed_columns = []
