@@ -4733,7 +4733,7 @@ Average turnover rate for factor-based portfolios
 
 ### 数学公式与计算口径
 
-当日至少有2个有效因子值时，先将有效值转为平均并列秩 $`R_{ti}`$；无信号资产的代理权重明确设0：
+当日至少有10个有限因子值时，先将有效值转为平均并列秩 $`R_{ti}`$；无信号资产的代理权重明确设0：
 
 
 
@@ -4743,7 +4743,7 @@ w_{ti}=\frac{R_{ti}}{\sum_{j\in V_t}R_{tj}}\ (i\in V_t),\quad w_{ti}=0\ (i\notin
 
 
 
-$`D`$ 是两日权重均已知的相邻转换集合。人数不足的日期整行未知，涉及该日的换手为NaN。默认 min_periods=2，因此至少1个有效相邻转换。它是排名代理权重的半L1换手，**不是 $`(1-\rho_S)/2`$，也不是真实成交额**。
+$`D`$ 是两日权重均已知的相邻转换集合。任一日有限资产少于10个时整行权重未知，涉及该日的换手为NaN。默认 min_periods=2 是时间维门槛，因此至少1个有效相邻转换；它不降低截面至少10个有限资产的要求。它是排名代理权重的半L1换手，**不是 $`(1-\rho_S)/2`$，也不是真实成交额**。
 
 ### 函数层默认参数
 
@@ -5823,7 +5823,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.registry_adapters.compute_rank_ic_value` | `6f6265b28abd476d16151366891fed14960419ca1cdbd9d779cf6dfcd3078fe1` |
 | `quant_evaluator.metrics.registry_adapters.compute_rank_stability_value` | `39d524e66ce4ab37789d9825d328f41e8971af703e5f7b5e63de971d305177b8` |
 | `quant_evaluator.metrics.registry_adapters.compute_subsample_stability_value` | `489216040cc6db11db8d63cff048db0b2d4a84959f5b13a335e39d564eb08828` |
-| `quant_evaluator.metrics.registry_adapters.compute_turnover_value` | `98c39f7e184453db3d4f4a822b0c29d50b4b0178b9148f06ab8a603cfbef0b44` |
+| `quant_evaluator.metrics.registry_adapters.compute_turnover_value` | `24b9357cca288f7a8c1acf2f4f244e63b9b95377ca8be49af944426476b9a04e` |
 | `quant_evaluator.metrics.risk.drawdown_analysis.compute_drawdown_duration` | `ff6cb5226393566ace7485b7db3ba5218bd44b37cb656a7b6b9a25db12c826d4` |
 | `quant_evaluator.metrics.risk.drawdown_analysis.compute_drawdown_series` | `669f4917b2984564f35e072086ec84c3214e6214b61b2ea136c9580743ac52f6` |
 | `quant_evaluator.metrics.risk.drawdown_analysis.drawdown_events` | `bda7f9a2ba54090b23fabe0bd2e43835cc7634e597729044a864b11641e543dc` |

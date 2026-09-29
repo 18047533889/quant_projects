@@ -60,6 +60,24 @@ def test_turnover_adapters_mask_invalid_finite_poison_values() -> None:
     )
 
 
+def test_registered_turnover_requires_ten_finite_signals() -> None:
+    base = np.arange(10, dtype=np.float64)
+    for n_assets, expected_finite in ((9, False), (10, True)):
+        row0 = base[:n_assets]
+        values = np.stack((row0, row0[::-1]))[:, :, None]
+        batch = FactorBatch(
+            factor_ids=("factor",),
+            time_axis=AxisRef("time", "int64", 2, np.arange(2)),
+            asset_axis=AxisRef(
+                "asset", "str", n_assets,
+                np.array([f"A{i}" for i in range(n_assets)]),
+            ),
+            values=values,
+        )
+        result = compute_turnover_value(batch, min_periods=2)
+        assert np.isfinite(result[0]) == expected_finite
+
+
 def test_rank_turnover_sentinel_stays_above_large_finite_signal() -> None:
     # Adding 1 to either signal rounds back to the same float64 value. A
     # missing-value sentinel tied with that maximum changes every weight.

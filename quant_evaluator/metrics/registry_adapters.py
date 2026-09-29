@@ -167,7 +167,7 @@ def compute_turnover_value(
         for t in range(series.shape[0]):
             row = series[t]
             finite = np.isfinite(row)
-            if finite.sum() < 2:
+            if finite.sum() < 10:
                 continue
             ranks_f = rankdata(row[finite], method="average")
             ranks[t, :] = 0.0

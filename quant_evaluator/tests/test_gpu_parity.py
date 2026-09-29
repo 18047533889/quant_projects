@@ -25,6 +25,7 @@ from quant_evaluator.kernels.gpu.turnover import batched_turnover
 from quant_evaluator.kernels.gpu.stability import batched_rank_stability
 from quant_evaluator.metrics.quantile import assign_quantiles, compute_quantile_returns
 from quant_evaluator.metrics.turnover import compute_turnover, estimate_turnover_from_ranks
+from quant_evaluator.metrics.registry_adapters import compute_turnover_value
 from quant_evaluator.metrics.temporal import compute_rank_stability
 from quant_evaluator.contracts.factor_batch import FactorBatch, AxisRef
 from quant_evaluator.contracts.label_bundle import LabelBundle
@@ -278,6 +279,19 @@ def test_gpu_turnover_matches_cpu_minimum_cross_section_contract(n_assets):
         batched_turnover(np.transpose(x, (0, 2, 1)), return_series=True)
     )
     np.testing.assert_allclose(gpu, cpu, equal_nan=True)
+
+
+@pytest.mark.parametrize("n_assets", [9, 10])
+def test_gpu_registered_turnover_matches_cpu_adapter_floor(n_assets):
+    """The registered turnover metric and GPU kernel share the 10-value floor."""
+    base = np.arange(n_assets, dtype=np.float64)
+    x = np.stack((base, base[::-1], np.roll(base, 1)))[:, :, None]
+    fb, _ = _make_batch(x, np.zeros((3, n_assets), dtype=np.float64))
+
+    cpu = compute_turnover_value(fb, min_periods=2)
+    gpu = cp.asnumpy(batched_turnover(np.transpose(x, (0, 2, 1))))
+    np.testing.assert_allclose(gpu, cpu, equal_nan=True)
+    assert np.isfinite(cpu[0]) == (n_assets == 10)
 
 
 def test_gpu_rank_stability_parity(data):
