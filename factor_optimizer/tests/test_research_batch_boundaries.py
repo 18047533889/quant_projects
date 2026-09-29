@@ -67,6 +67,31 @@ def test_long_forward_labels_are_purged_by_actual_end_time_not_nominal_horizon()
     assert max(attacked.label_end_time[i] for i in split.validation_indices) < 191
 
 
+@pytest.mark.parametrize("times", [
+    tuple(range(120)) + (118,) + tuple(range(121, 240)),
+    tuple(range(120)) + (119,) + tuple(range(121, 240)),
+])
+def test_automatic_split_rejects_duplicate_or_out_of_order_decision_times(times):
+    _, labels = _fixture()
+    attacked = replace(labels)
+    object.__setattr__(attacked, "decision_time", times)
+
+    with pytest.raises(ValueError, match="strictly increasing"):
+        automatic_time_split(attacked, _config())
+
+
+def test_automatic_split_preserves_decision_time_only_duck_typed_inputs():
+    from types import SimpleNamespace
+
+    _, labels = _fixture()
+    duck_typed = SimpleNamespace(
+        decision_time=labels.decision_time, label_end_time=labels.label_end_time
+    )
+    assert automatic_time_split(duck_typed, _config()).identity == automatic_time_split(
+        labels, _config()
+    ).identity
+
+
 def test_validation_features_cannot_change_any_train_candidate_score():
     batch, labels = _fixture()
     config = _config()

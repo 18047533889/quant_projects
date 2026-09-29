@@ -156,6 +156,15 @@ def automatic_time_split(labels, config: BatchOptimizationConfig | None = None):
     """60/20/20 in time, warmup, and purge real label windows at boundaries."""
     config = config or BatchOptimizationConfig()
     n = len(labels.decision_time)
+    decision_times = tuple(labels.decision_time)
+    try:
+        aligned = not hasattr(labels, "values") or len(decision_times) == len(labels.values)
+        chronological = aligned and all(
+            left < right for left, right in zip(decision_times, decision_times[1:]))
+    except (TypeError, ValueError):
+        chronological = False
+    if not chronological:
+        raise ValueError("decision_time must be strictly increasing and aligned with label rows")
     v = int(n * config.train_fraction)
     t = int(n * (config.train_fraction + config.validation_fraction))
     if not 0 < v < t < n:
