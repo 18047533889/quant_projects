@@ -174,7 +174,7 @@ def cs_winsor(
     Returns
     -------
     np.ndarray
-        Winsorized values. NaN inputs produce NaN outputs.
+        Winsorized values. NaN and infinite inputs produce NaN outputs.
 
     Notes
     -----
@@ -187,15 +187,18 @@ def cs_winsor(
     if not (0 <= lower < upper <= 1):
         raise ValueError(f"Invalid quantiles: lower={lower}, upper={upper}")
 
-    # Compute quantiles along axis, ignoring NaN
-    lower_bound = np.nanquantile(values, lower, axis=axis, keepdims=True)
-    upper_bound = np.nanquantile(values, upper, axis=axis, keepdims=True)
+    # FE's canonical winsorize treats infinities as missing before estimating
+    # row quantiles. Match that policy: nanquantile alone does not ignore Inf
+    # and can produce NaN bounds for otherwise usable rows.
+    finite_values = np.where(np.isfinite(values), values, np.nan)
+    lower_bound = np.nanquantile(finite_values, lower, axis=axis, keepdims=True)
+    upper_bound = np.nanquantile(finite_values, upper, axis=axis, keepdims=True)
 
     # Clip
-    result = np.clip(values, lower_bound, upper_bound)
+    result = np.clip(finite_values, lower_bound, upper_bound)
 
-    # Preserve NaN
-    result = np.where(np.isnan(values), np.nan, result)
+    # Preserve missing and non-finite inputs as missing.
+    result = np.where(np.isfinite(values), result, np.nan)
 
     return result
 

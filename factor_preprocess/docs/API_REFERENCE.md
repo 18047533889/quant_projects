@@ -4605,7 +4605,7 @@ Cross-sectional winsorization by quantiles.
 
 ### cs_scale
 
-[实际实现](../factor_preprocess/transforms/cross_sectional.py#L203)。
+[实际实现](../factor_preprocess/transforms/cross_sectional.py#L206)。
 
 Cross-sectional scaling to target standard deviation.
 
@@ -5241,7 +5241,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/representation/policy.py` | `fdb0967671f949a93a8a7e59853530b35d2b5917213c53c256dba6dbc23de386` |
 | `factor_preprocess/representation/tree_ready.py` | `6362ac24a6a3916733652199bfcb3b47096e2b80aa53ffd2b1633ae4ec80c659` |
 | `factor_preprocess/transforms/__init__.py` | `6b7f63f73848b60b67fff56a3b414a62c7c8019def1c110cf9029dd4d34dddec` |
-| `factor_preprocess/transforms/cross_sectional.py` | `6c145d736f221f2eb92055768537350b99197d55fad86d6ef0be32559f33899e` |
+| `factor_preprocess/transforms/cross_sectional.py` | `7f2d2a0daa5cc698eed8ce289e769cdad0e749627b1ab9213c2a24083d6985c1` |
 | `factor_preprocess/transforms/decomposition/__init__.py` | `089d5af717071ab530734b69b74a98ccfec25ad6557b58cd1b4b7e5abdcb1f11` |
 | `factor_preprocess/transforms/decomposition/cycle.py` | `0a0c3c5493af64c178ab556776dfd1d0ae36625cfc445c0fba012ee618a0482e` |
 | `factor_preprocess/transforms/decomposition/seasonal.py` | `a7ed56c6b957f742d000e195f58ac031053562a3cdbfaa568a8aa598d8744874` |

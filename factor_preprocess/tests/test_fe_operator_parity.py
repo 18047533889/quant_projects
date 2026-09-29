@@ -214,6 +214,26 @@ def test_cs_winsor_fe_backed_matches_fp_kernel(lower, upper):
     np.testing.assert_allclose(out.to_numpy().reshape(mat.shape), fp, **_CS_TOL)
 
 
+@needs_fe
+def test_cs_winsor_infinities_are_excluded_like_fe():
+    from factor_preprocess.transforms import cs_winsor
+
+    mat = np.array([
+        [1.0, np.inf, 3.0],
+        [-np.inf, 1.0, 2.0],
+        [np.inf, -np.inf, np.nan],
+        [1.0, 2.0, 3.0],
+    ])
+    dates = pd.date_range("2024-01-01", periods=len(mat))
+    cols = ["A", "B", "C"]
+    out = _adapter_call("winsorize", _long(mat, dates, cols), lower=0.05, upper=0.95)
+    fp = cs_winsor(mat, lower=0.05, upper=0.95)
+    np.testing.assert_allclose(out.to_numpy().reshape(mat.shape), fp, **_CS_TOL)
+    assert np.isnan(fp[0, 1])
+    assert np.isnan(fp[1, 0])
+    assert np.isnan(fp[2, :]).all()
+
+
 # ---------------------------------------------------------------------------
 # Missingness exact duplicate
 # ---------------------------------------------------------------------------

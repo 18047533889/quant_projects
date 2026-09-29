@@ -94,6 +94,23 @@ class TestStructuralIdentity:
         # Should match because numeric params are normalized
         assert identity1.matches(identity2)
 
+    @pytest.mark.parametrize(
+        ("left", "right"),
+        [
+            ('{"op":"scale","args":["close",-1]}',
+             '{"op":"scale","args":["close",-2]}'),
+            ('{"op":"scale","args":["close",1e-3]}',
+             '{"op":"scale","args":["close",2e-3]}'),
+        ],
+    )
+    def test_negative_and_exponent_numeric_params_are_normalized(self, left, right):
+        # Complete JSON numeric tokens normalize regardless of sign or exponent.
+        identity1 = StructuralIdentity.from_canonical_repr("hash1", left)
+        identity2 = StructuralIdentity.from_canonical_repr("hash2", right)
+
+        assert identity1.operator_signature == identity2.operator_signature
+        assert identity1.matches(identity2)
+
     def test_same_operator_different_fields(self):
         """Test that same operator with different field arguments matches structurally."""
         identity1 = StructuralIdentity.from_canonical_repr(

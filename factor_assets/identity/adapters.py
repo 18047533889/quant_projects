@@ -121,11 +121,17 @@ class StructuralIdentity:
         """
         sig = expr
 
-        # Replace numeric literals with <NUM> (but not in field names)
-        # Match standalone numbers, not parts of words
-        sig = re.sub(r':\s*(\d+\.?\d*)', r':<NUM>', sig)
-        sig = re.sub(r'\[(\d+\.?\d*)\]', r'[<NUM>]', sig)
-        sig = re.sub(r',\s*(\d+\.?\d*)', r',<NUM>', sig)
+        # Replace complete JSON numeric values with <NUM>. Matching the whole
+        # token matters for negative and exponent-form literals: replacing only
+        # the mantissa of 1e-3 would leave e-3 in the signature and make
+        # otherwise identical operator structures compare differently.
+        number = r"-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?"
+        value_pattern = re.compile(
+            rf'(?P<prefix>[:,]\s*|\[\s*)(?P<number>{number})(?P<suffix>\s*(?=[,}}\]]))'
+        )
+        sig = value_pattern.sub(
+            lambda match: f"{match.group('prefix')}<NUM>{match.group('suffix')}", sig
+        )
 
         # Replace string values but keep "op": and "args": keys and operator names
         # Replace strings in args arrays that are field references

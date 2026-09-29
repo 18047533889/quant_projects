@@ -38,6 +38,9 @@ parity test; tolerance contract explicit — cross-sectional and ffill exact
 `atol=0.0`, OLS `atol=1e-9`/`rtol=1e-7`).  Registry routing tests:
 `tests/test_transform_metadata.py`.
 
+The `cs_winsor` parity probe covers non-finite inputs: FP converts +/-Inf to
+missing before quantile estimation, matching FE `winsorize`.
+
 ## Cross-sectional
 
 | transform | semantic id | math semantics | FE equivalent operator | FE semantic metadata | confidence | fitted? | causal? | FP-native reason | implementation_origin |
