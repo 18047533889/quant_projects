@@ -141,8 +141,7 @@ def preflight_factor_count_profile(args):
     from data_access.registry.loader import DatasetRegistry
     from data_access.store import DataAccessStore
     from data_access.cos.research import read_declared_cos_object
-    from data_access.cos.remote import resolve_s3_credentials
-    from data_access.core.exceptions import ValidationError
+    from data_access.core.exceptions import AuthorizationError
     from quant_evaluator.scripts.load_real_cos_factor_batch import BASE, SHA, _ds
 
     requested_sha = args.manifest_sha256 or full.MANIFEST_SHA256 or SHA
@@ -152,17 +151,11 @@ def preflight_factor_count_profile(args):
     engine = DuckDBEngine(threads=1)
     try:
         store = DataAccessStore(DatasetRegistry({dataset.name: dataset}), engine)
-        # Preserve DataAccess authorization ordering before reporting whether a
-        # usable credential is present. Never inspect credential values here.
+        # Preserve DataAccess authorization ordering. The declared-object read
+        # is the authority for whether the configured COS path is usable: it
+        # may use the DataAccess CLI gateway without S3 credentials.
         store.authorize_dataset(dataset.name)
         store._authorize_factor_params(dataset.name, None)
-        try:
-            resolve_s3_credentials()
-        except ValidationError:
-            return {"status": "unauthenticated", "pass": False,
-                    "reason": "no usable COS/S3 credential for this execution context",
-                    "manifest_sha256": requested_sha,
-                    "gpu_memory": _gpu_memory_snapshot()}
         declared = read_declared_cos_object(store, dataset.name, allow_research=True)
         if declared.content_sha256 != requested_sha:
             return {"status": "unavailable", "pass": False,
@@ -258,6 +251,8 @@ def preflight_factor_count_profile(args):
                 failures.append("effective free VRAM is below the 14 GiB profile minimum")
             preflight["reason"] = "; ".join(failures)
         return preflight
+    except AuthorizationError:
+        raise
     except Exception as exc:
         message = str(exc)
         # Failed COS CLI metadata requests are collapsed to empty results.

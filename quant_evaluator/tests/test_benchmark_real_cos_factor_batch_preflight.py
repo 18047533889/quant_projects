@@ -1,6 +1,7 @@
 """Small non-COS tests for the real-COS factor-count preflight CLI."""
 import json
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -72,6 +73,124 @@ def test_f32_working_set_estimate_is_manifest_bound():
     conservative = max(array_bound * 16, scaled_f24)
     assert benchmark._estimate_f32_peak_bytes() == conservative
     assert benchmark._estimate_f32_peak_bytes("0" * 64) == conservative
+
+
+def _stub_preflight_data_access(monkeypatch, read_declared):
+    import data_access.core.engine as engine_module
+    import data_access.cos.research as research_module
+    import data_access.registry.loader as registry_module
+    import data_access.store as store_module
+    import quant_evaluator.scripts.load_real_cos_factor_batch as loader_module
+
+    class FakeEngine:
+        def __init__(self, **kwargs):
+            pass
+
+        def close(self):
+            pass
+
+    class FakeStore:
+        def __init__(self, registry, engine):
+            self.authorized = []
+
+        def authorize_dataset(self, dataset):
+            self.authorized.append(dataset)
+
+        def _authorize_factor_params(self, dataset, params):
+            assert params is None
+
+    monkeypatch.setattr(engine_module, "DuckDBEngine", FakeEngine)
+    monkeypatch.setattr(registry_module, "DatasetRegistry", lambda datasets: datasets)
+    monkeypatch.setattr(store_module, "DataAccessStore", FakeStore)
+    monkeypatch.setattr(research_module, "read_declared_cos_object", read_declared)
+    monkeypatch.setattr(loader_module, "_ds", lambda name, *args: SimpleNamespace(name=name))
+    monkeypatch.setattr(benchmark, "_estimate_f32_peak_bytes", lambda _sha: 1024**3)
+    monkeypatch.setattr(benchmark, "_mem_available_bytes", lambda: 16 * 1024**3)
+    monkeypatch.setattr(benchmark, "_gpu_memory_snapshot", lambda: {
+        "status": "ok", "devices": [{"free_mib": 35_840}],
+    })
+    monkeypatch.setattr(benchmark, "_gpu_memory_pass", lambda _snapshot: True)
+
+
+def test_f32_preflight_uses_authorized_data_access_read_without_s3_creds(monkeypatch):
+    from data_access.cos import remote
+
+    calls = []
+
+    def read_manifest(store, dataset, **kwargs):
+        assert store.authorized == [dataset]
+        calls.append((dataset, kwargs))
+        factors = {}
+        for i in range(1, 33):
+            factor_id = f"factor_{i}"
+            digest = f"{i:064x}"
+            factors[factor_id] = {
+                "verified": True,
+                "status": "evaluated_optimization_pending",
+                "bytes": 1024,
+                "sha256": digest,
+                "uri": (
+                    "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/"
+                    f"factor_values/{digest}/{factor_id}.parquet"
+                ),
+            }
+        return SimpleNamespace(
+            content_sha256=benchmark.full.MANIFEST_SHA256,
+            table=SimpleNamespace(to_pylist=lambda: [{"factors": factors}]),
+        )
+
+    _stub_preflight_data_access(monkeypatch, read_manifest)
+    monkeypatch.setattr(remote, "resolve_s3_credentials", lambda: pytest.fail(
+        "the DataAccess read path must not require S3 credentials"))
+    args = SimpleNamespace(
+        manifest_sha256=benchmark.full.MANIFEST_SHA256,
+        profile_max_object_mib=128, profile_max_total_mib=2048,
+        max_working_gib=50,
+    )
+
+    result = benchmark.preflight_factor_count_profile(args)
+
+    assert result["status"] == "ready"
+    assert result["verified_factor_count"] == 32
+    assert result["gpu_memory_pass"] is True
+    assert calls == [("source_manifest", {"allow_research": True})]
+
+
+def test_f32_preflight_fails_closed_when_data_access_read_is_unavailable(monkeypatch):
+    from data_access.core.exceptions import ValidationError
+
+    def reject_read(*args, **kwargs):
+        raise ValidationError("COS metadata unavailable")
+
+    _stub_preflight_data_access(monkeypatch, reject_read)
+    args = SimpleNamespace(
+        manifest_sha256=benchmark.full.MANIFEST_SHA256,
+        profile_max_object_mib=128, profile_max_total_mib=2048,
+        max_working_gib=50,
+    )
+
+    result = benchmark.preflight_factor_count_profile(args)
+
+    assert result["status"] == "unavailable"
+    assert result["pass"] is False
+    assert "COS metadata unavailable" in result["reason"]
+
+
+def test_f32_preflight_does_not_reclassify_data_access_authorization_denial(monkeypatch):
+    from data_access.core.exceptions import AccessDeniedError
+
+    def reject_read(*args, **kwargs):
+        raise AccessDeniedError("dataset read denied")
+
+    _stub_preflight_data_access(monkeypatch, reject_read)
+    args = SimpleNamespace(
+        manifest_sha256=benchmark.full.MANIFEST_SHA256,
+        profile_max_object_mib=128, profile_max_total_mib=2048,
+        max_working_gib=50,
+    )
+
+    with pytest.raises(AccessDeniedError):
+        benchmark.preflight_factor_count_profile(args)
 
 
 def test_f32_whole_batch_uses_complete_metric_batch_worker(monkeypatch, capsys):
@@ -156,14 +275,7 @@ def test_f8_extended_trial_honors_configured_timeout(monkeypatch, tmp_path):
     assert report["pass"] is True
 
 
-@pytest.mark.parametrize("credential_error, expected_status, expected_category", [
-    (True, "unauthenticated", None),
-    (False, "unavailable", "object_metadata_unavailable"),
-])
-def test_f32_preflight_distinguishes_auth_from_unknown_metadata(
-    monkeypatch, credential_error, expected_status, expected_category
-):
-    from types import SimpleNamespace
+def test_f32_preflight_classifies_metadata_failure_without_s3_credential_probe(monkeypatch):
     from data_access.core.exceptions import ValidationError
     from data_access.store import DataAccessStore
     from data_access.cos import remote, research
@@ -171,20 +283,16 @@ def test_f32_preflight_distinguishes_auth_from_unknown_metadata(
     monkeypatch.setattr(DataAccessStore, "authorize_dataset", lambda *_: None)
     monkeypatch.setattr(DataAccessStore, "_authorize_factor_params", lambda *_: None)
     calls = []
-    if credential_error:
-        def credential_probe():
-            raise ValidationError("missing credential")
-    else:
-        def credential_probe():
-            calls.append("credential")
-            return object()
+
     def metadata_probe(*_args, **_kwargs):
         calls.append("metadata")
         raise ValidationError("exact object metadata is missing or mismatched")
-    monkeypatch.setattr(remote, "resolve_s3_credentials", credential_probe)
+
+    monkeypatch.setattr(remote, "resolve_s3_credentials", lambda: pytest.fail(
+        "metadata failure classification must not probe S3 credentials"))
     monkeypatch.setattr(research, "read_declared_cos_object", metadata_probe)
     result = benchmark.preflight_factor_count_profile(SimpleNamespace(manifest_sha256=None))
-    assert result["status"] == expected_status
-    assert result.get("category") == expected_category
-    assert calls == ([] if credential_error else ["credential", "metadata"])
-    assert "credential" not in result.get("reason", "") or credential_error
+
+    assert result["status"] == "unavailable"
+    assert result["category"] == "object_metadata_unavailable"
+    assert calls == ["metadata"]

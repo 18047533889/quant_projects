@@ -156,15 +156,16 @@ def _validate_source_binding(binding):
     return dict(binding)
 
 
-def _public_source_report(source):
-    """Keep useful public metadata and replace private per-object locators with hashes."""
+def _public_source_report(source, *, include_binding=False):
+    """Keep an allowlisted public summary; add strict bindings only for F24 mixed-three."""
     safe_fields = (
         "days", "assets", "date_span", "calendar_sessions",
         "missing_adj_vwap_partitions", "label", "factor_finite_ratio",
         "label_finite_ratio", "limitations",
     )
     public = {key: _plain(source[key]) for key in safe_fields if key in source}
-    public["source_binding"] = _source_identity(source)
+    if include_binding:
+        public["source_binding"] = _source_identity(source)
     return public
 
 def _validate_auto_reference(reference):
@@ -602,7 +603,7 @@ def main():
                         "repeats_per_run": args.repeats, "factors": 24,
                         "shape": shape, "dtype": str(_BATCH.values.dtype),
                         "manifest_sha256": MANIFEST_SHA256},
-            "source": _public_source_report(source), "source_identity_matches_reference": source_match,
+            "source": _public_source_report(source, include_binding=True), "source_identity_matches_reference": source_match,
             "reference_config_hash": reference_meta["config_hash"],
             "reference_explicit_cuda_artifact_sha256": expected_cuda_hash,
             "runs": runs,
@@ -659,7 +660,7 @@ def main():
                     "repeats_per_child": 2, "timeout_s": args.timeout_s,
                     "shape": shape, "dtype": str(_BATCH.values.dtype),
                     "manifest_sha256": MANIFEST_SHA256, "compact_artifacts": args.compact},
-        "source": _public_source_report(source), "load_s": load_s,
+        "source": _public_source_report(source, include_binding=f24_mixed_request), "load_s": load_s,
         "parent_peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
         "config_hashes": config_hashes,
         "runs": report_runs, "comparisons_to_first_cpu": comparisons,

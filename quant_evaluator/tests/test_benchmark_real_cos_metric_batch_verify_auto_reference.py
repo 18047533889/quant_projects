@@ -104,3 +104,25 @@ def test_auto_reference_requires_certified_cuda_route():
         changed = dict(run)
         changed[key] = value
         assert not harness._auto_reference_run_passes(changed)
+
+
+@pytest.mark.parametrize("factor_count", (2, 8, 13, 32))
+def test_other_profiles_use_safe_summary_without_f24_source_binding(factor_count):
+    source = {
+        "sources": [{"uri": "cos://private/location", "factor_id": "private_factor"}]
+                   * factor_count,
+        "days": 12, "assets": 50, "label": "safe label",
+    }
+    public = harness._public_source_report(source)
+    assert public == {"days": 12, "assets": 50, "label": "safe label"}
+    serialized = json.dumps(public)
+    assert "cos://" not in serialized
+    assert "private_factor" not in serialized
+    assert "source_binding" not in public
+
+
+def test_f24_source_binding_is_opt_in_for_safe_reports():
+    source = {"sources": [{"uri": "cos://private/location", "factor_id": "private_factor"}]}
+    public = harness._public_source_report(source, include_binding=False)
+    assert "source_binding" not in public
+    assert "cos://" not in json.dumps(public)

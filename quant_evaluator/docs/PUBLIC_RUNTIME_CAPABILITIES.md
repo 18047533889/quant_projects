@@ -916,10 +916,13 @@ python -m quant_evaluator.scripts.benchmark_real_cos_metric_batch \
 `--metrics` 值；未带 `--run` 时只预检，不加载完整面板。完整链的
 速度证据不能外推给单指标，单指标 `auto` 仍保守留在 CPU，
 待各自真实大批量对拍和交错计时通过后才可认证。2026-09-29
-本执行上下文的预检因缺少可用 COS/S3 授权而返回
-`unauthenticated`；没有绕过授权或强行加载整板。
-基准报告仍包含来源/因子标识；`--compact` 只压缩制品值，
-公开仓库只能收录经过脱敏核查的摘要。
+本执行上下文通过 DataAccess COS CLI 预检成功读取绑定 manifest，GPU gate
+通过；但 F32 估算峰值为 50 GiB，另需 8 GiB headroom，当时 available
+约 53.45 GiB，未满足资源门槛。因此未执行该单项 A/B，也未扩大 `auto`
+认证范围。没有强行加载整板。
+预检回执可能包含所选因子标识；批次基准报告只保留白名单摘要，
+F24 精确三指标另保留脱敏的来源绑定哈希。`--compact` 只压缩制品值；
+公开仓库仍须逐份核查报告，不可直接发布原始 COS 路径。
 
 新版 CPU 行块与加载器组合在同一 F24 rank 链上另完成六轮真实 COS
 公开入口复测，完整制品对拍通过；父进程 RSS 峰值 10,850,236 KiB，
