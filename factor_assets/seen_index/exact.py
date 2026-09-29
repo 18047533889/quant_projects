@@ -42,6 +42,10 @@ class SeenIndex:
 
     def __init__(self):
         self._seen: dict[str, SeenRecord] = {}
+        # Factor IDs are immutable identities too. Keep their reverse lookup
+        # alongside the canonical-hash index so repeated inserts remain O(1)
+        # instead of scanning the full history on every new candidate.
+        self._factor_hashes: dict[str, str] = {}
 
     def record(
         self,
@@ -78,13 +82,10 @@ class SeenIndex:
 
         # A factor ID is an immutable identity, so a different canonical hash
         # cannot be recorded under an already-seen ID.
-        existing = next(
-            (record for record in self._seen.values() if record.factor_id == factor_id),
-            None,
-        )
-        if existing is not None:
+        existing_hash = self._factor_hashes.get(factor_id)
+        if existing_hash is not None:
             raise ValueError(
-                f"factor_id already recorded with canonical_hash {existing.canonical_hash}"
+                f"factor_id already recorded with canonical_hash {existing_hash}"
             )
 
         now = datetime.now(timezone.utc).isoformat()
@@ -99,6 +100,7 @@ class SeenIndex:
         )
 
         self._seen[canonical_hash] = record
+        self._factor_hashes[factor_id] = canonical_hash
         return record
 
     def is_seen(self, canonical_hash: str) -> bool:

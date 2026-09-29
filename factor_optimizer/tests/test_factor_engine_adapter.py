@@ -263,3 +263,14 @@ def test_fallback_counts_numpy_integer_lookback(adapter, monkeypatch):
     assert result["estimated_cost"] == 1.25
     import json
     json.dumps(result)
+
+
+def test_semantic_hash_rejects_wrong_expression_input_arity(adapter):
+    from factor_engine.expr.cleaned_call import CleanedCall
+    from factor_engine.expr.column import ColumnRef
+
+    malformed_rank = CleanedCall(
+        "rank", (ColumnRef("close"), ColumnRef("open")),
+    )
+    with pytest.raises((TypeError, ValueError), match="rank.*(positional|arguments|arity)"):
+        adapter.compute_canonical_hash(malformed_rank)

@@ -204,8 +204,12 @@ def create_fe_adapter() -> FactorEngineAdapter:
                         raise ValueError(f"{node.op!r} contains duplicate parameter names")
                     canonical = OperatorRegistry.resolve_canonical_strict(node.op)
                     normalized = normalize_parameter_aliases(canonical, kwargs)
-                    if normalized:
-                        self._validate_operator_parameters(canonical, normalized)
+                    # Semantic identity is only meaningful for a well-formed
+                    # call. Validate the authored input arity as well as scalar
+                    # parameters; otherwise malformed calls can enter SeenCache.
+                    self._validate_operator_parameters(
+                        canonical, normalized, input_count=len(node.args)
+                    )
                     return CleanedCall(
                         op=canonical,
                         args=tuple(normalize(arg) for arg in node.args),
@@ -319,7 +323,9 @@ def create_fe_adapter() -> FactorEngineAdapter:
                     "metadata": metadata,
                 }
 
-            def _validate_operator_parameters(self, canonical: str, kwargs: Dict[str, Any]) -> None:
+            def _validate_operator_parameters(
+                self, canonical: str, kwargs: Dict[str, Any], *, input_count: Optional[int] = None,
+            ) -> None:
                 """Run FE's registered call-contract validator without executing a kernel."""
                 backends = self.operator_registry.backends_for(canonical)
                 operator = None
@@ -339,7 +345,11 @@ def create_fe_adapter() -> FactorEngineAdapter:
                     inputs = [name for name in names if name not in specs and name not in scalar_names]
                 inputs = [name for name in inputs if name not in kwargs]
                 placeholder = pd.DataFrame([[0.0]])
-                operator._prepare_call(tuple(placeholder for _ in inputs), kwargs)
+                if input_count is None:
+                    call_inputs = inputs
+                else:
+                    call_inputs = [None] * input_count
+                operator._prepare_call(tuple(placeholder for _ in call_inputs), kwargs)
 
             def estimate_complexity(self, factor_definition: Any) -> Dict[str, Any]:
                 """Estimate complexity through FE analyzer."""

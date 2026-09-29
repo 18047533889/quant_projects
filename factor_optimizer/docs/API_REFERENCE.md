@@ -10650,7 +10650,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/__init__.py` | `c56006f3491a1795bc0dc673f116e214f4f20e2965ba1d468a452c9f0cc1d76d` |
 | `factor_optimizer/adapters/__init__.py` | `d2cd050fc93d62119ef592d8d663e985e5218554c6cb289d839e384a49b40a23` |
 | `factor_optimizer/adapters/factor_assets.py` | `6a2ad44b43710199fd6eed901de2974fb8a66314f525be016c2f4796bf8af6d4` |
-| `factor_optimizer/adapters/factor_engine.py` | `c56a54266309fe05278958d648c3ebb4990adc20e3bfd94f0b728bacf0e5f046` |
+| `factor_optimizer/adapters/factor_engine.py` | `a26d2be039dda962033b914f57ae0475ce893d47e61918f7a06fa5242bf4b921` |
 | `factor_optimizer/adapters/fitness.py` | `4486884657f730c65064fe6e1aebc7555a515fbc3cba41c71c1bf8c9e4c48ce5` |
 | `factor_optimizer/adapters/layered_decay.py` | `86ac91175c82eef473abef116a7a67802872a0da96ce0fa7a6022bf783bb3e26` |
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |

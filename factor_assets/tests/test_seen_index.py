@@ -68,6 +68,17 @@ def test_seen_index_rejects_factor_id_collision():
     assert index.count() == 1
 
 
+def test_seen_index_keeps_factor_id_reverse_index_consistent():
+    index = SeenIndex()
+    for i in range(1000):
+        index.record(canonical_hash=f"hash-{i}", factor_id=f"factor-{i}")
+
+    assert index._factor_hashes["factor-999"] == "hash-999"
+    with pytest.raises(ValueError, match="canonical_hash hash-999"):
+        index.record(canonical_hash="different-hash", factor_id="factor-999")
+    assert index.count() == 1000
+
+
 def test_seen_index_is_seen():
     """Test checking if a factor has been seen."""
     index = SeenIndex()
