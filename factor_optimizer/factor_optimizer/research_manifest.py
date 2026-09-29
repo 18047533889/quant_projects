@@ -190,7 +190,10 @@ def _rank_scope(expression):
                ast.keyword, ast.List, ast.Tuple, ast.UnaryOp, ast.USub, ast.UAdd)
     if any(not isinstance(n, allowed) for n in nodes):
         raise ValueError("unsupported fe_dsl syntax; no code is executed")
-    ranks = {"rank", "cs_rank"}
+    # Keep this allowlist aligned with FactorEngine's registered rank aliases.
+    # These names resolve to canonical ``rank`` in FE; overlooking one can
+    # misclassify an already-ranked factor and apply a second baseline rank.
+    ranks = {"rank", "cs_rank", "CS_RANK", "RANK", "c_rank", "cs_rank_01"}
     is_rank = lambda n: isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in ranks
     return any(is_rank(n) for n in nodes), is_rank(tree.body)
 

@@ -6871,7 +6871,7 @@ One DataAccess-verified landing manifest reusable within a bounded read.
 
 ### read_bound_manifest
 
-[实际实现](../factor_optimizer/research_manifest.py#L198)。
+[实际实现](../factor_optimizer/research_manifest.py#L201)。
 
 Read and bind one landing manifest for reuse across its factor reads.
 
@@ -6879,7 +6879,7 @@ Read and bind one landing manifest for reuse across its factor reads.
 
 ### verify_bound_manifest_unchanged
 
-[实际实现](../factor_optimizer/research_manifest.py#L224)。
+[实际实现](../factor_optimizer/research_manifest.py#L227)。
 
 Require the declared manifest identity to remain stable across a pass.
 
@@ -6887,7 +6887,7 @@ Require the declared manifest identity to remain stable across a pass.
 
 ### read_bound_factor
 
-[实际实现](../factor_optimizer/research_manifest.py#L250)。
+[实际实现](../factor_optimizer/research_manifest.py#L253)。
 
 Read declared datasets through DataAccess; enforce URI, bytes and SHA256.
 
@@ -10701,7 +10701,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/research_diagnostics.py` | `26c82a50b2edcaa4eff8911da11a4fcd52fbad2f5235148202a300d396ced23d` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |
 | `factor_optimizer/research_fitness.py` | `c7021a482a74b691f68ae6b706355b7f7c9544e8658d5aa81a921cceef4e6494` |
-| `factor_optimizer/research_manifest.py` | `5a816ac445604d7676e86db4c4918de2d75592ae52973593c07a3ddb76a071a3` |
+| `factor_optimizer/research_manifest.py` | `b2a5d5ec912cb18fe065498965d092da0d1ab095a366ac7fa7c4f565d09d4ba5` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |
 | `factor_optimizer/search/conditional_search.py` | `4b6dfeceacd797ad16f2406d0cd8c5cc1a4146c59c65c611f875356ce7251731` |

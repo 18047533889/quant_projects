@@ -77,6 +77,34 @@ def test_bound_reader_verifies_actual_data_and_reports_rank_scope(declared_sourc
     assert not list((declared_source[3] / "cache").rglob("object.*"))
 
 
+@pytest.mark.parametrize("alias", ["rank", "cs_rank", "CS_RANK", "RANK", "c_rank", "cs_rank_01"])
+def test_rank_scope_recognizes_factor_engine_rank_aliases(alias):
+    from factor_optimizer.research_manifest import _rank_scope
+
+    contains, output = _rank_scope(f"{alias}(col('close'))")
+    assert contains and output
+
+
+def test_rank_scope_excludes_rank_corr_and_panel_rank():
+    from factor_optimizer.research_manifest import _rank_scope
+
+    assert _rank_scope("rank_corr(col('close'), col('volume'))") == (False, False)
+    assert _rank_scope("panel_rank(col('close'))") == (False, False)
+
+
+def test_cs_rank_01_is_exact_duplicate():
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    import numpy as np
+    import pandas as pd
+    from factor_optimizer.research_manifest import _rank_scope
+
+    rank = OperatorRegistry.get("rank", backend="pandas_numpy", mode="any")
+    cs_rank_01 = OperatorRegistry.get("cs_rank_01", backend="pandas_numpy", mode="any")
+    sample = pd.DataFrame([[1.0, 1.0, 3.0], [np.nan, 2.0, 4.0]])
+    pd.testing.assert_frame_equal(rank.calculate(sample), cs_rank_01.calculate(sample))
+    assert _rank_scope("cs_rank_01(col('close'))") == (True, True)
+
+
 
 def test_reused_manifest_keeps_each_factor_head_get_head_and_binding_checks(declared_source):
     from factor_optimizer.research_manifest import read_bound_factor, read_bound_manifest
