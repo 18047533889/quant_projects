@@ -5,7 +5,7 @@ Computes factor similarity using correlation metrics.
 FA stores only bounded summary statistics, not full value arrays.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from typing import Protocol, Optional
 
@@ -34,6 +34,17 @@ def _deduplicate_similar_neighbors(
         key=lambda item: (item[1][0][0], item[0], item[1][0][1]),
     )
     return [result for _, (_, result) in ordered]
+
+
+def _orient_similarity_result(
+    result: "SimilarityResult", factor_id_a: str, factor_id_b: str
+) -> "SimilarityResult":
+    """Return symmetric cached evidence in the caller's requested orientation."""
+    if result.factor_id_a == factor_id_a and result.factor_id_b == factor_id_b:
+        return result
+    if result.factor_id_a == factor_id_b and result.factor_id_b == factor_id_a:
+        return replace(result, factor_id_a=factor_id_a, factor_id_b=factor_id_b)
+    raise ValueError("cached similarity result does not match the requested factor pair")
 
 
 class SimilarityMethod(Enum):
@@ -250,8 +261,8 @@ class QEPairwiseSimilarity:
             factor_id_a, factor_id_b, method,
             universe_ref, period_start, period_end
         )
-        if cached:
-            return cached
+        if cached is not None:
+            return _orient_similarity_result(cached, factor_id_a, factor_id_b)
 
         # Delegate to QE adapter if available
         if self._qe_adapter:
@@ -267,7 +278,9 @@ class QEPairwiseSimilarity:
                 # Convert to SimilarityResult and cache
                 similarity_result = self._convert_qe_result(result, method)
                 self.add_result(similarity_result)
-                return similarity_result
+                return _orient_similarity_result(
+                    similarity_result, factor_id_a, factor_id_b
+                )
 
         return None
 
@@ -314,7 +327,7 @@ class QEPairwiseSimilarity:
                 continue
 
             if result.is_high_similarity(threshold):
-                candidates.append((fid_b, result))
+                candidates.append((fid_b, _orient_similarity_result(result, fid_a, fid_b)))
 
         results = _deduplicate_similar_neighbors(candidates)
         return results[:max_results]
@@ -382,7 +395,10 @@ class QEPairwiseSimilarity:
             factor_id_a, factor_id_b, method,
             universe_ref, period_start, period_end
         )
-        return self._cache.get(key)
+        result = self._cache.get(key)
+        if result is None:
+            return None
+        return _orient_similarity_result(result, factor_id_a, factor_id_b)
 
     def _convert_qe_result(self, qe_result, method: SimilarityMethod) -> SimilarityResult:
         """Convert typed QE evidence; legacy aggregate-only dicts stay UNKNOWN."""
@@ -509,7 +525,10 @@ class CorrelationSimilarity:
             factor_id_a, factor_id_b, method,
             universe_ref, period_start, period_end
         )
-        return self._cache.get(key)
+        result = self._cache.get(key)
+        if result is None:
+            return None
+        return _orient_similarity_result(result, factor_id_a, factor_id_b)
 
     def find_similar(
         self,
@@ -544,7 +563,7 @@ class CorrelationSimilarity:
                 continue
 
             if result.is_high_similarity(threshold):
-                candidates.append((fid_b, result))
+                candidates.append((fid_b, _orient_similarity_result(result, fid_a, fid_b)))
 
         results = _deduplicate_similar_neighbors(candidates)
 

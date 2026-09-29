@@ -31,13 +31,13 @@ def test_qe_symmetric_pair_shares_cache():
     )
     similarity.add_result(result)
 
-    # Query with reversed order (B, A) should return same result
+    # Query with reversed order (B, A) preserves the pair but follows the request.
     retrieved = similarity.compute_similarity("factor_b", "factor_a")
 
     assert retrieved is not None
     assert retrieved.similarity_score == 0.85
-    assert retrieved.factor_id_a == "factor_a"  # Original ordering preserved
-    assert retrieved.factor_id_b == "factor_b"
+    assert retrieved.factor_id_a == "factor_b"
+    assert retrieved.factor_id_b == "factor_a"
 
 
 def test_qe_count_correct_after_multiple_adds():

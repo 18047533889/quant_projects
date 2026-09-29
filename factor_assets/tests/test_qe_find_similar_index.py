@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 from factor_assets.similarity.exact import (
     QEPairwiseSimilarity,
     SimilarityMeasurementStatus,
@@ -29,6 +31,8 @@ def _scan_reference(similarity, factor_id, **kwargs):
         if fid_b in seen_factor_ids:
             continue
         if result.is_high_similarity(threshold):
+            if (result.factor_id_a, result.factor_id_b) != (fid_a, fid_b):
+                result = replace(result, factor_id_a=fid_a, factor_id_b=fid_b)
             results.append(result)
             seen_factor_ids.add(fid_b)
     results.sort(key=lambda result: abs(result.similarity_score), reverse=True)

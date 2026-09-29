@@ -294,6 +294,45 @@ def test_correlation_similarity_find_similar():
     assert similar[0].similarity_score == 0.85
 
 
+@pytest.mark.parametrize("similarity_class", [CorrelationSimilarity, QEPairwiseSimilarity])
+def test_find_similar_orients_symmetric_result_to_query_factor(similarity_class):
+    """A symmetric cache hit must identify the query as factor_id_a."""
+    similarity = similarity_class()
+    similarity.add_result(SimilarityResult(
+        factor_id_a="F001",
+        factor_id_b="F002",
+        similarity_score=-0.91,
+        method=SimilarityMethod.PEARSON,
+        timestamp="2024-01-01T00:00:00Z",
+        sample_size=1000,
+    ))
+
+    reverse = similarity.find_similar("F002")
+
+    assert len(reverse) == 1
+    assert (reverse[0].factor_id_a, reverse[0].factor_id_b) == ("F002", "F001")
+    assert reverse[0].similarity_score == -0.91
+
+
+@pytest.mark.parametrize("similarity_class", [CorrelationSimilarity, QEPairwiseSimilarity])
+def test_compute_similarity_orients_symmetric_cache_hit(similarity_class):
+    similarity = similarity_class()
+    similarity.add_result(SimilarityResult(
+        factor_id_a="F001",
+        factor_id_b="F002",
+        similarity_score=0.84,
+        method=SimilarityMethod.PEARSON,
+        timestamp="2024-01-01T00:00:00Z",
+        sample_size=1000,
+    ))
+
+    reverse = similarity.compute_similarity("F002", "F001")
+
+    assert reverse is not None
+    assert (reverse.factor_id_a, reverse.factor_id_b) == ("F002", "F001")
+    assert reverse.similarity_score == 0.84
+
+
 def test_correlation_similarity_find_similar_max_results():
     """Test limiting find_similar results."""
     similarity = CorrelationSimilarity()
