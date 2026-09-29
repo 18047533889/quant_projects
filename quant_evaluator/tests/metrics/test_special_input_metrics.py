@@ -208,6 +208,21 @@ def test_generalization_evidence_fixture_binds_metric_to_request_axis(metric_id,
     assert _value_digest(repeat) == _value_digest(out)
 
 
+def test_generalization_metrics_batch_equals_individual():
+    fb, lb, probe, gen, _ = _int_inputs()
+    metrics = tuple(sorted(GEN_ORACLES))
+    batch = evaluate(
+        fb, lb, metrics=metrics, portfolio_returns=probe,
+        generalization_evidence=gen,
+    )
+    for metric_id in metrics:
+        single = evaluate(
+            fb, lb, metrics=(metric_id,), portfolio_returns=probe,
+            generalization_evidence=gen,
+        )
+        assert batch.metric_values[metric_id] == single.metric_values[metric_id]
+
+
 def test_generalization_evidence_axis_mismatch_still_rejected():
     """The fixture works because the axis matches — prove the guard is the
     reason the old ("f0","f1") fixture failed, i.e. the contract is intact."""
@@ -294,6 +309,21 @@ def test_calendar_metric_oracle_matches_documented_formula(function, days, obser
 # --------------------------------------------------------------------------
 # 3. cost_drag leg fixture (1 previously unmeasurable metric)
 # --------------------------------------------------------------------------
+
+
+def test_calendar_metrics_batch_equals_individual():
+    fb, lb, probe, snap = _calendar_inputs()
+    metrics = ("worst_calendar_month", "worst_calendar_quarter", "worst_calendar_year")
+    batch = evaluate(
+        fb, lb, metrics=metrics, portfolio_returns=probe,
+        calendar_snapshot=snap,
+    )
+    for metric_id in metrics:
+        single = evaluate(
+            fb, lb, metrics=(metric_id,), portfolio_returns=probe,
+            calendar_snapshot=snap,
+        )
+        assert batch.metric_values[metric_id] == single.metric_values[metric_id]
 
 
 def test_turnover_cost_measured_through_cost_drag_leg():
