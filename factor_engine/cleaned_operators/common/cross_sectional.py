@@ -1362,19 +1362,47 @@ class CrossSectionalRank(SeriesOperator):
 
     def _calculate_series(self, x: pl.DataFrame, **kwargs) -> pl.DataFrame:
         numeric_cols = [c for c in x.columns if c not in {"date", "stock_code"}]
-        values = pl.concat_list([
-            pl.when(pl.col(c).is_finite()).then(pl.col(c)).otherwise(None)
-            for c in numeric_cols
-        ])
-        ranks = values.list.eval(pl.element().rank(method="average"))
-        count = values.list.drop_nulls().list.len()
-        return x.with_columns([
-            pl.when(values.list.get(i).is_null()).then(None)
-            .when(count <= 1).then(0.5)
-            .otherwise((ranks.list.get(i) - 1.0) / (count - 1.0))
-            .alias(c)
-            for i, c in enumerate(numeric_cols)
-        ])
+        if not numeric_cols or x.height == 0:
+            return x
+
+        # Rank a single long value column per panel row. The former wide
+        # concat_list expression was embedded once per output column, making
+        # expression construction/optimization grow quadratically with width.
+        long = (
+            x.select(numeric_cols)
+            .with_row_index("_r")
+            .unpivot(index="_r", on=numeric_cols, variable_name="_c", value_name="_v")
+            .with_columns(
+                pl.when(pl.col("_v").is_finite())
+                .then(pl.col("_v"))
+                .otherwise(None)
+                .alias("_v")
+            )
+            .with_columns(
+                pl.col("_v").rank(method="average").over("_r").alias("_rank"),
+                pl.col("_v").count().over("_r").alias("_count"),
+            )
+            .with_columns(
+                pl.when(pl.col("_v").is_null())
+                .then(None)
+                .when(pl.col("_count") <= 1)
+                .then(0.5)
+                .otherwise(
+                    (pl.col("_rank") - 1.0) / (pl.col("_count") - 1.0)
+                )
+                .alias("_ranked")
+            )
+        )
+        wide = (
+            long.pivot(
+                values="_ranked", index="_r", on="_c", aggregate_function="first"
+            )
+            .sort("_r")
+            .drop("_r")
+            .select(numeric_cols)
+        )
+        passthrough = [c for c in x.columns if c not in numeric_cols]
+        return wide.with_columns([x.get_column(c) for c in passthrough]).select(x.columns)
 
 @register_operator(name="rank", category="cross_sectional", business_category="cross_sectional", canonical="rank", source="factor_dsl_np")
 class RankPolars(SeriesOperator):
@@ -1397,9 +1425,9 @@ class RankPolars(SeriesOperator):
         execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
         materializes_full_panel=True,
         supports_nulls=True, supports_nan=True, supports_inf=True,
-        implementation_source_hash="common.cross_sectional:RankPolars:v1",
+        implementation_source_hash="common.cross_sectional:RankPolars:v2",
         emitter_identity="polars_expr:rank",
-        kernel_identity="common.cross_sectional:RankPolars",
+        kernel_identity="common.cross_sectional:RankPolars:v2",
         parameter_domain_hash="rank:declared:v1",
         semantic_contract_hash="rank:polars_native_expr:v1",
         notes=('Genuine polars expression kernel (pl.col/with_columns); runtime probe shows 0 pl.DataFrame.to_pandas calls and the kernel body has no pandas/NumPy term. Declared to connect the polars_long channel: execution_kind was previously absent, so canonical_polars_kind(production_mode=True) reported UNSUPPORTED.'),

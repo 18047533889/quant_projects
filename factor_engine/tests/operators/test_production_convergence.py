@@ -187,6 +187,53 @@ def test_rank_polars_is_native_and_matches_pandas_edges() -> None:
     pd.testing.assert_frame_equal(actual, expected)
 
 
+@pytest.mark.parametrize("n_columns", [1, 2, 5, 16, 20])
+def test_rank_polars_matches_pandas_for_bounded_panel_widths(n_columns: int) -> None:
+    """Keep rank tie/missing semantics exact as its wide implementation scales."""
+    pl = pytest.importorskip("polars")
+    import numpy as np
+
+    rng = np.random.default_rng(61109 + n_columns)
+    values = rng.normal(size=(6, n_columns))
+    values[0, :] = 2.0  # all ties, including the singleton-width case
+    values[1, :] = np.nan
+    values[1, 0] = 4.0  # singleton finite value => 0.5
+    values[2, :] = np.nan
+    values[2, 0] = np.inf  # Inf is excluded; no finite sample in this row
+    if n_columns > 1:
+        values[3, 0] = -np.inf
+        values[3, 1] = values[3, 2] if n_columns > 2 else 1.0
+
+    panel = pd.DataFrame(values, columns=[f"a{i}" for i in range(n_columns)])
+    pandas_op = OperatorRegistry.get("rank", "pandas_numpy")
+    polars_op = OperatorRegistry.get("rank", "polars")
+    expected = pandas_op.calculate(panel)
+    actual = polars_op.calculate(pl.from_pandas(panel)).to_pandas()
+    pd.testing.assert_frame_equal(actual, expected, check_exact=True)
+
+def test_rank_polars_preserves_axis_metadata_and_column_order() -> None:
+    import numpy as np
+    pl = pytest.importorskip("polars")
+    panel = pd.DataFrame({
+        "date": pd.date_range("2024-01-01", periods=2),
+        "stock_code": ["A", "B"],
+        "left": [1.0, 3.0],
+        "right": [3.0, 1.0],
+    })
+    from factor_engine.cleaned_operators.common.cross_sectional import RankPolars
+
+    spec = RankPolars._physical_spec
+    assert spec.kernel_identity == "common.cross_sectional:RankPolars:v2"
+    assert len(spec.implementation_source_hash) == 64
+    int(spec.implementation_source_hash, 16)
+    polars_op = OperatorRegistry.get("rank", "polars")
+    out = polars_op.calculate(pl.from_pandas(panel)).to_pandas()
+    assert list(out.columns) == list(panel.columns)
+    pd.testing.assert_series_equal(out["date"], panel["date"])
+    pd.testing.assert_series_equal(out["stock_code"], panel["stock_code"])
+    np.testing.assert_array_equal(out[["left", "right"]].to_numpy(), [[0.0, 1.0], [1.0, 0.0]])
+
+
 @pytest.mark.parametrize(
     "canonical,args",
     [
