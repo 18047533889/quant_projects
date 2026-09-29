@@ -14,6 +14,8 @@ import pandas as pd
 from factor_optimizer.search.conditional_search import build_conditional_tree
 
 
+_MAX_FE_RANK_CELLS = 2_000_000
+
 class IneligibleValueRepair(ValueError):
     """A valid registry candidate has no exact executable value primitive."""
 
@@ -64,6 +66,51 @@ def _execute_fe_neg(values: pd.Series) -> pd.Series:
     return pd.Series(actual, index=values.index, name=values.name)
 
 
+def _execute_fe_cs_rank(frame: pd.DataFrame) -> pd.Series:
+    """Apply FE's average-tie, finite-only 0–1 rank per date."""
+    if frame.empty:
+        return pd.Series(index=frame.index, dtype=float, name="value")
+    try:
+        from factor_engine.cleaned_operators.registry import OperatorRegistry
+    except ImportError as exc:
+        raise RuntimeError(
+            "REPRESENTATION_RANK is FE-owned, but FactorEngine is unavailable"
+        ) from exc
+
+    operator = OperatorRegistry.get("rank", backend="pandas_numpy", mode="any")
+    if operator is None:
+        raise RuntimeError("FactorEngine canonical 'rank' has no pandas_numpy backend")
+
+    date_codes, dates = pd.factorize(frame["date"], sort=False)
+    asset_codes, assets = pd.factorize(frame["asset_id"], sort=False)
+    values = frame["value"].to_numpy(dtype=float, copy=True)
+    values[~np.isfinite(values)] = np.nan
+    # Bound the wide intermediate for long, sparse histories. A complete date
+    # is never split, so row-wise FE ranks are independent of chunk size.
+    max_cells = _MAX_FE_RANK_CELLS
+    dates_per_chunk = max(1, max_cells // max(1, len(assets)))
+    ranked = np.empty(len(frame), dtype=float)
+    for start in range(0, len(dates), dates_per_chunk):
+        stop = min(start + dates_per_chunk, len(dates))
+        rows = np.flatnonzero((date_codes >= start) & (date_codes < stop))
+        long = pd.DataFrame({
+            "_date": date_codes[rows], "_asset": asset_codes[rows],
+            "_value": values[rows],
+        })
+        wide = long.pivot(index="_date", columns="_asset", values="_value")
+        result = operator.calculate(wide)
+        if not isinstance(result, pd.DataFrame) or result.shape != wide.shape:
+            raise ValueError("FactorEngine 'rank' returned an unexpected pandas result shape")
+        if not result.index.equals(wide.index) or not result.columns.equals(wide.columns):
+            raise ValueError("FactorEngine 'rank' changed the cross-sectional axes")
+        matrix = result.to_numpy(dtype=float, copy=False)
+        ranked[rows] = matrix[
+            wide.index.get_indexer(date_codes[rows]),
+            wide.columns.get_indexer(asset_codes[rows]),
+        ]
+    return pd.Series(ranked, index=frame.index, name="value")
+
+
 @dataclass(frozen=True)
 class ValueRepairPlan:
     family: str
@@ -101,6 +148,8 @@ class ValueRepairPlan:
             from factor_preprocess.transforms.repair_shapes import rank_shape
             return rank_shape(frame, **kwargs)
         if self.transform == "cs_rank":
+            if kwargs.get("method", "average") == "average":
+                return _execute_fe_cs_rank(frame)
             from factor_preprocess.transforms.repair_shapes import cross_sectional_rank
             return cross_sectional_rank(frame, **kwargs)
         if self.transform == "fp_cs_rank_min":

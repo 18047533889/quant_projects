@@ -132,6 +132,101 @@ def test_cross_sectional_rank_preserves_row_axis_and_ties():
     np.testing.assert_allclose(out.to_numpy(), [0., .5, 1., .5])
 
 
+def test_cross_sectional_average_rank_routes_to_fe_and_matches_fp_edges(monkeypatch):
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_preprocess.transforms.repair_shapes import cross_sectional_rank
+
+    operator = OperatorRegistry.get("rank", backend="pandas_numpy", mode="any")
+    assert operator is not None
+    original = operator.calculate
+    calls = []
+
+    def tracked(frame):
+        calls.append(frame.shape)
+        return original(frame)
+
+    monkeypatch.setattr(operator, "calculate", tracked)
+    date_a, date_b = pd.Timestamp("2026-01-01"), pd.Timestamp("2026-01-02")
+    values = pd.DataFrame({
+        "asset_id": ["A", "B", "C", "A", "B", "C", "D", "D", "E"],
+        "date": [date_a] * 3 + [date_b] * 4 + [pd.Timestamp("2026-01-03")] * 2,
+        "value": [1., 1., 3., np.nan, np.inf, 4., -np.inf, np.nan, -np.inf],
+    }, index=[8, 2, 7, 5, 0, 9, 3, 11, 1])
+    plan = compile_("REPRESENTATION_RANK", {
+        "rank_axis": "cross_sectional", "tie_method": "average",
+    })
+    result = plan.execute(values, allow_research=True)
+    reference = cross_sectional_rank(values)
+    pd.testing.assert_series_equal(result, reference)
+    assert result.index.equals(values.index)
+    assert result.dtype == np.dtype("float64")
+    assert calls == [(3, 5)]  # Three dates by five assets in one FE batch.
+    assert result.loc[9] == 0.5  # One finite value in this date's cross-section.
+    assert result.loc[[5, 0, 3, 11, 1]].isna().all()
+
+    empty = values.iloc[:0]
+    empty_result = plan.execute(empty, allow_research=True)
+    assert empty_result.empty and empty_result.index.equals(empty.index)
+
+
+def test_cross_sectional_average_rank_is_stable_when_chunked_by_complete_dates():
+    values = panel([1., 4., 2., np.nan], [1., 3., 3., np.inf])
+    plan = compile_("REPRESENTATION_RANK", {
+        "rank_axis": "cross_sectional", "tie_method": "average",
+    })
+    whole = plan.execute(values, allow_research=True)
+    chunks = pd.concat([
+        plan.execute(values.loc[values.date == date], allow_research=True)
+        for date in values.date.drop_duplicates()
+    ])
+    pd.testing.assert_series_equal(chunks.sort_index(), whole.sort_index())
+
+
+def test_cross_sectional_average_rank_fails_closed_without_fe_operator(monkeypatch):
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    original_get = OperatorRegistry.get
+
+    def without_rank(name, *, backend, mode):
+        return None if name == "rank" and backend == "pandas_numpy" else original_get(
+            name, backend=backend, mode=mode
+        )
+
+    monkeypatch.setattr(OperatorRegistry, "get", without_rank)
+    values = panel([1.0], [2.0])
+    plan = compile_("REPRESENTATION_RANK", {
+        "rank_axis": "cross_sectional", "tie_method": "average",
+    })
+    with pytest.raises(RuntimeError, match="no pandas_numpy backend"):
+        plan.execute(values, allow_research=True)
+
+
+def test_cross_sectional_average_rank_bounds_wide_intermediate(monkeypatch):
+    from factor_optimizer.adapters import repair_execution
+    from factor_preprocess.transforms.repair_shapes import cross_sectional_rank
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    monkeypatch.setattr(repair_execution, "_MAX_FE_RANK_CELLS", 4)
+    operator = OperatorRegistry.get("rank", backend="pandas_numpy", mode="any")
+    original = operator.calculate
+    shapes = []
+
+    def tracked(wide):
+        shapes.append(wide.shape)
+        return original(wide)
+
+    monkeypatch.setattr(operator, "calculate", tracked)
+    values = panel([1., 4., 2., np.nan, 3.], [1., 3., 3., np.inf, 2.])
+    values = values.iloc[[8, 1, 4, 7, 2, 5, 0, 9, 3, 6]]
+    plan = compile_("REPRESENTATION_RANK", {
+        "rank_axis": "cross_sectional", "tie_method": "average",
+    })
+    pd.testing.assert_series_equal(
+        plan.execute(values, allow_research=True), cross_sectional_rank(values)
+    )
+    assert shapes == [(2, 2), (2, 2), (1, 2)]
+
+
 def test_rank_tie_variants_have_distinct_fe_and_fp_identities():
     from factor_engine.cleaned_operators.math_certificate import _rank_rowwise_np
 

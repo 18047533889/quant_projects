@@ -634,7 +634,7 @@ Versioned, research-only execution plans for value-level repair families.
 
 ### IneligibleValueRepair
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L17)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L19)。
 
 A valid registry candidate has no exact executable value primitive.
 
@@ -642,7 +642,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### ValueRepairPlan
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L68)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L115)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -659,7 +659,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### ValueRepairPlan.identity
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L77)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L124)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -669,7 +669,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### ValueRepairPlan.execute
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L88)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L135)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -679,7 +679,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### compile_value_repair
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L137)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L186)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -10655,7 +10655,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/adapters/layered_decay.py` | `86ac91175c82eef473abef116a7a67802872a0da96ce0fa7a6022bf783bb3e26` |
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
-| `factor_optimizer/adapters/repair_execution.py` | `a6f0c8391585639479143286b9a0b636961c2b0ba7d8e0a4159af983ec1fa8ad` |
+| `factor_optimizer/adapters/repair_execution.py` | `3565d1fe9ed419607f5262afb1e32087014e0771a5aa5518d7f78dffe1766d71` |
 | `factor_optimizer/capabilities.py` | `efb1fbf1b54b1b14f128ffe63c74f54f7a22f99a409a0761aac67fc1b6e3ed28` |
 | `factor_optimizer/complexity/__init__.py` | `79c8daf01ef8071b77eb7cbb8df4ae45fc9e2d4a4349f35d402a12f79936e696` |
 | `factor_optimizer/complexity/budget.py` | `d797ada6f52d0ccab3820450fb12e8f84f3f3dbb4e9f1e53f64eb5bb21a3469d` |
