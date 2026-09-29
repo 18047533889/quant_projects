@@ -679,7 +679,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### compile_value_repair
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L95)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L100)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -10655,7 +10655,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/adapters/layered_decay.py` | `86ac91175c82eef473abef116a7a67802872a0da96ce0fa7a6022bf783bb3e26` |
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
-| `factor_optimizer/adapters/repair_execution.py` | `bdcc809bcef98f2dc1107b4430c7078ddf943d2a65b5513460627cd56e90e4d5` |
+| `factor_optimizer/adapters/repair_execution.py` | `77a9d99788f297132dc90a9827d00d6bf1b321860b7934429090774f9b9ab78f` |
 | `factor_optimizer/capabilities.py` | `efb1fbf1b54b1b14f128ffe63c74f54f7a22f99a409a0761aac67fc1b6e3ed28` |
 | `factor_optimizer/complexity/__init__.py` | `79c8daf01ef8071b77eb7cbb8df4ae45fc9e2d4a4349f35d402a12f79936e696` |
 | `factor_optimizer/complexity/budget.py` | `d797ada6f52d0ccab3820450fb12e8f84f3f3dbb4e9f1e53f64eb5bb21a3469d` |

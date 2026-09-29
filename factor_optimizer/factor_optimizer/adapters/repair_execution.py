@@ -66,6 +66,11 @@ class ValueRepairPlan:
         if self.transform == "cs_rank":
             from factor_preprocess.transforms.repair_shapes import cross_sectional_rank
             return cross_sectional_rank(frame, **kwargs)
+        if self.transform == "fp_cs_rank_min":
+            # FE's canonical cs_rank/rank is average-tie only. Keep this
+            # research-only FP variant explicit in the frozen plan identity.
+            from factor_preprocess.transforms.repair_shapes import cross_sectional_rank
+            return cross_sectional_rank(frame, method="min")
         if self.transform in {"ts_rank_history", "ts_zscore_history"}:
             from factor_preprocess.transforms.temporal_representation import (
                 time_series_rank, capped_time_series_zscore,
@@ -162,7 +167,10 @@ def compile_value_repair(family: str, parameters: Mapping[str, object], *,
             return _plan(family, "ts_rank_history",
                          {"method": params["tie_method"], "window": int(params["window"])},
                          natural_time_scale, training_context_ref)
-        return _plan(family, "cs_rank", {"method": params["tie_method"]},
+        if params["tie_method"] == "min":
+            return _plan(family, "fp_cs_rank_min", {},
+                         natural_time_scale, training_context_ref)
+        return _plan(family, "cs_rank", {"method": "average"},
                      natural_time_scale, training_context_ref)
     if family == "REPRESENTATION_ZSCORE":
         if params["zscore_axis"] == "ts":

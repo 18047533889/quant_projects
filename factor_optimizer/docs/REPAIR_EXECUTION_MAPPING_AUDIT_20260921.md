@@ -42,6 +42,13 @@ The 16 numeric/structural treatment declarations without a public family compile
 
 特别地，U/倒 U、tail、rank/zscore 和 neutralization 都不能写成“没有原语”；准确状态是“原语存在，FO family 到原语、拟合状态和外部输入的自动入口未接”。
 
+后续修订（2026-09-30）：`REPRESENTATION_RANK` 的截面 average-tie 研究计划仍使用
+`cs_rank`，并与 FE canonical `rank` 的 `(rank-1)/(N-1)` 口径对拍；
+`tie_method=min` 的研究计划现使用独立的 `fp_cs_rank_min` transform identity，
+明确委托 FP 的 min-tie 实现，不冒充 FE `CS_RANK`/`rank` 别名。
+旧版已冻结的 `cs_rank(method=min)` 计划仍可按原语义读取执行，但新编译计划
+不会复用其 identity。两条路径均非生产自动发布授权。
+
 ## 两个已接 family 的实测映射
 
 | method | FP transform | mapping |

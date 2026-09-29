@@ -48,6 +48,28 @@ def test_cross_sectional_rank_preserves_row_axis_and_ties():
     np.testing.assert_allclose(out.to_numpy(), [0., .5, 1., .5])
 
 
+def test_rank_tie_variants_have_distinct_fe_and_fp_identities():
+    from factor_engine.cleaned_operators.math_certificate import _rank_rowwise_np
+
+    date = pd.Timestamp("2026-01-01")
+    values = pd.DataFrame({"asset_id": ["A", "B", "C"],
+                           "date": [date] * 3, "value": [1., 1., 2.]})
+    average = compile_("REPRESENTATION_RANK", {
+        "rank_axis": "cross_sectional", "tie_method": "average"})
+    minimum = compile_("REPRESENTATION_RANK", {
+        "rank_axis": "cross_sectional", "tie_method": "min"})
+    assert average.transform == "cs_rank"
+    assert minimum.transform == "fp_cs_rank_min"
+    assert average.identity != minimum.identity
+    expected_fe = _rank_rowwise_np(np.array([[1., 1., 2.]]))[0]
+    np.testing.assert_allclose(average.execute(values, allow_research=True), expected_fe)
+    np.testing.assert_allclose(minimum.execute(values, allow_research=True), [0., 0., 1.])
+    # Existing frozen v3 plans remain readable and preserve their old semantics.
+    legacy = type(average)(minimum.family, "cs_rank", (("method", "min"),),
+                           minimum.training_context_ref, minimum.natural_time_scale)
+    np.testing.assert_allclose(legacy.execute(values, allow_research=True), [0., 0., 1.])
+
+
 def test_missing_fill_is_bounded_causal_and_asset_isolated():
     values = panel([1., np.nan, np.nan, np.nan], [10., np.nan, 30., np.nan])
     p = compile_("MISSINGNESS_FRESHNESS", {"mode": "fill", "freshness_window": 2})
