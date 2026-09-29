@@ -13,8 +13,148 @@ from factor_assets.seen_index.persistent import PersistentSeenIndex
 from factor_assets.seen_index.exact import SeenRecord
 
 
+class _AttemptTrackingLock:
+    def __init__(self):
+        self._lock = threading.RLock()
+        self.writer_attempted = threading.Event()
+
+    def __enter__(self):
+        if threading.current_thread().name in {"writer", "closer"}:
+            self.writer_attempted.set()
+        self._lock.acquire()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._lock.release()
+
+
+class _BlockingSelectConnection:
+    def __init__(self, connection):
+        self.connection = connection
+        self.select_entered = threading.Event()
+        self.release_select = threading.Event()
+
+    def execute(self, sql, parameters=()):
+        if sql.lstrip().upper().startswith("SELECT") and not self.select_entered.is_set():
+            self.select_entered.set()
+            if not self.release_select.wait(timeout=5):
+                raise TimeoutError("test did not release blocked SELECT")
+        return self.connection.execute(sql, parameters)
+
+    def __enter__(self):
+        self.connection.__enter__()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return self.connection.__exit__(exc_type, exc_value, traceback)
+
+    def close(self):
+        return self.connection.close()
+
+
+
 class TestPersistentSeenIndex:
     """Tests for PersistentSeenIndex."""
+    @pytest.mark.parametrize("read_name", ["is_seen", "get", "get_all", "count"])
+    def test_reads_serialize_with_record_on_shared_connection(self, read_name):
+
+        index = PersistentSeenIndex(":memory:")
+        index.record("seed", "seed-factor")
+        lock = _AttemptTrackingLock()
+        connection = _BlockingSelectConnection(index._conn)
+        index._conn = connection
+        index._lock = lock
+        results, errors = {}, []
+        reader_done = threading.Event()
+        writer_done = threading.Event()
+
+        def read():
+            try:
+                readers = {
+                    "is_seen": lambda: index.is_seen("seed"),
+                    "get": lambda: index.get("seed"),
+                    "get_all": index.get_all,
+                    "count": index.count,
+                }
+                results["read"] = readers[read_name]()
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                reader_done.set()
+
+        def write():
+            try:
+                results["write"] = index.record("new", "new-factor")
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                writer_done.set()
+
+        reader = threading.Thread(target=read, name="reader")
+        reader.start()
+        assert connection.select_entered.wait(timeout=2)
+        writer = threading.Thread(target=write, name="writer")
+        writer.start()
+        assert lock.writer_attempted.wait(timeout=2)
+        assert not writer_done.wait(timeout=0.05)
+        connection.release_select.set()
+        reader.join(timeout=2)
+        writer.join(timeout=2)
+
+        assert reader_done.is_set() and writer_done.is_set()
+        assert errors == []
+
+        if read_name == "is_seen":
+            assert results["read"] is True
+        elif read_name == "get":
+            assert results["read"].canonical_hash == "seed"
+        elif read_name == "get_all":
+            assert [record.canonical_hash for record in results["read"]] == ["seed"]
+        else:
+            assert results["read"] == 1
+        assert results["write"].canonical_hash == "new"
+        assert index.count() == 2
+        index.close()
+
+    def test_close_waits_for_active_read_on_shared_connection(self):
+        index = PersistentSeenIndex(":memory:")
+        index.record("seed", "seed-factor")
+        lock = _AttemptTrackingLock()
+        connection = _BlockingSelectConnection(index._conn)
+        index._conn = connection
+        index._lock = lock
+        results, errors = [], []
+        close_done = threading.Event()
+
+        def read():
+            try:
+                results.append(index.count())
+            except BaseException as exc:
+                errors.append(exc)
+
+        def close():
+            try:
+                index.close()
+            except BaseException as exc:
+                errors.append(exc)
+            finally:
+                close_done.set()
+
+        reader = threading.Thread(target=read, name="reader")
+        reader.start()
+        assert connection.select_entered.wait(timeout=2)
+        closer = threading.Thread(target=close, name="closer")
+        closer.start()
+        assert lock.writer_attempted.wait(timeout=2)
+        assert not close_done.wait(timeout=0.05)
+        connection.release_select.set()
+        reader.join(timeout=2)
+        closer.join(timeout=2)
+
+        assert results == [1]
+        assert errors == []
+        assert close_done.is_set()
+        assert index._conn is None
 
     def test_in_memory_basic(self):
         """Test basic in-memory operations."""

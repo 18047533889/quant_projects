@@ -163,11 +163,12 @@ class PersistentSeenIndex:
 
     def is_seen(self, canonical_hash: str) -> bool:
         """Check if a factor has been seen before."""
-        cursor = self._conn.execute(
-            "SELECT 1 FROM seen_factors WHERE canonical_hash = ?",
-            (canonical_hash,)
-        )
-        return cursor.fetchone() is not None
+        with self._lock:
+            cursor = self._conn.execute(
+                "SELECT 1 FROM seen_factors WHERE canonical_hash = ?",
+                (canonical_hash,)
+            )
+            return cursor.fetchone() is not None
 
     def get(self, canonical_hash: str) -> Optional[SeenRecord]:
         """
@@ -179,34 +180,38 @@ class PersistentSeenIndex:
         Returns:
             SeenRecord if found, None otherwise
         """
-        cursor = self._conn.execute(
-            "SELECT * FROM seen_factors WHERE canonical_hash = ?",
-            (canonical_hash,)
-        )
-        row = cursor.fetchone()
+        with self._lock:
+            cursor = self._conn.execute(
+                "SELECT * FROM seen_factors WHERE canonical_hash = ?",
+                (canonical_hash,)
+            )
+            row = cursor.fetchone()
 
-        if row is None:
-            return None
+            if row is None:
+                return None
 
-        return self._row_to_record(row)
+            return self._row_to_record(row)
 
     def get_all(self) -> list[SeenRecord]:
         """Get all seen records."""
-        cursor = self._conn.execute("SELECT * FROM seen_factors ORDER BY first_seen_at")
-        rows = cursor.fetchall()
+        with self._lock:
+            cursor = self._conn.execute("SELECT * FROM seen_factors ORDER BY first_seen_at")
+            rows = cursor.fetchall()
 
-        return [self._row_to_record(row) for row in rows]
+            return [self._row_to_record(row) for row in rows]
 
     def count(self) -> int:
         """Get total number of seen factors."""
-        cursor = self._conn.execute("SELECT COUNT(*) FROM seen_factors")
-        return cursor.fetchone()[0]
+        with self._lock:
+            cursor = self._conn.execute("SELECT COUNT(*) FROM seen_factors")
+            return cursor.fetchone()[0]
 
     def close(self) -> None:
         """Close database connection."""
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+        with self._lock:
+            if self._conn:
+                self._conn.close()
+                self._conn = None
 
     def __enter__(self):
         """Context manager entry."""
