@@ -190,9 +190,28 @@ def create_fe_adapter() -> FactorEngineAdapter:
                 self.operator_registry = OperatorRegistry()
 
             def compute_canonical_hash(self, factor_definition: Any) -> str:
-                """Compute canonical hash using FE's mining module."""
-                # factor_definition should be an api.Factor or expr.Expr
-                return candidate_semantic_hash(factor_definition)
+                """Hash FE-normalized expression structure; reject invalid call contracts."""
+                from factor_engine.expr.cleaned_call import CleanedCall
+
+                expr = getattr(factor_definition, "expr", factor_definition)
+
+                def normalize(node):
+                    if not isinstance(node, CleanedCall):
+                        return node
+                    kwargs = node.kwargs_dict()
+                    if len(kwargs) != len(node.kwargs):
+                        raise ValueError(f"{node.op!r} contains duplicate parameter names")
+                    canonical = OperatorRegistry.resolve_canonical_strict(node.op)
+                    normalized = normalize_parameter_aliases(canonical, kwargs)
+                    if normalized:
+                        self._validate_operator_parameters(canonical, normalized)
+                    return CleanedCall(
+                        op=canonical,
+                        args=tuple(normalize(arg) for arg in node.args),
+                        kwargs=tuple(normalized.items()),
+                    )
+
+                return candidate_semantic_hash(normalize(expr))
 
             def validate_mutation(self, mutation: Any, spec: Any) -> Dict[str, Any]:
                 """Validate referenced operators and any supplied FE parameters."""

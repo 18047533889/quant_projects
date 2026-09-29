@@ -210,3 +210,37 @@ def test_adapter_adds_only_sibling_package_parent_once(monkeypatch):
     create_fe_adapter()
     assert sys.path.count(repo_root) == 1
     assert package_dir not in sys.path
+
+
+def test_semantic_hash_normalizes_fe_parameter_aliases_for_seen_dedup(adapter):
+    from factor_engine.expr.cleaned_call import CleanedCall
+    from factor_engine.expr.column import ColumnRef
+    from factor_optimizer.seen.identity import SeenCache
+
+    close = ColumnRef("close")
+    alias = CleanedCall("ts_sma", (close,), (("d", 5),))
+    canonical = CleanedCall("ts_mean", (close,), (("window", 5),))
+    other_value = CleanedCall("ts_mean", (close,), (("window", 6),))
+    other_operator = CleanedCall("ts_delay", (close,), (("n", 5),))
+
+    assert adapter.compute_canonical_hash(alias) == adapter.compute_canonical_hash(canonical)
+    assert adapter.compute_canonical_hash(alias) != adapter.compute_canonical_hash(other_value)
+    assert adapter.compute_canonical_hash(alias) != adapter.compute_canonical_hash(other_operator)
+
+    seen = SeenCache(adapter)
+    assert seen.check_and_mark(alias, "trial-1")[0] is False
+    assert seen.check_and_mark(canonical, "trial-2")[0] is True
+    assert seen.size() == 1
+
+
+def test_semantic_hash_rejects_invalid_fe_parameters(adapter):
+    from factor_engine.expr.cleaned_call import CleanedCall
+    from factor_engine.expr.column import ColumnRef
+
+    invalid_window = CleanedCall("ts_sma", (ColumnRef("close"),), (("d", 0),))
+    with pytest.raises(ValueError, match="window must be >= 1"):
+        adapter.compute_canonical_hash(invalid_window)
+
+    unknown_operator = CleanedCall("not_a_real_operator", (ColumnRef("close"),))
+    with pytest.raises((KeyError, ValueError)):
+        adapter.compute_canonical_hash(unknown_operator)
