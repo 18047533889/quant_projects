@@ -101,12 +101,15 @@ class CosFactorTileSource:
                  manifest_sha256: str, max_tile_size: int,
                  read_factor: Callable, verify_manifest: Callable,
                  make_tile: Callable, prefetch: str = "auto",
+                 prefetch_workers: int = 2,
                  max_source_memory_bytes: int = 4 * 1024**3,
                  max_prefetch_memory_bytes: int = 512 * 1024**2,
                  extra_assembly_bytes_per_cell: int = 0,
                  _close_controller: Callable[[], None] | None = None):
         if prefetch not in {"off", "on", "auto"}:
             raise ValueError("prefetch must be 'off', 'on' or 'auto'")
+        if type(prefetch_workers) is not int or prefetch_workers not in {1, 2, 4}:
+            raise ValueError("prefetch_workers must be one of 1, 2 or 4")
         if not records or len({r.factor_id for r in records}) != len(records):
             raise ValueError("records must have unique factor ids")
         if type(max_tile_size) is not int or not 1 <= max_tile_size <= 32:
@@ -138,7 +141,10 @@ class CosFactorTileSource:
         # auto is deliberately enabled for this COS-only adapter.
         self.prefetch_mode = prefetch
         self.prefetch_enabled = prefetch != "off"
-        self.prefetch_window = 2 if self.prefetch_enabled else 1
+        # Keep queued payloads bounded to active workers: a larger queue could
+        # retain completed payloads beyond the worker-based memory estimate.
+        self.prefetch_workers = prefetch_workers if self.prefetch_enabled else 0
+        self.prefetch_window = prefetch_workers if self.prefetch_enabled else 1
         self.next_start = 0
         self._closed = False
         self._lock = Lock()
@@ -171,7 +177,7 @@ class CosFactorTileSource:
         )
         # DataAccess research reads cap Arrow results at 128 MiB. Allow an
         # additional equal-sized pandas conversion buffer per active worker.
-        estimated_prefetch = 2 * 256 * 1024**2 if self.prefetch_enabled else 0
+        estimated_prefetch = self.prefetch_workers * 256 * 1024**2
         estimated_bytes = estimated_assembly + estimated_prefetch
         if estimated_prefetch > max_prefetch_memory_bytes:
             if self._executor is not None:
@@ -179,7 +185,8 @@ class CosFactorTileSource:
             raise MemoryError("bounded prefetch exceeds max_prefetch_memory_bytes")
         if estimated_bytes > max_source_memory_bytes:
             raise MemoryError("tile assembly plus bounded prefetch exceeds max_source_memory_bytes")
-        self._executor = (ThreadPoolExecutor(max_workers=2, thread_name_prefix="qe-cos-prefetch")
+        self._executor = (ThreadPoolExecutor(max_workers=self.prefetch_workers,
+                                             thread_name_prefix="qe-cos-prefetch")
                           if self.prefetch_enabled else None)
         self.estimated_assembly_bytes = estimated_assembly
         self.estimated_peak_source_bytes = estimated_bytes
@@ -211,6 +218,7 @@ class CosFactorTileSource:
                          manifest_context_factory: Callable[[], DataAccessReadContext],
                          factor_context_factory: Callable[[BoundCosFactor], DataAccessReadContext],
                          max_object_mib: int = 128, max_tile_size: int = 16,
+                         prefetch_workers: int = 2,
                          max_source_memory_bytes: int = 4 * 1024**3,
                          max_prefetch_memory_bytes: int = 512 * 1024**2,
                          extra_assembly_bytes_per_cell: int = 0,
@@ -297,6 +305,7 @@ class CosFactorTileSource:
                 manifest_sha256=manifest_sha, max_tile_size=max_tile_size,
                 read_factor=read_factor, verify_manifest=verify_manifest,
                 make_tile=make_tile, prefetch=prefetch,
+                prefetch_workers=prefetch_workers,
                 max_source_memory_bytes=max_source_memory_bytes,
                 max_prefetch_memory_bytes=max_prefetch_memory_bytes,
                 extra_assembly_bytes_per_cell=extra_assembly_bytes_per_cell,

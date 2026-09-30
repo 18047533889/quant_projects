@@ -11,7 +11,8 @@ from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.factor_tile_source import iter_validated_factor_tiles
 
 
-def _source(prefetch="auto", *, tamper=False):
+def _source(prefetch="auto", *, tamper=False, prefetch_workers=2,
+            max_prefetch_memory_bytes=512 * 1024**2, max_source_memory_bytes=4 * 1024**3):
     records = tuple(BoundCosFactor(f"f{i}", f"cos://bucket/{i}", f"{i}" * 64,
                                    100) for i in range(5))
     times = AxisRef("time", "int64", 2, np.array([1, 2], dtype=np.int64))
@@ -51,6 +52,9 @@ def _source(prefetch="auto", *, tamper=False):
         manifest_snapshot={"immutable": True}, manifest_sha256="m" * 64,
         max_tile_size=2, read_factor=read_factor, verify_manifest=verify,
         make_tile=make_tile, prefetch=prefetch,
+        prefetch_workers=prefetch_workers,
+        max_prefetch_memory_bytes=max_prefetch_memory_bytes,
+        max_source_memory_bytes=max_source_memory_bytes,
     )
     return source, calls, verified, lambda: maximum
 
@@ -98,6 +102,22 @@ def test_prefetch_off_is_serial():
         assert calls == ["f0", "f1", "f2", "f3", "f4"]
         assert maximum() == 1
         assert source.prefetch_window == 1
+    finally:
+        source.close()
+
+
+@pytest.mark.parametrize("workers", (1, 2, 4))
+def test_prefetch_worker_window_and_read_concurrency_are_configurable(workers):
+    source, _, _, maximum = _source(prefetch_workers=workers,
+        max_prefetch_memory_bytes=1024**3, max_source_memory_bytes=12 * 1024**3)
+    try:
+        first = source.read_tile(0, 2)
+        assert first.batch.factor_ids == ("f0", "f1")
+        assert source.prefetch_workers == workers
+        assert source.prefetch_window == workers
+        assert maximum() <= workers
+        assert len(source._pending) <= workers
+        assert source.estimated_prefetch_bytes == workers * 256 * 1024**2
     finally:
         source.close()
 
@@ -155,6 +175,28 @@ def test_source_enforces_tile_plus_prefetch_memory_budget():
             manifest_snapshot={}, manifest_sha256="m" * 64, max_tile_size=1,
             read_factor=lambda *_: None, verify_manifest=lambda *_: None,
             make_tile=lambda *_: None, max_prefetch_memory_bytes=1)
+
+
+def test_four_workers_require_explicit_prefetch_budget_and_are_admitted_when_raised(monkeypatch):
+    # Admission must fail before any worker can perform a read.
+    with monkeypatch.context() as scoped:
+        scoped.setattr("quant_evaluator.adapters.cos_factor_tile_source.ThreadPoolExecutor",
+                       lambda **_: pytest.fail("workers created before budget rejection"))
+        with pytest.raises(MemoryError, match="max_prefetch_memory_bytes"):
+            _source(prefetch_workers=4)
+    source, *_ = _source(prefetch_workers=4,
+        max_prefetch_memory_bytes=1024**3, max_source_memory_bytes=12 * 1024**3)
+    try:
+        assert source.prefetch_workers == 4
+        assert source.estimated_prefetch_bytes == 1024**3
+    finally:
+        source.close()
+
+
+@pytest.mark.parametrize("workers", (0, 3, 5, True))
+def test_invalid_prefetch_worker_count_is_rejected(workers):
+    with pytest.raises(ValueError, match="prefetch_workers"):
+        _source(prefetch_workers=workers)
 
 
 def test_data_access_builder_uses_injected_helpers_without_factor_optimizer(monkeypatch):
