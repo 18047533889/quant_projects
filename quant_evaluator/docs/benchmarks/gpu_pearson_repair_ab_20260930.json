@@ -1,0 +1,77 @@
+{
+  "schema": "qe_gpu_pearson_selective_repair_public_ab.v1",
+  "gpu": "NVIDIA L20",
+  "baseline_revision": "6984c311f",
+  "repeats": 6,
+  "measurement": "warm, alternating full public API calls; wall and CUDA event medians",
+  "cases": [
+    {
+      "case": "safe_float64",
+      "shape": [
+        128,
+        8,
+        5000
+      ],
+      "dtype": "<class 'numpy.float64'>",
+      "legacy_wall_median_ms": 0.9147470118477941,
+      "new_wall_median_ms": 0.8686884975759313,
+      "legacy_cuda_event_median_ms": 0.907727986574173,
+      "new_cuda_event_median_ms": 0.8611840009689331,
+      "wall_speedup_pct": 5.035109563115637,
+      "max_abs_error": 0.0,
+      "nan_mask_equal": true,
+      "valid_counts_equal": true
+    },
+    {
+      "case": "mixed_50pct_float64",
+      "shape": [
+        128,
+        8,
+        5000
+      ],
+      "dtype": "<class 'numpy.float64'>",
+      "legacy_wall_median_ms": 2.7286124823149294,
+      "new_wall_median_ms": 1.2896409898530692,
+      "legacy_cuda_event_median_ms": 2.7208160161972046,
+      "new_cuda_event_median_ms": 1.2814880013465881,
+      "wall_speedup_pct": 52.73638165141905,
+      "max_abs_error": 0.0,
+      "nan_mask_equal": true,
+      "valid_counts_equal": true
+    },
+    {
+      "case": "all_unsafe_float64",
+      "shape": [
+        128,
+        8,
+        5000
+      ],
+      "dtype": "<class 'numpy.float64'>",
+      "legacy_wall_median_ms": 4.545152492937632,
+      "new_wall_median_ms": 1.6303005104418844,
+      "legacy_cuda_event_median_ms": 4.536767959594727,
+      "new_cuda_event_median_ms": 1.6220160126686096,
+      "wall_speedup_pct": 64.131005219845,
+      "max_abs_error": 0.0,
+      "nan_mask_equal": true,
+      "valid_counts_equal": true
+    },
+    {
+      "case": "float32_bypass",
+      "shape": [
+        128,
+        8,
+        5000
+      ],
+      "dtype": "<class 'numpy.float32'>",
+      "legacy_wall_median_ms": 0.8456140058115125,
+      "new_wall_median_ms": 0.8456395007669926,
+      "legacy_cuda_event_median_ms": 0.8366720080375671,
+      "new_cuda_event_median_ms": 0.8376159965991974,
+      "wall_speedup_pct": -0.0030149637192482307,
+      "max_abs_error": 0.0,
+      "nan_mask_equal": true,
+      "valid_counts_equal": true
+    }
+  ]
+}

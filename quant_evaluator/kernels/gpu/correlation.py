@@ -16,6 +16,7 @@ from typing import Optional, Tuple
 import numpy as np
 
 from quant_evaluator.kernels.gpu.rank import batched_rank
+from quant_evaluator.kernels.gpu.pearson_repair import repair_unsafe_pearson_rows
 
 
 def _import_cp():
@@ -23,39 +24,6 @@ def _import_cp():
     return cp
 
 
-def _scaled_pearson_rows(x, y, finite):
-    """Stable Pearson for selected (R,N) rows whose raw moments are unsafe."""
-    cp = _import_cp()
-    x64 = x.astype(cp.float64)
-    y64 = y.astype(cp.float64)
-    x_safe = cp.where(finite, x64, 0.0)
-    y_safe = cp.where(finite, y64, 0.0)
-
-    def centered_scaled(values, valid):
-        first = cp.argmax(valid, axis=1)
-        origin = cp.take_along_axis(values, first[:, None], axis=1)
-        shifted = values - origin
-        overflow = cp.any(valid & ~cp.isfinite(shifted), axis=1)
-        raw_scale = cp.max(cp.abs(values), axis=1)
-        raw_scale = cp.where(raw_scale > 0, raw_scale, 1.0)
-        raw_scaled = values / raw_scale[:, None]
-        base = cp.where(overflow[:, None], raw_scaled, shifted)
-        base = cp.where(valid, base, 0.0)
-        scale = cp.max(cp.abs(base), axis=1)
-        scale = cp.where(scale > 0, scale, 1.0)
-        normalized = base / scale[:, None]
-        count = cp.sum(valid, axis=1, dtype=cp.float64)
-        mean = cp.sum(normalized, axis=1, dtype=cp.float64) / cp.maximum(count, 1.0)
-        return cp.where(valid, normalized - mean[:, None], 0.0)
-
-    n = cp.sum(finite, axis=1, dtype=cp.float64)
-    dx = centered_scaled(x_safe, finite)
-    dy = centered_scaled(y_safe, finite)
-    vx = cp.sum(dx * dx, axis=1, dtype=cp.float64)
-    vy = cp.sum(dy * dy, axis=1, dtype=cp.float64)
-    cov = cp.sum(dx * dy, axis=1, dtype=cp.float64)
-    ic = (cov / cp.sqrt(vx)) / cp.sqrt(vy)
-    return cp.where((n < 1) | (vx <= 0) | (vy <= 0), cp.nan, ic)
 
 
 def _pairwise_finite_sums(x, y, min_obs: int, *, bounded: bool = False):
@@ -65,10 +33,19 @@ def _pairwise_finite_sums(x, y, min_obs: int, *, bounded: bool = False):
     (ic, valid_counts) with NaN where insufficient/zero-variance.
     """
     cp = _import_cp()
+    if x.ndim != 3:
+        raise ValueError("Pearson factor input must have shape (T,F,N)")
     if y.ndim == 2:
+        if y.shape != (x.shape[0], x.shape[2]):
+            raise ValueError("Pearson label shape must match factor time and asset axes")
         yb = y[:, None, :]  # (T,1,N)
+    elif y.ndim == 3:
+        if (y.shape[0] != x.shape[0] or y.shape[2] != x.shape[2]
+                or y.shape[1] not in (1, x.shape[1])):
+            raise ValueError("Pearson label tensor must have shape (T,1,N) or (T,F,N)")
+        yb = y
     else:
-        yb = y  # (T,F,N)
+        raise ValueError("Pearson labels must have shape (T,N) or (T,1,N)/(T,F,N)")
     if x.shape[2] == 0:
         return (
             cp.full(x.shape[:2], cp.nan, dtype=cp.float64),
@@ -114,14 +91,10 @@ def _pairwise_finite_sums(x, y, min_obs: int, *, bounded: bool = False):
         | (cp.abs(mx) > cp.sqrt(vx / cp.maximum(n - 1.0, 1.0)) * 1e6)
         | (cp.abs(my) > cp.sqrt(vy / cp.maximum(n - 1.0, 1.0)) * 1e6)
     )
-    if bool(cp.any(unsafe).item()):
-        flat_mask = unsafe.reshape(-1)
-        xf = x.reshape(-1, x.shape[2])[flat_mask]
-        yf = cp.broadcast_to(yb, x.shape).reshape(-1, x.shape[2])[flat_mask]
-        ff = finite.reshape(-1, x.shape[2])[flat_mask]
-        stable = _scaled_pearson_rows(xf, yf, ff)
-        ic = ic.copy()
-        ic.reshape(-1)[flat_mask] = stable
+    ic = repair_unsafe_pearson_rows(
+        x, yb, finite, unsafe, ic,
+        n_factors=x.shape[1], y_is_broadcast=(yb.shape[1] == 1),
+    )
 
     ic = cp.where(n < min_obs, cp.nan, ic)
     return ic, n.astype(cp.int32)
