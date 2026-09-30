@@ -37,3 +37,107 @@ def test_training_layer_curves_feed_real_layered_candidates():
     assert all(c["proposal_source"] == "TRAIN_layer_states" for c in candidates)
     assert all(c.get("valid_train_days", 0) >= 60 for c in candidates)
     assert all("train_candidate_metrics" in c for c in candidates)
+
+
+def test_validation_labels_cannot_change_layered_train_scores_but_can_reject_winner():
+    from dataclasses import replace
+    import runpy
+    from pathlib import Path
+    from factor_optimizer.research_batch import optimize_factor_batch, BatchOptimizationConfig
+
+    fixture = runpy.run_path(str(Path(__file__).with_name("test_research_diagnostics.py")))
+    batch, labels = fixture["panel"](400)
+    rng = np.random.default_rng(721)
+    innovations = rng.normal(size=labels.values.shape)
+    latent = np.empty_like(innovations)
+    latent[0] = .2 * innovations[0]
+    for t in range(1, len(latent)):
+        latent[t] = .98 * latent[t - 1] + .2 * innovations[t]
+    factor_values = latent + .8 * rng.normal(size=latent.shape)
+    labels = replace(labels, values=latent + .05 * rng.normal(size=latent.shape))
+    batch = replace(batch, values=factor_values[:, :, None])
+    config = BatchOptimizationConfig(families=("DECAY_REFINEMENT",), bootstrap_draws=99,
+                                     selection_objective="rank_ic", minimum_improvement=.001)
+    clean = optimize_factor_batch(batch, labels, allow_research=True, config=config)
+    split = clean.split
+    assert np.isfinite(labels.values[list(split.validation_indices)]).all()
+    assert clean.factors["u_shape"].selected_family == "DECAY_REFINEMENT"
+    assert clean.factors["u_shape"].status == "improved"
+    assert clean.factors["u_shape"].validation_coverage >= config.minimum_coverage
+    poisoned_values = labels.values.copy()
+    poisoned_values[list(split.validation_indices)] *= -1.
+    poisoned = optimize_factor_batch(batch, replace(labels, values=poisoned_values),
+                                      allow_research=True, config=config)
+
+    def train_candidate_records(result):
+        return [dict(record) for record in result.factors["u_shape"].candidates
+                if record.get("transform") == "layered_decay"]
+
+    clean_records = train_candidate_records(clean)
+    poisoned_records = train_candidate_records(poisoned)
+    assert clean_records and len(clean_records) == len(poisoned_records)
+    assert any(record["train_gain"] > config.minimum_improvement for record in clean_records)
+    for before, after in zip(clean_records, poisoned_records):
+        assert before["parameters"] == after["parameters"]
+        assert before["train_gain"] == after["train_gain"]
+        assert before["valid_train_days"] == after["valid_train_days"]
+    assert poisoned.factors["u_shape"].status == "raw_retained"
+    assert poisoned.factors["u_shape"].selected_family == "NO_OP_RAW"
+    assert poisoned.factors["u_shape"].reason.startswith("TRAIN winner not confirmed on VALIDATION")
+    assert poisoned.factors["u_shape"].validation_coverage >= config.minimum_coverage
+
+    # The joint-scoring path also records portfolio metric dictionaries; compare
+    # these directly so validation poisoning cannot alter any nested TRAIN score.
+    joint_config = replace(config, selection_objective="joint")
+    joint_clean = optimize_factor_batch(batch, labels, allow_research=True, config=joint_config)
+    joint_poisoned = optimize_factor_batch(
+        batch, replace(labels, values=poisoned_values), allow_research=True, config=joint_config)
+    joint_clean_records = train_candidate_records(joint_clean)
+    joint_poisoned_records = train_candidate_records(joint_poisoned)
+    assert joint_clean_records and len(joint_clean_records) == len(joint_poisoned_records)
+
+    def assert_nested_equal(left, right):
+        if isinstance(left, dict):
+            assert left.keys() == right.keys()
+            for key in left:
+                assert_nested_equal(left[key], right[key])
+        elif isinstance(left, (tuple, list)):
+            assert len(left) == len(right)
+            for a, b in zip(left, right):
+                assert_nested_equal(a, b)
+        elif isinstance(left, (float, np.floating)) and isinstance(right, (float, np.floating)):
+            assert (left == right) or (np.isnan(left) and np.isnan(right))
+        else:
+            assert left == right
+
+    for before, after in zip(joint_clean_records, joint_poisoned_records):
+        assert_nested_equal(before["train_raw_metrics"], after["train_raw_metrics"])
+        assert_nested_equal(before["train_candidate_metrics"], after["train_candidate_metrics"])
+
+
+def test_layered_plan_equal_date_rows_have_strict_lag_isolation():
+    from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
+
+    rng = np.random.default_rng(914)
+    values = rng.normal(size=(8, 40))
+    frame = pd.DataFrame({"date": np.repeat(np.arange(8), 40),
+                          "asset_id": np.tile(np.arange(40), 8),
+                          "value": values.ravel()})
+    plan = LayeredDecayPlan((3.,) * 20, "train-only")
+    original = frame.copy(deep=True)
+    baseline = plan.execute(frame, allow_research=True)
+
+    changed = frame.copy()
+    changed.loc[changed["date"] == 4, "value"] *= -100.
+    counterfactual = plan.execute(changed, allow_research=True)
+    dates = frame["date"].to_numpy()
+    same_date = dates == 4
+    earlier = dates < 4
+    future = dates > 4
+    np.testing.assert_array_equal(counterfactual.to_numpy()[same_date], baseline.to_numpy()[same_date])
+    np.testing.assert_array_equal(counterfactual.to_numpy()[earlier], baseline.to_numpy()[earlier])
+    pd.testing.assert_frame_equal(frame, original)
+    future_values, baseline_future = counterfactual.to_numpy()[future], baseline.to_numpy()[future]
+    comparable = np.isfinite(future_values) & np.isfinite(baseline_future)
+    assert comparable.any()
+    assert np.any(future_values[comparable] != baseline_future[comparable])
