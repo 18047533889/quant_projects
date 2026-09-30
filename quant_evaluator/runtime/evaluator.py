@@ -1895,6 +1895,7 @@ def evaluate(
     if _auto_route_override is not None and _gpu_result_override is None:
         raise ValueError("_auto_route_override requires a shared GPU result")
     auto_route_reason = None
+    measured_auto_validation = None
     if backend_name is None or backend_name == "auto":
         if _auto_route_override is not None:
             backend_name, auto_route_reason = _auto_route_override
@@ -1931,7 +1932,8 @@ def evaluate(
             )
             if simple_measured_auto:
                 from quant_evaluator.runtime.auto_calibration import select_measured_auto_backend
-                backend_name, auto_route_reason, _ = select_measured_auto_backend(
+                (backend_name, auto_route_reason, _,
+                 measured_auto_validation) = select_measured_auto_backend(
                     factor_batch, label_bundle, metrics=metric_ids,
                     gpu_policy=gpu_policy, static_backend=backend_name,
                     static_reason=auto_route_reason,
@@ -2972,6 +2974,13 @@ def evaluate(
         "metric_backends": metric_backends,
     }
     bundle_metadata.update(execution_route)
+    # Validation diagnostics vary per call, so keep them outside the stable
+    # v1 route receipt and its hash.
+    if measured_auto_validation is not None:
+        bundle_metadata["auto_backend_validation_seconds"] = (
+            measured_auto_validation["validation_seconds"])
+        bundle_metadata["auto_backend_rejection_reason"] = (
+            measured_auto_validation["rejection_reason"])
     # Execution identity is separate from the semantic config_hash, which
     # remains stable across CPU and CUDA runs of the same request.
     bundle_metadata["execution_receipt"] = {

@@ -81,6 +81,8 @@ def test_no_candidate_does_not_fingerprint_inputs_or_scan_source(monkeypatch):
     result = evaluate(batch, label, metrics=("coverage",))
     assert result.metadata["auto_backend_reason"] == "static_test_route"
     assert result.metadata["backend_used"] == "cpu"
+    assert result.metadata["auto_backend_validation_seconds"] == 0.0
+    assert result.metadata["auto_backend_rejection_reason"] == "no_candidate"
 
 
 def test_exact_candidate_is_adopted_and_marked_in_receipt(monkeypatch):
@@ -105,6 +107,8 @@ def test_exact_candidate_is_adopted_and_marked_in_receipt(monkeypatch):
     assert result.metadata["auto_backend_policy"] == "measured_auto_registry_exact_v1"
     assert result.metadata["auto_backend_profile"] == "exact_content_process_local"
     assert result.metadata["execution_receipt"]["auto_backend_reason"] == "measured_auto_exact_candidate"
+    assert result.metadata["auto_backend_validation_seconds"] >= 0.0
+    assert result.metadata["auto_backend_rejection_reason"] is None
 
 
 @pytest.mark.parametrize("identity", [
@@ -138,6 +142,8 @@ def test_same_static_route_skips_exact_validation(monkeypatch):
 
     result = evaluate(batch, label, metrics=("coverage",))
     assert result.metadata["auto_backend_reason"] == "static_test_route"
+    assert result.metadata["auto_backend_validation_seconds"] == 0.0
+    assert result.metadata["auto_backend_rejection_reason"] == "candidate_matches_static_route"
 
 
 def test_advanced_request_stays_on_static_route(monkeypatch):
@@ -226,3 +232,151 @@ def test_both_injected_results_may_omit_all_parity_fields():
     cpu = SimpleNamespace(factor_ids=("f1",))
     cuda = SimpleNamespace(factor_ids=("f1",))
     assert _parity_mismatch(cpu, cuda, CalibrationPolicy()) is None
+
+
+def test_validation_cost_at_or_above_median_advantage_keeps_static_route(monkeypatch):
+    batch, label = inputs()
+    _cache = add_candidate(batch, label, winner="cuda_strict")
+    mock_static(monkeypatch, backend="cpu", reason="static_test_route")
+    monkeypatch.setattr(auto_calibration, "calibration_identity", lambda *args, **kwargs: {
+        "key": "measured-key", "device_admission": None,
+        "process_source_drifted": False,
+        "source_metadata": {"mode": "strict_full_content"},
+        "setup_seconds": 4.0,
+    })
+    result = evaluate(batch, label, metrics=("coverage",))
+    assert result.metadata["backend_used"] == "cpu"
+    assert result.metadata["auto_backend_reason"] == "static_test_route"
+    assert result.metadata["auto_backend_validation_seconds"] == 4.0
+    assert result.metadata["auto_backend_rejection_reason"] == "validation_cost_exceeds_median_advantage"
+
+
+
+def test_full_fingerprint_covers_factor_mask_axes_and_label(monkeypatch):
+    from dataclasses import replace
+
+    batch, label = inputs()
+    monkeypatch.setattr(backend_calibration, "_PROCESS_SOURCE_DIGEST", None)
+    monkeypatch.setattr(backend_calibration, "_PROCESS_SOURCE_DRIFTED", False)
+    monkeypatch.setattr(backend_calibration, "_source_fingerprint", lambda: "fixed-source")
+    monkeypatch.setattr(backend_calibration, "_device_admission",
+                        lambda _policy: (None, {"device_id": 0, "name": "test-gpu"}))
+    monkeypatch.setattr(backend_calibration, "_runtime_fingerprint",
+                        lambda info: {"device": info, "runtime": "fixed-runtime"})
+    policy = CalibrationPolicy(max_wall_time_seconds=360.0)
+
+    def key_for(candidate_batch=batch, candidate_label=label):
+        return backend_calibration.calibration_identity(
+            candidate_batch, candidate_label, metrics=("coverage",),
+            calibration_policy=policy, gpu_policy=GPUExecutionPolicy(),
+        )["key"]
+
+    baseline = key_for()
+    changed_mask = FactorBatch(
+        factor_ids=batch.factor_ids, time_axis=batch.time_axis,
+        asset_axis=batch.asset_axis, values=batch.values,
+        validity=np.zeros(batch.values.shape, dtype=bool),
+    )
+    changed_time = FactorBatch(
+        factor_ids=batch.factor_ids,
+        time_axis=AxisRef("time", "int64", 4, np.arange(4, dtype=np.int64) + 10),
+        asset_axis=batch.asset_axis, values=batch.values,
+    )
+    changed_assets = np.array(["x", "y", "z"])
+    changed_axis = AxisRef("asset", "str", 3, changed_assets)
+    changed_asset_batch = FactorBatch(
+        factor_ids=batch.factor_ids, time_axis=batch.time_axis,
+        asset_axis=changed_axis, values=batch.values,
+    )
+    changed_label = replace(label, values=label.values + 1.0)
+    changed_label_mask = replace(label, validity=np.zeros(label.values.shape, dtype=bool))
+    changed_label_axis = replace(label, asset_axis=changed_axis)
+
+    for candidate_batch, candidate_label in (
+        (changed_mask, label), (changed_time, label),
+        (changed_asset_batch, label), (batch, changed_label),
+        (batch, changed_label_mask), (batch, changed_label_axis),
+    ):
+        assert key_for(candidate_batch, candidate_label) != baseline
+
+
+def test_source_runtime_and_device_identity_change_full_key(monkeypatch):
+    batch, label = inputs()
+    source = ["source-a"]
+    device = [{"device_id": 0, "driver": 1}]
+    runtime = ["runtime-a"]
+    monkeypatch.setattr(backend_calibration, "_source_fingerprint", lambda: source[0])
+    monkeypatch.setattr(backend_calibration, "_device_admission",
+                        lambda _policy: (None, dict(device[0])))
+    monkeypatch.setattr(backend_calibration, "_runtime_fingerprint",
+                        lambda info: {"device": info, "runtime": runtime[0]})
+    monkeypatch.setattr(backend_calibration, "_PROCESS_SOURCE_DIGEST", None)
+    monkeypatch.setattr(backend_calibration, "_PROCESS_SOURCE_DRIFTED", False)
+    policy = CalibrationPolicy(max_wall_time_seconds=360.0)
+
+    def key():
+        return backend_calibration.calibration_identity(
+            batch, label, metrics=("coverage",), calibration_policy=policy,
+            gpu_policy=GPUExecutionPolicy(),
+        )["key"]
+
+    baseline = key()
+    runtime[0] = "runtime-b"
+    assert key() != baseline
+    runtime[0] = "runtime-a"
+    device[0] = {"device_id": 0, "driver": 2}
+    assert key() != baseline
+    device[0] = {"device_id": 0, "driver": 1}
+    source[0] = "source-b"
+    monkeypatch.setattr(backend_calibration, "_PROCESS_SOURCE_DIGEST", None)
+    monkeypatch.setattr(backend_calibration, "_PROCESS_SOURCE_DRIFTED", False)
+    assert key() != baseline
+
+
+
+def test_validation_timing_is_diagnostic_and_does_not_change_receipt_hash(monkeypatch):
+    batch, label = inputs()
+    _cache = add_candidate(batch, label, winner="cpu")
+    mock_static(monkeypatch, backend="cuda_strict", reason="static_test_route")
+    elapsed = [1.0]
+
+    def identity(*args, **kwargs):
+        return {
+            "key": "measured-key", "device_admission": None,
+            "process_source_drifted": False,
+            "source_metadata": {"mode": "strict_full_content"},
+            "setup_seconds": elapsed[0],
+        }
+
+    monkeypatch.setattr(auto_calibration, "calibration_identity", identity)
+    first = evaluate(batch, label, metrics=("coverage",))
+    elapsed[0] = 2.0
+    second = evaluate(batch, label, metrics=("coverage",))
+
+    assert first.metadata["auto_backend_validation_seconds"] == 1.0
+    assert second.metadata["auto_backend_validation_seconds"] == 2.0
+    assert first.metadata["execution_receipt"]["receipt_hash"] == second.metadata["execution_receipt"]["receipt_hash"]
+    assert "auto_backend_validation_seconds" not in first.metadata["execution_receipt"]
+    assert "auto_backend_rejection_reason" not in first.metadata["execution_receipt"]
+
+
+def test_explicit_backend_keeps_v1_receipt_hash_route_contract():
+    from quant_evaluator.contracts._hashutil import stable_content_hex
+
+    batch, label = inputs()
+    result = evaluate(batch, label, metrics=("coverage",), backend="cpu")
+    receipt = result.metadata["execution_receipt"]
+    route = {
+        key: receipt[key]
+        for key in (
+            "backend_requested", "backend_strategy", "backend_used",
+            "auto_backend_policy", "auto_backend_profile", "auto_backend_reason",
+            "metric_backends",
+        )
+    }
+    assert receipt["receipt_hash"] == stable_content_hex(
+        tag="EvaluationExecutionReceipt.v1",
+        fields={"config_hash": receipt["config_hash"], **route},
+    )
+    assert "auto_backend_validation_seconds" not in receipt
+    assert "auto_backend_rejection_reason" not in receipt

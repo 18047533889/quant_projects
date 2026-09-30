@@ -86,3 +86,22 @@ fall back to the certified route. QE annotates an adopted route with
 `auto_backend_reason="measured_auto_exact_candidate"` and
 `auto_backend_profile="exact_content_process_local"`.
 Advanced requests retain their existing routing. Manual backend choices remain explicit.
+
+## Account for per-hit verification cost
+
+QE checks the candidate cache before hashing inputs and again after validation,
+so an expired or missing calibration record causes no input scan. For a live
+candidate choosing a different route, QE measures the full identity check.
+It adopts the candidate only if that check costs less than the recorded
+CPU/CUDA median difference. Invalid identity, stale cache and cost rejection
+remove that candidate; temporary device-admission failure retains it for retry.
+
+Read `bundle.metadata["auto_backend_validation_seconds"]` and
+`bundle.metadata["auto_backend_rejection_reason"]` for the check time and
+decision. No candidate or same-route selection reports zero verification time.
+These diagnostic fields stay outside the v1 execution receipt hash, which
+continues to identify the route and semantic config without volatile timing.
+
+This is a check after spending the validation time. A rejected call still paid
+that cost. The gate does not recover elapsed time, predict device contention,
+or establish that an unseen workload's first call uses its fastest backend.

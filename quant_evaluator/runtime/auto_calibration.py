@@ -102,34 +102,58 @@ def measured_auto_descriptor(batch, label, metrics):
 
 def select_measured_auto_backend(batch, label, *, metrics, gpu_policy,
                                  static_backend, static_reason):
-    """Adopt an exact registered route after full live identity validation."""
-    from quant_evaluator.runtime.measured_auto_registry import lookup_candidate
+    """Adopt only if validation cost is below the measured median margin.
+
+    This post-validation gate cannot recover time already spent checking identity
+    and does not promise that the next complete request will be faster.
+    """
+    import time
+    from quant_evaluator.runtime.measured_auto_registry import lookup_candidate_details
 
     effective_gpu_policy = gpu_policy or GPUExecutionPolicy()
     descriptor = measured_auto_descriptor(batch, label, metrics)
 
     def validate(candidate):
+        started = time.monotonic()
         try:
             candidate_policy = CalibrationPolicy(**dict(candidate.calibration_policy))
             identity = calibration_identity(
                 batch, label, metrics=metrics,
                 calibration_policy=candidate_policy,
                 gpu_policy=effective_gpu_policy,
+                started=started,
             )
         except Exception:
-            return False
-        return (
-            identity["device_admission"] is None
-            and not identity["process_source_drifted"]
-            and identity["source_metadata"].get("mode") == "strict_full_content"
-            and identity["key"] == candidate.cache_key
-        )
+            return {
+                "valid": False,
+                "validation_seconds": time.monotonic() - started,
+                "rejection_reason": "identity_validation_failed",
+            }
+        validation_seconds = float(identity.get(
+            "setup_seconds", time.monotonic() - started))
+        if identity["device_admission"] is not None:
+            return {"valid": False, "validation_seconds": validation_seconds,
+                    "rejection_reason": "device_admission_failed"}
+        if identity["process_source_drifted"]:
+            return {"valid": False, "validation_seconds": validation_seconds,
+                    "rejection_reason": "source_drift"}
+        if identity["source_metadata"].get("mode") != "strict_full_content":
+            return {"valid": False, "validation_seconds": validation_seconds,
+                    "rejection_reason": "source_mode_mismatch"}
+        if identity["key"] != candidate.cache_key:
+            return {"valid": False, "validation_seconds": validation_seconds,
+                    "rejection_reason": "identity_mismatch"}
+        return {"valid": True, "validation_seconds": validation_seconds}
 
-    winner = lookup_candidate(
+    lookup = lookup_candidate_details(
         descriptor=descriptor, calibration_policy=None,
         gpu_policy=effective_gpu_policy, static_backend=static_backend,
         validator=validate,
     )
-    if winner is None:
-        return static_backend, static_reason, False
-    return winner, "measured_auto_exact_candidate", True
+    validation_metadata = {
+        "validation_seconds": lookup.validation_seconds,
+        "rejection_reason": lookup.rejection_reason,
+    }
+    if lookup.winner is None:
+        return static_backend, static_reason, False, validation_metadata
+    return lookup.winner, "measured_auto_exact_candidate", True, validation_metadata

@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
 import math
+import numbers
 import os
 import threading
 import time
@@ -52,6 +53,12 @@ class MeasuredCandidate:
     cpu_seconds: float
     cuda_seconds: float
     setup_seconds: float
+
+@dataclass(frozen=True)
+class CandidateLookup:
+    winner: str | None
+    validation_seconds: float | None
+    rejection_reason: str | None
 
 def _after_fork_child():
     global _LOCK, _RECORDS
@@ -114,9 +121,16 @@ def register_candidate(cache, cache_key: str, *, status: str, winner: str,
             _RECORDS.popitem(last=False)
     return True
 
-def lookup_candidate(*, descriptor: InputDescriptor, calibration_policy, gpu_policy,
-                     static_backend: str, validator: Callable[[MeasuredCandidate], bool] | None):
-    """Return route only after validator recomputes full identity and cache record."""
+def _drop_if_current(key, candidate):
+    with _LOCK:
+        current = _RECORDS.get(key)
+        if current is not None and current[1] is candidate:
+            _RECORDS.pop(key, None)
+
+def lookup_candidate_details(*, descriptor: InputDescriptor, calibration_policy,
+                             gpu_policy, static_backend: str,
+                             validator: Callable[[MeasuredCandidate], object] | None):
+    """Return route and measured validation cost after exact identity checks."""
     key = (descriptor, _freeze(gpu_policy))
     found = None
     with _LOCK:
@@ -124,21 +138,77 @@ def lookup_candidate(*, descriptor: InputDescriptor, calibration_policy, gpu_pol
         if key in _RECORDS:
             _, found = _RECORDS[key]
             _RECORDS.move_to_end(key)
-    if (found is None
-            or (calibration_policy is not None
-                and found.calibration_policy != _freeze(calibration_policy))
-            or found.winner == static_backend or validator is None):
-        return None
-    try:
-        if not validator(found):
-            return None
-    except Exception:
-        return None
+    if found is None:
+        return CandidateLookup(None, 0.0, "no_candidate")
+    if (calibration_policy is not None
+            and found.calibration_policy != _freeze(calibration_policy)):
+        return CandidateLookup(None, 0.0, "calibration_policy_mismatch")
+    if found.winner == static_backend:
+        return CandidateLookup(None, 0.0, "candidate_matches_static_route")
+    if validator is None:
+        return CandidateLookup(None, 0.0, "validator_unavailable")
     cache = found.cache_ref()
-    record = None if cache is None else cache.get(found.cache_key)
+    try:
+        record = None if cache is None else cache.get(found.cache_key)
+    except Exception:
+        record = None
+    if (not isinstance(record, Mapping) or record.get("parity") != "pass"
+            or record.get("winner") != found.winner):
+        _drop_if_current(key, found)
+        return CandidateLookup(None, 0.0, "calibration_cache_missing_or_stale")
+    try:
+        validation = validator(found)
+    except Exception:
+        return CandidateLookup(None, 0.0, "identity_validation_failed")
+    if isinstance(validation, Mapping):
+        validation_seconds = validation.get("validation_seconds")
+        reason = validation.get("rejection_reason")
+        valid = validation.get("valid", False)
+    else:
+        validation_seconds, reason, valid = 0.0, None, bool(validation)
+    if isinstance(validation, Mapping):
+        try:
+            if (isinstance(validation_seconds, bool)
+                    or not isinstance(validation_seconds, numbers.Real)):
+                raise ValueError("validation duration must be numeric")
+            validation_seconds = float(validation_seconds)
+            if not math.isfinite(validation_seconds) or validation_seconds < 0:
+                raise ValueError("validation duration must be finite and nonnegative")
+        except (TypeError, ValueError):
+            _drop_if_current(key, found)
+            return CandidateLookup(None, None, "invalid_validation_cost")
+    else:
+        validation_seconds = 0.0
+    if not valid:
+        if reason in {"identity_mismatch", "source_drift", "source_mode_mismatch"}:
+            _drop_if_current(key, found)
+        return CandidateLookup(None, validation_seconds, reason or "identity_mismatch")
+    selected, other = ((found.cpu_seconds, found.cuda_seconds)
+                       if found.winner == "cpu"
+                       else (found.cuda_seconds, found.cpu_seconds))
+    median_advantage = float(other) - float(selected)
+    if validation_seconds >= median_advantage:
+        _drop_if_current(key, found)
+        return CandidateLookup(None, validation_seconds,
+                               "validation_cost_exceeds_median_advantage")
+    try:
+        record = None if cache is None else cache.get(found.cache_key)
+    except Exception:
+        record = None
     if not isinstance(record, Mapping) or record.get("parity") != "pass" or record.get("winner") != found.winner:
-        return None
-    return found.winner
+        _drop_if_current(key, found)
+        return CandidateLookup(None, validation_seconds,
+                               "calibration_cache_missing_or_stale")
+    return CandidateLookup(found.winner, validation_seconds, None)
+
+def lookup_candidate(*, descriptor: InputDescriptor, calibration_policy, gpu_policy,
+                     static_backend: str, validator: Callable[[MeasuredCandidate], bool] | None):
+    """Backward-compatible route-only lookup wrapper."""
+    return lookup_candidate_details(
+        descriptor=descriptor, calibration_policy=calibration_policy,
+        gpu_policy=gpu_policy, static_backend=static_backend,
+        validator=validator,
+    ).winner
 
 def clear_registry_for_tests():
     with _LOCK:

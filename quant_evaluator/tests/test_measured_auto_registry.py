@@ -177,6 +177,111 @@ def test_ttl_expiry_and_fork_reset(monkeypatch):
     assert add(cache=cache)[0]
     clock[0] += registry.TTL_SECONDS
     assert registry.registry_size() == 0
+    expired = registry.lookup_candidate_details(
+        descriptor=descriptor(), calibration_policy=None,
+        gpu_policy={"device_ids": (0,)}, static_backend="cpu",
+        validator=lambda _: pytest.fail("expired candidate must not validate"),
+    )
+    assert expired.rejection_reason == "no_candidate"
+    assert expired.validation_seconds == 0.0
     assert add(cache=cache)[0]
     registry._after_fork_child()
+    assert registry.registry_size() == 0
+
+
+def test_validation_cost_gate_reports_and_drops_expensive_candidate():
+    ok, _cache = add()
+    assert ok
+    result = registry.lookup_candidate_details(
+        descriptor=descriptor(), calibration_policy=None,
+        gpu_policy={"device_ids": (0,)}, static_backend="cpu",
+        validator=lambda _: {"valid": True, "validation_seconds": 6.0},
+    )
+    assert result.winner is None
+    assert result.validation_seconds == 6.0
+    assert result.rejection_reason == "validation_cost_exceeds_median_advantage"
+    assert registry.registry_size() == 0
+
+
+def test_transient_device_admission_keeps_candidate_but_identity_mismatch_drops_it():
+    ok, _cache = add()
+    assert ok
+    transient = registry.lookup_candidate_details(
+        descriptor=descriptor(), calibration_policy=None,
+        gpu_policy={"device_ids": (0,)}, static_backend="cpu",
+        validator=lambda _: {"valid": False, "validation_seconds": 0.7,
+                             "rejection_reason": "device_admission_failed"},
+    )
+    assert transient.rejection_reason == "device_admission_failed"
+    assert registry.registry_size() == 1
+    stale = registry.lookup_candidate_details(
+        descriptor=descriptor(), calibration_policy=None,
+        gpu_policy={"device_ids": (0,)}, static_backend="cpu",
+        validator=lambda _: {"valid": False, "validation_seconds": 0.8,
+                             "rejection_reason": "identity_mismatch"},
+    )
+    assert stale.rejection_reason == "identity_mismatch"
+    assert registry.registry_size() == 0
+    calls = []
+    again = registry.lookup_candidate_details(
+        descriptor=descriptor(), calibration_policy=None,
+        gpu_policy={"device_ids": (0,)}, static_backend="cpu",
+        validator=lambda _: calls.append(True),
+    )
+    assert again.rejection_reason == "no_candidate"
+    assert again.validation_seconds == 0.0
+    assert calls == []
+
+
+
+def test_missing_calibration_cache_record_drops_before_validation():
+    ok, cache = add()
+    assert ok
+    cache.record = None
+    result = registry.lookup_candidate_details(
+        descriptor=descriptor(), calibration_policy=None,
+        gpu_policy={"device_ids": (0,)}, static_backend="cpu",
+        validator=lambda _: pytest.fail("missing cache record must skip validation"),
+    )
+    assert result.rejection_reason == "calibration_cache_missing_or_stale"
+    assert result.validation_seconds == 0.0
+    assert registry.registry_size() == 0
+
+
+@pytest.mark.parametrize("bad_cost", [None, float("nan"), float("inf"), -0.1, "bad", "0.2", True])
+def test_invalid_mapping_validation_cost_fails_closed_and_drops_candidate(bad_cost):
+    ok, _cache = add()
+    assert ok
+    result = registry.lookup_candidate_details(
+        descriptor=descriptor(), calibration_policy=None,
+        gpu_policy={"device_ids": (0,)}, static_backend="cpu",
+        validator=lambda _: {"valid": True, "validation_seconds": bad_cost},
+    )
+    assert result.winner is None
+    assert result.validation_seconds is None
+    assert result.rejection_reason == "invalid_validation_cost"
+    assert registry.registry_size() == 0
+
+
+def test_cache_expiry_between_preflight_and_postcheck_rejects_route():
+    class ExpiresAfterPreflight(Cache):
+        def __init__(self, record):
+            self.record = record
+            self.calls = 0
+
+        def get(self, key):
+            self.calls += 1
+            return self.record if self.calls == 1 else None
+
+    cache = ExpiresAfterPreflight(sample_record())
+    ok, _ = add(cache=cache)
+    assert ok
+    result = registry.lookup_candidate_details(
+        descriptor=descriptor(), calibration_policy=None,
+        gpu_policy={"device_ids": (0,)}, static_backend="cpu",
+        validator=lambda _: {"valid": True, "validation_seconds": 0.2},
+    )
+    assert cache.calls == 2
+    assert result.winner is None
+    assert result.rejection_reason == "calibration_cache_missing_or_stale"
     assert registry.registry_size() == 0
