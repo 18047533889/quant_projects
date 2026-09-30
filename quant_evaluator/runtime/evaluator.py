@@ -133,12 +133,18 @@ def _select_public_auto_backend(
         if (batch_name is None and
                 frozenset(canonical_metrics) == _AUTO_REAL_COS_F32_COVERAGE_MIXED_FOUR):
             batch_name = "coverage_mixed_four"
+        if (batch_name is None and
+                frozenset(canonical_metrics) == _AUTO_REAL_COS_F32_DEFAULT_FIVE):
+            batch_name = "default_five"
         if batch_name is None or len(canonical_metrics) != len(set(canonical_metrics)):
             return "cpu", "metric_set_not_certified"
     profile = _auto_public_shape_profile(factor_batch)
     if profile is None:
         return "cpu", "shape_outside_certified_range"
     if (batch_name == "coverage_mixed_four"
+            and profile != _AUTO_REAL_COS_F32_PROFILE):
+        return "cpu", "metric_not_certified_for_profile"
+    if (batch_name == "default_five"
             and profile != _AUTO_REAL_COS_F32_PROFILE):
         return "cpu", "metric_not_certified_for_profile"
     if batch_name == "pearson_chain" and profile != _AUTO_REAL_COS_F32_PROFILE:
@@ -264,6 +270,8 @@ def _select_public_auto_backend(
             minimum = (_AUTO_REAL_COS_F2_RANK_BATCH_MIN_EFFECTIVE_VRAM_BYTES
                        if batch_name == "rank_chain"
                        else _AUTO_REAL_COS_F2_QUANTILE_BATCH_MIN_EFFECTIVE_VRAM_BYTES)
+        elif real_cos_f32_certified_batch and batch_name == "default_five":
+            minimum = _AUTO_REAL_COS_F32_DEFAULT_FIVE_MIN_EFFECTIVE_VRAM_BYTES
         elif real_cos_f32_certified_batch:
             minimum = (_AUTO_REAL_COS_F32_COVERAGE_MIXED_FOUR_MIN_EFFECTIVE_VRAM_BYTES
                        if batch_name == "coverage_mixed_four"
