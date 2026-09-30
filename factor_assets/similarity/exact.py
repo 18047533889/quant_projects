@@ -5,6 +5,7 @@ Computes factor similarity using correlation metrics.
 FA stores only bounded summary statistics, not full value arrays.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from heapq import nsmallest
 from operator import index
@@ -21,7 +22,7 @@ def _similarity_scope_key(result: "SimilarityResult") -> tuple[tuple[bool, str],
 
 
 def _deduplicate_similar_neighbors(
-    candidates: list[tuple[str, "SimilarityResult"]],
+    candidates: Iterable[tuple[str, "SimilarityResult"]],
     *, max_results: Optional[int] = None,
 ) -> list["SimilarityResult"]:
     """Keep each neighbor's strongest score with deterministic scope tie breaks."""
@@ -68,23 +69,27 @@ def _find_similar_in_cache(
     if max_results < 0:
         raise ValueError("max_results must be non-negative")
     max_results = index(max_results)  # match integer slice-index semantics
-    candidates = []
     if max_results == 0:
         return []
-    for key in factor_keys.get(factor_id, {}):
-        result = cache[key]
-        fid_a, fid_b, method_val, universe, start, end = key
-        if fid_a != factor_id or method_val != method.value:
-            continue
-        if universe_ref is not None and universe != universe_ref:
-            continue
-        if period_start is not None and start != period_start:
-            continue
-        if period_end is not None and end != period_end:
-            continue
-        if result.is_high_similarity(threshold):
-            candidates.append((fid_b, _orient_similarity_result(result, fid_a, fid_b)))
-    return _deduplicate_similar_neighbors(candidates, max_results=max_results)
+
+    def matching_candidates():
+        for key in factor_keys.get(factor_id, {}):
+            fid_a, fid_b, method_val, universe, start, end = key
+            if fid_a != factor_id or method_val != method.value:
+                continue
+            if universe_ref is not None and universe != universe_ref:
+                continue
+            if period_start is not None and start != period_start:
+                continue
+            if period_end is not None and end != period_end:
+                continue
+            result = cache[key]
+            if result.is_high_similarity(threshold):
+                yield fid_b, _orient_similarity_result(result, fid_a, fid_b)
+
+    return _deduplicate_similar_neighbors(
+        matching_candidates(), max_results=max_results
+    )
 
 
 class SimilarityMethod(Enum):
