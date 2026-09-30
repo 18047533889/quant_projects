@@ -99,6 +99,8 @@ print(bundle.metadata["execution_receipt"])
 
 接入前 CPU/CUDA/auto 六轮测试及数值误差标准见
 [F32 coverage 对照说明](docs/benchmarks/real_cos_f32_coverage_comparison_20261001.md)。
+四指标改后真实回放已确认两轮 auto 均使用 CUDA，完整数值对照通过；见
+[v27 接入验证](docs/benchmarks/real_cos_f32_mixed_four_auto_v27_20261001.md)。
 
 核心契约：
 - **LabelBundle** — 显式前向标签；时序全部由调用方提供；默认 `price_convention="vwap_to_vwap"`；
