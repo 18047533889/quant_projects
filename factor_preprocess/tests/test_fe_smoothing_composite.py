@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from factor_preprocess.adapters.fe_smoothing import execute_trailing_median
 from factor_preprocess.adapters.fe_smoothing import execute_trailing_sma
 from factor_preprocess.transforms.smoothing import trailing_sma
 
@@ -116,3 +117,127 @@ def test_fe_composite_does_not_mutate_infinite_input_values():
     expected = trailing_sma(frame, window=2, min_periods=1)
     np.testing.assert_allclose(actual.to_numpy(), expected.to_numpy(), equal_nan=True)
     pd.testing.assert_frame_equal(frame, original)
+
+@pytest.mark.parametrize("min_periods", [0, 1, 2, 3])
+def test_lagged_median_matches_native_for_interleaved_rows_and_duplicate_labels(min_periods):
+    from factor_preprocess.transforms.smoothing import trailing_median
+
+    frame = pd.DataFrame(
+        {
+            "asset_id": pd.Categorical(
+                ["a", "b", "a", "b", None, "a", "b", "a"],
+                categories=["a", "b", "unused"],
+            ),
+            "date": [1, 1, 1, 2, 1, 2, 3, 3],
+            "value": [10.0, 1.0, 20.0, np.inf, 999.0, np.nan, 5.0, -np.inf],
+        },
+        index=[4, 4, 2, 2, 4, 9, 9, 4],
+    )
+    original = frame.copy(deep=True)
+    actual = execute_trailing_median(frame, window=3, min_periods=min_periods)
+    expected = trailing_median(frame, window=3, min_periods=min_periods)
+    assert actual.index.equals(frame.index)
+    assert actual.name == expected.name
+    np.testing.assert_allclose(actual.to_numpy(), expected.to_numpy(), equal_nan=True)
+    pd.testing.assert_frame_equal(frame, original)
+    # Current-row mutations cannot affect the corresponding output.
+    changed = frame.copy()
+    changed.iloc[5, changed.columns.get_loc("value")] = 123456.0
+    changed_actual = execute_trailing_median(changed, window=3, min_periods=min_periods)
+    np.testing.assert_allclose(actual.iloc[:6].to_numpy(), changed_actual.iloc[:6].to_numpy(), equal_nan=True)
+
+
+def test_lagged_median_registry_uses_fe_composite_route():
+    from factor_preprocess.registry.transforms import get_default_registry
+    from factor_preprocess.transforms.smoothing import trailing_median
+
+    registry = get_default_registry()
+    meta = registry.get("trailing_median")
+    assert meta.implementation_origin == "FE_COMPOSITE"
+    assert meta.fe_operator_id is None
+    assert meta.fe_equivalent_semantics == "FE_COMPOSITE:long_smoothing.lagged_median:v1"
+    routed = registry.get_execution("trailing_median")
+    sample = pd.DataFrame(
+        {"asset_id": ["a", "b", "a", "b", "a"], "date": [1, 1, 2, 2, 3],
+         "value": [1.0, 10.0, 2.0, 20.0, 4.0]}
+    )
+    np.testing.assert_allclose(
+        routed(sample, window=3, min_periods=1).to_numpy(),
+        trailing_median(sample, window=3, min_periods=1).to_numpy(),
+        equal_nan=True,
+    )
+
+
+def test_lagged_median_rejects_null_dates_for_observed_assets():
+    frame = pd.DataFrame({"asset_id": ["a", "a"], "date": [1, None], "value": [1.0, 2.0]})
+    with pytest.raises(ValueError, match="dates must be non-null"):
+        execute_trailing_median(frame, window=1)
+
+
+def test_lagged_median_min_periods_counts_only_finite_values():
+    frame = pd.DataFrame(
+        {"asset_id": ["a"] * 7, "date": range(7),
+         "value": [3.0, np.nan, 5.0, np.inf, 7.0, -np.inf, 9.0]},
+        index=[1, 1, 2, 2, 1, 1, 2],
+    )
+    result = execute_trailing_median(frame, window=4, min_periods=2)
+    np.testing.assert_allclose(
+        result.to_numpy(), [np.nan, np.nan, np.nan, 4.0, 4.0, 6.0, 6.0], equal_nan=True
+    )
+
+
+def test_lagged_median_registry_stays_fail_closed_without_fe(monkeypatch):
+    import factor_preprocess.adapters.fe_smoothing as adapter
+    from factor_preprocess.errors import GovernanceError
+    from factor_preprocess.registry.transforms import get_default_registry
+
+    monkeypatch.setattr(adapter, "get_fe_composite_executor", lambda name, recipe_identity: None)
+    with pytest.raises(GovernanceError, match="FE composite authority unavailable"):
+        get_default_registry().get_execution("trailing_median")
+    assert callable(get_default_registry().get_execution("trailing_median", allow_research=True))
+
+
+@pytest.mark.parametrize("window", [1, 3, 5])
+@pytest.mark.parametrize("min_periods_mode", ["default", "zero", "window"])
+def test_lagged_median_parameter_edges_preserve_nullable_assets_and_prefix(window, min_periods_mode):
+    from factor_preprocess.transforms.smoothing import trailing_median
+    min_periods = {"default": None, "zero": 0, "window": window}[min_periods_mode]
+    frame = pd.DataFrame(
+        {
+            "asset_id": pd.array([1, 2, 1, 1, 2, 1, 1], dtype="Int64"),
+            "date": pd.array([1, 1, 2, 3, 2, 4, 5], dtype="Int64"),
+            "value": [2.0, 10.0, np.nan, 6.0, 12.0, np.inf, 10.0],
+        },
+        index=[8, 8, 3, 3, 8, 5, 5],
+    )
+    original = frame.copy(deep=True)
+    actual = execute_trailing_median(frame, window=window, min_periods=min_periods)
+    expected = trailing_median(frame, window=window, min_periods=min_periods)
+    assert actual.index.equals(frame.index)
+    np.testing.assert_allclose(actual.to_numpy(), expected.to_numpy(), equal_nan=True)
+
+    prefix_len = 5
+    prefix_result = execute_trailing_median(
+        frame.iloc[:prefix_len], window=window, min_periods=min_periods
+    )
+    np.testing.assert_allclose(
+        actual.iloc[:prefix_len].to_numpy(), prefix_result.to_numpy(), equal_nan=True
+    )
+    pd.testing.assert_frame_equal(frame, original)
+
+
+def test_lagged_median_empty_and_all_null_assets_keep_shape_and_index():
+    frame = pd.DataFrame(
+        {"asset_id": pd.array([1, pd.NA, 1], dtype="Int64"),
+         "date": pd.array([1, 1, 2], dtype="Int64"), "value": [2.0, 99.0, 4.0]},
+        index=[6, 6, 2],
+    )
+    empty = frame.iloc[:0]
+    result = execute_trailing_median(empty, window=3)
+    assert result.empty and result.index.equals(empty.index)
+
+    all_null = frame.copy()
+    all_null["asset_id"] = pd.array([pd.NA] * len(frame), dtype="Int64")
+    result = execute_trailing_median(all_null, window=3)
+    assert result.index.equals(all_null.index)
+    assert result.isna().all()

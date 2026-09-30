@@ -1,7 +1,7 @@
 # factor_preprocess 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**76 个 Python 模块、431 个公开函数/类/方法定义**。
+扫描实际包目录：**76 个 Python 模块、432 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -17,7 +17,7 @@
 | [factor_preprocess/adapters/ewma_full_replay.py](../factor_preprocess/adapters/ewma_full_replay.py) | 3 | Exact, bounded restart replay for the public lagged FP EWMA. |
 | [factor_preprocess/adapters/factor_assets.py](../factor_preprocess/adapters/factor_assets.py) | 12 | Factor Assets adapter - optional integration with factor_assets package. |
 | [factor_preprocess/adapters/fe_operator.py](../factor_preprocess/adapters/fe_operator.py) | 7 | FE operator adapter (R61-FI-041, plan §26 F2/F3). |
-| [factor_preprocess/adapters/fe_smoothing.py](../factor_preprocess/adapters/fe_smoothing.py) | 2 | FactorEngine-backed long-panel smoothing adapter (lazy FE dependency). |
+| [factor_preprocess/adapters/fe_smoothing.py](../factor_preprocess/adapters/fe_smoothing.py) | 3 | FactorEngine-backed long-panel smoothing adapter (lazy FE dependency). |
 | [factor_preprocess/adapters/fitted_recipe.py](../factor_preprocess/adapters/fitted_recipe.py) | 2 | Apply-only execution of narrowly supported frozen FP fitted state. |
 | [factor_preprocess/backends/__init__.py](../factor_preprocess/backends/__init__.py) | 0 | Automatic backend selection for factor_preprocess. |
 | [factor_preprocess/backends/polars_backend.py](../factor_preprocess/backends/polars_backend.py) | 6 | Polars backend for high-performance cross-sectional transforms. |
@@ -552,7 +552,7 @@ FactorEngine-backed long-panel smoothing adapter (lazy FE dependency).
 
 ### get_fe_composite_executor
 
-[实际实现](../factor_preprocess/adapters/fe_smoothing.py#L9)。
+[实际实现](../factor_preprocess/adapters/fe_smoothing.py#L10)。
 
 Resolve known semantics, not a content hash of the FE implementation.
 
@@ -560,9 +560,19 @@ Resolve known semantics, not a content hash of the FE implementation.
 
 ### execute_trailing_sma
 
-[实际实现](../factor_preprocess/adapters/fe_smoothing.py#L21)。
+[实际实现](../factor_preprocess/adapters/fe_smoothing.py#L29)。
 
 Delegate trailing SMA to FE's compositional long-panel recipe.
+
+参数：`(values: pd.DataFrame, window: int, min_periods: int \| None=None, asset_col: str='asset_id', time_col: str='date', value_col: str='value')`。
+
+返回类型：`pd.Series`。
+
+### execute_trailing_median
+
+[实际实现](../factor_preprocess/adapters/fe_smoothing.py#L37)。
+
+Delegate trailing median to FE's lagged median recipe.
 
 参数：`(values: pd.DataFrame, window: int, min_periods: int \| None=None, asset_col: str='asset_id', time_col: str='date', value_col: str='value')`。
 
@@ -4070,7 +4080,7 @@ Create registry with all built-in transforms.
 
 ### get_default_registry
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1569)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1575)。
 
 Get or create the default global registry.
 
@@ -5212,7 +5222,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/adapters/ewma_full_replay.py` | `f5d653976ab97b8581d299dddbd49494e65639cba164ee4cea722f30a74d5fb5` |
 | `factor_preprocess/adapters/factor_assets.py` | `75478a4f2c9cc80b7c30aacf729fe33ab722cfc2be7dfb63f11e3f562b92e878` |
 | `factor_preprocess/adapters/fe_operator.py` | `9ec69415707feac974eed219f15910f22cde9650aac57b00873df1c3bbf977b2` |
-| `factor_preprocess/adapters/fe_smoothing.py` | `7b563b0f64652bcecf636caec9b341a44307bd467e9cff61a71bc8263abde013` |
+| `factor_preprocess/adapters/fe_smoothing.py` | `5f7f58390b3aecb0fbc92f1ab8bf33c35f56f7a5feb2ab9e57aa424e620fdc71` |
 | `factor_preprocess/adapters/fitted_recipe.py` | `f6e770d3b0ad1090b52ce527169005b4ca7f06b58b06462c35db06e9c2c42e2e` |
 | `factor_preprocess/backends/__init__.py` | `764cb2de6fa732845a8040a4910996e1c0c19c210e659b9d9688100589ced7cc` |
 | `factor_preprocess/backends/polars_backend.py` | `e96429361fbae7b5f0d69b23e7e2bfeb7b77e77078a0f8c84f80cd993d8de22a` |
@@ -5257,7 +5267,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/regime/switching.py` | `a6114ab07de853206d2d705d79946a162efb5d8cb04a8c7352e87ca5e5c8c43a` |
 | `factor_preprocess/registry/__init__.py` | `f7d6d9c9d84116aa51d6c7d38695d2b439f63c69cb01d54327a998d970936329` |
 | `factor_preprocess/registry/policies.py` | `6f0c776875e25205ce2e8f072dfdb70ae15caacdb6f9dc516a6151cace7fd202` |
-| `factor_preprocess/registry/transforms.py` | `c805b5ea5fa7a9be1a422d06c27d4722d1decf8b37b75f24420f555094540989` |
+| `factor_preprocess/registry/transforms.py` | `130d38f4fe153a3e38ae2230b043f20a6d328730b172b1eec34fe3559243f1d4` |
 | `factor_preprocess/representation/__init__.py` | `5b62691fd8b68400db3bcc025ec528ed68240d3dd127d5e036fe3e08fb58942d` |
 | `factor_preprocess/representation/linear_ready.py` | `c0f394448c6be34cc02bf83000e182da18d4f022fe83c82cd524b5582f20c81e` |
 | `factor_preprocess/representation/multichannel.py` | `f9edaba509c7bf1c12a1534eb9ca758e523f7efc62f955e09b8609bc6c346dfe` |
