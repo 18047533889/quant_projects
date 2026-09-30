@@ -412,7 +412,9 @@ def authoritative_array_hash(value: np.ndarray) -> str:
     elif array.dtype.fields is not None:
         raise TypeError("structured arrays require an explicit schema codec")
     else:
-        digest.update(array.tobytes())
+        # Hash the same C-order bytes without allocating a second full panel.
+        # ascontiguousarray above also normalizes scalar/non-contiguous input.
+        digest.update(memoryview(array.reshape(-1).view(np.uint8)))
     return digest.hexdigest()
 
 
