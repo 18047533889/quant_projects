@@ -13,7 +13,7 @@
 | `cs_scale` | `axis=-1, target_std=1, ddof=1` | 截面/否；生产；FP | $`z_i=x_i\,target\_std/s`$ 不中心化；零标准差保留原值。 |
 | `rolling_mean` | `window, min_periods=None` | 时间/严格滞后；生产；FP | None=window；$`z_t=\mathrm{mean}(x_{t-w:t-1})`$，有限数不足为 NaN。 |
 | `rolling_std` | `window, min_periods=None, ddof=1` | 时间/严格滞后；生产；FP | $`z_t=\mathrm{std}_{ddof}(x_{t-w:t-1})`$。 |
-| `rolling_zscore` | 同上 | 时间/历史；生产；FP | $`z_t=(x_t-\bar x_{t-1,w})/s_{t-1,w}`$ 当前值仅进分子，零标准差 NaN。 |
+| `rolling_zscore` | 同上 | 时间/历史；生产；FP→FE_COMPOSITE | $`z_t=(x_t-\bar x_{t-1,w})/s_{t-1,w}`$ 当前值仅进分子；按 IEEE 除法，`0/0` 为 NaN、非零/0 为带符号 Inf；FE recipe `FE_COMPOSITE:long_smoothing.lagged_zscore:v1`。 |
 | `ewma` | `halflife, min_periods=1` | 时间/严格滞后；生产；FP | 对 shift(1) 做 `ewm(adjust=False)`：$`z_t=(1-\alpha)z_{t-1}+\alpha x_{t-1},\ \alpha=1-e^{-\ln2/h}`$。 |
 | `trailing_sma` | `window, min_periods=None` | 时间/严格滞后；生产；FP | lagged 窗口均值；None=window。 |
 | `trailing_median` | 同上 | 时间/严格滞后；生产；FP | $`z_t=\mathrm{median}(x_{t-w:t-1})`$。 |

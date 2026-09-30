@@ -66,6 +66,8 @@ rolling_mean 与 trailing_sma 都返回过去 window 个轴位置、排除当前
 z_t=\frac{x_t-\bar{x}_{t-1,w}}{s_{t-1,w}}
 ```
 
+rolling_zscore 的除法遵循 IEEE 语义：分子和标准差都为零时得到 NaN；分子非零而标准差为零时得到带符号的 Inf。生产注册表将该 lagged 统计 recipe 路由为 `FE_COMPOSITE:long_smoothing.lagged_zscore:v1`（FP→FE composite）；这不是默认包含当前行的 `ts_zscore`。FE recipe 不可用时生产路径 fail closed，FP 实现只保留给显式 research 模式。
+
 trailing_median 返回过去窗口中位数。
 
 ewma 先 shift(1)，再执行 adjust=False 的递归：
