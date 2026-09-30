@@ -23,10 +23,45 @@ def _import_cp():
     return cp
 
 
-def _pairwise_finite_sums(x, y, min_obs: int):
+def _scaled_pearson_rows(x, y, finite):
+    """Stable Pearson for selected (R,N) rows whose raw moments are unsafe."""
+    cp = _import_cp()
+    x64 = x.astype(cp.float64)
+    y64 = y.astype(cp.float64)
+    x_safe = cp.where(finite, x64, 0.0)
+    y_safe = cp.where(finite, y64, 0.0)
+
+    def centered_scaled(values, valid):
+        first = cp.argmax(valid, axis=1)
+        origin = cp.take_along_axis(values, first[:, None], axis=1)
+        shifted = values - origin
+        overflow = cp.any(valid & ~cp.isfinite(shifted), axis=1)
+        raw_scale = cp.max(cp.abs(values), axis=1)
+        raw_scale = cp.where(raw_scale > 0, raw_scale, 1.0)
+        raw_scaled = values / raw_scale[:, None]
+        base = cp.where(overflow[:, None], raw_scaled, shifted)
+        base = cp.where(valid, base, 0.0)
+        scale = cp.max(cp.abs(base), axis=1)
+        scale = cp.where(scale > 0, scale, 1.0)
+        normalized = base / scale[:, None]
+        count = cp.sum(valid, axis=1, dtype=cp.float64)
+        mean = cp.sum(normalized, axis=1, dtype=cp.float64) / cp.maximum(count, 1.0)
+        return cp.where(valid, normalized - mean[:, None], 0.0)
+
+    n = cp.sum(finite, axis=1, dtype=cp.float64)
+    dx = centered_scaled(x_safe, finite)
+    dy = centered_scaled(y_safe, finite)
+    vx = cp.sum(dx * dx, axis=1, dtype=cp.float64)
+    vy = cp.sum(dy * dy, axis=1, dtype=cp.float64)
+    cov = cp.sum(dx * dy, axis=1, dtype=cp.float64)
+    ic = (cov / cp.sqrt(vx)) / cp.sqrt(vy)
+    return cp.where((n < 1) | (vx <= 0) | (vy <= 0), cp.nan, ic)
+
+
+def _pairwise_finite_sums(x, y, min_obs: int, *, bounded: bool = False):
     """Compute Pearson sums over pairwise-finite (T,F,N) x and y.
 
-    y may be (T,N) (broadcast to (T,1,N)) or (T,F,N).  Returns
+    y may be (T,N) (broadcast to (T,1,N)) or (T,F,N). Returns
     (ic, valid_counts) with NaN where insufficient/zero-variance.
     """
     cp = _import_cp()
@@ -34,11 +69,17 @@ def _pairwise_finite_sums(x, y, min_obs: int):
         yb = y[:, None, :]  # (T,1,N)
     else:
         yb = y  # (T,F,N)
+    if x.shape[2] == 0:
+        return (
+            cp.full(x.shape[:2], cp.nan, dtype=cp.float64),
+            cp.zeros(x.shape[:2], dtype=cp.int32),
+        )
     finite = cp.isfinite(x) & cp.isfinite(yb)
     n = cp.sum(finite, axis=2, dtype=cp.float64)  # (T, F)
-    # Reduce in float64, then center before forming products. Raw moments in
-    # float32 lose the variance of a large cross-section with a common offset;
-    # even float64 raw moments can cancel when the offset is sufficiently large.
+
+    # Fast centered path for ordinary magnitudes. Keep the original reduction
+    # order for the common case; only rows whose variance/norm is out of the
+    # safe float64 range use scale normalization below.
     sx = cp.sum(cp.where(finite, x, 0.0), axis=2, dtype=cp.float64)
     sy = cp.sum(cp.where(finite, yb, 0.0), axis=2, dtype=cp.float64)
     mx = sx / cp.maximum(n, 1.0)
@@ -50,7 +91,39 @@ def _pairwise_finite_sums(x, y, min_obs: int):
     cov = cp.sum(dx * dy, axis=2, dtype=cp.float64)
     denom = cp.sqrt(vx * vy)
     ic = cov / denom
-    ic = cp.where((n < min_obs) | (vx <= 0) | (vy <= 0), cp.nan, ic)
+
+    # Float16/float32 inputs are far inside float64's squared-norm range,
+    # including their smallest subnormals; retain the no-sync fast path.
+    if bounded or (
+        x.dtype in (cp.float16, cp.float32)
+        and yb.dtype in (cp.float16, cp.float32)
+    ):
+        ic = cp.where((n < min_obs) | (vx <= 0) | (vy <= 0), cp.nan, ic)
+        return ic, n.astype(cp.int32)
+
+    # The direct product may overflow/underflow even when each variance is
+    # representable. Route those rows through scale-normalized arithmetic.
+    tiny = np.finfo(np.float64).tiny
+    large = np.sqrt(np.finfo(np.float64).max)
+    unsafe = (
+        (vx <= 0) | (vy <= 0) | (~cp.isfinite(vx)) | (~cp.isfinite(vy))
+        | (vx < tiny) | (vy < tiny) | (vx > large) | (vy > large)
+        | (~cp.isfinite(denom)) | (denom <= 0) | (~cp.isfinite(ic))
+        # Centering around a rounded mean loses low bits when the offset is
+        # enormous compared with the cross-sectional standard deviation.
+        | (cp.abs(mx) > cp.sqrt(vx / cp.maximum(n - 1.0, 1.0)) * 1e6)
+        | (cp.abs(my) > cp.sqrt(vy / cp.maximum(n - 1.0, 1.0)) * 1e6)
+    )
+    if bool(cp.any(unsafe).item()):
+        flat_mask = unsafe.reshape(-1)
+        xf = x.reshape(-1, x.shape[2])[flat_mask]
+        yf = cp.broadcast_to(yb, x.shape).reshape(-1, x.shape[2])[flat_mask]
+        ff = finite.reshape(-1, x.shape[2])[flat_mask]
+        stable = _scaled_pearson_rows(xf, yf, ff)
+        ic = ic.copy()
+        ic.reshape(-1)[flat_mask] = stable
+
+    ic = cp.where(n < min_obs, cp.nan, ic)
     return ic, n.astype(cp.int32)
 
 
@@ -125,7 +198,7 @@ def batched_spearman_ic(
     # retain average-tie Spearman; confidence/applicability is separate.
     min_levels = 2
     # rx and ry are (T,F,N); _pairwise_finite_sums handles y.ndim==3
-    ic, n = _pairwise_finite_sums(rx, ry, min_obs)
+    ic, n = _pairwise_finite_sums(rx, ry, min_obs, bounded=True)
     low_levels = (dlx < min_levels) | (dly < min_levels)
     ic = cp.where(low_levels, cp.nan, ic)
     return ic, n

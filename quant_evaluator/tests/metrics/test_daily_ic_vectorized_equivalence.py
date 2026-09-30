@@ -221,6 +221,24 @@ def test_known_value_oracle_small_case(method):
     assert ic[1, 0] == -1.0
 
 
+def test_public_compute_daily_ic_stabilizes_extreme_and_large_offset_inputs():
+    y = np.arange(64, dtype=np.float64)
+    values = np.empty((2, 64, 1), dtype=np.float64)
+    labels = np.empty((2, 64), dtype=np.float64)
+    values[0, :, 0] = 1e16 + 2.0 * y
+    labels[0] = y
+    values[1, :, 0] = 1e-200 * (y + 1.0)
+    labels[1] = 1e200 * (64.0 - y)
+
+    # Direct mathematical relationships provide the oracle: positive affine
+    # relation on day 0 and negative monotone affine relation on day 1.
+    np.testing.assert_array_equal(np.diff(values[0, :, 0]), np.full(63, 2.0))
+    fb, lb = _make_batch(values, labels)
+    ic, counts = compute_daily_ic(fb, lb, method="pearson", min_assets=2)
+    np.testing.assert_array_equal(counts, np.full((2, 1), 64, dtype=np.int32))
+    np.testing.assert_allclose(ic[:, 0], np.array([1.0, -1.0]), rtol=0.0, atol=1e-12)
+
+
 @pytest.mark.parametrize("method", _METHODS)
 def test_asset_permutation_invariance(method):
     """IC must not depend on asset ordering (rank-based, pairwise mask)."""

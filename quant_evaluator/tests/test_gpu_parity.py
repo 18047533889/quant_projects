@@ -20,6 +20,7 @@ from quant_evaluator.kernels.gpu.correlation import (
     batched_pearson_ic,
     batched_spearman_ic,
 )
+from quant_evaluator.metrics.ic import _pearson_correlation, compute_daily_ic
 from quant_evaluator.kernels.gpu.quantile import batched_quantile_returns
 from quant_evaluator.kernels.gpu.turnover import batched_turnover
 from quant_evaluator.kernels.gpu.stability import batched_rank_stability
@@ -169,6 +170,123 @@ def test_gpu_pearson_ic_float32_large_offset(label_offset):
     assert cp.asnumpy(counts)[0, 0] == n
     assert np.isfinite(gpu_value)
     assert abs(gpu_value - expected) < 1e-5
+
+
+def _stable_pearson_oracle(x, y):
+    """Independent scale-normalized Pearson oracle for extreme magnitudes."""
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
+    finite = np.isfinite(x) & np.isfinite(y)
+    x, y = x[finite], y[finite]
+    x = x / np.max(np.abs(x))
+    y = y / np.max(np.abs(y))
+    x = x - x.mean()
+    y = y - y.mean()
+    return np.dot(x, y) / np.sqrt(np.dot(x, x)) / np.sqrt(np.dot(y, y))
+
+
+@pytest.mark.parametrize("scale_x,scale_y", [
+    (1e-200, 1e200),
+    (1e-160, 1e160),
+    (1e-150, 1e150),
+    (1e150, 1e-150),
+])
+def test_pearson_scale_invariance_across_float64_range(scale_x, scale_y):
+    z = np.arange(1, 65, dtype=np.float64)
+    x = scale_x * z
+    y = scale_y * z[::-1]
+    expected = _stable_pearson_oracle(x, y)
+
+    cpu = _pearson_correlation(x, y, min_obs=2)
+    gpu, _ = batched_pearson_ic(
+        x[None, None, :], y[None, :], min_obs=2
+    )
+    assert expected == pytest.approx(-1.0, abs=1e-14)
+    assert cpu == pytest.approx(expected, abs=1e-14)
+    assert float(cp.asnumpy(gpu)[0, 0]) == pytest.approx(expected, abs=1e-14)
+
+
+def test_pearson_intermediate_bias_threshold_matches_cpu_gpu():
+    y = np.arange(64, dtype=np.float64)
+    x = 2e14 + 1e7 * y
+    mean = np.mean(x)
+    sum_std = np.sqrt(np.sum((x - mean) ** 2))
+    sample_std = np.std(x, ddof=1)
+    # This lies between the formerly inconsistent sum-std and sample-std
+    # threshold checks; both CPU and GPU must now take the stable route.
+    assert abs(mean) / sum_std < 1e6
+    assert abs(mean) / sample_std > 1e6
+    np.testing.assert_array_equal(np.diff(x), np.full(63, 1e7))
+
+    fb, lb = _make_batch(x[None, :, None], y[None, :])
+    cpu, counts = compute_daily_ic(fb, lb, method="pearson", min_assets=2)
+    gpu, _ = batched_pearson_ic(x[None, None, :], y[None, :], min_obs=2)
+    assert counts.tolist() == [[64]]
+    assert cpu[0, 0] == pytest.approx(1.0, abs=1e-12)
+    assert float(cp.asnumpy(gpu)[0, 0]) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_pearson_large_offset_exact_linear_relationship():
+    y = np.arange(64, dtype=np.float64)
+    x = 1e16 + 2.0 * y
+    # Every increment is exactly representable at this offset.
+    np.testing.assert_array_equal(np.diff(x), np.full(63, 2.0))
+
+    cpu = _pearson_correlation(x, y, min_obs=2)
+    gpu, _ = batched_pearson_ic(
+        x[None, None, :], y[None, :], min_obs=2
+    )
+    assert cpu == pytest.approx(1.0, abs=1e-12)
+    assert float(cp.asnumpy(gpu)[0, 0]) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_pearson_extreme_scale_uses_pairwise_finite_values():
+    z = np.arange(1, 65, dtype=np.float64)
+    x = 1e-200 * z
+    y = 1e200 * z[::-1]
+    x[[1, 7]] = [np.nan, np.inf]
+    y[[3, 9]] = [-np.inf, np.nan]
+    expected = _stable_pearson_oracle(x, y)
+
+    cpu = _pearson_correlation(x, y, min_obs=2)
+    gpu, counts = batched_pearson_ic(
+        x[None, None, :], y[None, :], min_obs=2
+    )
+    assert expected == pytest.approx(-1.0, abs=1e-14)
+    assert cpu == pytest.approx(expected, abs=1e-14)
+    assert float(cp.asnumpy(gpu)[0, 0]) == pytest.approx(expected, abs=1e-14)
+    assert int(cp.asnumpy(counts)[0, 0]) == 60
+
+
+def test_pearson_opposite_finite_extremes_use_scaling_fallback():
+    x = np.array([-1.7e308, 1.7e308, -1.6e308, 1.6e308], dtype=np.float64)
+    y = x.copy()
+
+    cpu = _pearson_correlation(x, y, min_obs=2)
+    gpu, _ = batched_pearson_ic(
+        x[None, None, :], y[None, :], min_obs=2
+    )
+    assert cpu == pytest.approx(1.0, abs=1e-14)
+    assert float(cp.asnumpy(gpu)[0, 0]) == pytest.approx(1.0, abs=1e-14)
+
+
+def test_pearson_stable_path_preserves_zero_correlation_and_constants():
+    x = np.tile(np.arange(1, 33, dtype=np.float64), 2)
+    y = np.repeat(np.array([-1.0, 1.0]), 32)
+    expected = _stable_pearson_oracle(x, y)
+    cpu = _pearson_correlation(x, y, min_obs=2)
+    gpu, _ = batched_pearson_ic(x[None, None, :], y[None, :], min_obs=2)
+    assert abs(expected) < 1e-15
+    assert cpu == pytest.approx(expected, abs=1e-15)
+    assert float(cp.asnumpy(gpu)[0, 0]) == pytest.approx(expected, abs=1e-15)
+
+    constant = np.ones(64, dtype=np.float64) * 1e-200
+    assert np.isnan(_pearson_correlation(constant, y, min_obs=2))
+    gpu_constant, _ = batched_pearson_ic(
+        constant[None, None, :], y[None, :], min_obs=2
+    )
+    assert np.isnan(float(cp.asnumpy(gpu_constant)[0, 0]))
+
 
 def test_gpu_rank_heavy_ties():
     x = np.array([[3.0, 1, 2, 2, 5, 1, 2, 2]])

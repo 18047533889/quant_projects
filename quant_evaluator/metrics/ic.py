@@ -65,6 +65,15 @@ def _corrcoef_pair_1d(x_valid: np.ndarray, y_valid: np.ndarray, n: int) -> float
     c *= np.true_divide(1, n - 1)
     d = np.diag(c)
     stddev = np.sqrt(d.real)
+    # Keep the historical operation order for ordinary inputs. If raw
+    # moments overflow/underflow or a large offset dwarfs the variation,
+    # delegate to the affine-invariant stabilized path.
+    if (
+        not np.all(np.isfinite(stddev))
+        or np.any(stddev <= 0)
+        or np.any(np.abs(avg) > stddev * 1e6)
+    ):
+        return _stable_corrcoef_pair_1d(x_valid, y_valid, n)
     c /= stddev[:, None]
     c /= stddev[None, :]
     np.clip(c.real, -1, 1, out=c.real)
@@ -155,10 +164,9 @@ def _pearson_correlation(
     if n < min_obs:
         return np.nan
 
-    # Check for constants (robust to all-NaN / inf edges)
-    if (np.nanmax(x_valid) - np.nanmin(x_valid) == 0) or (
-        np.nanmax(y_valid) - np.nanmin(y_valid) == 0
-    ):
+    # Equality avoids overflowing max - min at opposite finite extremes
+    # and preserves distinctions between subnormal / very small values.
+    if np.all(x_valid == x_valid[0]) or np.all(y_valid == y_valid[0]):
         return np.nan
 
     if winsorize is not None:
@@ -177,10 +185,7 @@ def _pearson_correlation(
                 y_win = series
         x_valid, y_valid = x_win, y_win
 
-    # Compute Pearson correlation
-    corr = np.corrcoef(x_valid, y_valid)[0, 1]
-
-    return corr
+    return _corrcoef_pair_1d(x_valid, y_valid, n)
 
 
 def _spearman_rank_correlation(x: np.ndarray, y: np.ndarray, min_obs: int = 10) -> float:
@@ -723,3 +728,33 @@ def ic_significance(
     p_value = 2.0 * (1.0 - stats.norm.cdf(abs(t_stat)))
 
     return float(ir), float(t_stat), float(p_value)
+
+def _stable_corrcoef_pair_1d(x_valid: np.ndarray, y_valid: np.ndarray, n: int) -> float:
+    """Scale-safe Pearson fallback, preserving small variation near large offsets."""
+    def centered_scaled(values):
+        values = np.asarray(values, dtype=np.float64)
+        with np.errstate(over="ignore", invalid="ignore"):
+            shifted = values - values[0]
+        if np.all(np.isfinite(shifted)):
+            scale = np.max(np.abs(shifted))
+            if scale == 0:
+                return None
+            shifted = shifted / scale
+            return shifted - np.mean(shifted)
+        # A difference of opposite finite extremes can overflow.
+        scale = np.max(np.abs(values))
+        if scale == 0:
+            return None
+        normalized = values / scale
+        return normalized - np.mean(normalized)
+
+    dx = centered_scaled(x_valid)
+    dy = centered_scaled(y_valid)
+    if dx is None or dy is None:
+        return np.nan
+    vx = np.dot(dx, dx)
+    vy = np.dot(dy, dy)
+    if not np.isfinite(vx) or not np.isfinite(vy) or vx <= 0 or vy <= 0:
+        return np.nan
+    corr = np.dot(dx, dy) / np.sqrt(vx) / np.sqrt(vy)
+    return float(np.clip(corr, -1.0, 1.0))

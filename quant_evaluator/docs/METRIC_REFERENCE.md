@@ -1776,7 +1776,7 @@ s_f=\sqrt{\frac1{n_f-1}\sum_t(IC_{t,f}-\bar{IC}_f)^2}
 | `valid_counts` | `None` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/ic.py#L671)；`quant_evaluator.metrics.ic.compute_ic_std`。
+实现核对：[函数定义](../metrics/ic.py#L676)；`quant_evaluator.metrics.ic.compute_ic_std`。
 
 <a id="metric-ic_summary"></a>
 ## ic_summary — ic_summary
@@ -2277,7 +2277,7 @@ Time-averaged Pearson information coefficient: the time-mean of daily Pearson IC
 | `valid_counts` | `None` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/ic.py#L657)；`quant_evaluator.metrics.ic.compute_mean_ic_value`。
+实现核对：[函数定义](../metrics/ic.py#L662)；`quant_evaluator.metrics.ic.compute_mean_ic_value`。
 
 <a id="metric-mean_investment_fraction"></a>
 ## mean_investment_fraction — Mean Investment Fraction
@@ -2717,7 +2717,7 @@ s_f=\sqrt{(n_f-1)^{-1}\sum_{t\in V_f}(IC^P_{tf}-\bar{IC}^P_f)^2}
 | `valid_counts` | `None` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/ic.py#L671)；`quant_evaluator.metrics.ic.compute_ic_std`。
+实现核对：[函数定义](../metrics/ic.py#L676)；`quant_evaluator.metrics.ic.compute_ic_std`。
 
 <a id="metric-purity_ratio"></a>
 ## purity_ratio — Purity Ratio
@@ -5569,12 +5569,13 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.exposure_evidence.build_factor_loading_series](../metrics/exposure_evidence.py#L366)
 - [quant_evaluator.metrics.exposure_evidence.compute_style_exposure_evidence](../metrics/exposure_evidence.py#L496)
 - [quant_evaluator.metrics.ic._corrcoef_pair_1d](../metrics/ic.py#L34)
-- [quant_evaluator.metrics.ic._corrcoef_rank_last](../metrics/ic.py#L74)
+- [quant_evaluator.metrics.ic._corrcoef_rank_last](../metrics/ic.py#L83)
 - [quant_evaluator.metrics.ic._pairwise_finite_mask](../metrics/ic.py#L20)
-- [quant_evaluator.metrics.ic._reject_boolean_ic_series](../metrics/ic.py#L588)
-- [quant_evaluator.metrics.ic._spearman_rank_correlation](../metrics/ic.py#L186)
-- [quant_evaluator.metrics.ic.compute_daily_ic](../metrics/ic.py#L218)
-- [quant_evaluator.metrics.ic.compute_mean_ic](../metrics/ic.py#L611)
+- [quant_evaluator.metrics.ic._reject_boolean_ic_series](../metrics/ic.py#L593)
+- [quant_evaluator.metrics.ic._spearman_rank_correlation](../metrics/ic.py#L191)
+- [quant_evaluator.metrics.ic._stable_corrcoef_pair_1d](../metrics/ic.py#L732)
+- [quant_evaluator.metrics.ic.compute_daily_ic](../metrics/ic.py#L223)
+- [quant_evaluator.metrics.ic.compute_mean_ic](../metrics/ic.py#L616)
 - [quant_evaluator.metrics.ic_summary._check_min_periods](../metrics/ic_summary.py#L795)
 - [quant_evaluator.metrics.ic_summary._coerce_real_float_array](../metrics/ic_summary.py#L778)
 - [quant_evaluator.metrics.ic_summary._rolling_mean_nan](../metrics/ic_summary.py#L264)
@@ -5716,11 +5717,12 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.exposure_evidence.compute_size_exposure` | `581226de1b2583df9ba1d1b520a3a985db702ee347c9f99f61038cfd4fc64472` |
 | `quant_evaluator.metrics.exposure_evidence.compute_style_exposure_evidence` | `8489b5d105ac339a1566602ef60c35d2c92f2a29fd6dc4523f8aa228413b53d5` |
 | `quant_evaluator.metrics.exposure_evidence.compute_volatility_exposure` | `c686f6a4b47075a132e79caf213143e227212a0af63392513a8707727fc9a8e5` |
-| `quant_evaluator.metrics.ic._corrcoef_pair_1d` | `594e821f0d69c8ce13e8764ea394d2326394dc3e55e524a41db606fc32320e40` |
+| `quant_evaluator.metrics.ic._corrcoef_pair_1d` | `79265ef88b901dd54178a0e590122df75d6f6b3b5d82a644fc9237a728312866` |
 | `quant_evaluator.metrics.ic._corrcoef_rank_last` | `ab983f6d7970d5073d5a90797551547e118b9e4dc20474ae11545a28e10d1e86` |
 | `quant_evaluator.metrics.ic._pairwise_finite_mask` | `f9943a8e1f717199085d02df95c5f4b86ed466fc0c1b28bc381e83daec72a4b5` |
 | `quant_evaluator.metrics.ic._reject_boolean_ic_series` | `906995c840d5cdbe79ea225fbc3f6fe61253d993e24ddc92643accdbea08b3ec` |
 | `quant_evaluator.metrics.ic._spearman_rank_correlation` | `4e9ef965007cf5bbd49a0f7b4cba971ef6d41f351b3f57ac49c7bb7817dcb532` |
+| `quant_evaluator.metrics.ic._stable_corrcoef_pair_1d` | `3ef8a802acc7fd318ea12a831393939bd0f0de727047a07301e683d03aac4da3` |
 | `quant_evaluator.metrics.ic.compute_daily_ic` | `6d68172a95df279284474a11c1004d5f093b5c974ec10c07c405c8da5e6d9e81` |
 | `quant_evaluator.metrics.ic.compute_ic_std` | `d61c306ec97b6b117ccf93933512552e29fc881140f1cfe8dbfcd8b7c1013f37` |
 | `quant_evaluator.metrics.ic.compute_mean_ic` | `eaf6b80b8bfe3b7dae1838c5fece7d7f12d7057c102102b5286d0cadbd4e5c85` |
