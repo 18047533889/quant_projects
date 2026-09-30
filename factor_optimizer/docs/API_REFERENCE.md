@@ -403,7 +403,7 @@ TRAIN-frozen research plan for observation-origin twenty-layer decay.
 
 ### LayeredDecayPlan
 
-[实际实现](../factor_optimizer/adapters/layered_decay.py#L13)。
+[实际实现](../factor_optimizer/adapters/layered_decay.py#L39)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -416,7 +416,7 @@ TRAIN-frozen research plan for observation-origin twenty-layer decay.
 
 ### LayeredDecayPlan.parameters
 
-[实际实现](../factor_optimizer/adapters/layered_decay.py#L32)。
+[实际实现](../factor_optimizer/adapters/layered_decay.py#L58)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -424,7 +424,7 @@ TRAIN-frozen research plan for observation-origin twenty-layer decay.
 
 ### LayeredDecayPlan.identity
 
-[实际实现](../factor_optimizer/adapters/layered_decay.py#L36)。
+[实际实现](../factor_optimizer/adapters/layered_decay.py#L62)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -432,7 +432,7 @@ TRAIN-frozen research plan for observation-origin twenty-layer decay.
 
 ### LayeredDecayPlan.execute
 
-[实际实现](../factor_optimizer/adapters/layered_decay.py#L40)。
+[实际实现](../factor_optimizer/adapters/layered_decay.py#L66)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -10668,7 +10668,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/adapters/factor_engine.py` | `de24ad77fc2408851497d93836c40d744d37907151bb8d96fd03a767c279e2e5` |
 | `factor_optimizer/adapters/fe_smoothing.py` | `54929a09f6c907d0f8242de384a50c59568003d4091d3c97d7a9a1ebbb433770` |
 | `factor_optimizer/adapters/fitness.py` | `4486884657f730c65064fe6e1aebc7555a515fbc3cba41c71c1bf8c9e4c48ce5` |
-| `factor_optimizer/adapters/layered_decay.py` | `86ac91175c82eef473abef116a7a67802872a0da96ce0fa7a6022bf783bb3e26` |
+| `factor_optimizer/adapters/layered_decay.py` | `420afc6bc59543f65048458b8b370bc61a52e4387d27d492acf71d421c1d1788` |
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
 | `factor_optimizer/adapters/repair_execution.py` | `512c91404d5457f0971c97430db10c60836f75fdc3ee401dea646513d087c25e` |

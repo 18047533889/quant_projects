@@ -141,3 +141,84 @@ def test_layered_plan_equal_date_rows_have_strict_lag_isolation():
     comparable = np.isfinite(future_values) & np.isfinite(baseline_future)
     assert comparable.any()
     assert np.any(future_values[comparable] != baseline_future[comparable])
+
+
+def test_layered_quantile_blocks_match_full_batch_at_small_middle_and_full_sizes(monkeypatch):
+    from quant_evaluator.metrics import quantile
+    from factor_preprocess.transforms.layered_decay import layered_decay
+    from factor_optimizer.adapters.layered_decay import _assign_daily_quantiles
+
+    rng = np.random.default_rng(2201)
+    values = rng.normal(size=(7, 45))
+    values[2, ::5] = 3.0
+    values[4, ::7] = np.nan
+    values[6, ::9] = -2.0
+    panel = values.copy()
+    full_panel_bins = quantile.assign_quantiles_batch(panel, n_quantiles=20)
+    expected = layered_decay(panel, full_panel_bins, (4.,) * 20, allow_research=True)
+
+    calls = []
+    original = quantile.assign_quantiles_batch
+
+    def bounded_assignments(chunk, *, n_quantiles=5, method="max"):
+        calls.append(chunk.shape)
+        return original(chunk, n_quantiles=n_quantiles, method=method)
+
+    monkeypatch.setattr(quantile, "assign_quantiles_batch", bounded_assignments)
+    per_date_budget = values.shape[1] * 40 + 20 * 1024
+    for budget, expected_rows in ((per_date_budget, 1),
+                                  (3 * per_date_budget, 3),
+                                  (len(values) * per_date_budget, len(values))):
+        calls.clear()
+        bins = _assign_daily_quantiles(panel, working_bytes=budget)
+        np.testing.assert_array_equal(bins, full_panel_bins)
+        actual = layered_decay(panel, bins, (4.,) * 20, allow_research=True)
+        np.testing.assert_array_equal(actual, expected)
+        assert calls == [(min(expected_rows, len(values) - start), values.shape[1])
+                         for start in range(0, len(values), expected_rows)]
+
+
+def test_layered_quantile_default_respects_working_set_budget(monkeypatch):
+    from quant_evaluator.metrics import quantile
+    from factor_optimizer.adapters.layered_decay import (
+        _assign_daily_quantiles, _QUANTILE_WORKING_BYTES,
+    )
+
+    values = np.tile(np.arange(1000, dtype=float), (2000, 1))
+    calls = []
+    original = quantile.assign_quantiles_batch
+
+    def bounded_assignments(chunk, *, n_quantiles=5, method="max"):
+        calls.append(chunk.shape)
+        return original(chunk, n_quantiles=n_quantiles, method=method)
+
+    monkeypatch.setattr(quantile, "assign_quantiles_batch", bounded_assignments)
+    _assign_daily_quantiles(values)
+    max_rows = max(rows for rows, _ in calls)
+    assert max_rows * (values.shape[1] * 40 + 20 * 1024) <= _QUANTILE_WORKING_BYTES
+    assert len(calls) > 1
+    assert max_rows < len(values)
+    assert sum(rows for rows, _ in calls) == len(values)
+
+
+def test_layered_plan_preserves_nonfinite_masks_and_does_not_mutate_input():
+    from quant_evaluator.metrics.quantile import assign_quantiles_batch
+    from factor_preprocess.transforms.layered_decay import layered_decay
+    from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
+
+    rng = np.random.default_rng(2202)
+    values = rng.normal(size=(12, 40))
+    values[2, :3] = (np.inf, -np.inf, np.nan)
+    values[:, -1] = np.nan
+    bins = assign_quantiles_batch(values, n_quantiles=20)
+    expected = layered_decay(values, bins, (5.,) * 20, allow_research=True)
+    frame = pd.DataFrame({"date": np.repeat(np.arange(len(values)), values.shape[1]),
+                          "asset_id": np.tile(np.arange(values.shape[1]), len(values)),
+                          "value": values.ravel()})
+    before = frame.copy(deep=True)
+
+    actual = LayeredDecayPlan((5.,) * 20, "train:nonfinite-parity").execute(
+        frame, allow_research=True)
+
+    np.testing.assert_array_equal(actual.to_numpy(), expected.ravel())
+    pd.testing.assert_frame_equal(frame, before)
