@@ -41,3 +41,11 @@ adapter/axis index, `--factors 61 --tile-size 16 --max-total-mib 6144`,
 Do not treat this explicit example budget as a default or a proof of optimality.
 Report whole-request and source-read timings separately, compare values/masks/counts,
 and alternate run order before extending any automatic routing envelope.
+
+For explicit four-worker IO experiments, additionally pass
+`--cos-prefetch-workers 4 --max-prefetch-memory-mib 1024`.
+Default values remain two workers and 512 MiB. These options are COS-only;
+the harness rejects nondefault worker/budget settings on the legacy adapter.
+The options also propagate into isolated CUDA benchmark workers.
+A larger allowed worker count does not guarantee an IO speedup; measure the
+complete request and keep resource headroom before changing defaults.

@@ -280,7 +280,7 @@ def test_cos_builder_uses_registered_descriptors_and_existing_make_tile_semantic
 
     source = harness._make_cos_source(
         records, rows, dates, asset_axis.values, label, "a" * 64, 2, 16,
-        prefetch="auto")
+        prefetch="auto", prefetch_workers=4, max_prefetch_memory_mib=1024)
     batch = captured["make_tile"](
         0, 2, [BoundCosFactor(*records[0]), BoundCosFactor(*records[1])],
         payloads)
@@ -290,6 +290,8 @@ def test_cos_builder_uses_registered_descriptors_and_existing_make_tile_semantic
     assert captured_tile["expected"] == rows
     assert captured["prefetch"] == "auto" and captured["max_tile_size"] == 2
     assert captured["max_source_memory_bytes"] == 4096 * 1024**2
+    assert captured["prefetch_workers"] == 4
+    assert captured["max_prefetch_memory_bytes"] == 1024**3
     assert captured["extra_assembly_bytes_per_cell"] > 0
     assert [ctx.store.engine.kwargs for ctx in contexts] == [{"threads": 1}, {"threads": 2}]
     for context in contexts:
@@ -298,7 +300,8 @@ def test_cos_builder_uses_registered_descriptors_and_existing_make_tile_semantic
 
 
 @pytest.mark.parametrize("mode", ("off", "on", "auto"))
-def test_run_backend_forwards_explicit_cos_prefetch_policy(monkeypatch, mode):
+@pytest.mark.parametrize("workers", (1, 2, 4))
+def test_run_backend_forwards_explicit_cos_prefetch_policy(monkeypatch, mode, workers):
     _, asset_axis, _, label, _, _ = _fixtures()
     records = (("f0", "cos://test/f0", "0" * 64, 1),)
     source_rows = ((*records[0], "etag", "2" * 64),)
@@ -309,7 +312,9 @@ def test_run_backend_forwards_explicit_cos_prefetch_policy(monkeypatch, mode):
         max_source_memory_bytes=1024, estimated_peak_source_bytes=512)
     seen = []
     monkeypatch.setattr(harness, "_make_cos_source",
-                        lambda *args, **kwargs: seen.append(kwargs["prefetch"]) or source)
+                        lambda *args, **kwargs: seen.append((kwargs["prefetch"],
+                            kwargs["prefetch_workers"], kwargs["max_prefetch_memory_mib"]))
+                            or source)
     monkeypatch.setattr(harness, "evaluate_factor_source_batch",
         lambda *args, **kwargs: SimpleNamespace(metadata={
             "factor_tiles_processed": 1, "backend_used": "cpu",
@@ -317,8 +322,9 @@ def test_run_backend_forwards_explicit_cos_prefetch_policy(monkeypatch, mode):
     _, receipt = harness.run_backend(
         "cpu", records, source_rows, pd.date_range("2024-01-01", periods=3, freq="B"),
         asset_axis.values, label, "a" * 64, 1, 16, GPUExecutionPolicy(),
-        harness.DEFAULT_METRICS, source_adapter="cos", cos_prefetch=mode)
-    assert seen == [mode]
+        harness.DEFAULT_METRICS, source_adapter="cos", cos_prefetch=mode,
+        cos_prefetch_workers=workers, max_prefetch_memory_mib=1024)
+    assert seen == [(mode, workers, 1024)]
     assert receipt["cos_prefetch"] == mode
     assert receipt["prefetch_mode"] == mode
     assert receipt["prefetch_objects"] is (mode != "off")

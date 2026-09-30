@@ -86,7 +86,8 @@ def preflight(max_object_mib: int, max_total_mib: int,
 
 def _make_cos_source(records, source_rows, dates, assets, labels,
                      manifest_sha, tile_size, max_object_mib, *, prefetch,
-                     max_source_memory_mib=4096):
+                     max_source_memory_mib=4096, prefetch_workers=2,
+                     max_prefetch_memory_mib=512):
     """Build the COS source; its private callback consumes the mutable list.
 
     Payload entries are cleared after dense assembly; callers must not reuse
@@ -169,6 +170,8 @@ def _make_cos_source(records, source_rows, dates, assets, labels,
         factor_context_factory=factor_context_factory,
         max_object_mib=max_object_mib, max_tile_size=tile_size,
         max_source_memory_bytes=max_source_memory_mib * 1024**2,
+        prefetch_workers=prefetch_workers,
+        max_prefetch_memory_bytes=max_prefetch_memory_mib * 1024**2,
         # Allow one 128 MiB bounded Arrow result plus an equal-sized pandas
         # conversion per selected object. Arrow's cap is not a pandas/RSS hard
         # limit; this remains a conservative logical estimate only.
@@ -333,7 +336,8 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
                 manifest_sha, tile_size, max_object_mib, policy, selected_metrics,
                 *, expected_auto_cuda=False, prefetch_objects=False,
                 source_adapter="legacy", cos_prefetch="auto",
-                max_source_memory_mib=4096):
+                max_source_memory_mib=4096, cos_prefetch_workers=2,
+                max_prefetch_memory_mib=512):
     if source_adapter == "legacy":
         if cos_prefetch != "auto":
             raise ValueError("cos_prefetch applies only to source_adapter='cos'")
@@ -348,7 +352,9 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
             records, source_rows, dates, assets, labels, manifest_sha,
             tile_size, max_object_mib,
             prefetch=cos_prefetch,
-            max_source_memory_mib=max_source_memory_mib)
+            max_source_memory_mib=max_source_memory_mib,
+            prefetch_workers=cos_prefetch_workers,
+            max_prefetch_memory_mib=max_prefetch_memory_mib)
         prefetch_mode = source.prefetch_mode
     else:
         raise ValueError("source_adapter must be 'legacy' or 'cos'")
@@ -472,6 +478,10 @@ def run_gpu_tile_width_ab(args, selected_metrics):
                        "--max-total-mib", str(args.max_total_mib),
                        "--max-source-memory-mib",
                        str(getattr(args, "max_source_memory_mib", 4096)),
+                       "--cos-prefetch-workers",
+                       str(getattr(args, "cos_prefetch_workers", 2)),
+                       "--max-prefetch-memory-mib",
+                       str(getattr(args, "max_prefetch_memory_mib", 512)),
                        "--gpu-worker", "--output", str(output)]
             if getattr(args, "prefetch_objects", False):
                 command.append("--prefetch-objects")
@@ -623,6 +633,8 @@ def main():
     parser.add_argument("--max-total-mib", type=int, default=4096)
     parser.add_argument("--max-source-memory-mib", type=int, default=4096,
                         help="COS source memory budget in MiB (default: 4096)")
+    parser.add_argument("--cos-prefetch-workers", type=int, choices=(1, 2, 4), default=2)
+    parser.add_argument("--max-prefetch-memory-mib", type=int, default=512)
     parser.add_argument("--axis-index", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
@@ -630,6 +642,11 @@ def main():
         parser.error("--prefetch-objects is legacy-only; use --cos-prefetch for the COS adapter")
     if args.source_adapter == "legacy" and args.cos_prefetch != "auto":
         parser.error("--cos-prefetch requires --source-adapter cos")
+    if args.max_prefetch_memory_mib < 0:
+        parser.error("--max-prefetch-memory-mib must be nonnegative")
+    if args.source_adapter == "legacy" and (
+            args.cos_prefetch_workers != 2 or args.max_prefetch_memory_mib != 512):
+        parser.error("prefetch worker/budget options require --source-adapter cos")
     selected = ALL_SOURCE_METRICS if args.metrics == "all_source" else tuple(args.metrics.split(","))
     if (selected not in (DEFAULT_METRICS, PEARSON_SINGLE, ALL_SOURCE_METRICS)
             and not is_pearson_chain(selected)):
@@ -706,7 +723,9 @@ def main():
             args.tile_size, args.max_object_mib, policy, selected,
             expected_auto_cuda=True, prefetch_objects=args.prefetch_objects,
             source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
-            max_source_memory_mib=args.max_source_memory_mib)
+            max_source_memory_mib=args.max_source_memory_mib,
+            cos_prefetch_workers=args.cos_prefetch_workers,
+            max_prefetch_memory_mib=args.max_prefetch_memory_mib)
         receipt["preflight"] = gate
         receipt["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
         receipt["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
@@ -722,7 +741,9 @@ def main():
             args.tile_size, args.max_object_mib, policy, selected,
             prefetch_objects=args.prefetch_objects,
             source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
-            max_source_memory_mib=args.max_source_memory_mib)
+            max_source_memory_mib=args.max_source_memory_mib,
+            cos_prefetch_workers=args.cos_prefetch_workers,
+            max_prefetch_memory_mib=args.max_prefetch_memory_mib)
         cuda_receipt["preflight"] = cuda_gate
         direct_comparison = compare(auto, cuda, selected, expected_days=len(dates))
         route_pass = (receipt["auto_backend_reason"] ==
@@ -761,7 +782,9 @@ def main():
             manifest_sha, args.tile_size, args.max_object_mib, policy, selected,
             prefetch_objects=args.prefetch_objects,
             source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
-            max_source_memory_mib=args.max_source_memory_mib)
+            max_source_memory_mib=args.max_source_memory_mib,
+            cos_prefetch_workers=args.cos_prefetch_workers,
+            max_prefetch_memory_mib=args.max_prefetch_memory_mib)
         run["tile_size"] = args.tile_size
         run["preflight"] = gate
         scalar_metrics, observation_counts = {}, {}
@@ -804,7 +827,9 @@ def main():
             args.tile_size, args.max_object_mib, policy, selected,
             prefetch_objects=args.prefetch_objects,
             source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
-            max_source_memory_mib=args.max_source_memory_mib)
+            max_source_memory_mib=args.max_source_memory_mib,
+            cos_prefetch_workers=args.cos_prefetch_workers,
+            max_prefetch_memory_mib=args.max_prefetch_memory_mib)
         receipt["preflight"] = gate
         runs[backend] = (bundle, receipt)
     cpu, cpu_run = runs["cpu"]
@@ -824,7 +849,9 @@ def main():
             args.tile_size, args.max_object_mib, policy, selected,
             expected_auto_cuda=True, prefetch_objects=args.prefetch_objects,
             source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
-            max_source_memory_mib=args.max_source_memory_mib)
+            max_source_memory_mib=args.max_source_memory_mib,
+            cos_prefetch_workers=args.cos_prefetch_workers,
+            max_prefetch_memory_mib=args.max_prefetch_memory_mib)
         auto_run["preflight"] = gate
         auto_run["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
         auto_run["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
