@@ -53,6 +53,10 @@ class MeasuredCandidate:
     cpu_seconds: float
     cuda_seconds: float
     setup_seconds: float
+    batch_ref: object = None
+    label_ref: object = None
+    metrics: tuple[str, ...] = ()
+    request_digest: str | None = None
 
 @dataclass(frozen=True)
 class CandidateLookup:
@@ -82,7 +86,8 @@ def _prune(now):
 def register_candidate(cache, cache_key: str, *, status: str, winner: str,
                        calibration_record: Mapping, source_check: Mapping,
                        process_source_drifted: bool, calibration_policy,
-                       gpu_policy, descriptor: InputDescriptor, setup_seconds: float) -> bool:
+                       gpu_policy, descriptor: InputDescriptor, setup_seconds: float,
+                       batch=None, label=None, metrics=(), request_digest=None) -> bool:
     """Register trustworthy measured metadata only when savings pay setup."""
     if status not in ("calibrated", "cache_hit") or process_source_drifted:
         return False
@@ -107,9 +112,27 @@ def register_candidate(cache, cache_key: str, *, status: str, winner: str,
         cache_ref = weakref.ref(cache)
     except TypeError:
         return False
+    try:
+        batch_ref = weakref.ref(batch) if batch is not None else None
+        label_ref = weakref.ref(label) if label is not None else None
+    except TypeError:
+        batch_ref = label_ref = None
+    metrics = tuple(metrics)
+    digest_valid = (isinstance(request_digest, str) and len(request_digest) == 64)
+    if digest_valid:
+        try:
+            int(request_digest, 16)
+        except ValueError:
+            digest_valid = False
+    if not (batch_ref is not None and label_ref is not None and digest_valid
+            and metrics and all(isinstance(metric, str) for metric in metrics)):
+        batch_ref = label_ref = None
+        request_digest = None
+        metrics = ()
     policy, gpu = _freeze(calibration_policy), _freeze(gpu_policy)
     candidate = MeasuredCandidate(cache_ref, str(cache_key), policy, gpu, descriptor,
-        winner, float(cpu), float(cuda), float(setup_seconds))
+        winner, float(cpu), float(cuda), float(setup_seconds),
+        batch_ref, label_ref, metrics, request_digest)
     # One bounded candidate per input and GPU policy.  The candidate retains
     # its calibration policy so the exact cache key can be recomputed later.
     key, now = (descriptor, gpu), time.monotonic()

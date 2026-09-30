@@ -55,6 +55,8 @@ def evaluate_measured_auto(batch, label, *, metrics, options, gpu_policy,
         process_source_drifted=result.metadata.get("process_source_drifted", False),
         calibration_policy=options.policy, gpu_policy=effective_gpu_policy,
         descriptor=descriptor, setup_seconds=result.metadata.get("setup_seconds", 0),
+        batch=batch, label=label, metrics=metrics,
+        request_digest=result.metadata.get("request_digest"),
     )
     bundle = result.bundle
     metadata = dict(bundle.metadata)
@@ -117,12 +119,40 @@ def select_measured_auto_backend(batch, label, *, metrics, gpu_policy,
         started = time.monotonic()
         try:
             candidate_policy = CalibrationPolicy(**dict(candidate.calibration_policy))
-            identity = calibration_identity(
-                batch, label, metrics=metrics,
-                calibration_policy=candidate_policy,
-                gpu_policy=effective_gpu_policy,
-                started=started,
+            from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
+            from quant_evaluator.contracts.label_bundle import LabelBundle
+            exact_axes = (
+                type(batch.time_axis) is AxisRef
+                and type(batch.asset_axis) is AxisRef
+                and (label.asset_axis is None or type(label.asset_axis) is AxisRef)
             )
+            exact_objects = (
+                type(batch) is FactorBatch
+                and type(label) is LabelBundle
+                and exact_axes
+                and candidate.batch_ref is not None
+                and candidate.label_ref is not None
+                and candidate.batch_ref() is batch
+                and candidate.label_ref() is label
+                and candidate.metrics == tuple(metrics)
+                and candidate.request_digest is not None
+            )
+            if exact_objects:
+                from quant_evaluator.runtime import backend_calibration
+                identity = backend_calibration._calibration_identity_from_request_digest(
+                    batch, label, metrics=metrics,
+                    calibration_policy=candidate_policy,
+                    gpu_policy=effective_gpu_policy,
+                    request_digest=candidate.request_digest,
+                    started=started,
+                )
+            else:
+                identity = calibration_identity(
+                    batch, label, metrics=metrics,
+                    calibration_policy=candidate_policy,
+                    gpu_policy=effective_gpu_policy,
+                    started=started,
+                )
         except Exception:
             return {
                 "valid": False,

@@ -105,3 +105,26 @@ continues to identify the route and semantic config without volatile timing.
 This is a check after spending the validation time. A rejected call still paid
 that cost. The gate does not recover elapsed time, predict device contention,
 or establish that an unseen workload's first call uses its fastest backend.
+
+## Reuse immutable input identity
+
+When you pass the same live `FactorBatch` and `LabelBundle` objects after
+calibration, QE can reuse their recorded request digest. QE matches weak
+references by object identity and checks the metric tuple and exact contract
+and axis types. A new object or a contract subclass takes the full fingerprint
+path. The registry does not retain input arrays through strong references.
+Keep the inputs and calibration cache alive to use this path.
+
+QE still checks strict disk-source content, runtime identity, GPU admission,
+cache validity and the measured latency margin on each lookup. Digest reuse
+does not certify hot reloads or runtime monkeypatches. Source drift or device
+admission failure prevents adoption, as before.
+
+A bounded synthetic experiment used a `(128, 1024, 16)` float64 factor panel
+(16 MiB), one warm identity call and five alternating full/reuse repetitions
+on server-c. Both paths produced the same identity key. Median identity-check
+time was 0.040388 s for full hashing and 0.030589 s with digest reuse. Strict
+source mode and successful device admission remained active. This measures
+identity assembly, not complete evaluation latency or a real-COS workload.
+The focused 75-test run also checked repeated reuse, changed inputs, source
+drift, device failure, weak-reference collection and subclass fallback.

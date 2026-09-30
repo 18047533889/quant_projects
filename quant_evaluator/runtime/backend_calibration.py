@@ -224,12 +224,53 @@ def calibration_identity(batch: FactorBatch, label_bundle: LabelBundle, *, metri
             or len(set(metrics)) != len(metrics)):
         raise InvalidContractError("metrics must be nonempty unique metric ids")
 
-    global _PROCESS_SOURCE_DIGEST, _PROCESS_SOURCE_DRIFTED
     started = time.monotonic() if started is None else started
     request_digest = _request_fingerprint(batch, label_bundle, metrics)
     hash_seconds = time.monotonic() - started
     if hash_seconds >= calibration_policy.max_wall_time_seconds:
         raise TimeoutError("input fingerprint exceeded soft calibration time budget")
+    return _calibration_identity_from_request_digest(
+        batch, label_bundle, metrics=metrics,
+        calibration_policy=calibration_policy, gpu_policy=gpu_policy,
+        request_digest=request_digest, started=started,
+        input_fingerprint_seconds=hash_seconds,
+    )
+
+
+def _calibration_identity_from_request_digest(
+    batch: FactorBatch, label_bundle: LabelBundle, *, metrics,
+    calibration_policy: CalibrationPolicy,
+    gpu_policy: GPUExecutionPolicy,
+    request_digest: str,
+    started: float,
+    input_fingerprint_seconds: float = 0.0,
+) -> dict:
+    """Assemble identity after exact immutable-object reuse was proven.
+
+    This private helper does not establish input identity. The measured-auto
+    registry may call it only after matching its weak references to the exact
+    FactorBatch and LabelBundle objects captured during calibration. Source,
+    runtime, and device admission are recomputed below.
+    """
+    if not isinstance(batch, FactorBatch) or not isinstance(label_bundle, LabelBundle):
+        raise InvalidContractError("calibration requires FactorBatch and LabelBundle")
+    if not isinstance(calibration_policy, CalibrationPolicy):
+        raise InvalidContractError("calibration_policy must be CalibrationPolicy")
+    if not isinstance(gpu_policy, GPUExecutionPolicy):
+        raise InvalidContractError("gpu_policy must be GPUExecutionPolicy")
+    if isinstance(metrics, (str, bytes)):
+        raise InvalidContractError("metrics must be a sequence")
+    metrics = tuple(metrics)
+    if (not metrics or any(not isinstance(item, str) or not item for item in metrics)
+            or len(set(metrics)) != len(metrics)):
+        raise InvalidContractError("metrics must be nonempty unique metric ids")
+    if not isinstance(request_digest, str) or len(request_digest) != 64:
+        raise InvalidContractError("request digest must be a SHA-256 hex digest")
+    try:
+        int(request_digest, 16)
+    except ValueError as exc:
+        raise InvalidContractError("request digest must be a SHA-256 hex digest") from exc
+    global _PROCESS_SOURCE_DIGEST, _PROCESS_SOURCE_DRIFTED
     source_receipt = None
     if calibration_policy.source_check_mode == "stat_guarded":
         source_receipt = _SOURCE_IDENTITY.identify(strict_full_content=False)
@@ -264,7 +305,8 @@ def calibration_identity(batch: FactorBatch, label_bundle: LabelBundle, *, metri
     return {
         "request_digest": request_digest, "source_digest": source_digest,
         "runtime": runtime, "key": key, "source_metadata": source_metadata,
-        "input_fingerprint_seconds": hash_seconds, "setup_seconds": setup_seconds,
+        "input_fingerprint_seconds": input_fingerprint_seconds,
+        "setup_seconds": setup_seconds,
         "device_admission": admission_reason, "device_info": device_info,
         "process_source_drifted": _PROCESS_SOURCE_DRIFTED,
     }
@@ -465,6 +507,7 @@ def evaluate_calibrated_batch(
         bundle = _call_evaluate(evaluate_fn, batch, label_bundle, metrics, route, gpu_policy)
         return CalibratedEvaluation(bundle, {
             "status": "cache_hit", "cache_key": key, "winner": route,
+            "request_digest": request_digest,
             "source_check": source_metadata,
             "input_fingerprint_seconds": hash_seconds, "setup_seconds": setup_seconds,
             "device_admission": "pass" if admission_reason is None else admission_reason,
@@ -531,7 +574,8 @@ def evaluate_calibrated_batch(
     return CalibratedEvaluation(selected, {
         "status": "calibrated" if mismatch is None else "parity_failed_cpu_fallback",
         "source_check": source_metadata,
-        "cache_key": key, "winner": winner, "input_fingerprint_seconds": hash_seconds,
+        "cache_key": key, "winner": winner, "request_digest": request_digest,
+        "input_fingerprint_seconds": hash_seconds,
         "setup_seconds": setup_seconds, "device_admission": "pass",
         "calibration_record": record, "process_source_drifted": _PROCESS_SOURCE_DRIFTED,
         "cache_scope": "process_local",
