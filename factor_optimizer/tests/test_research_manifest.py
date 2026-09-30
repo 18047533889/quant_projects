@@ -50,7 +50,10 @@ def declared_source(tmp_path, monkeypatch):
         data = payload(uri)
         return dict(key=uri.removeprefix("cos://bucket/"), size=len(data),
                     etag=hashlib.md5(data).hexdigest())
+    real_run = subprocess.run
     def gateway(cmd, **kwargs):
+        if not cmd or cmd[0] != "test-gateway":
+            return real_run(cmd, **kwargs)
         transfers.append(cmd[2])
         Path(cmd[3]).write_bytes(payload(cmd[2]))
         return subprocess.CompletedProcess(cmd, 0, "", "")
@@ -59,6 +62,18 @@ def declared_source(tmp_path, monkeypatch):
     monkeypatch.setattr(subprocess, "run", gateway)
     yield store, record, transfers, tmp_path, heads
     engine.close()
+
+
+def test_gateway_fixture_leaves_unrelated_subprocesses_real(declared_source, tmp_path):
+    import sys
+
+    output = tmp_path / "native-process-output"
+    result = subprocess.run(
+        [sys.executable, "-c", "print('native')", str(output)],
+        capture_output=True, text=True, check=True,
+    )
+    assert result.stdout.strip() == "native"
+    assert not output.exists()
 
 
 def read(source):
