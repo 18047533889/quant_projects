@@ -39,9 +39,11 @@ def _load():
 
 def _payload(registry, infer_policy, classify_canonical, surface_summary) -> dict:
     rows: list[dict] = []
+    # catalog() deep-copies the sealed registry; take one coherent snapshot.
+    catalog_snapshot = registry.catalog()
     for canonical in registry.list_canonical():
-        operator = registry.get(canonical, mode="any")
-        meta = dict(registry.catalog().get(canonical) or {})
+        operator = registry.get(canonical, "pandas_numpy", mode="any") or registry.get(canonical, "polars", mode="any") or registry.get(canonical, mode="any")
+        meta = dict(catalog_snapshot.get(canonical) or {})
         from factor_engine.cleaned_operators.operator_spec import build_operator_spec
         spec = build_operator_spec(canonical)
         if operator is not None:

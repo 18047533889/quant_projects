@@ -49,6 +49,10 @@ def _json_default(o: Any) -> Any:
 
 def _json_clean(value: Any) -> Any:
     """Recursively convert non-JSON-native leaves (type objects, dataclasses)."""
+    from factor_engine.cleaned_operators.base import MISSING
+    if value is MISSING:
+        # Preserve required/default=None distinction used by runtime snapshots.
+        return {"declared": False}
     from dataclasses import asdict, is_dataclass
 
     if is_dataclass(value) and not isinstance(value, type):
@@ -96,7 +100,7 @@ def main() -> None:
     from factor_engine.cleaned_operators.operator_policy import infer_operator_policy
 
     for _canonical, _entry in operators.items():
-        _op = OperatorRegistry.get(_canonical, "pandas_numpy") or OperatorRegistry.get(_canonical)
+        _op = OperatorRegistry.get(_canonical, "pandas_numpy", mode="any") or OperatorRegistry.get(_canonical, "polars", mode="any") or OperatorRegistry.get(_canonical, mode="any")
         if _op is None:
             continue
         _policy = infer_operator_policy(_op, canonical=_canonical)
