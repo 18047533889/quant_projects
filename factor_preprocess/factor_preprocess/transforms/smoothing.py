@@ -463,6 +463,10 @@ def one_sided_iir_lowpass(
     recursion only ever consumes past observations, the output is
     prefix-invariant and strictly one-sided.
 
+    Any non-finite lagged observation (NaN or +/-Inf) resets the recursive
+    state and produces NaN for that output. The next finite lagged observation
+    seeds a fresh state.
+
     Parameters
     ----------
     values : pd.DataFrame
@@ -495,7 +499,7 @@ def one_sided_iir_lowpass(
         y = np.nan
         for i in range(n):
             x = lagged[i]
-            if np.isnan(x):
+            if not np.isfinite(x):
                 y = np.nan
                 out[i] = np.nan
                 continue
@@ -520,10 +524,14 @@ def kalman_local_level(
     One-sided Kalman local-level smoother.
 
     Model: ``x[t] = level[t] + v``, ``level[t] = level[t-1] + w`` with
+
     ``var(v)=measurement_noise`` and ``var(w)=process_noise``. A standard
     scalar Kalman filter runs forward only over the lagged observations
     (current observation excluded via ``shift(1)``). The filtered-level
     estimate at each step is prefix-invariant and strictly causal.
+
+    Any non-finite lagged observation (NaN or +/-Inf) resets both the level
+    estimate and its variance; the next finite observation starts a new run.
 
     Parameters
     ----------
@@ -564,7 +572,7 @@ def kalman_local_level(
         p = np.nan
         for i in range(n):
             z = lagged[i]
-            if np.isnan(z):
+            if not np.isfinite(z):
                 out[i] = np.nan
                 x_hat = np.nan
                 p = np.nan

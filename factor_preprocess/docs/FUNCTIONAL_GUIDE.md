@@ -98,7 +98,7 @@ one_sided_iir_lowpass 使用：
 y_t=(1-a)y_{t-1}+a x_{t-1}
 ```
 
-alpha 必须在 (0,1]；滞后 NaN 会重置状态。
+alpha 必须在 (0,1]；滞后 NaN 或 ±Inf 会重置状态，后续有限值重新播种。
 
 kalman_local_level 使用局部水平模型：
 
@@ -106,7 +106,7 @@ kalman_local_level 使用局部水平模型：
 l_t=l_{t-1}+w_t,\qquad x_t=l_t+v_t
 ```
 
-process_noise 可为 0，measurement_noise 必须大于 0；滤波消费滞后观测，缺失会重置状态。
+process_noise 可为 0，measurement_noise 必须大于 0；滤波消费滞后观测，非有限值会重置状态。
 
 event_decay 使用滞后事件序列：
 
