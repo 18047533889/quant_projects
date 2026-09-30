@@ -17,25 +17,12 @@ from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.contracts.factor_tile_source import (
     capture_factor_tile_source, read_validated_factor_tile,
 )
+from quant_evaluator.runtime.source_auto_evidence import (
+    SOURCE_AUTO_EVIDENCE_VERSION, SOURCE_AUTO_METRICS, select_source_auto_route,
+)
 
 
-_SOURCE_METRICS = frozenset({
-    "rank_ic", "rank_ic_series", "ic_ir", "ic_std", "ic_median",
-    "pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir",
-    "coverage", "quantile_spread", "quantile_monotonicity",
-    "daily_quantile_monotonicity_rate", "turnover", "factor_turnover_rate",
-})
-_RANK_PAIR = frozenset({"rank_ic", "rank_ic_series"})
-_F32_MIXED_THREE = frozenset({"rank_ic", "quantile_spread", "factor_turnover_rate"})
-_F8_SHAPE = (2586, 5461, 8)
-_F8_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
-_F32_SHAPE = (2586, 5461, 32)
-_F32_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
-_F61_SHAPE = (2586, 5461, 61)
-_F61_ALL_SOURCE_SHAPES = frozenset({_F61_SHAPE, (2400, 5000, 61)})
-_F61_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
-_F61_PEARSON_CHAIN = ("pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir")
-_F61_PEARSON_CHAIN_SET = frozenset(_F61_PEARSON_CHAIN)
+_SOURCE_METRICS = SOURCE_AUTO_METRICS
 
 
 def _source_request_fingerprint(metadata, label_bundle, metrics):
@@ -167,51 +154,30 @@ def evaluate_factor_source_batch(
     reason = "explicit"
     requested_tile_width = min(metadata.max_tile_size, max_tile_size or metadata.max_tile_size)
     effective_tile_size = requested_tile_width
+    evidence_id = None
+    evidence_artifacts = ()
+    evidence_status = None
     if backend == "auto":
         shape = (metadata.time_axis.size, metadata.asset_axis.size, len(metadata.factor_ids))
-        f61_mixed_three = (shape == _F61_SHAPE and len(selected) == 3
-                           and frozenset(selected) == _F32_MIXED_THREE
-                           and requested_tile_width >= 8)
-        # A tile cap is an upper bound: use the faster certified width within it.
-        tile_width = (16 if requested_tile_width >= 16 else 8) if f61_mixed_three else requested_tile_width
-        f8 = shape == _F8_SHAPE
-        f32 = shape == _F32_SHAPE and tile_width == 2
-        f32_mixed_three = (f32 and len(selected) == 3
-                           and frozenset(selected) == _F32_MIXED_THREE)
-        f61_pearson_single = (shape == _F61_SHAPE and selected == ("pearson_ic",)
-                              and requested_tile_width >= 16)
-        f61_pearson_chain = (shape == _F61_SHAPE and len(selected) == len(_F61_PEARSON_CHAIN)
-                             and frozenset(selected) == _F61_PEARSON_CHAIN_SET
-                             and requested_tile_width >= 16)
-        f61_all_source = (shape in _F61_ALL_SOURCE_SHAPES and len(selected) == len(_SOURCE_METRICS)
-                          and frozenset(selected) == _SOURCE_METRICS
-                          and requested_tile_width >= 16)
-        rank_pair = (f8 or f32) and len(selected) == 2 and frozenset(selected) == _RANK_PAIR
-        if (metadata.dtype == "float64"
-                and label_bundle.values.dtype == np.float64
-                and (rank_pair or f32_mixed_three or f61_mixed_three
-                     or f61_pearson_single or f61_pearson_chain or f61_all_source)):
+        evidence = select_source_auto_route(
+            shape=shape, metrics=selected, source_dtype=metadata.dtype,
+            label_dtype=str(label_bundle.values.dtype),
+            requested_tile_width=requested_tile_width,
+        )
+        if evidence is not None:
             from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
 
             if policy.precision_policy != GPUExecutionPolicy().precision_policy:
                 rejection = "gpu_precision_policy_outside_certified_range"
             else:
-                minimum = (_F61_MIN_EFFECTIVE_VRAM_BYTES if (f61_mixed_three or f61_pearson_single
-                                                            or f61_pearson_chain or f61_all_source) else
-                           _F32_MIN_EFFECTIVE_VRAM_BYTES if f32 else
-                           _F8_MIN_EFFECTIVE_VRAM_BYTES)
-                rejection = _auto_batch_cuda_rejection(policy, minimum)
+                rejection = _auto_batch_cuda_rejection(
+                    policy, evidence.minimum_effective_vram_bytes)
             route = "cuda_strict" if rejection is None else "cpu"
-            reason = (("bounded_f61_all_source_15_gpu_tile16" if f61_all_source else
-                       "bounded_f61_pearson_chain_gpu_tile16" if f61_pearson_chain else
-                       "bounded_f61_pearson_ic_gpu_tile16" if f61_pearson_single else
-                       ("bounded_f61_mixed_three_gpu_tile16" if tile_width == 16
-                        else "bounded_f61_mixed_three_gpu") if f61_mixed_three else
-                       "bounded_f32_mixed_three_gpu" if f32_mixed_three else
-                       "bounded_f32_rank_pair_gpu" if f32 else "bounded_f8_rank_pair_gpu")
-                      if rejection is None else rejection)
-            if (f61_pearson_single or f61_pearson_chain or f61_all_source) and rejection is None:
-                tile_width = 16
+            reason = evidence.legacy_reason if rejection is None else rejection
+            evidence_artifacts = evidence.evidence_artifacts
+            evidence_id = evidence.evidence_id
+            evidence_status = evidence.evidence_status
+            tile_width = evidence.effective_tile_width
         else:
             route, reason = "cpu", "source_shape_or_metrics_not_certified"
     if route == "cuda_strict":
@@ -233,7 +199,11 @@ def evaluate_factor_source_batch(
         "backend_requested": backend,
         "backend_used": backend_used,
         "auto_backend_reason": reason if backend == "auto" else None,
+        "auto_backend_evidence_id": evidence_id,
+        "auto_backend_evidence_version": SOURCE_AUTO_EVIDENCE_VERSION if evidence_id else None,
         "metric_backends": metric_backends,
+        "auto_backend_evidence_artifacts": evidence_artifacts,
+        "auto_backend_evidence_status": evidence_status,
         "gpu_device_ids": policy.device_ids,
         "gpu_precision_policy": policy.precision_policy.value,
         "max_vram_fraction": policy.max_vram_fraction,
@@ -254,8 +224,12 @@ def evaluate_factor_source_batch(
         "backend_requested": backend,
         "backend_used": backend_used,
         "auto_backend_reason": receipt["auto_backend_reason"],
+        "auto_backend_evidence_id": receipt["auto_backend_evidence_id"],
+        "auto_backend_evidence_version": receipt["auto_backend_evidence_version"],
         "metric_backends": metric_backends,
+        "auto_backend_evidence_artifacts": receipt["auto_backend_evidence_artifacts"],
         "execution_receipt": receipt,
+        "auto_backend_evidence_status": receipt["auto_backend_evidence_status"],
         "effective_max_tile_size": effective_tile_size,
         "source_snapshot_id": metadata.snapshot_id,
         "source_api": "columnar_factor_source_v1",

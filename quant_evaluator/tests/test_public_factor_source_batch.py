@@ -34,6 +34,25 @@ class Source:
         pass
 
 
+def _patch_source_evidence_shape(monkeypatch, family, shape):
+    """Inject small test shapes through the evidence registry itself."""
+    from dataclasses import replace
+    import importlib
+
+    registry = importlib.import_module("quant_evaluator.runtime.source_auto_evidence")
+    records = []
+    for item in registry.SOURCE_AUTO_EVIDENCE:
+        if family in item.evidence_id:
+            adjusted_shape = item.shape
+            if isinstance(adjusted_shape, frozenset):
+                adjusted_shape = frozenset({shape})
+            else:
+                adjusted_shape = shape
+            item = replace(item, shape=adjusted_shape)
+        records.append(item)
+    monkeypatch.setattr(registry, "SOURCE_AUTO_EVIDENCE", tuple(records))
+
+
 def _inputs():
     rng = np.random.default_rng(983)
     T, N, F = 8, 48, 5
@@ -84,6 +103,9 @@ def test_public_source_batch_matches_full_cpu(backend):
     assert result.factor_ids == batch.factor_ids
     assert result.metadata["source_snapshot_id"] == source.snapshot_id
     assert result.metadata["backend_used"] == ("cuda" if backend == "cuda_strict" else "cpu")
+    if backend == "auto":
+        assert result.metadata["execution_receipt"]["auto_backend_evidence_id"] is None
+        assert result.metadata["execution_receipt"]["auto_backend_evidence_version"] is None
     assert result.to_dict()["series_metrics"]["rank_ic_series"]
 
 
@@ -113,7 +135,7 @@ def test_auto_source_exact_profile_uses_cuda_when_gate_passes(monkeypatch):
     evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
 
     batch, label = _inputs()
-    monkeypatch.setattr(source_api, "_F8_SHAPE", batch.values.shape)
+    _patch_source_evidence_shape(monkeypatch, "f8", batch.values.shape)
     monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection", lambda *_: None)
     result = evaluate_factor_source_batch(
         Source(batch), label, metrics=("rank_ic", "rank_ic_series"))
@@ -129,7 +151,7 @@ def test_auto_source_resource_rejection_falls_back_to_cpu(monkeypatch):
     evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
 
     batch, label = _inputs()
-    monkeypatch.setattr(source_api, "_F8_SHAPE", batch.values.shape)
+    _patch_source_evidence_shape(monkeypatch, "f8", batch.values.shape)
     monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection",
                         lambda *_: "insufficient_cuda_memory")
     result = evaluate_factor_source_batch(
@@ -144,7 +166,7 @@ def test_auto_source_nondefault_precision_does_not_use_uncertified_gpu(monkeypat
     source_api = importlib.import_module("quant_evaluator.api.factor_source")
 
     batch, label = _inputs()
-    monkeypatch.setattr(source_api, "_F8_SHAPE", batch.values.shape)
+    _patch_source_evidence_shape(monkeypatch, "f8", batch.values.shape)
     policy = GPUExecutionPolicy(precision_policy=PrecisionPolicy.GPU_FP64)
     result = evaluate_factor_source_batch(
         Source(batch), label, metrics=("rank_ic", "rank_ic_series"), gpu_policy=policy)
@@ -242,11 +264,7 @@ def test_auto_f61_all_source_profile_uses_cuda_only_with_certified_gate(monkeypa
     source_api = importlib.import_module("quant_evaluator.api.factor_source")
     evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
     batch, label = _inputs()
-    assert source_api._F61_ALL_SOURCE_SHAPES == frozenset({
-        (2586, 5461, 61), (2400, 5000, 61),
-    })
-    monkeypatch.setattr(source_api, "_F61_SHAPE", batch.values.shape)
-    monkeypatch.setattr(source_api, "_F61_ALL_SOURCE_SHAPES", frozenset({batch.values.shape}))
+    _patch_source_evidence_shape(monkeypatch, "f61", batch.values.shape)
     admitted = []
     monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection",
                         lambda _policy, minimum: admitted.append(minimum) or None)
@@ -286,8 +304,8 @@ def test_auto_f61_all_source_profile_uses_cuda_only_with_certified_gate(monkeypa
     assert rejected.metadata["backend_used"] == "cpu"
     assert rejected.metadata["auto_backend_reason"] == "insufficient_cuda_memory"
 
-    monkeypatch.setattr(source_api, "_F61_ALL_SOURCE_SHAPES",
-                        frozenset({(batch.values.shape[0] + 1, *batch.values.shape[1:])}))
+    _patch_source_evidence_shape(
+        monkeypatch, "f61", (batch.values.shape[0] + 1, *batch.values.shape[1:]))
     candidate = Source(batch)
     candidate.max_tile_size = 32
     rejected = evaluate_factor_source_batch(
@@ -328,7 +346,7 @@ def test_auto_source_f32_pair_uses_cuda_only_for_certified_tile_width(monkeypatc
     source_api = importlib.import_module("quant_evaluator.api.factor_source")
     evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
     batch, label = _inputs()
-    monkeypatch.setattr(source_api, "_F32_SHAPE", batch.values.shape)
+    _patch_source_evidence_shape(monkeypatch, "f32", batch.values.shape)
     monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection", lambda *_: None)
     metrics = ("rank_ic", "rank_ic_series")
     cuda = evaluate_factor_source_batch(Source(batch), label, metrics=metrics, backend="auto")
@@ -358,7 +376,7 @@ def test_auto_source_f32_mixed_three_uses_cuda_under_exact_gate(monkeypatch):
     source_api = importlib.import_module("quant_evaluator.api.factor_source")
     evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
     batch, label = _inputs()
-    monkeypatch.setattr(source_api, "_F32_SHAPE", batch.values.shape)
+    _patch_source_evidence_shape(monkeypatch, "f32", batch.values.shape)
     admitted = []
     monkeypatch.setattr(
         evaluator, "_auto_batch_cuda_rejection",
@@ -382,7 +400,7 @@ def test_auto_source_f32_mixed_three_fails_closed_outside_gate(monkeypatch):
     source_api = importlib.import_module("quant_evaluator.api.factor_source")
     evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
     batch, label = _inputs()
-    monkeypatch.setattr(source_api, "_F32_SHAPE", batch.values.shape)
+    _patch_source_evidence_shape(monkeypatch, "f32", batch.values.shape)
     monkeypatch.setattr(
         evaluator, "_auto_batch_cuda_rejection",
         lambda *_: pytest.fail("uncertified request must not probe CUDA admission"),
@@ -418,7 +436,7 @@ def test_auto_source_f61_mixed_three_uses_cuda_under_exact_gate(monkeypatch):
     source_api = importlib.import_module("quant_evaluator.api.factor_source")
     evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
     batch, label = _inputs()
-    monkeypatch.setattr(source_api, "_F61_SHAPE", batch.values.shape)
+    _patch_source_evidence_shape(monkeypatch, "f61", batch.values.shape)
     admitted = []
     monkeypatch.setattr(
         evaluator, "_auto_batch_cuda_rejection",
@@ -450,7 +468,7 @@ def test_auto_source_f61_selects_certified_width_within_cap(monkeypatch, cap, ex
         np.tile(seed.values, (1, 1, 5))[:, :, :21],
         validity=np.tile(seed.validity, (1, 1, 5))[:, :, :21],
     )
-    monkeypatch.setattr(source_api, "_F61_SHAPE", batch.values.shape)
+    _patch_source_evidence_shape(monkeypatch, "f61", batch.values.shape)
     monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection", lambda *_: None)
     source = Source(batch)
     source.max_tile_size = 32
@@ -474,7 +492,7 @@ def test_auto_source_f61_pearson_single_uses_certified_tile_and_fails_closed(mon
     source_api = importlib.import_module("quant_evaluator.api.factor_source")
     evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
     batch, label = _inputs()
-    monkeypatch.setattr(source_api, "_F61_SHAPE", batch.values.shape)
+    _patch_source_evidence_shape(monkeypatch, "f61", batch.values.shape)
     admitted = []
     monkeypatch.setattr(
         evaluator, "_auto_batch_cuda_rejection",
@@ -518,7 +536,7 @@ def test_auto_source_f61_pearson_chain_exact_route_and_negative_cases(monkeypatc
     source_api = importlib.import_module("quant_evaluator.api.factor_source")
     evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
     batch, label = _inputs()
-    monkeypatch.setattr(source_api, "_F61_SHAPE", batch.values.shape)
+    _patch_source_evidence_shape(monkeypatch, "f61", batch.values.shape)
     gates = []
     monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection",
                         lambda _policy, minimum: gates.append(minimum) or None)
@@ -592,7 +610,7 @@ def test_auto_source_f61_mixed_three_fails_closed_outside_gate(monkeypatch):
     source_api = importlib.import_module("quant_evaluator.api.factor_source")
     evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
     batch, label = _inputs()
-    monkeypatch.setattr(source_api, "_F61_SHAPE", batch.values.shape)
+    _patch_source_evidence_shape(monkeypatch, "f61", batch.values.shape)
     monkeypatch.setattr(
         evaluator, "_auto_batch_cuda_rejection",
         lambda *_: pytest.fail("uncertified request must not probe CUDA admission"),

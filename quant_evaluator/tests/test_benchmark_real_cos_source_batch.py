@@ -1,4 +1,6 @@
 import json
+import gc
+import weakref
 from types import SimpleNamespace
 
 import numpy as np
@@ -206,12 +208,15 @@ def test_cos_builder_uses_registered_descriptors_and_existing_make_tile_semantic
 
     _, asset_axis, _, label, _, _ = _fixtures()
     dates = pd.date_range("2024-01-01", periods=3, freq="B")
-    records = (("f0", "cos://test/path/f0.parquet", "0" * 64, 12),)
+    records = (("f0", "cos://test/path/f0.parquet", "0" * 64, 12),
+               ("f1", "cos://test/path/f1.parquet", "1" * 64, 12))
     source_assets = ("A.SZ", "B.SH", "C.SZ", "D.SH")
     frame = pd.DataFrame({"timestamp": dates,
                           **{name: [1.0, 2.0, 3.0] for name in source_assets}})
     axis_frame = frame.set_index("timestamp")
     row = (*records[0], "etag-f0", harness.tiles.axis_hash(axis_frame))
+    row1 = (*records[1], "etag-f1", harness.tiles.axis_hash(axis_frame))
+    rows = (row, row1)
     contexts = []
 
     class Engine:
@@ -243,24 +248,49 @@ def test_cos_builder_uses_registered_descriptors_and_existing_make_tile_semantic
     monkeypatch.setattr(harness.CosFactorTileSource, "from_data_access",
                         classmethod(fake_from_data_access))
     captured_tile = {}
-    monkeypatch.setattr(harness.tiles, "make_tile",
-        lambda stream, expected, received_dates, received_assets, received_labels:
-            captured_tile.update(stream=list(stream), expected=expected,
-                                 dates=received_dates, assets=received_assets,
-                                 labels=received_labels) or "batch")
+    source_frames = [frame.copy(), frame.copy()]
+    source_frame_refs = [weakref.ref(item) for item in source_frames]
+    payloads = [VerifiedFactorPayload(item, {"source_etag": etag})
+                for item, etag in zip(source_frames, ("etag-f0", "etag-f1"))]
+    del source_frames
+
+    def consume_stream(stream, expected, received_dates, received_assets,
+                       received_labels):
+        iterator = iter(stream)
+        first = next(iterator)
+        assert first[1] == rows[0]
+        pd.testing.assert_frame_equal(first[0], axis_frame, check_freq=False)
+        first = None
+        second = next(iterator)
+        gc.collect()
+        # The original payload DataFrame for factor 0 must be collectible
+        # before the second factor is consumed, not merely on callback return.
+        assert payloads[0] is None
+        assert source_frame_refs[0]() is None
+        assert second[1] == rows[1]
+        pd.testing.assert_frame_equal(second[0], axis_frame, check_freq=False)
+        second = None
+        with pytest.raises(StopIteration):
+            next(iterator)
+        captured_tile.update(expected=expected, dates=received_dates,
+                             assets=received_assets, labels=received_labels)
+        return "batch"
+
+    monkeypatch.setattr(harness.tiles, "make_tile", consume_stream)
 
     source = harness._make_cos_source(
-        records, (row,), dates, asset_axis.values, label, "a" * 64, 1, 16,
+        records, rows, dates, asset_axis.values, label, "a" * 64, 2, 16,
         prefetch="auto")
     batch = captured["make_tile"](
-        0, 1, [BoundCosFactor("f0", row[1], row[2], row[3])],
-        [VerifiedFactorPayload(frame, {"source_etag": "etag-f0"})])
+        0, 2, [BoundCosFactor(*records[0]), BoundCosFactor(*records[1])],
+        payloads)
     assert batch == "batch"
-    assert captured_tile["expected"] == (row,)
-    assert captured_tile["stream"][0][1] == row
-    pd.testing.assert_frame_equal(captured_tile["stream"][0][0], axis_frame,
-                                  check_freq=False)
-    assert captured["prefetch"] == "auto" and captured["max_tile_size"] == 1
+    assert payloads == [None, None]
+    assert source_frame_refs[0]() is None and source_frame_refs[1]() is None
+    assert captured_tile["expected"] == rows
+    assert captured["prefetch"] == "auto" and captured["max_tile_size"] == 2
+    assert captured["max_source_memory_bytes"] == 4096 * 1024**2
+    assert captured["extra_assembly_bytes_per_cell"] > 0
     assert [ctx.store.engine.kwargs for ctx in contexts] == [{"threads": 1}, {"threads": 2}]
     for context in contexts:
         context.close()
@@ -401,6 +431,7 @@ def test_preflight_enforces_ram_and_bounded_disk_headroom(monkeypatch, tmp_path)
     monkeypatch.setattr(harness, "available_ram_bytes",
                         lambda: 40 * 1024**3)
     assert harness.preflight(128, 4096)["pass"] is True
+    assert harness.preflight(128, 4096, 37 * 1024)["pass"] is False
 
     monkeypatch.setattr(harness, "available_ram_bytes",
                         lambda: 31 * 1024**3)

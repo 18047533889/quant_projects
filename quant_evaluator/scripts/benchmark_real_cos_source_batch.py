@@ -22,7 +22,8 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 
-from quant_evaluator.api.factor_source import _F61_ALL_SOURCE_SHAPES, evaluate_factor_source_batch
+from quant_evaluator.api.factor_source import evaluate_factor_source_batch
+from quant_evaluator.runtime.source_auto_evidence import SOURCE_F61_ALL_SHAPES as _F61_ALL_SOURCE_SHAPES
 from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
 from quant_evaluator.contracts.factor_tile_source import FactorTile
 from quant_evaluator.contracts.factor_batch import AxisRef
@@ -62,25 +63,35 @@ def available_ram_bytes() -> int:
                     if line.startswith("MemAvailable:"))
 
 
-def preflight(max_object_mib: int, max_total_mib: int) -> dict:
+def preflight(max_object_mib: int, max_total_mib: int,
+              max_source_memory_mib: int = 4096) -> dict:
     available = available_ram_bytes()
+    # Reserve four GiB beyond the logical source cap for the OS/runtime and
+    # allocator overhead. This is admission control, not an RSS guarantee.
+    required_ram = max(MIN_AVAILABLE_RAM_BYTES,
+                       (max_source_memory_mib + 4096) * 1024**2)
     cache_path = tiles.cos_cache_root()
     while not cache_path.exists():
         cache_path = cache_path.parent
     disk_free = shutil.disk_usage(cache_path).free
     disk_required = (max_total_mib + 1024) * 1024**2
     return {
-        "pass": available >= MIN_AVAILABLE_RAM_BYTES and disk_free >= disk_required,
+        "pass": available >= required_ram and disk_free >= disk_required,
         "available_ram_bytes": available,
-        "minimum_available_ram_bytes": MIN_AVAILABLE_RAM_BYTES,
+        "minimum_available_ram_bytes": required_ram,
         "cos_cache_disk_free_bytes": disk_free,
         "required_disk_bytes": disk_required,
     }
 
 
 def _make_cos_source(records, source_rows, dates, assets, labels,
-                     manifest_sha, tile_size, max_object_mib, *, prefetch):
-    """Use the production adapter with the research descriptors used by this harness."""
+                     manifest_sha, tile_size, max_object_mib, *, prefetch,
+                     max_source_memory_mib=4096):
+    """Build the COS source; its private callback consumes the mutable list.
+
+    Payload entries are cleared after dense assembly; callers must not reuse
+    the payload list after invoking this callback.
+    """
     from data_access.core.engine import DuckDBEngine
     from data_access.registry.loader import DatasetRegistry
     from data_access.store import DataAccessStore
@@ -120,26 +131,30 @@ def _make_cos_source(records, source_rows, dates, assets, labels,
         expected = source_rows[start:end]
         if len(payloads) != len(expected) or len(bound_records) != len(expected):
             raise ValueError("COS source did not return the selected tile width")
-        stream = []
-        for record, item, row in zip(bound_records, payloads, expected):
-            identity = item.identity
-            frame = item.payload
-            if "timestamp" not in frame.columns:
-                raise ValueError("factor timestamp missing after bound COS read")
-            frame = frame.set_index("timestamp")
-            frame.index = pd.to_datetime(frame.index).normalize()
-            if frame.index.has_duplicates or frame.columns.has_duplicates:
-                raise ValueError("duplicate factor axis")
-            frame = frame.loc[:, [column for column in frame
-                                  if column.endswith((".SZ", ".SH"))]].sort_index()
-            if ((record.factor_id, record.uri, record.sha256, record.size_bytes)
-                    != (row[0], row[1], row[2], row[3])):
-                raise ValueError("COS bound identity differs from the axis preflight")
-            if (identity.get("source_etag") != row[4]
-                    or tiles.axis_hash(frame) != row[5]):
-                raise ValueError("COS source ETag or panel axes changed after preflight")
-            stream.append((frame, row))
-        return tiles.make_tile(stream, expected, dates, assets, labels)
+        def consuming_stream():
+            for index, (record, row) in enumerate(zip(bound_records, expected)):
+                item = payloads[index]
+                identity = item.identity
+                frame = item.payload
+                if "timestamp" not in frame.columns:
+                    raise ValueError("factor timestamp missing after bound COS read")
+                frame = frame.set_index("timestamp")
+                frame.index = pd.to_datetime(frame.index).normalize()
+                if frame.index.has_duplicates or frame.columns.has_duplicates:
+                    raise ValueError("duplicate factor axis")
+                frame = frame.loc[:, [column for column in frame
+                                      if column.endswith((".SZ", ".SH"))]].sort_index()
+                if ((record.factor_id, record.uri, record.sha256, record.size_bytes)
+                        != (row[0], row[1], row[2], row[3])):
+                    raise ValueError("COS bound identity differs from the axis preflight")
+                if (identity.get("source_etag") != row[4]
+                        or tiles.axis_hash(frame) != row[5]):
+                    raise ValueError("COS source ETag or panel axes changed after preflight")
+                yield frame, row
+                # make_tile drops the yielded frame before requesting another.
+                del frame, item, identity
+                payloads[index] = None
+        return tiles.make_tile(consuming_stream(), expected, dates, assets, labels)
 
     return CosFactorTileSource.from_data_access(
         factor_ids=tuple(row[0] for row in records), time_axis=AxisRef(
@@ -153,6 +168,13 @@ def _make_cos_source(records, source_rows, dates, assets, labels,
         manifest_context_factory=manifest_context_factory,
         factor_context_factory=factor_context_factory,
         max_object_mib=max_object_mib, max_tile_size=tile_size,
+        max_source_memory_bytes=max_source_memory_mib * 1024**2,
+        # Allow one 128 MiB bounded Arrow result plus an equal-sized pandas
+        # conversion per selected object. Arrow's cap is not a pandas/RSS hard
+        # limit; this remains a conservative logical estimate only.
+        extra_assembly_bytes_per_cell=(
+            (256 * 1024**2 + len(dates) * len(assets) - 1)
+            // max(1, len(dates) * len(assets))),
         prefetch=prefetch)
 
 
@@ -310,7 +332,8 @@ def compare(cpu, cuda, selected_metrics, *, expected_days=None) -> dict:
 def run_backend(backend, records, source_rows, dates, assets, labels,
                 manifest_sha, tile_size, max_object_mib, policy, selected_metrics,
                 *, expected_auto_cuda=False, prefetch_objects=False,
-                source_adapter="legacy", cos_prefetch="auto"):
+                source_adapter="legacy", cos_prefetch="auto",
+                max_source_memory_mib=4096):
     if source_adapter == "legacy":
         if cos_prefetch != "auto":
             raise ValueError("cos_prefetch applies only to source_adapter='cos'")
@@ -324,7 +347,8 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         source = _make_cos_source(
             records, source_rows, dates, assets, labels, manifest_sha,
             tile_size, max_object_mib,
-            prefetch=cos_prefetch)
+            prefetch=cos_prefetch,
+            max_source_memory_mib=max_source_memory_mib)
         prefetch_mode = source.prefetch_mode
     else:
         raise ValueError("source_adapter must be 'legacy' or 'cos'")
@@ -446,6 +470,8 @@ def run_gpu_tile_width_ab(args, selected_metrics):
                        "--days", str(args.days), "--assets", str(args.assets),
                        "--max-object-mib", str(args.max_object_mib),
                        "--max-total-mib", str(args.max_total_mib),
+                       "--max-source-memory-mib",
+                       str(getattr(args, "max_source_memory_mib", 4096)),
                        "--gpu-worker", "--output", str(output)]
             if getattr(args, "prefetch_objects", False):
                 command.append("--prefetch-objects")
@@ -595,6 +621,8 @@ def main():
     parser.add_argument("--assets", type=int, default=5500)
     parser.add_argument("--max-object-mib", type=int, default=128)
     parser.add_argument("--max-total-mib", type=int, default=4096)
+    parser.add_argument("--max-source-memory-mib", type=int, default=4096,
+                        help="COS source memory budget in MiB (default: 4096)")
     parser.add_argument("--axis-index", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
@@ -638,7 +666,10 @@ def main():
         reference = certified_cuda_hashes(args.auto_references, selected,
                                           tiles.MANIFEST_SHA256)
 
-    initial_preflight = preflight(args.max_object_mib, args.max_total_mib)
+    if args.max_source_memory_mib < 1:
+        parser.error("--max-source-memory-mib must be positive")
+    initial_preflight = preflight(args.max_object_mib, args.max_total_mib,
+                                  args.max_source_memory_mib)
     print(json.dumps({"preflight": initial_preflight}), flush=True)
     if not initial_preflight["pass"]:
         raise SystemExit("insufficient RAM or COS cache disk headroom")
@@ -667,19 +698,20 @@ def main():
     if reference is not None:
         if reference["shape"] != [len(dates), len(assets), len(records)]:
             raise ValueError("auto request shape differs from certified A/B coverage")
-        gate = preflight(args.max_object_mib, args.max_total_mib)
+        gate = preflight(args.max_object_mib, args.max_total_mib, args.max_source_memory_mib)
         if not gate["pass"]:
             raise SystemExit("RAM or COS cache disk headroom fell below preflight before auto run")
         auto, receipt = run_backend(
             "auto", records, source_rows, dates, assets, labels, manifest_sha,
             args.tile_size, args.max_object_mib, policy, selected,
             expected_auto_cuda=True, prefetch_objects=args.prefetch_objects,
-            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch)
+            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
+            max_source_memory_mib=args.max_source_memory_mib)
         receipt["preflight"] = gate
         receipt["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
         receipt["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
         reference_comparison = verify_auto_against_reference(auto, selected, reference)
-        cuda_gate = preflight(args.max_object_mib, args.max_total_mib)
+        cuda_gate = preflight(args.max_object_mib, args.max_total_mib, args.max_source_memory_mib)
         if not cuda_gate["pass"]:
             raise SystemExit("RAM or COS cache disk headroom fell below preflight before explicit CUDA run")
         rejection = _auto_batch_cuda_rejection(policy, MIN_EFFECTIVE_VRAM_BYTES)
@@ -689,7 +721,8 @@ def main():
             "cuda_strict", records, source_rows, dates, assets, labels, manifest_sha,
             args.tile_size, args.max_object_mib, policy, selected,
             prefetch_objects=args.prefetch_objects,
-            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch)
+            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
+            max_source_memory_mib=args.max_source_memory_mib)
         cuda_receipt["preflight"] = cuda_gate
         direct_comparison = compare(auto, cuda, selected, expected_days=len(dates))
         route_pass = (receipt["auto_backend_reason"] ==
@@ -720,14 +753,15 @@ def main():
         return
 
     if args.gpu_worker:
-        gate = preflight(args.max_object_mib, args.max_total_mib)
+        gate = preflight(args.max_object_mib, args.max_total_mib, args.max_source_memory_mib)
         if not gate["pass"]:
             raise SystemExit("RAM or COS cache disk headroom fell below preflight")
         result, run = run_backend(
             "cuda_strict", records, source_rows, dates, assets, labels,
             manifest_sha, args.tile_size, args.max_object_mib, policy, selected,
             prefetch_objects=args.prefetch_objects,
-            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch)
+            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
+            max_source_memory_mib=args.max_source_memory_mib)
         run["tile_size"] = args.tile_size
         run["preflight"] = gate
         scalar_metrics, observation_counts = {}, {}
@@ -758,7 +792,7 @@ def main():
     runs = {}
     order = ("cpu", "cuda_strict") if args.run_order == "cpu-first" else ("cuda_strict", "cpu")
     for backend in order:
-        gate = preflight(args.max_object_mib, args.max_total_mib)
+        gate = preflight(args.max_object_mib, args.max_total_mib, args.max_source_memory_mib)
         if not gate["pass"]:
             raise SystemExit(f"RAM or COS cache disk headroom fell below preflight before {backend} run")
         if backend == "cuda_strict":
@@ -769,7 +803,8 @@ def main():
             backend, records, source_rows, dates, assets, labels, manifest_sha,
             args.tile_size, args.max_object_mib, policy, selected,
             prefetch_objects=args.prefetch_objects,
-            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch)
+            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
+            max_source_memory_mib=args.max_source_memory_mib)
         receipt["preflight"] = gate
         runs[backend] = (bundle, receipt)
     cpu, cpu_run = runs["cpu"]
@@ -781,14 +816,15 @@ def main():
     auto_run = None
     auto_comparison = None
     if args.verify_auto and comparison["pass"]:
-        gate = preflight(args.max_object_mib, args.max_total_mib)
+        gate = preflight(args.max_object_mib, args.max_total_mib, args.max_source_memory_mib)
         if not gate["pass"]:
             raise SystemExit("RAM or COS cache disk headroom fell below preflight before auto run")
         auto, auto_run = run_backend(
             "auto", records, source_rows, dates, assets, labels, manifest_sha,
             args.tile_size, args.max_object_mib, policy, selected,
             expected_auto_cuda=True, prefetch_objects=args.prefetch_objects,
-            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch)
+            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
+            max_source_memory_mib=args.max_source_memory_mib)
         auto_run["preflight"] = gate
         auto_run["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
         auto_run["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
