@@ -274,7 +274,9 @@ def _compare_metric_values(left, right, *, rtol, atol, path):
                 return mismatch
         return None
     if left != right:
-        if isinstance(left, (float, int, np.number)) and isinstance(right, (float, int, np.number)):
+        # Counts and discrete metadata must match exactly, even at large values.
+        # Only floating/complex measurements are eligible for numerical tolerance.
+        if isinstance(left, (float, np.floating, complex, np.complexfloating)):
             return None if np.isclose(left, right, rtol=rtol, atol=atol, equal_nan=True) else f"{path}: values differ"
         return f"{path}: values differ"
     return None

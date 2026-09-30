@@ -129,3 +129,20 @@ def test_admitted_public_cpu_cuda_bundles_and_cached_route(monkeypatch):
     assert second.bundle is not first.bundle
     assert first.bundle.artifacts["pearson_ic_series"].values.shape == (64, 8)
     assert c._parity_mismatch(first.bundle, second.bundle, policy) is None
+
+
+@pytest.mark.parametrize("scalar_type", [int, np.int64, np.uint64])
+def test_large_integer_counts_are_compared_exactly(scalar_type):
+    left = scalar_type(10**12)
+    right = scalar_type(10**12 + 1)
+    assert c._compare_metric_values(left, right, rtol=1e-10, atol=1e-12,
+                                    path="sample_count") is not None
+    assert c._compare_metric_values(left, scalar_type(10**12), rtol=1e-10,
+                                    atol=1e-12, path="sample_count") is None
+
+
+def test_float_measurements_still_use_configured_tolerance():
+    assert c._compare_metric_values(1.0, 1.0 + 1e-12, rtol=1e-10,
+                                    atol=1e-12, path="measurement") is None
+    assert c._compare_metric_values(1.0, 1.1, rtol=1e-10,
+                                    atol=1e-12, path="measurement") is not None
