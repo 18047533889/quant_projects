@@ -38,7 +38,7 @@ METRICS = DEFAULT_METRICS
 ALLOWED_BATCHES = (DEFAULT_METRICS, RANK_CHAIN, QUANTILE_CHAIN)
 PEARSON_SINGLE_METRICS = tuple((metric,) for metric in PEARSON_CHAIN)
 F32_SINGLE_METRICS = (RANK_SERIES_SINGLE, QUANTILE_FULL_SINGLE,
-                      QUANTILE_DAILY_SINGLE, *PEARSON_SINGLE_METRICS)
+                      QUANTILE_DAILY_SINGLE, TURNOVER_SINGLE, *PEARSON_SINGLE_METRICS)
 MANIFEST_SHA256 = "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864"
 _BATCH = None
 _LABELS = None
@@ -489,7 +489,8 @@ def main():
                          "F2 permits rank_ic_series alone, F13 permits factor_turnover_rate "
                          "or rank_ic_positive_ratio alone, or their exact rank-IC/positive-ratio pair, "
                          "and F32 permits rank_ic_series, quantile_returns_full, "
-                         "quantile_returns_daily or a Pearson metric alone, or the exact Pearson chain")
+                         "quantile_returns_daily, factor_turnover_rate or a Pearson metric alone, "
+                         "or the exact Pearson chain")
     if args.factors == 2 and requested not in (RANK_SERIES_SINGLE, RANK_CHAIN, QUANTILE_CHAIN):
         parser.error("F2 runs require rank_ic_series alone or an exact rank/quantile chain")
     if args.factors == 13 and requested not in (
@@ -499,7 +500,7 @@ def main():
     if args.factors == 24 and requested not in (RANK_CHAIN, QUANTILE_CHAIN, DEFAULT_METRICS):
         parser.error("F24 runs require the exact rank-chain, quantile-chain, or mixed-three request")
     if args.factors == 32 and requested not in (*F32_SINGLE_METRICS, PEARSON_CHAIN):
-        parser.error("F32 runs require a certified singleton (rank, quantile or Pearson) "
+        parser.error("F32 runs require a certified singleton (rank, quantile, turnover or Pearson) "
                      "or the exact Pearson chain")
     if args.verify_auto_reference:
         if args.run:
@@ -512,8 +513,12 @@ def main():
             verify_auto_reference=args.verify_auto_reference)
     except ValueError as exc:
         parser.error(str(exc))
-    preflight_request = requested in (PEARSON_CHAIN, QUANTILE_DAILY_SINGLE,
-                                      *PEARSON_SINGLE_METRICS)
+    f32_turnover_request = args.factors == 32 and requested == TURNOVER_SINGLE
+    if f32_turnover_request and args.run and args.output is None:
+        parser.error("F32 factor_turnover_rate requires --output to persist the receipt")
+    preflight_request = (requested in (PEARSON_CHAIN, QUANTILE_DAILY_SINGLE,
+                                       *PEARSON_SINGLE_METRICS)
+                         or f32_turnover_request)
     if args.run and not ((args.factors == 32 and preflight_request) or f24_mixed_request):
         parser.error("--run applies only to a preflight-approved F32 request "
                      "or the exact F24 mixed-three request")
@@ -537,6 +542,7 @@ def main():
                               "note": "pass --run to start the F32 "
                                       + ("Pearson chain" if requested == PEARSON_CHAIN else
                                          "Pearson singleton" if requested in PEARSON_SINGLE_METRICS else
+                                         "factor turnover" if f32_turnover_request else
                                          "daily quantile")
                                       + " benchmark"}), flush=True)
             return
