@@ -356,3 +356,74 @@ def test_data_access_builder_relies_on_bound_manifest_uri_sha_and_status(
             source.read_tile(0, 1)
         assert source._closed
         assert closes == ["factor", "manifest"]
+
+
+
+def test_source_memory_bound_accounts_assembly_and_validity_copies():
+    records = tuple(BoundCosFactor(f"f{i}", f"cos://b/{i}", "a" * 64, 1)
+                    for i in range(2))
+    times = AxisRef("time", "int64", 2, np.array([1, 2], dtype=np.int64))
+    assets = AxisRef("asset", "str", 2, np.array(["A", "B"]))
+    args = dict(
+        records=records, time_axis=times, asset_axis=assets, dtype="float64",
+        manifest_snapshot={}, manifest_sha256="m" * 64, max_tile_size=2,
+        read_factor=lambda *_: None, verify_manifest=lambda *_: None,
+        make_tile=lambda *_: None, prefetch="off",
+    )
+    # 3 value panels + raw/frozen bool masks, with no extra callback scratch.
+    expected = 3 * (2 * 2 * 8 * 2) + (2 * 2 * 2 * 2)
+    with pytest.raises(MemoryError, match="tile assembly"):
+        CosFactorTileSource(**args, max_source_memory_bytes=expected - 1)
+    source = CosFactorTileSource(**args, max_source_memory_bytes=expected)
+    assert source.estimated_assembly_bytes == expected
+    source.close()
+
+    with_extra = CosFactorTileSource(
+        **args, max_source_memory_bytes=expected + 7 * 2 * 2 * 2,
+        extra_assembly_bytes_per_cell=7)
+    assert with_extra.estimated_assembly_bytes == expected + 7 * 2 * 2 * 2
+    with_extra.close()
+
+
+def test_f61_tile16_assembly_bound_does_not_fit_four_gibibytes():
+    records = tuple(BoundCosFactor(f"f{i}", f"cos://b/{i}", "a" * 64, 1)
+                    for i in range(16))
+    times = AxisRef("time", "int64", 2586, np.arange(2586, dtype=np.int64))
+    assets = AxisRef("asset", "int64", 5461, np.arange(5461, dtype=np.int64))
+    with pytest.raises(MemoryError, match="tile assembly"):
+        CosFactorTileSource(
+            records=records, time_axis=times, asset_axis=assets, dtype="float64",
+            manifest_snapshot={}, manifest_sha256="m" * 64, max_tile_size=16,
+            read_factor=lambda *_: None, verify_manifest=lambda *_: None,
+            make_tile=lambda *_: None, prefetch="auto",
+            max_source_memory_bytes=4 * 1024**3)
+
+
+
+@pytest.mark.parametrize("extra", [True, -1, 1.5])
+def test_extra_assembly_bound_must_be_nonnegative_integer(extra):
+    times = AxisRef("time", "int64", 1, np.array([1], dtype=np.int64))
+    assets = AxisRef("asset", "int64", 1, np.array([1], dtype=np.int64))
+    with pytest.raises(ValueError, match="extra_assembly_bytes_per_cell"):
+        CosFactorTileSource(
+            records=(BoundCosFactor("f", "cos://b/f", "a" * 64, 1),),
+            time_axis=times, asset_axis=assets, dtype="float64",
+            manifest_snapshot={}, manifest_sha256="m" * 64, max_tile_size=1,
+            read_factor=lambda *_: None, verify_manifest=lambda *_: None,
+            make_tile=lambda *_: None, extra_assembly_bytes_per_cell=extra)
+
+
+def test_source_budget_uses_available_factors_not_unused_tile_capacity():
+    times = AxisRef("time", "int64", 2, np.arange(2, dtype=np.int64))
+    assets = AxisRef("asset", "int64", 3, np.arange(3, dtype=np.int64))
+    expected = 6 * (3 * 8 + 2)
+    with CosFactorTileSource(
+        records=(BoundCosFactor("f", "cos://b/f", "a" * 64, 1),),
+        time_axis=times, asset_axis=assets, dtype="float64",
+        manifest_snapshot={}, manifest_sha256="m" * 64, max_tile_size=32,
+        read_factor=lambda *_: None, verify_manifest=lambda *_: None,
+        make_tile=lambda *_: None, prefetch="off",
+        max_source_memory_bytes=expected,
+    ) as source:
+        assert source.estimated_assembly_bytes == expected
+        assert source.estimated_peak_source_bytes == expected

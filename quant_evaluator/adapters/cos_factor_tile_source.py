@@ -89,7 +89,11 @@ class CosFactorTileSource:
     Prefer ``from_data_access`` for the production path. It binds and verifies
     the manifest through explicitly injected bound-manifest helpers and creates
     one DataAccess store/engine context per read. QE does not depend on the
-    library that provides those helpers.
+    library that provides those helpers. Memory admission is a conservative
+    logical-payload estimate for source frames, mutable dense assembly,
+    immutable FactorBatch ownership, validity copies, bounded prefetch, and
+    declared callback scratch; it is not a hard RSS guarantee because Python
+    and pandas allocator/object overhead is outside the model.
     """
 
     def __init__(self, *, records: Sequence[BoundCosFactor], time_axis,
@@ -99,6 +103,7 @@ class CosFactorTileSource:
                  make_tile: Callable, prefetch: str = "auto",
                  max_source_memory_bytes: int = 4 * 1024**3,
                  max_prefetch_memory_bytes: int = 512 * 1024**2,
+                 extra_assembly_bytes_per_cell: int = 0,
                  _close_controller: Callable[[], None] | None = None):
         if prefetch not in {"off", "on", "auto"}:
             raise ValueError("prefetch must be 'off', 'on' or 'auto'")
@@ -110,6 +115,8 @@ class CosFactorTileSource:
             raise ValueError("max_source_memory_bytes must be positive")
         if type(max_prefetch_memory_bytes) is not int or max_prefetch_memory_bytes < 0:
             raise ValueError("max_prefetch_memory_bytes must be nonnegative")
+        if type(extra_assembly_bytes_per_cell) is not int or extra_assembly_bytes_per_cell < 0:
+            raise ValueError("extra_assembly_bytes_per_cell must be a nonnegative integer")
         if not callable(read_factor) or not callable(verify_manifest) or not callable(make_tile):
             raise TypeError("read_factor, verify_manifest and make_tile must be callable")
         normalized_dtype = np.dtype(dtype)
@@ -145,21 +152,36 @@ class CosFactorTileSource:
         self.tile_read_timings: list[dict[str, object]] = []
         self.max_source_memory_bytes = max_source_memory_bytes
         self.max_prefetch_memory_bytes = max_prefetch_memory_bytes
+        self.extra_assembly_bytes_per_cell = extra_assembly_bytes_per_cell
         self._controller_close = _close_controller
-        panel_bytes = int(time_axis.size) * int(asset_axis.size) * normalized_dtype.itemsize
+        cells_per_factor = int(time_axis.size) * int(asset_axis.size)
+        panel_bytes = cells_per_factor * normalized_dtype.itemsize
+        tile_factors = min(max_tile_size, len(records))
+        # During the standard dense materializer, source frames coexist with a
+        # mutable assembled array and FactorBatch's immutable value owner (3
+        # panel copies). The validity mask and its immutable owner add 2 bytes
+        # per cell. Custom make_tile callbacks must declare any additional
+        # simultaneously-live scratch via extra_assembly_bytes_per_cell. This
+        # is a logical payload estimate, not an RSS guarantee: allocator and
+        # pandas object/index overhead are outside the bound.
+        estimated_assembly = (
+            3 * panel_bytes * tile_factors
+            + 2 * cells_per_factor * tile_factors
+            + extra_assembly_bytes_per_cell * cells_per_factor * tile_factors
+        )
         # DataAccess research reads cap Arrow results at 128 MiB. Allow an
         # additional equal-sized pandas conversion buffer per active worker.
         estimated_prefetch = 2 * 256 * 1024**2 if self.prefetch_enabled else 0
-        # Includes raw input panels, the dense FactorBatch, and bounded reads.
-        estimated_bytes = panel_bytes * (2 * max_tile_size) + estimated_prefetch
+        estimated_bytes = estimated_assembly + estimated_prefetch
         if estimated_prefetch > max_prefetch_memory_bytes:
             if self._executor is not None:
                 self._executor.shutdown(wait=True, cancel_futures=True)
             raise MemoryError("bounded prefetch exceeds max_prefetch_memory_bytes")
         if estimated_bytes > max_source_memory_bytes:
-            raise MemoryError("tile plus bounded prefetch exceeds max_source_memory_bytes")
+            raise MemoryError("tile assembly plus bounded prefetch exceeds max_source_memory_bytes")
         self._executor = (ThreadPoolExecutor(max_workers=2, thread_name_prefix="qe-cos-prefetch")
                           if self.prefetch_enabled else None)
+        self.estimated_assembly_bytes = estimated_assembly
         self.estimated_peak_source_bytes = estimated_bytes
         self.estimated_prefetch_bytes = estimated_prefetch
 
@@ -191,13 +213,17 @@ class CosFactorTileSource:
                          max_object_mib: int = 128, max_tile_size: int = 16,
                          max_source_memory_bytes: int = 4 * 1024**3,
                          max_prefetch_memory_bytes: int = 512 * 1024**2,
+                         extra_assembly_bytes_per_cell: int = 0,
                          prefetch: str = "auto", expected_manifest_sha256: str | None = None):
         """Build a COS source using caller-injected bound-manifest helpers.
 
         The context factories provide explicit registered dataset descriptors;
         each factor context owns a thread-local store/engine and cleanup method.
         The selected factor URI, SHA and byte count are taken from the captured
-        manifest, never accepted as caller-authored identity claims.
+        manifest, never accepted as caller-authored identity claims. The source
+        budget accounts for source frames, dense assembly, immutable FactorBatch
+        copies, validity mask copies, and bounded prefetch. Custom tile builders
+        with extra simultaneous scratch must declare it per T*N*factor cell.
         """
         if not isinstance(bound_manifest_helpers, BoundManifestHelpers):
             raise TypeError("bound_manifest_helpers must be BoundManifestHelpers")
@@ -273,6 +299,7 @@ class CosFactorTileSource:
                 make_tile=make_tile, prefetch=prefetch,
                 max_source_memory_bytes=max_source_memory_bytes,
                 max_prefetch_memory_bytes=max_prefetch_memory_bytes,
+                extra_assembly_bytes_per_cell=extra_assembly_bytes_per_cell,
                 _close_controller=close_controller)
         except BaseException:
             close_controller()
