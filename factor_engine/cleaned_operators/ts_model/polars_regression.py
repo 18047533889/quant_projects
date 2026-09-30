@@ -87,6 +87,13 @@ def _register(name: str, description: str, params: list[str], fn):
                 return _call_pandas_delegate(name, args, kwargs)
             return fn(*args, **kwargs)
 
+    if name not in exact_delegates:
+        # Bind the real native path separately: no dormant delegate branch
+        # should remain in this implementation's physical callable.
+        def _native_calculate_series(self, *args, **kwargs):
+            return fn(*args, **kwargs)
+        _TsPolars._calculate_series = _native_calculate_series
+        _TsPolars._contract_callable = staticmethod(fn)
     return _TsPolars
 
 
