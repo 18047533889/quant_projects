@@ -39,3 +39,19 @@ route while recomputing a fresh bundle. These are small-request validation
 timings, not large-batch speed evidence. Fingerprinting/device/source checks
 still cost time (38.3 ms setup on this cache hit); calibration is not a promise
 of lower end-to-end latency than an already known explicit backend.
+
+## Source-check cost and assurance
+
+`CalibrationPolicy(source_check_mode="strict_full_content")` remains the default:
+every check reads all Python source content, with bounded traversal and byte limits.
+For a process in which files are only changed through ordinary filesystem edits,
+`source_check_mode="stat_guarded"` reuses file hashes under device/inode/mode/size/
+mtime/ctime guards and reads only changed files. It is explicitly **not** protection
+against edits retaining every guard (including same-size writes within one coarse
+filesystem timestamp tick), privileged metadata restoration, hot reloads or monkeypatches.
+Both modes identify files on disk, not loaded Python semantics; observed source
+drift permanently disables calibration-cache reads/writes until process restart.
+Modes share the same digest scheme, but use separate policy-keyed route records.
+Forked processes receive a new source-identity nonce. Metadata `source_check` reports
+the selected assurance and, for guarded checks, the files/bytes actually hashed.
+This option does not change default `evaluate(..., backend="auto")` routing.

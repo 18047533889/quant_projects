@@ -15,6 +15,7 @@ import hashlib
 import importlib.metadata
 import json
 import platform
+from pathlib import Path
 import secrets
 import threading
 import time
@@ -27,6 +28,7 @@ from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
 from quant_evaluator.contracts.errors import InvalidContractError
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
+from quant_evaluator.runtime.source_identity import ProcessSourceIdentity
 
 
 @dataclass(frozen=True)
@@ -38,8 +40,11 @@ class CalibrationPolicy:
     warmups: int = 1
     relative_tolerance: float = 1e-10
     absolute_tolerance: float = 1e-12
+    source_check_mode: str = "strict_full_content"
 
     def __post_init__(self):
+        if self.source_check_mode not in ("strict_full_content", "stat_guarded"):
+            raise ValueError("source_check_mode must be strict_full_content or stat_guarded")
         if not np.isfinite(self.max_wall_time_seconds) or self.max_wall_time_seconds <= 0:
             raise ValueError("max_wall_time_seconds must be positive and finite")
         if type(self.repetitions) is not int or not 1 <= self.repetitions <= 9:
@@ -96,6 +101,7 @@ class CalibratedEvaluation:
 _PROCESS_CACHE_NONCE = secrets.token_hex(16)
 _PROCESS_SOURCE_DIGEST = None
 _PROCESS_SOURCE_DRIFTED = False
+_SOURCE_IDENTITY = ProcessSourceIdentity(Path(__file__).resolve().parent.parent)
 
 
 def _hash_array(hasher, array: np.ndarray, *, chunk_bytes: int = 4 * 1024**2) -> None:
@@ -155,19 +161,8 @@ def _request_fingerprint(batch: FactorBatch, label: LabelBundle, metrics) -> str
 
 
 def _source_fingerprint() -> str:
-    """Hash current QE Python source, so code changes invalidate calibration."""
-    from pathlib import Path
-    import quant_evaluator
-
-    root = Path(quant_evaluator.__file__).parent
-    digest = hashlib.sha256(b"QE-source-tree-v1\0")
-    for path in sorted(root.rglob("*.py")):
-        relative = path.relative_to(root).as_posix()
-        digest.update(relative.encode("utf-8") + b"\0")
-        with path.open("rb") as stream:
-            for block in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(block)
-    return digest.hexdigest()
+    """Bounded full-content identity; does not identify loaded Python code."""
+    return _SOURCE_IDENTITY.identify(strict_full_content=True).digest
 
 
 def _runtime_fingerprint(device_info: dict | None) -> dict:
@@ -355,7 +350,14 @@ def evaluate_calibrated_batch(
     hash_seconds = time.monotonic() - started
     if hash_seconds >= calibration_policy.max_wall_time_seconds:
         raise TimeoutError("input fingerprint exceeded soft calibration time budget")
-    source_digest = _source_fingerprint()
+    source_receipt = None
+    if calibration_policy.source_check_mode == "stat_guarded":
+        source_receipt = _SOURCE_IDENTITY.identify(strict_full_content=False)
+        source_digest = source_receipt.digest
+        if source_receipt.drifted:
+            _PROCESS_SOURCE_DRIFTED = True
+    else:
+        source_digest = _source_fingerprint()
     if _PROCESS_SOURCE_DIGEST is None:
         _PROCESS_SOURCE_DIGEST = source_digest
     elif source_digest != _PROCESS_SOURCE_DIGEST:
@@ -365,7 +367,7 @@ def evaluate_calibrated_batch(
     admission_reason, device_info = _device_admission(gpu_policy)
     runtime = _runtime_fingerprint(device_info)
     key_payload = {"request": request_digest, "source": source_digest,
-                   "process_nonce": _PROCESS_CACHE_NONCE,
+                   "process_nonce": (_PROCESS_CACHE_NONCE, _SOURCE_IDENTITY.process_nonce),
                    "runtime": runtime, "metrics": metrics,
                    "gpu_policy": {field.name: getattr(gpu_policy, field.name)
                                   for field in fields(gpu_policy)},
@@ -375,6 +377,12 @@ def evaluate_calibrated_batch(
     key = hashlib.sha256(json.dumps(key_payload, sort_keys=True, default=str,
                                     separators=(",", ":")).encode()).hexdigest()
     setup_seconds = time.monotonic() - started
+    source_metadata = {
+        "mode": calibration_policy.source_check_mode,
+        "identity_scope": "disk_source_not_loaded_python",
+        "files_hashed": None if source_receipt is None else source_receipt.files_hashed,
+        "bytes_hashed": None if source_receipt is None else source_receipt.bytes_hashed,
+    }
     # Injectable evaluators are test seams, not stable cache namespaces.
     cache_record = (cache.get(key) if admission_reason is None and not injected_evaluator
                     and not _PROCESS_SOURCE_DRIFTED else None)
@@ -385,6 +393,7 @@ def evaluate_calibrated_batch(
         bundle = _call_evaluate(evaluate_fn, batch, label_bundle, metrics, route, gpu_policy)
         return CalibratedEvaluation(bundle, {
             "status": "cache_hit", "cache_key": key, "winner": route,
+            "source_check": source_metadata,
             "input_fingerprint_seconds": hash_seconds, "setup_seconds": setup_seconds,
             "device_admission": "pass" if admission_reason is None else admission_reason,
             "calibration_record": cache_record,
@@ -394,6 +403,7 @@ def evaluate_calibrated_batch(
         bundle = _call_evaluate(evaluate_fn, batch, label_bundle, metrics, "cpu", gpu_policy)
         return CalibratedEvaluation(bundle, {
             "status": "cpu_only_device_admission", "winner": "cpu",
+            "source_check": source_metadata,
             "device_admission": admission_reason, "setup_seconds": setup_seconds,
         })
 
@@ -448,6 +458,7 @@ def evaluate_calibrated_batch(
     selected = last_results[winner] if mismatch is None else cpu_result
     return CalibratedEvaluation(selected, {
         "status": "calibrated" if mismatch is None else "parity_failed_cpu_fallback",
+        "source_check": source_metadata,
         "cache_key": key, "winner": winner, "input_fingerprint_seconds": hash_seconds,
         "setup_seconds": setup_seconds, "device_admission": "pass",
         "calibration_record": record, "process_source_drifted": _PROCESS_SOURCE_DRIFTED,
