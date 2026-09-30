@@ -2,11 +2,12 @@
 Factor Assets adapter - optional integration with factor_assets package.
 
 Provides protocol-based boundary for converting FactorSet to preprocessing input.
-Fails gracefully if factor_assets is not available.
+The provider is injected by the caller; FactorAssets does not define a default
+provider or own the factor-value read contract.
 """
 
+from collections.abc import Sequence
 from typing import Protocol, Dict, Any, Optional
-from datetime import datetime
 import numpy as np
 
 
@@ -82,12 +83,24 @@ class FactorSetProvider(Protocol):
         ...
 
 
+def _validated_factor_ids(value: Any, source: str) -> list[str]:
+    """Require an ordered sequence of usable factor ID strings."""
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes, bytearray)):
+        raise ValueError(f"{source} factor_ids must be a sequence of strings")
+    factor_ids = list(value)
+    if any(not isinstance(factor_id, str) for factor_id in factor_ids):
+        raise ValueError(f"{source} factor_ids must contain only strings")
+    if any(not factor_id for factor_id in factor_ids):
+        raise ValueError(f"{source} factor_ids cannot contain empty strings")
+    return factor_ids
+
+
 class FactorAssetsAdapter:
     """
     Adapter for factor_assets package integration.
 
     Converts FactorSet objects to preprocessing-ready input arrays.
-    Raises OptionalDependencyMissing if factor_assets is not installed.
+    Requires a caller-supplied provider; use :func:`create_adapter` for checks.
     """
 
     def __init__(self, provider: FactorSetProvider):
@@ -128,11 +141,15 @@ class FactorAssetsAdapter:
         """
         # Validate the factor set
         if not self._provider.validate_factor_set(factor_set):
-            raise ValueError(f"Invalid factor set: {factor_set.set_id}")
+            set_id = getattr(factor_set, "set_id", "<unknown>")
+            raise ValueError(f"Invalid factor set: {set_id}")
+        factor_ids = _validated_factor_ids(
+            getattr(factor_set, "factor_ids", None), "FactorSet"
+        )
+        if len(set(factor_ids)) != len(factor_ids):
+            raise ValueError("FactorSet contains duplicate factor_ids")
 
         # Extract factor IDs from the set
-        factor_ids = list(factor_set.factor_ids)
-
         # Use universe and frequency from the set if available
         universe = getattr(factor_set, 'universe_ref', None)
 
@@ -143,6 +160,47 @@ class FactorAssetsAdapter:
             end_date=end_date,
             universe=universe,
         )
+
+        # The third values axis is positional: a provider returning the right
+        # shape with IDs in a different order would silently attach each
+        # factor's values to the wrong identity downstream.
+        if not isinstance(result, dict):
+            raise ValueError("factor batch result must be a dictionary")
+        if "factor_ids" not in result:
+            raise ValueError("factor batch result is missing factor_ids")
+        returned_ids = _validated_factor_ids(result["factor_ids"], "factor batch result")
+        if len(set(returned_ids)) != len(returned_ids):
+            raise ValueError("factor batch result contains duplicate factor_ids")
+        if returned_ids != factor_ids:
+            missing = [factor_id for factor_id in factor_ids if factor_id not in returned_ids]
+            unexpected = [factor_id for factor_id in returned_ids if factor_id not in factor_ids]
+            if missing or unexpected:
+                raise ValueError(
+                    "factor batch result factor_ids mismatch: "
+                    f"missing={missing}, unexpected={unexpected}"
+                )
+            raise ValueError(
+                "factor batch result factor_ids order does not match requested order"
+            )
+
+        values = np.asarray(result.get("values"))
+        if values.ndim != 3:
+            raise ValueError(
+                "factor batch values must have shape (n_times, n_assets, n_factors)"
+            )
+        if values.shape[2] != len(factor_ids):
+            raise ValueError(
+                "factor batch values factor axis does not match factor_ids: "
+                f"{values.shape[2]} != {len(factor_ids)}"
+            )
+        for axis, key in ((0, "dates"), (1, "assets")):
+            if key not in result:
+                raise ValueError(f"factor batch result is missing {key}")
+            if values.shape[axis] != len(result[key]):
+                raise ValueError(
+                    f"factor batch values axis {axis} does not match {key}: "
+                    f"{values.shape[axis]} != {len(result[key])}"
+                )
 
         # Add set-level metadata
         result['set_metadata'] = {
@@ -187,10 +245,9 @@ class FactorAssetsAdapter:
 
 
 def check_factor_assets_available() -> bool:
-    """Check whether the factor_assets integration can construct its default provider."""
+    """Return whether the optional ``factor_assets`` package is importable."""
     try:
         import factor_assets
-        from factor_preprocess.adapters._factor_assets_impl import DefaultFactorSetProvider
     except ImportError:
         return False
     return True
@@ -198,16 +255,18 @@ def check_factor_assets_available() -> bool:
 
 def create_adapter(provider: Optional[FactorSetProvider] = None) -> FactorAssetsAdapter:
     """
-    Create a FactorAssetsAdapter instance.
+    Create an adapter from an injected provider; there is no default provider.
 
     Args:
-        provider: Optional custom provider; if None, tries to create default
+        provider: Provider implementing :class:`FactorSetProvider`.
 
     Returns:
         FactorAssetsAdapter instance
 
     Raises:
-        OptionalDependencyMissing: If factor_assets not available and no provider given
+        OptionalDependencyMissing: If ``factor_assets`` is not importable and
+            no provider is supplied.
+        ValueError: If ``factor_assets`` is available but no provider is supplied.
     """
     if provider is not None:
         return FactorAssetsAdapter(provider)
@@ -218,10 +277,10 @@ def create_adapter(provider: Optional[FactorSetProvider] = None) -> FactorAssets
             feature_name="FactorSet integration"
         )
 
-    # Import and create default provider
-    from factor_preprocess.adapters._factor_assets_impl import DefaultFactorSetProvider
-    provider = DefaultFactorSetProvider()
-    return FactorAssetsAdapter(provider)
+    raise ValueError(
+        "A FactorSetProvider must be supplied; factor_assets does not expose a "
+        "default batch-value provider. Configure and inject a provider explicitly."
+    )
 
 
 __all__ = [

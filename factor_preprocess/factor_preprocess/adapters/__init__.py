@@ -16,9 +16,9 @@ All adapters are optional and fail gracefully if dependencies are missing.
 ```python
 from factor_preprocess.adapters import factor_assets, data_access
 
-# Check availability
+# Check package availability; inject a FactorSetProvider explicitly
 if factor_assets.check_factor_assets_available():
-    adapter = factor_assets.create_adapter()
+    adapter = factor_assets.create_adapter(provider=my_factor_set_provider)
     data = adapter.load_factor_set(my_factor_set)
 
 # Or handle gracefully

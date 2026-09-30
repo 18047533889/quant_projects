@@ -373,7 +373,7 @@ Factor Assets adapter - optional integration with factor_assets package.
 
 ### OptionalDependencyMissing
 
-[实际实现](../factor_preprocess/adapters/factor_assets.py#L13)。
+[实际实现](../factor_preprocess/adapters/factor_assets.py#L14)。
 
 Raised when an optional dependency is required but not available.
 
@@ -381,7 +381,7 @@ Raised when an optional dependency is required but not available.
 
 ### OptionalDependencyMissing.__init__
 
-[实际实现](../factor_preprocess/adapters/factor_assets.py#L16)。
+[实际实现](../factor_preprocess/adapters/factor_assets.py#L17)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -389,7 +389,7 @@ Raised when an optional dependency is required but not available.
 
 ### FactorSetProvider
 
-[实际实现](../factor_preprocess/adapters/factor_assets.py#L25)。
+[实际实现](../factor_preprocess/adapters/factor_assets.py#L26)。
 
 Protocol for factor set providers.
 
@@ -397,7 +397,7 @@ Protocol for factor set providers.
 
 ### FactorSetProvider.get_factor_values
 
-[实际实现](../factor_preprocess/adapters/factor_assets.py#L33)。
+[实际实现](../factor_preprocess/adapters/factor_assets.py#L34)。
 
 Retrieve factor values for a single factor.
 
@@ -407,7 +407,7 @@ Retrieve factor values for a single factor.
 
 ### FactorSetProvider.get_factor_batch
 
-[实际实现](../factor_preprocess/adapters/factor_assets.py#L52)。
+[实际实现](../factor_preprocess/adapters/factor_assets.py#L53)。
 
 Retrieve factor values for multiple factors efficiently.
 
@@ -417,7 +417,7 @@ Retrieve factor values for multiple factors efficiently.
 
 ### FactorSetProvider.validate_factor_set
 
-[实际实现](../factor_preprocess/adapters/factor_assets.py#L72)。
+[实际实现](../factor_preprocess/adapters/factor_assets.py#L73)。
 
 Validate that a FactorSet is well-formed and factors exist.
 
@@ -427,13 +427,13 @@ Validate that a FactorSet is well-formed and factors exist.
 
 ### FactorAssetsAdapter
 
-[实际实现](../factor_preprocess/adapters/factor_assets.py#L85)。
+[实际实现](../factor_preprocess/adapters/factor_assets.py#L98)。
 
 Adapter for factor_assets package integration.
 
 ### FactorAssetsAdapter.__init__
 
-[实际实现](../factor_preprocess/adapters/factor_assets.py#L93)。
+[实际实现](../factor_preprocess/adapters/factor_assets.py#L106)。
 
 Initialize adapter with a provider.
 
@@ -441,7 +441,7 @@ Initialize adapter with a provider.
 
 ### FactorAssetsAdapter.load_factor_set
 
-[实际实现](../factor_preprocess/adapters/factor_assets.py#L102)。
+[实际实现](../factor_preprocess/adapters/factor_assets.py#L115)。
 
 Load factor values from a FactorSet.
 
@@ -451,7 +451,7 @@ Load factor values from a FactorSet.
 
 ### FactorAssetsAdapter.load_single_factor
 
-[实际实现](../factor_preprocess/adapters/factor_assets.py#L159)。
+[实际实现](../factor_preprocess/adapters/factor_assets.py#L217)。
 
 Load a single factor by ID.
 
@@ -461,9 +461,9 @@ Load a single factor by ID.
 
 ### check_factor_assets_available
 
-[实际实现](../factor_preprocess/adapters/factor_assets.py#L189)。
+[实际实现](../factor_preprocess/adapters/factor_assets.py#L247)。
 
-Check whether the factor_assets integration can construct its default provider.
+Return whether the optional ``factor_assets`` package is importable.
 
 参数：`()`。
 
@@ -471,9 +471,9 @@ Check whether the factor_assets integration can construct its default provider.
 
 ### create_adapter
 
-[实际实现](../factor_preprocess/adapters/factor_assets.py#L199)。
+[实际实现](../factor_preprocess/adapters/factor_assets.py#L256)。
 
-Create a FactorAssetsAdapter instance.
+Create an adapter from an injected provider; there is no default provider.
 
 参数：`(provider: Optional[FactorSetProvider]=None)`。
 
@@ -5183,11 +5183,11 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | 模块 | SHA-256 |
 |---|---|
 | `factor_preprocess/__init__.py` | `f5a80d33d15bec2ea64c588986c0351f5270612e9cc6c7e8061a03825c224197` |
-| `factor_preprocess/adapters/__init__.py` | `ba37f7ae44f9dc1984ca159fb788ed0159503ea7e324a4325ff31f5f97db6d6a` |
+| `factor_preprocess/adapters/__init__.py` | `eff79270b478c56c556183f1f13745050eac022d83082976c4443f875b9b9fb3` |
 | `factor_preprocess/adapters/_data_access_impl.py` | `81d88b87b3a14b93afae6a975ee2d852d28f81b115d099d248387b681270e1ea` |
 | `factor_preprocess/adapters/data_access.py` | `4bb432d31734d8b16062d1e36010082d829388ca60916c4e0dd0db6b8992e71f` |
 | `factor_preprocess/adapters/ewma_full_replay.py` | `f5d653976ab97b8581d299dddbd49494e65639cba164ee4cea722f30a74d5fb5` |
-| `factor_preprocess/adapters/factor_assets.py` | `490a6d44a56e71ac9b039f871837c410af9b3f78ab2dd4fd02df95b0eed4aa9b` |
+| `factor_preprocess/adapters/factor_assets.py` | `75478a4f2c9cc80b7c30aacf729fe33ab722cfc2be7dfb63f11e3f562b92e878` |
 | `factor_preprocess/adapters/fe_operator.py` | `9ec69415707feac974eed219f15910f22cde9650aac57b00873df1c3bbf977b2` |
 | `factor_preprocess/adapters/fitted_recipe.py` | `f6e770d3b0ad1090b52ce527169005b4ca7f06b58b06462c35db06e9c2c42e2e` |
 | `factor_preprocess/backends/__init__.py` | `764cb2de6fa732845a8040a4910996e1c0c19c210e659b9d9688100589ced7cc` |
