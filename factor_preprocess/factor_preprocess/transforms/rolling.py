@@ -270,7 +270,8 @@ def rolling_zscore(
     pd.Series
         Rolling z-score: (current - rolling_mean) / rolling_std.
         First `window` observations per asset are NaN.
-        Zero std produces NaN.
+        Division follows IEEE semantics: 0/0 produces NaN, while a nonzero
+        numerator over zero std produces a signed infinity.
 
     Notes
     -----

@@ -170,3 +170,51 @@ def lagged_std(frame: pd.DataFrame, *, window: int, min_periods: int | None = No
         frame, window=window, min_periods=min_periods, asset_col=asset_col,
         time_col=time_col, value_col=value_col, reducer="std", ddof=ddof,
     )
+def lagged_zscore(frame: pd.DataFrame, *, window: int, min_periods: int | None = None,
+                  ddof: float = 1, asset_col: str = "asset_id",
+                  time_col: str = "date", value_col: str = "value") -> pd.Series:
+    """Normalize current values by prior finite-only mean and std in one collect."""
+    window, min_periods = _validate_rolling_params(window, min_periods)
+    missing = {asset_col, time_col, value_col}.difference(frame.columns)
+    if missing:
+        raise ValueError(f"long panel is missing columns: {sorted(missing)}")
+    if not isinstance(ddof, (numbers.Real, np.bool_)):
+        raise TypeError("an integer is required")
+    ddof = int(ddof)
+    output = np.full(len(frame), np.nan, dtype=float)
+    if frame.empty:
+        return pd.Series(output, index=frame.index, name=value_col)
+    assets = frame[asset_col].reset_index(drop=True)
+    observed = assets.notna().to_numpy()
+    if not observed.any():
+        return pd.Series(output, index=frame.index, name=value_col)
+    times = frame[time_col].reset_index(drop=True)
+    if times.iloc[np.flatnonzero(observed)].isna().any():
+        raise ValueError("per-asset dates must be non-null and monotone increasing")
+    dates = frame.loc[observed, [asset_col, time_col]].reset_index(drop=True)
+    if not dates.groupby(asset_col, sort=False, observed=True)[time_col].is_monotonic_increasing.all():
+        raise ValueError("per-asset dates must be monotone increasing")
+    group_codes, _ = pd.factorize(assets[observed], sort=False)
+    positions = np.flatnonzero(observed).astype(np.int64, copy=False)
+    raw = frame[value_col].reset_index(drop=True).to_numpy(dtype=float, na_value=np.nan, copy=True)
+    valid = np.isfinite(raw)
+    clean = raw.copy()
+    clean[~valid] = np.nan
+    from factor_engine.backend.native_long_rolling_moments import collect_lagged_moments
+    result = collect_lagged_moments(
+        positions,
+        group_codes.astype(np.int64, copy=False),
+        clean[observed],
+        valid.astype(np.float64, copy=False)[observed],
+        window=window,
+        min_periods=min_periods,
+        ddof=ddof,
+    )
+    actual_positions = result.get_column("ts").to_numpy()
+    actual_groups = result.get_column("inst").to_numpy()
+    if not np.array_equal(actual_positions, positions) or not np.array_equal(actual_groups, group_codes):
+        raise RuntimeError("FactorEngine long z-score changed row identity or order")
+    mean, std = result.get_column("_mean").to_numpy(), result.get_column("_std").to_numpy()
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        output[positions] = (raw[observed] - mean) / std
+    return pd.Series(output, index=frame.index, name=value_col)

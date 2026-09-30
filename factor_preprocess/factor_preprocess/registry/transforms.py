@@ -1553,13 +1553,19 @@ def create_default_registry() -> TransformRegistry:
         fe_equivalent_semantics="FE_COMPOSITE:long_smoothing.lagged_std:v1",
     )
 
+    registry.enrich(
+        "rolling_zscore", implementation_origin="FE_COMPOSITE", fe_operator_id=None,
+        fit_kind="stateless",
+        fe_equivalent_semantics="FE_COMPOSITE:long_smoothing.lagged_zscore:v1",
+    )
+
     # Every transform left FP_NATIVE is explicitly stamped (fail-closed:
     # ``implementation_origin`` is never None on a production transform so a
     # routing audit can enumerate the full catalog without guessing).
     for _meta in registry.all_transforms():
         if _meta.name in {
             "cs_rank", "cs_demean", "cs_winsor",
-            "forward_fill", "ols_neutralize", "industry_neutral",
+            "forward_fill", "ols_neutralize", "industry_neutral", "rolling_zscore",
             "size_neutral", "dual_neutral", "trailing_sma", "trailing_median", "rolling_std",
         }:
             continue

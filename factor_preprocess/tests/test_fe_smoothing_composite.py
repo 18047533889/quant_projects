@@ -357,3 +357,40 @@ def test_lagged_std_ties_and_all_missing_match_native(values, all_missing):
         assert actual.isna().all()
     else:
         np.testing.assert_allclose(actual.iloc[2:].to_numpy(), [0.0, 0.0])
+
+
+def test_lagged_zscore_registry_route_preserves_ieee_and_index():
+    from factor_preprocess.adapters.fe_smoothing import execute_rolling_zscore
+    from factor_preprocess.registry.transforms import get_default_registry
+    from factor_preprocess.transforms.rolling import rolling_zscore
+
+    frame = pd.DataFrame(
+        {"asset_id": ["a"] * 8, "date": range(8),
+         "value": [2.0, 2.0, 2.0, 2.0, 3.0, np.nan, 1.0, 2.0]},
+        index=[7, 7, 3, 3, 8, 8, 4, 4],
+    )
+    registry = get_default_registry()
+    meta = registry.get("rolling_zscore")
+    assert meta.implementation_origin == "FE_COMPOSITE"
+    assert meta.fe_equivalent_semantics == "FE_COMPOSITE:long_smoothing.lagged_zscore:v1"
+    expected = rolling_zscore(frame, window=3, min_periods=1, ddof=1)
+    actual = registry.get_execution("rolling_zscore")(
+        frame, window=3, min_periods=1, ddof=1
+    )
+    direct = execute_rolling_zscore(frame, window=3, min_periods=1, ddof=1)
+    assert actual.index.equals(frame.index)
+    np.testing.assert_allclose(actual.to_numpy(), expected.to_numpy(), equal_nan=True)
+    np.testing.assert_allclose(direct.to_numpy(), expected.to_numpy(), equal_nan=True)
+    assert np.isposinf(actual.iloc[4])
+
+
+def test_lagged_zscore_registry_fails_closed_without_fe(monkeypatch):
+    import factor_preprocess.adapters.fe_smoothing as adapter
+    from factor_preprocess.errors import GovernanceError
+    from factor_preprocess.registry.transforms import get_default_registry
+
+    monkeypatch.setattr(adapter, "get_fe_composite_executor", lambda name, recipe_identity: None)
+    registry = get_default_registry()
+    with pytest.raises(GovernanceError, match="FE composite authority unavailable"):
+        registry.get_execution("rolling_zscore")
+    assert callable(registry.get_execution("rolling_zscore", allow_research=True))
