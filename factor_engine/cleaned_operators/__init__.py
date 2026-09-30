@@ -1198,6 +1198,9 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     from factor_engine.cleaned_operators.polars_gap_coverage import register_polars_gap_coverage
     register_polars_gap_coverage()
 
+    from factor_engine.cleaned_operators.polars_native.research_quality_pit_native_20260930 import register_research_quality_pit_native_20260930
+    register_research_quality_pit_native_20260930()
+
     # Replace the legacy first-seen fiscal SQL lowering with exact ordinal,
     # revision-aware semantics before evidence and final contracts are consumed.
     from factor_engine.backend.sql_pushdown.fiscal_v2 import apply_fiscal_sql_v2
