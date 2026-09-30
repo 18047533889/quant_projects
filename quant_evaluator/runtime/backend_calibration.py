@@ -1,10 +1,10 @@
-"""Opt-in, whole-request CPU/CUDA calibration for materialized QE batches.
+"""Whole-request CPU/CUDA calibration for materialized QE batches.
 
-This wrapper is deliberately not wired into :func:`evaluate`'s default auto
-router. Calibration is expensive, executes both backends, and only records a
-route for the exact content-addressed request and runtime that was measured.
-The wall-time limit is a soft admission budget: Python cannot safely interrupt
-an in-flight public evaluation.
+Cold calibration remains opt-in because it executes both backends. Passing
+exact candidates may later be reused by :func:`evaluate`'s default auto router
+after strict content, source, runtime, and device-admission checks. The wall-
+time limit is a soft admission budget: Python cannot safely interrupt an
+in-flight public evaluation.
 """
 from __future__ import annotations
 
@@ -200,6 +200,76 @@ def _runtime_fingerprint(device_info: dict | None) -> dict:
             "packages": packages, "device": device_info}
 
 
+def calibration_identity(batch: FactorBatch, label_bundle: LabelBundle, *, metrics,
+                         calibration_policy: CalibrationPolicy,
+                         gpu_policy: GPUExecutionPolicy | None = None,
+                         started: float | None = None) -> dict:
+    """Build the exact content/source/runtime key shared by measured auto.
+
+    Callers should only invoke this after a cheap measured-auto candidate
+    match. It intentionally performs the full input fingerprint and source
+    check, so it is not part of ordinary certified auto's no-candidate path.
+    """
+    if not isinstance(batch, FactorBatch) or not isinstance(label_bundle, LabelBundle):
+        raise InvalidContractError("calibration requires FactorBatch and LabelBundle")
+    if not isinstance(calibration_policy, CalibrationPolicy):
+        raise InvalidContractError("calibration_policy must be CalibrationPolicy")
+    gpu_policy = gpu_policy or GPUExecutionPolicy()
+    if not isinstance(gpu_policy, GPUExecutionPolicy):
+        raise InvalidContractError("gpu_policy must be GPUExecutionPolicy")
+    if isinstance(metrics, (str, bytes)):
+        raise InvalidContractError("metrics must be a sequence")
+    metrics = tuple(metrics)
+    if (not metrics or any(not isinstance(x, str) or not x for x in metrics)
+            or len(set(metrics)) != len(metrics)):
+        raise InvalidContractError("metrics must be nonempty unique metric ids")
+
+    global _PROCESS_SOURCE_DIGEST, _PROCESS_SOURCE_DRIFTED
+    started = time.monotonic() if started is None else started
+    request_digest = _request_fingerprint(batch, label_bundle, metrics)
+    hash_seconds = time.monotonic() - started
+    if hash_seconds >= calibration_policy.max_wall_time_seconds:
+        raise TimeoutError("input fingerprint exceeded soft calibration time budget")
+    source_receipt = None
+    if calibration_policy.source_check_mode == "stat_guarded":
+        source_receipt = _SOURCE_IDENTITY.identify(strict_full_content=False)
+        source_digest = source_receipt.digest
+        if source_receipt.drifted:
+            _PROCESS_SOURCE_DRIFTED = True
+    else:
+        source_digest = _source_fingerprint()
+    if _PROCESS_SOURCE_DIGEST is None:
+        _PROCESS_SOURCE_DIGEST = source_digest
+    elif source_digest != _PROCESS_SOURCE_DIGEST:
+        _PROCESS_SOURCE_DRIFTED = True
+    admission_reason, device_info = _device_admission(gpu_policy)
+    runtime = _runtime_fingerprint(device_info)
+    key_payload = {"request": request_digest, "source": source_digest,
+                   "process_nonce": (_PROCESS_CACHE_NONCE, _SOURCE_IDENTITY.process_nonce),
+                   "runtime": runtime, "metrics": metrics,
+                   "gpu_policy": {field.name: getattr(gpu_policy, field.name)
+                                  for field in fields(gpu_policy)},
+                   "calibration_policy": {
+                       field.name: getattr(calibration_policy, field.name)
+                       for field in fields(calibration_policy)}}
+    key = hashlib.sha256(json.dumps(key_payload, sort_keys=True, default=str,
+                                    separators=(",", ":")).encode()).hexdigest()
+    setup_seconds = time.monotonic() - started
+    source_metadata = {
+        "mode": calibration_policy.source_check_mode,
+        "identity_scope": "disk_source_not_loaded_python",
+        "files_hashed": None if source_receipt is None else source_receipt.files_hashed,
+        "bytes_hashed": None if source_receipt is None else source_receipt.bytes_hashed,
+    }
+    return {
+        "request_digest": request_digest, "source_digest": source_digest,
+        "runtime": runtime, "key": key, "source_metadata": source_metadata,
+        "input_fingerprint_seconds": hash_seconds, "setup_seconds": setup_seconds,
+        "device_admission": admission_reason, "device_info": device_info,
+        "process_source_drifted": _PROCESS_SOURCE_DRIFTED,
+    }
+
+
 def _device_admission(policy: GPUExecutionPolicy):
     from quant_evaluator.runtime.evaluator import (
         _AUTO_BATCH_MIN_EFFECTIVE_VRAM_BYTES, _auto_batch_cuda_rejection,
@@ -319,7 +389,12 @@ def _parity_mismatch(cpu, cuda, policy: CalibrationPolicy) -> str | None:
     for name in ("metric_values", "grouped_metrics", "diagnostics", "artifacts",
                  "factor_artifacts", "metric_versions", "instance_results",
                  "instance_specs", "warnings"):
-        if not hasattr(cpu, name) or not hasattr(cuda, name):
+        cpu_has = hasattr(cpu, name)
+        cuda_has = hasattr(cuda, name)
+        if cpu_has != cuda_has:
+            return f"{name}: result field is missing on one backend"
+        if not cpu_has:
+            # Lightweight injected test doubles may omit all result fields.
             continue
         mismatch = _compare_metric_values(
             getattr(cpu, name), getattr(cuda, name),
@@ -364,49 +439,22 @@ def evaluate_calibrated_batch(
     gpu_policy = gpu_policy or GPUExecutionPolicy()
     if not isinstance(gpu_policy, GPUExecutionPolicy):
         raise InvalidContractError("gpu_policy must be GPUExecutionPolicy")
-    global _PROCESS_SOURCE_DIGEST, _PROCESS_SOURCE_DRIFTED
     started = time.monotonic()
     public_evaluate = __import__(
         "quant_evaluator.runtime.evaluator", fromlist=["evaluate"]).evaluate
     injected_evaluator = evaluate_fn is not None and evaluate_fn is not public_evaluate
     evaluate_fn = evaluate_fn or public_evaluate
-    request_digest = _request_fingerprint(batch, label_bundle, metrics)
-    hash_seconds = time.monotonic() - started
-    if hash_seconds >= calibration_policy.max_wall_time_seconds:
-        raise TimeoutError("input fingerprint exceeded soft calibration time budget")
-    source_receipt = None
-    if calibration_policy.source_check_mode == "stat_guarded":
-        source_receipt = _SOURCE_IDENTITY.identify(strict_full_content=False)
-        source_digest = source_receipt.digest
-        if source_receipt.drifted:
-            _PROCESS_SOURCE_DRIFTED = True
-    else:
-        source_digest = _source_fingerprint()
-    if _PROCESS_SOURCE_DIGEST is None:
-        _PROCESS_SOURCE_DIGEST = source_digest
-    elif source_digest != _PROCESS_SOURCE_DIGEST:
-        # A running interpreter cannot reload the source tree atomically. Do
-        # not reuse or create route records after observing on-disk drift.
-        _PROCESS_SOURCE_DRIFTED = True
-    admission_reason, device_info = _device_admission(gpu_policy)
-    runtime = _runtime_fingerprint(device_info)
-    key_payload = {"request": request_digest, "source": source_digest,
-                   "process_nonce": (_PROCESS_CACHE_NONCE, _SOURCE_IDENTITY.process_nonce),
-                   "runtime": runtime, "metrics": metrics,
-                   "gpu_policy": {field.name: getattr(gpu_policy, field.name)
-                                  for field in fields(gpu_policy)},
-                   "calibration_policy": {
-                       field.name: getattr(calibration_policy, field.name)
-                       for field in fields(calibration_policy)}}
-    key = hashlib.sha256(json.dumps(key_payload, sort_keys=True, default=str,
-                                    separators=(",", ":")).encode()).hexdigest()
-    setup_seconds = time.monotonic() - started
-    source_metadata = {
-        "mode": calibration_policy.source_check_mode,
-        "identity_scope": "disk_source_not_loaded_python",
-        "files_hashed": None if source_receipt is None else source_receipt.files_hashed,
-        "bytes_hashed": None if source_receipt is None else source_receipt.bytes_hashed,
-    }
+    identity = calibration_identity(
+        batch, label_bundle, metrics=metrics,
+        calibration_policy=calibration_policy, gpu_policy=gpu_policy,
+        started=started,
+    )
+    request_digest = identity["request_digest"]
+    hash_seconds = identity["input_fingerprint_seconds"]
+    source_metadata = identity["source_metadata"]
+    admission_reason = identity["device_admission"]
+    key = identity["key"]
+    setup_seconds = identity["setup_seconds"]
     # Injectable evaluators are test seams, not stable cache namespaces.
     cache_record = (cache.get(key) if admission_reason is None and not injected_evaluator
                     and not _PROCESS_SOURCE_DRIFTED else None)

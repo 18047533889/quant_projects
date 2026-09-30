@@ -1909,6 +1909,33 @@ def evaluate(
                 generalization_evidence=generalization_evidence, evaluator=evaluator,
                 gpu_policy=gpu_policy,
             )
+            simple_measured_auto = (
+                isinstance(factors, FactorBatch)
+                and isinstance(labels, LabelBundle)
+                and not _prepare_only
+                and not _include_auto_route_reason
+                and _gpu_result_override is None
+                and _diagnostics_override is None
+                and split_ref is None
+                and context is None
+                and evaluator is None
+                and not metric_parameters
+                and not quantile_builder_parameters
+                and portfolio_returns is None
+                and holding_returns is None
+                and portfolio_spec is None
+                and trade_eligibility is None
+                and calendar_snapshot is None
+                and exposure_panel is None
+                and generalization_evidence is None
+            )
+            if simple_measured_auto:
+                from quant_evaluator.runtime.auto_calibration import select_measured_auto_backend
+                backend_name, auto_route_reason, _ = select_measured_auto_backend(
+                    factor_batch, label_bundle, metrics=metric_ids,
+                    gpu_policy=gpu_policy, static_backend=backend_name,
+                    static_reason=auto_route_reason,
+                )
     if _prepare_only:
         return ((backend_name, auto_route_reason) if _include_auto_route_reason
                 else backend_name)
@@ -2931,8 +2958,16 @@ def evaluate(
         "backend_requested": requested_backend,
         "backend_strategy": backend_strategy,
         "backend_used": selected_backend,
-        "auto_backend_policy": _AUTO_CUDA_POLICY_VERSION if auto_route_reason is not None else None,
-        "auto_backend_profile": _auto_public_shape_profile(factor_batch) if auto_route_reason is not None else None,
+        "auto_backend_policy": (
+            "measured_auto_registry_exact_v1"
+            if auto_route_reason == "measured_auto_exact_candidate"
+            else (_AUTO_CUDA_POLICY_VERSION if auto_route_reason is not None else None)
+        ),
+        "auto_backend_profile": (
+            "exact_content_process_local"
+            if auto_route_reason == "measured_auto_exact_candidate"
+            else (_auto_public_shape_profile(factor_batch) if auto_route_reason is not None else None)
+        ),
         "auto_backend_reason": auto_route_reason,
         "metric_backends": metric_backends,
     }

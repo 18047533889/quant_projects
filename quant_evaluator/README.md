@@ -6,8 +6,8 @@
 - [全部注册指标逐项计算手册](docs/METRIC_REFERENCE.md)：164 个指标的数学公式、中文符号解释、样本/缺失规则与默认参数；源码仅作核对链接，以此目录为准，不以本页历史“51/60 项”计数为准。
 - [公开运行能力与输入/输出契约](docs/PUBLIC_RUNTIME_CAPABILITIES.md)：三个曾被旧表误标的统计指标、序列制品、轴坐标、组合与回撤两阶段调用范例。
 - [批量 source 后端与内存选项](docs/SOURCE_BATCH_OPTIONS.md)：auto 的证据边界、显式后端、tile 上限及 COS 组装预算。
-- [物化批次后端校准](docs/benchmarks/calibrated_batch_usage_20260930.md)：显式 CPU/CUDA 整批对拍、限次校准及有界路由缓存；尚不替代默认 auto。
-- [公开 evaluate 实测择优选项](docs/benchmarks/public_measured_auto_usage_20261001.md)：`auto_calibration=AutoCalibrationOptions(...)` 对当前完整物化批次择优并复用精确请求路由；首次双后端测试成本与输入限制见文档。
+- [物化批次后端校准](docs/benchmarks/calibrated_batch_usage_20260930.md)：显式 CPU/CUDA 整批对拍、限次校准及有界路由缓存。
+- [公开 evaluate 实测择优选项](docs/benchmarks/public_measured_auto_usage_20261001.md)：`auto_calibration=AutoCalibrationOptions(...)` 对当前完整物化批次择优；普通 `auto` 可在同一进程采用合格的精确请求候选，首次双后端测试成本与输入限制见文档。
 - 更新校验：`python quant_evaluator/scripts/build_metric_reference.py --check`。
 
 本次 IC/ICIR 默认统一至少 20 个有效配对/日；缺失权重不再按部分资产求和报告低换手。历史结果需要重算，不能只改版本标签。
@@ -68,7 +68,9 @@ bundle: EvaluationBundle = evaluate(
 
 ### 选择 CPU、自动路由或 GPU
 
-`evaluate(..., backend=None)`（默认）和 `backend="auto"` 在未传 `auto_calibration` 时使用同一套确定性、整批自动路由：只有经过公开入口 A/B 与输出对拍的硬件、面板形状、dtype、指标集合及默认参数组合才会走 CUDA；其余请求走 CPU。这一默认模式不会在调用时运行基准测试，也不会把同一请求拆成按指标选择不同后端。用 `bundle.metadata["execution_receipt"]` 可检查 `backend_requested`、`backend_used`、`auto_backend_policy`、`auto_backend_profile` 和 `auto_backend_reason`。对证据范围外的物化请求，可显式选择上方的 `auto_calibration` 实测模式；它不承诺首次调用更快。
+`evaluate(..., backend=None)`（默认）和 `backend="auto"` 使用同一套整批路由。认证范围内按已有公开入口 A/B 证据选择后端；同一进程中，普通物化请求还可采用 `auto_calibration` 登记的合格实测候选。候选与认证路由相同时不做全量指纹扫描；选择不同时必须重验输入内容、源码、运行环境、设备准入及缓存。无合格候选的范围外请求走 CPU。默认调用不会自动重放双后端基准，也不把同一请求拆成按指标选择不同后端。
+
+用 `bundle.metadata["execution_receipt"]` 检查后端和选择原因；实测候选接入时，`auto_backend_reason` 为 `measured_auto_exact_candidate`。保留 `AutoCalibrationOptions` 对象并使用相同 GPU policy，普通 `auto` 才能复用该缓存。首次校准成本、过期和高级输入限制见使用文档。真实 1000 日 × 5461 股 × 32 因子接入测试见 [结果说明](docs/benchmarks/real_cos_f32_1000d_default_measured_auto_20261001.md)。
 
 明确指定后端可用 `"cpu"`、`"cuda"`、`"cuda_strict"` 或 `"gpu"`（GPU 别名）。显式 GPU 请求不会静默回退到 CPU；CUDA 不可用或所请求的指标不受 GPU 执行器支持时会报错。未知后端名称同样会报错。`"numba"` 和 `"polars"` 不是公开 `evaluate` 门面的后端名称。
 
@@ -80,7 +82,7 @@ bundle = evaluate(fb, lb, metrics=rank_metrics, backend="auto")
 print(bundle.metadata["execution_receipt"])
 ```
 
-这项自动 CUDA 路由只认证上述精确面板形状、float64、默认指标参数、无额外上下文、单 NVIDIA L20，以及足够的有效空闲显存；rank 链需要至少 14 GiB。完整分位链和默认三指标批次各有独立认证。形状、指标组合或运行条件超出认证范围时，自动路由使用 CPU；显式 CUDA 请求则按 GPU 路径校验并失败关闭。基准证据证明这些已测请求在该环境中更快且数值对拍通过，不构成对其它 GPU、所有指标组合或全部 164 项指标的速度保证。详见 `docs/benchmarks/real_cos_f32_chain_ab_20260928.md`、`docs/benchmarks/real_cos_f32_single_routes_20260928.md` 和 `docs/benchmarks/real_cos_f32_default_batch_20260928.json`。
+这项认证 CUDA 路由覆盖上述精确面板形状、float64、默认指标参数、无额外上下文、单 NVIDIA L20，以及足够的有效空闲显存；rank 链需要至少 14 GiB。完整分位链和默认三指标批次各有独立认证。形状、指标组合或运行条件超出认证范围且无合格实测候选时，自动路由使用 CPU；显式 CUDA 请求则按 GPU 路径校验并失败关闭。基准证据证明这些已测请求在该环境中更快且数值对拍通过，不构成对其它 GPU、所有指标组合或全部 164 项指标的速度保证。详见 `docs/benchmarks/real_cos_f32_chain_ab_20260928.md`、`docs/benchmarks/real_cos_f32_single_routes_20260928.md` 和 `docs/benchmarks/real_cos_f32_default_batch_20260928.json`。
 
 核心契约：
 - **LabelBundle** — 显式前向标签；时序全部由调用方提供；默认 `price_convention="vwap_to_vwap"`；
