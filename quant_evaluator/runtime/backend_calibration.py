@@ -146,7 +146,10 @@ def _hash_array(hasher, array: np.ndarray, *, chunk_bytes: int = 4 * 1024**2) ->
                          buffersize=max(1, chunk_bytes // itemsize))
     for chunk in iterator:
         contiguous = np.ascontiguousarray(chunk)
-        hasher.update(memoryview(contiguous).cast("B"))
+        # NumPy datetime/timedelta arrays reject the Python buffer format
+        # exposed by memoryview(array). A uint8 view preserves exact C bytes
+        # for every non-object dtype, with no additional chunk-sized copy.
+        hasher.update(memoryview(contiguous.view(np.uint8)).cast("B"))
 
 
 def _request_fingerprint(batch: FactorBatch, label: LabelBundle, metrics) -> str:
