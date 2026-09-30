@@ -4,6 +4,7 @@ import pytest
 
 from factor_preprocess.adapters.fe_smoothing import execute_trailing_median
 from factor_preprocess.adapters.fe_smoothing import execute_trailing_sma
+from factor_preprocess.adapters.fe_smoothing import execute_rolling_std
 from factor_preprocess.transforms.smoothing import trailing_sma
 
 
@@ -241,3 +242,118 @@ def test_lagged_median_empty_and_all_null_assets_keep_shape_and_index():
     result = execute_trailing_median(all_null, window=3)
     assert result.index.equals(all_null.index)
     assert result.isna().all()
+
+
+@pytest.mark.parametrize("ddof", [0, 1, 2, -1, 0.5, 1.5, -1.5, True, False])
+@pytest.mark.parametrize("min_periods", [0, 1, 2, 3])
+def test_lagged_std_matches_native_with_nonfinite_interleaved_rows(ddof, min_periods):
+    from factor_preprocess.transforms.rolling import rolling_std
+
+    frame = pd.DataFrame(
+        {
+            "asset_id": pd.array([1, 2, 1, 2, 1, 1, pd.NA, 1, 1], dtype="Int64"),
+            "date": pd.array([1, 1, 2, 2, 2, 3, 3, 4, 5], dtype="Int64"),
+            "value": [1.0, 10.0, 3.0, 20.0, np.nan, np.inf, 999.0, 5.0, -np.inf],
+        },
+        index=[4, 4, 2, 2, 4, 9, 9, 4, 2],
+    )
+    original = frame.copy(deep=True)
+    actual = execute_rolling_std(
+        frame, window=3, min_periods=min_periods, ddof=ddof
+    )
+    expected = rolling_std(
+        frame, window=3, min_periods=min_periods, ddof=ddof
+    )
+    assert actual.index.equals(frame.index)
+    np.testing.assert_allclose(actual.to_numpy(), expected.to_numpy(), equal_nan=True)
+    pd.testing.assert_frame_equal(frame, original)
+
+    prefix = 7
+    prefix_result = execute_rolling_std(
+        frame.iloc[:prefix], window=3, min_periods=min_periods, ddof=ddof
+    )
+    np.testing.assert_allclose(
+        actual.iloc[:prefix].to_numpy(), prefix_result.to_numpy(), equal_nan=True
+    )
+
+
+def test_lagged_std_registry_route_and_singleton_ddof_boundary():
+    from factor_preprocess.registry.transforms import get_default_registry
+    from factor_preprocess.transforms.rolling import rolling_std
+
+    registry = get_default_registry()
+    meta = registry.get("rolling_std")
+    assert meta.implementation_origin == "FE_COMPOSITE"
+    assert meta.fit_kind == "stateless"
+    assert meta.fe_equivalent_semantics == "FE_COMPOSITE:long_smoothing.lagged_std:v1"
+
+    frame = pd.DataFrame(
+        {"asset_id": ["a"] * 4, "date": [1, 2, 3, 4],
+         "value": [4.0, 7.0, 10.0, 13.0]}
+    )
+    actual = registry.get_execution("rolling_std")(
+        frame, window=1, min_periods=0, ddof=1
+    )
+    expected = rolling_std(frame, window=1, min_periods=0, ddof=1)
+    np.testing.assert_allclose(actual.to_numpy(), expected.to_numpy(), equal_nan=True)
+    assert actual.isna().all()
+    routed = registry.get_execution("rolling_std")(
+        frame, window=2, min_periods=1, ddof=1.5
+    )
+    routed_expected = rolling_std(frame, window=2, min_periods=1, ddof=1.5)
+    np.testing.assert_allclose(
+        routed.to_numpy(), routed_expected.to_numpy(), equal_nan=True
+    )
+
+
+def test_lagged_std_matches_pandas_ddof_coercion_and_fails_closed_without_fe(monkeypatch):
+    import factor_preprocess.adapters.fe_smoothing as adapter
+    from factor_preprocess.errors import GovernanceError
+    from factor_preprocess.registry.transforms import get_default_registry
+
+    frame = pd.DataFrame(
+        {"asset_id": ["a", "a"], "date": [1, 2], "value": [1.0, 2.0]}
+    )
+    from factor_preprocess.transforms.rolling import rolling_std
+    np.testing.assert_allclose(
+        execute_rolling_std(frame, window=2, ddof=2).to_numpy(),
+        rolling_std(frame, window=2, ddof=2).to_numpy(),
+        equal_nan=True,
+    )
+    for ddof, error in ((np.nan, ValueError), (np.inf, OverflowError), ("1", TypeError)):
+        with pytest.raises(error):
+            execute_rolling_std(frame, window=2, ddof=ddof)
+    monkeypatch.setattr(adapter, "get_fe_composite_executor", lambda name, recipe_identity: None)
+    registry = get_default_registry()
+    with pytest.raises(GovernanceError, match="FE composite authority unavailable"):
+        registry.get_execution("rolling_std")
+    research = registry.get_execution("rolling_std", allow_research=True)
+    assert callable(research)
+    from factor_preprocess.transforms.rolling import rolling_std
+    np.testing.assert_allclose(
+        research(frame, window=2, ddof=2).to_numpy(),
+        rolling_std(frame, window=2, ddof=2).to_numpy(),
+        equal_nan=True,
+    )
+
+
+@pytest.mark.parametrize(
+    "values,all_missing",
+    [
+        ([2.0, 2.0, 2.0, 2.0], False),
+        ([np.nan, np.inf, -np.inf], True),
+    ],
+)
+def test_lagged_std_ties_and_all_missing_match_native(values, all_missing):
+    from factor_preprocess.transforms.rolling import rolling_std
+
+    frame = pd.DataFrame(
+        {"asset_id": ["a"] * len(values), "date": range(len(values)), "value": values}
+    )
+    actual = execute_rolling_std(frame, window=2, min_periods=1, ddof=1)
+    expected = rolling_std(frame, window=2, min_periods=1, ddof=1)
+    np.testing.assert_allclose(actual.to_numpy(), expected.to_numpy(), equal_nan=True)
+    if all_missing:
+        assert actual.isna().all()
+    else:
+        np.testing.assert_allclose(actual.iloc[2:].to_numpy(), [0.0, 0.0])

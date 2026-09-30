@@ -40,9 +40,31 @@ def _median_expression(value_col: str, window: int, min_periods: int,
     return CleanedCall("where", (enough, median, Literal(np.nan)))
 
 
+def _std_expression(value_col: str, window: int, min_periods: int, ddof: int,
+                    CleanedCall, ColumnRef, Literal):
+    delayed = CleanedCall("ts_delay", (ColumnRef(value_col),), (("n", 1),))
+    std = CleanedCall("ts_std", (delayed,), (("window", window), ("ddof", 0)))
+    delayed_valid = CleanedCall("ts_delay", (ColumnRef("_valid"),), (("n", 1),))
+    count = CleanedCall("ts_sum", (delayed_valid,), (
+        ("window", window), ("min_periods", 1)
+    ))
+    enough_count = CleanedCall("ge", (count, Literal(max(1, min_periods))))
+    enough_dof = CleanedCall("gt", (count, Literal(ddof)))
+    remaining_dof = CleanedCall("subtract", (count, Literal(ddof)))
+    safe_denominator = CleanedCall(
+        "where", (enough_dof, remaining_dof, Literal(1.0))
+    )
+    correction = CleanedCall(
+        "sqrt", (CleanedCall("divide", (count, safe_denominator)),)
+    )
+    adjusted = CleanedCall("multiply", (std, correction))
+    enough = CleanedCall("where", (enough_dof, enough_count, Literal(0.0)))
+    return CleanedCall("where", (enough, adjusted, Literal(np.nan)))
+
+
 def _lagged_rolling(frame: pd.DataFrame, *, window: int, min_periods: int | None,
                     asset_col: str, time_col: str, value_col: str,
-                    reducer: str) -> pd.Series:
+                    reducer: str, ddof: float = 1) -> pd.Series:
     """Validate, compile, and restore a lagged rolling statistic by row position."""
     window, min_periods = _validate_rolling_params(window, min_periods)
     missing = {asset_col, time_col, value_col}.difference(frame.columns)
@@ -62,6 +84,12 @@ def _lagged_rolling(frame: pd.DataFrame, *, window: int, min_periods: int | None
     dates = frame.loc[observed, [asset_col, time_col]].reset_index(drop=True)
     if not dates.groupby(asset_col, sort=False, observed=True)[time_col].is_monotonic_increasing.all():
         raise ValueError("per-asset dates must be monotone increasing")
+    if reducer == "std":
+        if not isinstance(ddof, (numbers.Real, np.bool_)):
+            raise TypeError("an integer is required")
+        # pandas rolling kernels coerce ddof with int(), including toward-zero
+        # truncation for finite floats (e.g. 1.5 -> 1, -1.5 -> -1).
+        ddof = int(ddof)
 
     # Integer group codes and row ordinals preserve nullable/categorical IDs,
     # interleaved assets, duplicate dates, and duplicate caller index labels.
@@ -85,18 +113,22 @@ def _lagged_rolling(frame: pd.DataFrame, *, window: int, min_periods: int | None
         "inst": group_codes.astype(np.int64, copy=False),
         "_v": numeric_values[observed],
     }
-    if reducer == "median":
+    if reducer in {"median", "std"}:
         panel["_valid"] = valid_values.astype(np.float64, copy=False)[observed]
     base = pl.DataFrame(panel).lazy()
-    builders = {"mean": _mean_expression, "median": _median_expression}
+    builders = {"mean": _mean_expression, "median": _median_expression,
+                "std": _std_expression}
     try:
         builder = builders[reducer]
     except KeyError as exc:
         raise ValueError(f"unknown lagged rolling reducer {reducer!r}") from exc
     if reducer == "mean":
         expression = builder("_v", window, min_periods, CleanedCall, ColumnRef)
-    else:
+    elif reducer == "median":
         expression = builder("_v", window, min_periods, CleanedCall, ColumnRef, Literal)
+    else:
+        expression = builder("_v", window, min_periods, int(ddof),
+                             CleanedCall, ColumnRef, Literal)
     plan = Analyzer(production=False).lower(expression).ir
     compiled = compile_plan_to_polars(plan, base)
     if compiled is None:
@@ -127,4 +159,14 @@ def lagged_median(frame: pd.DataFrame, *, window: int, min_periods: int | None =
     return _lagged_rolling(
         frame, window=window, min_periods=min_periods, asset_col=asset_col,
         time_col=time_col, value_col=value_col, reducer="median",
+    )
+
+
+def lagged_std(frame: pd.DataFrame, *, window: int, min_periods: int | None = None,
+               ddof: float = 1, asset_col: str = "asset_id", time_col: str = "date",
+               value_col: str = "value") -> pd.Series:
+    """Compute finite-only per-asset sample/population std over prior rows."""
+    return _lagged_rolling(
+        frame, window=window, min_periods=min_periods, asset_col=asset_col,
+        time_col=time_col, value_col=value_col, reducer="std", ddof=ddof,
     )
