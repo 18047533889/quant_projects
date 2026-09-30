@@ -6,6 +6,7 @@
 - [全部注册指标逐项计算手册](docs/METRIC_REFERENCE.md)：164 个指标的数学公式、中文符号解释、样本/缺失规则与默认参数；源码仅作核对链接，以此目录为准，不以本页历史“51/60 项”计数为准。
 - [公开运行能力与输入/输出契约](docs/PUBLIC_RUNTIME_CAPABILITIES.md)：三个曾被旧表误标的统计指标、序列制品、轴坐标、组合与回撤两阶段调用范例。
 - [批量 source 后端与内存选项](docs/SOURCE_BATCH_OPTIONS.md)：auto 的证据边界、显式后端、tile 上限及 COS 组装预算。
+- [物化批次后端校准](docs/benchmarks/calibrated_batch_usage_20260930.md)：显式 CPU/CUDA 整批对拍、限次校准及有界路由缓存；尚不替代默认 auto。
 - 更新校验：`python quant_evaluator/scripts/build_metric_reference.py --check`。
 
 本次 IC/ICIR 默认统一至少 20 个有效配对/日；缺失权重不再按部分资产求和报告低换手。历史结果需要重算，不能只改版本标签。

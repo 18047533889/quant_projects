@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "created_utc_date": "2026-09-30",
+  "purpose": "Opt-in materialized public-batch calibration smoke evidence; not production routing certification.",
+  "source": "Deterministic synthetic in-memory FactorBatch and LabelBundle; no COS reads or source replays.",
+  "runtime": {
+    "device_admission": "pass",
+    "device_name": "NVIDIA L20",
+    "device_id": 0,
+    "driver_version": 13000,
+    "cuda_runtime_version": 13020,
+    "qe_source_fingerprint_prefix": "2bd77f2c076a315b"
+  },
+  "request": {
+    "shape_time_asset_factor": [256, 5000, 32],
+    "factor_value_bytes": 327680000,
+    "label_value_bytes": 10240000,
+    "metrics": [
+      "pearson_ic",
+      "pearson_ic_series",
+      "pearson_ic_std",
+      "pearson_ic_ir"
+    ],
+    "seed": 20260930
+  },
+  "calibration_policy": {
+    "max_wall_time_seconds": 120,
+    "repetitions_per_backend": 2,
+    "warmups_per_backend": 0,
+    "selection_basis": "steady_state_median; first-call timings reported separately"
+  },
+  "result": {
+    "status": "calibrated",
+    "winner": "cuda_strict",
+    "parity": "pass",
+    "parity_mismatch": null,
+    "cpu_median_seconds": 2.1313780974887777,
+    "cuda_median_seconds": 1.3266660410154145,
+    "cpu_first_call_seconds": 2.1368701629980933,
+    "cuda_first_call_seconds": 1.4317878730071243,
+    "whole_public_backend_calls": 4,
+    "setup_seconds_including_input_fingerprint": 0.4486162429966498,
+    "bundle_type": "EvaluationBundle",
+    "bundle_factor_count": 32,
+    "diagnostic_count": 32,
+    "factor_artifact_factor_count": 32,
+    "artifacts": {
+      "pearson_ic": {"kind": "scalar", "shape": [32]},
+      "pearson_ic_ir": {"kind": "scalar", "shape": [32]},
+      "pearson_ic_series": {"kind": "series", "shape": [256, 32]},
+      "pearson_ic_std": {"kind": "scalar", "shape": [32]}
+    },
+    "cache_repeat": {
+      "status": "cache_hit",
+      "winner": "cuda_strict",
+      "bundle_type": "EvaluationBundle",
+      "cache_entries": 1
+    },
+    "wall_seconds_including_cache_repeat": 8.815932611003518,
+    "cache_key": "5e4b1e27094380a24271b8eb6fc18641de040c6ba9e0981659859fc9bb06b912"
+  },
+  "limitations": [
+    "One synthetic request on one admitted L20; timings are local evidence, not a general performance guarantee.",
+    "The API remains opt-in and is not connected to the default auto router.",
+    "The wall-time budget is soft and checked between complete public evaluation calls."
+  ]
+}
