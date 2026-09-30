@@ -83,3 +83,74 @@ def test_f32_rejects_default_multi_metric_request_before_loading(monkeypatch):
     with pytest.raises(SystemExit) as exc:
         benchmark.main()
     assert exc.value.code == 2
+
+
+@pytest.mark.parametrize("metrics", [
+    "coverage",
+    "rank_ic,quantile_spread,factor_turnover_rate,coverage",
+])
+def test_f32_coverage_preflight_only_never_loads_or_writes(monkeypatch, capsys, metrics):
+    from quant_evaluator.scripts import benchmark_real_cos_factor_batch as factor_batch
+
+    preflights = []
+
+    def fake_preflight(args):
+        preflights.append(args)
+        return {"status": "ready", "pass": True}
+
+    def fail_load(*args, **kwargs):
+        pytest.fail("preflight-only request must not load COS data")
+
+    monkeypatch.setattr(factor_batch, "preflight_factor_count_profile", fake_preflight)
+    monkeypatch.setattr(benchmark, "load_real_batch", fail_load)
+    monkeypatch.setattr(benchmark, "METRICS", benchmark.DEFAULT_METRICS)
+    monkeypatch.setattr(sys, "argv", [
+        "benchmark_real_cos_metric_batch.py", "--factors", "32", "--metrics", metrics,
+    ])
+
+    benchmark.main()
+
+    assert len(preflights) == 1
+    assert preflights[0].profile_max_object_mib == 128
+    assert preflights[0].profile_max_total_mib == 2048
+    assert preflights[0].max_working_gib == 50
+    report = json.loads(capsys.readouterr().out.splitlines()[-1])
+    assert report["status"] == "preflight_only"
+
+
+def test_f32_coverage_run_requires_output_before_preflight_or_load(monkeypatch):
+    from quant_evaluator.scripts import benchmark_real_cos_factor_batch as factor_batch
+
+    def fail(*args, **kwargs):
+        pytest.fail("missing-output guard must run before preflight or COS load")
+
+    monkeypatch.setattr(factor_batch, "preflight_factor_count_profile", fail)
+    monkeypatch.setattr(benchmark, "load_real_batch", fail)
+    monkeypatch.setattr(sys, "argv", [
+        "benchmark_real_cos_metric_batch.py", "--factors", "32",
+        "--metrics", "coverage", "--run",
+    ])
+
+    with pytest.raises(SystemExit) as exc:
+        benchmark.main()
+    assert exc.value.code == 2
+
+
+@pytest.mark.parametrize(("factors", "metrics"), [
+    (32, "coverage,rank_ic,quantile_spread,factor_turnover_rate"),
+    (24, "coverage"),
+])
+def test_coverage_rejects_wrong_order_or_factor_count_before_loading(
+        monkeypatch, factors, metrics):
+    def fail_load(*args, **kwargs):
+        pytest.fail("invalid coverage request must be rejected before COS load")
+
+    monkeypatch.setattr(benchmark, "load_real_batch", fail_load)
+    monkeypatch.setattr(sys, "argv", [
+        "benchmark_real_cos_metric_batch.py", "--factors", str(factors),
+        "--metrics", metrics,
+    ])
+
+    with pytest.raises(SystemExit) as exc:
+        benchmark.main()
+    assert exc.value.code == 2
