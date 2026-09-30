@@ -45,7 +45,8 @@ class ResamplingPlan:
 
     @property
     def replicate_ids(self):
-        return tuple(f'{self.content_hash}:{i}' for i in range(self.num_replicates))
+        content_hash = self.content_hash
+        return tuple(f'{content_hash}:{i}' for i in range(self.num_replicates))
 
     def indices(self):
         n = len(self.time_ids)

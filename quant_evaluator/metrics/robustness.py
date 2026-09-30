@@ -396,16 +396,18 @@ def compute_joint_block_bootstrap(ic_series, plan, factor_ids):
         batch = indices[first:first + rows_per_batch]
         gathered = values[batch]  # (b, n_time, len(ids))
         samples[first:first + len(batch), valid] = gathered[:, :, valid].mean(axis=1)
+    plan_hash = plan.content_hash
+    replicate_ids = tuple(f'{plan_hash}:{i}' for i in range(plan.num_replicates))
     return DistributionMetricArtifact(
         metric_id="ic_mean_joint_moving_block.v1", domain="robustness",
         samples=samples, stat_names=ids,
-        provenance={"resampling_plan_ref": plan.content_hash,
-                    "resampling_plan_content_hash": plan.content_hash,
+        provenance={"resampling_plan_ref": plan_hash,
+                    "resampling_plan_content_hash": plan_hash,
                     "sample_identity_hash": sample_identity,
                     "time_identity_hash": time_identity,
                     "common_mask_hash": common_mask_hash,
                     "pairing_scope": "ic_series_complete_time_grid",
-                    "replicate_ids": plan.replicate_ids, "clock_ref": plan.clock_ref,
+                    "replicate_ids": replicate_ids, "clock_ref": plan.clock_ref,
                     "time_ids": plan.time_ids, "factor_ids": ids,
                     "missing_policy": "complete_common_grid_or_insufficient",
                     "effective_replicates": tuple(plan.num_replicates if v else 0 for v in valid)},
