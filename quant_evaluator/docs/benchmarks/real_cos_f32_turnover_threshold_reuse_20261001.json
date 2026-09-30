@@ -1,0 +1,598 @@
+{
+  "created_utc": "2026-10-01T04:22:55.283034+08:00",
+  "script_sha256": "5042d41148d29e10893d9ea7861695c25ffe9d2fabd0a3accd40be47f0fdb0d7",
+  "request": {
+    "metrics": [
+      "factor_turnover_rate"
+    ],
+    "backend_order": [
+      "cpu",
+      "cuda_strict",
+      "auto",
+      "auto",
+      "cuda_strict",
+      "cpu"
+    ],
+    "factors": 32,
+    "repeats_per_child": 2,
+    "timeout_s": 180,
+    "shape": [
+      2586,
+      5461,
+      32
+    ],
+    "dtype": "float64",
+    "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+    "compact_artifacts": true
+  },
+  "source": {
+    "days": 2586,
+    "assets": 5461,
+    "date_span": [
+      "2016-01-04",
+      "2026-08-25"
+    ],
+    "calendar_sessions": 2588,
+    "missing_adj_vwap_partitions": [],
+    "label": "decision t; execution t+1; AdjVwap(t+2)/AdjVwap(t+1)-1",
+    "factor_finite_ratio": 0.7661925726444125,
+    "label_finite_ratio": 0.7738646803396594,
+    "limitations": "research lineage; no upstream PIT/investability certification"
+  },
+  "load_s": 122.87206778000109,
+  "parent_peak_rss_kib": 9951800,
+  "config_hashes": [
+    "79829164328dd18bbd3bc34de93bfd493d1f3e6e521481d03f7b958d9c0ba716"
+  ],
+  "runs": [
+    {
+      "status": "ok",
+      "backend_requested": "cpu",
+      "seconds": [
+        55.473102489020675,
+        54.437654729990754
+      ],
+      "cold_s": 55.473102489020675,
+      "warm_median_s": 54.437654729990754,
+      "peak_rss_kib": 9816136,
+      "backend_used": "cpu",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "factor_turnover_rate": "cpu"
+      },
+      "metric_observation_counts": {
+        "factor_turnover_rate": [
+          2410,
+          2535,
+          2546,
+          2421,
+          2573,
+          2561,
+          2538,
+          2522,
+          2499,
+          2558,
+          2518,
+          2537,
+          2533,
+          2558,
+          2545,
+          2549,
+          2507,
+          2546,
+          2542,
+          2496,
+          2492,
+          2553,
+          2569,
+          1834,
+          1951,
+          2567,
+          2494,
+          2572,
+          2559,
+          2554,
+          2525,
+          2576
+        ]
+      },
+      "peak_vram": null,
+      "factor_tile_size": null,
+      "factor_tiles_processed": null,
+      "vram_budget_bytes": null,
+      "config_hash": "79829164328dd18bbd3bc34de93bfd493d1f3e6e521481d03f7b958d9c0ba716",
+      "execution_receipt": {
+        "backend_requested": "cpu",
+        "backend_strategy": "explicit",
+        "backend_used": "cpu",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "factor_turnover_rate": "cpu"
+        },
+        "config_hash": "79829164328dd18bbd3bc34de93bfd493d1f3e6e521481d03f7b958d9c0ba716",
+        "receipt_hash": "12449cea3d70aaeebae3f357250d68eaa95dc4078ac46ff3fa801230018c8b7f"
+      },
+      "round": 1,
+      "artifact_sha256": "548ffecb1f164f249973b281e3a8416cbfe909bbcb206a9a0c7ff1cb7b56a5da"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cuda_strict",
+      "seconds": [
+        18.096725880983286,
+        17.527568463992793
+      ],
+      "cold_s": 18.096725880983286,
+      "warm_median_s": 17.527568463992793,
+      "peak_rss_kib": 12346136,
+      "backend_used": "cuda",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "factor_turnover_rate": "cuda"
+      },
+      "metric_observation_counts": {
+        "factor_turnover_rate": [
+          2410,
+          2535,
+          2546,
+          2421,
+          2573,
+          2561,
+          2538,
+          2522,
+          2499,
+          2558,
+          2518,
+          2537,
+          2533,
+          2558,
+          2545,
+          2549,
+          2507,
+          2546,
+          2542,
+          2496,
+          2492,
+          2553,
+          2569,
+          1834,
+          1951,
+          2567,
+          2494,
+          2572,
+          2559,
+          2554,
+          2525,
+          2576
+        ]
+      },
+      "peak_vram": 2018205696,
+      "factor_tile_size": 16,
+      "factor_tiles_processed": 2,
+      "vram_budget_bytes": 31928156160.0,
+      "config_hash": "79829164328dd18bbd3bc34de93bfd493d1f3e6e521481d03f7b958d9c0ba716",
+      "execution_receipt": {
+        "backend_requested": "cuda_strict",
+        "backend_strategy": "explicit",
+        "backend_used": "cuda",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "factor_turnover_rate": "cuda"
+        },
+        "config_hash": "79829164328dd18bbd3bc34de93bfd493d1f3e6e521481d03f7b958d9c0ba716",
+        "receipt_hash": "581ff44bb9d81899776b47a0a5a8862bdd0cae4b17ab008f7527593e0ddb6533"
+      },
+      "round": 2,
+      "artifact_sha256": "dcef6d7777ec5ed47de6efde0a704e9e309aba6908bbb08251177889fa9971f0"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "auto",
+      "seconds": [
+        18.1226506580133,
+        16.32137791000423
+      ],
+      "cold_s": 18.1226506580133,
+      "warm_median_s": 16.32137791000423,
+      "peak_rss_kib": 12346460,
+      "backend_used": "cuda",
+      "auto_backend_reason": "certified_single_metric_real_cos_f32_factor_turnover_rate",
+      "auto_backend_profile": "real_cos_f32_exact_20260928",
+      "metric_backends": {
+        "factor_turnover_rate": "cuda"
+      },
+      "metric_observation_counts": {
+        "factor_turnover_rate": [
+          2410,
+          2535,
+          2546,
+          2421,
+          2573,
+          2561,
+          2538,
+          2522,
+          2499,
+          2558,
+          2518,
+          2537,
+          2533,
+          2558,
+          2545,
+          2549,
+          2507,
+          2546,
+          2542,
+          2496,
+          2492,
+          2553,
+          2569,
+          1834,
+          1951,
+          2567,
+          2494,
+          2572,
+          2559,
+          2554,
+          2525,
+          2576
+        ]
+      },
+      "peak_vram": 2018205696,
+      "factor_tile_size": 16,
+      "factor_tiles_processed": 2,
+      "vram_budget_bytes": 31928156160.0,
+      "config_hash": "79829164328dd18bbd3bc34de93bfd493d1f3e6e521481d03f7b958d9c0ba716",
+      "execution_receipt": {
+        "backend_requested": "auto",
+        "backend_strategy": "auto",
+        "backend_used": "cuda",
+        "auto_backend_policy": "ashare_public_routes_20260929_v26",
+        "auto_backend_profile": "real_cos_f32_exact_20260928",
+        "auto_backend_reason": "certified_single_metric_real_cos_f32_factor_turnover_rate",
+        "metric_backends": {
+          "factor_turnover_rate": "cuda"
+        },
+        "config_hash": "79829164328dd18bbd3bc34de93bfd493d1f3e6e521481d03f7b958d9c0ba716",
+        "receipt_hash": "ca1ecfb96a7c1b5bab8331e860814a89b8730076bdbba08e0a4b1434813c7c57"
+      },
+      "round": 3,
+      "artifact_sha256": "dcef6d7777ec5ed47de6efde0a704e9e309aba6908bbb08251177889fa9971f0"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "auto",
+      "seconds": [
+        18.069931539008394,
+        16.50395430799108
+      ],
+      "cold_s": 18.069931539008394,
+      "warm_median_s": 16.50395430799108,
+      "peak_rss_kib": 12346644,
+      "backend_used": "cuda",
+      "auto_backend_reason": "certified_single_metric_real_cos_f32_factor_turnover_rate",
+      "auto_backend_profile": "real_cos_f32_exact_20260928",
+      "metric_backends": {
+        "factor_turnover_rate": "cuda"
+      },
+      "metric_observation_counts": {
+        "factor_turnover_rate": [
+          2410,
+          2535,
+          2546,
+          2421,
+          2573,
+          2561,
+          2538,
+          2522,
+          2499,
+          2558,
+          2518,
+          2537,
+          2533,
+          2558,
+          2545,
+          2549,
+          2507,
+          2546,
+          2542,
+          2496,
+          2492,
+          2553,
+          2569,
+          1834,
+          1951,
+          2567,
+          2494,
+          2572,
+          2559,
+          2554,
+          2525,
+          2576
+        ]
+      },
+      "peak_vram": 2018205696,
+      "factor_tile_size": 16,
+      "factor_tiles_processed": 2,
+      "vram_budget_bytes": 31928156160.0,
+      "config_hash": "79829164328dd18bbd3bc34de93bfd493d1f3e6e521481d03f7b958d9c0ba716",
+      "execution_receipt": {
+        "backend_requested": "auto",
+        "backend_strategy": "auto",
+        "backend_used": "cuda",
+        "auto_backend_policy": "ashare_public_routes_20260929_v26",
+        "auto_backend_profile": "real_cos_f32_exact_20260928",
+        "auto_backend_reason": "certified_single_metric_real_cos_f32_factor_turnover_rate",
+        "metric_backends": {
+          "factor_turnover_rate": "cuda"
+        },
+        "config_hash": "79829164328dd18bbd3bc34de93bfd493d1f3e6e521481d03f7b958d9c0ba716",
+        "receipt_hash": "ca1ecfb96a7c1b5bab8331e860814a89b8730076bdbba08e0a4b1434813c7c57"
+      },
+      "round": 4,
+      "artifact_sha256": "dcef6d7777ec5ed47de6efde0a704e9e309aba6908bbb08251177889fa9971f0"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cuda_strict",
+      "seconds": [
+        18.308354380977107,
+        16.703132513997843
+      ],
+      "cold_s": 18.308354380977107,
+      "warm_median_s": 16.703132513997843,
+      "peak_rss_kib": 12346488,
+      "backend_used": "cuda",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "factor_turnover_rate": "cuda"
+      },
+      "metric_observation_counts": {
+        "factor_turnover_rate": [
+          2410,
+          2535,
+          2546,
+          2421,
+          2573,
+          2561,
+          2538,
+          2522,
+          2499,
+          2558,
+          2518,
+          2537,
+          2533,
+          2558,
+          2545,
+          2549,
+          2507,
+          2546,
+          2542,
+          2496,
+          2492,
+          2553,
+          2569,
+          1834,
+          1951,
+          2567,
+          2494,
+          2572,
+          2559,
+          2554,
+          2525,
+          2576
+        ]
+      },
+      "peak_vram": 2018205696,
+      "factor_tile_size": 16,
+      "factor_tiles_processed": 2,
+      "vram_budget_bytes": 31928156160.0,
+      "config_hash": "79829164328dd18bbd3bc34de93bfd493d1f3e6e521481d03f7b958d9c0ba716",
+      "execution_receipt": {
+        "backend_requested": "cuda_strict",
+        "backend_strategy": "explicit",
+        "backend_used": "cuda",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "factor_turnover_rate": "cuda"
+        },
+        "config_hash": "79829164328dd18bbd3bc34de93bfd493d1f3e6e521481d03f7b958d9c0ba716",
+        "receipt_hash": "581ff44bb9d81899776b47a0a5a8862bdd0cae4b17ab008f7527593e0ddb6533"
+      },
+      "round": 5,
+      "artifact_sha256": "dcef6d7777ec5ed47de6efde0a704e9e309aba6908bbb08251177889fa9971f0"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cpu",
+      "seconds": [
+        55.19377309200354,
+        53.854134176974185
+      ],
+      "cold_s": 55.19377309200354,
+      "warm_median_s": 53.854134176974185,
+      "peak_rss_kib": 9815752,
+      "backend_used": "cpu",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "factor_turnover_rate": "cpu"
+      },
+      "metric_observation_counts": {
+        "factor_turnover_rate": [
+          2410,
+          2535,
+          2546,
+          2421,
+          2573,
+          2561,
+          2538,
+          2522,
+          2499,
+          2558,
+          2518,
+          2537,
+          2533,
+          2558,
+          2545,
+          2549,
+          2507,
+          2546,
+          2542,
+          2496,
+          2492,
+          2553,
+          2569,
+          1834,
+          1951,
+          2567,
+          2494,
+          2572,
+          2559,
+          2554,
+          2525,
+          2576
+        ]
+      },
+      "peak_vram": null,
+      "factor_tile_size": null,
+      "factor_tiles_processed": null,
+      "vram_budget_bytes": null,
+      "config_hash": "79829164328dd18bbd3bc34de93bfd493d1f3e6e521481d03f7b958d9c0ba716",
+      "execution_receipt": {
+        "backend_requested": "cpu",
+        "backend_strategy": "explicit",
+        "backend_used": "cpu",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "factor_turnover_rate": "cpu"
+        },
+        "config_hash": "79829164328dd18bbd3bc34de93bfd493d1f3e6e521481d03f7b958d9c0ba716",
+        "receipt_hash": "12449cea3d70aaeebae3f357250d68eaa95dc4078ac46ff3fa801230018c8b7f"
+      },
+      "round": 6,
+      "artifact_sha256": "548ffecb1f164f249973b281e3a8416cbfe909bbcb206a9a0c7ff1cb7b56a5da"
+    }
+  ],
+  "comparisons_to_first_cpu": {
+    "cpu": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "factor_turnover_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "factor_turnover_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ],
+    "cuda_strict": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "factor_turnover_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "factor_turnover_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ],
+    "auto": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "factor_turnover_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "factor_turnover_rate": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ]
+  },
+  "parity_pass": true
+}
