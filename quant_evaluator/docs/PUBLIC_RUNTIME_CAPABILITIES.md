@@ -1062,6 +1062,14 @@ cuda_strict 仍可供研究对拍。这不是 PIT 或所有指标的生产认证
 `auto` 回执仍为 CUDA/tile 16。证据见[逆序 A/B](benchmarks/real_cos_f61_pearson_chain_reordered_ab_20260930.json)
 和[逆序自动路由验收](benchmarks/real_cos_f61_pearson_chain_reordered_auto_20260930.json)。
 
+Pearson 数值边界修复后的生产 COS adapter 复测（同一完整 F61 面板、tile 16、
+双对象自动预取）按 CUDA→CPU→auto 执行：90.76 s、128.84 s、84.83 s。
+157,929 个结果的数值、有限值 mask 和观测数均通过，最大差异 8.33×10⁻¹⁶；
+auto 选择 CUDA。CUDA 单轮来源读取为 87.94 s，说明这条链当前主要耗时在读取。
+第三轮 auto 的读取缓存状态不同，不能把它相对显式 CUDA 的时间差当作内核加速。
+证据见[稳定 Pearson 与生产 COS adapter A/B](benchmarks/real_cos_f61_pearson_origin_cos_ab_20260930.json)。
+复跑 F61 时来源文件总量约 4,764 MiB，需脚本已有的 `--max-total-mib 6144` 上限并通过资源预检。
+
 ## F61 全部 15 项来源指标整批请求（2026-09-30）
 
 在同一真实 COS manifest、2,586 日 × 5,461 股 × 61 因子、float64、
