@@ -50,9 +50,11 @@ def diagnose_factor(
     valid_values = values[valid_mask]
 
     if num_valid > 0:
-        is_constant = (np.std(valid_values) == 0)
         min_value = float(np.min(valid_values))
         max_value = float(np.max(valid_values))
+        # Equality of finite extrema is exact; variance can underflow for
+        # distinct tiny values and overflow for large constant values.
+        is_constant = (min_value == max_value)
         mean_value = float(np.mean(valid_values))
     else:
         is_constant = True
