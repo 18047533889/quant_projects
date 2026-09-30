@@ -11,6 +11,7 @@ from typing import Any, Dict, Optional, Sequence
 
 from quant_evaluator.runtime.evaluator import evaluate
 from quant_evaluator.contracts.label_bundle import LabelBundle
+from quant_evaluator.diagnosis.factor import diagnose_all_factors
 from quant_evaluator.registry.metrics import resolve_alias
 
 
@@ -75,12 +76,14 @@ def _evaluate_ic_labels_shared_cuda(
                 group = getattr(gpu_bundle, field)
                 if canonical in group:
                     group[requested_id] = group[canonical]
+    shared_diagnostics = diagnose_all_factors(factor_batch)
     return [
         evaluate(
             factor_batch, label, metrics=selected_metrics, backend=backend,
             gpu_policy=gpu_policy, split_ref=split_ref,
             metric_parameters=metric_parameters,
             _auto_route_override=route_decision, _gpu_result_override=gpu_bundle,
+            _diagnostics_override=(factor_batch, shared_diagnostics),
         )
         for label, gpu_bundle, route_decision in zip(labels, gpu_bundles, route_decisions)
     ]

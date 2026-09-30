@@ -1560,6 +1560,7 @@ def evaluate(
     _include_auto_route_reason=False,
     _auto_route_override=None,
     _gpu_result_override=None,
+    _diagnostics_override=None,
 ):
     """Evaluate explicit factor and label contracts through the runtime.
 
@@ -2924,13 +2925,30 @@ def evaluate(
     }
     request_id = str(bundle_metadata.pop("request_id", uuid4()))
 
+    if _diagnostics_override is None:
+        diagnostics = diagnose_all_factors(factor_batch)
+    else:
+        diagnostic_batch, shared_diagnostics = _diagnostics_override
+        if diagnostic_batch is not factor_batch:
+            raise InvalidContractError(
+                "Shared diagnostics must belong to the exact FactorBatch instance"
+            )
+        if (not isinstance(shared_diagnostics, dict)
+                or set(shared_diagnostics) != set(factor_batch.factor_ids)):
+            raise InvalidContractError(
+                "Shared diagnostics must cover every factor in the FactorBatch"
+            )
+        # Keep each returned bundle's mapping independently mutable, matching
+        # the ordinary evaluate() result while reusing immutable diagnoses.
+        diagnostics = dict(shared_diagnostics)
+
     return EvaluationBundle(
         request_id=request_id,
         factor_ids=tuple(factor_batch.factor_ids),
         label_id=label_bundle.target_id,
         timestamp=datetime.now(timezone.utc).isoformat(),
         metric_values=metric_values,
-        diagnostics=diagnose_all_factors(factor_batch),
+        diagnostics=diagnostics,
         grouped_metrics=grouped_metrics,
         metric_versions=versions,
         config_hash=config_hash,

@@ -523,3 +523,24 @@ def test_evaluate_many_cuda_falls_back_after_resident_label_oom(monkeypatch):
             reference[lb.target_id].artifacts["rank_ic_series"].values,
             rtol=0, atol=1e-12, equal_nan=True,
         )
+
+
+def test_evaluate_many_shared_cuda_computes_factor_diagnostics_once(monkeypatch):
+    from quant_evaluator.api import evaluate_many as api_module
+
+    factors, labels = _inputs()
+    reference = evaluate_many(factors, labels, backend="cpu", metrics=("rank_ic_series",))
+    calls = []
+    original = api_module.diagnose_all_factors
+
+    def diagnose(batch):
+        calls.append(batch)
+        return original(batch)
+
+    monkeypatch.setattr(api_module, "diagnose_all_factors", diagnose)
+    result = evaluate_many(factors, labels, backend="cuda_strict", metrics=("rank_ic_series",))
+
+    assert calls == [factors]
+    for label in labels:
+        assert result[label.target_id].diagnostics == reference[label.target_id].diagnostics
+    assert result["h1"].diagnostics is not result["h5"].diagnostics
