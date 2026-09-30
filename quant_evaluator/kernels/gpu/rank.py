@@ -60,10 +60,9 @@ def _chunk_rows(n: int, dtype_bytes: int) -> int:
 def _rank_chunk(flat, nan_mask, cp, *, return_distinct=False):
     """Average-tie rank for one chunk of (R, N) float32/float64 values.
 
-    Returns (R, N) float64 ranks; NaN positions stay NaN.  Uses a segmented
-    reduction via ``cp.bincount`` over per-group (row, gid) keys.  The chunk
-    is bounded by :func:`_chunk_rows` so peak VRAM stays within budget even
-    though a few float64 (R, N) temporaries are materialized per chunk.
+    Returns (R, N) float64 ranks; NaN positions stay NaN. A device run-bound
+    kernel finds tie boundaries without a host scalar read or per-group
+    bincount workspace. Singleton runs take a constant-time neighbor path.
     """
     R, n = flat.shape
     x_safe = cp.where(nan_mask, cp.inf, flat)
@@ -71,28 +70,15 @@ def _rank_chunk(flat, nan_mask, cp, *, return_distinct=False):
     sv = cp.take_along_axis(x_safe, order, axis=1)     # (R, N) input dtype
     fin_sorted = sv != cp.inf                          # (R, N) bool
 
-    # group id: contiguous equal-value runs per row (int32)
+    # Equal-value run boundaries in sorted order.
     starts = cp.zeros_like(sv, dtype=cp.bool_)
     starts[:, 0] = True
     starts[:, 1:] = sv[:, 1:] != sv[:, :-1]
-    gid = cp.cumsum(starts, axis=1, dtype=cp.int32) - 1
     distinct = (cp.sum(starts & fin_sorted, axis=1, dtype=cp.int32)
                 if return_distinct else None)
 
-    # 1-based positions in sorted order (pandas default rank before tie-average)
-    pos1 = cp.arange(1, n + 1, dtype=cp.float64)[None, :]  # (1, N) float64
-    # zero out NaN contributions so they never affect finite group means
-    rankw = cp.where(fin_sorted, pos1, 0.0)   # (R, N) float64
-
-    # per (row, gid) segmented reduction; NaN sentinels share one trailing group
-    maxg = int(gid.max()) + 1
-    key = (cp.arange(R, dtype=cp.int64)[:, None] * maxg + gid).ravel()
-    n_bins = R * maxg
-    group_sum = cp.bincount(key, weights=rankw.ravel(), minlength=n_bins)
-    group_cnt = cp.bincount(key, minlength=n_bins).astype(cp.float64)
-    group_mean = group_sum / cp.maximum(group_cnt, 1.0)
-
-    mean_rank_flat = group_mean[key].reshape(R, n)  # (R, N) float64
+    from quant_evaluator.kernels.gpu.sorted_rank_runs import sorted_average_ranks
+    mean_rank_flat = sorted_average_ranks(sv, cp)
 
     # scatter back to original (unsorted) positions
     ranks = cp.empty_like(mean_rank_flat)

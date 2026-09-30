@@ -1,0 +1,17 @@
+{
+  "evidence_kind": "transcribed_terminal_summary_not_full_artifact_report",
+  "shape": [2586, 5461, 32],
+  "dtype": "float64",
+  "metrics": ["rank_ic_series"],
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "config_hash": "629a23a14bf0ecea3603dd3fac586feeff236fee0337bb72fe39f18a1f4912e8",
+  "parity_pass": true,
+  "runs": [
+    {"round": 1, "backend": "cpu", "cold_s": 67.69723958801478, "warm_median_s": 66.5833786969888, "peak_rss_kib": 9192444},
+    {"round": 2, "backend": "cuda_strict", "cold_s": 19.95757283299463, "warm_median_s": 17.673465994012076, "peak_vram": 15760462848, "peak_rss_kib": 11593476},
+    {"round": 3, "backend": "auto", "cold_s": 19.20740063500125, "warm_median_s": 17.632300075987587, "backend_used": "cuda", "auto_backend_reason": "certified_single_metric_real_cos_f32_rank_ic_series", "peak_vram": 15760462848, "peak_rss_kib": 11599864},
+    {"round": 4, "backend": "auto", "cold_s": 19.027476971998112, "warm_median_s": 17.393965138006024, "backend_used": "cuda", "auto_backend_reason": "certified_single_metric_real_cos_f32_rank_ic_series", "peak_vram": 15760462848, "peak_rss_kib": 11604532},
+    {"round": 5, "backend": "cuda_strict", "cold_s": 19.133302662987262, "warm_median_s": 17.478602803021204, "peak_vram": 15760462848, "peak_rss_kib": 11610228},
+    {"round": 6, "backend": "cpu", "cold_s": 68.35866537198308, "warm_median_s": 67.30392897201818, "peak_rss_kib": 9218608}
+  ]
+}

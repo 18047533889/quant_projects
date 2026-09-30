@@ -1,0 +1,17 @@
+{
+  "benchmark": "local old bincount helper vs new sorted run kernel",
+  "device": "server-c CUDA GPU; CuPy 14.2.0",
+  "shape": [128, 5461],
+  "repeats": 3,
+  "timing": "median CUDA event milliseconds; includes GPU work, old helper also synchronizes for gid.max().item()",
+  "memory_budget_exceeded": true,
+  "memory_note": "Inputs were one at a time (2,796,032 bytes F32; 5,592,064 bytes F64). CuPy default-pool total_bytes is retained pool reservation, not exact peak live VRAM. The single process reused its default pool across cases, so later totals include earlier cached allocations. Old unique F32 raised total_bytes from 2,796,032 to 1,323,925,504 bytes; later maximum observed was 2,598,916,608 bytes. Treat these as an over-budget lead, not isolated per-case attribution or peak memory.",
+  "results": [
+    {"dtype":"float32","distribution":"unique","parity":"exact","new_event_median_ms":0.523,"old_event_median_ms":5.120,"speedup":9.79,"pool_reserved_bytes_after_new":37750272,"pool_reserved_bytes_after_old":1323925504},
+    {"dtype":"float32","distribution":"ties17","parity":"exact","new_event_median_ms":0.535,"old_event_median_ms":1.061,"speedup":1.98,"pool_reserved_bytes_after_new":2598916608,"pool_reserved_bytes_after_old":2598916608},
+    {"dtype":"float32","distribution":"constant","parity":"exact","new_event_median_ms":0.517,"old_event_median_ms":1.483,"speedup":2.87,"pool_reserved_bytes_after_new":2598916608,"pool_reserved_bytes_after_old":2598916608},
+    {"dtype":"float64","distribution":"unique","parity":"exact","new_event_median_ms":0.549,"old_event_median_ms":5.179,"speedup":9.43,"pool_reserved_bytes_after_new":2598916608,"pool_reserved_bytes_after_old":2598916608},
+    {"dtype":"float64","distribution":"ties17","parity":"exact","new_event_median_ms":0.576,"old_event_median_ms":1.076,"speedup":1.87,"pool_reserved_bytes_after_new":2598916608,"pool_reserved_bytes_after_old":2598916608},
+    {"dtype":"float64","distribution":"constant","parity":"exact","new_event_median_ms":0.515,"old_event_median_ms":1.459,"speedup":2.83,"pool_reserved_bytes_after_new":2598916608,"pool_reserved_bytes_after_old":2598916608}
+  ]
+}
