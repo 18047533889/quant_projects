@@ -83,3 +83,38 @@ def test_registry_evidence_ids_are_stable_and_artifact_paths_exist():
             continue
         assert entry.evidence_artifacts
         assert all((root / path).is_file() for path in entry.evidence_artifacts)
+
+
+def test_f61_pearson_consuming_evidence_has_full_parity_and_stable_outputs():
+    """Validate recorded evidence, not a timing assertion on the CI machine."""
+    import json
+
+    root = Path(__file__).resolve().parents[2]
+    entry = next(e for e in SOURCE_AUTO_EVIDENCE
+                 if e.evidence_id == "real_cos_f61_pearson_chain_tile16")
+    names = ("real_cos_f61_consuming_source_pearson_ab_20260930.json",
+             "real_cos_f61_prefetch4_pearson_ab_20260930.json",
+             "real_cos_f61_prefetch4_reverse_pearson_ab_20260930.json")
+    documents = []
+    for name in names:
+        path = "quant_evaluator/docs/benchmarks/" + name
+        assert path in entry.evidence_artifacts
+        doc = json.loads((root / path).read_text())
+        assert doc["status"] == "complete"
+        assert tuple(doc["shape"]) == F61
+        assert frozenset(doc["metric_ids"]) == frozenset(PEARSON_CHAIN)
+        for comparison in (doc["comparison"], doc["auto_comparison"]):
+            assert comparison["pass"] is True
+            assert comparison["compared_factor_count"] == 61
+            # The harness counts compared output elements, not metric IDs.
+            assert comparison["compared_metric_count"] == 2586 * 61 + 3 * 61
+            assert set(comparison["metrics"]) == set(PEARSON_CHAIN)
+            for metric in comparison["metrics"].values():
+                assert metric["finite_mask_equal"] is True
+                assert metric["observation_counts_equal"] is True
+        documents.append(doc)
+    assert len({d["manifest_sha256"] for d in documents}) == 1
+    for metric_id in PEARSON_CHAIN:
+        for key in ("cpu_values_sha256", "cuda_values_sha256"):
+            assert len({d["comparison"]["metrics"][metric_id][key]
+                        for d in documents}) == 1
