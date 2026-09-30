@@ -71,16 +71,25 @@ def _same_axis(left: AxisRef, right: AxisRef) -> bool:
 
 def capture_factor_tile_source(source: FactorTileSource) -> FactorTileSourceMetadata:
     """Freeze source metadata before reads; fail closed on incomplete axes."""
+    return _capture_factor_tile_source(source)
+
+
+def _capture_factor_tile_source(source, *, known_ids=None):
+    # Only the same already validated built-in tuple bypasses repeated ID
+    # scans. Lists/replacements still receive full validation; every other
+    # metadata field retains its original read-boundary checks.
     try:
-        ids = tuple(source.factor_ids)
+        raw_ids = source.factor_ids
+        ids = tuple(raw_ids)
         time_axis, asset_axis = source.time_axis, source.asset_axis
         dtype, snapshot_id = source.dtype, source.snapshot_id
         maximum = source.max_tile_size
         reader, closer = source.read_tile, source.close
     except (AttributeError, TypeError) as exc:
         raise InvalidContractError("factor tile source metadata is incomplete") from exc
-    if (not ids or any(not isinstance(fid, str) or not fid.strip() for fid in ids)
-            or len(set(ids)) != len(ids)):
+    trusted_ids = type(raw_ids) is tuple and raw_ids is known_ids
+    if not trusted_ids and (not ids or any(not isinstance(fid, str) or not fid.strip() for fid in ids)
+                           or len(set(ids)) != len(ids)):
         raise InvalidContractError("source factor_ids must be ordered, nonempty and unique")
     if (not isinstance(time_axis, AxisRef) or not isinstance(asset_axis, AxisRef)
             or time_axis.values is None or asset_axis.values is None):
@@ -104,7 +113,7 @@ def capture_factor_tile_source(source: FactorTileSource) -> FactorTileSourceMeta
 
 
 def _assert_source_unchanged(source: FactorTileSource, metadata: FactorTileSourceMetadata) -> None:
-    current = capture_factor_tile_source(source)
+    current = _capture_factor_tile_source(source, known_ids=metadata.factor_ids)
     if (current.factor_ids != metadata.factor_ids
             or current.dtype != metadata.dtype
             or current.snapshot_id != metadata.snapshot_id
