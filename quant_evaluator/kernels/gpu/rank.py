@@ -83,7 +83,6 @@ def _rank_chunk(flat, nan_mask, cp, *, return_distinct=False):
     pos1 = cp.arange(1, n + 1, dtype=cp.float64)[None, :]  # (1, N) float64
     # zero out NaN contributions so they never affect finite group means
     rankw = cp.where(fin_sorted, pos1, 0.0)   # (R, N) float64
-    cntw = cp.where(fin_sorted, 1.0, 0.0)     # (R, N) float64
 
     # per (row, gid) segmented reduction; NaN sentinels share one trailing group
     maxg = int(gid.max()) + 1
