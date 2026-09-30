@@ -175,8 +175,8 @@ class ValueRepairPlan:
             from factor_preprocess.transforms.repair_shapes import tail_hinge
             return tail_hinge(frame, **kwargs)
         if self.transform == "tail_saturation":
-            from factor_preprocess.transforms.repair_shapes import tail_saturation
-            return tail_saturation(frame, **kwargs)
+            from factor_optimizer.adapters.fe_tail_saturation import execute_fe_tail_saturation
+            return execute_fe_tail_saturation(frame, **kwargs)
         if self.transform == "robust_scale":
             from factor_preprocess.transforms.repair_shapes import robust_scale
             return robust_scale(frame, **kwargs)
