@@ -1,0 +1,598 @@
+{
+  "created_utc": "2026-10-01T05:20:07.444538+08:00",
+  "script_sha256": "5555f3a02d8ac24d2b5fea9414f58f83ea2622644313a5085b2eb8dffc85a9fd",
+  "request": {
+    "metrics": [
+      "coverage"
+    ],
+    "backend_order": [
+      "cpu",
+      "cuda_strict",
+      "auto",
+      "auto",
+      "cuda_strict",
+      "cpu"
+    ],
+    "factors": 32,
+    "repeats_per_child": 2,
+    "timeout_s": 420.0,
+    "shape": [
+      2586,
+      5461,
+      32
+    ],
+    "dtype": "float64",
+    "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+    "compact_artifacts": true
+  },
+  "source": {
+    "days": 2586,
+    "assets": 5461,
+    "date_span": [
+      "2016-01-04",
+      "2026-08-25"
+    ],
+    "calendar_sessions": 2588,
+    "missing_adj_vwap_partitions": [],
+    "label": "decision t; execution t+1; AdjVwap(t+2)/AdjVwap(t+1)-1",
+    "factor_finite_ratio": 0.7661925726444125,
+    "label_finite_ratio": 0.7738646803396594,
+    "limitations": "research lineage; no upstream PIT/investability certification"
+  },
+  "load_s": 118.03234761499334,
+  "parent_peak_rss_kib": 9980960,
+  "config_hashes": [
+    "c2310e2f8c4a409b435d3cfa8ea22f0d45bdae9c10a0b0e39d0f7f6bb7a53435"
+  ],
+  "runs": [
+    {
+      "status": "ok",
+      "backend_requested": "cpu",
+      "seconds": [
+        17.872326058975887,
+        16.878515171993058
+      ],
+      "cold_s": 17.872326058975887,
+      "warm_median_s": 16.878515171993058,
+      "peak_rss_kib": 6758560,
+      "backend_used": "cpu",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "coverage": "cpu"
+      },
+      "metric_observation_counts": {
+        "coverage": [
+          10809508,
+          10809508,
+          10925980,
+          10865498,
+          10925980,
+          10925980,
+          10925980,
+          10925980,
+          10925980,
+          10865498,
+          10925980,
+          10915059,
+          10909599,
+          10809508,
+          10918558,
+          10918558,
+          10822311,
+          10918558,
+          10918558,
+          10916727,
+          10918447,
+          10918247,
+          10918247,
+          9389548,
+          10096169,
+          10918247,
+          10925980,
+          10918247,
+          10918247,
+          10816860,
+          10697410,
+          10918558
+        ]
+      },
+      "peak_vram": null,
+      "factor_tile_size": null,
+      "factor_tiles_processed": null,
+      "vram_budget_bytes": null,
+      "config_hash": "c2310e2f8c4a409b435d3cfa8ea22f0d45bdae9c10a0b0e39d0f7f6bb7a53435",
+      "execution_receipt": {
+        "backend_requested": "cpu",
+        "backend_strategy": "explicit",
+        "backend_used": "cpu",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "coverage": "cpu"
+        },
+        "config_hash": "c2310e2f8c4a409b435d3cfa8ea22f0d45bdae9c10a0b0e39d0f7f6bb7a53435",
+        "receipt_hash": "ba8e09538a7c28496cdcb0ce91ddc6470e25e1e4f7f27a6f78fa1b953ba40d3f"
+      },
+      "round": 1,
+      "artifact_sha256": "014d8f5a2f40024cfcd5eed7360af0a57bc3602c5af58b4a9cb53cb488576a2b"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cuda_strict",
+      "seconds": [
+        15.959652292978717,
+        14.825462123000761
+      ],
+      "cold_s": 15.959652292978717,
+      "warm_median_s": 14.825462123000761,
+      "peak_rss_kib": 8225044,
+      "backend_used": "cuda",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "coverage": "cuda"
+      },
+      "metric_observation_counts": {
+        "coverage": [
+          10809508,
+          10809508,
+          10925980,
+          10865498,
+          10925980,
+          10925980,
+          10925980,
+          10925980,
+          10925980,
+          10865498,
+          10925980,
+          10915059,
+          10909599,
+          10809508,
+          10918558,
+          10918558,
+          10822311,
+          10918558,
+          10918558,
+          10916727,
+          10918447,
+          10918247,
+          10918247,
+          9389548,
+          10096169,
+          10918247,
+          10925980,
+          10918247,
+          10918247,
+          10816860,
+          10697410,
+          10918558
+        ]
+      },
+      "peak_vram": 1256872448,
+      "factor_tile_size": 8,
+      "factor_tiles_processed": 4,
+      "vram_budget_bytes": 31858950144.0,
+      "config_hash": "c2310e2f8c4a409b435d3cfa8ea22f0d45bdae9c10a0b0e39d0f7f6bb7a53435",
+      "execution_receipt": {
+        "backend_requested": "cuda_strict",
+        "backend_strategy": "explicit",
+        "backend_used": "cuda",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "coverage": "cuda"
+        },
+        "config_hash": "c2310e2f8c4a409b435d3cfa8ea22f0d45bdae9c10a0b0e39d0f7f6bb7a53435",
+        "receipt_hash": "c2ee045738ab44464fc70f82a9182635a3e8e68017924dd4e9583c49baec3336"
+      },
+      "round": 2,
+      "artifact_sha256": "aec8ca8664b0e792fa8035bf3a4ac5f60b5a9caee8062aed5da2b508e9316298"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "auto",
+      "seconds": [
+        17.73998785499134,
+        16.851267087011365
+      ],
+      "cold_s": 17.73998785499134,
+      "warm_median_s": 16.851267087011365,
+      "peak_rss_kib": 6758788,
+      "backend_used": "cpu",
+      "auto_backend_reason": "metric_not_certified",
+      "auto_backend_profile": "real_cos_f32_exact_20260928",
+      "metric_backends": {
+        "coverage": "cpu"
+      },
+      "metric_observation_counts": {
+        "coverage": [
+          10809508,
+          10809508,
+          10925980,
+          10865498,
+          10925980,
+          10925980,
+          10925980,
+          10925980,
+          10925980,
+          10865498,
+          10925980,
+          10915059,
+          10909599,
+          10809508,
+          10918558,
+          10918558,
+          10822311,
+          10918558,
+          10918558,
+          10916727,
+          10918447,
+          10918247,
+          10918247,
+          9389548,
+          10096169,
+          10918247,
+          10925980,
+          10918247,
+          10918247,
+          10816860,
+          10697410,
+          10918558
+        ]
+      },
+      "peak_vram": null,
+      "factor_tile_size": null,
+      "factor_tiles_processed": null,
+      "vram_budget_bytes": null,
+      "config_hash": "c2310e2f8c4a409b435d3cfa8ea22f0d45bdae9c10a0b0e39d0f7f6bb7a53435",
+      "execution_receipt": {
+        "backend_requested": "auto",
+        "backend_strategy": "auto",
+        "backend_used": "cpu",
+        "auto_backend_policy": "ashare_public_routes_20260929_v26",
+        "auto_backend_profile": "real_cos_f32_exact_20260928",
+        "auto_backend_reason": "metric_not_certified",
+        "metric_backends": {
+          "coverage": "cpu"
+        },
+        "config_hash": "c2310e2f8c4a409b435d3cfa8ea22f0d45bdae9c10a0b0e39d0f7f6bb7a53435",
+        "receipt_hash": "3e23e8c3313600da1ce8941843902a172cfca8414ff1697888a66b289e445542"
+      },
+      "round": 3,
+      "artifact_sha256": "014d8f5a2f40024cfcd5eed7360af0a57bc3602c5af58b4a9cb53cb488576a2b"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "auto",
+      "seconds": [
+        17.831940396979917,
+        16.874000634998083
+      ],
+      "cold_s": 17.831940396979917,
+      "warm_median_s": 16.874000634998083,
+      "peak_rss_kib": 6759128,
+      "backend_used": "cpu",
+      "auto_backend_reason": "metric_not_certified",
+      "auto_backend_profile": "real_cos_f32_exact_20260928",
+      "metric_backends": {
+        "coverage": "cpu"
+      },
+      "metric_observation_counts": {
+        "coverage": [
+          10809508,
+          10809508,
+          10925980,
+          10865498,
+          10925980,
+          10925980,
+          10925980,
+          10925980,
+          10925980,
+          10865498,
+          10925980,
+          10915059,
+          10909599,
+          10809508,
+          10918558,
+          10918558,
+          10822311,
+          10918558,
+          10918558,
+          10916727,
+          10918447,
+          10918247,
+          10918247,
+          9389548,
+          10096169,
+          10918247,
+          10925980,
+          10918247,
+          10918247,
+          10816860,
+          10697410,
+          10918558
+        ]
+      },
+      "peak_vram": null,
+      "factor_tile_size": null,
+      "factor_tiles_processed": null,
+      "vram_budget_bytes": null,
+      "config_hash": "c2310e2f8c4a409b435d3cfa8ea22f0d45bdae9c10a0b0e39d0f7f6bb7a53435",
+      "execution_receipt": {
+        "backend_requested": "auto",
+        "backend_strategy": "auto",
+        "backend_used": "cpu",
+        "auto_backend_policy": "ashare_public_routes_20260929_v26",
+        "auto_backend_profile": "real_cos_f32_exact_20260928",
+        "auto_backend_reason": "metric_not_certified",
+        "metric_backends": {
+          "coverage": "cpu"
+        },
+        "config_hash": "c2310e2f8c4a409b435d3cfa8ea22f0d45bdae9c10a0b0e39d0f7f6bb7a53435",
+        "receipt_hash": "3e23e8c3313600da1ce8941843902a172cfca8414ff1697888a66b289e445542"
+      },
+      "round": 4,
+      "artifact_sha256": "014d8f5a2f40024cfcd5eed7360af0a57bc3602c5af58b4a9cb53cb488576a2b"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cuda_strict",
+      "seconds": [
+        15.85800189699512,
+        14.643345086020418
+      ],
+      "cold_s": 15.85800189699512,
+      "warm_median_s": 14.643345086020418,
+      "peak_rss_kib": 8225032,
+      "backend_used": "cuda",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "coverage": "cuda"
+      },
+      "metric_observation_counts": {
+        "coverage": [
+          10809508,
+          10809508,
+          10925980,
+          10865498,
+          10925980,
+          10925980,
+          10925980,
+          10925980,
+          10925980,
+          10865498,
+          10925980,
+          10915059,
+          10909599,
+          10809508,
+          10918558,
+          10918558,
+          10822311,
+          10918558,
+          10918558,
+          10916727,
+          10918447,
+          10918247,
+          10918247,
+          9389548,
+          10096169,
+          10918247,
+          10925980,
+          10918247,
+          10918247,
+          10816860,
+          10697410,
+          10918558
+        ]
+      },
+      "peak_vram": 1256872448,
+      "factor_tile_size": 8,
+      "factor_tiles_processed": 4,
+      "vram_budget_bytes": 31858950144.0,
+      "config_hash": "c2310e2f8c4a409b435d3cfa8ea22f0d45bdae9c10a0b0e39d0f7f6bb7a53435",
+      "execution_receipt": {
+        "backend_requested": "cuda_strict",
+        "backend_strategy": "explicit",
+        "backend_used": "cuda",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "coverage": "cuda"
+        },
+        "config_hash": "c2310e2f8c4a409b435d3cfa8ea22f0d45bdae9c10a0b0e39d0f7f6bb7a53435",
+        "receipt_hash": "c2ee045738ab44464fc70f82a9182635a3e8e68017924dd4e9583c49baec3336"
+      },
+      "round": 5,
+      "artifact_sha256": "aec8ca8664b0e792fa8035bf3a4ac5f60b5a9caee8062aed5da2b508e9316298"
+    },
+    {
+      "status": "ok",
+      "backend_requested": "cpu",
+      "seconds": [
+        17.61612552101724,
+        16.685044698999263
+      ],
+      "cold_s": 17.61612552101724,
+      "warm_median_s": 16.685044698999263,
+      "peak_rss_kib": 6757544,
+      "backend_used": "cpu",
+      "auto_backend_reason": null,
+      "auto_backend_profile": null,
+      "metric_backends": {
+        "coverage": "cpu"
+      },
+      "metric_observation_counts": {
+        "coverage": [
+          10809508,
+          10809508,
+          10925980,
+          10865498,
+          10925980,
+          10925980,
+          10925980,
+          10925980,
+          10925980,
+          10865498,
+          10925980,
+          10915059,
+          10909599,
+          10809508,
+          10918558,
+          10918558,
+          10822311,
+          10918558,
+          10918558,
+          10916727,
+          10918447,
+          10918247,
+          10918247,
+          9389548,
+          10096169,
+          10918247,
+          10925980,
+          10918247,
+          10918247,
+          10816860,
+          10697410,
+          10918558
+        ]
+      },
+      "peak_vram": null,
+      "factor_tile_size": null,
+      "factor_tiles_processed": null,
+      "vram_budget_bytes": null,
+      "config_hash": "c2310e2f8c4a409b435d3cfa8ea22f0d45bdae9c10a0b0e39d0f7f6bb7a53435",
+      "execution_receipt": {
+        "backend_requested": "cpu",
+        "backend_strategy": "explicit",
+        "backend_used": "cpu",
+        "auto_backend_policy": null,
+        "auto_backend_profile": null,
+        "auto_backend_reason": null,
+        "metric_backends": {
+          "coverage": "cpu"
+        },
+        "config_hash": "c2310e2f8c4a409b435d3cfa8ea22f0d45bdae9c10a0b0e39d0f7f6bb7a53435",
+        "receipt_hash": "ba8e09538a7c28496cdcb0ce91ddc6470e25e1e4f7f27a6f78fa1b953ba40d3f"
+      },
+      "round": 6,
+      "artifact_sha256": "014d8f5a2f40024cfcd5eed7360af0a57bc3602c5af58b4a9cb53cb488576a2b"
+    }
+  ],
+  "comparisons_to_first_cpu": {
+    "cpu": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "coverage": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "coverage": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ],
+    "cuda_strict": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "coverage": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "coverage": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ],
+    "auto": [
+      {
+        "config_hash": true,
+        "metrics": {
+          "coverage": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      },
+      {
+        "config_hash": true,
+        "metrics": {
+          "coverage": {
+            "descriptor": true,
+            "values_rtol_1e-8_atol_1e-10": true,
+            "finite_mask": true,
+            "valid_mask": true,
+            "counts": true,
+            "provenance_observation_counts": true,
+            "provenance": true,
+            "metric_values": true,
+            "pass": true
+          }
+        },
+        "pass": true
+      }
+    ]
+  },
+  "parity_pass": true
+}
