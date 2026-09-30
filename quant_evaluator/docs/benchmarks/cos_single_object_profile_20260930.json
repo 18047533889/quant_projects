@@ -1,0 +1,87 @@
+{
+  "f61_selected_count": 61,
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "measurements": [
+    {
+      "axis": {
+        "axis_sha256": "877ca46d0f3b4ee38107c33fdba28f880a5dad86dfe09a4bc7288eac96143971",
+        "columns": 5461,
+        "first_date": "2016-01-04T00:00:00",
+        "last_date": "2026-08-27T00:00:00",
+        "rows": 2588
+      },
+      "bound_factor_read_s": 3.4136260180093814,
+      "bytes": 103359672,
+      "etag": "7c7c48d1e8096f94935f02aa84599ac2-4",
+      "factor_id": "weekly_3b94de18d97efb6b",
+      "manifest_read_s": 0.42797689500730485,
+      "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+      "pass": "first_read",
+      "phase_counts": {
+        "download_s": 1,
+        "hash_compute_s": 199,
+        "hash_file_read_s": 100,
+        "head_s": 2,
+        "parquet_arrow_materialize_s": 1,
+        "parquet_store_read_s": 1
+      },
+      "phases_s": {
+        "arrow_to_pandas_s": 0.03295721398899332,
+        "axis_hash_s": 0.0015135449939407408,
+        "axis_normalize_filter_sort_s": 0.045026748994132504,
+        "download_s": 0.9062745700066444,
+        "hash_compute_s": 0.19164160289801657,
+        "hash_file_read_s": 0.018598720896989107,
+        "head_s": 1.1572130949934945,
+        "parquet_arrow_materialize_s": 3.089982783421874e-06,
+        "parquet_store_read_s": 1.081565601984039,
+        "unattributed_bound_read_s": 0.058329337247414514
+      },
+      "sha256": "daa508f324b6015628622860dea90a919cc08afc4ab8c43972f04948a6d0809b",
+      "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/daa508f324b6015628622860dea90a919cc08afc4ab8c43972f04948a6d0809b/weekly_3b94de18d97efb6b.parquet"
+    },
+    {
+      "axis": {
+        "axis_sha256": "877ca46d0f3b4ee38107c33fdba28f880a5dad86dfe09a4bc7288eac96143971",
+        "columns": 5461,
+        "first_date": "2016-01-04T00:00:00",
+        "last_date": "2026-08-27T00:00:00",
+        "rows": 2588
+      },
+      "bound_factor_read_s": 2.2117643030069303,
+      "bytes": 103359672,
+      "etag": "7c7c48d1e8096f94935f02aa84599ac2-4",
+      "factor_id": "weekly_3b94de18d97efb6b",
+      "manifest_read_s": 0.40803539799526334,
+      "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+      "pass": "sequential_repeat",
+      "phase_counts": {
+        "download_s": 1,
+        "hash_compute_s": 199,
+        "hash_file_read_s": 100,
+        "head_s": 2,
+        "parquet_arrow_materialize_s": 1,
+        "parquet_store_read_s": 1
+      },
+      "phases_s": {
+        "arrow_to_pandas_s": 0.03217208699788898,
+        "axis_hash_s": 0.0015234829916153103,
+        "axis_normalize_filter_sort_s": 0.04561188200023025,
+        "download_s": 0.7405668369901832,
+        "hash_compute_s": 0.19156757782911882,
+        "hash_file_read_s": 0.01802838599542156,
+        "head_s": 0.24067012500017881,
+        "parquet_arrow_materialize_s": 3.029999788850546e-06,
+        "parquet_store_read_s": 1.0069043679977767,
+        "unattributed_bound_read_s": 0.0140239791944623
+      },
+      "sha256": "daa508f324b6015628622860dea90a919cc08afc4ab8c43972f04948a6d0809b",
+      "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/daa508f324b6015628622860dea90a919cc08afc4ab8c43972f04948a6d0809b/weekly_3b94de18d97efb6b.parquet"
+    }
+  ],
+  "object_max_bytes": 134217728,
+  "repeat_definition": "second sequential remote read; cache state uncontrolled; no persistent local cache",
+  "schema": "qe_cos_single_object_profile.v1",
+  "selection": "middle record by (bytes,factor_id) in F61 sample",
+  "temporary_object_policy": "private DataAccess temp, removed after each read"
+}
