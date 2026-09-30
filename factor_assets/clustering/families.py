@@ -1234,6 +1234,80 @@ class Dendrogram:
         return optimal_k
 
 
+def _correlation_distance_matrix(graph, factor_ids, missing_distance_policy):
+    """Build distances using one temporary adjacency index per matrix row.
+
+    Preserve former upper-triangle lookup semantics: only the adjacency row
+    for the lexically earlier factor is consulted, and its first matching
+    neighbor wins if a row contains duplicate entries. Temporary storage is
+    bounded by the largest degree rather than a cached graph-wide copy.
+    """
+    # Preserve the public duck-typed behavior: subclasses may override either
+    # lookup method, and graph-like objects need not expose an adjacency API.
+    # Only the exact native methods have the equivalence needed for indexing.
+    native_get_correlation = getattr(
+        getattr(graph, "get_correlation", None), "__func__", None
+    ) is SparseCorrelationGraph.get_correlation
+    native_neighbors = getattr(
+        getattr(graph, "neighbors", None), "__func__", None
+    ) is SparseCorrelationGraph.neighbors
+    if not (native_get_correlation and native_neighbors):
+        n = len(factor_ids)
+        distance_matrix = np.ones((n, n))
+        for i, factor_a in enumerate(factor_ids):
+            distance_matrix[i, i] = 0.0
+            for j, factor_b in enumerate(factor_ids):
+                if i < j:
+                    correlation = graph.get_correlation(factor_a, factor_b)
+                    if correlation is None:
+                        if missing_distance_policy != "treat_missing_as_max":
+                            raise ValueError(
+                                f"No observed distance between {factor_a!r} and {factor_b!r}; "
+                                "a missing edge is not evidence of low similarity. "
+                                "Pass missing_distance_policy='treat_missing_as_max' "
+                                "to opt into the research-only behaviour, or supply a "
+                                "complete distance artifact."
+                            )
+                        distance = 1.0
+                    else:
+                        distance = 1.0 - abs(correlation)
+                    distance_matrix[i, j] = distance
+                    distance_matrix[j, i] = distance
+        return distance_matrix
+
+    factor_index = {factor_id: index for index, factor_id in enumerate(factor_ids)}
+    n = len(factor_ids)
+    distance_matrix = np.ones((n, n))
+    np.fill_diagonal(distance_matrix, 0.0)
+
+    for i, factor_a in enumerate(factor_ids):
+        row = {}
+        for factor_b, correlation in graph.neighbors(factor_a):
+            j = factor_index.get(factor_b)
+            if j is not None and j > i:
+                # get_correlation returned the first matching row entry.
+                row.setdefault(j, correlation)
+
+        for j in range(i + 1, n):
+            correlation = row.get(j)
+            if correlation is not None:
+                distance = 1.0 - abs(correlation)
+            else:
+                if missing_distance_policy != "treat_missing_as_max":
+                    raise ValueError(
+                        f"No observed distance between {factor_a!r} and {factor_ids[j]!r}; "
+                        "a missing edge is not evidence of low similarity. "
+                        "Pass missing_distance_policy='treat_missing_as_max' "
+                        "to opt into the research-only behaviour, or supply a "
+                        "complete distance artifact."
+                    )
+                distance = 1.0
+            distance_matrix[i, j] = distance
+            distance_matrix[j, i] = distance
+
+    return distance_matrix
+
+
 class HierarchicalClustering:
     """
     Hierarchical clustering for factor families.
@@ -1361,36 +1435,11 @@ class HierarchicalClustering:
 
         # Build distance matrix from correlation graph
         factor_ids = sorted(self.graph.nodes)
-        n = len(factor_ids)
-        distance_matrix = np.ones((n, n))
-
-        # Convert correlation to distance: dist = 1 - abs(corr)
-        for i, fid_a in enumerate(factor_ids):
-            distance_matrix[i, i] = 0.0
-            for j, fid_b in enumerate(factor_ids):
-                if i < j:
-                    corr = self.graph.get_correlation(fid_a, fid_b)
-                    if corr is not None:
-                        dist = 1.0 - abs(corr)
-                    else:
-                        # A missing edge is NOT evidence of low similarity.
-                        # Fail closed unless the caller explicitly opted into
-                        # the research-only "treat missing as max distance"
-                        # policy.  This prevents UNKNOWN observations from
-                        # being silently conflated with COMPUTED_LOW.
-                        if self.missing_distance_policy != "treat_missing_as_max":
-                            raise ValueError(
-                                f"No observed distance between {fid_a!r} and {fid_b!r}; "
-                                "a missing edge is not evidence of low similarity. "
-                                "Pass missing_distance_policy='treat_missing_as_max' "
-                                "to opt into the research-only behaviour, or supply a "
-                                "complete distance artifact."
-                            )
-                        dist = 1.0  # No edge = maximum distance (explicit opt-in only)
-                    distance_matrix[i, j] = dist
-                    distance_matrix[j, i] = dist
 
         # Convert to condensed form for scipy
+        distance_matrix = _correlation_distance_matrix(
+            self.graph, factor_ids, self.missing_distance_policy
+        )
         condensed_distances = squareform(distance_matrix, checks=False)
 
         # Perform hierarchical clustering
