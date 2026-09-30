@@ -14,7 +14,7 @@ not be treated as authoritative factor genealogy.
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Dict, List, Set, Optional, Tuple
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 
 from factor_assets.clustering.certification import (
     CertifiedGraphArtifact,
@@ -221,62 +221,142 @@ class LineageDetector:
             leaves=leaves
         )
 
+    _NEIGHBOR_CACHE_MAX_ENTRIES = 128
+    _NEIGHBOR_CACHE_MAX_TOTAL_NEIGHBORS = 16_384
+
     def _find_relations(
         self,
         subgraph: SparseCorrelationGraph,
         members: Set[str]
     ) -> List[ParentChildRelation]:
         """Find all parent-child relations in subgraph."""
-        relations = []
-        seen_pairs = set()  # Track pairs to avoid duplicates
+        confidence_method = getattr(self, "_calculate_confidence")
+        confidence_impl = getattr(confidence_method, "__func__", confidence_method)
+        graph_instance_methods = getattr(subgraph, "__dict__", {})
+        use_cached_confidence = (
+            confidence_impl is LineageDetector._calculate_confidence
+            and type(subgraph) is SparseCorrelationGraph
+            and not any(
+                name in graph_instance_methods
+                for name in ("neighbors", "degree", "get_correlation")
+            )
+        )
 
-        # Consider all pairs of connected nodes
+        relations = []
+        seen_pairs = set()
+        # The degree map is O(V). Neighbor sets are retained only in a bounded
+        # call-local LRU; traversal continues to fetch neighbors from the graph.
+        degree_by_node = (
+            {node: subgraph.degree(node) for node in members}
+            if use_cached_confidence
+            else None
+        )
+        neighbor_cache = OrderedDict()
+        cached_neighbor_total = 0
+
+        def cached_neighbors(node: str) -> Set[str]:
+            nonlocal cached_neighbor_total
+            cached = neighbor_cache.pop(node, None)
+            if cached is not None:
+                neighbor_cache[node] = cached
+                return cached
+
+            result = {neighbor for neighbor, _ in subgraph.neighbors(node)}
+            if len(result) > self._NEIGHBOR_CACHE_MAX_TOTAL_NEIGHBORS:
+                return result
+            while neighbor_cache and (
+                len(neighbor_cache) >= self._NEIGHBOR_CACHE_MAX_ENTRIES
+                or cached_neighbor_total + len(result)
+                > self._NEIGHBOR_CACHE_MAX_TOTAL_NEIGHBORS
+            ):
+                _, evicted = neighbor_cache.popitem(last=False)
+                cached_neighbor_total -= len(evicted)
+            neighbor_cache[node] = result
+            cached_neighbor_total += len(result)
+            return result
+
         for factor_a in members:
+            # Keep traversal order and first-seen correlation semantics.
             for factor_b, corr in subgraph.neighbors(factor_a):
                 if factor_b not in members:
                     continue
-
-                # Skip if we've already processed this pair
                 canonical_pair = tuple(sorted([factor_a, factor_b]))
                 if canonical_pair in seen_pairs:
                     continue
                 seen_pairs.add(canonical_pair)
-
-                # Check if correlation is strong enough
                 if abs(corr) < self.min_correlation:
                     continue
 
-                # Determine parent/child by degree
-                degree_a = subgraph.degree(factor_a)
-                degree_b = subgraph.degree(factor_b)
+                if use_cached_confidence:
+                    degree_a = degree_by_node[factor_a]
+                    degree_b = degree_by_node[factor_b]
+                else:
+                    degree_a = subgraph.degree(factor_a)
+                    degree_b = subgraph.degree(factor_b)
 
-                parent, child = None, None
                 if degree_a > degree_b + self.degree_threshold:
                     parent, child = factor_a, factor_b
                 elif degree_b > degree_a + self.degree_threshold:
                     parent, child = factor_b, factor_a
+                elif factor_a < factor_b:
+                    parent, child = factor_a, factor_b
                 else:
-                    # Similar degree, use lexicographic order for stability
-                    if factor_a < factor_b:
-                        parent, child = factor_a, factor_b
-                    else:
-                        parent, child = factor_b, factor_a
+                    parent, child = factor_b, factor_a
 
-                # Calculate confidence based on neighborhood overlap
-                confidence = self._calculate_confidence(
-                    parent, child, subgraph
-                )
+                if use_cached_confidence:
+                    # This path is limited to the base undirected graph, which
+                    # deduplicates identical edges and rejects conflicting ones.
+                    confidence = self._calculate_confidence_from_cached(
+                        parent,
+                        child,
+                        corr,
+                        degree_by_node,
+                        cached_neighbors,
+                    )
+                else:
+                    # Preserve subclass, instance-level graph, and detector hooks.
+                    confidence = self._calculate_confidence(
+                        parent, child, subgraph
+                    )
 
-                # Only add if confidence is reasonable
                 if confidence >= 0.3:
                     relations.append(ParentChildRelation(
                         parent_id=parent,
                         child_id=child,
                         correlation=corr,
-                        confidence=confidence
+                        confidence=confidence,
                     ))
-
         return relations
+
+    @staticmethod
+    def _calculate_confidence_from_cached(
+        parent: str,
+        child: str,
+        corr: Optional[float],
+        degree_by_node: Dict[str, int],
+        get_neighbors,
+    ) -> float:
+        """Apply the default confidence formula with bounded neighbor reuse."""
+        if corr is None:
+            return 0.0
+        corr_score = abs(corr)
+        parent_neighbors = get_neighbors(parent)
+        child_neighbors = get_neighbors(child)
+        if not child_neighbors:
+            overlap_score = 1.0
+        else:
+            overlap_score = len(child_neighbors & parent_neighbors) / len(child_neighbors)
+
+        parent_degree = degree_by_node[parent]
+        child_degree = degree_by_node[child]
+        if parent_degree == 0:
+            degree_score = 0.0
+        else:
+            degree_ratio = child_degree / parent_degree
+            degree_score = 1.0 - degree_ratio if degree_ratio <= 1.0 else 0.0
+
+        confidence = 0.4 * corr_score + 0.4 * overlap_score + 0.2 * degree_score
+        return min(confidence, 1.0)
 
     def _calculate_confidence(
         self,
