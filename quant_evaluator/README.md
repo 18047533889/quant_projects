@@ -7,6 +7,7 @@
 - [公开运行能力与输入/输出契约](docs/PUBLIC_RUNTIME_CAPABILITIES.md)：三个曾被旧表误标的统计指标、序列制品、轴坐标、组合与回撤两阶段调用范例。
 - [批量 source 后端与内存选项](docs/SOURCE_BATCH_OPTIONS.md)：auto 的证据边界、显式后端、tile 上限及 COS 组装预算。
 - [物化批次后端校准](docs/benchmarks/calibrated_batch_usage_20260930.md)：显式 CPU/CUDA 整批对拍、限次校准及有界路由缓存；尚不替代默认 auto。
+- [公开 evaluate 实测择优选项](docs/benchmarks/public_measured_auto_usage_20261001.md)：`auto_calibration=AutoCalibrationOptions(...)` 对当前完整物化批次择优并复用精确请求路由；首次双后端测试成本与输入限制见文档。
 - 更新校验：`python quant_evaluator/scripts/build_metric_reference.py --check`。
 
 本次 IC/ICIR 默认统一至少 20 个有效配对/日；缺失权重不再按部分资产求和报告低换手。历史结果需要重算，不能只改版本标签。
@@ -67,7 +68,7 @@ bundle: EvaluationBundle = evaluate(
 
 ### 选择 CPU、自动路由或 GPU
 
-`evaluate(..., backend=None)`（默认）和 `backend="auto"` 使用同一套确定性、整批自动路由：只有经过公开入口 A/B 与输出对拍的硬件、面板形状、dtype、指标集合及默认参数组合才会走 CUDA；其余请求走 CPU。自动路由不会在调用时运行基准测试，也不会把同一请求拆成按指标选择不同后端。用 `bundle.metadata["execution_receipt"]` 可检查 `backend_requested`、`backend_used`、`auto_backend_policy`、`auto_backend_profile` 和 `auto_backend_reason`。
+`evaluate(..., backend=None)`（默认）和 `backend="auto"` 在未传 `auto_calibration` 时使用同一套确定性、整批自动路由：只有经过公开入口 A/B 与输出对拍的硬件、面板形状、dtype、指标集合及默认参数组合才会走 CUDA；其余请求走 CPU。这一默认模式不会在调用时运行基准测试，也不会把同一请求拆成按指标选择不同后端。用 `bundle.metadata["execution_receipt"]` 可检查 `backend_requested`、`backend_used`、`auto_backend_policy`、`auto_backend_profile` 和 `auto_backend_reason`。对证据范围外的物化请求，可显式选择上方的 `auto_calibration` 实测模式；它不承诺首次调用更快。
 
 明确指定后端可用 `"cpu"`、`"cuda"`、`"cuda_strict"` 或 `"gpu"`（GPU 别名）。显式 GPU 请求不会静默回退到 CPU；CUDA 不可用或所请求的指标不受 GPU 执行器支持时会报错。未知后端名称同样会报错。`"numba"` 和 `"polars"` 不是公开 `evaluate` 门面的后端名称。
 

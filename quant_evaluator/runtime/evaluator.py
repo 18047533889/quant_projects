@@ -1547,6 +1547,7 @@ def evaluate(
     split_ref=None,
     backend=None,
     gpu_policy=None,
+    auto_calibration=None,
     metric_parameters=None,
     portfolio_returns=None,
     holding_returns=None,
@@ -1599,6 +1600,29 @@ def evaluate(
 
     request_metadata = {}
     request_fields = {}
+    if auto_calibration is not None:
+        from quant_evaluator.runtime.auto_calibration import evaluate_measured_auto
+        unsupported = {
+            "context": context, "where": where, "evaluator": evaluator,
+            "split_ref": split_ref, "metric_parameters": metric_parameters,
+            "portfolio_returns": portfolio_returns, "holding_returns": holding_returns,
+            "portfolio_spec": portfolio_spec, "trade_eligibility": trade_eligibility,
+            "calendar_snapshot": calendar_snapshot, "exposure_panel": exposure_panel,
+            "quantile_builder_parameters": quantile_builder_parameters,
+            "generalization_evidence": generalization_evidence,
+            "_auto_route_override": _auto_route_override,
+            "_gpu_result_override": _gpu_result_override,
+            "_diagnostics_override": _diagnostics_override,
+        }
+        if any(value is not None for value in unsupported.values()) or _prepare_only or _include_auto_route_reason:
+            raise InvalidContractError("auto_calibration supports only materialized batch metrics and gpu_policy")
+        if isinstance(factors, EvaluationRequest):
+            raise InvalidContractError("auto_calibration requires explicit FactorBatch and LabelBundle")
+        return evaluate_measured_auto(
+            factors, labels, metrics=metrics if metrics is not None else ("coverage",),
+            options=auto_calibration, gpu_policy=gpu_policy,
+            requested_backend=backend_name,
+        )
     ic_series_cache = {}
     if isinstance(factors, EvaluationRequest) and factors.metric_instances:
         if where is not None:
