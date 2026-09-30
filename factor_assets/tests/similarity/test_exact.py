@@ -549,3 +549,57 @@ def test_similarity_method_enum():
     assert SimilarityMethod.PEARSON.value == "pearson"
     assert SimilarityMethod.SPEARMAN.value == "spearman"
     assert SimilarityMethod.KENDALL.value == "kendall"
+
+
+
+@pytest.mark.parametrize("similarity_class", [CorrelationSimilarity, QEPairwiseSimilarity])
+def test_similarity_index_handles_self_pairs_overwrites_clear_and_case_sensitive_ids(similarity_class):
+    similarity = similarity_class()
+
+    def add(a, b, score, method=SimilarityMethod.PEARSON):
+        similarity.add_result(SimilarityResult(
+            factor_id_a=a, factor_id_b=b, similarity_score=score,
+            method=method, timestamp="2026-09-30T00:00:00Z", sample_size=20,
+        ))
+
+    add("A", "A", 0.95)
+    add("A", "B", -0.91)
+    add("A", "NEG", -0.93)
+    add("A", "b", 0.8)
+    add("a", "lower", 0.99)
+    add("B", "A", 0.72)  # Reverse-oriented replacement keeps index keys unique.
+    add("A", "C", 0.88, SimilarityMethod.SPEARMAN)
+
+    assert similarity.count() == 6
+    assert [r.factor_id_b for r in similarity.find_similar("A", threshold=0.9)] == ["A", "NEG"]
+    assert [r.factor_id_b for r in similarity.find_similar("A", threshold=0.7)] == ["A", "NEG", "b", "B"]
+    assert [r.factor_id_b for r in similarity.find_similar(
+        "A", method=SimilarityMethod.SPEARMAN)] == ["C"]
+    assert [r.factor_id_b for r in similarity.find_similar("a")] == ["lower"]
+    assert [r.factor_id_b for r in similarity.find_similar("B")] == ["A"]
+
+    similarity.clear()
+    assert similarity.count() == 0
+    assert similarity.find_similar("A") == []
+    add("A", "D", 0.9)
+    assert [r.factor_id_b for r in similarity.find_similar("A")] == ["D"]
+
+
+def test_correlation_similarity_count_self_pair_and_overwrite():
+    similarity = CorrelationSimilarity()
+    result = SimilarityResult(
+        factor_id_a="SELF", factor_id_b="SELF", similarity_score=0.8,
+        method=SimilarityMethod.PEARSON, timestamp="2026-09-30T00:00:00Z",
+        sample_size=10,
+    )
+    assert similarity.count() == 0
+    similarity.add_result(result)
+    assert similarity.count() == 1
+    similarity.add_result(result)
+    assert similarity.count() == 1
+    similarity.add_result(SimilarityResult(
+        factor_id_a="A", factor_id_b="B", similarity_score=0.7,
+        method=SimilarityMethod.PEARSON, timestamp="2026-09-30T00:00:00Z",
+        sample_size=10,
+    ))
+    assert similarity.count() == 2

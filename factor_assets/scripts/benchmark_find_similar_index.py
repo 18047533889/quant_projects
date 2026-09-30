@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bounded in-memory A/B benchmark for QEPairwiseSimilarity.find_similar.
+"""Bounded in-memory scan-vs-index benchmark for similarity find_similar.
 
 Run from the repository root:
     PYTHONPATH=. python3 factor_assets/scripts/benchmark_find_similar_index.py
@@ -14,8 +14,10 @@ import random
 import statistics
 import timeit
 from collections.abc import Sequence
+from dataclasses import replace
 
 from factor_assets.similarity.exact import (
+    CorrelationSimilarity,
     QEPairwiseSimilarity,
     SimilarityMethod,
     SimilarityResult,
@@ -51,9 +53,9 @@ def _result(
     )
 
 
-def _populate(unrelated_pairs: int) -> QEPairwiseSimilarity:
+def _populate(unrelated_pairs: int, similarity_class=QEPairwiseSimilarity):
     rng = random.Random(SEED)
-    similarity = QEPairwiseSimilarity()
+    similarity = similarity_class()
     for i in range(unrelated_pairs):
         similarity.add_result(
             _result(f"COLD{i}", f"OTHER{i}", rng.uniform(-0.2, 0.2))
@@ -75,7 +77,7 @@ def _populate(unrelated_pairs: int) -> QEPairwiseSimilarity:
 
 
 def _scan_reference(
-    similarity: QEPairwiseSimilarity,
+    similarity,
     factor_id: str,
     *,
     threshold: float = 0.7,
@@ -101,13 +103,15 @@ def _scan_reference(
         if fid_b in seen_factor_ids:
             continue
         if result.is_high_similarity(threshold):
+            if (result.factor_id_a, result.factor_id_b) != (fid_a, fid_b):
+                result = replace(result, factor_id_a=fid_a, factor_id_b=fid_b)
             results.append(result)
             seen_factor_ids.add(fid_b)
     results.sort(key=lambda result: abs(result.similarity_score), reverse=True)
     return results[:max_results]
 
 
-def _verify_equivalence(similarity: QEPairwiseSimilarity) -> None:
+def _verify_equivalence(similarity) -> None:
     queries = (
         {},
         {"threshold": 0.9},
@@ -150,29 +154,41 @@ def main(argv: Sequence[str] | None = None) -> int:
         f"seed={SEED} degree={TARGET_DEGREE} queries_per_sample={QUERY_NUMBER} "
         f"repeats={REPEATS}"
     )
-    print("unrelated_pairs,total_cache_keys,scan_us,indexed_us,speedup,equivalent")
+    print(
+        "unrelated_pairs,total_cache_keys,scan_us,correlation_index_us,"
+        "qe_index_us,scan_over_correlation,scan_over_qe,equivalent"
+    )
     for unrelated_pairs in args.sizes:
-        similarity = _populate(unrelated_pairs)
-        _verify_equivalence(similarity)
+        qe_similarity = _populate(unrelated_pairs)
+        correlation_similarity = _populate(unrelated_pairs, CorrelationSimilarity)
+        _verify_equivalence(qe_similarity)
+        _verify_equivalence(correlation_similarity)
 
-        scan = lambda: _scan_reference(similarity, TARGET_FACTOR)
-        indexed = lambda: similarity.find_similar(TARGET_FACTOR)
-        # Warm both paths, then interleave A/B/B/A to limit systematic
-        # ordering and interpreter/cache warm-up effects.
+        scan = lambda: _scan_reference(qe_similarity, TARGET_FACTOR)
+        qe_indexed = lambda: qe_similarity.find_similar(TARGET_FACTOR)
+        correlation_indexed = lambda: correlation_similarity.find_similar(TARGET_FACTOR)
+        # Warm all paths, then interleave scan and both index variants to
+        # limit systematic ordering and interpreter/cache warm-up effects.
         scan()
-        indexed()
+        qe_indexed()
+        correlation_indexed()
         scan_times = []
-        indexed_times = []
+        qe_times = []
+        correlation_times = []
         for _ in range(REPEATS):
             scan_times.append(timeit.timeit(scan, number=QUERY_NUMBER))
-            indexed_times.append(timeit.timeit(indexed, number=QUERY_NUMBER))
-            indexed_times.append(timeit.timeit(indexed, number=QUERY_NUMBER))
+            qe_times.append(timeit.timeit(qe_indexed, number=QUERY_NUMBER))
+            correlation_times.append(timeit.timeit(correlation_indexed, number=QUERY_NUMBER))
+            correlation_times.append(timeit.timeit(correlation_indexed, number=QUERY_NUMBER))
+            qe_times.append(timeit.timeit(qe_indexed, number=QUERY_NUMBER))
             scan_times.append(timeit.timeit(scan, number=QUERY_NUMBER))
         scan_us = statistics.median(scan_times) * 1e6 / QUERY_NUMBER
-        indexed_us = statistics.median(indexed_times) * 1e6 / QUERY_NUMBER
+        qe_us = statistics.median(qe_times) * 1e6 / QUERY_NUMBER
+        correlation_us = statistics.median(correlation_times) * 1e6 / QUERY_NUMBER
         print(
-            f"{unrelated_pairs},{len(similarity._cache)},{scan_us:.1f},"
-            f"{indexed_us:.1f},{scan_us / indexed_us:.1f}x,yes"
+            f"{unrelated_pairs},{len(qe_similarity._cache)},{scan_us:.1f},"
+            f"{correlation_us:.1f},{qe_us:.1f},{scan_us / correlation_us:.1f}x,"
+            f"{scan_us / qe_us:.1f}x,yes"
         )
     return 0
 

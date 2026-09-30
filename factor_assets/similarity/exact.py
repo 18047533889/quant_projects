@@ -47,6 +47,37 @@ def _orient_similarity_result(
     raise ValueError("cached similarity result does not match the requested factor pair")
 
 
+def _index_cache_key(cache, factor_keys, key) -> None:
+    """Index a newly inserted directional cache key for factor-local lookup."""
+    if key not in cache:
+        factor_keys.setdefault(key[0], {})[key] = None
+
+
+def _find_similar_in_cache(
+    cache, factor_keys, factor_id: str, threshold: float, max_results: int,
+    method: "SimilarityMethod", universe_ref: Optional[str],
+    period_start: Optional[str], period_end: Optional[str],
+) -> list["SimilarityResult"]:
+    """Find neighbors from a factor's ordered cache-key index."""
+    if max_results < 0:
+        raise ValueError("max_results must be non-negative")
+    candidates = []
+    for key in factor_keys.get(factor_id, {}):
+        result = cache[key]
+        fid_a, fid_b, method_val, universe, start, end = key
+        if fid_a != factor_id or method_val != method.value:
+            continue
+        if universe_ref is not None and universe != universe_ref:
+            continue
+        if period_start is not None and start != period_start:
+            continue
+        if period_end is not None and end != period_end:
+            continue
+        if result.is_high_similarity(threshold):
+            candidates.append((fid_b, _orient_similarity_result(result, fid_a, fid_b)))
+    return _deduplicate_similar_neighbors(candidates)[:max_results]
+
+
 class SimilarityMethod(Enum):
     """Similarity computation methods."""
     PEARSON = "pearson"
@@ -306,31 +337,10 @@ class QEPairwiseSimilarity:
         Returns:
             List of SimilarityResult ordered by descending similarity
         """
-        if max_results < 0:
-            raise ValueError("max_results must be non-negative")
-        # In production, would delegate to QE batch correlation
-        # For now, use cache
-        candidates = []
-        factor_keys = self._factor_keys.get(factor_id, {})
-        for key in factor_keys:
-            result = self._cache[key]
-            # key is (fid_a, fid_b, method_val, universe, start, end)
-            fid_a, fid_b, method_val, universe, start, end = key
-
-            if fid_a != factor_id or method_val != method.value:
-                continue
-            if universe_ref is not None and universe != universe_ref:
-                continue
-            if period_start is not None and start != period_start:
-                continue
-            if period_end is not None and end != period_end:
-                continue
-
-            if result.is_high_similarity(threshold):
-                candidates.append((fid_b, _orient_similarity_result(result, fid_a, fid_b)))
-
-        results = _deduplicate_similar_neighbors(candidates)
-        return results[:max_results]
+        return _find_similar_in_cache(
+            self._cache, self._factor_keys, factor_id, threshold, max_results,
+            method, universe_ref, period_start, period_end,
+        )
 
     def add_result(self, result: SimilarityResult) -> None:
         """
@@ -352,9 +362,7 @@ class QEPairwiseSimilarity:
         for key in (key_a, key_b):
             # Dict assignment to an existing cache key preserves its global
             # insertion position; only first insertion belongs in the index.
-            if key not in self._cache:
-                factor_id = key[0]
-                self._factor_keys.setdefault(factor_id, {})[key] = None
+            _index_cache_key(self._cache, self._factor_keys, key)
             self._cache[key] = result
 
     def _make_cache_key(
@@ -462,6 +470,7 @@ class CorrelationSimilarity:
 
     def __init__(self):
         self._cache: dict[tuple[str, str, str, Optional[str], Optional[str], Optional[str]], SimilarityResult] = {}
+        self._factor_keys: dict[str, dict[tuple[str, str, str, Optional[str], Optional[str], Optional[str]], None]] = {}
 
     def add_result(self, result: SimilarityResult) -> None:
         """
@@ -479,8 +488,11 @@ class CorrelationSimilarity:
             result.universe_ref, result.period_start, result.period_end
         )
 
-        # Store with both orderings for symmetric lookup
+        # Store both orderings and index each directional key once. Replacements
+        # leave their existing insertion position intact in both mappings.
+        _index_cache_key(self._cache, self._factor_keys, key_a)
         self._cache[key_a] = result
+        _index_cache_key(self._cache, self._factor_keys, key_b)
         self._cache[key_b] = result
 
     def _make_cache_key(
@@ -545,35 +557,18 @@ class CorrelationSimilarity:
 
         In production, this would query a similarity index.
         """
-        if max_results < 0:
-            raise ValueError("max_results must be non-negative")
-        candidates = []
-
-        for key, result in self._cache.items():
-            # key is (fid_a, fid_b, method_val, universe, start, end)
-            fid_a, fid_b, method_val, universe, start, end = key
-
-            if fid_a != factor_id or method_val != method.value:
-                continue
-            if universe_ref is not None and universe != universe_ref:
-                continue
-            if period_start is not None and start != period_start:
-                continue
-            if period_end is not None and end != period_end:
-                continue
-
-            if result.is_high_similarity(threshold):
-                candidates.append((fid_b, _orient_similarity_result(result, fid_a, fid_b)))
-
-        results = _deduplicate_similar_neighbors(candidates)
-
-        return results[:max_results]
+        return _find_similar_in_cache(
+            self._cache, self._factor_keys, factor_id, threshold, max_results,
+            method, universe_ref, period_start, period_end,
+        )
 
     def count(self) -> int:
         """Get total number of cached similarity results (accounting for symmetric storage)."""
-        # Divide by 2 since we store symmetric pairs
-        return len(self._cache) // 2
+        # A self-pair has one key; all other logical pairs have two.
+        self_pairs = sum(key[0] == key[1] for key in self._cache)
+        return (len(self._cache) + self_pairs) // 2
 
     def clear(self) -> None:
         """Clear all cached results."""
         self._cache.clear()
+        self._factor_keys.clear()

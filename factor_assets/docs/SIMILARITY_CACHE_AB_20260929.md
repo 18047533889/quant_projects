@@ -35,3 +35,25 @@ PYTHONPATH=. .venv/bin/python factor_assets/scripts/benchmark_find_similar_index
 另一轮同机运行的倍数约为 15.1×/69.1×/217.9×；
 微秒级计时会受负载影响。结论仅限这段缓存查询和指定合成度数，
 不代表真实 QE 成对计算、COS 读取或 FA 整条流水线同比例加速。
+
+
+## CorrelationSimilarity 共用索引（2026-09-30）
+
+CorrelationSimilarity 现在与 QEPairwiseSimilarity 共用 _find_similar_in_cache
+及索引登记辅助函数；缓存仍是权威结果，索引只保留每个左因子的有序键。
+self-pair 计数也修正为一个逻辑结果。两类 provider 的回归测试覆盖 self-pair、
+普通 pair、反向覆写、绝对阈值方向、方法/范围过滤、大小写敏感 ID 和 clear 后重建。
+当前类没有 remove API，因此不存在独立删除路径；clear() 会同时清空缓存和索引。
+
+同一确定性脚本也可比较完整缓存扫描 oracle、CorrelationSimilarity 索引及 QE 索引：
+
+    PYTHONPATH=. .venv/bin/python factor_assets/scripts/benchmark_find_similar_index.py --sizes 1000,3000
+
+本机一次运行（微秒/查询；目标因子度数固定为 24）：
+
+| 无关 pair | 缓存键 | 全扫描 | Correlation 索引 | QE 索引 |
+|---:|---:|---:|---:|---:|
+| 1,000 | 2,048 | 117.7 | 64.8 | 64.9 |
+| 3,000 | 6,048 | 250.8 | 64.7 | 64.9 |
+
+这是小型、内存内合成的实现级 benchmark，不涉及真实 QE 计算、DataAccess/COS，也不说明这两个 helper class 是生产默认路由或推断端到端收益。仓库中的 diverse assembly 仍通过注入的 similarity_provider 执行。
