@@ -163,6 +163,11 @@ class ValueRepairPlan:
             )
             function = time_series_rank if self.transform == "ts_rank_history" else capped_time_series_zscore
             return function(frame, **kwargs)
+        if self.transform == "trailing_sma":
+            if kwargs.get("min_periods", kwargs.get("window")) != kwargs.get("window"):
+                raise ValueError("FE SMA reuse requires a complete trailing window")
+            from factor_optimizer.adapters.fe_smoothing import execute_lagged_sma
+            return execute_lagged_sma(frame, window=kwargs["window"])
         if self.transform == "capped_zscore":
             from factor_preprocess.transforms.repair_shapes import capped_zscore
             return capped_zscore(frame, **kwargs)

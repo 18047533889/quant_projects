@@ -248,6 +248,8 @@ portfolio recipe 只是把冻结配方交给显式 consumer 评估，并不让�
 
 TreatmentDecisionPolicy 依次处理证据完整性、诊断、修复建议、预期收益、风险、接受或重试或拒绝、理由与血缘。硬性 integrity gate 不能被高分补偿。修复后必须绑定父因子、变异、证据 schema 和 digest。
 
+值级因果 SMA 复用 FactorEngine 的 long-Polars 执行：输出时点 t 先滞后一条，再对前 w 个观测做完整窗口均值（`ts_mean(ts_delay(x, 1), window=w, min_periods=w)`）。窗口按每个资产实际存在的观测行计数；稀疏日期不会被补齐，也不会因跨日间隔而改变窗口长度。该入口仅供显式允许的研究执行，不能据此推断生产资格。 在 200,000 行（1,000 资产 × 200 日、window=20）交错 5 轮基准中，热运行 FE 中位数 0.0409 秒、FP 0.0802 秒，FE 约快 2 倍且逐值一致；FE 首次冷启动约 12.06 秒，含初始化成本。完整基准与分段剖析见 [FE SMA A/B 基准](benchmarks/fe_sma_ab_20260930.md)。
+
 ## 12. Train、Validation 与 Sealed Test
 
 train 用于拟合或构造候选，validation 用于模型选择。SplitPlan 表达时间边界、purge overlap 和 embargo。漏斗晋级、平台、Pareto 和赢家选择只能使用 search data。

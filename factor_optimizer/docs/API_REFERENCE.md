@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**77 个 Python 模块、943 个公开函数/类/方法定义**。
+扫描实际包目录：**78 个 Python 模块、944 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -14,6 +14,7 @@
 | [factor_optimizer/adapters/__init__.py](../factor_optimizer/adapters/__init__.py) | 0 | Adapter protocols for FE and QE integration. |
 | [factor_optimizer/adapters/factor_assets.py](../factor_optimizer/adapters/factor_assets.py) | 18 | FA factor-intelligence provider adapters (R61-FI-014 / plan §20 E6, matrix E6). |
 | [factor_optimizer/adapters/factor_engine.py](../factor_optimizer/adapters/factor_engine.py) | 7 | FactorEngineAdapter: protocol for FE integration (optional dependency). |
+| [factor_optimizer/adapters/fe_smoothing.py](../factor_optimizer/adapters/fe_smoothing.py) | 1 | FactorEngine-native, lagged smoothing on sparse long panels. |
 | [factor_optimizer/adapters/fitness.py](../factor_optimizer/adapters/fitness.py) | 2 | Fitness adapter: dimension/desirability mapping for generalized treatment decisions. |
 | [factor_optimizer/adapters/layered_decay.py](../factor_optimizer/adapters/layered_decay.py) | 4 | TRAIN-frozen research plan for observation-origin twenty-layer decay. |
 | [factor_optimizer/adapters/preprocessing.py](../factor_optimizer/adapters/preprocessing.py) | 6 | Versioned research bridge from smoothing proposals to real FP kernels. |
@@ -356,6 +357,20 @@ Create FE adapter if factor-engine is installed.
 
 返回类型：`FactorEngineAdapter`。
 
+## factor_optimizer/adapters/fe_smoothing.py
+
+FactorEngine-native, lagged smoothing on sparse long panels.
+
+### execute_lagged_sma
+
+[实际实现](../factor_optimizer/adapters/fe_smoothing.py#L10)。
+
+Run FE ``ts_mean(ts_delay(x, 1), window, min_periods=window)``.
+
+参数：`(frame: pd.DataFrame, *, window: int)`。
+
+返回类型：`pd.Series`。
+
 ## factor_optimizer/adapters/fitness.py
 
 Fitness adapter: dimension/desirability mapping for generalized treatment decisions.
@@ -679,7 +694,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### compile_value_repair
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L186)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L191)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -10651,11 +10666,12 @@ Import seen records from dictionaries.
 | `factor_optimizer/adapters/__init__.py` | `d2cd050fc93d62119ef592d8d663e985e5218554c6cb289d839e384a49b40a23` |
 | `factor_optimizer/adapters/factor_assets.py` | `6a2ad44b43710199fd6eed901de2974fb8a66314f525be016c2f4796bf8af6d4` |
 | `factor_optimizer/adapters/factor_engine.py` | `de24ad77fc2408851497d93836c40d744d37907151bb8d96fd03a767c279e2e5` |
+| `factor_optimizer/adapters/fe_smoothing.py` | `92e198da9c433deab4d76b50c7cc23ed34ee34c19bb1a60d85bdee3124166606` |
 | `factor_optimizer/adapters/fitness.py` | `4486884657f730c65064fe6e1aebc7555a515fbc3cba41c71c1bf8c9e4c48ce5` |
 | `factor_optimizer/adapters/layered_decay.py` | `86ac91175c82eef473abef116a7a67802872a0da96ce0fa7a6022bf783bb3e26` |
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
-| `factor_optimizer/adapters/repair_execution.py` | `3565d1fe9ed419607f5262afb1e32087014e0771a5aa5518d7f78dffe1766d71` |
+| `factor_optimizer/adapters/repair_execution.py` | `512c91404d5457f0971c97430db10c60836f75fdc3ee401dea646513d087c25e` |
 | `factor_optimizer/capabilities.py` | `efb1fbf1b54b1b14f128ffe63c74f54f7a22f99a409a0761aac67fc1b6e3ed28` |
 | `factor_optimizer/complexity/__init__.py` | `79c8daf01ef8071b77eb7cbb8df4ae45fc9e2d4a4349f35d402a12f79936e696` |
 | `factor_optimizer/complexity/budget.py` | `d797ada6f52d0ccab3820450fb12e8f84f3f3dbb4e9f1e53f64eb5bb21a3469d` |
