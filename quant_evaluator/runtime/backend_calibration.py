@@ -9,6 +9,7 @@ an in-flight public evaluation.
 from __future__ import annotations
 
 from collections import OrderedDict
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass, fields, is_dataclass
 import hashlib
@@ -20,6 +21,7 @@ import secrets
 import threading
 import time
 from typing import Any, Callable
+import weakref
 
 import numpy as np
 from quant_evaluator.contracts._hashutil import canonicalize
@@ -57,6 +59,24 @@ class CalibrationPolicy:
                 raise ValueError(f"{name} must be nonnegative and finite")
 
 
+# Keep only weak references so cache instances remain collectible. A forked
+# process has its own process-local cache state; inherited route records must
+# not be reused there, and inherited locks may have been held by vanished
+# parent threads.
+_CALIBRATION_CACHES = weakref.WeakSet()
+
+
+def _reset_calibration_caches_after_fork():
+    for cache in list(_CALIBRATION_CACHES):
+        cache._lock = threading.RLock()
+        cache._records.clear()
+
+
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=_reset_calibration_caches_after_fork)
+
+
+
 class BoundedCalibrationCache:
     """Thread-safe LRU of exact-request route/timing records, never results."""
 
@@ -69,6 +89,7 @@ class BoundedCalibrationCache:
         self.ttl_seconds = float(ttl_seconds)
         self._records = OrderedDict()
         self._lock = threading.RLock()
+        _CALIBRATION_CACHES.add(self)
 
     def get(self, key: str):
         with self._lock:
