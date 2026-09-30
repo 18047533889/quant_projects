@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, tzinfo
+
 import numpy as np
 
 from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
@@ -10,13 +12,14 @@ from quant_evaluator.runtime.backend_calibration import (
 from quant_evaluator.runtime import measured_auto_registry as registry
 
 
-def _inputs(values=None):
-    time_axis = AxisRef("time", "int64", 4, np.arange(4, dtype=np.int64))
+def _inputs(values=None, *, context_refs=None, time_axis=None):
+    time_axis = time_axis or AxisRef("time", "int64", 4, np.arange(4, dtype=np.int64))
     asset_axis = AxisRef("asset", "str", 3, np.array(["a", "b", "c"]))
     batch = FactorBatch(
         factor_ids=("f1",), time_axis=time_axis, asset_axis=asset_axis,
         values=(np.arange(12, dtype=np.float64).reshape(4, 3, 1)
                 if values is None else values),
+        context_refs={} if context_refs is None else context_refs,
     )
     label = LabelBundle(
         target_id="forward_1d", values=np.arange(12, dtype=np.float64).reshape(4, 3),
@@ -224,3 +227,89 @@ def test_axis_subclass_falls_back_to_full_fingerprint(monkeypatch):
     assert selected[0] == "cpu", selected
     assert selected[2] is True
     assert calls["fingerprint"] == 1
+
+
+class _MutableTimezone(tzinfo):
+    def __init__(self):
+        self.hours = 0
+
+    def utcoffset(self, value):
+        return timedelta(hours=self.hours)
+
+    def dst(self, value):
+        return timedelta(0)
+
+    def tzname(self, value):
+        return f"UTC{self.hours:+d}"
+
+
+def test_mutable_timezone_in_context_uses_full_fingerprint(monkeypatch):
+    zone = _MutableTimezone()
+    batch, label = _inputs(context_refs={
+        "captured_at": datetime(2024, 1, 1, tzinfo=zone),
+    })
+    calls, gpu_policy, _cache = _install_candidate(monkeypatch, batch, label)
+    zone.hours = 4
+    selected = auto_calibration.select_measured_auto_backend(
+        batch, label, metrics=("coverage",), gpu_policy=gpu_policy,
+        static_backend="cuda_strict", static_reason="static",
+    )
+    assert selected[0] == "cuda_strict"
+    assert selected[3]["rejection_reason"] == "identity_mismatch"
+    assert calls["fingerprint"] == 1
+
+
+def test_object_datetime_axis_uses_full_fingerprint(monkeypatch):
+    zone = _MutableTimezone()
+    time_axis = AxisRef(
+        "time", "object", 4,
+        np.array([
+            datetime(2024, 1, day, tzinfo=zone) for day in range(1, 5)
+        ], dtype=object),
+    )
+    batch, label = _inputs(time_axis=time_axis)
+    calls, gpu_policy, _cache = _install_candidate(monkeypatch, batch, label)
+    zone.hours = 5
+    selected = auto_calibration.select_measured_auto_backend(
+        batch, label, metrics=("coverage",), gpu_policy=gpu_policy,
+        static_backend="cuda_strict", static_reason="static",
+    )
+    assert selected[0] == "cuda_strict"
+    assert selected[3]["rejection_reason"] == "identity_mismatch"
+    assert calls["fingerprint"] == 1
+
+
+def test_nested_primitive_context_remains_digest_reuse_eligible(monkeypatch):
+    batch, label = _inputs(context_refs={
+        "versions": {"factor": ["v1", "v2"]},
+        "groups": ["g1", "g2"],
+    })
+    calls, gpu_policy, _cache = _install_candidate(monkeypatch, batch, label)
+    selected = auto_calibration.select_measured_auto_backend(
+        batch, label, metrics=("coverage",), gpu_policy=gpu_policy,
+        static_backend="cuda_strict", static_reason="static",
+    )
+    assert selected[:3] == ("cpu", "measured_auto_exact_candidate", True)
+    assert calls["fingerprint"] == 0
+
+
+def test_immutability_walk_limit_falls_back_to_full_fingerprint(monkeypatch):
+    batch, label = _inputs(context_refs={"items": list(range(1100))})
+    calls, gpu_policy, _cache = _install_candidate(monkeypatch, batch, label)
+    selected = auto_calibration.select_measured_auto_backend(
+        batch, label, metrics=("coverage",), gpu_policy=gpu_policy,
+        static_backend="cuda_strict", static_reason="static",
+    )
+    assert selected[:3] == ("cpu", "measured_auto_exact_candidate", True)
+    assert calls["fingerprint"] == 1
+
+
+def test_immutability_walk_preflights_container_width(monkeypatch):
+    from quant_evaluator.contracts.metric_artifacts import FrozenMapping
+    from quant_evaluator.runtime import immutable_input_identity
+
+    monkeypatch.setattr(immutable_input_identity, "MAX_IMMUTABILITY_NODES", 4)
+    assert not immutable_input_identity._deeply_immutable(tuple(range(100_000)))
+    assert not immutable_input_identity._deeply_immutable(
+        FrozenMapping({f"k{i}": i for i in range(100)})
+    )

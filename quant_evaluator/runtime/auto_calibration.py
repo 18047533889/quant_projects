@@ -119,17 +119,11 @@ def select_measured_auto_backend(batch, label, *, metrics, gpu_policy,
         started = time.monotonic()
         try:
             candidate_policy = CalibrationPolicy(**dict(candidate.calibration_policy))
-            from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
-            from quant_evaluator.contracts.label_bundle import LabelBundle
-            exact_axes = (
-                type(batch.time_axis) is AxisRef
-                and type(batch.asset_axis) is AxisRef
-                and (label.asset_axis is None or type(label.asset_axis) is AxisRef)
+            from quant_evaluator.runtime.immutable_input_identity import (
+                supports_request_digest_reuse,
             )
             exact_objects = (
-                type(batch) is FactorBatch
-                and type(label) is LabelBundle
-                and exact_axes
+                supports_request_digest_reuse(batch, label)
                 and candidate.batch_ref is not None
                 and candidate.label_ref is not None
                 and candidate.batch_ref() is batch

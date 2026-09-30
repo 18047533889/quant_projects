@@ -128,3 +128,15 @@ source mode and successful device admission remained active. This measures
 identity assembly, not complete evaluation latency or a real-COS workload.
 The focused 75-test run also checked repeated reuse, changed inputs, source
 drift, device failure, weak-reference collection and subclass fallback.
+
+Digest reuse also requires a bounded deep-immutability check of factor context
+metadata and non-object coordinate arrays with immutable bytes ownership.
+Custom timezone objects can change the canonical representation of a stored
+datetime, despite its frozen outer contract. QE therefore takes the full
+fingerprint path for those values, object axes and unproven metadata types.
+The metadata walk permits at most 1024 visited nodes and checks container
+width before growing its worklist. Larger metadata uses full hashing.
+
+Regression tests mutate a custom timezone offset and confirm changed full
+identity prevents adoption. Immutable nested primitive metadata retains digest
+reuse. Public input-contract acceptance remains unchanged.
