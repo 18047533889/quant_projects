@@ -173,7 +173,7 @@ DEDUPE_ALIASES: dict[str, str] = {
     "shift": "ts_delay",
     # --- 截面 / 分组 ---
     "standardize": "zscore",
-    "panel_rank": "rank",
+    "panel_rank": "cs_pct_rank",
     "panel_zscore": "zscore",
     "panel_standardize": "zscore",
     "industry_neutralize": "group_neutralize",

@@ -255,7 +255,7 @@
 | cs_multi_ridge_resid | extended | pandas_numpy, polars | cs_multi_robust_resid | True | cs | None | None | 0 |
 | cs_neighbor_gap | daily | pandas_numpy, polars |  | True | cs | None | 1 | 0 |
 | cs_neutralize | daily | pandas_numpy, polars, sql |  | True | cs | None | None | 0 |
-| cs_pct_rank | daily | pandas_numpy, polars, sql | rank_pct | True | cs | None | None | 0 |
+| cs_pct_rank | daily | pandas_numpy, polars, sql | panel_rank, rank_pct | True | cs | None | None | 0 |
 | cs_physical_panel_coverage | extended | pandas_numpy, polars |  | True | cs | None | None | 0 |
 | cs_predictability_mosaic_score | extended | pandas_numpy, polars |  | True | cs | None | 1 | 0 |
 | cs_quantile | daily | pandas_numpy, polars, sql | c_percentile, quantile | True | cs | None | None | 0 |
@@ -959,7 +959,7 @@
 | psar_flip | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |
 | quarter_from_cumulative | daily | pandas_numpy, polars, sql |  | True | fundamental_period | None | 1 | 0 |
 | range_volatility | daily | pandas_numpy, polars, sql |  | True | ts | None | 1 | 0 |
-| rank | daily | pandas_numpy, polars, sql | CS_RANK, RANK, c_rank, cs_rank, cs_rank_01, panel_rank | True | cs | None | None | 0 |
+| rank | daily | pandas_numpy, polars, sql | CS_RANK, RANK, c_rank, cs_rank, cs_rank_01 | True | cs | None | None | 0 |
 | rank_corr | daily | pandas_numpy, polars, sql | RANKCORR, RANK_CORR, rankcorr | True | ts | None | 2 | 0 |
 | real_turnover_rate | daily | pandas_numpy, polars |  | True | elementwise | None | 1 | 0 |
 | reg_forecast_error_pct | daily | pandas_numpy, polars |  | True | ts | None | 1 | 0 |

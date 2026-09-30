@@ -3558,6 +3558,7 @@
       "canonical": "cs_pct_rank",
       "surface": "daily",
       "aliases": [
+        "panel_rank",
         "rank_pct"
       ],
       "backends": [
@@ -13652,8 +13653,7 @@
         "RANK",
         "c_rank",
         "cs_rank",
-        "cs_rank_01",
-        "panel_rank"
+        "cs_rank_01"
       ],
       "backends": [
         "pandas_numpy",
