@@ -6,6 +6,8 @@ FA stores only bounded summary statistics, not full value arrays.
 """
 
 from dataclasses import dataclass, replace
+from heapq import nsmallest
+from operator import index
 from enum import Enum
 from typing import Protocol, Optional
 
@@ -20,6 +22,7 @@ def _similarity_scope_key(result: "SimilarityResult") -> tuple[tuple[bool, str],
 
 def _deduplicate_similar_neighbors(
     candidates: list[tuple[str, "SimilarityResult"]],
+    *, max_results: Optional[int] = None,
 ) -> list["SimilarityResult"]:
     """Keep each neighbor's strongest score with deterministic scope tie breaks."""
     best_by_neighbor: dict[str, tuple[tuple[float, tuple[tuple[bool, str], ...]], "SimilarityResult"]] = {}
@@ -29,10 +32,13 @@ def _deduplicate_similar_neighbors(
         if current is None or rank < current[0]:
             best_by_neighbor[neighbor_id] = (rank, result)
 
-    ordered = sorted(
-        best_by_neighbor.items(),
-        key=lambda item: (item[1][0][0], item[0], item[1][0][1]),
-    )
+    order_key = lambda item: (item[1][0][0], item[0], item[1][0][1])
+    if max_results is None:
+        ordered = sorted(best_by_neighbor.items(), key=order_key)
+    else:
+        # Preserve full-sort tie ordering without sorting all neighbors when
+        # callers request a small top-k result.
+        ordered = nsmallest(max_results, best_by_neighbor.items(), key=order_key)
     return [result for _, (_, result) in ordered]
 
 
@@ -61,7 +67,10 @@ def _find_similar_in_cache(
     """Find neighbors from a factor's ordered cache-key index."""
     if max_results < 0:
         raise ValueError("max_results must be non-negative")
+    max_results = index(max_results)  # match integer slice-index semantics
     candidates = []
+    if max_results == 0:
+        return []
     for key in factor_keys.get(factor_id, {}):
         result = cache[key]
         fid_a, fid_b, method_val, universe, start, end = key
@@ -75,7 +84,7 @@ def _find_similar_in_cache(
             continue
         if result.is_high_similarity(threshold):
             candidates.append((fid_b, _orient_similarity_result(result, fid_a, fid_b)))
-    return _deduplicate_similar_neighbors(candidates)[:max_results]
+    return _deduplicate_similar_neighbors(candidates, max_results=max_results)
 
 
 class SimilarityMethod(Enum):
