@@ -29,7 +29,7 @@ from factor_preprocess.registry.transforms import (
     get_default_registry,
 )
 
-_VALID_ORIGINS = {"FE_OPERATOR", "FP_NATIVE"}
+_VALID_ORIGINS = {"FE_OPERATOR", "FE_COMPOSITE", "FP_NATIVE"}
 _VALID_FIT_KINDS = {"stateless", "fitted"}
 
 #: The 8 transforms routed to FE execution (parity-proved in
@@ -62,9 +62,12 @@ def test_every_transform_has_origin_and_valid_fields():
             assert m.fit_kind == "stateless", (
                 f"{m.name}: fitted transforms must stay FP_NATIVE"
             )
+        elif m.implementation_origin == "FE_COMPOSITE":
+            assert m.fe_operator_id is None, m.name
+            assert m.fit_kind == "stateless", m.name
         else:
             assert m.fe_operator_id is None, (
-                f"{m.name}: FP_NATIVE must not carry fe_operator_id"
+                f"{m.name}: non-operator origins must not carry fe_operator_id"
             )
 
 
@@ -117,6 +120,10 @@ def test_origin_semantic_surface_participates_in_numeric_policy_hash():
                     fe_operator_id=None, fit_kind="stateless")
     after_native = registry.get("t1").numeric_policy_hash
     assert after_native != after_fe
+    registry.enrich("t1", implementation_origin="FE_COMPOSITE", fe_operator_id=None,
+                    fit_kind="stateless", fe_equivalent_semantics="FE_COMPOSITE:test:v1")
+    after_composite = registry.get("t1").numeric_policy_hash
+    assert after_composite != after_native
     # The FP_NATIVE route with fe_operator_id=None is not guaranteed to
     # restore the original pre-enrichment hash, because enrichment re-derives
     # the numeric policy hash from the *full current surface* each time — the
@@ -128,6 +135,7 @@ def test_origin_semantic_surface_participates_in_numeric_policy_hash():
 def test_resolve_origin_rules():
     registry = get_default_registry()
     assert registry.resolve_origin("cs_rank") == "FE_OPERATOR"
+    assert registry.resolve_origin("trailing_sma") == "FE_COMPOSITE"
     assert registry.resolve_origin("cs_zscore") == "FP_NATIVE"
     assert registry.resolve_origin("ewma") == "FP_NATIVE"
     with pytest.raises(ValueError):

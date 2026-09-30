@@ -807,6 +807,8 @@ class TransformRegistry:
             return "FP_NATIVE"
         if metadata.implementation_origin == "FE_OPERATOR" and metadata.fe_operator_id:
             return "FE_OPERATOR"
+        if metadata.implementation_origin == "FE_COMPOSITE":
+            return "FE_COMPOSITE"
         return "FP_NATIVE"
 
     def get_execution(self, name: str, *, allow_research: bool = False):
@@ -829,6 +831,23 @@ class TransformRegistry:
             self.validate_production(name)
         elif name not in self._transforms:
             raise ValueError(f"Transform '{name}' is not registered")
+
+        if self.resolve_origin(name) == "FE_COMPOSITE":
+            meta = self._transforms[name]
+            try:
+                from factor_preprocess.adapters.fe_smoothing import get_fe_composite_executor
+            except (ImportError, ModuleNotFoundError):
+                get_fe_composite_executor = None
+            executor = (get_fe_composite_executor(name, meta.fe_equivalent_semantics)
+                        if get_fe_composite_executor is not None else None)
+            if executor is not None:
+                return _ValidatedExecutor(meta, executor)
+            if allow_research:
+                return _ValidatedExecutor(meta, meta.func)
+            raise GovernanceError(
+                f"FE composite authority unavailable for {name!r}; "
+                "no implicit FP-native fallback"
+            )
 
         if self.resolve_origin(name) == "FE_OPERATOR":
             try:
@@ -1516,6 +1535,12 @@ def create_default_registry() -> TransformRegistry:
         )
     del _name, _fe_id, _fit_kind, _FE_ROUTED
 
+    registry.enrich(
+        "trailing_sma", implementation_origin="FE_COMPOSITE", fe_operator_id=None,
+        fit_kind="stateless",
+        fe_equivalent_semantics="FE_COMPOSITE:long_smoothing.lagged_mean:v1",
+    )
+
     # Every transform left FP_NATIVE is explicitly stamped (fail-closed:
     # ``implementation_origin`` is never None on a production transform so a
     # routing audit can enumerate the full catalog without guessing).
@@ -1523,7 +1548,7 @@ def create_default_registry() -> TransformRegistry:
         if _meta.name in {
             "cs_rank", "cs_demean", "cs_winsor",
             "forward_fill", "ols_neutralize", "industry_neutral",
-            "size_neutral", "dual_neutral",
+            "size_neutral", "dual_neutral", "trailing_sma",
         }:
             continue
         _kind = "fitted" if _meta.requires_fit else "stateless"

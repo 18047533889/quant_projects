@@ -1,0 +1,318 @@
+{
+  "cases": [
+    {
+      "causal_semantics": "per-asset prior observed rows [t-window, t-1]; current excluded; delay=1",
+      "min_periods": 0,
+      "routes": {
+        "FE_registry": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.04584494201117195,
+          "warm_samples_seconds": [
+            0.04584494201117195,
+            0.05191192901111208,
+            0.0443665070051793,
+            0.04114198498427868,
+            0.04972563500632532
+          ]
+        },
+        "FP_native": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.08068161801202223,
+          "warm_samples_seconds": [
+            0.08096725901123136,
+            0.08068161801202223,
+            0.07818196399603039,
+            0.08047057499061339,
+            0.08231065899599344
+          ]
+        }
+      },
+      "window": 3
+    },
+    {
+      "causal_semantics": "per-asset prior observed rows [t-window, t-1]; current excluded; delay=1",
+      "min_periods": 1,
+      "routes": {
+        "FE_registry": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.045362116972683,
+          "warm_samples_seconds": [
+            0.047609728993847966,
+            0.04771917502512224,
+            0.045362116972683,
+            0.043599510012427345,
+            0.04216813397943042
+          ]
+        },
+        "FP_native": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.07593315202393569,
+          "warm_samples_seconds": [
+            0.09798193501774222,
+            0.07593315202393569,
+            0.07582818501396105,
+            0.07655710299150087,
+            0.07561617100145668
+          ]
+        }
+      },
+      "window": 3
+    },
+    {
+      "causal_semantics": "per-asset prior observed rows [t-window, t-1]; current excluded; delay=1",
+      "min_periods": 3,
+      "routes": {
+        "FE_registry": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.046212532004574314,
+          "warm_samples_seconds": [
+            0.041481574007775635,
+            0.05153339100070298,
+            0.042349808994913474,
+            0.046212532004574314,
+            0.04686315098660998
+          ]
+        },
+        "FO_adapter": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.04557990998728201,
+          "warm_samples_seconds": [
+            0.04574156602029689,
+            0.040070577000733465,
+            0.04640515599749051,
+            0.04557990998728201,
+            0.04497313901083544
+          ]
+        },
+        "FP_native": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.07990078200236894,
+          "warm_samples_seconds": [
+            0.08207553601823747,
+            0.08100105897756293,
+            0.07990078200236894,
+            0.0772928610094823,
+            0.07931164998444729
+          ]
+        }
+      },
+      "window": 3
+    },
+    {
+      "causal_semantics": "per-asset prior observed rows [t-window, t-1]; current excluded; delay=1",
+      "min_periods": 0,
+      "routes": {
+        "FE_registry": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.0437963750155177,
+          "warm_samples_seconds": [
+            0.04391918101464398,
+            0.044224812008906156,
+            0.043376886984333396,
+            0.04298730898881331,
+            0.0437963750155177
+          ]
+        },
+        "FP_native": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.0770615569781512,
+          "warm_samples_seconds": [
+            0.07395987201016396,
+            0.0770615569781512,
+            0.07633129900204949,
+            0.07734197899117135,
+            0.0987692599883303
+          ]
+        }
+      },
+      "window": 10
+    },
+    {
+      "causal_semantics": "per-asset prior observed rows [t-window, t-1]; current excluded; delay=1",
+      "min_periods": 1,
+      "routes": {
+        "FE_registry": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.049309386988170445,
+          "warm_samples_seconds": [
+            0.04353905201423913,
+            0.05062556799384765,
+            0.049269098992226645,
+            0.050536730006569996,
+            0.049309386988170445
+          ]
+        },
+        "FP_native": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.08161813000333495,
+          "warm_samples_seconds": [
+            0.0863652859989088,
+            0.07510758700664155,
+            0.0798064139962662,
+            0.08263832898228429,
+            0.08161813000333495
+          ]
+        }
+      },
+      "window": 10
+    },
+    {
+      "causal_semantics": "per-asset prior observed rows [t-window, t-1]; current excluded; delay=1",
+      "min_periods": 10,
+      "routes": {
+        "FE_registry": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.04739422499551438,
+          "warm_samples_seconds": [
+            0.047789703006856143,
+            0.045865961990784854,
+            0.04247375499107875,
+            0.04739422499551438,
+            0.0631898769934196
+          ]
+        },
+        "FO_adapter": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.04588689099182375,
+          "warm_samples_seconds": [
+            0.04588689099182375,
+            0.045097085007000715,
+            0.04656955000245944,
+            0.045884411985753104,
+            0.060652334010228515
+          ]
+        },
+        "FP_native": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.07868601899826899,
+          "warm_samples_seconds": [
+            0.07868601899826899,
+            0.0774118369736243,
+            0.07794266100972891,
+            0.0792660910228733,
+            0.09149462101049721
+          ]
+        }
+      },
+      "window": 10
+    },
+    {
+      "causal_semantics": "per-asset prior observed rows [t-window, t-1]; current excluded; delay=1",
+      "min_periods": 0,
+      "routes": {
+        "FE_registry": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.0488646509766113,
+          "warm_samples_seconds": [
+            0.053094353002961725,
+            0.04622321098577231,
+            0.0488646509766113,
+            0.07764661000692286,
+            0.04654418199788779
+          ]
+        },
+        "FP_native": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.07988098199712113,
+          "warm_samples_seconds": [
+            0.10956767402240075,
+            0.07779781601857394,
+            0.07988098199712113,
+            0.07790100199053995,
+            0.08566278699436225
+          ]
+        }
+      },
+      "window": 30
+    },
+    {
+      "causal_semantics": "per-asset prior observed rows [t-window, t-1]; current excluded; delay=1",
+      "min_periods": 1,
+      "routes": {
+        "FE_registry": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.044695916993077844,
+          "warm_samples_seconds": [
+            0.04696031799539924,
+            0.0424072360037826,
+            0.04751705098897219,
+            0.044695916993077844,
+            0.04288263199850917
+          ]
+        },
+        "FP_native": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.08000856899889186,
+          "warm_samples_seconds": [
+            0.08591109997360036,
+            0.07878439599880949,
+            0.08000856899889186,
+            0.07959781098179519,
+            0.08297294800286181
+          ]
+        }
+      },
+      "window": 30
+    },
+    {
+      "causal_semantics": "per-asset prior observed rows [t-window, t-1]; current excluded; delay=1",
+      "min_periods": 30,
+      "routes": {
+        "FE_registry": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.05369589399197139,
+          "warm_samples_seconds": [
+            0.055618686019442976,
+            0.053952457004925236,
+            0.04831172799458727,
+            0.05369589399197139,
+            0.048526661994401366
+          ]
+        },
+        "FO_adapter": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.04988519998732954,
+          "warm_samples_seconds": [
+            0.050314736989093944,
+            0.04548595298547298,
+            0.04988519998732954,
+            0.050800411991076544,
+            0.04750904199318029
+          ]
+        },
+        "FP_native": {
+          "max_abs_diff_vs_fp": 0.0,
+          "warm_median_seconds": 0.08246244399924763,
+          "warm_samples_seconds": [
+            0.09021892899181694,
+            0.08069795698975213,
+            0.08246244399924763,
+            0.09976391101372428,
+            0.08043182597612031
+          ]
+        }
+      },
+      "window": 30
+    }
+  ],
+  "fo_contract": "FO FE-smoothing adapter keeps complete-window SMA (min_periods=window); min_periods=0/1 are compared only between FP-native and FE registry.",
+  "status": "passed",
+  "timing_method": {
+    "cold_fe_first_call_seconds": 12.474387736991048,
+    "cold_fe_max_abs_diff_vs_fp": 0.0,
+    "cold_fe_time_excluded_from_warm_statistics": true,
+    "warm_order": "rotating route order, reversed on alternating rounds",
+    "warm_rounds": 5
+  },
+  "workload": {
+    "asset_dtype": "category with unused category and null asset rows",
+    "assets": 1000,
+    "date_spacing": "3 integer ticks per per-asset observation (sparse calendar)",
+    "duplicate_index": true,
+    "infinite_values": true,
+    "null_values": true,
+    "observations_per_asset_before_null_asset_rows": 200,
+    "rows": 200000,
+    "seed": 20260930
+  }
+}

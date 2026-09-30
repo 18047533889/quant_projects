@@ -363,9 +363,9 @@ FactorEngine-native, lagged smoothing on sparse long panels.
 
 ### execute_lagged_sma
 
-[实际实现](../factor_optimizer/adapters/fe_smoothing.py#L10)。
+[实际实现](../factor_optimizer/adapters/fe_smoothing.py#L5)。
 
-Run FE ``ts_mean(ts_delay(x, 1), window, min_periods=window)``.
+Run the complete-window FE lagged-SMA recipe on a sparse long panel.
 
 参数：`(frame: pd.DataFrame, *, window: int)`。
 
@@ -10666,7 +10666,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/adapters/__init__.py` | `d2cd050fc93d62119ef592d8d663e985e5218554c6cb289d839e384a49b40a23` |
 | `factor_optimizer/adapters/factor_assets.py` | `6a2ad44b43710199fd6eed901de2974fb8a66314f525be016c2f4796bf8af6d4` |
 | `factor_optimizer/adapters/factor_engine.py` | `de24ad77fc2408851497d93836c40d744d37907151bb8d96fd03a767c279e2e5` |
-| `factor_optimizer/adapters/fe_smoothing.py` | `92e198da9c433deab4d76b50c7cc23ed34ee34c19bb1a60d85bdee3124166606` |
+| `factor_optimizer/adapters/fe_smoothing.py` | `54929a09f6c907d0f8242de384a50c59568003d4091d3c97d7a9a1ebbb433770` |
 | `factor_optimizer/adapters/fitness.py` | `4486884657f730c65064fe6e1aebc7555a515fbc3cba41c71c1bf8c9e4c48ce5` |
 | `factor_optimizer/adapters/layered_decay.py` | `86ac91175c82eef473abef116a7a67802872a0da96ce0fa7a6022bf783bb3e26` |
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |

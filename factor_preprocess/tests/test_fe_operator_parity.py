@@ -381,7 +381,7 @@ def test_fitted_and_unmapped_transforms_are_fp_native():
             )
     # Freshness / smoothing / decomposition / cs_zscore are FP-native.
     for name in ("freshness_score", "days_since_update", "ewma", "kama",
-                 "trailing_sma", "one_sided_iir_lowpass", "kalman_local_level",
+                 "one_sided_iir_lowpass", "kalman_local_level",
                  "hp_filter", "volatility_scale", "missing_indicator",
                  "cs_zscore"):
         meta = registry.get(name)
@@ -389,6 +389,14 @@ def test_fitted_and_unmapped_transforms_are_fp_native():
         assert meta.implementation_origin == "FP_NATIVE", name
         assert registry.resolve_origin(name) == "FP_NATIVE", name
 
+    # Lagged SMA is an FE composite (not a single FE operator), with explicit
+    # semantic identity so catalog audits cannot classify it as FP-native.
+    sma = registry.get("trailing_sma")
+    assert sma is not None
+    assert sma.implementation_origin == "FE_COMPOSITE"
+    assert sma.fe_operator_id is None
+    assert sma.fe_equivalent_semantics == "FE_COMPOSITE:long_smoothing.lagged_mean:v1"
+    assert registry.resolve_origin("trailing_sma") == "FE_COMPOSITE"
 
 def test_fe_operator_execution_fails_closed_but_research_fallback_is_explicit(monkeypatch):
     """Missing FE authority blocks production; research can opt into FP math."""
