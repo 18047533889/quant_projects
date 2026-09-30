@@ -12,6 +12,8 @@ Focus areas:
 - Complex algorithms (DFA, multifractal, wavelet) - skeletons with TODO
 """
 from __future__ import annotations
+import hashlib
+from pathlib import Path
 import copy
 from factor_engine.cleaned_operators.common import direction_risk_polars as _risk_kernels
 
@@ -561,7 +563,7 @@ class TSAutocorrelationTimeInitialPositiveSequencePolarsNative(SeriesOperator):
 # Volume and Basic Statistics
 # ============================================================================
 
-@register_operator(name="ts_average_volume", canonical="ts_average_volume", backend="polars")
+@register_operator(name="ts_average_volume", canonical="ts_average_volume", backend="polars", source="factor_engine.cleaned_operators.polars_native.ts_advanced_batch1", replace=True, expected_old_source="factor_dsl_np", replacement_reason="Pin the native rolling-volume implementation and its axis/finite-value contract.")
 class TSAverageVolumePolarsNative(SeriesOperator):
     """Rolling average of volume (or any feature)"""
 
@@ -576,13 +578,40 @@ class TSAverageVolumePolarsNative(SeriesOperator):
     metadata.param_specs = {
         "window": ParamSpec(dtype=int, min=1, param_role=ParamRole.HORIZON),
     }
+    _source_hash = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    _physical_spec = PhysicalImplementationSpec(
+        canonical="ts_average_volume",
+        backend="polars",
+        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        materializes_full_panel=True,
+        supports_lazy=False,
+        supports_streaming=False,
+        supports_nulls=True,
+        supports_nan=True,
+        supports_inf=True,
+        implementation_source_hash=_source_hash,
+        emitter_identity="factor_engine.cleaned_operators.polars_native.ts_advanced_batch1:rolling_expr:v2",
+        kernel_identity="factor_engine.cleaned_operators.polars_native.ts_advanced_batch1.TSAverageVolumePolarsNative._calculate_series",
+        parameter_domain_hash=hashlib.sha256(repr((metadata.param_names, metadata.param_specs)).encode()).hexdigest(),
+        semantic_contract_hash=hashlib.sha256(b"ts_average_volume:pandas_rolling_mean_finite_full_window:v1").hexdigest(),
+        notes="Source-pinned native Polars rolling mean; preserves the panel time axis and treats non-finite observations as missing.",
+    )
 
     def _calculate_series(self, volume, window, **kwargs):
+        if isinstance(volume, pl.DataFrame):
+            from factor_engine.cleaned_operators.common._polars_bridge import FE_TIME_COL
+
+            value_columns = [name for name in volume.columns if name != FE_TIME_COL]
+            projections = ([pl.col(FE_TIME_COL)] if FE_TIME_COL in volume.columns else []) + [
+                pl.when(pl.col(name).is_finite()).then(pl.col(name)).otherwise(None).rolling_mean(window, min_samples=window).alias(name)
+                for name in value_columns
+            ]
+            return volume.lazy().select(projections).collect()
         return (
             volume.to_frame()
             .lazy()
             .select([
-                pl.col(volume.name).rolling_mean(window).alias(volume.name)
+                pl.when(pl.col(volume.name).is_finite()).then(pl.col(volume.name)).otherwise(None).rolling_mean(window, min_samples=window).alias(volume.name)
             ])
             .collect()
             .to_series()
