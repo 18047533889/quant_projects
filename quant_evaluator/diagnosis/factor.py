@@ -55,7 +55,14 @@ def diagnose_factor(
         # Equality of finite extrema is exact; variance can underflow for
         # distinct tiny values and overflow for large constant values.
         is_constant = (min_value == max_value)
-        mean_value = float(np.mean(valid_values))
+        with np.errstate(over="ignore", invalid="ignore"):
+            mean_value = float(np.mean(valid_values))
+        if not np.isfinite(mean_value):
+            # A finite-input mean lies between its extrema. Rescale only
+            # when the ordinary sum overflowed, preserving the existing
+            # reduction for normal inputs.
+            scale = max(abs(min_value), abs(max_value))
+            mean_value = float(np.mean(valid_values / scale) * scale)
     else:
         is_constant = True
         min_value = None

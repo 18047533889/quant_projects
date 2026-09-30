@@ -31,3 +31,17 @@ def test_constant_diagnosis_uses_finite_valid_extrema(values, validity, expected
         finite = np.asarray(values)[np.isfinite(values) & np.asarray(validity)]
     assert diagnosis.num_valid_observations == len(finite)
     assert diagnosis.num_missing == 2 - len(finite)
+
+
+@pytest.mark.parametrize("values,expected", [
+    ([1e308, 1e308], 1e308),
+    ([-1e308, -1e308], -1e308),
+    ([1e308, -1e308], 0.0),
+])
+def test_diagnosis_mean_of_finite_values_stays_finite(values, expected):
+    batch = FactorBatch(
+        ("factor",), AxisRef("time", "int64", 1, np.array([0], dtype=np.int64)),
+        AxisRef("asset", "int64", 2, np.arange(2, dtype=np.int64)),
+        np.asarray(values, dtype=np.float64).reshape(1, 2, 1),
+    )
+    assert diagnose_factor(batch).mean_value == expected
