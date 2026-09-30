@@ -62,7 +62,12 @@ def _nanquantile_rows(safe, n_fin, q):
     hi = lo + 1
     v_lo = cp.take_along_axis(sv, lo[:, None], axis=1)[:, 0]
     v_hi = cp.take_along_axis(sv, hi[:, None], axis=1)[:, 0]
-    return v_lo + frac * (v_hi - v_lo)  # (R,)
+    delta = v_hi - v_lo
+    lower_lerp = v_lo + frac * delta
+    # Match NumPy's linear quantile correction for the upper half of an
+    # interval. This avoids a different rounding path at frac >= 0.5.
+    upper_lerp = v_hi - (1.0 - frac) * delta
+    return cp.where(frac >= 0.5, upper_lerp, lower_lerp)  # (R,)
 
 
 def batched_factor_turnover_rate(factor_values, quantile: float = 0.9):
