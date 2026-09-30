@@ -7,7 +7,7 @@ its long-standing evaluator-module monkeypatch points stay intact.
 # The 701-day x 5314-stock x 2-factor registered A-share panel showed full
 # CPU/CUDA output parity and a CUDA advantage in cold and alternating warm
 # public-facade runs for these metrics (2026-09-26). Other metrics retain CPU.
-_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260929_v26"
+_AUTO_CUDA_POLICY_VERSION = "ashare_public_routes_20260929_v27"
 _AUTO_SMALL_PROFILE = "ashare_701d_20260926"
 _AUTO_LARGE_PROFILE = "real_cos_region_20260927"
 _AUTO_LARGE_EXTRAP_PROFILE = "real_cos_bounded_headroom_20260927"
@@ -58,13 +58,18 @@ _AUTO_REAL_COS_F24_MIXED_THREE_MIN_EFFECTIVE_VRAM_BYTES = 20 * 1024 ** 3
 _AUTO_REAL_COS_F32_PROFILE = "real_cos_f32_exact_20260928"
 _AUTO_REAL_COS_F32_SHAPE = (2586, 5461, 32)
 _AUTO_REAL_COS_F32_BATCH_NAMES = frozenset({
-    "rank_chain", "quantile_chain", "real_cos_mixed_three", "pearson_chain"})
+    "rank_chain", "quantile_chain", "real_cos_mixed_three", "pearson_chain",
+    "coverage_mixed_four"})
+_AUTO_REAL_COS_F32_COVERAGE_MIN_EFFECTIVE_VRAM_BYTES = 2 * 1024 ** 3
+_AUTO_REAL_COS_F32_COVERAGE_MIXED_FOUR_MIN_EFFECTIVE_VRAM_BYTES = 12 * 1024 ** 3
+_AUTO_REAL_COS_F32_COVERAGE_MIXED_FOUR = frozenset(
+    ("rank_ic", "quantile_spread", "factor_turnover_rate", "coverage"))
 _AUTO_REAL_COS_F32_PEARSON_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F32_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES = 17 * 1024 ** 3
 _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES = 8 * 1024 ** 3
 _AUTO_REAL_COS_F32_SINGLE_METRICS = frozenset(
-    {"rank_ic", "rank_ic_series", "quantile_returns_full", "quantile_returns_daily", "quantile_spread", "factor_turnover_rate"})
+    {"rank_ic", "rank_ic_series", "quantile_returns_full", "quantile_returns_daily", "quantile_spread", "factor_turnover_rate", "coverage"})
 _AUTO_REAL_COS_F2_RANK_SERIES_SHAPE = (2586, 5461, 2)
 _AUTO_REAL_COS_F2_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 _AUTO_REAL_COS_F2_BATCH_SHAPE = (2586, 5461, 2)
@@ -195,6 +200,9 @@ __all__ = (
     '_AUTO_REAL_COS_F2_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES',
     '_AUTO_REAL_COS_F2_RANK_SERIES_SHAPE',
     '_AUTO_REAL_COS_F32_BATCH_NAMES',
+    '_AUTO_REAL_COS_F32_COVERAGE_MIN_EFFECTIVE_VRAM_BYTES',
+    '_AUTO_REAL_COS_F32_COVERAGE_MIXED_FOUR_MIN_EFFECTIVE_VRAM_BYTES',
+    '_AUTO_REAL_COS_F32_COVERAGE_MIXED_FOUR',
     '_AUTO_REAL_COS_F32_PEARSON_CHAIN',
     '_AUTO_REAL_COS_F32_PEARSON_MIN_EFFECTIVE_VRAM_BYTES',
     '_AUTO_REAL_COS_F32_PROFILE',

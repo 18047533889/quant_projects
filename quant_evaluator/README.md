@@ -84,6 +84,22 @@ print(bundle.metadata["execution_receipt"])
 
 这项认证 CUDA 路由覆盖上述精确面板形状、float64、默认指标参数、无额外上下文、单 NVIDIA L20，以及足够的有效空闲显存；rank 链需要至少 14 GiB。完整分位链和默认三指标批次各有独立认证。形状、指标组合或运行条件超出认证范围且无合格实测候选时，自动路由使用 CPU；显式 CUDA 请求则按 GPU 路径校验并失败关闭。基准证据证明这些已测请求在该环境中更快且数值对拍通过，不构成对其它 GPU、所有指标组合或全部 164 项指标的速度保证。详见 `docs/benchmarks/real_cos_f32_chain_ab_20260928.md`、`docs/benchmarks/real_cos_f32_single_routes_20260928.md` 和 `docs/benchmarks/real_cos_f32_default_batch_20260928.json`。
 
+2026-10-01 的 v27 路由另覆盖该精确 F32 面板的 `coverage` 单项，以及
+`("rank_ic", "quantile_spread", "factor_turnover_rate", "coverage")` 四指标组合。
+两者需要的有效空闲显存分别为 2 GiB 和 12 GiB；按默认
+`GPUExecutionPolicy(max_vram_fraction=0.75)`，设备空闲显存需分别达到约
+2.67 GiB 和 16 GiB。设备、dtype、默认参数及无额外上下文限制同上。
+四指标组合不会借用双因子认证区间。你可以省略 `backend`，或使用下面的调用：
+
+```python
+metrics = ("rank_ic", "quantile_spread", "factor_turnover_rate", "coverage")
+bundle = evaluate(fb, lb, metrics=metrics, backend="auto")
+print(bundle.metadata["execution_receipt"])
+```
+
+接入前 CPU/CUDA/auto 六轮测试及数值误差标准见
+[F32 coverage 对照说明](docs/benchmarks/real_cos_f32_coverage_comparison_20261001.md)。
+
 核心契约：
 - **LabelBundle** — 显式前向标签；时序全部由调用方提供；默认 `price_convention="vwap_to_vwap"`；
   `__post_init__` 强制校验严格递增 + 因果链。

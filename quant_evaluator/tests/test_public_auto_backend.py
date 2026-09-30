@@ -398,6 +398,132 @@ def test_f12_pearson_ic_exact_auto_route_and_guards(monkeypatch):
     assert select(batch, labels, metric, **options) == expected
 
 
+def test_f32_coverage_routes_and_exact_mixed_four_guards(monkeypatch):
+    budgets = []
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda policy, minimum: budgets.append(minimum) or None)
+    batch = SimpleNamespace(num_times=2586, num_assets=5461, num_factors=32,
+                            values=np.empty(0, dtype=np.float64))
+    labels = SimpleNamespace(values=np.empty(0, dtype=np.float64))
+    options = dict(metric_parameters={}, context=None, quantile_builder_parameters={},
+                   portfolio_returns=None, holding_returns=None, trade_eligibility=None,
+                   calendar_snapshot=None, exposure_panel=None,
+                   generalization_evidence=None, evaluator=None)
+    select = module._select_public_auto_backend
+    coverage = ("coverage",)
+    mixed = ("rank_ic", "quantile_spread", "factor_turnover_rate", "coverage")
+    assert module._resolve_alias("ic.rank.mean") == "rank_ic"
+    assert select(batch, labels, coverage, **options) == (
+        "cuda_strict", "certified_single_metric_real_cos_f32_coverage")
+    assert budgets[-1] == 2 * 1024 ** 3
+    assert select(batch, labels, mixed, **options) == (
+        "cuda_strict", "certified_batch_real_cos_f32_coverage_mixed_four")
+    assert select(batch, labels, tuple(reversed(mixed)), **options) == (
+        "cuda_strict", "certified_batch_real_cos_f32_coverage_mixed_four")
+    assert budgets[-1] == 12 * 1024 ** 3
+    # This subset is an already-certified route with its original budget.
+    mixed_three = mixed[:-1]
+    assert select(batch, labels, mixed_three, **options) == (
+        "cuda_strict", "certified_batch_real_cos_f32_mixed_three")
+    assert budgets[-1] == 14 * 1024 ** 3
+    assert select(batch, labels, ("rank_ic", "quantile_spread", "coverage"), **options) == (
+        "cpu", "metric_set_not_certified")
+    assert select(batch, labels, mixed + ("coverage",), **options) == (
+        "cpu", "metric_set_not_certified")
+    for shape in ((2585, 5461, 32), (2586, 5460, 32),
+                  (2586, 5461, 31), (2586, 5461, 33)):
+        batch.num_times, batch.num_assets, batch.num_factors = shape
+        assert select(batch, labels, coverage, **options)[0] == "cpu"
+        assert select(batch, labels, mixed, **options)[0] == "cpu"
+    for shape in ((600, 5000, 2), (701, 5314, 2), (800, 5500, 2),
+                  (2586, 5461, 1), (2586, 5461, 5), (2586, 5461, 8),
+                  (2586, 5461, 12), (2586, 5461, 13), (2586, 5461, 24),
+                  (1000, 5000, 2)):
+        batch.num_times, batch.num_assets, batch.num_factors = shape
+        assert select(batch, labels, mixed, **options) == (
+            "cpu", "metric_not_certified_for_profile")
+    batch.num_times, batch.num_assets, batch.num_factors = 2586, 5461, 32
+    batch.values = np.empty(0, dtype=np.float32)
+    assert select(batch, labels, coverage, **options) == (
+        "cpu", "dtype_outside_certified_range")
+    batch.values = np.empty(0, dtype=np.float64)
+    labels.values = np.empty(0, dtype=np.float32)
+    assert select(batch, labels, mixed, **options) == (
+        "cpu", "dtype_outside_certified_range")
+    labels.values = np.empty(0, dtype=np.float64)
+    assert select(batch, labels, coverage,
+                  **(options | {"context": object()})) == (
+        "cpu", "special_input_or_parameters")
+    assert select(batch, labels, mixed,
+                  **(options | {"metric_parameters": {"coverage": {"min_assets": 10}}})) == (
+        "cpu", "special_input_or_parameters")
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda *args: "insufficient_cuda_memory")
+    assert select(batch, labels, coverage, **options) == (
+        "cpu", "insufficient_cuda_memory")
+    assert select(batch, labels, mixed, **options) == (
+        "cpu", "insufficient_cuda_memory")
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
+                        lambda *args: "cuda_unavailable")
+    assert select(batch, labels, coverage, **options) == (
+        "cpu", "cuda_unavailable")
+    assert select(batch, labels, mixed, **options) == (
+        "cpu", "cuda_unavailable")
+
+
+def test_f32_coverage_vram_margin_boundaries(monkeypatch):
+    from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
+
+    class Device:
+        def __init__(self, index):
+            self.index = index
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+    hardware = {"free": 12 * 1024 ** 3, "device_error": False}
+
+    class Runtime:
+        @staticmethod
+        def getDeviceProperties(index):
+            if hardware["device_error"]:
+                raise RuntimeError("device unavailable")
+            return {"name": b"NVIDIA L20"}
+
+        @staticmethod
+        def memGetInfo():
+            return hardware["free"], 48 * 1024 ** 3
+
+    monkeypatch.setitem(sys.modules, "cupy", SimpleNamespace(
+        cuda=SimpleNamespace(Device=Device, runtime=Runtime)))
+    selector = module._auto_batch_cuda_rejection
+    coverage_min = module._AUTO_REAL_COS_F32_COVERAGE_MIN_EFFECTIVE_VRAM_BYTES
+    mixed_min = module._AUTO_REAL_COS_F32_COVERAGE_MIXED_FOUR_MIN_EFFECTIVE_VRAM_BYTES
+    full_fraction = GPUExecutionPolicy(max_vram_fraction=1.0)
+    hardware["free"] = coverage_min
+    assert selector(full_fraction, coverage_min) is None
+    hardware["free"] = coverage_min - 1
+    assert selector(full_fraction, coverage_min) == "insufficient_cuda_memory"
+    hardware["free"] = mixed_min
+    assert selector(full_fraction, mixed_min) is None
+    hardware["free"] = mixed_min - 1
+    assert selector(full_fraction, mixed_min) == "insufficient_cuda_memory"
+    for minimum in (coverage_min, mixed_min):
+        default_free = (minimum * 4 + 2) // 3
+        hardware["free"] = default_free
+        assert selector(None, minimum) is None
+        hardware["free"] = default_free - 1
+        assert selector(None, minimum) == "insufficient_cuda_memory"
+    hardware["free"] = mixed_min
+    assert selector(GPUExecutionPolicy(max_vram_fraction=0.5), mixed_min) == (
+        "insufficient_cuda_memory")
+    hardware["device_error"] = True
+    assert selector(None, coverage_min) == "cuda_unavailable"
+
+
 def test_f13_exact_whole_batch_routes_and_guards(monkeypatch):
     budgets = []
     monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
@@ -735,7 +861,8 @@ def test_f32_rank_and_quantile_chains_exact_shape_and_gpu_gate(monkeypatch):
                             8 * 1024 ** 3, 8 * 1024 ** 3, 8 * 1024 ** 3,
                             8 * 1024 ** 3]
     assert select(batch, labels, ("coverage",), **options) == (
-        "cpu", "metric_not_certified")
+        "cuda_strict", "certified_single_metric_real_cos_f32_coverage")
+    assert budgets[-1] == 2 * 1024 ** 3
     mixed_metrics = ("rank_ic", "quantile_spread", "factor_turnover_rate")
     mixed_expected = ("cuda_strict", "certified_batch_real_cos_f32_mixed_three")
     assert select(batch, labels, mixed_metrics, **options) == mixed_expected

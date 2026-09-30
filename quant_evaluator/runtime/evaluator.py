@@ -130,11 +130,17 @@ def _select_public_auto_backend(
         if (batch_name is None and
                 frozenset(canonical_metrics) == _AUTO_REAL_COS_F13_RANK_POSITIVE_PAIR):
             batch_name = "rank_positive_pair"
+        if (batch_name is None and
+                frozenset(canonical_metrics) == _AUTO_REAL_COS_F32_COVERAGE_MIXED_FOUR):
+            batch_name = "coverage_mixed_four"
         if batch_name is None or len(canonical_metrics) != len(set(canonical_metrics)):
             return "cpu", "metric_set_not_certified"
     profile = _auto_public_shape_profile(factor_batch)
     if profile is None:
         return "cpu", "shape_outside_certified_range"
+    if (batch_name == "coverage_mixed_four"
+            and profile != _AUTO_REAL_COS_F32_PROFILE):
+        return "cpu", "metric_not_certified_for_profile"
     if batch_name == "pearson_chain" and profile != _AUTO_REAL_COS_F32_PROFILE:
         return "cpu", "metric_not_certified_for_profile"
     if batch_name == "rank_positive_pair" and profile != _AUTO_REAL_COS_F13_PROFILE:
@@ -259,11 +265,13 @@ def _select_public_auto_backend(
                        if batch_name == "rank_chain"
                        else _AUTO_REAL_COS_F2_QUANTILE_BATCH_MIN_EFFECTIVE_VRAM_BYTES)
         elif real_cos_f32_certified_batch:
-            minimum = (_AUTO_REAL_COS_F32_PEARSON_MIN_EFFECTIVE_VRAM_BYTES
-                       if batch_name == "pearson_chain"
-                       else (_AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES
-                             if batch_name in ("rank_chain", "real_cos_mixed_three")
-                             else _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES))
+            minimum = (_AUTO_REAL_COS_F32_COVERAGE_MIXED_FOUR_MIN_EFFECTIVE_VRAM_BYTES
+                       if batch_name == "coverage_mixed_four"
+                       else (_AUTO_REAL_COS_F32_PEARSON_MIN_EFFECTIVE_VRAM_BYTES
+                             if batch_name == "pearson_chain"
+                             else (_AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES
+                                   if batch_name in ("rank_chain", "real_cos_mixed_three")
+                                   else _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES)))
         elif real_cos_f24_mixed_three:
             minimum = _AUTO_REAL_COS_F24_MIXED_THREE_MIN_EFFECTIVE_VRAM_BYTES
         elif real_cos_f24_certified_batch:
@@ -319,11 +327,13 @@ def _select_public_auto_backend(
         return "cuda_strict", f"certified_batch_{batch_name}"
     if profile == _AUTO_REAL_COS_F32_PROFILE:
         min_effective_vram = (
-            _AUTO_REAL_COS_F32_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES
-            if canonical_metrics[0] == "rank_ic_series"
-            else (_AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES
-                  if canonical_metrics[0] == "rank_ic"
-                  else _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES))
+            _AUTO_REAL_COS_F32_COVERAGE_MIN_EFFECTIVE_VRAM_BYTES
+            if canonical_metrics[0] == "coverage"
+            else (_AUTO_REAL_COS_F32_RANK_SERIES_MIN_EFFECTIVE_VRAM_BYTES
+                  if canonical_metrics[0] == "rank_ic_series"
+                  else (_AUTO_REAL_COS_F32_RANK_MIN_EFFECTIVE_VRAM_BYTES
+                        if canonical_metrics[0] == "rank_ic"
+                        else _AUTO_REAL_COS_F32_QUANTILE_MIN_EFFECTIVE_VRAM_BYTES)))
     elif profile == _AUTO_REAL_COS_F12_PROFILE:
         min_effective_vram = (
             _AUTO_REAL_COS_F12_RANK_MIN_EFFECTIVE_VRAM_BYTES
