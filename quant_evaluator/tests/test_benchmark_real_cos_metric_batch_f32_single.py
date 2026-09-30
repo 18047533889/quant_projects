@@ -88,6 +88,7 @@ def test_f32_rejects_default_multi_metric_request_before_loading(monkeypatch):
 @pytest.mark.parametrize("metrics", [
     "coverage",
     "rank_ic,quantile_spread,factor_turnover_rate,coverage",
+    "rank_ic,pearson_ic,ic_ir,quantile_spread,coverage",
 ])
 def test_f32_coverage_preflight_only_never_loads_or_writes(monkeypatch, capsys, metrics):
     from quant_evaluator.scripts import benchmark_real_cos_factor_batch as factor_batch
@@ -118,7 +119,11 @@ def test_f32_coverage_preflight_only_never_loads_or_writes(monkeypatch, capsys, 
     assert report["status"] == "preflight_only"
 
 
-def test_f32_coverage_run_requires_output_before_preflight_or_load(monkeypatch):
+@pytest.mark.parametrize("metrics", [
+    "coverage",
+    "rank_ic,pearson_ic,ic_ir,quantile_spread,coverage",
+])
+def test_f32_coverage_run_requires_output_before_preflight_or_load(monkeypatch, metrics):
     from quant_evaluator.scripts import benchmark_real_cos_factor_batch as factor_batch
 
     def fail(*args, **kwargs):
@@ -128,7 +133,7 @@ def test_f32_coverage_run_requires_output_before_preflight_or_load(monkeypatch):
     monkeypatch.setattr(benchmark, "load_real_batch", fail)
     monkeypatch.setattr(sys, "argv", [
         "benchmark_real_cos_metric_batch.py", "--factors", "32",
-        "--metrics", "coverage", "--run",
+        "--metrics", metrics, "--run",
     ])
 
     with pytest.raises(SystemExit) as exc:
@@ -139,8 +144,10 @@ def test_f32_coverage_run_requires_output_before_preflight_or_load(monkeypatch):
 @pytest.mark.parametrize(("factors", "metrics"), [
     (32, "coverage,rank_ic,quantile_spread,factor_turnover_rate"),
     (24, "coverage"),
+    (32, "coverage,quantile_spread,ic_ir,pearson_ic,rank_ic"),
+    (24, "rank_ic,pearson_ic,ic_ir,quantile_spread,coverage"),
 ])
-def test_coverage_rejects_wrong_order_or_factor_count_before_loading(
+def test_f32_rejects_wrong_order_or_factor_count_before_loading(
         monkeypatch, factors, metrics):
     def fail_load(*args, **kwargs):
         pytest.fail("invalid coverage request must be rejected before COS load")

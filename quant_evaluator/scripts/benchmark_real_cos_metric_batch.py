@@ -36,6 +36,7 @@ POSITIVE_RATIO_SINGLE = ("rank_ic_positive_ratio",)
 RANK_POSITIVE_PAIR = ("rank_ic", "rank_ic_positive_ratio")
 F32_COVERAGE_SINGLE = ("coverage",)
 F32_MIXED_COVERAGE = (*DEFAULT_METRICS, "coverage")
+F32_DEFAULT_FIVE = ("rank_ic", "pearson_ic", "ic_ir", "quantile_spread", "coverage")
 METRICS = DEFAULT_METRICS
 ALLOWED_BATCHES = (DEFAULT_METRICS, RANK_CHAIN, QUANTILE_CHAIN)
 PEARSON_SINGLE_METRICS = tuple((metric,) for metric in PEARSON_CHAIN)
@@ -488,13 +489,15 @@ def main():
                     TURNOVER_SINGLE, POSITIVE_RATIO_SINGLE, RANK_POSITIVE_PAIR))
                 or (args.factors == 32 and requested in (
                     *F32_SINGLE_METRICS, PEARSON_CHAIN,
-                    F32_COVERAGE_SINGLE, F32_MIXED_COVERAGE))):
+                    F32_COVERAGE_SINGLE, F32_MIXED_COVERAGE,
+                    F32_DEFAULT_FIVE))):
             parser.error("metrics must be an exact default, rank-chain or quantile-chain set; "
                          "F2 permits rank_ic_series alone, F13 permits factor_turnover_rate "
                          "or rank_ic_positive_ratio alone, or their exact rank-IC/positive-ratio pair, "
                          "and F32 permits rank_ic_series, quantile_returns_full, "
                          "quantile_returns_daily, factor_turnover_rate or a Pearson metric alone, "
-                         "coverage alone, mixed-three followed by coverage, or the exact Pearson chain")
+                         "coverage alone, mixed-three followed by coverage, the exact Pearson chain, "
+                         "or the exact five-metric request")
     if args.factors == 2 and requested not in (RANK_SERIES_SINGLE, RANK_CHAIN, QUANTILE_CHAIN):
         parser.error("F2 runs require rank_ic_series alone or an exact rank/quantile chain")
     if args.factors == 13 and requested not in (
@@ -505,9 +508,10 @@ def main():
         parser.error("F24 runs require the exact rank-chain, quantile-chain, or mixed-three request")
     if args.factors == 32 and requested not in (
             *F32_SINGLE_METRICS, PEARSON_CHAIN,
-            F32_COVERAGE_SINGLE, F32_MIXED_COVERAGE):
-        parser.error("F32 runs require a certified singleton (rank, quantile, turnover or Pearson) "
-                     "coverage singleton, mixed-three followed by coverage, or the exact Pearson chain")
+            F32_COVERAGE_SINGLE, F32_MIXED_COVERAGE, F32_DEFAULT_FIVE):
+        parser.error("F32 runs require a certified singleton (rank, quantile, turnover or Pearson), "
+                     "coverage singleton, mixed-three followed by coverage, the exact Pearson chain, "
+                     "or the exact five-metric request")
     if args.verify_auto_reference:
         if args.run:
             parser.error("--verify-auto-reference cannot be combined with --run")
@@ -522,11 +526,13 @@ def main():
     f32_turnover_request = args.factors == 32 and requested == TURNOVER_SINGLE
     f32_coverage_request = args.factors == 32 and requested in (
         F32_COVERAGE_SINGLE, F32_MIXED_COVERAGE)
-    if (f32_turnover_request or f32_coverage_request) and args.run and args.output is None:
-        parser.error("F32 factor_turnover_rate and coverage requests require --output to persist the receipt")
+    f32_five_request = args.factors == 32 and requested == F32_DEFAULT_FIVE
+    if (f32_turnover_request or f32_coverage_request or f32_five_request) and args.run and args.output is None:
+        parser.error("F32 factor_turnover_rate, coverage and five-metric requests require --output "
+                     "to persist the receipt")
     preflight_request = (requested in (PEARSON_CHAIN, QUANTILE_DAILY_SINGLE,
                                        *PEARSON_SINGLE_METRICS)
-                         or f32_turnover_request or f32_coverage_request)
+                         or f32_turnover_request or f32_coverage_request or f32_five_request)
     if args.run and not ((args.factors == 32 and preflight_request) or f24_mixed_request):
         parser.error("--run applies only to a preflight-approved F32 request "
                      "or the exact F24 mixed-three request")
@@ -553,6 +559,7 @@ def main():
                                          "factor turnover" if f32_turnover_request else
                                          "coverage" if requested == F32_COVERAGE_SINGLE else
                                          "mixed-three plus coverage" if requested == F32_MIXED_COVERAGE else
+                                         "five-metric" if f32_five_request else
                                          "daily quantile")
                                       + " benchmark"}), flush=True)
             return
