@@ -78,3 +78,15 @@ def test_kalman_nonfinite_lags_reset_state_without_infinite_output():
     pd.testing.assert_frame_equal(
         frame, _frame([1.0, 2.0, 3.0, np.inf, 4.0, -np.inf, 5.0, 6.0])
     )
+
+
+@pytest.mark.parametrize("parameter", ["process_noise", "measurement_noise"])
+@pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf])
+def test_kalman_rejects_nonfinite_noise_before_execution(parameter, value):
+    frame = _frame([1.0, 2.0, 3.0])
+    original = frame.copy(deep=True)
+    kwargs = dict(process_noise=0.01, measurement_noise=0.3)
+    kwargs[parameter] = value
+    with pytest.raises(ValueError, match=parameter + ".*finite"):
+        kalman_local_level(frame, **kwargs)
+    pd.testing.assert_frame_equal(frame, original)

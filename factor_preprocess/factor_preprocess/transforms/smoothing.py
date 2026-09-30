@@ -554,10 +554,10 @@ def kalman_local_level(
     pd.Series
         Kalman filtered local level, aligned with input index.
     """
-    if process_noise < 0:
-        raise ValueError(f"process_noise must be >= 0, got {process_noise}")
-    if measurement_noise <= 0:
-        raise ValueError(f"measurement_noise must be > 0, got {measurement_noise}")
+    if not np.isfinite(process_noise) or process_noise < 0:
+        raise ValueError(f"process_noise must be >= 0 and finite, got {process_noise}")
+    if not np.isfinite(measurement_noise) or measurement_noise <= 0:
+        raise ValueError(f"measurement_noise must be > 0 and finite, got {measurement_noise}")
 
     _check_sort(values, asset_col, time_col)
     result = _verified_series(values)

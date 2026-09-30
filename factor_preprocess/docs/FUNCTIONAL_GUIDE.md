@@ -106,7 +106,7 @@ kalman_local_level 使用局部水平模型：
 l_t=l_{t-1}+w_t,\qquad x_t=l_t+v_t
 ```
 
-process_noise 可为 0，measurement_noise 必须大于 0；滤波消费滞后观测，非有限值会重置状态。
+process_noise 必须有限且大于等于 0，measurement_noise 必须有限且大于 0；NaN 和正负无穷参数在执行前拒绝。滤波消费滞后观测，非有限观测值会重置状态。
 
 event_decay 使用滞后事件序列：
 
