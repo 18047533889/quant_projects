@@ -8,7 +8,10 @@ import sys
 
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
-from quant_evaluator.contracts.errors import InvalidContractError
+from quant_evaluator.contracts.errors import (
+    InvalidContractError, SealedSplitOverlapError,
+)
+from quant_evaluator.contracts.sealed_split import SealedSplitRef
 from quant_evaluator.runtime.evaluator import evaluate
 
 module = import_module("quant_evaluator.runtime.evaluator")
@@ -33,7 +36,8 @@ def _policy(metric_ids=("rank_ic",), **overrides):
         metric_parameters={}, context=None, quantile_builder_parameters={},
         portfolio_returns=None, holding_returns=None, trade_eligibility=None,
         calendar_snapshot=None, exposure_panel=None,
-        generalization_evidence=None, evaluator=None,
+        generalization_evidence=None, evaluator=None, split_ref=None,
+        portfolio_spec=None,
     )
     options.update(overrides)
     return module._select_public_auto_backend(batch, labels, metric_ids, **options)
@@ -937,6 +941,71 @@ def _inputs(t, n):
                         label_end_time=tuple(range(2, t + 2)))
     return batch, label
 
+
+_DEFAULT_FIVE = ("rank_ic", "pearson_ic", "ic_ir", "quantile_spread", "coverage")
+
+
+@pytest.mark.parametrize("field", ("split_ref", "portfolio_spec"))
+def test_auto_default_five_special_inputs_stay_cpu_before_cuda_admission(monkeypatch, field):
+    monkeypatch.setattr(module, "_auto_public_shape_profile",
+                        lambda unused: module._AUTO_REAL_COS_F32_PROFILE)
+    monkeypatch.setattr(
+        module, "_auto_batch_cuda_rejection",
+        lambda *args: pytest.fail("special input reached CUDA admission"),
+    )
+    value = (SealedSplitRef("later", start_time=40, end_time=50)
+             if field == "split_ref" else object())
+    assert _policy(_DEFAULT_FIVE, **{field: value}) == (
+        "cpu", "special_input_or_parameters")
+
+
+@pytest.mark.parametrize("field", ("split_ref", "portfolio_spec"))
+def test_public_default_five_forwards_special_inputs_to_auto_guard(monkeypatch, field):
+    monkeypatch.setattr(module, "_auto_public_shape_profile",
+                        lambda unused: module._AUTO_REAL_COS_F32_PROFILE)
+    monkeypatch.setattr(
+        module, "_auto_batch_cuda_rejection",
+        lambda *args: pytest.fail("special input reached CUDA admission"),
+    )
+    batch, labels = _inputs(30, 60)
+    value = (SealedSplitRef("later", start_time=40, end_time=50)
+             if field == "split_ref" else object())
+    assert evaluate(batch, labels, metrics=_DEFAULT_FIVE, backend="auto",
+                    _prepare_only=True, **{field: value}) == "cpu"
+
+
+def test_public_split_overlap_still_fails_before_backend_selection(monkeypatch):
+    batch, labels = _inputs(30, 60)
+    monkeypatch.setattr(
+        module, "_select_public_auto_backend",
+        lambda *args, **kwargs: pytest.fail("backend selector ran before split gate"),
+    )
+    overlap = SealedSplitRef("overlap", start_time=5, end_time=10)
+    with pytest.raises(SealedSplitOverlapError, match="overlaps"):
+        evaluate(batch, labels, metrics=("rank_ic",), backend="auto",
+                 split_ref=overlap, _prepare_only=True)
+
+
+@pytest.mark.parametrize("backend", ("cpu", "cuda"))
+def test_explicit_backend_override_skips_auto_special_input_guard(monkeypatch, backend):
+    batch, labels = _inputs(30, 60)
+    monkeypatch.setattr(
+        module, "_select_public_auto_backend",
+        lambda *args, **kwargs: pytest.fail("explicit backend entered auto selector"),
+    )
+    split = SealedSplitRef("later", start_time=40, end_time=50)
+    assert evaluate(batch, labels, metrics=_DEFAULT_FIVE, backend=backend,
+                    split_ref=split, portfolio_spec=object(),
+                    _prepare_only=True) == backend
+
+
+def test_public_default_five_plain_route_remains_certified(monkeypatch):
+    monkeypatch.setattr(module, "_auto_public_shape_profile",
+                        lambda unused: module._AUTO_REAL_COS_F32_PROFILE)
+    monkeypatch.setattr(module, "_auto_batch_cuda_rejection", lambda *args: None)
+    batch, labels = _inputs(30, 60)
+    assert evaluate(batch, labels, metrics=_DEFAULT_FIVE, backend="auto",
+                    _prepare_only=True) == "cuda_strict"
 
 def test_auto_small_public_request_equals_cpu(monkeypatch):
     monkeypatch.setattr(module, "_auto_batch_cuda_rejection", lambda *args: None)

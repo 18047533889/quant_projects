@@ -108,7 +108,8 @@ def _select_public_auto_backend(
     factor_batch, label_bundle, canonical_metrics, *, metric_parameters,
     context, quantile_builder_parameters, portfolio_returns, holding_returns,
     trade_eligibility, calendar_snapshot, exposure_panel,
-    generalization_evidence, evaluator, gpu_policy=None,
+    generalization_evidence, evaluator, gpu_policy=None, split_ref=None,
+    portfolio_spec=None,
 ):
     """Return a bounded whole-request route and an auditable reason."""
     batch_name = None
@@ -261,7 +262,8 @@ def _select_public_auto_backend(
             or portfolio_returns is not None or holding_returns is not None
             or trade_eligibility is not None or calendar_snapshot is not None
             or exposure_panel is not None or generalization_evidence is not None
-            or evaluator is not None):
+            or evaluator is not None or split_ref is not None
+            or portfolio_spec is not None):
         return "cpu", "special_input_or_parameters"
     if batch_name is not None:
         if real_cos_f5_mixed_three:
@@ -1925,7 +1927,8 @@ def evaluate(
                 metric_parameters=metric_parameters, context=context,
                 quantile_builder_parameters=quantile_builder_parameters,
                 portfolio_returns=portfolio_returns, holding_returns=holding_returns,
-                trade_eligibility=trade_eligibility, calendar_snapshot=calendar_snapshot,
+                trade_eligibility=trade_eligibility, split_ref=split_ref,
+                portfolio_spec=portfolio_spec, calendar_snapshot=calendar_snapshot,
                 exposure_panel=exposure_panel,
                 generalization_evidence=generalization_evidence, evaluator=evaluator,
                 gpu_policy=gpu_policy,
