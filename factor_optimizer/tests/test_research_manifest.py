@@ -312,3 +312,52 @@ def test_known_bound_recipe_drives_baseline_without_repeating_rank(
 def test_unknown_or_branched_recipe_is_not_claimed_untreated(declared_source, expression):
     declared_source[1]["fe_dsl"] = expression
     assert read(declared_source).lineage is None
+
+
+def test_manifest_float_digest_preserves_json_scalar_types_and_signed_zero():
+    from factor_optimizer.research_manifest import _manifest_factors_sha256
+
+    digest = _manifest_factors_sha256
+    assert digest({"x": True}) != digest({"x": 1})
+    assert digest({"x": 1}) != digest({"x": 1.0})
+    assert digest({"x": 0.0}) != digest({"x": -0.0})
+    assert digest({"x": 0.125}) == digest({"x": float.fromhex("0x1.0000000000000p-3")})
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_manifest_float_digest_rejects_nonfinite_values(value):
+    from factor_optimizer.research_manifest import _manifest_factors_sha256
+
+    with pytest.raises(ValueError, match="floats must be finite"):
+        _manifest_factors_sha256({"upload_seconds": value})
+
+
+def test_real_shaped_manifest_float_metadata_can_be_bound(declared_source):
+    from factor_optimizer.research_manifest import _manifest_factors_sha256, read_bound_manifest
+
+    store, record, transfers, _, _ = declared_source
+    record["upload_seconds"] = 0.125
+    record["evaluation_retry_after"] = 2.5
+    snapshot = read_bound_manifest(store, "manifest", allow_research=True)
+
+    assert snapshot.factors["f"]["upload_seconds"] == 0.125
+    assert snapshot.factors["f"]["evaluation_retry_after"] == 2.5
+    assert snapshot._factors_sha256 == _manifest_factors_sha256(snapshot.factors)
+    assert transfers == ["cos://bucket/pool/landing_manifest.json"]
+
+
+def test_forged_snapshot_with_changed_float_metadata_fails_hash_guard(declared_source):
+    from dataclasses import replace
+    from factor_optimizer.research_manifest import read_bound_factor, read_bound_manifest
+
+    store, record, transfers, _, _ = declared_source
+    record["upload_seconds"] = 0.125
+    snapshot = read_bound_manifest(store, "manifest", allow_research=True)
+    forged_factors = {"f": dict(snapshot.factors["f"], upload_seconds=0.25)}
+    forged = replace(snapshot, factors=forged_factors)
+    transfers.clear()
+
+    with pytest.raises(ValueError, match="snapshot identity"):
+        read_bound_factor(store, "manifest", "factor", "f", allow_research=True,
+                          manifest_snapshot=forged)
+    assert transfers == []

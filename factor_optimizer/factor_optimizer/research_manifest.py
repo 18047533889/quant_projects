@@ -67,6 +67,10 @@ def _manifest_factors_sha256(factors):
             return ["bool", value]
         if type(value) is int:
             return ["int", value]
+        if type(value) is float:
+            if not math.isfinite(value):
+                raise ValueError("landing manifest floats must be finite")
+            return ["float", value.hex()]
         if type(value) is str:
             return ["str", value]
         raise ValueError("landing manifest contains an unsupported value type")
