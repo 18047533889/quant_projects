@@ -39,6 +39,44 @@ def create_test_asset(factor_id: str, registered_at: str, campaign_id=None) -> F
     )
 
 
+def test_mixed_timezone_offsets_use_instants_for_cutoff_and_state_order():
+    manager = SnapshotManager()
+    asset = create_test_asset("offset", "2026-01-02T09:00:00+02:00")
+    events = [
+        StateEvent("offset", LifecycleState.EVALUATED, LifecycleState.APPROVED,
+                   "2026-01-02T08:30:00Z", evidence_refs=()),
+        StateEvent("offset", LifecycleState.REGISTERED, LifecycleState.EVALUATED,
+                   "2026-01-02T10:00:00+02:00", evidence_refs=()),
+    ]
+    early = manager.create_snapshot([asset], events,
+        SnapshotQuery(as_of_timestamp="2026-01-02T08:00:00Z"))
+    assert early.total_count == 1
+    assert early.assets[0].lifecycle_state == LifecycleState.EVALUATED
+    assert early.assets[0].first_evaluated_at == "2026-01-02T10:00:00+02:00"
+    assert early.assets[0].approved_at is None
+    late = manager.create_snapshot([asset], events,
+        SnapshotQuery(as_of_timestamp="2026-01-02T10:30:00+02:00"))
+    assert late.assets[0].lifecycle_state == LifecycleState.APPROVED
+    assert late.assets[0].approved_at == "2026-01-02T08:30:00Z"
+
+
+def test_timezone_normalization_preserves_equal_instant_input_order():
+    manager = SnapshotManager()
+    asset = create_test_asset("offset", "2026-01-02T07:00:00")
+    events = [
+        StateEvent("offset", LifecycleState.REGISTERED, LifecycleState.EVALUATED,
+                   "2026-01-02T10:00:00+02:00", evidence_refs=()),
+        StateEvent("offset", LifecycleState.EVALUATED, LifecycleState.APPROVED,
+                   "2026-01-02T08:00:00Z", evidence_refs=()),
+    ]
+    result = manager.create_snapshot([asset], events,
+        SnapshotQuery(as_of_timestamp="2026-01-02T03:00:00-05:00"))
+    assert result.total_count == 1
+    assert result.assets[0].lifecycle_state == LifecycleState.APPROVED
+    assert result.assets[0].first_evaluated_at == events[0].timestamp
+    assert result.assets[0].approved_at == events[1].timestamp
+
+
 def test_snapshot_manager_empty_registry():
     """Test snapshot of empty registry."""
     manager = SnapshotManager()

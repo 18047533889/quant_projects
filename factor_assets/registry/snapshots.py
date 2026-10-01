@@ -22,7 +22,13 @@ def _normalize_ts(ts: str) -> str:
     fall back to the raw string if unparseable.
     """
     try:
-        return datetime.fromisoformat(ts.replace("Z", "+00:00")).isoformat()
+        parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        # Registry timestamps use UTC; legacy naive timestamps mean UTC too.
+        # Normalize offsets before comparing strings so wall-clock order
+        # cannot replace chronological instant order.
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc).isoformat()
     except (ValueError, AttributeError):
         return ts
 
