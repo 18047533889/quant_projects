@@ -1,6 +1,6 @@
 # 默认变换目录与策略预设
 
-本目录来自当前环境的 `create_default_registry()` / `create_default_policies()`。当前注册 43 项：8 项 `FE_OPERATOR`、5 项 `FE_COMPOSITE`、30 项 `FP_NATIVE`。基础注册表含 40 项；源码按可选 PyWavelets 依赖条件注册三个 wavelet 函数，本次环境已注册这三项。所有默认项均 `requires_fit=False`、`fit_kind=stateless`；“历史”仅表示本次调用读取按资产隔离的过去输入。DataFrame 时间变换要求每资产日期单调，不会静默排序。公共列名默认 `asset_id/date/value`（收益列 `return`）。
+本目录来自当前环境的 `create_default_registry()` / `create_default_policies()`。当前注册 43 项：4 项 `FE_OPERATOR`、9 项 `FE_COMPOSITE`、30 项 `FP_NATIVE`。基础注册表含 40 项；源码按可选 PyWavelets 依赖条件注册三个 wavelet 函数，本次环境已注册这三项。所有默认项均 `requires_fit=False`、`fit_kind=stateless`；“历史”仅表示本次调用读取按资产隔离的过去输入。DataFrame 时间变换要求每资产日期单调，不会静默排序。公共列名默认 `asset_id/date/value`（收益列 `return`）。
 
 ## 全目录
 
@@ -36,7 +36,7 @@
 | `freshness_score` | `halflife_days` | 时间/历史；生产；FP | $`z_t=e^{-\ln2\,age_t/h}`$ 从未有效填0。 |
 | `stale_data_indicator` | `max_days` | 时间/历史；生产；FP | $`z_t=\mathbf1[age_t\gt max\_days]`$ 从未有效 NaN；max_days 非负。 |
 | `freshness_aware_fill` | `max_lag=None, decay_halflife=10` | 时间/历史；生产；FP | 当前有限原样；缺失时 $`z_t=x_{last}e^{-\ln2\,age/h}`$，超界/无过去值 NaN。 |
-| `ols_neutralize` | `exposures, min_observations=10, add_intercept=True` | 截面/否；生产；FE `cs_neutralize` | 逐日共同有限支持：$`\hat\beta=(X^TX)^+X^Ty,\ e=y-X\hat\beta`$ 不足门槛整日 NaN。 |
+| `ols_neutralize` | `exposures, min_observations=10, add_intercept=True` | 截面/否；生产；FE `long_neutralization.ols_effective_rank` | 逐日共同有限支持，去全零暴露列后按需加截距，用 SVD 最小二乘：$`\hat\beta=X^+y,\ e=y-X\hat\beta`$；要求 $`n\ge\mathrm{min\_observations}`$ 且 $`\mathrm{rank}(X)<n`$，否则该日 NaN。 |
 | `industry_neutral` | 同上 | 截面/否；生产；FE | 与 OLS 同 kernel 的语义别名；调用者须提供行业暴露，名称不自动筛列。 |
 | `size_neutral` | 同上 | 截面/否；生产；FE | 同上，调用者须提供 size 暴露。 |
 | `dual_neutral` | 同上 | 截面/否；生产；FE | 同上，调用者须提供行业与 size 暴露。 |
@@ -50,7 +50,17 @@
 | `wavelet_smooth` | `wavelet="db4", level=1` | 时间/全 lagged 样本；条件注册、OFFLINE_ONLY；FP | 调用 `wavelet_decompose` 并返回 approximation 通道 $`a_{level}`$；若指定键不存在则取首个 approximation，否则全 NaN。 |
 | `wavelet_denoise` | `wavelet="db4", level=None, threshold_mode="soft", threshold_scale=1` | 时间/全 lagged 样本；条件注册、OFFLINE_ONLY；FP | 对 lagged 有限序列分解，以最细 detail 的 MAD 估计 $`\sigma=\mathrm{median}(\lvert d-\mathrm{median}(d)\rvert)/0.6745`$，阈值 $`\lambda=threshold\_scale\,\sigma\sqrt{2\ln n}`$；保留 approximation，对 details 做 soft/hard threshold 后全序列重构。少于 4 点或失败为 NaN。 |
 
-FE_OPERATOR 共 8 项：`cs_rank`、`cs_demean`、`cs_winsor`、`forward_fill`、`ols_neutralize` 及三个 neutral 别名。FE_COMPOSITE 共 5 项：`trailing_sma`、`rolling_mean`、`trailing_median`、`rolling_std`、`rolling_zscore`；基础 40 项中的其余 27 项为 FP_NATIVE。三个 wavelet 项也始终在本目录列明，但仅在可选 PyWavelets 依赖可用时才作为 FP_NATIVE/OFFLINE_ONLY 注册，因此运行时总数为 40 或 43；本次环境已注册，合计 30 项 FP_NATIVE。
+FE_OPERATOR 共 4 项：`cs_rank`、`cs_demean`、`cs_winsor`、`forward_fill`。FE_COMPOSITE 共 9 项：`trailing_sma`、`rolling_mean`、`trailing_median`、`rolling_std`、`rolling_zscore`、`ols_neutralize` 及三个 neutral 别名；基础 40 项中的其余 27 项为 FP_NATIVE。三个 wavelet 项也始终在本目录列明，但仅在可选 PyWavelets 依赖可用时才作为 FP_NATIVE/OFFLINE_ONLY 注册，因此运行时总数为 40 或 43；本次环境已注册，合计 30 项 FP_NATIVE。
+
+### OLS 有效秩口径
+
+调用者提供唯一的 `(date, asset_id)` 暴露键；执行器左连接因子行，并保留原行顺序和重复索引。缺失日期不拟合，拟合仅使用因子与全部暴露均有限的行。重复暴露列、线性相关列与近共线列按 `numpy.linalg.lstsq(rcond=None)` 的有效秩求解，FE 通用 `cs_neutralize` 仍保留自己的严格满秩及条件数要求。
+
+设设计矩阵维数为 $`n\times p`$，$`m=\max(\lVert y\rVert_\infty,\lVert X\hat\beta\rVert_\infty)`$。若残差均有限，且 $`m=0`$ 或 $`\lVert e\rVert_\infty/m\le8\epsilon\max(n,p)`$，执行器将完全解释产生的浮点残差置零。SVD 失败时返回该日 NaN。
+
+四个中性化名称使用同一个 FE composite recipe：`FE_COMPOSITE:long_neutralization.ols_effective_rank:v1`。行业、规模及双中性化别名不会自动生成或筛选暴露列。FE 不可用时，生产执行报错；研究调用须显式选择原生回退。
+
+验证文件：`tests/test_fe_neutralization_composite.py`、`tests/test_fe_ols_route_parity_gaps.py`、`tests/test_fe_operator_parity.py`。
 
 ## 默认策略
 

@@ -96,11 +96,11 @@ missing before quantile estimation, matching FE `winsorize`.
 
 | transform | semantic id | math semantics | FE equivalent operator | FE semantic metadata | confidence | fitted? | causal? | FP-native reason | implementation_origin |
 |---|---|---|---|---|---|---|---|---|---|
-| `ols_neutralize` | `NEUTRAL:ols` | per-date cross-sectional OLS residual against exposures (`lstsq`, `min_observations`, `add_intercept`) | `cs_neutralize` | overhaul `cross_sectional_regression`; params `y/exposures/group/weight/add_intercept/min_obs`; causal `cross_sectional` | **exact** for `add_intercept=False`, joint exposures (`maxabs ~2e-16` == LAPACK rounding) | no (stateless per-date) | yes | — | **FE_OPERATOR** (`fe_operator_id=cs_neutralize`) |
+| `ols_neutralize` | `NEUTRAL:ols` | per-date finite-row least-squares residual, effective-rank residual DOF | `long_neutralization.ols_effective_rank` | recipe `FE_COMPOSITE:long_neutralization.ols_effective_rank:v1` | parity tests include rank deficiency, zero columns and ill conditioning | no (stateless per-date) | yes | — | **FE_COMPOSITE** |
 | `compute_exposures` | `EXPOSURE:compute` | per-date exposure coefficients | `cs_regression` / `cs_neutralize` | — | none | no | yes | FE `cs_regression` returns mode-parameterized output (resid/beta/fit), not the coefficient-per-exposure-frame FP returns; no direct equivalent | **FP_NATIVE** |
-| `industry_neutral` | `INDUSTRY_NEUTRAL:SW_L1` | semantic alias → `ols_neutralize` kernel | `cs_neutralize` | — | **exact** (kernel == ols_neutralize) | no | yes | routed as alias of `ols_neutralize` | **FE_OPERATOR** (`fe_operator_id=cs_neutralize`) |
-| `size_neutral` | `SIZE_NEUTRAL:log_mktcap` | semantic alias → `ols_neutralize` | `cs_neutralize` | — | **exact** | no | yes | routed as alias of `ols_neutralize` | **FE_OPERATOR** (`fe_operator_id=cs_neutralize`) |
-| `dual_neutral` | `DUAL_NEUTRAL:industry_size` | semantic alias → `ols_neutralize` | `cs_neutralize` | — | **exact** | no | yes | routed as alias of `ols_neutralize` | **FE_OPERATOR** (`fe_operator_id=cs_neutralize`) |
+| `industry_neutral` | `INDUSTRY_NEUTRAL:SW_L1` | semantic alias → `ols_neutralize` kernel | `long_neutralization.ols_effective_rank` | same OLS composite recipe | same kernel | no | yes | caller supplies exposure columns | **FE_COMPOSITE** |
+| `size_neutral` | `SIZE_NEUTRAL:log_mktcap` | semantic alias → `ols_neutralize` | `long_neutralization.ols_effective_rank` | same OLS composite recipe | same kernel | no | yes | caller supplies exposure columns | **FE_COMPOSITE** |
+| `dual_neutral` | `DUAL_NEUTRAL:industry_size` | semantic alias → `ols_neutralize` | `long_neutralization.ols_effective_rank` | same OLS composite recipe | same kernel | no | yes | caller supplies exposure columns | **FE_COMPOSITE** |
 
 ## Decomposition / regime / research-only
 
@@ -112,10 +112,10 @@ missing before quantile estimation, matching FE `winsorize`.
 
 ## Routing summary (R61-FI-041)
 
-- **FE_OPERATOR (8):** `cs_rank`, `cs_demean`, `cs_winsor`, `forward_fill`,
-  `ols_neutralize`, `industry_neutral`, `size_neutral`, `dual_neutral`.
-- **FE_COMPOSITE (5):** `trailing_sma`, `rolling_mean`, `trailing_median`,
-  `rolling_std`, `rolling_zscore`.
+- **FE_OPERATOR (4):** `cs_rank`, `cs_demean`, `cs_winsor`, `forward_fill`.
+- **FE_COMPOSITE (9):** `trailing_sma`, `rolling_mean`, `trailing_median`,
+  `rolling_std`, `rolling_zscore`, `ols_neutralize`, `industry_neutral`,
+  `size_neutral`, `dual_neutral`.
 - **FP_NATIVE (30):** everything else. FE-backed transforms retain their
   FP-native kernel for explicit research fallback (plan §26 F3). Production
   execution requires FE and fails closed when FE is unavailable; FE remains

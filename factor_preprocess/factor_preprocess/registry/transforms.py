@@ -835,7 +835,7 @@ class TransformRegistry:
         if self.resolve_origin(name) == "FE_COMPOSITE":
             meta = self._transforms[name]
             try:
-                from factor_preprocess.adapters.fe_smoothing import get_fe_composite_executor
+                from factor_preprocess.adapters.fe_composite import get_fe_composite_executor
             except (ImportError, ModuleNotFoundError):
                 get_fe_composite_executor = None
             executor = (get_fe_composite_executor(name, meta.fe_equivalent_semantics)
@@ -1505,11 +1505,8 @@ def create_default_registry() -> TransformRegistry:
     # docs/FE_OPERATOR_REUSE_MATRIX.md as partial:normal).
     # Missingness exact duplicate:
     #   forward_fill <- FE ffill_limit (bounded ffill == pandas ffill(limit))
-    # Neutralization exact duplicate (add_intercept=False, joint exposures):
-    #   ols_neutralize <- FE cs_neutralize
-    #     (industry_neutral / size_neutral / dual_neutral are semantic aliases
-    #      bound to the SAME kernel; their adapter execution is therefore the
-    #      same route and is stamped below).
+    # OLS is an FE-owned long-panel composite with FP effective-rank residual
+    # degrees of freedom. Generic FE cs_neutralize remains strict and unchanged.
     #
     # Anything NOT listed here (fitted / exposure-aware residualization with
     # fitted state, freshness, temporal smoothing with halflife/current-bar
@@ -1521,10 +1518,6 @@ def create_default_registry() -> TransformRegistry:
         "cs_demean": ("cs_demean", "stateless"),
         "cs_winsor": ("winsorize", "stateless"),
         "forward_fill": ("ffill_limit", "stateless"),
-        "ols_neutralize": ("cs_neutralize", "stateless"),
-        "industry_neutral": ("cs_neutralize", "stateless"),
-        "size_neutral": ("cs_neutralize", "stateless"),
-        "dual_neutral": ("cs_neutralize", "stateless"),
     }
     for _name, (_fe_id, _fit_kind) in _FE_ROUTED.items():
         registry.enrich(
@@ -1564,6 +1557,13 @@ def create_default_registry() -> TransformRegistry:
         fit_kind="stateless",
         fe_equivalent_semantics="FE_COMPOSITE:long_smoothing.lagged_zscore:v1",
     )
+    for _name in ("ols_neutralize", "industry_neutral", "size_neutral", "dual_neutral"):
+        registry.enrich(
+            _name, implementation_origin="FE_COMPOSITE", fe_operator_id=None,
+            fit_kind="stateless",
+            fe_equivalent_semantics="FE_COMPOSITE:long_neutralization.ols_effective_rank:v1",
+        )
+    del _name
 
     # Every transform left FP_NATIVE is explicitly stamped (fail-closed:
     # ``implementation_origin`` is never None on a production transform so a

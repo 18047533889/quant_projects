@@ -8,7 +8,8 @@ OLS_NEUTRALIZATION_RECIPE = "FE_COMPOSITE:long_neutralization.ols_effective_rank
 
 def get_fe_neutralization_executor(name: str, recipe_identity: str | None):
     """Resolve an explicitly registered neutralization recipe identity."""
-    if name != "ols_neutralize" or recipe_identity != OLS_NEUTRALIZATION_RECIPE:
+    names = {"ols_neutralize", "industry_neutral", "size_neutral", "dual_neutral"}
+    if name not in names or recipe_identity != OLS_NEUTRALIZATION_RECIPE:
         raise GovernanceError(f"FE neutralization recipe is not registered for {name!r}")
     try:
         from factor_engine.backend.long_neutralization import ols_effective_rank

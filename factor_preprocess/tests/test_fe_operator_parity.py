@@ -350,10 +350,6 @@ def test_fe_backed_transforms_carry_origin_metadata():
         "cs_demean": "cs_demean",
         "cs_winsor": "winsorize",
         "forward_fill": "ffill_limit",
-        "ols_neutralize": "cs_neutralize",
-        "industry_neutral": "cs_neutralize",
-        "size_neutral": "cs_neutralize",
-        "dual_neutral": "cs_neutralize",
     }
     for name, fe_id in expected.items():
         meta = registry.get(name)
@@ -362,14 +358,20 @@ def test_fe_backed_transforms_carry_origin_metadata():
         assert meta.fe_operator_id == fe_id, name
         assert meta.fit_kind == "stateless", name
         assert registry.resolve_origin(name) == "FE_OPERATOR", name
+    for name in ("ols_neutralize", "industry_neutral", "size_neutral", "dual_neutral"):
+        meta = registry.get(name)
+        assert meta.implementation_origin == "FE_COMPOSITE", name
+        assert meta.fe_operator_id is None
+        assert meta.fe_equivalent_semantics == "FE_COMPOSITE:long_neutralization.ols_effective_rank:v1"
+        assert meta.fit_kind == "stateless"
+        assert registry.resolve_origin(name) == "FE_COMPOSITE", name
 
 
 def test_fitted_and_unmapped_transforms_are_fp_native():
     registry = get_default_registry()
     # Fitted-state transforms are never routed to FE (stateless-only rule).
-    # requires_exposure is NOT the discriminator: ols_neutralize and its
-    # semantic aliases require exposures but are stateless exact duplicates
-    # that ARE FE-routed.  fitted (requires_fit) is the hard FP_NATIVE class.
+    # requires_exposure is NOT the discriminator: OLS and its aliases require
+    # exposures but are stateless FE composites; fitted is the FP_NATIVE class.
     for m in registry.all_transforms():
         if m.requires_fit:
             assert m.implementation_origin == "FP_NATIVE", m.name

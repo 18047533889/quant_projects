@@ -1,7 +1,7 @@
 # factor_preprocess 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**77 个 Python 模块、436 个公开函数/类/方法定义**。
+扫描实际包目录：**78 个 Python 模块、437 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -16,6 +16,7 @@
 | [factor_preprocess/adapters/data_access.py](../factor_preprocess/adapters/data_access.py) | 15 | Data Access adapter - optional integration with the data_access package. |
 | [factor_preprocess/adapters/ewma_full_replay.py](../factor_preprocess/adapters/ewma_full_replay.py) | 3 | Exact, bounded restart replay for the public lagged FP EWMA. |
 | [factor_preprocess/adapters/factor_assets.py](../factor_preprocess/adapters/factor_assets.py) | 12 | Factor Assets adapter - optional integration with factor_assets package. |
+| [factor_preprocess/adapters/fe_composite.py](../factor_preprocess/adapters/fe_composite.py) | 1 | Central resolver for explicit FactorEngine composite identities. |
 | [factor_preprocess/adapters/fe_neutralization.py](../factor_preprocess/adapters/fe_neutralization.py) | 2 | Lazy adapter for FE-owned OLS neutralization composites. |
 | [factor_preprocess/adapters/fe_operator.py](../factor_preprocess/adapters/fe_operator.py) | 7 | FE operator adapter (R61-FI-041, plan §26 F2/F3). |
 | [factor_preprocess/adapters/fe_smoothing.py](../factor_preprocess/adapters/fe_smoothing.py) | 5 | FactorEngine-backed long-panel smoothing adapter (lazy FE dependency). |
@@ -481,6 +482,20 @@ Create an adapter from an injected provider; there is no default provider.
 
 返回类型：`FactorAssetsAdapter`。
 
+## factor_preprocess/adapters/fe_composite.py
+
+Central resolver for explicit FactorEngine composite identities.
+
+显式导出（含重导出）：`get_fe_composite_executor`。
+
+### get_fe_composite_executor
+
+[实际实现](../factor_preprocess/adapters/fe_composite.py#L10)。
+
+Dispatch FE composites to a narrow, identity-checked adapter.
+
+参数：`(name: str, recipe_identity: str \| None)`。
+
 ## factor_preprocess/adapters/fe_neutralization.py
 
 Lazy adapter for FE-owned OLS neutralization composites.
@@ -497,7 +512,7 @@ Resolve an explicitly registered neutralization recipe identity.
 
 ### execute_ols_neutralize
 
-[实际实现](../factor_preprocess/adapters/fe_neutralization.py#L20)。
+[实际实现](../factor_preprocess/adapters/fe_neutralization.py#L21)。
 
 Delegate without duplicating FE's numerical implementation.
 
@@ -5264,7 +5279,8 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/adapters/data_access.py` | `4bb432d31734d8b16062d1e36010082d829388ca60916c4e0dd0db6b8992e71f` |
 | `factor_preprocess/adapters/ewma_full_replay.py` | `f5d653976ab97b8581d299dddbd49494e65639cba164ee4cea722f30a74d5fb5` |
 | `factor_preprocess/adapters/factor_assets.py` | `75478a4f2c9cc80b7c30aacf729fe33ab722cfc2be7dfb63f11e3f562b92e878` |
-| `factor_preprocess/adapters/fe_neutralization.py` | `abdad703f68acea02a7b4f6eb005af4c51965be26f29568e92d89ebb2e543878` |
+| `factor_preprocess/adapters/fe_composite.py` | `7d8be58e62feea41d66b3c4a73bb19da107d827bc88ad1b8c6512431e273a3f4` |
+| `factor_preprocess/adapters/fe_neutralization.py` | `e92aad57c3610ea9689436fe2e4f0758fb92261427ccc7c09914210a65481230` |
 | `factor_preprocess/adapters/fe_operator.py` | `9ec69415707feac974eed219f15910f22cde9650aac57b00873df1c3bbf977b2` |
 | `factor_preprocess/adapters/fe_smoothing.py` | `95b3a36e80d095c6e10022550c2afa529b93e60c25465febe1356863d365320b` |
 | `factor_preprocess/adapters/fitted_recipe.py` | `f6e770d3b0ad1090b52ce527169005b4ca7f06b58b06462c35db06e9c2c42e2e` |
@@ -5311,7 +5327,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/regime/switching.py` | `a6114ab07de853206d2d705d79946a162efb5d8cb04a8c7352e87ca5e5c8c43a` |
 | `factor_preprocess/registry/__init__.py` | `f7d6d9c9d84116aa51d6c7d38695d2b439f63c69cb01d54327a998d970936329` |
 | `factor_preprocess/registry/policies.py` | `6f0c776875e25205ce2e8f072dfdb70ae15caacdb6f9dc516a6151cace7fd202` |
-| `factor_preprocess/registry/transforms.py` | `65a68385caff474f3a5b04727d547f7766d105b525d83f80c9fb6d1a8307aca5` |
+| `factor_preprocess/registry/transforms.py` | `bb1f78bf1c5bdb24df75a6900c187aae4a60ce311218187fdacc7a3a276940f2` |
 | `factor_preprocess/representation/__init__.py` | `5b62691fd8b68400db3bcc025ec528ed68240d3dd127d5e036fe3e08fb58942d` |
 | `factor_preprocess/representation/linear_ready.py` | `c0f394448c6be34cc02bf83000e182da18d4f022fe83c82cd524b5582f20c81e` |
 | `factor_preprocess/representation/multichannel.py` | `f9edaba509c7bf1c12a1534eb9ca758e523f7efc62f955e09b8609bc6c346dfe` |

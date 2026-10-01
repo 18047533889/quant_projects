@@ -5,7 +5,7 @@ Locks the implementation-origin metadata surface (plan §26 F2):
 
 - Every registered transform carries ``implementation_origin`` (never None)
   so a routing audit can enumerate the whole catalog.
-- ``implementation_origin`` is one of ``{"FE_OPERATOR", "FP_NATIVE"}``.
+- ``implementation_origin`` is one of ``{"FE_OPERATOR", "FE_COMPOSITE", "FP_NATIVE"}``.
 - ``fe_operator_id`` is set exactly when ``implementation_origin ==
   "FE_OPERATOR"`` (and is None otherwise).
 - ``fit_kind`` is one of ``{"stateless", "fitted"}`` and agrees with
@@ -32,17 +32,13 @@ from factor_preprocess.registry.transforms import (
 _VALID_ORIGINS = {"FE_OPERATOR", "FE_COMPOSITE", "FP_NATIVE"}
 _VALID_FIT_KINDS = {"stateless", "fitted"}
 
-#: The 8 transforms routed to FE execution (parity-proved in
-#: tests/test_fe_operator_parity.py).
+#: Direct FE operators; composite recipes have a separate identity contract.
+#: Parity tests cover both routes.
 _FE_ROUTED = {
     "cs_rank": "rank",
     "cs_demean": "cs_demean",
     "cs_winsor": "winsorize",
     "forward_fill": "ffill_limit",
-    "ols_neutralize": "cs_neutralize",
-    "industry_neutral": "cs_neutralize",
-    "size_neutral": "cs_neutralize",
-    "dual_neutral": "cs_neutralize",
 }
 
 
@@ -79,6 +75,27 @@ def test_fe_routed_set_is_exact():
         if m.implementation_origin == "FE_OPERATOR"
     }
     assert routed == _FE_ROUTED
+
+
+def test_fe_composite_set_and_recipe_identities_are_exact():
+    registry = get_default_registry()
+    expected = {
+        "trailing_sma": "FE_COMPOSITE:long_smoothing.lagged_mean:v1",
+        "rolling_mean": "FE_COMPOSITE:long_smoothing.lagged_mean:v1",
+        "trailing_median": "FE_COMPOSITE:long_smoothing.lagged_median:v1",
+        "rolling_std": "FE_COMPOSITE:long_smoothing.lagged_std:v1",
+        "rolling_zscore": "FE_COMPOSITE:long_smoothing.lagged_zscore:v1",
+    }
+    for name in ("ols_neutralize", "industry_neutral", "size_neutral", "dual_neutral"):
+        expected[name] = "FE_COMPOSITE:long_neutralization.ols_effective_rank:v1"
+    actual = {
+        meta.name: meta.fe_equivalent_semantics
+        for meta in registry.all_transforms()
+        if meta.implementation_origin == "FE_COMPOSITE"
+    }
+    assert actual == expected
+    for name in expected:
+        assert registry.get(name).fe_operator_id is None
 
 
 def test_fitted_transforms_are_fp_native():
