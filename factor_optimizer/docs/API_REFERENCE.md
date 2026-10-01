@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**81 个 Python 模块、956 个公开函数/类/方法定义**。
+扫描实际包目录：**82 个 Python 模块、957 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -21,6 +21,7 @@
 | [factor_optimizer/adapters/preprocessing.py](../factor_optimizer/adapters/preprocessing.py) | 6 | Versioned research bridge from smoothing proposals to real FP kernels. |
 | [factor_optimizer/adapters/quant_evaluator.py](../factor_optimizer/adapters/quant_evaluator.py) | 14 | QuantEvaluatorAdapter: protocol for QE integration (optional dependency). |
 | [factor_optimizer/adapters/repair_execution.py](../factor_optimizer/adapters/repair_execution.py) | 5 | Versioned, research-only execution plans for value-level repair families. |
+| [factor_optimizer/candidate_catalog.py](../factor_optimizer/candidate_catalog.py) | 1 | Shared, deterministic static candidate catalog for batch research. |
 | [factor_optimizer/capabilities.py](../factor_optimizer/capabilities.py) | 5 | Truthful runtime capability metadata for factor_optimizer. |
 | [factor_optimizer/complexity/__init__.py](../factor_optimizer/complexity/__init__.py) | 0 | Complexity estimation and budget tracking. |
 | [factor_optimizer/complexity/budget.py](../factor_optimizer/complexity/budget.py) | 9 | Complexity budget tracking and enforcement. |
@@ -720,6 +721,18 @@ A valid registry candidate has no exact executable value primitive.
 参数：`(family: str, parameters: Mapping[str, object], *, natural_time_scale: float, training_context_ref: str)`。
 
 返回类型：`ValueRepairPlan`。
+
+## factor_optimizer/candidate_catalog.py
+
+Shared, deterministic static candidate catalog for batch research.
+
+### optimizer_candidate_specs
+
+[实际实现](../factor_optimizer/candidate_catalog.py#L5)。
+
+Return the optimizer's ordered, prespecified (family, parameters) grid.
+
+参数：`(config)`。
 
 ## factor_optimizer/capabilities.py
 
@@ -6692,7 +6705,7 @@ At most two IC references, private to one batch's TRAIN search.
 
 ### optimize_factor_batch
 
-[实际实现](../factor_optimizer/research_batch.py#L497)。
+[实际实现](../factor_optimizer/research_batch.py#L460)。
 
 Optimize aligned QE contracts automatically, preserving every input ID.
 
@@ -10802,6 +10815,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
 | `factor_optimizer/adapters/repair_execution.py` | `d64200649a33819d3013de96f89e18a02bb032ed3e20d6ce2c34d4490c7d3727` |
+| `factor_optimizer/candidate_catalog.py` | `5414e62ee8c6d535a14e8ed823f387c09b8a423a3cab91870c66edda6d864926` |
 | `factor_optimizer/capabilities.py` | `efb1fbf1b54b1b14f128ffe63c74f54f7a22f99a409a0761aac67fc1b6e3ed28` |
 | `factor_optimizer/complexity/__init__.py` | `79c8daf01ef8071b77eb7cbb8df4ae45fc9e2d4a4349f35d402a12f79936e696` |
 | `factor_optimizer/complexity/budget.py` | `d797ada6f52d0ccab3820450fb12e8f84f3f3dbb4e9f1e53f64eb5bb21a3469d` |
@@ -10842,7 +10856,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
-| `factor_optimizer/research_batch.py` | `5df03b30600a68f98699ad0fe19b1e8f7a4a2c608df3cf800cdf5550b39dd6f1` |
+| `factor_optimizer/research_batch.py` | `0a223c81c0f5a49d3c2cbb4b2eb181b33196f285b20617aeef5fe13b12879307` |
 | `factor_optimizer/research_batch_diagnostics.py` | `0ec5186c413814db6457342e97236b582e95a460033c11a6804b815c64d24b89` |
 | `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
 | `factor_optimizer/research_diagnostics.py` | `054ee2ad344395812656f1a7991983c58cade69e8c0b524d98981258cd6947ad` |

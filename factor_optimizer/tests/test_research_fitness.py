@@ -20,6 +20,31 @@ def test_joint_utility_rejects_ic_gain_with_material_drawdown_loss():
     assert joint_utility(b) < joint_utility(a)
 
 
+@pytest.mark.parametrize("metric,failed_value", [
+    ("rank_ic", -.0101),
+    ("rank_icir", -.1001),
+    ("sharpe", -.2501),
+    ("max_drawdown", .2301),
+    ("worst_block_sharpe", -.5001),
+    ("turnover", .6501),
+])
+def test_each_raw_relative_floor_rejects_even_when_joint_utility_rises(metric, failed_value):
+    from factor_optimizer.research_fitness import joint_utility, passes_floors
+
+    raw = {
+        "rank_ic": 0., "rank_icir": 0., "sharpe": 0.,
+        "max_drawdown": .2, "worst_block_sharpe": 0., "turnover": .4,
+    }
+    candidate = {
+        "rank_ic": .25, "rank_icir": 2., "sharpe": 4.,
+        "max_drawdown": .1, "worst_block_sharpe": 2., "turnover": .05,
+    }
+    candidate[metric] = failed_value
+
+    assert joint_utility(candidate) > joint_utility(raw)
+    assert not passes_floors(raw, candidate)
+
+
 def test_missing_portfolio_return_does_not_fabricate_zero_drawdown():
     from factor_optimizer.research_fitness import summarize
     sample = series()

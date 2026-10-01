@@ -9,6 +9,7 @@ import pandas as pd
 
 from factor_optimizer.adapters.preprocessing import compile_admissible_smoothing_grid
 from factor_optimizer.adapters.repair_execution import compile_value_repair, IneligibleValueRepair
+from factor_optimizer.candidate_catalog import optimizer_candidate_specs
 from factor_optimizer.policy.repair_registry import RepairFamilyRegistry
 from factor_optimizer.research_batch import (
     BatchOptimizationConfig, automatic_time_split, _pair_ic, optimize_factor_batch,
@@ -18,7 +19,7 @@ from factor_optimizer.research_fitness import (
 )
 
 
-def method_cases():
+def _executable_method_cases():
     """Exercise each family and each declared value-executable categorical branch."""
     registry = RepairFamilyRegistry.default()
     for family in registry.family_names:
@@ -56,14 +57,36 @@ def method_cases():
             yield family, params, None
 
 
-def audit_methods(batch, labels):
+def _candidate_key(family, parameters):
+    return family, json.dumps(parameters, sort_keys=True, separators=(",", ":"), default=str)
+
+
+def method_cases(config=None):
+    """Deduplicate executable audit branches with the optimizer's static grid."""
+    config = config or BatchOptimizationConfig()
+    seen = set()
+    from itertools import chain
+    cases = chain(
+        _executable_method_cases(),
+        ((family, dict(parameters), None)
+         for family, parameters in optimizer_candidate_specs(config)),
+    )
+    for family, parameters, plan in cases:
+        key = _candidate_key(family, parameters)
+        if key in seen:
+            continue
+        seen.add(key)
+        yield family, parameters, plan
+
+
+def audit_methods(batch, labels, *, config=None):
     """Evaluate every method, even when RAW has too few valid IC dates.
 
     Scores are exploratory TRAIN diagnostics only, not method acceptance.
     Each executable case checks prefix invariance, asset permutation and row
     alignment. Unsupported inputs remain explicit, not fake RAW execution.
     """
-    config = BatchOptimizationConfig()
+    config = config or BatchOptimizationConfig()
     split = automatic_time_split(labels, config)
     t, a = split.validation_start, batch.values.shape[1]
     rows = []
@@ -77,7 +100,7 @@ def audit_methods(batch, labels):
                               "value": raw.ravel()})
         cut = (t // 2) * a
         order = np.arange(t*a).reshape(t,a)[:,::-1].ravel()
-        for family, params, compiled in method_cases():
+        for family, params, compiled in method_cases(config):
             row = {"factor": name, "family": family, "parameters": params}
             try:
                 plan = compiled or compile_value_repair(family, params,
@@ -124,18 +147,46 @@ def audit_methods(batch, labels):
     return rows
 
 
+def candidate_universe(result):
+    """Report static optimizer specs, adaptive proposals, and executable cases."""
+    config = result.config or BatchOptimizationConfig()
+    static_specs = optimizer_candidate_specs(config)
+    static_keys = {_candidate_key(family, parameters)
+                   for family, parameters in static_specs}
+    adaptive = {}
+    for factor_id, outcome in result.factors.items():
+        adaptive[factor_id] = [dict(record) for record in outcome.candidates
+            if (record.get("proposal_source") is not None
+                or record.get("orientation", 1) != 1
+                or _candidate_key(record["family"], record["parameters"]) not in static_keys)]
+    executable_cases = [
+        {"family": family, "parameters": dict(parameters),
+         "compiled_identity": None if plan is None else plan.identity,
+         "in_static_optimizer_grid": _candidate_key(family, parameters) in static_keys}
+        for family, parameters, plan in method_cases(config)
+    ]
+    return {
+        "optimizer_static": [{"family": family, "parameters": dict(parameters)}
+                             for family, parameters in static_specs],
+        "optimizer_adaptive_actual_by_factor": adaptive,
+        "executable_audit_cases": executable_cases,
+    }
+
+
 def main():
     from real_batch_audit import load_sample
     batch, labels, inputs = load_sample()
+    config = BatchOptimizationConfig()
     print("Loaded bounded real sample; auditing methods on TRAIN only", file=sys.stderr, flush=True)
-    audit = audit_methods(batch, labels)
+    audit = audit_methods(batch, labels, config=config)
     print("Method audit complete; running automatic TRAIN/VALIDATION selection", file=sys.stderr, flush=True)
-    result = optimize_factor_batch(batch, labels, allow_research=True)
+    result = optimize_factor_batch(batch, labels, config=config, allow_research=True)
     report = {
         "inputs": inputs, "test_evaluated": False, "method_audit_partition": "TRAIN only",
         "limits": "TRAIN execution and costed joint-metric audit; no profit claim or upstream PIT re-certification",
         "method_status_counts": dict(Counter(row["status"] for row in audit)),
         "methods": audit,
+        "candidate_universe": candidate_universe(result),
         "split": {"train": len(result.split.train_indices),
                   "validation": len(result.split.validation_indices),
                   "test_reserved": len(result.split.test_indices)},

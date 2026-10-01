@@ -17,7 +17,7 @@ def test_method_audit_only_suppresses_typed_evidence_unavailability(monkeypatch,
         transform = "identity"
         def execute(self, frame, **kwargs):
             return frame["value"].copy()
-    monkeypatch.setattr(audit, "method_cases", lambda: [("NO_OP_RAW", {}, Identity())])
+    monkeypatch.setattr(audit, "method_cases", lambda config=None: [("NO_OP_RAW", {}, Identity())])
     def broken(*args, **kwargs):
         if expected:
             raise JointMetricsUnavailable("undefined_ratios", "undefined risk", metrics=("sharpe",))

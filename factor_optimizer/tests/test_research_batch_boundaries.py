@@ -99,7 +99,7 @@ def test_validation_features_cannot_change_any_train_candidate_score():
         batch, labels, config=config, allow_research=True
     )
     values = np.array(batch.values, copy=True)
-    values[144:192] = 1e12
+    values[baseline.split.validation_start:baseline.split.test_start] = 1e12
     poisoned = replace(batch, values=values)
 
     attacked = optimize_factor_batch(
@@ -110,14 +110,19 @@ def test_validation_features_cannot_change_any_train_candidate_score():
         left = baseline.factors[factor_id]
         right = attacked.factors[factor_id]
         left_scores = [
-            (x["family"], x["parameters"], x.get("train_gain"))
+            (x["family"], x["parameters"], x.get("plan_identity"),
+             x.get("train_gain"), x.get("status"))
             for x in left.candidates
         ]
         right_scores = [
-            (x["family"], x["parameters"], x.get("train_gain"))
+            (x["family"], x["parameters"], x.get("plan_identity"),
+             x.get("train_gain"), x.get("status"))
             for x in right.candidates
         ]
         assert left_scores == right_scores
+        assert left.validation_candidate_identity == right.validation_candidate_identity
+        assert left.validation_candidate_identity is not None
+        assert left.train_gain == right.train_gain
 
 
 def test_test_label_values_validity_and_windows_do_not_pollute_research_result():

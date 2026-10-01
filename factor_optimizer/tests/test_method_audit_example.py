@@ -35,6 +35,10 @@ def test_method_audit_executes_every_numeric_family_and_marks_missing_inputs():
                          label_start_time=tuple(range(1,t+1)), label_end_time=tuple(range(2,t+2)), asset_axis=aa)
     rows = audit.audit_methods(batch, labels)
     assert not [r for r in rows if r["status"] == "failed"]
+    from factor_optimizer.candidate_catalog import optimizer_candidate_specs
+    for family, parameters in optimizer_candidate_specs(audit.BatchOptimizationConfig()):
+        assert sum(row["family"] == family and row["parameters"] == parameters
+                   for row in rows) == 1
     executed = {r["family"] for r in rows if r["status"] == "executed"}
     assert executed == {"NO_OP_RAW", "SIGN_ORIENTATION", "DECAY_REFINEMENT", "CAUSAL_SMOOTHING",
                         "ROBUST_OUTLIER", "MISSINGNESS_FRESHNESS", "U_SHAPE_REPAIR",

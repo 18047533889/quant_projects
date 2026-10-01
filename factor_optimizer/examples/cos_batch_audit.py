@@ -18,7 +18,7 @@ from data_access.store import DataAccessStore
 from data_access.cos.research import read_declared_cos_object
 from factor_optimizer.research_diagnostics import diagnose_training_batch
 from factor_optimizer.research_manifest import read_bound_factor
-from factor_optimizer.research_batch import automatic_time_split
+from factor_optimizer.research_batch import BatchOptimizationConfig, automatic_time_split
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 
@@ -209,22 +209,27 @@ def main():
                         help="isolate individually low-coverage factors or reject the whole sample")
     parser.add_argument("--max-factor-mib", type=int, choices=range(1, 65), default=8,
                         help="per-factor admission cap; total factor objects capped at 128 MiB")
+    parser.add_argument("--output-json", type=Path, default=None,
+                        help="write the bounded JSON report to this new path instead of stdout")
     args = parser.parse_args()
+    config = BatchOptimizationConfig()
+    if args.output_json is not None and args.output_json.exists():
+        raise FileExistsError(f"refusing to overwrite existing report: {args.output_json}")
     batch, labels, provenance, lineages = load_cos_sample(
         n_factors=args.factors, n_assets=args.assets, include_lineages=True,
         manifest_uri=args.manifest, max_factor_bytes=args.max_factor_mib*1024**2,
         coverage_policy=args.coverage_policy)
     report = {"inputs": provenance, "test_evaluated": False,
-              "diagnostics": diagnose_training_batch(batch, labels)}
+              "diagnostics": diagnose_training_batch(batch, labels, config=config)}
     if args.audit_methods:
         from collections import Counter
         from method_audit import audit_methods
-        methods = audit_methods(batch, labels)
+        methods = audit_methods(batch, labels, config=config)
         report.update(methods=methods, method_audit_partition="TRAIN only",
                       method_status_counts=dict(Counter(row['status'] for row in methods)))
     if args.optimize:
         from factor_optimizer.research_batch import optimize_factor_batch
-        result = optimize_factor_batch(batch, labels, allow_research=True, lineages=lineages)
+        result = optimize_factor_batch(batch, labels, config=config, allow_research=True, lineages=lineages)
         report["automatic"] = {name: {
             "status": r.status, "selected_family": r.selected_family,
             "train_gain": r.train_gain, "validation_lower_bound": r.validation_lower_bound,
@@ -235,7 +240,17 @@ def main():
             "candidates": [dict(c) for c in r.candidates],
         } for name, r in result.factors.items()}
         report["selection_objective"] = "joint.v1: Sharpe, RankICIR, RankIC, drawdown, worst-block Sharpe, turnover"
-    print(json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False))
+        from method_audit import candidate_universe
+        report["candidate_universe"] = candidate_universe(result)
+    encoded = json.dumps(report, ensure_ascii=False, indent=2, allow_nan=False)
+    if len(encoded.encode("utf-8")) > 16 * 1024**2:
+        raise ValueError("JSON report exceeds the 16 MiB output limit")
+    if args.output_json is None:
+        print(encoded)
+    else:
+        with args.output_json.open("x", encoding="utf-8") as stream:
+            stream.write(encoded)
+            stream.write("\n")
     if args.audit_methods and report['method_status_counts'].get('failed', 0):
         raise SystemExit(1)
 

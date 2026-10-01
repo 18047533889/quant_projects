@@ -132,13 +132,13 @@ def test_cli_method_audit_reports_cases_and_fails_on_broken_method(monkeypatch, 
     if failed:
         rows.append({'family': 'EWMA', 'status': 'failed', 'reason': 'broken'})
     calls = []
-    def audit(b, y):
+    def audit(b, y, *, config):
         assert b is batch and y is labels
         calls.append(True)
         return rows
     monkeypatch.setitem(sys.modules, 'method_audit', SimpleNamespace(audit_methods=audit))
     monkeypatch.setattr(example, 'load_cos_sample', lambda **k: (batch, labels, {}, {}))
-    monkeypatch.setattr(example, 'diagnose_training_batch', lambda *a: {})
+    monkeypatch.setattr(example, 'diagnose_training_batch', lambda *a, **kw: {})
     monkeypatch.setattr(sys, 'argv', ['cos_batch_audit.py', '--audit-methods'])
     if failed:
         with pytest.raises(SystemExit) as exc:
@@ -187,3 +187,74 @@ def test_manifest_selection_rejects_out_of_pool_before_io(monkeypatch, uri):
 def test_factor_budget_cannot_exceed_existing_dataaccess_cap(cap):
     with pytest.raises(ValueError, match="max_factor_bytes"):
         example.select_manifest_records([{"factors": {}}], 1, max_factor_bytes=cap)
+
+
+def test_cli_output_json_uses_actual_candidate_inventory_and_keeps_stdout_empty(monkeypatch, capsys, tmp_path):
+    import json
+    import sys
+    from types import SimpleNamespace
+    from factor_optimizer import research_batch
+
+    batch, labels = object(), object()
+    result = SimpleNamespace(factors={}, identity="optimization-result")
+    monkeypatch.setattr(example, "load_cos_sample", lambda **k: (batch, labels, {}, {}))
+    monkeypatch.setattr(example, "diagnose_training_batch", lambda *a, **k: {})
+    monkeypatch.setattr(research_batch, "optimize_factor_batch", lambda *a, **k: result)
+    monkeypatch.setitem(sys.modules, "method_audit", SimpleNamespace(
+        candidate_universe=lambda actual: {"result_identity": actual.identity}))
+    output = tmp_path / "report.json"
+    monkeypatch.setattr(sys, "argv", ["cos_batch_audit.py", "--optimize", "--output-json", str(output)])
+
+    example.main()
+
+    assert capsys.readouterr().out == ""
+    report = json.loads(output.read_text(encoding="utf-8"))
+    assert report["test_evaluated"] is False
+    assert report["candidate_universe"] == {"result_identity": "optimization-result"}
+
+
+def test_cli_refuses_existing_json_path_before_loading_sample(monkeypatch, tmp_path):
+    import sys
+    output = tmp_path / "existing.json"
+    output.write_text("preserve", encoding="utf-8")
+    monkeypatch.setattr(example, "load_cos_sample", lambda **k: pytest.fail("sample read began before collision check"))
+    monkeypatch.setattr(sys, "argv", ["cos_batch_audit.py", "--output-json", str(output)])
+
+    with pytest.raises(FileExistsError, match="refusing to overwrite"):
+        example.main()
+    assert output.read_text(encoding="utf-8") == "preserve"
+
+
+def test_cli_exclusive_create_catches_output_collision_after_preflight(monkeypatch, capsys, tmp_path):
+    import sys
+    output = tmp_path / "race.json"
+
+    def load_and_create_output(**kwargs):
+        assert not output.exists()
+        output.write_text("concurrent writer", encoding="utf-8")
+        return object(), object(), {}, {}
+
+    monkeypatch.setattr(example, "load_cos_sample", load_and_create_output)
+    monkeypatch.setattr(example, "diagnose_training_batch", lambda *a, **kw: {})
+    monkeypatch.setattr(sys, "argv", ["cos_batch_audit.py", "--output-json", str(output)])
+
+    with pytest.raises(FileExistsError):
+        example.main()
+
+    assert output.read_text(encoding="utf-8") == "concurrent writer"
+    assert capsys.readouterr().out == ""
+
+
+def test_cli_oversized_json_is_rejected_without_file_or_stdout(monkeypatch, capsys, tmp_path):
+    import sys
+    output = tmp_path / "too-large.json"
+    monkeypatch.setattr(example, "load_cos_sample", lambda **kwargs: (object(), object(), {}, {}))
+    monkeypatch.setattr(example, "diagnose_training_batch", lambda *a, **kw: {})
+    monkeypatch.setattr(example.json, "dumps", lambda *a, **kw: "x" * (16 * 1024**2 + 1))
+    monkeypatch.setattr(sys, "argv", ["cos_batch_audit.py", "--output-json", str(output)])
+
+    with pytest.raises(ValueError, match="16 MiB"):
+        example.main()
+
+    assert not output.exists()
+    assert capsys.readouterr().out == ""
