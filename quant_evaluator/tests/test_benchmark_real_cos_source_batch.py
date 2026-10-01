@@ -608,3 +608,78 @@ def test_gpu_tile_width_ab_failure_keeps_partial_receipt(monkeypatch, tmp_path):
     assert receipt["status"] == "interrupted"
     assert receipt["runs"] == []
     assert "median_seconds_by_width" not in receipt
+def test_f8_rank_pair_profile_compares_full_scalar_and_series_outputs():
+    factor_ids = tuple(f"f{index}" for index in range(8))
+    scalar = np.linspace(-0.2, 0.2, 8)
+    series = np.arange(24, dtype=np.float64).reshape(3, 8)
+
+    def bundle(*, series_values=series):
+        return SimpleNamespace(
+            factor_ids=factor_ids,
+            metadata={"source_request_fingerprint": "a" * 64},
+            scalar_metrics={"rank_ic": scalar},
+            series_metrics={"rank_ic_series": series_values},
+            observation_counts={
+                "rank_ic": np.asarray([3] * 8),
+                "rank_ic_series": np.asarray([3] * 8),
+            },
+        )
+
+    result = harness.compare(bundle(), bundle(), harness.RANK_PAIR, expected_days=3)
+    assert result["pass"]
+    assert result["compared_factor_count"] == 8
+    assert result["compared_metric_count"] == 8 + 3 * 8
+    assert result["metrics"]["rank_ic_series"]["artifact_kind"] == "series"
+    changed = series.copy()
+    changed[0, 0] = np.nan
+    assert not harness.compare(
+        bundle(), bundle(series_values=changed), harness.RANK_PAIR,
+        expected_days=3)["pass"]
+
+
+def test_f8_auto_reference_requires_complete_opposite_order_pair(tmp_path):
+    metrics = {
+        "rank_ic": {
+            "pass": True, "cpu_values_sha256": "a" * 64,
+            "cuda_values_sha256": "b" * 64, "cuda_shape": [8],
+            "finite_value_count": 8,
+        },
+        "rank_ic_series": {
+            "pass": True, "cpu_values_sha256": "c" * 64,
+            "cuda_values_sha256": "d" * 64, "cuda_shape": [2586, 8],
+            "finite_value_count": 2586 * 8,
+        },
+    }
+    comparison = {"pass": True, "compared_metric_count": 8 + 2586 * 8,
+                  "metrics": metrics}
+    common = {
+        "status": "complete", "kind": "real_cos_whole_source_batch_ab.v1",
+        "manifest_sha256": "e" * 64, "shape": list(harness.F8_SOURCE_SHAPE),
+        "factor_dtype": "float64", "tile_size": 2,
+        "metric_ids": list(harness.RANK_PAIR), "comparison": comparison,
+        "runs": [{"backend_used": "cpu"}, {"backend_used": "cuda"}],
+        "source_adapter": "cos", "cos_prefetch": "auto",
+        "prefetch_objects": True, "prefetch_mode": "auto", "prefetch_window": 2,
+    }
+    reports = []
+    for index, order in enumerate((
+            ["cpu", "cuda_strict"], ["cuda_strict", "cpu"])):
+        report = dict(common, run_order=order)
+        path = tmp_path / f"f8-ab-{index}.json"
+        path.write_text(json.dumps(report), encoding="utf-8")
+        reports.append(path)
+
+    reference = harness.certified_cuda_hashes(
+        tuple(reports), harness.RANK_PAIR, "e" * 64)
+    assert reference["shape"] == list(harness.F8_SOURCE_SHAPE)
+
+
+@pytest.mark.parametrize("profile_args", [
+    ["--factors", "8", "--metrics", "rank-pair"],
+    ["--factors", "8", "--metrics", "rank-pair", "--days", "2586",
+     "--assets", "5461", "--tile-size", "8"],
+])
+def test_f8_source_benchmark_rejects_unbounded_profile(monkeypatch, profile_args):
+    monkeypatch.setattr("sys.argv", ["benchmark", *profile_args])
+    with pytest.raises(SystemExit):
+        harness.main()

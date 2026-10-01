@@ -34,7 +34,9 @@ from quant_evaluator.adapters.cos_factor_tile_source import (
 )
 from quant_evaluator.scripts import benchmark_real_cos_factor_tiles as tiles
 
+F8_SOURCE_SHAPE = (2586, 5461, 8)
 DEFAULT_METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
+RANK_PAIR = ("rank_ic", "rank_ic_series")
 PEARSON_SINGLE = ("pearson_ic",)
 PEARSON_CHAIN = ("pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir")
 ALL_SOURCE_METRICS = (
@@ -546,23 +548,40 @@ def certified_cuda_hashes(paths, selected_metrics, manifest_sha):
         if path.stat().st_size > 1024**2:
             raise ValueError("reference report exceeds 1 MiB")
         report = json.loads(path.read_text(encoding="utf-8"))
+        shape = tuple(report.get("shape", ()))
+        f8_profile = (shape == F8_SOURCE_SHAPE
+                      and tuple(selected_metrics) == RANK_PAIR
+                      and report.get("tile_size") == 2)
+        f61_profile = (len(shape) == 3 and shape[2] == 61
+                       and (tuple(selected_metrics) in (
+                           DEFAULT_METRICS, PEARSON_SINGLE, ALL_SOURCE_METRICS)
+                            or is_pearson_chain(selected_metrics))
+                       and report.get("tile_size") == 16)
         if (report.get("status") != "complete"
                 or report.get("kind") != "real_cos_whole_source_batch_ab.v1"
                 or not report.get("comparison", {}).get("pass")
                 or report.get("manifest_sha256") != manifest_sha
                 or tuple(report.get("metric_ids", ())) != selected_metrics
                 or report.get("factor_dtype") != "float64"
-                or report.get("tile_size") != 16
+                or not (f8_profile or f61_profile)
                 or {run.get("backend_used") for run in report.get("runs", ())}
                 != {"cpu", "cuda"}):
             raise ValueError("reference report is not a matching completed CPU/CUDA A/B")
         reports.append(report)
     first, second = reports
     profile_shape = tuple(first.get("shape", ()))
+    valid_profile_shape = (profile_shape in _F61_ALL_SOURCE_SHAPES
+                           or (profile_shape == F8_SOURCE_SHAPE
+                               and tuple(selected_metrics) == RANK_PAIR))
+    source_setting_keys = ("source_adapter", "cos_prefetch", "prefetch_objects",
+                           "prefetch_mode", "prefetch_window")
+    same_source_settings = all(first.get(key) == second.get(key)
+                               for key in source_setting_keys)
     if ({tuple(first.get("run_order", ())), tuple(second.get("run_order", ()))}
             != {("cpu", "cuda_strict"), ("cuda_strict", "cpu")}
             or first.get("shape") != second.get("shape")
-            or profile_shape not in _F61_ALL_SOURCE_SHAPES
+            or not valid_profile_shape
+            or not same_source_settings
             or first["comparison"].get("compared_metric_count")
             != second["comparison"].get("compared_metric_count")):
         raise ValueError("reference reports lack opposite-order matched coverage")
@@ -607,7 +626,7 @@ def verify_auto_against_reference(auto, selected_metrics, reference):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--factors", type=int, choices=(48, 61), required=True)
+    parser.add_argument("--factors", type=int, choices=(8, 48, 61), required=True)
     parser.add_argument("--tile-size", type=int, default=8)
     parser.add_argument("--metrics", default=",".join(DEFAULT_METRICS),
                         help="default three, pearson_ic, Pearson chain, or all_source")
@@ -647,29 +666,39 @@ def main():
     if args.source_adapter == "legacy" and (
             args.cos_prefetch_workers != 2 or args.max_prefetch_memory_mib != 512):
         parser.error("prefetch worker/budget options require --source-adapter cos")
-    selected = ALL_SOURCE_METRICS if args.metrics == "all_source" else tuple(args.metrics.split(","))
-    if (selected not in (DEFAULT_METRICS, PEARSON_SINGLE, ALL_SOURCE_METRICS)
+    selected = (ALL_SOURCE_METRICS if args.metrics == "all_source" else
+                (RANK_PAIR if args.metrics == "rank-pair" else tuple(args.metrics.split(","))))
+    if (selected not in (DEFAULT_METRICS, RANK_PAIR, PEARSON_SINGLE, ALL_SOURCE_METRICS)
             and not is_pearson_chain(selected)):
-        parser.error("--metrics must be default three, pearson_ic, Pearson chain, or all_source")
+        parser.error("--metrics must be default three, rank-pair, pearson_ic, Pearson chain, or all_source")
+    f8_rank_pair_profile = (args.factors == 8 and selected == RANK_PAIR
+                            and args.days == 2586 and args.assets == 5461
+                            and args.tile_size == 2)
+    if args.factors == 8 and not f8_rank_pair_profile:
+        parser.error("F8 profile requires --metrics rank-pair --days 2586 --assets 5461 --tile-size 2")
+    if args.factors != 8 and selected == RANK_PAIR:
+        parser.error("rank-pair profile requires --factors 8")
     if not 1 <= args.tile_size <= 32:
         parser.error("--tile-size must be 1..32")
     if args.gpu_tile_widths and (len(set(args.gpu_tile_widths)) != 2
                                  or any(not 1 <= width <= 32 for width in args.gpu_tile_widths)):
         parser.error("--gpu-tile-widths requires two distinct widths in 1..32")
-    if args.gpu_worker and (is_pearson_chain(selected) or selected == ALL_SOURCE_METRICS):
+    if args.gpu_worker and (selected == RANK_PAIR or is_pearson_chain(selected) or selected == ALL_SOURCE_METRICS):
         parser.error("series metrics are supported only by whole-source CPU/CUDA A/B")
-    if args.verify_auto and (args.factors != 61
-                             or not (is_pearson_chain(selected) or selected == ALL_SOURCE_METRICS)
-                             or args.tile_size < 16 or args.gpu_worker
-                             or args.gpu_tile_widths):
-        parser.error("--verify-auto requires F61 Pearson or all-source, tile >=16, whole-source mode")
-    if args.auto_references and (args.factors != 61 or selected != ALL_SOURCE_METRICS
-                                  or args.tile_size != 16 or args.gpu_worker
-                                  or args.gpu_tile_widths or args.verify_auto
-                                  or args.output is None):
-        parser.error("--auto-references requires F61 all_source, tile 16, --output, and no other mode")
+    f61_auto_profile = (args.factors == 61
+                        and (is_pearson_chain(selected) or selected == ALL_SOURCE_METRICS)
+                        and args.tile_size >= 16)
+    if args.verify_auto and (not (f8_rank_pair_profile or f61_auto_profile)
+                             or args.gpu_worker or args.gpu_tile_widths):
+        parser.error("--verify-auto requires exact F8 rank-pair or certified F61 profile in whole-source mode")
+    f61_reference_profile = (args.factors == 61 and selected == ALL_SOURCE_METRICS
+                             and args.tile_size == 16)
+    if args.auto_references and (not (f8_rank_pair_profile or f61_reference_profile)
+                                  or args.gpu_worker or args.gpu_tile_widths
+                                  or args.verify_auto or args.output is None):
+        parser.error("--auto-references requires F8 rank-pair or F61 all_source exact profile, --output, and no other mode")
     if args.gpu_tile_widths:
-        if is_pearson_chain(selected) or selected == ALL_SOURCE_METRICS:
+        if selected == RANK_PAIR or is_pearson_chain(selected) or selected == ALL_SOURCE_METRICS:
             parser.error("series metrics are supported only by whole-source CPU/CUDA A/B")
         if args.gpu_worker or args.output is None:
             parser.error("--gpu-tile-widths requires --output and cannot use --gpu-worker")
@@ -707,6 +736,8 @@ def main():
         )
     dates, assets, labels = tiles.load_labels(
         common_dates, common_assets, args.days, args.assets)
+    if f8_rank_pair_profile and (len(dates), len(assets), len(records)) != F8_SOURCE_SHAPE:
+        raise SystemExit("F8 rank-pair profile did not materialize the exact source shape")
     policy = GPUExecutionPolicy()
     rejection = _auto_batch_cuda_rejection(policy, MIN_EFFECTIVE_VRAM_BYTES)
     if rejection:
@@ -746,9 +777,11 @@ def main():
             max_prefetch_memory_mib=args.max_prefetch_memory_mib)
         cuda_receipt["preflight"] = cuda_gate
         direct_comparison = compare(auto, cuda, selected, expected_days=len(dates))
-        route_pass = (receipt["auto_backend_reason"] ==
-                      "bounded_f61_all_source_15_gpu_tile16"
-                      and receipt["effective_max_tile_size"] == 16)
+        expected_reason, expected_tile = (
+            ("bounded_f8_rank_pair_gpu", 2) if f8_rank_pair_profile else
+            ("bounded_f61_all_source_15_gpu_tile16", 16))
+        route_pass = (receipt["auto_backend_reason"] == expected_reason
+                      and receipt["effective_max_tile_size"] == expected_tile)
         complete = route_pass and reference_comparison["pass"] and direct_comparison["pass"]
         report = {
             "status": "complete" if complete else "verification_failed",
@@ -855,11 +888,14 @@ def main():
         auto_run["preflight"] = gate
         auto_run["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
         auto_run["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
-        expected_reason = ("bounded_f61_all_source_15_gpu_tile16"
-                           if selected == ALL_SOURCE_METRICS else
-                           "bounded_f61_pearson_chain_gpu_tile16")
+        if f8_rank_pair_profile:
+            expected_reason, expected_tile = "bounded_f8_rank_pair_gpu", 2
+        elif selected == ALL_SOURCE_METRICS:
+            expected_reason, expected_tile = "bounded_f61_all_source_15_gpu_tile16", 16
+        else:
+            expected_reason, expected_tile = "bounded_f61_pearson_chain_gpu_tile16", 16
         if (auto_run["auto_backend_reason"] != expected_reason
-                or auto_run["effective_max_tile_size"] != 16):
+                or auto_run["effective_max_tile_size"] != expected_tile):
             raise ValueError("auto did not use the certified F61 source route")
         auto_comparison = compare(cpu, auto, selected, expected_days=len(dates))
     report = {

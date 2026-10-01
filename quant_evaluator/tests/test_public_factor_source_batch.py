@@ -128,21 +128,19 @@ def test_public_source_batch_invalid_options_fail_before_reads():
     assert source.reads == []
 
 
-def test_auto_source_exact_profile_uses_cuda_when_gate_passes(monkeypatch):
-    pytest.importorskip("cupy")
+def test_auto_source_unverified_f8_profile_falls_back_to_cpu(monkeypatch):
     import importlib
-    source_api = importlib.import_module("quant_evaluator.api.factor_source")
-    evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
 
     batch, label = _inputs()
     _patch_source_evidence_shape(monkeypatch, "f8", batch.values.shape)
-    monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection", lambda *_: None)
     result = evaluate_factor_source_batch(
         Source(batch), label, metrics=("rank_ic", "rank_ic_series"))
     reference = evaluate(batch, label, metrics=("rank_ic", "rank_ic_series"), backend="cpu")
     _assert_against_full_cpu(result, reference, ("rank_ic", "rank_ic_series"))
-    assert result.metadata["backend_used"] == "cuda"
-    assert result.metadata["auto_backend_reason"] == "bounded_f8_rank_pair_gpu"
+    receipt = result.metadata["execution_receipt"]
+    assert result.metadata["backend_used"] == "cpu"
+    assert receipt["auto_backend_reason"] == "source_shape_or_metrics_not_certified"
+    assert receipt["auto_backend_evidence_id"] is None
 
 
 def test_auto_source_resource_rejection_falls_back_to_cpu(monkeypatch):
@@ -151,11 +149,15 @@ def test_auto_source_resource_rejection_falls_back_to_cpu(monkeypatch):
     evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
 
     batch, label = _inputs()
-    _patch_source_evidence_shape(monkeypatch, "f8", batch.values.shape)
+    _patch_source_evidence_shape(monkeypatch, "f61", batch.values.shape)
     monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection",
                         lambda *_: "insufficient_cuda_memory")
+    source = Source(batch)
+    source.max_tile_size = 16
     result = evaluate_factor_source_batch(
-        Source(batch), label, metrics=("rank_ic", "rank_ic_series"))
+        source, label,
+        metrics=("rank_ic", "quantile_spread", "factor_turnover_rate"),
+        max_tile_size=16)
     assert result.metadata["backend_used"] == "cpu"
     assert result.metadata["auto_backend_reason"] == "insufficient_cuda_memory"
 
@@ -166,10 +168,14 @@ def test_auto_source_nondefault_precision_does_not_use_uncertified_gpu(monkeypat
     source_api = importlib.import_module("quant_evaluator.api.factor_source")
 
     batch, label = _inputs()
-    _patch_source_evidence_shape(monkeypatch, "f8", batch.values.shape)
+    _patch_source_evidence_shape(monkeypatch, "f61", batch.values.shape)
+    source = Source(batch)
+    source.max_tile_size = 16
     policy = GPUExecutionPolicy(precision_policy=PrecisionPolicy.GPU_FP64)
     result = evaluate_factor_source_batch(
-        Source(batch), label, metrics=("rank_ic", "rank_ic_series"), gpu_policy=policy)
+        source, label,
+        metrics=("rank_ic", "quantile_spread", "factor_turnover_rate"),
+        max_tile_size=16, gpu_policy=policy)
     assert result.metadata["backend_used"] == "cpu"
     assert result.metadata["auto_backend_reason"] == "gpu_precision_policy_outside_certified_range"
 

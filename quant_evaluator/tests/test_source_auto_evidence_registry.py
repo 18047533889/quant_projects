@@ -1,5 +1,6 @@
 """Pure equivalence tests for the source API's evidence-backed auto routes."""
 from pathlib import Path
+from dataclasses import replace
 
 import pytest
 
@@ -26,12 +27,14 @@ def _legacy_route(shape, metrics, width, factor_dtype="float64", label_dtype="fl
     metric_set = frozenset(metrics)
     f61_mixed = shape == F61 and len(metrics) == 3 and metric_set == frozenset(MIXED) and width >= 8
     tile = (16 if width >= 16 else 8) if f61_mixed else width
-    f8, f32 = shape == F8, shape == F32 and tile == 2
+    f32 = shape == F32 and tile == 2
     f32_mixed = f32 and len(metrics) == 3 and metric_set == frozenset(MIXED)
     f61_single = shape == F61 and metrics == ("pearson_ic",) and width >= 16
     f61_chain = shape == F61 and len(metrics) == len(PEARSON_CHAIN) and metric_set == frozenset(PEARSON_CHAIN) and width >= 16
     f61_all = shape in (F61, F61_ALT) and len(metrics) == len(ALL_METRICS) and metric_set == frozenset(ALL_METRICS) and width >= 16
-    rank_pair = (f8 or f32) and len(metrics) == 2 and metric_set == frozenset(RANK_PAIR)
+    # The F8 source route is intentionally unavailable until source-API
+    # evidence replaces its legacy, unverified performance status.
+    rank_pair = f32 and len(metrics) == 2 and metric_set == frozenset(RANK_PAIR)
     if factor_dtype != "float64" or label_dtype != "float64" or not (
             rank_pair or f32_mixed or f61_mixed or f61_single or f61_chain or f61_all):
         return None
@@ -48,7 +51,7 @@ def _legacy_route(shape, metrics, width, factor_dtype="float64", label_dtype="fl
         return "bounded_f32_mixed_three_gpu", 2
     if f32:
         return "bounded_f32_rank_pair_gpu", 2
-    return "bounded_f8_rank_pair_gpu", width
+    return None
 
 
 @pytest.mark.parametrize("shape", [F8, F32, F61, F61_ALT, (2586, 5461, 7)])
@@ -83,6 +86,31 @@ def test_registry_evidence_ids_are_stable_and_artifact_paths_exist():
             continue
         assert entry.evidence_artifacts
         assert all((root / path).is_file() for path in entry.evidence_artifacts)
+
+
+def test_unverified_f8_is_not_selected_and_future_evidence_is_tile2_only(monkeypatch):
+    import quant_evaluator.runtime.source_auto_evidence as registry
+
+    entry = next(e for e in SOURCE_AUTO_EVIDENCE
+                 if e.evidence_id == "real_cos_f8_rank_pair")
+    query = dict(shape=F8, metrics=RANK_PAIR, source_dtype="float64",
+                 label_dtype="float64")
+    assert select_source_auto_route(**query, requested_tile_width=2) is None
+
+    # Once a reviewed source-API A/B receipt exists, the route remains exact
+    # to the bounded tile width that the benchmark certified.
+    active = replace(entry, evidence_status="measured_source_ab",
+                     evidence_artifacts=("test:source-ab-receipt",))
+    monkeypatch.setattr(
+        registry, "SOURCE_AUTO_EVIDENCE",
+        tuple(active if item.evidence_id == entry.evidence_id else item
+              for item in SOURCE_AUTO_EVIDENCE),
+    )
+    route = select_source_auto_route(**query, requested_tile_width=2)
+    assert route is not None
+    assert route.effective_tile_width == 2
+    for width in (1, 3, 8, 16, 32):
+        assert select_source_auto_route(**query, requested_tile_width=width) is None
 
 
 def test_f61_pearson_consuming_evidence_has_full_parity_and_stable_outputs():

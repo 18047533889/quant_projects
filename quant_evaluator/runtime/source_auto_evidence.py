@@ -11,8 +11,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-SOURCE_AUTO_EVIDENCE_VERSION = "source_routes_20260930_v1"
+SOURCE_AUTO_EVIDENCE_VERSION = "source_routes_20261001_v2"
 SOURCE_F61_ALL_SHAPES = frozenset({(2586, 5461, 61), (2400, 5000, 61)})
+SOURCE_F8_RANK_PAIR_SHAPE = (2586, 5461, 8)
 
 _RANK_PAIR = frozenset({"rank_ic", "rank_ic_series"})
 _MIXED_THREE = frozenset({"rank_ic", "quantile_spread", "factor_turnover_rate"})
@@ -59,7 +60,9 @@ class SourceAutoEvidence:
 # width no greater than the caller's cap. No other route is interpolated.
 SOURCE_AUTO_EVIDENCE = (
     SourceAutoEvidence(
-        "real_cos_f8_rank_pair", (2586, 5461, 8), _RANK_PAIR,
+        "real_cos_f8_rank_pair", SOURCE_F8_RANK_PAIR_SHAPE, _RANK_PAIR,
+        minimum_requested_tile=2, exact_requested_tile=2,
+        certified_tile_widths=(2,),
         legacy_reason="bounded_f8_rank_pair_gpu",
         evidence_artifacts=(),
         evidence_status="legacy_unverified_source_performance"),
@@ -119,6 +122,10 @@ def select_source_auto_route(*, shape, metrics, source_dtype, label_dtype,
     if source_dtype != "float64" or label_dtype != "float64":
         return None
     for item in SOURCE_AUTO_EVIDENCE:
+        # Keep legacy evidence inspectable, but do not let it authorize
+        # default GPU routing until a source-API A/B receipt is registered.
+        if item.evidence_status != "measured_source_ab":
+            continue
         if not item.matches(shape, metrics, requested_tile_width):
             continue
         if item.certified_tile_widths:
