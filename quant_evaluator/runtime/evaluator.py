@@ -2506,7 +2506,15 @@ def evaluate(
     # Backend-independent provenance is computed from the host contracts after
     # execution (and before envelope construction).  CUDA metadata therefore
     # carries the same authoritative value/validity identities as CPU.
-    authoritative_provenance = runtime._provenance(factor_batch, label_bundle)
+    if gpu_result is None and evaluator is None:
+        # This is the exact EvaluationResult returned by the internally-created
+        # runtime in this call. Its finalized provenance remains authoritative
+        # after the runtime clears its temporary batch identity memo.
+        authoritative_provenance = result.provenance
+    else:
+        # Injected runtimes and GPU results may carry caller-controlled
+        # provenance, so derive identity from the current host contracts.
+        authoritative_provenance = runtime._provenance(factor_batch, label_bundle)
     result.metadata["provenance"] = authoritative_provenance
 
     from quant_evaluator.contracts.metric_artifacts import (
