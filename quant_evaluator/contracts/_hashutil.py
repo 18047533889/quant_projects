@@ -38,6 +38,7 @@ import json
 import sys
 
 import numpy as np
+from ._array_hash_cache import ArrayHashStateCache
 
 
 def canonicalize(value: Any) -> Any:
@@ -116,6 +117,7 @@ def stable_content_hex(*, tag: str, fields: Mapping[str, Any]) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+_ARRAY_HASH_STATE_CACHE = ArrayHashStateCache()
 
 def stable_content_hex_streamed_arrays(
     *, tag: str, fields: Mapping[str, Any], array_keys: tuple[str, ...],
@@ -169,6 +171,11 @@ def stable_content_hex_streamed_arrays(
             emit(json.dumps(canonicalize(array), sort_keys=True,
                             separators=(',', ':'), ensure_ascii=True))
             continue
+        prefix = digest.copy()
+        cached_state = _ARRAY_HASH_STATE_CACHE.get(array, prefix)
+        if cached_state is not None:
+            digest = cached_state
+            continue
         emit('{"__ndarray__":true,"data_b64":"')
         raw = memoryview(array).cast('B')
         for offset in range(0, len(raw), stride):
@@ -178,6 +185,7 @@ def stable_content_hex_streamed_arrays(
         emit(',"shape":')
         emit(json.dumps(list(array.shape), separators=(',', ':')))
         emit('}')
+        _ARRAY_HASH_STATE_CACHE.store(array, prefix, digest)
     emit('}]')
     return digest.hexdigest()
 #: Largest value CPython allows ``hash()`` to return (``sys.hash_info.modulus``).
