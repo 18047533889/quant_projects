@@ -462,9 +462,21 @@ class TransformMetadata:
 class _ValidatedExecutor:
     """Runtime call boundary that enforces the registered parameter contract."""
 
-    def __init__(self, metadata: TransformMetadata, executor: Callable):
+    def __init__(self, metadata: TransformMetadata, executor: Callable,
+                 execution_identity: Optional[dict] = None, *,
+                 execution_identity_provider: Optional[Callable[[], dict]] = None):
         self.metadata = metadata
         self.executor = executor
+        self._execution_identity = execution_identity
+        self._execution_identity_provider = execution_identity_provider
+
+    @property
+    def execution_identity(self):
+        """Read-only identity; bound providers refresh against live FE code."""
+        if self._execution_identity_provider is not None:
+            return self._execution_identity_provider()
+        from copy import deepcopy
+        return deepcopy(self._execution_identity)
 
     def __call__(self, *args, **kwargs):
         self.metadata.bind_call(*args, **kwargs)
@@ -811,6 +823,39 @@ class TransformRegistry:
             return "FE_COMPOSITE"
         return "FP_NATIVE"
 
+    def execution_identity(self, name: str, *, allow_research: bool = False) -> dict:
+        """Identify the resolver-selected route without changing legacy hashes."""
+        if type(allow_research) is not bool:
+            raise TypeError("allow_research must be a bool")
+        if not allow_research:
+            self.validate_production(name)
+        elif name not in self._transforms:
+            raise ValueError(f"Transform '{name}' is not registered")
+        metadata = self._transforms[name]
+        if metadata.implementation_origin != "FE_COMPOSITE":
+            raise GovernanceError(
+                f"Scoped execution identity is not bound for {name!r} "
+                f"(origin={metadata.implementation_origin!r})"
+            )
+        try:
+            from factor_preprocess.adapters.fe_composite import get_fe_composite_executor
+            executor = get_fe_composite_executor(
+                name, metadata.fe_equivalent_semantics
+            )
+        except (ImportError, ModuleNotFoundError):
+            executor = None
+        if executor is not None:
+            from factor_preprocess.adapters.fe_composite import get_fe_composite_identity
+            return get_fe_composite_identity(name, metadata.fe_equivalent_semantics)
+        if allow_research:
+            from factor_preprocess.adapters.fe_neutralization import (
+                fp_research_fallback_identity,
+            )
+            return fp_research_fallback_identity(name, metadata)
+        raise GovernanceError(
+            f"FE composite authority unavailable for {name!r}; execution identity is unbound"
+        )
+
     def get_execution(self, name: str, *, allow_research: bool = False):
         """Return the callable to execute for a transform.
 
@@ -841,9 +886,27 @@ class TransformRegistry:
             executor = (get_fe_composite_executor(name, meta.fe_equivalent_semantics)
                         if get_fe_composite_executor is not None else None)
             if executor is not None:
-                return _ValidatedExecutor(meta, executor)
+                identity_provider = None
+                try:
+                    from factor_preprocess.adapters.fe_composite import get_fe_composite_identity
+                    get_fe_composite_identity(name, meta.fe_equivalent_semantics)
+                except (GovernanceError, ImportError, ModuleNotFoundError, ValueError):
+                    # Routing remains authoritative; no digest is invented when
+                    # an optional scoped identity provider is unavailable.
+                    pass
+                else:
+                    identity_provider = lambda: self.execution_identity(
+                        name, allow_research=allow_research
+                    )
+                return _ValidatedExecutor(
+                    meta, executor, execution_identity_provider=identity_provider
+                )
             if allow_research:
-                return _ValidatedExecutor(meta, meta.func)
+                from factor_preprocess.adapters.fe_neutralization import (
+                    fp_research_fallback_identity,
+                )
+                identity = fp_research_fallback_identity(name, meta)
+                return _ValidatedExecutor(meta, meta.func, identity)
             raise GovernanceError(
                 f"FE composite authority unavailable for {name!r}; "
                 "no implicit FP-native fallback"

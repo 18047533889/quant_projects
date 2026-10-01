@@ -1,6 +1,8 @@
 """Central resolver for explicit FactorEngine composite identities."""
 from __future__ import annotations
 
+from factor_preprocess.errors import GovernanceError
+
 
 _OLS_NAMES = frozenset({
     "ols_neutralize", "industry_neutral", "size_neutral", "dual_neutral",
@@ -16,4 +18,17 @@ def get_fe_composite_executor(name: str, recipe_identity: str | None):
     return get_smoothing_executor(name, recipe_identity)
 
 
-__all__ = ["get_fe_composite_executor"]
+def get_fe_composite_identity(name: str, recipe_identity: str | None) -> dict:
+    """Resolve only FE composites with a specifically scoped provider."""
+    if name in _OLS_NAMES:
+        from factor_preprocess.adapters.fe_neutralization import (
+            get_fe_neutralization_identity,
+        )
+        return get_fe_neutralization_identity(name, recipe_identity)
+    raise GovernanceError(
+        f"No scoped FE composite identity provider is bound for {name!r}; "
+        "execution identity is not bound"
+    )
+
+
+__all__ = ["get_fe_composite_executor", "get_fe_composite_identity"]

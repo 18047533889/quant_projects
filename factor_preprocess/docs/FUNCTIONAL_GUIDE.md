@@ -360,3 +360,29 @@ recipe = TreatmentRecipe(
 - 线性/神经模型的 train-fitted scaling 由 fit/apply 与 representation 合同治理，不等于逐日无状态 cs_zscore。
 
 上线前至少验证输入排序、轴身份、PIT 暴露、prefix invariance、训练状态复用、NaN/Inf numeric policy、CPU/加速后端 parity、FeatureManifest 连续性，以及生产策略不存在 RESEARCH_ONLY/OFFLINE_ONLY 步骤。
+
+## 15. FE 组合算子的局部执行身份
+
+你可以查询 OLS 中性化路由的当前 FE 代码身份：
+
+```python
+registry = create_default_registry()
+executor = registry.get_execution("ols_neutralize")
+identity = executor.execution_identity
+assert identity == registry.execution_identity("ols_neutralize")
+```
+
+FE 提供 `ols_effective_rank` 入口及指定 `_private_name` helper 的代码、默认参数、
+闭包、注解和 NumPy/Pandas/Python 版本指纹。FP 增加 transform 名称、recipe 和
+执行来源字段。你应保存 `coverage_marker`，不要仅保存 `digest`。
+该身份没有覆盖 FP adapter 代码、库的完整依赖闭包或输入数据。
+
+执行器的只读 `execution_identity` 属性每次查询当前 FE 绑定，数值调用仍直接
+委托 FE。修改 FE 入口或指定 helper 后，已取得的执行器也会返回新的局部身份。
+注册表既有 signature、implementation、numeric-policy 和 seal 身份保持原定义。
+
+`allow_research=True` 仍优先执行 FE；只有 FE 不可用时才允许标记为
+`FP_RESEARCH_FALLBACK` 的 FP reference 路由。未提供局部身份的平滑组合算子
+仍保持原执行路由，其执行器属性返回 `None`，显式身份查询报错。
+这个接口不扩展 production admission，也不替代 recipe、输入、exposure、PIT
+或 materialization 制品的治理绑定。

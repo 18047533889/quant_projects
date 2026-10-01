@@ -1,7 +1,7 @@
 # factor_preprocess 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**78 个 Python 模块、437 个公开函数/类/方法定义**。
+扫描实际包目录：**78 个 Python 模块、441 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -16,8 +16,8 @@
 | [factor_preprocess/adapters/data_access.py](../factor_preprocess/adapters/data_access.py) | 15 | Data Access adapter - optional integration with the data_access package. |
 | [factor_preprocess/adapters/ewma_full_replay.py](../factor_preprocess/adapters/ewma_full_replay.py) | 3 | Exact, bounded restart replay for the public lagged FP EWMA. |
 | [factor_preprocess/adapters/factor_assets.py](../factor_preprocess/adapters/factor_assets.py) | 12 | Factor Assets adapter - optional integration with factor_assets package. |
-| [factor_preprocess/adapters/fe_composite.py](../factor_preprocess/adapters/fe_composite.py) | 1 | Central resolver for explicit FactorEngine composite identities. |
-| [factor_preprocess/adapters/fe_neutralization.py](../factor_preprocess/adapters/fe_neutralization.py) | 2 | Lazy adapter for FE-owned OLS neutralization composites. |
+| [factor_preprocess/adapters/fe_composite.py](../factor_preprocess/adapters/fe_composite.py) | 2 | Central resolver for explicit FactorEngine composite identities. |
+| [factor_preprocess/adapters/fe_neutralization.py](../factor_preprocess/adapters/fe_neutralization.py) | 4 | Lazy adapter for FE-owned OLS neutralization composites. |
 | [factor_preprocess/adapters/fe_operator.py](../factor_preprocess/adapters/fe_operator.py) | 7 | FE operator adapter (R61-FI-041, plan §26 F2/F3). |
 | [factor_preprocess/adapters/fe_smoothing.py](../factor_preprocess/adapters/fe_smoothing.py) | 5 | FactorEngine-backed long-panel smoothing adapter (lazy FE dependency). |
 | [factor_preprocess/adapters/fitted_recipe.py](../factor_preprocess/adapters/fitted_recipe.py) | 2 | Apply-only execution of narrowly supported frozen FP fitted state. |
@@ -64,7 +64,7 @@
 | [factor_preprocess/regime/switching.py](../factor_preprocess/regime/switching.py) | 3 | Regime-based transform switching. |
 | [factor_preprocess/registry/__init__.py](../factor_preprocess/registry/__init__.py) | 0 | Registry package - transform and policy catalogs. |
 | [factor_preprocess/registry/policies.py](../factor_preprocess/registry/policies.py) | 14 | Policy presets for transform pipelines. |
-| [factor_preprocess/registry/transforms.py](../factor_preprocess/registry/transforms.py) | 27 | Transform registry with versioning and discovery. |
+| [factor_preprocess/registry/transforms.py](../factor_preprocess/registry/transforms.py) | 28 | Transform registry with versioning and discovery. |
 | [factor_preprocess/representation/__init__.py](../factor_preprocess/representation/__init__.py) | 0 | Representation package - multi-channel representations for model input. |
 | [factor_preprocess/representation/linear_ready.py](../factor_preprocess/representation/linear_ready.py) | 5 | Linear model ready features: dense feature matrix builder. |
 | [factor_preprocess/representation/multichannel.py](../factor_preprocess/representation/multichannel.py) | 6 | Multichannel representation: raw, rank, zscore, residual channels. |
@@ -486,33 +486,63 @@ Create an adapter from an injected provider; there is no default provider.
 
 Central resolver for explicit FactorEngine composite identities.
 
-显式导出（含重导出）：`get_fe_composite_executor`。
+显式导出（含重导出）：`get_fe_composite_executor`、`get_fe_composite_identity`。
 
 ### get_fe_composite_executor
 
-[实际实现](../factor_preprocess/adapters/fe_composite.py#L10)。
+[实际实现](../factor_preprocess/adapters/fe_composite.py#L12)。
 
 Dispatch FE composites to a narrow, identity-checked adapter.
 
 参数：`(name: str, recipe_identity: str \| None)`。
 
+### get_fe_composite_identity
+
+[实际实现](../factor_preprocess/adapters/fe_composite.py#L21)。
+
+Resolve only FE composites with a specifically scoped provider.
+
+参数：`(name: str, recipe_identity: str \| None)`。
+
+返回类型：`dict`。
+
 ## factor_preprocess/adapters/fe_neutralization.py
 
 Lazy adapter for FE-owned OLS neutralization composites.
 
-显式导出（含重导出）：`OLS_NEUTRALIZATION_RECIPE`、`execute_ols_neutralize`、`get_fe_neutralization_executor`。
+显式导出（含重导出）：`OLS_NEUTRALIZATION_RECIPE`、`execute_ols_neutralize`、`get_fe_neutralization_executor`、`get_fe_neutralization_identity`、`fp_research_fallback_identity`。
 
 ### get_fe_neutralization_executor
 
-[实际实现](../factor_preprocess/adapters/fe_neutralization.py#L9)。
+[实际实现](../factor_preprocess/adapters/fe_neutralization.py#L14)。
 
 Resolve an explicitly registered neutralization recipe identity.
 
 参数：`(name: str, recipe_identity: str \| None)`。
 
+### get_fe_neutralization_identity
+
+[实际实现](../factor_preprocess/adapters/fe_neutralization.py#L25)。
+
+Return FE's scoped OLS identity with an explicit coverage statement.
+
+参数：`(name: str, recipe_identity: str \| None)`。
+
+返回类型：`dict`。
+
+### fp_research_fallback_identity
+
+[实际实现](../factor_preprocess/adapters/fe_neutralization.py#L62)。
+
+Identify the retained FP kernel without aliasing it to FE execution.
+
+参数：`(name: str, metadata)`。
+
+返回类型：`dict`。
+
 ### execute_ols_neutralize
 
-[实际实现](../factor_preprocess/adapters/fe_neutralization.py#L21)。
+[实际实现](../factor_preprocess/adapters/fe_neutralization.py#L83)。
 
 Delegate without duplicating FE's numerical implementation.
 
@@ -3603,7 +3633,7 @@ Online regime detection for volatility and correlation regimes.
 
 ### RegimeState
 
-[实际实现](../factor_preprocess/regime/detector.py#L13)。
+[实际实现](../factor_preprocess/regime/detector.py#L14)。
 
 Regime classification result.
 
@@ -3619,7 +3649,7 @@ Regime classification result.
 
 ### detect_variance_regime
 
-[实际实现](../factor_preprocess/regime/detector.py#L33)。
+[实际实现](../factor_preprocess/regime/detector.py#L34)。
 
 Detect variance regimes using rolling realized volatility.
 
@@ -3629,7 +3659,7 @@ Detect variance regimes using rolling realized volatility.
 
 ### detect_correlation_regime
 
-[实际实现](../factor_preprocess/regime/detector.py#L196)。
+[实际实现](../factor_preprocess/regime/detector.py#L197)。
 
 Detect correlation regimes using rolling average pairwise correlation.
 
@@ -3938,13 +3968,13 @@ Bind and validate one complete runtime call before execution.
 
 ### TransformRegistry
 
-[实际实现](../factor_preprocess/registry/transforms.py#L481)。
+[实际实现](../factor_preprocess/registry/transforms.py#L493)。
 
 Central registry for preprocessing transforms.
 
 ### TransformRegistry.__init__
 
-[实际实现](../factor_preprocess/registry/transforms.py#L493)。
+[实际实现](../factor_preprocess/registry/transforms.py#L505)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -3952,7 +3982,7 @@ Central registry for preprocessing transforms.
 
 ### TransformRegistry.register
 
-[实际实现](../factor_preprocess/registry/transforms.py#L512)。
+[实际实现](../factor_preprocess/registry/transforms.py#L524)。
 
 Register a transform.
 
@@ -3962,7 +3992,7 @@ Register a transform.
 
 ### TransformRegistry.get
 
-[实际实现](../factor_preprocess/registry/transforms.py#L706)。
+[实际实现](../factor_preprocess/registry/transforms.py#L718)。
 
 Get an isolated deep-frozen transform metadata snapshot by name.
 
@@ -3972,7 +4002,7 @@ Get an isolated deep-frozen transform metadata snapshot by name.
 
 ### TransformRegistry.enrich
 
-[实际实现](../factor_preprocess/registry/transforms.py#L718)。
+[实际实现](../factor_preprocess/registry/transforms.py#L730)。
 
 Attach additional semantic metadata to an existing transform.
 
@@ -3982,7 +4012,7 @@ Attach additional semantic metadata to an existing transform.
 
 ### TransformRegistry.validate_production
 
-[实际实现](../factor_preprocess/registry/transforms.py#L784)。
+[实际实现](../factor_preprocess/registry/transforms.py#L796)。
 
 Resolve registry metadata and fail closed for production admission.
 
@@ -3992,7 +4022,7 @@ Resolve registry metadata and fail closed for production admission.
 
 ### TransformRegistry.resolve_origin
 
-[实际实现](../factor_preprocess/registry/transforms.py#L795)。
+[实际实现](../factor_preprocess/registry/transforms.py#L807)。
 
 Resolve the effective implementation origin for a transform.
 
@@ -4000,9 +4030,19 @@ Resolve the effective implementation origin for a transform.
 
 返回类型：`str`。
 
+### TransformRegistry.execution_identity
+
+[实际实现](../factor_preprocess/registry/transforms.py#L826)。
+
+Identify the resolver-selected route without changing legacy hashes.
+
+参数：`(self, name: str, *, allow_research: bool=False)`。
+
+返回类型：`dict`。
+
 ### TransformRegistry.get_execution
 
-[实际实现](../factor_preprocess/registry/transforms.py#L814)。
+[实际实现](../factor_preprocess/registry/transforms.py#L859)。
 
 Return the callable to execute for a transform.
 
@@ -4010,7 +4050,7 @@ Return the callable to execute for a transform.
 
 ### TransformRegistry.get_function
 
-[实际实现](../factor_preprocess/registry/transforms.py#L872)。
+[实际实现](../factor_preprocess/registry/transforms.py#L935)。
 
 Reject the retired unvalidated native-kernel execution bypass.
 
@@ -4020,7 +4060,7 @@ Reject the retired unvalidated native-kernel execution bypass.
 
 ### TransformRegistry.get_research_reference_function
 
-[实际实现](../factor_preprocess/registry/transforms.py#L888)。
+[实际实现](../factor_preprocess/registry/transforms.py#L951)。
 
 Return a retained native parity kernel only with explicit consent.
 
@@ -4030,7 +4070,7 @@ Return a retained native parity kernel only with explicit consent.
 
 ### TransformRegistry.get_recipe_execution
 
-[实际实现](../factor_preprocess/registry/transforms.py#L902)。
+[实际实现](../factor_preprocess/registry/transforms.py#L965)。
 
 Compile an FE recipe with explicit execution authority.
 
@@ -4038,7 +4078,7 @@ Compile an FE recipe with explicit execution authority.
 
 ### TransformRegistry.list_by_category
 
-[实际实现](../factor_preprocess/registry/transforms.py#L928)。
+[实际实现](../factor_preprocess/registry/transforms.py#L991)。
 
 List isolated deep-frozen transform metadata snapshots in a category.
 
@@ -4048,7 +4088,7 @@ List isolated deep-frozen transform metadata snapshots in a category.
 
 ### TransformRegistry.list_by_tag
 
-[实际实现](../factor_preprocess/registry/transforms.py#L933)。
+[实际实现](../factor_preprocess/registry/transforms.py#L996)。
 
 List isolated deep-frozen snapshots with a given tag.
 
@@ -4058,7 +4098,7 @@ List isolated deep-frozen snapshots with a given tag.
 
 ### TransformRegistry.list_causal_safe
 
-[实际实现](../factor_preprocess/registry/transforms.py#L938)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1001)。
 
 List isolated deep-frozen snapshots of all causal-safe transforms.
 
@@ -4068,7 +4108,7 @@ List isolated deep-frozen snapshots of all causal-safe transforms.
 
 ### TransformRegistry.all_transforms
 
-[实际实现](../factor_preprocess/registry/transforms.py#L945)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1008)。
 
 Get isolated deep-frozen snapshots of all registered transforms.
 
@@ -4078,7 +4118,7 @@ Get isolated deep-frozen snapshots of all registered transforms.
 
 ### TransformRegistry.get_signature_hash
 
-[实际实现](../factor_preprocess/registry/transforms.py#L949)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1012)。
 
 Get signature hash for reproducibility tracking.
 
@@ -4088,7 +4128,7 @@ Get signature hash for reproducibility tracking.
 
 ### TransformRegistry.seal
 
-[实际实现](../factor_preprocess/registry/transforms.py#L954)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1017)。
 
 Freeze the registry into an immutable snapshot identity (FP-P1-05).
 
@@ -4098,7 +4138,7 @@ Freeze the registry into an immutable snapshot identity (FP-P1-05).
 
 ### TransformRegistry.diagnostic_events
 
-[实际实现](../factor_preprocess/registry/transforms.py#L976)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1039)。
 
 Stable ordered audit trail of registry lifecycle events.
 
@@ -4108,7 +4148,7 @@ Stable ordered audit trail of registry lifecycle events.
 
 ### TransformRegistry.snapshot_identity
 
-[实际实现](../factor_preprocess/registry/transforms.py#L988)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1051)。
 
 Content-derived identity of the sealed snapshot (None if not sealed).
 
@@ -4118,7 +4158,7 @@ Content-derived identity of the sealed snapshot (None if not sealed).
 
 ### TransformRegistry.is_sealed
 
-[实际实现](../factor_preprocess/registry/transforms.py#L993)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1056)。
 
 Whether the registry has been frozen.
 
@@ -4128,7 +4168,7 @@ Whether the registry has been frozen.
 
 ### create_default_registry
 
-[实际实现](../factor_preprocess/registry/transforms.py#L998)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1061)。
 
 Create registry with all built-in transforms.
 
@@ -4138,7 +4178,7 @@ Create registry with all built-in transforms.
 
 ### get_default_registry
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1593)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1659)。
 
 Get or create the default global registry.
 
@@ -5279,8 +5319,8 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/adapters/data_access.py` | `4bb432d31734d8b16062d1e36010082d829388ca60916c4e0dd0db6b8992e71f` |
 | `factor_preprocess/adapters/ewma_full_replay.py` | `f5d653976ab97b8581d299dddbd49494e65639cba164ee4cea722f30a74d5fb5` |
 | `factor_preprocess/adapters/factor_assets.py` | `75478a4f2c9cc80b7c30aacf729fe33ab722cfc2be7dfb63f11e3f562b92e878` |
-| `factor_preprocess/adapters/fe_composite.py` | `7d8be58e62feea41d66b3c4a73bb19da107d827bc88ad1b8c6512431e273a3f4` |
-| `factor_preprocess/adapters/fe_neutralization.py` | `e92aad57c3610ea9689436fe2e4f0758fb92261427ccc7c09914210a65481230` |
+| `factor_preprocess/adapters/fe_composite.py` | `7e5841b643da5cad3dd1aee5f147c53623c04e0c05063dd8193da0cee951a075` |
+| `factor_preprocess/adapters/fe_neutralization.py` | `f9f9a62bd357b2f1b85ae3c78e884a5c952fdae45b7677895af67e40d0dfe93a` |
 | `factor_preprocess/adapters/fe_operator.py` | `9ec69415707feac974eed219f15910f22cde9650aac57b00873df1c3bbf977b2` |
 | `factor_preprocess/adapters/fe_smoothing.py` | `95b3a36e80d095c6e10022550c2afa529b93e60c25465febe1356863d365320b` |
 | `factor_preprocess/adapters/fitted_recipe.py` | `f6e770d3b0ad1090b52ce527169005b4ca7f06b58b06462c35db06e9c2c42e2e` |
@@ -5323,11 +5363,11 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/regime/__init__.py` | `d6ab83b45ce1968507568b0f12c44ec555e62a7daa58429715ba315a0a2b107d` |
 | `factor_preprocess/regime/adaptive_weights.py` | `d9afad769e0ecd98650c72e1d57d86c8258e713ec01252791847c3c6c5883519` |
 | `factor_preprocess/regime/causal_detector.py` | `09bf81ebe35ea4c0c1e63b3b0bbcd94682d468a33c845a8ebdecb0820329091e` |
-| `factor_preprocess/regime/detector.py` | `f1d803b5f87c942b83e72c699d10429324c3feeda5544fc0169d0586b62553f1` |
+| `factor_preprocess/regime/detector.py` | `d7360bdc8db5e32265ffecfa488ca5d6424d99a41f6420cdc87eb4606c627aae` |
 | `factor_preprocess/regime/switching.py` | `a6114ab07de853206d2d705d79946a162efb5d8cb04a8c7352e87ca5e5c8c43a` |
 | `factor_preprocess/registry/__init__.py` | `f7d6d9c9d84116aa51d6c7d38695d2b439f63c69cb01d54327a998d970936329` |
 | `factor_preprocess/registry/policies.py` | `6f0c776875e25205ce2e8f072dfdb70ae15caacdb6f9dc516a6151cace7fd202` |
-| `factor_preprocess/registry/transforms.py` | `bb1f78bf1c5bdb24df75a6900c187aae4a60ce311218187fdacc7a3a276940f2` |
+| `factor_preprocess/registry/transforms.py` | `8ad2d901532d5ae3b8de322f1808c22b348400a048369052774ee830e6c7ab70` |
 | `factor_preprocess/representation/__init__.py` | `5b62691fd8b68400db3bcc025ec528ed68240d3dd127d5e036fe3e08fb58942d` |
 | `factor_preprocess/representation/linear_ready.py` | `c0f394448c6be34cc02bf83000e182da18d4f022fe83c82cd524b5582f20c81e` |
 | `factor_preprocess/representation/multichannel.py` | `f9edaba509c7bf1c12a1534eb9ca758e523f7efc62f955e09b8609bc6c346dfe` |
