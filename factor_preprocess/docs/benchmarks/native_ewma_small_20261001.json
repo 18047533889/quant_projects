@@ -1,0 +1,1047 @@
+{
+  "cases": [
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 52466941952,
+      "available_ram_before_bytes": 52467445760,
+      "case_seed": 20266001,
+      "days": 1000,
+      "halflife": 3.7,
+      "input_bytes_deep": 32000132,
+      "layout": "asset-major",
+      "missingness": "none",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 6.661338147750939e-16,
+            "max_rel_error": 2.0595777401774538e-10
+          },
+          "seconds": {
+            "FE": 0.20551833498757333,
+            "FP_research": 0.5816525130067021
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 6.661338147750939e-16,
+            "max_rel_error": 2.0595777401774538e-10
+          },
+          "seconds": {
+            "FE": 0.25048030400648713,
+            "FP_research": 0.5349646759568714
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.44049305497901514,
+        "FP_research": 0.57205909100594
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 51532701696,
+      "available_ram_before_bytes": 51578220544,
+      "case_seed": 20266001,
+      "days": 1000,
+      "halflife": 20.0,
+      "input_bytes_deep": 32000132,
+      "layout": "asset-major",
+      "missingness": "none",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 2.6645352591003757e-15,
+            "max_rel_error": 3.3700685028655134e-09
+          },
+          "seconds": {
+            "FE": 0.23046255600638688,
+            "FP_research": 0.5351063910056837
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 2.6645352591003757e-15,
+            "max_rel_error": 3.3700685028655134e-09
+          },
+          "seconds": {
+            "FE": 0.22896891995333135,
+            "FP_research": 0.5422343779937364
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.20233389001805335,
+        "FP_research": 0.559528568002861
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 51376713728,
+      "available_ram_before_bytes": 51377487872,
+      "case_seed": 20266011,
+      "days": 1000,
+      "halflife": 3.7,
+      "input_bytes_deep": 32000132,
+      "layout": "asset-major",
+      "missingness": "sparse_1pct",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 8.881784197001252e-16,
+            "max_rel_error": 1.6868598497854732e-10
+          },
+          "seconds": {
+            "FE": 0.22148817498236895,
+            "FP_research": 0.5496925929910503
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 8.881784197001252e-16,
+            "max_rel_error": 1.6868598497854732e-10
+          },
+          "seconds": {
+            "FE": 0.22638330794870853,
+            "FP_research": 0.5303080760058947
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.2471900230157189,
+        "FP_research": 0.549445720971562
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 52024557568,
+      "available_ram_before_bytes": 52057329664,
+      "case_seed": 20266011,
+      "days": 1000,
+      "halflife": 20.0,
+      "input_bytes_deep": 32000132,
+      "layout": "asset-major",
+      "missingness": "sparse_1pct",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 2.886579864025407e-15,
+            "max_rel_error": 3.1457457035171024e-10
+          },
+          "seconds": {
+            "FE": 0.21849177504191175,
+            "FP_research": 0.5438614190206863
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 2.886579864025407e-15,
+            "max_rel_error": 3.1457457035171024e-10
+          },
+          "seconds": {
+            "FE": 0.22885370400035754,
+            "FP_research": 0.5613090739934705
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.21375408698804677,
+        "FP_research": 0.5374576909816824
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 53162811392,
+      "available_ram_before_bytes": 53168230400,
+      "case_seed": 20266021,
+      "days": 1000,
+      "halflife": 3.7,
+      "input_bytes_deep": 32000132,
+      "layout": "asset-major",
+      "missingness": "all_nan",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": true,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 0.0,
+            "max_rel_error": 0.0
+          },
+          "seconds": {
+            "FE": 0.21554134401958436,
+            "FP_research": 0.5525960060185753
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": true,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 0.0,
+            "max_rel_error": 0.0
+          },
+          "seconds": {
+            "FE": 0.2567037470289506,
+            "FP_research": 0.5303085559862666
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.24422489199787378,
+        "FP_research": 0.5644003820489161
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 52049764352,
+      "available_ram_before_bytes": 52073963520,
+      "case_seed": 20266021,
+      "days": 1000,
+      "halflife": 20.0,
+      "input_bytes_deep": 32000132,
+      "layout": "asset-major",
+      "missingness": "all_nan",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": true,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 0.0,
+            "max_rel_error": 0.0
+          },
+          "seconds": {
+            "FE": 0.22077759698731825,
+            "FP_research": 0.5250847329734825
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": true,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 0.0,
+            "max_rel_error": 0.0
+          },
+          "seconds": {
+            "FE": 0.27561369800241664,
+            "FP_research": 0.5345784280216321
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.20008619799045846,
+        "FP_research": 0.563402391038835
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 51414618112,
+      "available_ram_before_bytes": 51397701632,
+      "case_seed": 20266031,
+      "days": 1000,
+      "halflife": 3.7,
+      "input_bytes_deep": 32000132,
+      "layout": "asset-major",
+      "missingness": "long_run_20pct",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 8.881784197001252e-16,
+            "max_rel_error": 7.963940823232335e-08
+          },
+          "seconds": {
+            "FE": 0.2554361450020224,
+            "FP_research": 0.5326593850040808
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 8.881784197001252e-16,
+            "max_rel_error": 7.963940823232335e-08
+          },
+          "seconds": {
+            "FE": 0.21388550294796005,
+            "FP_research": 0.5536890139919706
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.21850799501407892,
+        "FP_research": 0.5314241719897836
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 50193240064,
+      "available_ram_before_bytes": 50162176000,
+      "case_seed": 20266031,
+      "days": 1000,
+      "halflife": 20.0,
+      "input_bytes_deep": 32000132,
+      "layout": "asset-major",
+      "missingness": "long_run_20pct",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 2.886579864025407e-15,
+            "max_rel_error": 9.409295325604163e-09
+          },
+          "seconds": {
+            "FE": 0.23572656803298742,
+            "FP_research": 0.5514262220240198
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 2.886579864025407e-15,
+            "max_rel_error": 9.409295325604163e-09
+          },
+          "seconds": {
+            "FE": 0.23922460194444284,
+            "FP_research": 0.5230014160042629
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.19861978205153719,
+        "FP_research": 0.535174869990442
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 51739705344,
+      "available_ram_before_bytes": 51877978112,
+      "case_seed": 20266101,
+      "days": 1000,
+      "halflife": 3.7,
+      "input_bytes_deep": 32000132,
+      "layout": "time-major",
+      "missingness": "none",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 6.661338147750939e-16,
+            "max_rel_error": 9.498313802533858e-11
+          },
+          "seconds": {
+            "FE": 0.2509693989995867,
+            "FP_research": 0.6441350359818898
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 6.661338147750939e-16,
+            "max_rel_error": 9.498313802533858e-11
+          },
+          "seconds": {
+            "FE": 0.2503029489889741,
+            "FP_research": 0.6830435970332474
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.22800039901630953,
+        "FP_research": 0.6624922039918602
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 52382076928,
+      "available_ram_before_bytes": 52387295232,
+      "case_seed": 20266101,
+      "days": 1000,
+      "halflife": 20.0,
+      "input_bytes_deep": 32000132,
+      "layout": "time-major",
+      "missingness": "none",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 2.886579864025407e-15,
+            "max_rel_error": 1.2258780258182596e-07
+          },
+          "seconds": {
+            "FE": 0.2647093859850429,
+            "FP_research": 0.6335309550049715
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 2.886579864025407e-15,
+            "max_rel_error": 1.2258780258182596e-07
+          },
+          "seconds": {
+            "FE": 0.2579394200001843,
+            "FP_research": 0.6496234689839184
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.23817001399584115,
+        "FP_research": 0.651819835009519
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 51886583808,
+      "available_ram_before_bytes": 52037369856,
+      "case_seed": 20266111,
+      "days": 1000,
+      "halflife": 3.7,
+      "input_bytes_deep": 32000132,
+      "layout": "time-major",
+      "missingness": "sparse_1pct",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 6.661338147750939e-16,
+            "max_rel_error": 1.0733700446389968e-10
+          },
+          "seconds": {
+            "FE": 0.2618030729936436,
+            "FP_research": 0.6620956769911572
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 6.661338147750939e-16,
+            "max_rel_error": 1.0733700446389968e-10
+          },
+          "seconds": {
+            "FE": 0.2544986830325797,
+            "FP_research": 0.6377817169995978
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.24070524802664295,
+        "FP_research": 0.665986759995576
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 51857686528,
+      "available_ram_before_bytes": 51878395904,
+      "case_seed": 20266111,
+      "days": 1000,
+      "halflife": 20.0,
+      "input_bytes_deep": 32000132,
+      "layout": "time-major",
+      "missingness": "sparse_1pct",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 2.886579864025407e-15,
+            "max_rel_error": 5.446023934646177e-09
+          },
+          "seconds": {
+            "FE": 0.2521822330309078,
+            "FP_research": 0.6302785419975407
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 2.886579864025407e-15,
+            "max_rel_error": 5.446023934646177e-09
+          },
+          "seconds": {
+            "FE": 0.23697953997179866,
+            "FP_research": 0.6291106070275418
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.2474111169576645,
+        "FP_research": 0.6430193590349518
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 49881542656,
+      "available_ram_before_bytes": 49881542656,
+      "case_seed": 20266121,
+      "days": 1000,
+      "halflife": 3.7,
+      "input_bytes_deep": 32000132,
+      "layout": "time-major",
+      "missingness": "all_nan",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": true,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 0.0,
+            "max_rel_error": 0.0
+          },
+          "seconds": {
+            "FE": 0.25930785801028833,
+            "FP_research": 0.6351979949977249
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": true,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 0.0,
+            "max_rel_error": 0.0
+          },
+          "seconds": {
+            "FE": 0.24721645202953368,
+            "FP_research": 0.6484583560377359
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.2262134740012698,
+        "FP_research": 0.643572281987872
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 50114473984,
+      "available_ram_before_bytes": 50162356224,
+      "case_seed": 20266121,
+      "days": 1000,
+      "halflife": 20.0,
+      "input_bytes_deep": 32000132,
+      "layout": "time-major",
+      "missingness": "all_nan",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": true,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 0.0,
+            "max_rel_error": 0.0
+          },
+          "seconds": {
+            "FE": 0.2598980710026808,
+            "FP_research": 0.6357555669965222
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": true,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 0.0,
+            "max_rel_error": 0.0
+          },
+          "seconds": {
+            "FE": 0.2497925540083088,
+            "FP_research": 0.636075348011218
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.22600245900684968,
+        "FP_research": 0.6282128840102814
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 49880383488,
+      "available_ram_before_bytes": 49968726016,
+      "case_seed": 20266131,
+      "days": 1000,
+      "halflife": 3.7,
+      "input_bytes_deep": 32000132,
+      "layout": "time-major",
+      "missingness": "long_run_20pct",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 8.881784197001252e-16,
+            "max_rel_error": 1.9044409059873162e-10
+          },
+          "seconds": {
+            "FE": 0.2577037470182404,
+            "FP_research": 0.6800969949690625
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 8.881784197001252e-16,
+            "max_rel_error": 1.9044409059873162e-10
+          },
+          "seconds": {
+            "FE": 0.255448923970107,
+            "FP_research": 0.7060483659734018
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.23835196800064296,
+        "FP_research": 0.6663987369975075
+      }
+    },
+    {
+      "assets": 2000,
+      "available_ram_after_allocation_bytes": 47722393600,
+      "available_ram_before_bytes": 47733596160,
+      "case_seed": 20266131,
+      "days": 1000,
+      "halflife": 20.0,
+      "input_bytes_deep": 32000132,
+      "layout": "time-major",
+      "missingness": "long_run_20pct",
+      "rows": 2000000,
+      "size": "small",
+      "trials": [
+        {
+          "order": [
+            "FE",
+            "FP_research"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 2.886579864025407e-15,
+            "max_rel_error": 1.1215743272832557e-09
+          },
+          "seconds": {
+            "FE": 0.27559600898530334,
+            "FP_research": 0.7021803120151162
+          }
+        },
+        {
+          "order": [
+            "FP_research",
+            "FE"
+          ],
+          "parity": {
+            "allclose": true,
+            "bit_exact": false,
+            "independent_oracle": {
+              "assets": 4,
+              "oracle": "pandas Series.shift(1).ewm(adjust=False)",
+              "passed": true,
+              "rows_checked": 4000
+            },
+            "max_abs_error": 2.886579864025407e-15,
+            "max_rel_error": 1.1215743272832557e-09
+          },
+          "seconds": {
+            "FE": 0.26298911799676716,
+            "FP_research": 0.6949373189709149
+          }
+        }
+      ],
+      "warmup_seconds": {
+        "FE": 0.23463642998831347,
+        "FP_research": 0.73277430300368
+      }
+    }
+  ],
+  "ended_at_utc": "2026-10-01T12:05:21.817236+00:00",
+  "head_after": "8c6d114c3887c6127308d58288bf4304b5888663",
+  "head_before": "8c6d114c3887c6127308d58288bf4304b5888663",
+  "host": "qs-compute-gpu-hk-01",
+  "limits": {
+    "max_input_bytes": 536870912,
+    "min_available_gib_large": 16.0,
+    "min_available_gib_small": 8.0
+  },
+  "numpy": "2.2.6",
+  "pandas": "2.3.3",
+  "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
+  "polars": "1.42.1",
+  "python": "3.12.3 (main, Aug 31 2026, 10:18:26) [GCC 13.3.0]",
+  "seed": 20261001,
+  "source_sha256_after": {
+    "factor_engine/backend/long_ewm.py": "c0c3ee4319e83ea403e503f5b026cbff4dfb2f6301702c401ebf661913dfc1a3",
+    "factor_engine/backend/long_smoothing.py": "bb753fdc846384cde7a6b3900b03bc32cc7cad524021d35515e102b66fb1bb77",
+    "factor_engine/backend/native_long_ewm.py": "a79fcc6338acd3c198753e0a4ba2a2d080e86f0cba02cdbcb7bf624c1699bbac",
+    "factor_preprocess/factor_preprocess/adapters/fe_smoothing.py": "75a4f8f40f4cc13ba18226540066ff591975ebba0922aa4a448f0cb19a789435",
+    "factor_preprocess/factor_preprocess/registry/transforms.py": "4437483df0e170e81c0cc1914650ec22c5794e86e8edd81c121b4b1ef59f612e",
+    "factor_preprocess/factor_preprocess/transforms/rolling.py": "688a501d3cf8eb7f9aff7da8f7ef889caa877dc8045b76f786c360e9094b5551",
+    "factor_preprocess/scripts/benchmark_native_ewma.py": "cc398f365996d8aa2608575272adf93bba13e7387be84b2c2dbf0628b1c7126c"
+  },
+  "source_sha256_before": {
+    "factor_engine/backend/long_ewm.py": "c0c3ee4319e83ea403e503f5b026cbff4dfb2f6301702c401ebf661913dfc1a3",
+    "factor_engine/backend/long_smoothing.py": "bb753fdc846384cde7a6b3900b03bc32cc7cad524021d35515e102b66fb1bb77",
+    "factor_engine/backend/native_long_ewm.py": "a79fcc6338acd3c198753e0a4ba2a2d080e86f0cba02cdbcb7bf624c1699bbac",
+    "factor_preprocess/factor_preprocess/adapters/fe_smoothing.py": "75a4f8f40f4cc13ba18226540066ff591975ebba0922aa4a448f0cb19a789435",
+    "factor_preprocess/factor_preprocess/registry/transforms.py": "4437483df0e170e81c0cc1914650ec22c5794e86e8edd81c121b4b1ef59f612e",
+    "factor_preprocess/factor_preprocess/transforms/rolling.py": "688a501d3cf8eb7f9aff7da8f7ef889caa877dc8045b76f786c360e9094b5551",
+    "factor_preprocess/scripts/benchmark_native_ewma.py": "cc398f365996d8aa2608575272adf93bba13e7387be84b2c2dbf0628b1c7126c"
+  },
+  "started_at_utc": "2026-10-01T12:04:37.534379+00:00",
+  "status": "complete"
+}

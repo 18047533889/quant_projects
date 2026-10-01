@@ -84,6 +84,7 @@ a=1-2^{-1/h}
 每个资产独立递归，当前行不参与自己的输出。FactorEngine 使用稳定的二进制浮点换算实现同一系数，将非有限输入视为缺失，按 `ignore_nulls=False` 保留缺失位置的权重影响，并保留输入行序与索引。
 生产注册表将 `ewma` 标记为 `FE_COMPOSITE:long_smoothing.lagged_ewma:v1`；FE composite 不可用时，公共入口 fail closed。旧 pandas 实现只通过注册表 `allow_research=True` 显式作为研究回退。
 `halflife` 必须为有限正数，`min_periods` 默认 1。生产注册表的准入域是 3–60；直接 API 不经过该生产搜索域，可以用于域外研究参数，但仍受 FE 数值实现的二进制浮点支持范围约束。
+2026-10-01 的合成 EWMA 基准记录了 FE public route 与 research fallback 的测时和复现参数，见 [EWMA 基准报告](benchmarks/native_ewma_ab_20261001.md)。
 
 robust_ewma 先用滞后序列固定 10 期、至少 2 个值的均值和标准差做因果截尾，再做 EWMA；winsor_std 默认 4。非正 winsor_std 会被收缩成极小正数。
 
