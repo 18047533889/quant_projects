@@ -186,3 +186,36 @@ def test_real_ab_source_drift_after_pair_fails_closed(monkeypatch, tmp_path):
     monkeypatch.setattr(harness, "_sha256", changing_hash)
     with pytest.raises(RuntimeError, match="changed during A/B"):
         harness.run_real_cos_ab(run=True, output=tmp_path / "drift-after.json", repeats=1)
+
+
+def test_contiguous_ravel_path_matches_oracle_and_preserves_read_only_inputs():
+    values = np.arange(6 * 5 * 4, dtype=np.float64).reshape(6, 5, 4)
+    values[1, 2, 0] = np.nan
+    values[3, 1, 2] = np.inf
+    values[5, 4, 3] = -np.inf
+    validity = np.ones(values.shape, dtype=bool)
+    validity[2, 3, 0] = False
+    batch = FactorBatch(
+        tuple(f"f{i}" for i in range(values.shape[2])),
+        AxisRef("time", "int64", values.shape[0], np.arange(values.shape[0], dtype=np.int64)),
+        AxisRef("asset", "int64", values.shape[1], np.arange(values.shape[1], dtype=np.int64)),
+        values, validity=validity,
+    )
+    assert batch.values.flags.c_contiguous and not batch.values.flags.writeable
+    assert batch.validity.flags.c_contiguous and not batch.validity.flags.writeable
+    values_before = batch.values.copy()
+    validity_before = batch.validity.copy()
+    for index in range(batch.num_factors):
+        plane = batch.values[:, :, index]
+        valid_plane = batch.validity[:, :, index]
+        contiguous_values = plane.ravel(order="C")
+        contiguous_validity = valid_plane.ravel(order="C")
+        np.testing.assert_array_equal(contiguous_values, plane.flatten())
+        np.testing.assert_array_equal(contiguous_validity, valid_plane.flatten())
+        assert contiguous_values.flags.c_contiguous
+        assert contiguous_validity.flags.c_contiguous
+        assert not np.shares_memory(contiguous_values, batch.values)
+        assert not np.shares_memory(contiguous_validity, batch.validity)
+    assert legacy_diagnose_all_factors(batch) == diagnose_all_factors(batch)
+    np.testing.assert_array_equal(batch.values, values_before)
+    np.testing.assert_array_equal(batch.validity, validity_before)

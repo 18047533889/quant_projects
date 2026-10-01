@@ -1,4 +1,4 @@
-"""Bounded paired real-COS A/B for flatten copies in factor diagnostics.
+"""Bounded paired real-COS A/B for contiguous traversal in factor diagnostics.
 
 The reference intentionally retains the old flatten-based array traversal;
 its scalar semantics match the current implementation, including input-dtype
@@ -143,11 +143,11 @@ def run_real_cos_ab(*, run=False, output=None, repeats=3):
 
     # Alternate which implementation goes first in each matched pair.
     methods = {"flatten_reference": legacy_diagnose_all_factors,
-               "strided_view": diagnose_all_factors}
+               "production_contiguous": diagnose_all_factors}
     observations = []
     for pair in range(repeats):
-        order = (("flatten_reference", "strided_view") if pair % 2 == 0
-                 else ("strided_view", "flatten_reference"))
+        order = (("flatten_reference", "production_contiguous") if pair % 2 == 0
+                 else ("production_contiguous", "flatten_reference"))
         pair_result = {}
         for name in order:
             started = time.perf_counter()
@@ -157,7 +157,7 @@ def run_real_cos_ab(*, run=False, output=None, repeats=3):
             observations.append({"pair": pair, "order": name,
                                  "seconds": elapsed, "rss_bytes": _rss_bytes()})
         if _diagnosis_payload(pair_result["flatten_reference"]) != _diagnosis_payload(
-                pair_result["strided_view"]):
+                pair_result["production_contiguous"]):
             raise AssertionError(f"diagnostic field mismatch in pair {pair}")
         current_sha = {name: _sha256(path) for name, path in source_paths.items()}
         if current_sha != source_sha256_before:
