@@ -125,6 +125,8 @@ v28 另覆盖同一精确 F32 面板的五指标组合
 
 重复评估同一个不可变 FactorBatch 时，配置哈希缓存可跳过已编码的大数组，保持原有哈希。
 首次调用和重新创建数组仍需编码。限制与微测见 [数组哈希缓存](docs/benchmarks/immutable_array_hash_cache_20261001.md)。
+真实 F32 coverage 缓存回放中，auto 热运行中位数降至 7.98 秒，配置及同后端产物哈希不变；
+见 [六轮实测与边界](docs/benchmarks/real_cos_f32_coverage_hash_cache_ab_20261001.md)。
 
 核心契约：
 - **LabelBundle** — 显式前向标签；时序全部由调用方提供；默认 `price_convention="vwap_to_vwap"`；
