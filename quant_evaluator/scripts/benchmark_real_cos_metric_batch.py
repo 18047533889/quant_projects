@@ -746,7 +746,7 @@ def main():
             profile_max_object_mib=128,
             profile_max_total_mib=2048,
             max_working_gib=50,
-            metric_ids=METRICS,
+            metric_ids=requested,
         ))
         print(json.dumps({"preflight": preflight}, ensure_ascii=False), flush=True)
         if preflight["status"] != "ready":
