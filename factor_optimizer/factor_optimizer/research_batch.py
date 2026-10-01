@@ -536,6 +536,11 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     )
     from factor_optimizer.adapters.repair_execution import compile_value_repair
     from factor_optimizer.adapters.preprocessing import compile_admissible_smoothing_grid
+    from factor_optimizer.shape_rank_reuse import (
+        DEFAULT_MAX_BYTES, RankFeatureCache, apply_u_shape_from_rank,
+        count_distinct_eligible_u_shape_plans, is_eligible_u_shape_plan,
+        should_admit_u_shape_rank_reuse,
+    )
     from quant_evaluator.contracts.factor_batch import FactorBatch
     import pandas as pd
 
@@ -739,6 +744,22 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                             best = None
                             joint_record['baseline_unavailable'] = str(exc)
                 last_base_identity, last_base_values = None, None
+                eligible_u_plans = []
+                for family, params, precompiled, _orientation in proposals:
+                    if family not in {"U_SHAPE_REPAIR", "INVERTED_U_REPAIR"}:
+                        continue
+                    try:
+                        candidate_plan = precompiled or compile_value_repair(
+                            family, params, natural_time_scale=config.natural_time_scale,
+                            training_context_ref=train_ref)
+                    except Exception:
+                        continue
+                    eligible_u_plans.append(candidate_plan)
+                eligible_u_plan_count = count_distinct_eligible_u_shape_plans(eligible_u_plans)
+                reuse_admitted = should_admit_u_shape_rank_reuse(
+                    len(search_frame), eligible_u_plan_count)
+                shape_rank_cache = RankFeatureCache(
+                    max_bytes=DEFAULT_MAX_BYTES if reuse_admitted else 0)
                 for family, params, precompiled, orientation in proposals:
                     record = {"family": family, "parameters": dict(params), "orientation": orientation}
                     record["diagnosed_issues"] = [issue["code"] for issue in diagnosis["issues"]
@@ -751,8 +772,13 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                             natural_time_scale=config.natural_time_scale, training_context_ref=train_ref)
                         record["transform"] = plan.transform
                         if plan.identity != last_base_identity:
-                            base_values = np.asarray(plan.execute(
-                                search_frame, allow_research=True), dtype=float).reshape(prefix.shape)
+                            reused_shape = apply_u_shape_from_rank(
+                                plan, search_frame, shape_rank_cache, allow_research=True)
+                            if reused_shape is None:
+                                base_values = np.asarray(plan.execute(
+                                    search_frame, allow_research=True), dtype=float).reshape(prefix.shape)
+                            else:
+                                base_values = np.asarray(reused_shape, dtype=float).reshape(prefix.shape)
                             last_base_identity, last_base_values = plan.identity, base_values
                         values = last_base_values if orientation == 1 else -last_base_values
                         if orientation == -1:

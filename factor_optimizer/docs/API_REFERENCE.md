@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**79 个 Python 模块、945 个公开函数/类/方法定义**。
+扫描实际包目录：**80 个 Python 模块、953 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -89,6 +89,7 @@
 | [factor_optimizer/search/winner_selector.py](../factor_optimizer/search/winner_selector.py) | 6 | Robust winner selector for factor auto-treatment optimization. |
 | [factor_optimizer/seen/__init__.py](../factor_optimizer/seen/__init__.py) | 0 | Seen cache: track previously evaluated factors using FE canonical identity. |
 | [factor_optimizer/seen/identity.py](../factor_optimizer/seen/identity.py) | 15 | SeenCache: track previously evaluated factors to avoid duplicates. |
+| [factor_optimizer/shape_rank_reuse.py](../factor_optimizer/shape_rank_reuse.py) | 8 | Invocation-local reuse of FE's average-rank feature for shape repairs. |
 
 ## factor_optimizer/__init__.py
 
@@ -10672,6 +10673,84 @@ Import seen records from dictionaries.
 
 返回类型：`None`。
 
+## factor_optimizer/shape_rank_reuse.py
+
+Invocation-local reuse of FE's average-rank feature for shape repairs.
+
+### should_admit_u_shape_rank_reuse
+
+[实际实现](../factor_optimizer/shape_rank_reuse.py#L17)。
+
+Evidence-based TRAIN admission; all other cases stay on FE execution.
+
+参数：`(actual_train_rows: int, distinct_eligible_plan_count: int)`。
+
+返回类型：`bool`。
+
+### count_distinct_eligible_u_shape_plans
+
+[实际实现](../factor_optimizer/shape_rank_reuse.py#L28)。
+
+Count distinct eligible identities, ignoring wrappers and duplicates.
+
+参数：`(plans)`。
+
+返回类型：`int`。
+
+### is_eligible_u_shape_plan
+
+[实际实现](../factor_optimizer/shape_rank_reuse.py#L41)。
+
+Whether this exact, unwrapped ValueRepairPlan supports the shortcut.
+
+参数：`(plan)`。
+
+返回类型：`bool`。
+
+### RankFeatureCache
+
+[实际实现](../factor_optimizer/shape_rank_reuse.py#L84)。
+
+One-entry bounded cache scoped by the caller to one TRAIN invocation.
+
+### RankFeatureCache.__init__
+
+[实际实现](../factor_optimizer/shape_rank_reuse.py#L87)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self, max_bytes: int=DEFAULT_MAX_BYTES)`。
+
+### RankFeatureCache.retained_bytes
+
+[实际实现](../factor_optimizer/shape_rank_reuse.py#L100)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self)`。
+
+返回类型：`int`。
+
+### RankFeatureCache.average_rank
+
+[实际实现](../factor_optimizer/shape_rank_reuse.py#L110)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self, frame: pd.DataFrame, *, training_context_ref: str)`。
+
+返回类型：`pd.Series \| None`。
+
+### apply_u_shape_from_rank
+
+[实际实现](../factor_optimizer/shape_rank_reuse.py#L144)。
+
+Return the exact rank-shape formula for an unwrapped U-family plan.
+
+参数：`(plan, frame: pd.DataFrame, cache: RankFeatureCache, *, allow_research: bool=False)`。
+
+返回类型：`pd.Series \| None`。
+
 ## 源码一致性
 
 <details>
@@ -10730,7 +10809,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
-| `factor_optimizer/research_batch.py` | `6439082e220161c3cd078a0bbeb05c8c5d69ff1c08365b639435a11f65f45939` |
+| `factor_optimizer/research_batch.py` | `affc38c02912eb2b11b62663fd6bcf0523ef42cce149910008c4ae96981357e4` |
 | `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
 | `factor_optimizer/research_diagnostics.py` | `26c82a50b2edcaa4eff8911da11a4fcd52fbad2f5235148202a300d396ced23d` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |
@@ -10758,6 +10837,7 @@ Import seen records from dictionaries.
 | `factor_optimizer/search/winner_selector.py` | `3a2ff94402e3eb4b7e1b0a6c373362a96bab475d30c28c05e62db43edc70cb77` |
 | `factor_optimizer/seen/__init__.py` | `f37e222be83f53595c4ee7325542f299a1b6d64eeebce400e5296d0f56d33676` |
 | `factor_optimizer/seen/identity.py` | `dbf0d6cbbb1cd12f907a12fa2ce0089a9c2f1a25c9ee7da96b1735032163ff10` |
+| `factor_optimizer/shape_rank_reuse.py` | `84714f99b986d2cfecfa2c89db6bcc0243fcae0c939407f9608837274aa992c0` |
 
 </details>
 

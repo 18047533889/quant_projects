@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -332,3 +334,237 @@ def test_strict_parameter_and_execution_validation():
     with pytest.raises(ValueError, match="columns"): plan.execute(pd.DataFrame({"value": [1.]}), allow_research=True)
     duplicate = panel([1], [2]); duplicate = pd.concat([duplicate, duplicate.iloc[[0]]])
     with pytest.raises(ValueError, match="duplicate"): plan.execute(duplicate, allow_research=True)
+
+
+
+def _shape_cache_frame():
+    dates = pd.to_datetime(["2026-01-01"] * 5 + ["2026-01-02"])
+    return pd.DataFrame({
+        "asset_id": ["A", "B", "C", "D", "E", "A"],
+        "date": dates,
+        "value": [1.0, 1.0, 3.0, np.nan, np.inf, 9.0],
+    })
+
+
+@pytest.mark.parametrize("family", ["U_SHAPE_REPAIR", "INVERTED_U_REPAIR"])
+@pytest.mark.parametrize("center", [.35, .5, .65])
+@pytest.mark.parametrize("power", [1., 2.])
+def test_shape_rank_reuse_matches_fp_formula_elementwise(family, center, power):
+    from factor_optimizer.shape_rank_reuse import RankFeatureCache, apply_u_shape_from_rank
+
+    values = _shape_cache_frame()
+    params = {"center": center, "power": power, "asymmetry": True}
+    plan = compile_(family, params)
+    expected = plan.execute(values, allow_research=True)
+    actual = apply_u_shape_from_rank(plan, values, RankFeatureCache(), allow_research=True)
+    pd.testing.assert_series_equal(actual, expected, check_exact=True)
+
+
+def test_shape_rank_cache_computes_one_average_rank_for_candidate_grid(monkeypatch):
+    from factor_optimizer.adapters import repair_execution
+    from factor_optimizer.shape_rank_reuse import RankFeatureCache, apply_u_shape_from_rank
+
+    values = _shape_cache_frame()
+    cache = RankFeatureCache()
+    original = repair_execution._execute_fe_cs_rank
+    calls = []
+
+    def tracked(frame):
+        calls.append(len(frame))
+        return original(frame)
+
+    monkeypatch.setattr(repair_execution, "_execute_fe_cs_rank", tracked)
+    for family in ("U_SHAPE_REPAIR", "INVERTED_U_REPAIR"):
+        for center in (.35, .5, .65):
+            for power in (1., 2.):
+                plan = compile_(family, {"center": center, "power": power, "asymmetry": False})
+                actual = apply_u_shape_from_rank(plan, values, cache, allow_research=True)
+                expected = plan.execute(values, allow_research=True)
+                pd.testing.assert_series_equal(actual, expected, check_exact=True)
+    assert calls == [len(values)]
+    assert cache.rank_calls == 1
+    assert cache.hits == 11
+    assert cache.retained_bytes == len(values) * np.dtype(np.float64).itemsize
+
+
+def test_shape_rank_cache_invalidates_value_order_and_training_context():
+    from factor_optimizer.shape_rank_reuse import RankFeatureCache
+
+    values = _shape_cache_frame()
+    cache = RankFeatureCache()
+    cache.average_rank(values, training_context_ref="train:a")
+    cache.average_rank(values, training_context_ref="train:a")
+    cache.average_rank(values.copy(), training_context_ref="train:a")
+    assert (cache.rank_calls, cache.hits) == (2, 1)
+
+    changed = values.copy()
+    changed.loc[0, "value"] = 8.0
+    cache.average_rank(changed, training_context_ref="train:a")
+    cache.average_rank(values.iloc[::-1].copy(), training_context_ref="train:a")
+    cache.average_rank(values, training_context_ref="train:b")
+    assert cache.rank_calls == 5
+    assert cache.evictions == 4
+
+
+def test_shape_rank_cache_is_bounded_and_train_validation_local(monkeypatch):
+    from factor_optimizer import shape_rank_reuse
+    from factor_optimizer.adapters import repair_execution
+    from factor_optimizer.shape_rank_reuse import RankFeatureCache
+
+    values = _shape_cache_frame()
+    bounded = RankFeatureCache(max_bytes=0)
+    fingerprints, fe_ranks = [], []
+    original_key = shape_rank_reuse._frame_key
+    original_fe_rank = repair_execution._execute_fe_cs_rank
+    monkeypatch.setattr(shape_rank_reuse, "_frame_key",
+                        lambda *args, **kwargs: fingerprints.append(args[0]))
+    monkeypatch.setattr(repair_execution, "_execute_fe_cs_rank",
+                        lambda frame: fe_ranks.append(frame))
+    assert bounded.average_rank(values, training_context_ref="train:a") is None
+    assert bounded.average_rank(values, training_context_ref="train:a") is None
+    assert bounded.rank_calls == 0
+    assert bounded.bypasses == 2
+    assert bounded.average_rank(values.iloc[:0], training_context_ref="train:empty") is None
+    assert fingerprints == fe_ranks == []
+    assert bounded.rank_calls == 0
+    assert bounded.bypasses == 3
+    assert bounded.retained_bytes == 0
+    monkeypatch.setattr(shape_rank_reuse, "_frame_key", original_key)
+    monkeypatch.setattr(repair_execution, "_execute_fe_cs_rank", original_fe_rank)
+
+    train_cache = RankFeatureCache()
+    validation_cache = RankFeatureCache()
+    train_cache.average_rank(values, training_context_ref="train:a")
+    validation_cache.average_rank(values, training_context_ref="validation:a")
+    assert train_cache.rank_calls == validation_cache.rank_calls == 1
+    assert train_cache.hits == validation_cache.hits == 0
+
+
+def test_shape_rank_reuse_skips_baseline_wrapper():
+    from factor_optimizer.research_baseline import BaselineRepairPlan
+    from factor_optimizer.shape_rank_reuse import RankFeatureCache, apply_u_shape_from_rank
+
+    plan = compile_("U_SHAPE_REPAIR", {"center": .5, "power": 2., "asymmetry": False})
+    wrapped = SimpleNamespace(base=plan, family=plan.family,
+                              transform=plan.transform, parameters=plan.parameters)
+    assert apply_u_shape_from_rank(
+        wrapped, _shape_cache_frame(), RankFeatureCache(), allow_research=True) is None
+
+
+
+def test_shape_rank_shortcut_preserves_execute_authority_and_validation():
+    from dataclasses import replace
+    from factor_optimizer.shape_rank_reuse import RankFeatureCache, apply_u_shape_from_rank
+
+    values = _shape_cache_frame()
+    plan = compile_("U_SHAPE_REPAIR", {"center": .5, "power": 2., "asymmetry": False})
+    with pytest.raises(ValueError, match="research-only"):
+        apply_u_shape_from_rank(plan, values, RankFeatureCache())
+
+    invalid_frames = []
+    null_asset = values.copy()
+    null_asset.loc[0, "asset_id"] = None
+    invalid_frames.append((null_asset, "identity columns"))
+    null_date = values.copy()
+    null_date.loc[0, "date"] = pd.NaT
+    invalid_frames.append((null_date, "identity columns"))
+    duplicate = pd.concat([values, values.iloc[[0]]], ignore_index=True)
+    invalid_frames.append((duplicate, "duplicate"))
+    for invalid, message in invalid_frames:
+        with pytest.raises(ValueError, match=message):
+            apply_u_shape_from_rank(plan, invalid, RankFeatureCache(), allow_research=True)
+
+    bad_params = (
+        (("asymmetric", False), ("center", np.nan), ("inverted", False), ("power", 2.)),
+        (("asymmetric", False), ("center", .5), ("inverted", 1), ("power", 2.)),
+    )
+    for params in bad_params:
+        invalid_plan = replace(plan, parameters=params)
+        assert apply_u_shape_from_rank(
+            invalid_plan, values, RankFeatureCache(), allow_research=True) is None
+        with pytest.raises(ValueError):
+            invalid_plan.execute(values, allow_research=True)
+
+
+def test_shape_rank_cache_hit_cannot_be_made_writable_or_poison_later_candidate():
+    from factor_optimizer.shape_rank_reuse import RankFeatureCache
+
+    values = _shape_cache_frame()
+    cache = RankFeatureCache()
+    first = cache.average_rank(values, training_context_ref="train:a")
+    hit = cache.average_rank(values, training_context_ref="train:a")
+    with pytest.raises(ValueError):
+        hit.to_numpy(copy=False).setflags(write=True)
+    later = cache.average_rank(values, training_context_ref="train:a")
+    np.testing.assert_array_equal(later.to_numpy(), first.to_numpy())
+    assert cache.rank_calls == 1
+    assert cache.hits == 2
+
+
+def test_shape_rank_shortcut_bypasses_panels_over_memory_budget():
+    from factor_optimizer.shape_rank_reuse import RankFeatureCache, apply_u_shape_from_rank
+
+    values = _shape_cache_frame()
+    plan = compile_("U_SHAPE_REPAIR", {"center": .5, "power": 2., "asymmetry": False})
+    cache = RankFeatureCache(max_bytes=0)
+    assert apply_u_shape_from_rank(
+        plan, values, cache, allow_research=True) is None
+    assert cache.rank_calls == 0
+    assert cache.bypasses == 1
+    assert cache.retained_bytes == 0
+
+
+
+def test_shape_rank_key_failure_falls_back_before_fe_rank(monkeypatch):
+    from factor_optimizer import shape_rank_reuse
+    from factor_optimizer.adapters import repair_execution
+    from factor_optimizer.shape_rank_reuse import RankFeatureCache, apply_u_shape_from_rank
+
+    values = _shape_cache_frame()
+    plan = compile_("U_SHAPE_REPAIR", {"center": .5, "power": 2., "asymmetry": False})
+    cache = RankFeatureCache()
+    calls = []
+    monkeypatch.setattr(shape_rank_reuse, "_frame_key", lambda *args, **kwargs: None)
+    monkeypatch.setattr(repair_execution, "_execute_fe_cs_rank",
+                        lambda frame: calls.append(len(frame)))
+    assert apply_u_shape_from_rank(
+        plan, values, cache, allow_research=True) is None
+    assert calls == []
+    assert cache.rank_calls == 0
+    assert cache.bypasses == 1
+    assert len(plan.execute(values, allow_research=True)) == len(values)
+
+
+@pytest.mark.parametrize("rows, plans, expected", [
+    (499_999, 14, False),
+    (500_000, 13, False),
+    (500_000, 14, True),
+    (999_999, 6, False),
+    (1_000_000, 6, True),
+    (1_000_000, 14, True),
+])
+def test_u_shape_reuse_admission_boundaries(rows, plans, expected):
+    from factor_optimizer.shape_rank_reuse import should_admit_u_shape_rank_reuse
+    assert should_admit_u_shape_rank_reuse(rows, plans) is expected
+
+
+def test_u_shape_reuse_admission_rejects_noninteger_inputs():
+    from factor_optimizer.shape_rank_reuse import should_admit_u_shape_rank_reuse
+    for rows, plans in ((True, 14), (500_000, True), (-1, 14), (500_000, -1)):
+        with pytest.raises(ValueError, match="nonnegative integers"):
+            should_admit_u_shape_rank_reuse(rows, plans)
+
+
+def test_u_shape_distinct_eligible_count_excludes_duplicates_wrappers_and_invalid():
+    from dataclasses import replace
+    from types import SimpleNamespace
+    from factor_optimizer.shape_rank_reuse import count_distinct_eligible_u_shape_plans
+
+    plan = compile_("U_SHAPE_REPAIR", {"center": .5, "power": 2., "asymmetry": False})
+    other = compile_("INVERTED_U_REPAIR", {"center": .5, "power": 2., "asymmetry": False})
+    malformed = replace(plan, parameters=(("center", float("nan")), ("power", 2.),
+                                          ("asymmetric", False), ("inverted", False)))
+    wrapped = SimpleNamespace(base=plan, family=plan.family,
+                              transform=plan.transform, parameters=plan.parameters)
+    assert count_distinct_eligible_u_shape_plans(
+        [plan, plan, other, malformed, wrapped, object()]) == 2

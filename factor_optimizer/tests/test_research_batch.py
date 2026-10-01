@@ -131,3 +131,74 @@ def test_default_missingness_search_executes_fill_not_only_a_diagnostic_flag():
                for r in records)
     # Filling gaps alone cannot claim higher RankIC on shared observations.
     assert result.factors["good"].selected_family == "NO_OP_RAW"
+
+
+
+def test_shared_u_rank_preserves_train_candidate_scores_and_selection(monkeypatch):
+    optimize, Config = api()
+    batch, labels = fixture()
+    batch = replace(batch, factor_ids=("u",), values=batch.values[:, :, 2:3])
+    config = Config(families=("U_SHAPE_REPAIR",), bootstrap_draws=99, seed=73)
+
+    import factor_optimizer.shape_rank_reuse as reuse_module
+    # This tiny parity fixture intentionally forces the optimization on; it is
+    # not evidence for production admission at this frame size.
+    monkeypatch.setattr(reuse_module, "should_admit_u_shape_rank_reuse",
+                        lambda *args, **kwargs: True)
+    reused = optimize(batch, labels, config=config, allow_research=True)
+    monkeypatch.setattr(reuse_module, "apply_u_shape_from_rank",
+                        lambda *args, **kwargs: None)
+    reference = optimize(batch, labels, config=config, allow_research=True)
+
+    reused_factor = reused.factors["u"]
+    reference_factor = reference.factors["u"]
+    assert (reused_factor.selected_family, reused_factor.plan_identity,
+            reused_factor.train_gain, reused_factor.validation_lower_bound) == (
+            reference_factor.selected_family, reference_factor.plan_identity,
+            reference_factor.train_gain, reference_factor.validation_lower_bound)
+
+    def candidate_evidence(result):
+        return [
+            (item["family"], item["parameters"], item["status"],
+             item.get("plan_identity"), item.get("train_gain"), item.get("coverage"))
+            for item in result.factors["u"].candidates
+        ]
+
+    assert candidate_evidence(reused) == candidate_evidence(reference)
+
+
+
+def test_normal_small_frame_uses_ordinary_execute_without_cache_fingerprint(monkeypatch):
+    optimize, Config = api()
+    batch, labels = fixture()
+    batch = replace(batch, factor_ids=("u",), values=batch.values[:, :, 2:3])
+    import factor_optimizer.shape_rank_reuse as reuse_module
+    from factor_optimizer.adapters import repair_execution
+
+    original_cache = reuse_module.RankFeatureCache
+    caches = []
+    executions = []
+
+    class ObserveCache(original_cache):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            caches.append(self)
+
+    original_execute = repair_execution.ValueRepairPlan.execute
+    def observe_execute(self, *args, **kwargs):
+        if self.transform == "rank_shape":
+            executions.append(self.identity)
+        return original_execute(self, *args, **kwargs)
+
+    fingerprints = []
+    monkeypatch.setattr(reuse_module, "RankFeatureCache", ObserveCache)
+    monkeypatch.setattr(reuse_module, "_frame_key",
+                        lambda *args, **kwargs: fingerprints.append(args[0]))
+    monkeypatch.setattr(repair_execution.ValueRepairPlan, "execute", observe_execute)
+    result = optimize(batch, labels, config=Config(families=("U_SHAPE_REPAIR",)),
+                      allow_research=True)
+
+    assert caches and all(cache.max_bytes == 0 and cache.rank_calls == 0 for cache in caches)
+    assert fingerprints == []
+    assert executions
+    assert result.factors["u"].candidates
