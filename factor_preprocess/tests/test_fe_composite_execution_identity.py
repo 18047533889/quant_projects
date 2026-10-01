@@ -67,6 +67,8 @@ def test_smoothing_composite_has_explicit_unbound_identity():
 
     with pytest.raises(GovernanceError, match="No scoped FE composite identity provider"):
         registry.execution_identity("rolling_zscore")
+    with pytest.raises(GovernanceError, match="No scoped FE composite identity provider"):
+        registry.execution_identity("ewma")
 
 
 def test_research_opt_in_still_uses_fe_when_composite_executor_is_available(monkeypatch):

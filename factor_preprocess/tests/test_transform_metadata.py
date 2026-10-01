@@ -85,6 +85,7 @@ def test_fe_composite_set_and_recipe_identities_are_exact():
         "trailing_median": "FE_COMPOSITE:long_smoothing.lagged_median:v1",
         "rolling_std": "FE_COMPOSITE:long_smoothing.lagged_std:v1",
         "rolling_zscore": "FE_COMPOSITE:long_smoothing.lagged_zscore:v1",
+        "ewma": "FE_COMPOSITE:long_smoothing.lagged_ewma:v1",
     }
     for name in ("ols_neutralize", "industry_neutral", "size_neutral", "dual_neutral"):
         expected[name] = "FE_COMPOSITE:long_neutralization.ols_effective_rank:v1"
@@ -172,7 +173,7 @@ def test_resolve_origin_rules():
     assert registry.resolve_origin("cs_rank") == "FE_OPERATOR"
     assert registry.resolve_origin("trailing_sma") == "FE_COMPOSITE"
     assert registry.resolve_origin("cs_zscore") == "FP_NATIVE"
-    assert registry.resolve_origin("ewma") == "FP_NATIVE"
+    assert registry.resolve_origin("ewma") == "FE_COMPOSITE"
     with pytest.raises(ValueError):
         registry.resolve_origin("missing_transform")
 

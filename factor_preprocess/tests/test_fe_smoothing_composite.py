@@ -474,3 +474,109 @@ def test_lagged_zscore_registry_fails_closed_without_fe(monkeypatch):
     with pytest.raises(GovernanceError, match="FE composite authority unavailable"):
         registry.get_execution("rolling_zscore")
     assert callable(registry.get_execution("rolling_zscore", allow_research=True))
+
+
+def test_ewma_resolver_does_not_require_expression_emitter(monkeypatch):
+    import builtins
+    import factor_preprocess.adapters.fe_smoothing as adapter
+
+    original_import = builtins.__import__
+    def blocked_emitter(name, *args, **kwargs):
+        if name == "factor_engine.backend.polars_expr_emitter":
+            raise ModuleNotFoundError("emitter unavailable")
+        return original_import(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, "__import__", blocked_emitter)
+    assert adapter.get_fe_composite_executor(
+        "ewma", adapter.EWMA_RECIPE
+    ) is adapter.execute_ewma
+
+
+def test_ewma_public_route_matches_pandas_for_fractional_halflife():
+    from factor_preprocess.transforms import rolling as R
+    from factor_preprocess.transforms.rolling import _ewma_reference
+    frame = pd.DataFrame({
+        "asset_id": ["a"] * 6 + ["b"] * 6, "date": list(range(6)) * 2,
+        "value": [1.0, np.nan, 2.0, 4.0, -1.0, 3.0,
+                  9.0, 8.0, 7.0, np.nan, 5.0, 4.0],
+    })
+    actual = R.ewma(frame, halflife=2.5, min_periods=1)
+    expected = _ewma_reference(frame, halflife=2.5, min_periods=1)
+    np.testing.assert_allclose(actual.to_numpy(), expected.to_numpy(),
+                               rtol=1e-12, atol=1e-12, equal_nan=True)
+
+
+def test_ewma_direct_adapter_registry_are_bit_exact_in_production_domain():
+    from factor_preprocess.adapters.fe_smoothing import execute_ewma
+    from factor_preprocess.registry.transforms import get_default_registry
+    from factor_preprocess.transforms import rolling as R
+    from factor_preprocess.transforms.rolling import _ewma_fp_research
+    frame = pd.DataFrame({
+        "asset_id": ["a", "a", "b", "a", "b", "b"],
+        "date": [1, 2, 1, 3, 2, 3],
+        "value": [1.0, np.nan, -2.0, 3.5, 4.0, 5.0],
+    }).sort_values(["asset_id", "date"], kind="stable")
+    direct = R.ewma(frame, halflife=3.7, min_periods=1)
+    adapted = execute_ewma(frame, halflife=3.7, min_periods=1)
+    routed = get_default_registry().get_execution("ewma")(
+        frame, halflife=3.7, min_periods=1
+    )
+    for actual in (adapted, routed):
+        np.testing.assert_array_equal(actual.to_numpy(), direct.to_numpy())
+    assert get_default_registry().get("ewma").func is _ewma_fp_research
+
+
+def test_ewma_public_authority_fails_closed(monkeypatch):
+    from factor_preprocess.adapters import fe_composite
+    from factor_preprocess.errors import GovernanceError
+    from factor_preprocess.transforms import rolling as R
+    monkeypatch.setattr(fe_composite, "get_fe_composite_executor",
+                        lambda name, recipe_identity: None)
+    frame = pd.DataFrame({"asset_id": ["a"], "date": [1], "value": [1.0]})
+    with pytest.raises(GovernanceError, match="FE composite authority unavailable"):
+        R.ewma(frame, halflife=3.7)
+
+
+def test_ewma_fe_authority_fails_closed_and_research_fallback_is_explicit(monkeypatch):
+    import factor_preprocess.adapters.fe_smoothing as adapter
+    from factor_preprocess.errors import GovernanceError
+    from factor_preprocess.registry.transforms import get_default_registry
+    from factor_preprocess.transforms.rolling import _ewma_fp_research
+    frame = pd.DataFrame({"asset_id": ["a", "a"], "date": [1, 2], "value": [1.0, 2.0]})
+    registry = get_default_registry()
+    monkeypatch.setattr(adapter, "get_fe_composite_executor", lambda name, recipe_identity: None)
+    with pytest.raises(GovernanceError, match="FE composite authority unavailable"):
+        registry.get_execution("ewma")
+    research = registry.get_execution("ewma", allow_research=True)
+    assert research.executor is _ewma_fp_research
+    np.testing.assert_allclose(research(frame, halflife=3.7).to_numpy(),
+                               _ewma_fp_research(frame, halflife=3.7).to_numpy(),
+                               equal_nan=True)
+
+
+@pytest.mark.parametrize("halflife", [float.fromhex("0x0.0000000000001p-1022"),
+                                      2.0 ** 53, float.fromhex("0x1.fffffffffffffp+1023")])
+def test_ewma_fe_extreme_halflife_matches_stable_alpha_recurrence(halflife):
+    import math
+    from factor_preprocess.transforms import rolling as R
+    frame = pd.DataFrame({
+        "asset_id": ["a"] * 5, "date": range(5),
+        "value": [1.0, -2.0, 5.0, 4.0, -3.0],
+    })
+    alpha = -math.expm1(-math.log(2.0) / halflife)
+    prior = None
+    expected = [np.nan]
+    for value in frame["value"].to_numpy()[:-1]:
+        prior = value if prior is None else alpha * value + (1.0 - alpha) * prior
+        expected.append(prior)
+    actual = R.ewma(frame, halflife=halflife, min_periods=1)
+    np.testing.assert_allclose(actual.to_numpy(), expected, rtol=1e-14,
+                               atol=0.0, equal_nan=True)
+
+
+def test_ewma_fe_empty_and_min_periods_beyond_input_length():
+    from factor_preprocess.transforms import rolling as R
+    frame = pd.DataFrame({"asset_id": ["a", "a"], "date": [1, 2], "value": [1.0, 2.0]})
+    empty = R.ewma(frame.iloc[:0], halflife=2.0)
+    assert empty.empty and empty.index.equals(frame.iloc[:0].index)
+    result = R.ewma(frame, halflife=2.0, min_periods=3)
+    assert result.isna().all()

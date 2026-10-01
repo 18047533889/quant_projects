@@ -334,7 +334,7 @@ def rolling_zscore(
     )
 
 
-def ewma(
+def _ewma_fp_research(
     values: pd.DataFrame,
     halflife: float,
     min_periods: int = 1,
@@ -369,6 +369,9 @@ def ewma(
     Notes
     -----
     Uses shift(1) to exclude current observation.
+
+    Research-only fallback. Public EWMA calls use the FactorEngine
+    composite authority and fail closed when that route is unavailable.
     """
     if halflife <= 0:
         raise ValueError(f"halflife must be > 0, got {halflife}")
@@ -389,4 +392,62 @@ def ewma(
     return pd.Series(
         _lagged_ewm(values, halflife, min_periods, asset_col, value_col),
         index=values.index,
+    )
+
+
+def ewma(
+    values: pd.DataFrame,
+    halflife: float,
+    min_periods: int = 1,
+    asset_col: str = "asset_id",
+    time_col: str = "date",
+    value_col: str = "value",
+) -> pd.Series:
+    """Causal EWMA per asset, delegated to FactorEngine authority.
+
+    Parameters
+    ----------
+    values : pd.DataFrame
+        Long panel containing asset_col, time_col and value_col.
+        Dates must be non-null and monotone within each observed asset.
+    halflife : float
+        Finite positive half-life in units of observations.
+    min_periods : int
+        Non-negative minimum number of valid prior observations; default 1.
+    asset_col : str
+        Asset identifier column; rows with null assets produce missing output.
+    time_col : str
+        Time column used for per-asset ordering validation.
+    value_col : str
+        Numeric value column; nonfinite values count as missing observations.
+
+    Returns
+    -------
+    pd.Series
+        Lagged EWMA aligned with the original row order and index.
+
+    Notes
+    -----
+    The FE kernel uses adjust=False and ignore_nulls=False. Missing positions
+    affect weights. Public calls fail closed if FE authority is unavailable;
+    the registry permits an explicit research fallback via allow_research=True.
+    Halflife is measured in observations and maps to
+    alpha = 1 - exp(-log(2) / halflife). The current row is excluded:
+    each output uses only earlier rows from the same asset. Min_periods
+    counts valid prior observations before an output is emitted. Production
+    registry admission further restricts halflife to its declared domain.
+    """
+    from factor_preprocess.adapters.fe_composite import get_fe_composite_executor
+    from factor_preprocess.adapters.fe_smoothing import EWMA_RECIPE
+    from factor_preprocess.errors import GovernanceError
+
+    executor = get_fe_composite_executor("ewma", EWMA_RECIPE)
+    if executor is None:
+        raise GovernanceError(
+            "FE composite authority unavailable for 'ewma'; "
+            "no implicit FP-native fallback"
+        )
+    return executor(
+        values, halflife=halflife, min_periods=min_periods,
+        asset_col=asset_col, time_col=time_col, value_col=value_col,
     )

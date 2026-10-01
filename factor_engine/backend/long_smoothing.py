@@ -291,3 +291,14 @@ def lagged_zscore(frame: pd.DataFrame, *, window: int, min_periods: int | None =
         raise RuntimeError("FactorEngine long z-score changed row identity or order")
     output[positions] = result.get_column("_zscore").to_numpy()
     return pd.Series(output, index=frame.index, name=value_col)
+
+
+def lagged_ewma(frame: pd.DataFrame, *, halflife: float, min_periods: int = 1,
+                asset_col: str = "asset_id", time_col: str = "date",
+                value_col: str = "value") -> pd.Series:
+    """Compute a prior-row EWMA per asset with the native FE EWM recipe."""
+    from factor_engine.backend.long_ewm import lagged_ewma as _lagged_ewma
+    return _lagged_ewma(
+        frame, halflife=halflife, min_periods=min_periods,
+        asset_col=asset_col, time_col=time_col, value_col=value_col,
+    )

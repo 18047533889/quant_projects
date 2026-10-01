@@ -382,7 +382,7 @@ def test_fitted_and_unmapped_transforms_are_fp_native():
                 "cannot enumerate the catalog"
             )
     # Freshness / smoothing / decomposition / cs_zscore are FP-native.
-    for name in ("freshness_score", "days_since_update", "ewma", "kama",
+    for name in ("freshness_score", "days_since_update", "kama",
                  "one_sided_iir_lowpass", "kalman_local_level",
                  "hp_filter", "volatility_scale", "missing_indicator",
                  "cs_zscore"):
@@ -390,6 +390,13 @@ def test_fitted_and_unmapped_transforms_are_fp_native():
         assert meta is not None
         assert meta.implementation_origin == "FP_NATIVE", name
         assert registry.resolve_origin(name) == "FP_NATIVE", name
+
+    ewma = registry.get("ewma")
+    assert ewma is not None
+    assert ewma.implementation_origin == "FE_COMPOSITE"
+    assert ewma.fe_operator_id is None
+    assert ewma.fe_equivalent_semantics == "FE_COMPOSITE:long_smoothing.lagged_ewma:v1"
+    assert registry.resolve_origin("ewma") == "FE_COMPOSITE"
 
     # Lagged SMA is an FE composite (not a single FE operator), with explicit
     # semantic identity so catalog audits cannot classify it as FP-native.

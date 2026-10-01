@@ -1069,7 +1069,7 @@ def create_default_registry() -> TransformRegistry:
     """
     from factor_preprocess.transforms import (
         cs_rank, cs_zscore, cs_demean, cs_winsor, cs_scale,
-        rolling_mean, rolling_std, ewma,
+        rolling_mean, rolling_std,
         trailing_sma, trailing_median, robust_ewma, kama,
         one_sided_iir_lowpass, kalman_local_level,
         volatility_scale, volatility_scale_returns, realized_volatility,
@@ -1077,7 +1077,9 @@ def create_default_registry() -> TransformRegistry:
         impute_with_fallback,
         days_since_update, observation_age, freshness_score, stale_data_indicator,
     )
-    from factor_preprocess.transforms.rolling import _rolling_zscore_fp_research
+    from factor_preprocess.transforms.rolling import (
+        _ewma_fp_research, _rolling_zscore_fp_research,
+    )
     from factor_preprocess.neutralization import ols_neutralize, compute_exposures
     from factor_preprocess.regime import detect_correlation_regime
     from factor_preprocess.transforms.decomposition import (
@@ -1183,7 +1185,7 @@ def create_default_registry() -> TransformRegistry:
         causal_safe=True,
     )
     register_builtin(
-        "ewma", ewma, TransformCategory.TEMPORAL,
+        "ewma", _ewma_fp_research, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="Exponentially weighted moving average",
         tags={"ewma", "temporal", "smoothing"},
@@ -1596,6 +1598,12 @@ def create_default_registry() -> TransformRegistry:
     del _name, _fe_id, _fit_kind, _FE_ROUTED
 
     registry.enrich(
+        "ewma", implementation_origin="FE_COMPOSITE", fe_operator_id=None,
+        fit_kind="stateless",
+        fe_equivalent_semantics="FE_COMPOSITE:long_smoothing.lagged_ewma:v1",
+    )
+
+    registry.enrich(
         "trailing_sma", implementation_origin="FE_COMPOSITE", fe_operator_id=None,
         fit_kind="stateless",
         fe_equivalent_semantics="FE_COMPOSITE:long_smoothing.lagged_mean:v1",
@@ -1638,7 +1646,7 @@ def create_default_registry() -> TransformRegistry:
     for _meta in registry.all_transforms():
         if _meta.name in {
             "cs_rank", "cs_demean", "cs_winsor",
-            "forward_fill", "ols_neutralize", "industry_neutral", "rolling_zscore",
+            "forward_fill", "ols_neutralize", "industry_neutral", "rolling_zscore", "ewma",
             "size_neutral", "dual_neutral", "trailing_sma", "rolling_mean", "trailing_median", "rolling_std",
         }:
             continue

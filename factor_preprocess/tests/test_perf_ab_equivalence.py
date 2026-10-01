@@ -48,7 +48,7 @@ EQUIV_CASES = [
     ("rolling_zscore", R._rolling_zscore_fp_research,
      R._rolling_zscore_reference,
      dict(window=20, min_periods=10)),
-    ("ewma", R.ewma, R._ewma_reference, dict(halflife=10)),
+    ("ewma", R._ewma_fp_research, R._ewma_reference, dict(halflife=10)),
     ("trailing_median", S.trailing_median, S._trailing_median_reference,
      dict(window=20, min_periods=10)),
     ("robust_ewma", S.robust_ewma, S._robust_ewma_reference,
