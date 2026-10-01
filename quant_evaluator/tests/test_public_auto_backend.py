@@ -7,6 +7,7 @@ import pytest
 import sys
 
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
+from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy, PrecisionPolicy
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.contracts.errors import (
     InvalidContractError, SealedSplitOverlapError,
@@ -166,6 +167,9 @@ def test_auto_batch_hardware_rejection_uses_cpu(monkeypatch):
 def test_auto_shape_dtype_and_device_gates(monkeypatch):
     monkeypatch.setattr(module, "_auto_batch_cuda_rejection", lambda *args: None)
     assert _policy() == ("cuda_strict", "certified_single_metric_shape")
+    assert _policy(gpu_policy=GPUExecutionPolicy(
+        precision_policy=PrecisionPolicy.GPU_MIXED)) == (
+            "cuda_strict", "certified_single_metric_shape")
     batch = SimpleNamespace(num_times=599, num_assets=5314, num_factors=2,
                             values=np.empty(0, dtype=np.float64))
     labels = SimpleNamespace(values=np.empty(0, dtype=np.float64))
@@ -189,6 +193,13 @@ def test_auto_shape_dtype_and_device_gates(monkeypatch):
     monkeypatch.setattr(module, "_auto_batch_cuda_rejection",
                         lambda *args: "cuda_unavailable")
     assert select(batch, labels, ("rank_ic",), **kwargs) == ("cpu", "cuda_unavailable")
+
+
+def test_auto_rejects_nondefault_precision_policy():
+    policy = GPUExecutionPolicy(precision_policy=PrecisionPolicy.GPU_FP64)
+    assert _policy(gpu_policy=policy) == (
+        "cpu", "gpu_precision_policy_outside_certified_range")
+
 
 
 
@@ -996,6 +1007,8 @@ def test_explicit_backend_override_skips_auto_special_input_guard(monkeypatch, b
     split = SealedSplitRef("later", start_time=40, end_time=50)
     assert evaluate(batch, labels, metrics=_DEFAULT_FIVE, backend=backend,
                     split_ref=split, portfolio_spec=object(),
+                    gpu_policy=GPUExecutionPolicy(
+                        precision_policy=PrecisionPolicy.GPU_FP64),
                     _prepare_only=True) == backend
 
 

@@ -86,6 +86,8 @@ def _auto_batch_cuda_rejection(
     if (not isinstance(policy, GPUExecutionPolicy)
             or len(policy.device_ids) != 1 or policy.required_capabilities):
         return "gpu_policy_outside_certified_range"
+    if policy.precision_policy != GPUExecutionPolicy().precision_policy:
+        return "gpu_precision_policy_outside_certified_range"
     try:
         import cupy as cp
         with cp.cuda.Device(policy.device_ids[0]):
