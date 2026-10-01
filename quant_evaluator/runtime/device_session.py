@@ -17,6 +17,7 @@ from quant_evaluator.contracts.backend_policy import (
     GPUExecutionPolicy,
     PrecisionPolicy,
 )
+from quant_evaluator.runtime.gpu_working_set import estimate_coverage_working_set_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -223,11 +224,23 @@ class DeviceEvaluationSession:
                 "quantile_spread", "quantile_monotonicity",
                 "daily_quantile_monotonicity_rate"))
             and not metric_parameters)
+        coverage_default = plan == ("coverage",) and not metric_parameters
         for tile in (128, 64, 32, 16, 8, 4, 2, 1):
             other_live_bytes = 0
-            est = self._estimate_working_set(
-                metric_plan, T, N, tile, dtype_bytes,
-                quantile_default=quantile_default)
+            if coverage_default:
+                precision_is_fp64 = self.policy.precision_policy in (
+                    PrecisionPolicy.GPU_FP64, PrecisionPolicy.REFERENCE_FP64)
+                factor_dtype_bytes = max(dtype_bytes, 8) if precision_is_fp64 else dtype_bytes
+                label_dtype_bytes = max(dtype_bytes, 8)
+                est = estimate_coverage_working_set_bytes(
+                    T, N, tile, factor_dtype_bytes, label_dtype_bytes,
+                    force_fp64=precision_is_fp64)
+                pool = getattr(self, "_pool", None)
+                other_live_bytes = pool.used_bytes() if pool is not None else 0
+            else:
+                est = self._estimate_working_set(
+                    metric_plan, T, N, tile, dtype_bytes,
+                    quantile_default=quantile_default)
             if quantile_default:
                 # The quantile kernel requires one bounded cross-section even
                 # when the resident tile itself fits the device budget.

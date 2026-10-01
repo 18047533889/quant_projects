@@ -91,16 +91,17 @@ class GPUExecutor:
         self._host_result_bytes = total
 
     def _factor_tile_size(self, metrics, T, N, F, dtype_bytes):
-        # Preserve the existing estimator call contract for non-quantile
-        # plans. Only the exact five-metric chain needs parameter-aware
-        # admission; custom quantile parameters retain the generic bound.
+        # Only exact default quantile/coverage DAGs need parameter-aware sizing.
         quantile_chain = frozenset((
             "quantile_returns_full", "quantile_returns_daily",
             "quantile_spread", "quantile_monotonicity",
             "daily_quantile_monotonicity_rate"))
         plan = tuple(metrics)
-        kwargs = ({"metric_parameters": self.metric_parameters}
-                  if len(plan) == 5 and frozenset(plan) == quantile_chain else {})
+        parameter_aware = (
+            (len(plan) == 5 and frozenset(plan) == quantile_chain)
+            or plan == ("coverage",)
+        )
+        kwargs = {"metric_parameters": self.metric_parameters} if parameter_aware else {}
         return min(F, self.session.estimate_tile(
             metrics, T, N, dtype_bytes, **kwargs))
 
