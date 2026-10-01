@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 
 from quant_evaluator.contracts._array_hash_cache import ArrayHashStateCache
-from quant_evaluator.contracts.array_identity import authoritative_array_hash
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.runtime.evaluator import evaluate
@@ -67,49 +66,26 @@ def _install_caches(monkeypatch):
     return raw_cache, json_cache
 
 
-def test_public_facade_cache_probe_requires_both_real_cache_entries(monkeypatch):
+def test_public_facade_cold_identity_cache_does_not_block_resource_route(monkeypatch):
     evaluator = _patch_small_profile(monkeypatch, (5, 7, 32))
-    raw_cache, json_cache = _install_caches(monkeypatch)
-    monkeypatch.setattr(
-        evaluator, "_auto_batch_cuda_rejection",
-        lambda *args: pytest.fail("cold cache route must not probe CUDA"),
-    )
+    _install_caches(monkeypatch)
+    gate_calls = []
+    monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection",
+                        lambda *args: gate_calls.append(args) or None)
     batch, labels = _inputs()
 
-    # Raw states alone are insufficient: the exact config JSON stream is cold.
-    authoritative_array_hash(batch.values)
     assert evaluate(batch, labels, metrics=("coverage",), _prepare_only=True,
                     _include_auto_route_reason=True) == (
-        "cpu", "identity_hash_cache_not_fully_warm_real_cos_f32_coverage")
-    with json_cache._lock:
-        json_cache._entries.clear()
-
-    # A resident config stream cannot compensate for a missing raw factor state.
-    # LabelBundle.content_hash is a precomputed identity field, not a payload scan.
-    fields = evaluator._evaluation_config_hash_fields(
-        batch, labels, ("coverage",), metric_parameters={}, context=None,
-        quantile_builder_parameters={}, portfolio_returns=None,
-        holding_returns=None, portfolio_spec=None, trade_eligibility=None,
-        calendar_snapshot=None, exposure_panel=None, generalization_evidence=None,
-        split_ref=None, request_fields={},
-    )
-    from quant_evaluator.contracts import _hashutil as hashutil
-    hashutil.stable_content_hex_streamed_arrays(
-        tag="EvaluationConfig.v2", fields=fields,
-        array_keys=("factor_values", "factor_validity"),
-    )
-    with raw_cache._lock:
-        raw_cache._entries.clear()
-    assert evaluate(batch, labels, metrics=("coverage",), _prepare_only=True,
-                    _include_auto_route_reason=True) == (
-        "cpu", "identity_hash_cache_not_fully_warm_real_cos_f32_coverage")
+        "cuda_strict", "certified_single_metric_real_cos_f32_coverage")
+    assert gate_calls
 
 
-def test_original_f32_coverage_shape_cold_does_not_probe_cuda(monkeypatch):
+def test_original_f32_coverage_shape_cold_still_obeys_resource_rejection(monkeypatch):
     evaluator = import_module("quant_evaluator.runtime.evaluator")
+    gate_calls = []
     monkeypatch.setattr(
         evaluator, "_auto_batch_cuda_rejection",
-        lambda *args: pytest.fail("cold original-size route must not probe CUDA"),
+        lambda *args: gate_calls.append(args) or "insufficient_cuda_memory",
     )
     monkeypatch.setattr(evaluator, "FactorBatch", SimpleNamespace)
     monkeypatch.setattr(evaluator, "LabelBundle", SimpleNamespace)
@@ -125,10 +101,11 @@ def test_original_f32_coverage_shape_cold_does_not_probe_cuda(monkeypatch):
         quantile_builder_parameters={}, portfolio_returns=None, holding_returns=None,
         trade_eligibility=None, calendar_snapshot=None, exposure_panel=None,
         generalization_evidence=None, evaluator=None,
-    ) == ("cpu", "identity_hash_cache_not_fully_warm_real_cos_f32_coverage")
+    ) == ("cpu", "insufficient_cuda_memory")
+    assert gate_calls
 
 
-def test_public_facade_cold_cpu_then_warm_cuda_preserves_identity(monkeypatch):
+def test_public_facade_cold_and_warm_auto_cuda_match_cpu_identity(monkeypatch):
     cp = pytest.importorskip("cupy")
     try:
         if cp.cuda.runtime.getDeviceCount() < 1:
@@ -148,25 +125,26 @@ def test_public_facade_cold_cpu_then_warm_cuda_preserves_identity(monkeypatch):
     monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection", checked_gate)
     batch, labels = _inputs()
 
-    cold = evaluate(batch, labels, metrics=("coverage",))
-    assert cold.metadata["backend_used"] == "cpu"
-    assert cold.metadata["auto_backend_reason"] == (
-        "identity_hash_cache_not_fully_warm_real_cos_f32_coverage")
-    assert gate_calls == []
-
     rejection = real_gate(
         None, evaluator._AUTO_REAL_COS_F32_COVERAGE_MIN_EFFECTIVE_VRAM_BYTES)
     if rejection is not None:
         pytest.skip(f"certified CUDA resource gate unavailable: {rejection}")
+    cold = evaluate(batch, labels, metrics=("coverage",))
+    assert cold.metadata["backend_used"] == "cuda"
+    assert cold.metadata["auto_backend_reason"] == (
+        "certified_single_metric_real_cos_f32_coverage")
+    assert gate_calls
+    reference = evaluate(batch, labels, metrics=("coverage",), backend="cpu")
     warm = evaluate(batch, labels, metrics=("coverage",))
     assert gate_calls
     assert warm.metadata["backend_used"] == "cuda"
     assert warm.metadata["auto_backend_reason"] == (
         "certified_single_metric_real_cos_f32_coverage")
-    assert warm.config_hash == cold.config_hash
-    assert warm.metadata["provenance"] == cold.metadata["provenance"]
-    assert warm.grouped_metrics == cold.grouped_metrics
-    assert warm.factor_ids == cold.factor_ids
+    for result in (cold, warm):
+        assert result.config_hash == reference.config_hash
+        assert result.metadata["provenance"] == reference.metadata["provenance"]
+        assert result.grouped_metrics == reference.grouped_metrics
+        assert result.factor_ids == reference.factor_ids
 
 
 def test_evaluation_request_fields_are_included_in_cache_probe(monkeypatch):
@@ -183,11 +161,11 @@ def test_evaluation_request_fields_are_included_in_cache_probe(monkeypatch):
 
     cold = evaluate(request, _prepare_only=True, _include_auto_route_reason=True)
     assert cold == (
-        "cpu", "identity_hash_cache_not_fully_warm_real_cos_f32_coverage")
-    assert gate_calls == []
+        "cuda_strict", "certified_single_metric_real_cos_f32_coverage")
+    assert gate_calls
 
-    # The explicit CPU facade call warms the same config stream, including
-    # EvaluationRequest's tier/cost-budget fields, without using the auto route.
+    # Request fields remain in the shared exact config hash; cache residency
+    # no longer decides the route.
     evaluate(request, backend="cpu")
     warm = evaluate(request, _prepare_only=True, _include_auto_route_reason=True)
     assert warm == (

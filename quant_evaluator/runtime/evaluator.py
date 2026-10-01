@@ -26,7 +26,6 @@ from quant_evaluator.contracts.array_identity import authoritative_array_hash
 from quant_evaluator.api.requests import EvaluationRequest
 from quant_evaluator.runtime.evaluation_identity import (
     build_evaluation_config_hash_fields,
-    evaluation_identity_cache_ready,
 )
 
 from quant_evaluator.planner.batch_plan import BatchPlan, ChunkDescriptor, create_batch_plan
@@ -130,34 +129,6 @@ def _evaluation_config_hash_fields(
         generalization_evidence=generalization_evidence, split_ref=split_ref,
         request_fields=request_fields,
     )
-
-
-def _f32_coverage_identity_cache_ready(factor_batch, label_bundle, config_fields):
-    """Require resident raw and exact config-stream states; unknown is cold.
-
-    Peeks do not promote LRU entries; concurrent hashing or cache pressure can
-    evict state between calls, so the exact shape has cold and warm winners.
-    """
-    raw_arrays = [factor_batch.values, label_bundle.values]
-    if factor_batch.validity is not None:
-        raw_arrays.append(factor_batch.validity)
-    return evaluation_identity_cache_ready(
-        raw_arrays=raw_arrays, fields=config_fields, tag="EvaluationConfig.v2",
-        array_keys=("factor_values", "factor_validity"),
-    )
-
-
-def _apply_f32_coverage_cache_route(backend, reason, cache_ready):
-    """Downgrade only the certified F32 coverage auto route on a cache miss.
-
-    A warm exact-shape route remains eligible for CUDA; measured registry
-    adoption still decides whether to keep that static winner.
-    """
-    if (backend == "cuda_strict"
-            and reason == "certified_single_metric_real_cos_f32_coverage"
-            and not cache_ready):
-        return "cpu", "identity_hash_cache_not_fully_warm_real_cos_f32_coverage"
-    return backend, reason
 
 
 def _is_f32_coverage_auto_candidate(factor_batch, label_bundle, metric_ids):
@@ -440,29 +411,6 @@ def _select_public_auto_backend(
                   if profile in (_AUTO_LARGE_PROFILE, _AUTO_LARGE_EXTRAP_PROFILE)
                   else _AUTO_SINGLE_MIN_EFFECTIVE_VRAM_BYTES)
         )
-    if (_is_f32_coverage_auto_candidate(factor_batch, label_bundle, canonical_metrics)
-            and isinstance(factor_batch, FactorBatch)
-            and isinstance(label_bundle, LabelBundle)
-            ):
-        try:
-            config_fields = _evaluation_config_hash_fields(
-                factor_batch, label_bundle, canonical_metrics,
-                metric_parameters=metric_parameters, context=context,
-                quantile_builder_parameters=quantile_builder_parameters,
-                portfolio_returns=portfolio_returns, holding_returns=holding_returns,
-                portfolio_spec=portfolio_spec, trade_eligibility=trade_eligibility,
-                calendar_snapshot=calendar_snapshot, exposure_panel=exposure_panel,
-                generalization_evidence=generalization_evidence,
-                split_ref=split_ref, request_fields=request_fields or {},
-            )
-            cache_ready = _f32_coverage_identity_cache_ready(
-                factor_batch, label_bundle, config_fields)
-        except Exception:
-            cache_ready = False
-        if not cache_ready:
-            return _apply_f32_coverage_cache_route(
-                "cuda_strict", "certified_single_metric_real_cos_f32_coverage",
-                cache_ready)
     rejection = _auto_batch_cuda_rejection(gpu_policy, min_effective_vram)
     if rejection is not None:
         return "cpu", rejection

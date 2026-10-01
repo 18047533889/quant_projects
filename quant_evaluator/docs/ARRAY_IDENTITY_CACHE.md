@@ -21,27 +21,25 @@ The historical and cached implementations returned the same SHA-256 digest.
 These numbers measure the hash helper, not end-to-end evaluation. Use the real
 COS batch benchmark to measure backend selection and whole-request elapsed time.
 
-## Cache-aware coverage auto
+## Coverage auto and identity reuse
 
 For the certified float64 shape `(2586, 5461, 32)` and the single `coverage`
-metric, the static auto selector checks raw-array identities and the exact
-configuration-stream cache before probing CUDA resources. A missing or unknown
-state selects CPU with reason
-`identity_hash_cache_not_fully_warm_real_cos_f32_coverage`. A resident state
-allows the existing CUDA precision/device/free-memory guards to decide.
+metric, the static auto selector admits CUDA through the existing precision,
+device and free-memory guards, including on the first evaluation. Identity
+cache residency no longer selects the backend. QE still computes and validates
+the same authoritative array and configuration hashes for CPU and CUDA.
 
-The selector uses non-promoting cache peeks. It does not scan a missing factor
-payload to estimate a backend. It bounds metadata traversal and treats unsupported
-metadata as cold. It checks `EvaluationRequest` fields in the same shared field
-builder that computes the final config hash; another request configuration
-cannot borrow a warm state from a different hash prefix.
+`EvaluationRequest` fields remain part of the shared configuration identity.
+Eligible immutable arrays can reuse hash states; mutable or unsupported arrays
+retain their existing hashing path. Cache eviction changes hashing cost without
+changing this static route.
 
 An omitted backend and `backend="auto"` use this policy. You can select
 `backend="cpu"` for the reference path or `backend="cuda_strict"` to request
 CUDA explicitly. The existing measured-auto registry and explicit calibration
-options remain available; cache state affects the static coverage route only.
+options remain available. Resource rejection still selects CPU under auto.
 
-Cache eviction or concurrent evaluations can change residency between selection
-and execution. The selector makes a deterministic decision for the observed
-state, not a guarantee of the fastest elapsed time under changing host load.
-The F32 raw-cache A/B report records the cold/warm evidence behind this split.
+We verified the new route with six rounds and 18 complete evaluations on the
+real COS panel. See [cold-auto verification](benchmarks/real_cos_f32_coverage_cold_auto_cuda_20261001.md).
+The certificate covers this exact request and tested resource conditions.
+Other shapes, metrics, parameters and devices require their own evidence.
