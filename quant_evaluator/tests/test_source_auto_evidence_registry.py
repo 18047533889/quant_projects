@@ -25,6 +25,7 @@ def _legacy_route(shape, metrics, width, factor_dtype="float64", label_dtype="fl
     """Independent transcription of the pre-registry route predicates."""
     metrics = tuple(metrics)
     metric_set = frozenset(metrics)
+    f8_rank_pair = shape == F8 and width == 2 and len(metrics) == 2 and metric_set == frozenset(RANK_PAIR)
     f61_mixed = shape == F61 and len(metrics) == 3 and metric_set == frozenset(MIXED) and width >= 8
     tile = (16 if width >= 16 else 8) if f61_mixed else width
     f32 = shape == F32 and tile == 2
@@ -32,9 +33,8 @@ def _legacy_route(shape, metrics, width, factor_dtype="float64", label_dtype="fl
     f61_single = shape == F61 and metrics == ("pearson_ic",) and width >= 16
     f61_chain = shape == F61 and len(metrics) == len(PEARSON_CHAIN) and metric_set == frozenset(PEARSON_CHAIN) and width >= 16
     f61_all = shape in (F61, F61_ALT) and len(metrics) == len(ALL_METRICS) and metric_set == frozenset(ALL_METRICS) and width >= 16
-    # The F8 source route is intentionally unavailable until source-API
-    # evidence replaces its legacy, unverified performance status.
-    rank_pair = f32 and len(metrics) == 2 and metric_set == frozenset(RANK_PAIR)
+    # Exact F8 source-API A/B coverage is deliberately tile-2 only.
+    rank_pair = f8_rank_pair or (f32 and len(metrics) == 2 and metric_set == frozenset(RANK_PAIR))
     if factor_dtype != "float64" or label_dtype != "float64" or not (
             rank_pair or f32_mixed or f61_mixed or f61_single or f61_chain or f61_all):
         return None
@@ -49,6 +49,8 @@ def _legacy_route(shape, metrics, width, factor_dtype="float64", label_dtype="fl
                 else "bounded_f61_mixed_three_gpu"), tile
     if f32_mixed:
         return "bounded_f32_mixed_three_gpu", 2
+    if f8_rank_pair:
+        return "bounded_f8_rank_pair_gpu", 2
     if f32:
         return "bounded_f32_rank_pair_gpu", 2
     return None
@@ -78,39 +80,126 @@ def test_registry_evidence_ids_are_stable_and_artifact_paths_exist():
     assert len(ids) == len(set(ids))
     root = Path(__file__).resolve().parents[2]
     for entry in SOURCE_AUTO_EVIDENCE:
-        if entry.evidence_id == "real_cos_f8_rank_pair":
-            # No source-API whole-request F8 A/B was found; public-facade
-            # metric evidence must not be attached as if it were one.
-            assert entry.evidence_artifacts == ()
-            assert entry.evidence_status == "legacy_unverified_source_performance"
-            continue
         assert entry.evidence_artifacts
         assert all((root / path).is_file() for path in entry.evidence_artifacts)
 
 
-def test_unverified_f8_is_not_selected_and_future_evidence_is_tile2_only(monkeypatch):
+def test_measured_f8_is_selected_only_for_exact_tile2(monkeypatch):
     import quant_evaluator.runtime.source_auto_evidence as registry
 
     entry = next(e for e in SOURCE_AUTO_EVIDENCE
                  if e.evidence_id == "real_cos_f8_rank_pair")
     query = dict(shape=F8, metrics=RANK_PAIR, source_dtype="float64",
                  label_dtype="float64")
-    assert select_source_auto_route(**query, requested_tile_width=2) is None
-
-    # Once a reviewed source-API A/B receipt exists, the route remains exact
-    # to the bounded tile width that the benchmark certified.
-    active = replace(entry, evidence_status="measured_source_ab",
-                     evidence_artifacts=("test:source-ab-receipt",))
-    monkeypatch.setattr(
-        registry, "SOURCE_AUTO_EVIDENCE",
-        tuple(active if item.evidence_id == entry.evidence_id else item
-              for item in SOURCE_AUTO_EVIDENCE),
-    )
     route = select_source_auto_route(**query, requested_tile_width=2)
     assert route is not None
+    assert route.evidence_id == "real_cos_f8_rank_pair"
     assert route.effective_tile_width == 2
+    assert route.evidence_artifacts == entry.evidence_artifacts
+
+    # Removing measured status must revoke this exact envelope even when its
+    # shape, metrics, dtype, and requested width still match.
+    inactive = replace(entry, evidence_status="legacy_unverified_source_performance")
+    monkeypatch.setattr(
+        registry, "SOURCE_AUTO_EVIDENCE",
+        tuple(inactive if item.evidence_id == entry.evidence_id else item
+              for item in SOURCE_AUTO_EVIDENCE),
+    )
+    assert select_source_auto_route(**query, requested_tile_width=2) is None
     for width in (1, 3, 8, 16, 32):
         assert select_source_auto_route(**query, requested_tile_width=width) is None
+
+
+def test_f8_rank_pair_source_receipts_match_across_orders_and_cuda_is_faster():
+    """Check recorded A/B receipts without timing this machine's runtime."""
+    import json
+
+    root = Path(__file__).resolve().parents[2]
+    entry = next(e for e in SOURCE_AUTO_EVIDENCE
+                 if e.evidence_id == "real_cos_f8_rank_pair")
+    assert entry.evidence_status == "measured_source_ab"
+    assert entry.exact_requested_tile == 2
+    assert entry.certified_tile_widths == (2,)
+    assert entry.evidence_artifacts == (
+        "quant_evaluator/docs/benchmarks/real_cos_f8_source_rank_pair_cpu_first_20261001.json",
+        "quant_evaluator/docs/benchmarks/real_cos_f8_source_rank_pair_cuda_first_20261001.json",
+    )
+    documents = [json.loads((root / path).read_text())
+                 for path in entry.evidence_artifacts]
+    expected_orders = (("cpu", "cuda_strict"), ("cuda_strict", "cpu"))
+    expected_hashes = {
+        "rank_ic": {
+            "cpu_values_sha256": "f13219245d9c4cdf5052b5010a3d2bbe39a7ab0ce7179d8a6417ce95e15f28e8",
+            "cuda_values_sha256": "5c1d415affd699e52d8335f2a148af37a2920717485fd4aae46a0a55e7dfaf81",
+        },
+        "rank_ic_series": {
+            "cpu_values_sha256": "91f60bf5ee83c96bc8b2e68c1d6d3924a93f2ba804fedc5b5f4183bac7896edf",
+            "cuda_values_sha256": "82b620ebf5ee38b32253215b4b496336f4c367925770706362c4c5ab8b65e78d",
+        },
+    }
+    expected_count_hash = "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47"
+    shared_run_keys = (
+        "shape", "factor_dtype", "tile_size", "source_adapter", "cos_prefetch",
+        "prefetch_objects", "prefetch_mode", "prefetch_window", "metric_ids",
+        "manifest_sha256",
+    )
+    for doc, expected_order in zip(documents, expected_orders):
+        assert doc["status"] == "complete"
+        assert doc["kind"] == "real_cos_whole_source_batch_ab.v1"
+        assert doc["manifest_sha256"] == "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864"
+        assert tuple(doc["shape"]) == F8
+        assert tuple(doc["run_order"]) == expected_order
+        assert doc["factor_dtype"] == "float64"
+        assert doc["tile_size"] == 2
+        assert doc["source_adapter"] == "cos"
+        assert doc["cos_prefetch"] == "auto"
+        assert doc["prefetch_objects"] is True
+        assert doc["prefetch_mode"] == "auto"
+        assert doc["prefetch_window"] == 2
+        assert frozenset(doc["metric_ids"]) == frozenset(RANK_PAIR)
+        assert doc["preflight_before_cpu"]["pass"] is True
+        assert doc["preflight_before_cuda"]["pass"] is True
+        assert doc["comparison"]["pass"] is True
+        assert doc["comparison"]["compared_factor_count"] == 8
+        assert doc["comparison"]["compared_metric_count"] == 20_696
+        assert set(doc["comparison"]["metrics"]) == set(RANK_PAIR)
+        runs = {run["backend_requested"]: run for run in doc["runs"]}
+        assert set(runs) == {"cpu", "cuda_strict"}
+        assert runs["cpu"]["backend_used"] == "cpu"
+        assert runs["cuda_strict"]["backend_used"] == "cuda"
+        assert runs["cuda_strict"]["seconds"] < runs["cpu"]["seconds"]
+        for key in ("source_adapter", "source_request_identity_sha256",
+                    "source_snapshot_id", "source_manifest_sha256",
+                    "factor_ids_sha256", "prefetch_objects", "prefetch_mode",
+                    "cos_prefetch", "prefetch_window", "tile_ranges",
+                    "max_source_memory_bytes", "estimated_peak_source_bytes"):
+            assert runs["cpu"][key] == runs["cuda_strict"][key]
+        assert runs["cpu"]["source_adapter"] == "cos"
+        assert runs["cpu"]["prefetch_objects"] is True
+        assert runs["cpu"]["prefetch_mode"] == runs["cpu"]["cos_prefetch"] == "auto"
+        assert runs["cpu"]["prefetch_window"] == 2
+        for metric in RANK_PAIR:
+            result = doc["comparison"]["metrics"][metric]
+            assert result["pass"] is True
+            assert result["shape_valid"] is True
+            assert result["finite_mask_equal"] is True
+            assert result["observation_counts_equal"] is True
+            assert result["observation_counts_shape_valid"] is True
+            assert result["cpu_observation_counts_sha256"] == result["cuda_observation_counts_sha256"]
+            assert result["cpu_observation_counts_sha256"] == expected_count_hash
+            assert result["compared_value_count"] == (8 if metric == "rank_ic" else 20_688)
+            assert result["finite_value_count"] == (8 if metric == "rank_ic" else 20_643)
+            assert {key: result[key] for key in expected_hashes[metric]} == expected_hashes[metric]
+
+    assert all(doc["comparison"]["compared_metric_count"] == 20_696
+               for doc in documents)
+    for key in shared_run_keys:
+        assert documents[0][key] == documents[1][key]
+    for metric in RANK_PAIR:
+        for key in ("cpu_values_sha256", "cuda_values_sha256",
+                    "cpu_observation_counts_sha256", "cuda_observation_counts_sha256"):
+            assert len({doc["comparison"]["metrics"][metric][key]
+                        for doc in documents}) == 1
 
 
 def test_f61_pearson_consuming_evidence_has_full_parity_and_stable_outputs():

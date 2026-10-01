@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-SOURCE_AUTO_EVIDENCE_VERSION = "source_routes_20261001_v2"
+SOURCE_AUTO_EVIDENCE_VERSION = "source_routes_20261001_v3"
 SOURCE_F61_ALL_SHAPES = frozenset({(2586, 5461, 61), (2400, 5000, 61)})
 SOURCE_F8_RANK_PAIR_SHAPE = (2586, 5461, 8)
 
@@ -64,8 +64,9 @@ SOURCE_AUTO_EVIDENCE = (
         minimum_requested_tile=2, exact_requested_tile=2,
         certified_tile_widths=(2,),
         legacy_reason="bounded_f8_rank_pair_gpu",
-        evidence_artifacts=(),
-        evidence_status="legacy_unverified_source_performance"),
+        evidence_artifacts=("quant_evaluator/docs/benchmarks/real_cos_f8_source_rank_pair_cpu_first_20261001.json",
+                            "quant_evaluator/docs/benchmarks/real_cos_f8_source_rank_pair_cuda_first_20261001.json"),
+        evidence_status="measured_source_ab"),
     SourceAutoEvidence("synthetic_f32_rank_pair_tile2", (2586, 5461, 32), _RANK_PAIR,
                        exact_requested_tile=2, certified_tile_widths=(2,),
                        legacy_reason="bounded_f32_rank_pair_gpu",

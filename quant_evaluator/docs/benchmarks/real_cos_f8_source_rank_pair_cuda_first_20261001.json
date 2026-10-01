@@ -1,0 +1,275 @@
+{
+  "status": "complete",
+  "kind": "real_cos_whole_source_batch_ab.v1",
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "shape": [
+    2586,
+    5461,
+    8
+  ],
+  "factor_dtype": "float64",
+  "tile_size": 2,
+  "source_adapter": "cos",
+  "cos_prefetch": "auto",
+  "prefetch_objects": true,
+  "prefetch_mode": "auto",
+  "prefetch_window": 2,
+  "run_order": [
+    "cuda_strict",
+    "cpu"
+  ],
+  "metric_ids": [
+    "rank_ic",
+    "rank_ic_series"
+  ],
+  "preflight_before_cpu": {
+    "pass": true,
+    "available_ram_bytes": 67867897856,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 47737602048,
+    "required_disk_bytes": 5368709120
+  },
+  "preflight_before_cuda": {
+    "pass": true,
+    "available_ram_bytes": 69366603776,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 47737847808,
+    "required_disk_bytes": 5368709120
+  },
+  "runs": [
+    {
+      "source_adapter": "cos",
+      "backend_requested": "cpu",
+      "backend_used": "cpu",
+      "seconds": 22.940209897002205,
+      "total_wall_seconds": 22.940209897002205,
+      "factor_tiles_processed": 4,
+      "tile_ranges": [
+        [
+          0,
+          2
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          6
+        ],
+        [
+          6,
+          8
+        ]
+      ],
+      "factor_ids_sha256": "55fb3a6eea4f9d5e3d643f8678729c3168802de8c8274bf6031ad919b45215a3",
+      "source_request_identity_sha256": "446626f472e125e83aa534545a38b4129187d4a4851aabb34c3acdd5324f8705",
+      "source_snapshot_id": "d959674232fa135d517731f02bcbea586a95e1bff7bb52832d67beb54d10f309",
+      "source_manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+      "prefetch_objects": true,
+      "prefetch_mode": "auto",
+      "cos_prefetch": "auto",
+      "prefetch_window": 2,
+      "estimated_peak_source_bytes": 1836108344,
+      "max_source_memory_bytes": 4294967296,
+      "tile_read_timings": [
+        {
+          "tile_range": [
+            0,
+            2
+          ],
+          "wall_seconds": 2.5619740120018832,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            2,
+            4
+          ],
+          "wall_seconds": 0.46317842000280507,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            4,
+            6
+          ],
+          "wall_seconds": 0.4249950679950416,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            6,
+            8
+          ],
+          "wall_seconds": 0.8897736780054402,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        }
+      ],
+      "source_read_wall_seconds": 4.33992117800517,
+      "observation_counts_sha256": {
+        "rank_ic": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+        "rank_ic_series": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47"
+      },
+      "peak_process_rss_kib": 3199920,
+      "preflight": {
+        "pass": true,
+        "available_ram_bytes": 67867897856,
+        "minimum_available_ram_bytes": 34359738368,
+        "cos_cache_disk_free_bytes": 47737602048,
+        "required_disk_bytes": 5368709120
+      }
+    },
+    {
+      "source_adapter": "cos",
+      "backend_requested": "cuda_strict",
+      "backend_used": "cuda",
+      "seconds": 8.339067683002213,
+      "total_wall_seconds": 8.339067683002213,
+      "factor_tiles_processed": 4,
+      "tile_ranges": [
+        [
+          0,
+          2
+        ],
+        [
+          2,
+          4
+        ],
+        [
+          4,
+          6
+        ],
+        [
+          6,
+          8
+        ]
+      ],
+      "factor_ids_sha256": "55fb3a6eea4f9d5e3d643f8678729c3168802de8c8274bf6031ad919b45215a3",
+      "source_request_identity_sha256": "446626f472e125e83aa534545a38b4129187d4a4851aabb34c3acdd5324f8705",
+      "source_snapshot_id": "d959674232fa135d517731f02bcbea586a95e1bff7bb52832d67beb54d10f309",
+      "source_manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+      "prefetch_objects": true,
+      "prefetch_mode": "auto",
+      "cos_prefetch": "auto",
+      "prefetch_window": 2,
+      "estimated_peak_source_bytes": 1836108344,
+      "max_source_memory_bytes": 4294967296,
+      "tile_read_timings": [
+        {
+          "tile_range": [
+            0,
+            2
+          ],
+          "wall_seconds": 2.543465783994179,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            2,
+            4
+          ],
+          "wall_seconds": 1.4675324019917753,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            4,
+            6
+          ],
+          "wall_seconds": 1.506127232016297,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            6,
+            8
+          ],
+          "wall_seconds": 1.7433524160005618,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        }
+      ],
+      "source_read_wall_seconds": 7.260477834002813,
+      "observation_counts_sha256": {
+        "rank_ic": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+        "rank_ic_series": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47"
+      },
+      "peak_process_rss_kib": 3055924,
+      "preflight": {
+        "pass": true,
+        "available_ram_bytes": 69366603776,
+        "minimum_available_ram_bytes": 34359738368,
+        "cos_cache_disk_free_bytes": 47737847808,
+        "required_disk_bytes": 5368709120
+      }
+    }
+  ],
+  "comparison": {
+    "pass": true,
+    "compared_factor_count": 8,
+    "compared_metric_count": 20696,
+    "metrics": {
+      "rank_ic": {
+        "pass": true,
+        "artifact_kind": "scalar",
+        "cpu_shape": [
+          8
+        ],
+        "cuda_shape": [
+          8
+        ],
+        "shape_valid": true,
+        "factor_count": 8,
+        "compared_value_count": 8,
+        "finite_value_count": 8,
+        "finite_mask_equal": true,
+        "max_abs_error": 1.0755285551056204e-16,
+        "observation_counts_equal": true,
+        "observation_counts_shape_valid": true,
+        "cpu_observation_counts_sha256": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+        "cuda_observation_counts_sha256": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+        "cpu_values_sha256": "f13219245d9c4cdf5052b5010a3d2bbe39a7ab0ce7179d8a6417ce95e15f28e8",
+        "cuda_values_sha256": "5c1d415affd699e52d8335f2a148af37a2920717485fd4aae46a0a55e7dfaf81"
+      },
+      "rank_ic_series": {
+        "pass": true,
+        "artifact_kind": "series",
+        "cpu_shape": [
+          2586,
+          8
+        ],
+        "cuda_shape": [
+          2586,
+          8
+        ],
+        "shape_valid": true,
+        "factor_count": 8,
+        "compared_value_count": 20688,
+        "finite_value_count": 20643,
+        "finite_mask_equal": true,
+        "max_abs_error": 2.220446049250313e-16,
+        "observation_counts_equal": true,
+        "observation_counts_shape_valid": true,
+        "cpu_observation_counts_sha256": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+        "cuda_observation_counts_sha256": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+        "cpu_values_sha256": "91f60bf5ee83c96bc8b2e68c1d6d3924a93f2ba804fedc5b5f4183bac7896edf",
+        "cuda_values_sha256": "82b620ebf5ee38b32253215b4b496336f4c367925770706362c4c5ab8b65e78d"
+      }
+    }
+  },
+  "auto_run": null,
+  "auto_comparison": null,
+  "source_api": "columnar_factor_source_v1",
+  "limitations": [
+    "Research-source metrics only; no PIT or production certification.",
+    "This A/B alone does not establish automatic backend routing."
+  ]
+}

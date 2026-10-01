@@ -34,7 +34,7 @@ class Source:
         pass
 
 
-def _patch_source_evidence_shape(monkeypatch, family, shape):
+def _patch_source_evidence_shape(monkeypatch, family, shape, *, evidence_status=None):
     """Inject small test shapes through the evidence registry itself."""
     from dataclasses import replace
     import importlib
@@ -49,6 +49,8 @@ def _patch_source_evidence_shape(monkeypatch, family, shape):
             else:
                 adjusted_shape = shape
             item = replace(item, shape=adjusted_shape)
+            if evidence_status is not None:
+                item = replace(item, evidence_status=evidence_status)
         records.append(item)
     monkeypatch.setattr(registry, "SOURCE_AUTO_EVIDENCE", tuple(records))
 
@@ -128,11 +130,11 @@ def test_public_source_batch_invalid_options_fail_before_reads():
     assert source.reads == []
 
 
-def test_auto_source_unverified_f8_profile_falls_back_to_cpu(monkeypatch):
-    import importlib
-
+def test_auto_source_legacy_f8_profile_falls_back_to_cpu(monkeypatch):
     batch, label = _inputs()
-    _patch_source_evidence_shape(monkeypatch, "f8", batch.values.shape)
+    _patch_source_evidence_shape(
+        monkeypatch, "f8", batch.values.shape,
+        evidence_status="legacy_unverified_source_performance")
     result = evaluate_factor_source_batch(
         Source(batch), label, metrics=("rank_ic", "rank_ic_series"))
     reference = evaluate(batch, label, metrics=("rank_ic", "rank_ic_series"), backend="cpu")
