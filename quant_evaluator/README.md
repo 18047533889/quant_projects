@@ -99,6 +99,8 @@ print(bundle.metadata["execution_receipt"])
 
 接入前 CPU/CUDA/auto 六轮测试及数值误差标准见
 [F32 coverage 对照说明](docs/benchmarks/real_cos_f32_coverage_comparison_20261001.md)。
+coverage 单项的当前六轮回放中，两轮 auto 均选 CUDA，完整对照通过；
+见 [coverage 接入验证](docs/benchmarks/real_cos_f32_coverage_single_auto_post_v28_20261001.md)。
 四指标改后真实回放已确认两轮 auto 均使用 CUDA，完整数值对照通过；见
 [v27 接入验证](docs/benchmarks/real_cos_f32_mixed_four_auto_v27_20261001.md)。
 
@@ -112,6 +114,10 @@ v28 另覆盖同一精确 F32 面板的五指标组合
 静态认证路由对非空 `split_ref` 或 `portfolio_spec` 请求使用 CPU；
 这些额外输入尚未纳入对应实测范围。split 重叠检查仍在选择后端前执行。
 显式后端选项保留原有契约与输入校验。
+静态认证 CUDA 路由要求默认 `GPU_MIXED` 精度策略。其他精度策略触发
+`gpu_precision_policy_outside_certified_range`，该静态路由选择 CPU。
+显式 `backend="cuda_strict"` 可传入 `GPUExecutionPolicy` 选择精度；
+执行器仍按所选策略校验输入、设备与资源，并保留失败关闭行为。
 你仍可指定 `backend="cpu"` 获取参考结果，或用 `"cuda_strict"` 请求 GPU
 并在不可用时失败关闭。其他形状和指标组合需要独立证据。
 
