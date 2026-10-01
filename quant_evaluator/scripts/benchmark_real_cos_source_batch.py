@@ -32,6 +32,9 @@ from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
 from quant_evaluator.adapters.cos_factor_tile_source import (
     BoundManifestHelpers, CosFactorTileSource, DataAccessReadContext,
 )
+from quant_evaluator.scripts.f8_cap8_tile2_auto_references import (
+    validate_cap8_tile2_references,
+)
 from quant_evaluator.scripts import benchmark_real_cos_factor_tiles as tiles
 
 F8_SOURCE_SHAPE = (2586, 5461, 8)
@@ -395,6 +398,14 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         "source_adapter": source_adapter,
         "backend_requested": backend,
         "backend_used": result.metadata["backend_used"],
+        "source_request_fingerprint": result.metadata.get("source_request_fingerprint"),
+        "effective_max_tile_size": effective_tile_size,
+        "peak_vram_bytes": result.metadata.get("peak_vram"),
+        "pool_reserved_peak_bytes": result.metadata.get("pool_reserved_peak_bytes"),
+        "vram_budget_bytes": result.metadata.get("vram_budget_bytes"),
+        "h2d_bytes": result.metadata.get("h2d_bytes"),
+        "d2h_bytes": result.metadata.get("d2h_bytes"),
+        "oom_retries": result.metadata.get("oom_retries"),
         "seconds": elapsed,
         "total_wall_seconds": elapsed,
         "factor_tiles_processed": len(source.reads),
@@ -646,6 +657,9 @@ def main():
     parser.add_argument("--auto-references", nargs=2, type=Path,
                         metavar=("CUDA_CPU_REPORT", "CPU_CUDA_REPORT"),
                         help="run only auto against two opposite-order, matching F61 all-source A/B reports")
+    parser.add_argument("--auto-cap8-tile2-references", nargs=2, type=Path,
+                        metavar=("CPU_CUDA_TILE2_REPORT", "CUDA_CPU_TILE2_REPORT"),
+                        help="verify F8 auto cap 8 selecting measured effective tile 2")
     parser.add_argument("--days", type=int, default=0)
     parser.add_argument("--assets", type=int, default=5500)
     parser.add_argument("--max-object-mib", type=int, default=128)
@@ -673,9 +687,12 @@ def main():
         parser.error("--metrics must be default three, rank-pair, pearson_ic, Pearson chain, or all_source")
     f8_rank_pair_profile = (args.factors == 8 and selected == RANK_PAIR
                             and args.days == 2586 and args.assets == 5461
-                            and args.tile_size == 2)
+                            and args.tile_size in (2, 8))
+    # Tile 8 is exploratory CPU/CUDA A/B, not certified auto evidence.
+    # Keep auto/reference admission restricted until matching receipts exist.
+    f8_certified_auto_profile = f8_rank_pair_profile and args.tile_size == 2
     if args.factors == 8 and not f8_rank_pair_profile:
-        parser.error("F8 profile requires --metrics rank-pair --days 2586 --assets 5461 --tile-size 2")
+        parser.error("F8 profile requires --metrics rank-pair --days 2586 --assets 5461 --tile-size 2 or exploratory 8")
     if args.factors != 8 and selected == RANK_PAIR:
         parser.error("rank-pair profile requires --factors 8")
     if not 1 <= args.tile_size <= 32:
@@ -688,12 +705,20 @@ def main():
     f61_auto_profile = (args.factors == 61
                         and (is_pearson_chain(selected) or selected == ALL_SOURCE_METRICS)
                         and args.tile_size >= 16)
-    if args.verify_auto and (not (f8_rank_pair_profile or f61_auto_profile)
+    if args.verify_auto and (not (f8_certified_auto_profile or f61_auto_profile)
                              or args.gpu_worker or args.gpu_tile_widths):
         parser.error("--verify-auto requires exact F8 rank-pair or certified F61 profile in whole-source mode")
     f61_reference_profile = (args.factors == 61 and selected == ALL_SOURCE_METRICS
                              and args.tile_size == 16)
-    if args.auto_references and (not (f8_rank_pair_profile or f61_reference_profile)
+    f8_cap8_tile2_profile = (args.factors == 8 and selected == RANK_PAIR
+                             and args.days == 2586 and args.assets == 5461
+                             and args.tile_size == 8)
+    if args.auto_cap8_tile2_references and (
+            not f8_cap8_tile2_profile or args.gpu_worker or args.gpu_tile_widths
+            or args.verify_auto or args.auto_references or args.output is None
+            or args.source_adapter != "cos"):
+        parser.error("--auto-cap8-tile2-references requires exact F8 COS tile-8 profile, --output, and no other mode")
+    if args.auto_references and (not (f8_certified_auto_profile or f61_reference_profile)
                                   or args.gpu_worker or args.gpu_tile_widths
                                   or args.verify_auto or args.output is None):
         parser.error("--auto-references requires F8 rank-pair or F61 all_source exact profile, --output, and no other mode")
@@ -711,6 +736,9 @@ def main():
     if args.auto_references:
         reference = certified_cuda_hashes(args.auto_references, selected,
                                           tiles.MANIFEST_SHA256)
+    elif args.auto_cap8_tile2_references:
+        reference = validate_cap8_tile2_references(
+            args.auto_cap8_tile2_references, selected, tiles.MANIFEST_SHA256)
 
     if args.max_source_memory_mib < 1:
         parser.error("--max-source-memory-mib must be positive")
@@ -778,10 +806,15 @@ def main():
         cuda_receipt["preflight"] = cuda_gate
         direct_comparison = compare(auto, cuda, selected, expected_days=len(dates))
         expected_reason, expected_tile = (
+            ("bounded_f8_rank_pair_gpu_cap8_tile2", 2) if args.auto_cap8_tile2_references else
             ("bounded_f8_rank_pair_gpu", 2) if f8_rank_pair_profile else
             ("bounded_f61_all_source_15_gpu_tile16", 16))
+        fingerprint_pass = (args.auto_cap8_tile2_references is None or
+                            auto.metadata.get("source_request_fingerprint") ==
+                            reference.get("verified_source_request_fingerprint"))
         route_pass = (receipt["auto_backend_reason"] == expected_reason
-                      and receipt["effective_max_tile_size"] == expected_tile)
+                      and receipt["effective_max_tile_size"] == expected_tile
+                      and fingerprint_pass)
         complete = route_pass and reference_comparison["pass"] and direct_comparison["pass"]
         report = {
             "status": "complete" if complete else "verification_failed",
@@ -798,7 +831,9 @@ def main():
             "route_pass": route_pass,
             "reference_comparison": reference_comparison,
             "direct_comparison": direct_comparison,
-            "reference_reports": [str(path) for path in args.auto_references],
+            "reference_reports": [str(path) for path in
+                                  (args.auto_references or args.auto_cap8_tile2_references or ())],
+            "reference_effective_tile_size": 2 if args.auto_cap8_tile2_references else args.tile_size,
             "limitations": ["Research-source metrics only; no PIT or production certification."],
         }
         emit_report(report, args.output)

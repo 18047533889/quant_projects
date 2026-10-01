@@ -677,9 +677,61 @@ def test_f8_auto_reference_requires_complete_opposite_order_pair(tmp_path):
 @pytest.mark.parametrize("profile_args", [
     ["--factors", "8", "--metrics", "rank-pair"],
     ["--factors", "8", "--metrics", "rank-pair", "--days", "2586",
-     "--assets", "5461", "--tile-size", "8"],
+     "--assets", "5461", "--tile-size", "4"],
 ])
 def test_f8_source_benchmark_rejects_unbounded_profile(monkeypatch, profile_args):
     monkeypatch.setattr("sys.argv", ["benchmark", *profile_args])
     with pytest.raises(SystemExit):
         harness.main()
+
+
+@pytest.mark.parametrize("width", [2, 8])
+def test_f8_source_benchmark_admits_only_bounded_ab_before_preflight(monkeypatch, width):
+    monkeypatch.setattr("sys.argv", ["benchmark", "--factors", "8",
+        "--metrics", "rank-pair", "--days", "2586", "--assets", "5461",
+        "--tile-size", str(width)])
+    calls = []
+    def denied(*args):
+        calls.append(args)
+        return {"pass": False}
+    monkeypatch.setattr(harness, "preflight", denied)
+    with pytest.raises(SystemExit, match="insufficient RAM or COS cache disk headroom"):
+        harness.main()
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("mode", [
+    ["--verify-auto"],
+    ["--auto-references", "a.json", "b.json", "--output", "out.json"],
+])
+def test_exploratory_f8_tile8_cannot_enter_certified_auto_modes(monkeypatch, mode):
+    monkeypatch.setattr("sys.argv", ["benchmark", "--factors", "8",
+        "--metrics", "rank-pair", "--days", "2586", "--assets", "5461",
+        "--tile-size", "8", *mode])
+    monkeypatch.setattr(harness, "preflight", lambda *a: pytest.fail("unexpected preflight"))
+    monkeypatch.setattr(harness.tiles, "read_manifest", lambda *a: pytest.fail("unexpected COS read"))
+    with pytest.raises(SystemExit) as exc:
+        harness.main()
+    assert exc.value.code == 2
+
+
+def test_cap8_auto_tile2_references_reject_wrong_cli_tile_before_io(monkeypatch, tmp_path):
+    monkeypatch.setattr("sys.argv", ["benchmark", "--factors", "8", "--metrics",
+        "rank-pair", "--days", "2586", "--assets", "5461", "--tile-size", "2",
+        "--source-adapter", "cos", "--auto-cap8-tile2-references", "a.json", "b.json",
+        "--output", str(tmp_path / "out.json")])
+    monkeypatch.setattr(harness, "preflight", lambda *a: pytest.fail("unexpected preflight"))
+    with pytest.raises(SystemExit) as exc:
+        harness.main()
+    assert exc.value.code == 2
+
+
+def test_cap8_auto_mode_requires_cos_adapter(monkeypatch, tmp_path):
+    monkeypatch.setattr("sys.argv", ["benchmark", "--factors", "8", "--metrics",
+        "rank-pair", "--days", "2586", "--assets", "5461", "--tile-size", "8",
+        "--auto-cap8-tile2-references", "a.json", "b.json", "--output",
+        str(tmp_path / "out.json")])
+    monkeypatch.setattr(harness, "preflight", lambda *a: pytest.fail("unexpected preflight"))
+    with pytest.raises(SystemExit) as exc:
+        harness.main()
+    assert exc.value.code == 2

@@ -66,6 +66,11 @@ def _legacy_route(shape, metrics, width, factor_dtype="float64", label_dtype="fl
 @pytest.mark.parametrize("dtypes", [("float64", "float64"), ("float32", "float64"), ("float64", "float32")])
 def test_registry_matches_legacy_predicate_grid(shape, metrics, width, dtypes):
     expected = _legacy_route(shape, metrics, width, *dtypes)
+    # Fresh opposite-order source A/B adds only this cap8/effective2 envelope.
+    if (shape == F8 and width == 8 and len(metrics) == 2
+            and frozenset(metrics) == frozenset(RANK_PAIR)
+            and dtypes == ("float64", "float64")):
+        expected = ("bounded_f8_rank_pair_gpu_cap8_tile2", 2)
     actual = select_source_auto_route(
         shape=shape, metrics=metrics, source_dtype=dtypes[0], label_dtype=dtypes[1],
         requested_tile_width=width,
@@ -106,8 +111,11 @@ def test_measured_f8_is_selected_only_for_exact_tile2(monkeypatch):
               for item in SOURCE_AUTO_EVIDENCE),
     )
     assert select_source_auto_route(**query, requested_tile_width=2) is None
-    for width in (1, 3, 8, 16, 32):
+    for width in (1, 3, 16, 32):
         assert select_source_auto_route(**query, requested_tile_width=width) is None
+    cap8 = select_source_auto_route(**query, requested_tile_width=8)
+    assert cap8.evidence_id == "real_cos_f8_rank_pair_cap8_tile2"
+    assert cap8.effective_tile_width == 2
 
 
 def test_f8_rank_pair_source_receipts_match_across_orders_and_cuda_is_faster():

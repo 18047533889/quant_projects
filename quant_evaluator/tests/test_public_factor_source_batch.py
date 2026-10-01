@@ -438,6 +438,46 @@ def test_auto_source_f32_mixed_three_fails_closed_outside_gate(monkeypatch):
     assert rejected.metadata["backend_used"] == "cpu"
     assert rejected.metadata["auto_backend_reason"] == "insufficient_cuda_memory"
 
+def test_auto_source_f8_default_cap_uses_measured_tile2_and_preserves_request(monkeypatch):
+    pytest.importorskip("cupy")
+    import importlib
+    evaluator = importlib.import_module("quant_evaluator.runtime.evaluator")
+    batch, label = _inputs()
+    _patch_source_evidence_shape(monkeypatch, "f8", batch.values.shape)
+    monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection", lambda *_: None)
+    metrics = ("rank_ic", "rank_ic_series")
+    source = Source(batch)
+    source.max_tile_size = 8
+    routed = evaluate_factor_source_batch(source, label, metrics=metrics, backend="auto")
+    explicit = Source(batch)
+    explicit.max_tile_size = 8
+    reference = evaluate_factor_source_batch(
+        explicit, label, metrics=metrics, backend="cuda_strict", max_tile_size=2)
+    _assert_against_full_cpu(routed, evaluate(batch, label, metrics=metrics, backend="cpu"), metrics)
+    assert source.reads == [(0, 2), (2, 4), (4, 5)]
+    assert routed.metadata["backend_used"] == "cuda"
+    assert routed.metadata["effective_max_tile_size"] == 2
+    assert routed.metadata["auto_backend_reason"] == "bounded_f8_rank_pair_gpu_cap8_tile2"
+    assert routed.metadata["auto_backend_evidence_id"] == "real_cos_f8_rank_pair_cap8_tile2"
+    assert routed.metadata["source_request_fingerprint"] == reference.metadata["source_request_fingerprint"]
+    for metric in metrics:
+        if metric == "rank_ic_series":
+            left, right = routed.series_metrics[metric], reference.series_metrics[metric]
+        else:
+            left, right = routed.scalar_metrics[metric], reference.scalar_metrics[metric]
+        np.testing.assert_array_equal(left, right)
+        np.testing.assert_array_equal(routed.observation_counts[metric], reference.observation_counts[metric])
+
+    monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection", lambda *_: "insufficient_cuda_memory")
+    rejected = Source(batch)
+    rejected.max_tile_size = 8
+    fallback = evaluate_factor_source_batch(rejected, label, metrics=metrics, backend="auto")
+    assert fallback.metadata["backend_used"] == "cpu"
+    assert fallback.metadata["auto_backend_reason"] == "insufficient_cuda_memory"
+    assert fallback.metadata["effective_max_tile_size"] == 8
+    assert rejected.reads == [(0, 5)]
+
+
 def test_auto_source_f61_mixed_three_uses_cuda_under_exact_gate(monkeypatch):
     pytest.importorskip("cupy")
     import importlib

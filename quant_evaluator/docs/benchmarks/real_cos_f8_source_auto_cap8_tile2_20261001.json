@@ -1,0 +1,264 @@
+{
+  "status": "complete",
+  "kind": "real_cos_whole_source_auto_reference.v1",
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "shape": [
+    2586,
+    5461,
+    8
+  ],
+  "factor_dtype": "float64",
+  "tile_size": 8,
+  "source_adapter": "cos",
+  "cos_prefetch": "auto",
+  "metric_ids": [
+    "rank_ic",
+    "rank_ic_series"
+  ],
+  "prefetch_objects": true,
+  "prefetch_mode": "auto",
+  "prefetch_window": 2,
+  "run": {
+    "source_adapter": "cos",
+    "backend_requested": "auto",
+    "backend_used": "cuda",
+    "source_request_fingerprint": "14ab6a8e65afa45ed996d2f9d7aac07388c14944d9a2f6556d28ab3c8882746c",
+    "effective_max_tile_size": 2,
+    "peak_vram_bytes": 2586991616,
+    "pool_reserved_peak_bytes": 2586991616,
+    "vram_budget_bytes": 30894784512.0,
+    "h2d_bytes": 1129771680,
+    "d2h_bytes": 165696,
+    "oom_retries": 0,
+    "seconds": 9.089163917000405,
+    "total_wall_seconds": 9.089163917000405,
+    "factor_tiles_processed": 4,
+    "tile_ranges": [
+      [
+        0,
+        2
+      ],
+      [
+        2,
+        4
+      ],
+      [
+        4,
+        6
+      ],
+      [
+        6,
+        8
+      ]
+    ],
+    "factor_ids_sha256": "55fb3a6eea4f9d5e3d643f8678729c3168802de8c8274bf6031ad919b45215a3",
+    "source_request_identity_sha256": "446626f472e125e83aa534545a38b4129187d4a4851aabb34c3acdd5324f8705",
+    "source_snapshot_id": "d959674232fa135d517731f02bcbea586a95e1bff7bb52832d67beb54d10f309",
+    "source_manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+    "prefetch_objects": true,
+    "prefetch_mode": "auto",
+    "cos_prefetch": "auto",
+    "prefetch_window": 2,
+    "estimated_peak_source_bytes": 5733820640,
+    "max_source_memory_bytes": 8589934592,
+    "tile_read_timings": [
+      {
+        "tile_range": [
+          0,
+          2
+        ],
+        "wall_seconds": 3.091861309017986,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          2,
+          4
+        ],
+        "wall_seconds": 1.2367117509711534,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          4,
+          6
+        ],
+        "wall_seconds": 1.5922510129748844,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          6,
+          8
+        ],
+        "wall_seconds": 2.163733816007152,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      }
+    ],
+    "source_read_wall_seconds": 8.084557888971176,
+    "observation_counts_sha256": {
+      "rank_ic": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+      "rank_ic_series": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47"
+    },
+    "peak_process_rss_kib": 3133412,
+    "preflight": {
+      "pass": true,
+      "available_ram_bytes": 48700551168,
+      "minimum_available_ram_bytes": 34359738368,
+      "cos_cache_disk_free_bytes": 35509022720,
+      "required_disk_bytes": 5368709120
+    },
+    "auto_backend_reason": "bounded_f8_rank_pair_gpu_cap8_tile2"
+  },
+  "explicit_cuda_run": {
+    "source_adapter": "cos",
+    "backend_requested": "cuda_strict",
+    "backend_used": "cuda",
+    "source_request_fingerprint": "14ab6a8e65afa45ed996d2f9d7aac07388c14944d9a2f6556d28ab3c8882746c",
+    "effective_max_tile_size": 8,
+    "peak_vram_bytes": 8174620672,
+    "pool_reserved_peak_bytes": 8174620672,
+    "vram_budget_bytes": 30893211648.0,
+    "h2d_bytes": 1129771680,
+    "d2h_bytes": 165696,
+    "oom_retries": 0,
+    "seconds": 11.579577586031519,
+    "total_wall_seconds": 11.579577586031519,
+    "factor_tiles_processed": 1,
+    "tile_ranges": [
+      [
+        0,
+        8
+      ]
+    ],
+    "factor_ids_sha256": "55fb3a6eea4f9d5e3d643f8678729c3168802de8c8274bf6031ad919b45215a3",
+    "source_request_identity_sha256": "446626f472e125e83aa534545a38b4129187d4a4851aabb34c3acdd5324f8705",
+    "source_snapshot_id": "d959674232fa135d517731f02bcbea586a95e1bff7bb52832d67beb54d10f309",
+    "source_manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+    "prefetch_objects": true,
+    "prefetch_mode": "auto",
+    "cos_prefetch": "auto",
+    "prefetch_window": 2,
+    "estimated_peak_source_bytes": 5733820640,
+    "max_source_memory_bytes": 8589934592,
+    "tile_read_timings": [
+      {
+        "tile_range": [
+          0,
+          8
+        ],
+        "wall_seconds": 10.801894377975259,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      }
+    ],
+    "source_read_wall_seconds": 10.801894377975259,
+    "observation_counts_sha256": {
+      "rank_ic": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+      "rank_ic_series": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47"
+    },
+    "peak_process_rss_kib": 4873648,
+    "preflight": {
+      "pass": true,
+      "available_ram_bytes": 46776201216,
+      "minimum_available_ram_bytes": 34359738368,
+      "cos_cache_disk_free_bytes": 35508826112,
+      "required_disk_bytes": 5368709120
+    }
+  },
+  "route_pass": true,
+  "reference_comparison": {
+    "pass": true,
+    "compared_value_count": 20696,
+    "metrics": {
+      "rank_ic": {
+        "pass": true,
+        "artifact_kind": "scalar",
+        "shape": [
+          8
+        ],
+        "finite_value_count": 8,
+        "observation_counts_shape_valid": true,
+        "observation_counts_sha256": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+        "values_sha256": "5c1d415affd699e52d8335f2a148af37a2920717485fd4aae46a0a55e7dfaf81"
+      },
+      "rank_ic_series": {
+        "pass": true,
+        "artifact_kind": "series",
+        "shape": [
+          2586,
+          8
+        ],
+        "finite_value_count": 20643,
+        "observation_counts_shape_valid": true,
+        "observation_counts_sha256": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+        "values_sha256": "82b620ebf5ee38b32253215b4b496336f4c367925770706362c4c5ab8b65e78d"
+      }
+    }
+  },
+  "direct_comparison": {
+    "pass": true,
+    "compared_factor_count": 8,
+    "compared_metric_count": 20696,
+    "metrics": {
+      "rank_ic": {
+        "pass": true,
+        "artifact_kind": "scalar",
+        "cpu_shape": [
+          8
+        ],
+        "cuda_shape": [
+          8
+        ],
+        "shape_valid": true,
+        "factor_count": 8,
+        "compared_value_count": 8,
+        "finite_value_count": 8,
+        "finite_mask_equal": true,
+        "max_abs_error": 1.0408340855860843e-17,
+        "observation_counts_equal": true,
+        "observation_counts_shape_valid": true,
+        "cpu_observation_counts_sha256": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+        "cuda_observation_counts_sha256": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+        "cpu_values_sha256": "5c1d415affd699e52d8335f2a148af37a2920717485fd4aae46a0a55e7dfaf81",
+        "cuda_values_sha256": "6a3f095ade82b104cc9a2ebb35ae4bef247bb4af3c00bffe524531480aed9a4e"
+      },
+      "rank_ic_series": {
+        "pass": true,
+        "artifact_kind": "series",
+        "cpu_shape": [
+          2586,
+          8
+        ],
+        "cuda_shape": [
+          2586,
+          8
+        ],
+        "shape_valid": true,
+        "factor_count": 8,
+        "compared_value_count": 20688,
+        "finite_value_count": 20643,
+        "finite_mask_equal": true,
+        "max_abs_error": 0.0,
+        "observation_counts_equal": true,
+        "observation_counts_shape_valid": true,
+        "cpu_observation_counts_sha256": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+        "cuda_observation_counts_sha256": "b3a7876bf3e133513cb01e6d15a18fe1461c9b6e34038c5f2d9ffd06b796cb47",
+        "cpu_values_sha256": "82b620ebf5ee38b32253215b4b496336f4c367925770706362c4c5ab8b65e78d",
+        "cuda_values_sha256": "82b620ebf5ee38b32253215b4b496336f4c367925770706362c4c5ab8b65e78d"
+      }
+    }
+  },
+  "reference_reports": [
+    "quant_evaluator/docs/benchmarks/real_cos_f8_source_rank_pair_tile2_fresh_cpu_first_20261001.json",
+    "quant_evaluator/docs/benchmarks/real_cos_f8_source_rank_pair_tile2_fresh_cuda_first_20261001.json"
+  ],
+  "reference_effective_tile_size": 2,
+  "limitations": [
+    "Research-source metrics only; no PIT or production certification."
+  ]
+}
