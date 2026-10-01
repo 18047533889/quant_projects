@@ -134,19 +134,28 @@ def test_source_tiling_oom_retries_without_rereading_one_pass_source(monkeypatch
     metrics = ("rank_ic",)
     reference = _run_memory(batch, label, metrics)
     original = GPUExecutor.run
+    original_stage = DeviceEvaluationSession.stage_masked_factors
+    stage_attempts = []
     attempts = []
+
+    def stage_masked(self, values, validity, factor_ids, layout="T,F,N"):
+        factor_ids = tuple(factor_ids)
+        stage_attempts.append(factor_ids)
+        if len(factor_ids) > 1:
+            raise cp.cuda.memory.OutOfMemoryError(100, 100, 100)
+        return original_stage(self, values, validity, factor_ids, layout)
 
     def run(self, factor_ids, metric_ids, label_id="next_ret"):
         attempts.append(tuple(factor_ids))
-        if len(factor_ids) > 1:
-            raise cp.cuda.memory.OutOfMemoryError(100, 100, 100)
         return original(self, factor_ids, metric_ids, label_id)
 
+    monkeypatch.setattr(DeviceEvaluationSession, "stage_masked_factors", stage_masked)
     monkeypatch.setattr(GPUExecutor, "run", run)
     result = _run_source(source, label, metrics, max_tile_size=2)
     assert source.reads == [(0, 2), (2, 3), (3, 4), (4, 5)]
-    assert attempts == [("f0", "f1"), ("f0",), ("f1",),
-                        ("f2",), ("f3",), ("f4",)]
+    assert stage_attempts == [("f0", "f1"), ("f0",), ("f1",),
+                              ("f2",), ("f3",), ("f4",)]
+    assert attempts == [("f0",), ("f1",), ("f2",), ("f3",), ("f4",)]
     assert source.next_start == batch.num_factors
     assert result.metadata["factor_tiles_processed"] == 5
     np.testing.assert_allclose(result.scalar_metrics["rank_ic"],

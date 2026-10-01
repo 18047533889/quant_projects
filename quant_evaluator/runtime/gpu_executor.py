@@ -90,7 +90,7 @@ class GPUExecutor:
                 "reduce the queued factor batch and persist each completed batch via DataAccess")
         self._host_result_bytes = total
 
-    def _factor_tile_size(self, metrics, T, N, F, dtype_bytes):
+    def _factor_tile_size(self, metrics, T, N, F, dtype_bytes, *, validity_mask=False):
         # Only exact default quantile/coverage DAGs need parameter-aware sizing.
         quantile_chain = frozenset((
             "quantile_returns_full", "quantile_returns_daily",
@@ -102,6 +102,8 @@ class GPUExecutor:
             or plan == ("coverage",)
         )
         kwargs = {"metric_parameters": self.metric_parameters} if parameter_aware else {}
+        if validity_mask:
+            kwargs["validity_mask"] = True
         return min(F, self.session.estimate_tile(
             metrics, T, N, dtype_bytes, **kwargs))
 
@@ -112,7 +114,12 @@ class GPUExecutor:
         values = factor_batch.values
         T, N, F = values.shape
         self._reserve_host_result(T * F * np.dtype(np.float64).itemsize)
-        tile_size = min(F, self.session.estimate_tile(("probe_pnl",), T, N, values.dtype.itemsize))
+        validity_mask = factor_batch.validity is not None
+        dtype_bytes = (np.result_type(values.dtype, np.nan).itemsize
+                       if validity_mask else values.dtype.itemsize)
+        estimate_kwargs = {"validity_mask": True} if validity_mask else {}
+        tile_size = min(F, self.session.estimate_tile(
+            ("probe_pnl",), T, N, dtype_bytes, **estimate_kwargs))
         holding_dev = self.session.stage_holding_returns(holding_returns)
         permission = (None if trade_eligibility is None
                       else self.session.stage_trade_eligibility(trade_eligibility))
@@ -126,10 +133,15 @@ class GPUExecutor:
         while start < F:
             stop = min(start + tile_size, F)
             chunk = values[:, :, start:stop]
-            if factor_batch.validity is not None:
-                chunk = np.where(factor_batch.validity[:, :, start:stop], chunk, np.nan)
+            validity = (None if factor_batch.validity is None else
+                        factor_batch.validity[:, :, start:stop])
             try:
-                staged = self.session.stage_factors(chunk, factor_batch.factor_ids[start:stop], layout="T,N,F")
+                if validity is None:
+                    staged = self.session.stage_factors(
+                        chunk, factor_batch.factor_ids[start:stop], layout="T,N,F")
+                else:
+                    staged = self.session.stage_masked_factors(
+                        chunk, validity, factor_batch.factor_ids[start:stop], layout="T,N,F")
                 pnl = compute_cohort_pnl_batch_gpu(
                     staged, self.session._staged_holding_returns[holding_dev],
                     require_tradable=False, trade_eligibility=permission, **options)["pnl_net"]
@@ -196,7 +208,11 @@ class GPUExecutor:
         cp = _import_cp()
         values = factor_batch.values
         T, N, F = values.shape
-        tile = self._factor_tile_size(metrics, T, N, F, values.dtype.itemsize)
+        has_validity = factor_batch.validity is not None
+        dtype_bytes = (np.result_type(values.dtype, np.nan).itemsize
+                       if has_validity else values.dtype.itemsize)
+        tile = self._factor_tile_size(
+            metrics, T, N, F, dtype_bytes, validity_mask=has_validity)
         labels = label_bundle.values
         if label_bundle.validity is not None:
             labels = np.where(label_bundle.validity, labels, np.nan)
@@ -210,9 +226,12 @@ class GPUExecutor:
             self.session._final_tile = tile
             try:
                 chunk = values[:, :, start:stop]
-                if factor_batch.validity is not None:
-                    chunk = np.where(factor_batch.validity[:, :, start:stop], chunk, np.nan)
-                self.session.stage_factors(chunk, ids, layout="T,N,F")
+                validity = (None if not has_validity else
+                            factor_batch.validity[:, :, start:stop])
+                if validity is None:
+                    self.session.stage_factors(chunk, ids, layout="T,N,F")
+                else:
+                    self.session.stage_masked_factors(chunk, validity, ids, layout="T,N,F")
                 result = self.run(ids, metrics, label_bundle.target_id)
             except cp.cuda.memory.OutOfMemoryError:
                 if not self.session.policy.oom_retile or stop - start <= 1:
@@ -231,6 +250,7 @@ class GPUExecutor:
                         destination[name] = np.empty((*arr.shape[:-1], F), dtype=arr.dtype)
                     destination[name][..., start:stop] = arr
                     self.session._d2h_bytes += arr.nbytes
+            del result
             start = stop
             count += 1
         out.metadata = self.session.metadata()
@@ -275,8 +295,11 @@ class GPUExecutor:
                 or not np.array_equal(np.asarray(label_bundle.decision_time),
                                       metadata.time_axis.values)):
             raise InvalidContractError("label decision times must match the factor source")
+        source_dtype = np.dtype(metadata.dtype)
+        source_dtype_bytes = np.result_type(source_dtype, np.nan).itemsize
         tile_width = min(
-            self._factor_tile_size(metrics, T, N, F, np.dtype(metadata.dtype).itemsize),
+            self._factor_tile_size(metrics, T, N, F, source_dtype_bytes,
+                                   validity_mask=True),
             metadata.max_tile_size,
             max_tile_size or metadata.max_tile_size,
         )
@@ -302,13 +325,14 @@ class GPUExecutor:
                 offset = segment_start - start
                 ids = metadata.factor_ids[segment_start:stop]
                 chunk = host_values[:, :, offset:offset + stop - segment_start]
-                if host_validity is not None:
-                    chunk = np.where(
-                        host_validity[:, :, offset:offset + stop - segment_start],
-                        chunk, np.nan)
+                validity = (None if host_validity is None else
+                            host_validity[:, :, offset:offset + stop - segment_start])
                 self.session._final_tile = tile_width
                 try:
-                    self.session.stage_factors(chunk, ids, layout="T,N,F")
+                    if validity is None:
+                        self.session.stage_factors(chunk, ids, layout="T,N,F")
+                    else:
+                        self.session.stage_masked_factors(chunk, validity, ids, layout="T,N,F")
                     result = self.run(ids, metrics, label_bundle.target_id)
                 except cp.cuda.memory.OutOfMemoryError:
                     if not self.session.policy.oom_retile or stop - segment_start <= 1:
@@ -327,6 +351,7 @@ class GPUExecutor:
                             destination[name] = np.empty((*arr.shape[:-1], F), dtype=arr.dtype)
                         destination[name][..., segment_start:stop] = arr
                         self.session._d2h_bytes += arr.nbytes
+                del result
                 segment_start = stop
                 count += 1
             start = source_stop
@@ -337,7 +362,8 @@ class GPUExecutor:
         out.metadata["host_result_budget_bytes"] = self.session.policy.max_host_result_bytes
         return out
 
-    def _factor_tile_size_with_resident_labels(self, metrics, T, N, F, dtype_bytes, candidate_limit):
+    def _factor_tile_size_with_resident_labels(self, metrics, T, N, F, dtype_bytes,
+                                               candidate_limit, *, validity_mask=False):
         """Size against both live labels and one tile's metric working set."""
         plan = tuple(metrics)
         quantile_chain = frozenset((
@@ -349,7 +375,8 @@ class GPUExecutor:
             and not self.metric_parameters)
         if quantile_default:
             # This specialized estimator also admits its bounded row workspace.
-            return self._factor_tile_size(metrics, T, N, F, dtype_bytes)
+            return self._factor_tile_size(
+                metrics, T, N, F, dtype_bytes, validity_mask=validity_mask)
         live_bytes = self.session._pool.used_bytes()
         for candidate in (128, 64, 32, 16, 8, 4, 2, 1):
             tile = min(F, candidate)
@@ -357,6 +384,8 @@ class GPUExecutor:
                 continue
             estimate = self.session._estimate_working_set(
                 metrics, T, N, tile, dtype_bytes)
+            if validity_mask:
+                estimate += 2 * T * N * tile
             if estimate + live_bytes <= self.session._vram_budget:
                 self.session._final_tile = tile
                 return tile
@@ -376,7 +405,11 @@ class GPUExecutor:
         cp = _import_cp()
         values = factor_batch.values
         T, N, F = values.shape
-        tile = self._factor_tile_size(metrics, T, N, F, values.dtype.itemsize)
+        has_validity = factor_batch.validity is not None
+        dtype_bytes = (np.result_type(values.dtype, np.nan).itemsize
+                       if has_validity else values.dtype.itemsize)
+        tile = self._factor_tile_size(
+            metrics, T, N, F, dtype_bytes, validity_mask=has_validity)
         initial_tile = tile
         host_result_bytes_at_start = self._host_result_bytes
         outputs = [BatchEvaluationBundle(tuple(factor_batch.factor_ids), lb.target_id)
@@ -392,7 +425,9 @@ class GPUExecutor:
                 (8 if use_fp64 else np.asarray(lb.values).dtype.itemsize)
                 for lb in label_bundles)
             minimum_working_set = self.session._estimate_working_set(
-                metrics, T, N, 1, values.dtype.itemsize)
+                metrics, T, N, 1, dtype_bytes)
+            if has_validity:
+                minimum_working_set += 2 * T * N
             if (all_label_bytes > 0
                     and minimum_working_set + all_label_bytes <= self.session._vram_budget):
                 try:
@@ -403,13 +438,15 @@ class GPUExecutor:
                         resident_label_ids.append(lb.target_id)
                     # Include every label allocation and the active metric working set.
                     tile = self._factor_tile_size_with_resident_labels(
-                        metrics, T, N, F, values.dtype.itemsize, initial_tile)
+                        metrics, T, N, F, dtype_bytes, initial_tile,
+                        validity_mask=has_validity)
                     label_staging_mode = "resident"
                 except (cp.cuda.memory.OutOfMemoryError, MemoryError):
                     for target_id in resident_label_ids:
                         self.session.release_labels(target_id)
                     resident_label_ids.clear()
-                    tile = self._factor_tile_size(metrics, T, N, F, values.dtype.itemsize)
+                    tile = self._factor_tile_size(
+                        metrics, T, N, F, dtype_bytes, validity_mask=has_validity)
         start = 0
         count = 0
         while start < F:
@@ -418,9 +455,12 @@ class GPUExecutor:
             self.session._final_tile = tile
             try:
                 chunk = values[:, :, start:stop]
-                if factor_batch.validity is not None:
-                    chunk = np.where(factor_batch.validity[:, :, start:stop], chunk, np.nan)
-                self.session.stage_factors(chunk, ids, layout="T,N,F")
+                validity = (None if not has_validity else
+                            factor_batch.validity[:, :, start:stop])
+                if validity is None:
+                    self.session.stage_factors(chunk, ids, layout="T,N,F")
+                else:
+                    self.session.stage_masked_factors(chunk, validity, ids, layout="T,N,F")
                 for output, lb in zip(outputs, label_bundles):
                     if not resident_label_ids:
                         label_values = (np.where(lb.validity, lb.values, np.nan)
@@ -441,6 +481,7 @@ class GPUExecutor:
                                 destination[name] = np.empty((*arr.shape[:-1], F), dtype=arr.dtype)
                             destination[name][..., start:stop] = arr
                             self.session._d2h_bytes += arr.nbytes
+                    del result
             except cp.cuda.memory.OutOfMemoryError:
                 if resident_label_ids:
                     # Resident labels consumed memory needed by the tile. Drop

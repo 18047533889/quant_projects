@@ -187,10 +187,14 @@ def test_cuda_exposure_preserves_factor_tiling(monkeypatch):
     from quant_evaluator.runtime.device_session import DeviceEvaluationSession
 
     batch, labels, panel = _contracts()
-    monkeypatch.setattr(
-        DeviceEvaluationSession, "estimate_tile",
-        lambda self, metrics, t, n, itemsize: 1,
-    )
+    estimate_kwargs = []
+
+    def estimate_tile(self, metrics, t, n, itemsize, **kwargs):
+        estimate_kwargs.append(kwargs)
+        assert kwargs.get("validity_mask") is True
+        return 1
+
+    monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", estimate_tile)
     gpu = evaluate(batch, labels, metrics=("industry_exposure", "purity_ratio"),
                    exposure_panel=panel, backend="cuda_strict")
     cpu = evaluate(batch, labels, metrics=("industry_exposure", "purity_ratio"),
@@ -200,6 +204,9 @@ def test_cuda_exposure_preserves_factor_tiling(monkeypatch):
     np.testing.assert_allclose(gpu.artifacts["purity_ratio"].values,
                                cpu.artifacts["purity_ratio"].values, atol=1e-10)
     assert gpu.metadata["factor_tiles_processed"] == len(batch.factor_ids)
+    assert estimate_kwargs and all(
+        kwargs == {"validity_mask": True} for kwargs in estimate_kwargs
+    )
 
 
 def test_public_residual_ic_masks_label_and_exposure_validity_and_matches_oracle():

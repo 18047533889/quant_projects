@@ -77,6 +77,23 @@ def test_fp64_policy_promotes_factor_and_label_estimate():
     assert session.estimate_tile(("coverage",), 2586, 5461, 4) == 8
 
 
+def test_validity_mask_tile_estimate_requires_two_mask_buffers():
+    T, N, dtype_bytes = 2, 3, 8
+    session = DeviceEvaluationSession()
+    working_set_two = session._estimate_working_set(
+        ("rank_ic",), T, N, 2, dtype_bytes)
+    transient_masks_two = 2 * T * N * 2
+
+    session._vram_budget = working_set_two + transient_masks_two
+    assert session.estimate_tile(
+        ("rank_ic",), T, N, dtype_bytes, validity_mask=True) == 2
+
+    # One byte less excludes the two-factor tile while still admitting one.
+    session._vram_budget -= 1
+    assert session.estimate_tile(
+        ("rank_ic",), T, N, dtype_bytes, validity_mask=True) == 1
+
+
 def test_gpu_executor_forwards_parameters_only_for_specialized_plans():
     class Session:
         def __init__(self):
@@ -97,3 +114,6 @@ def test_gpu_executor_forwards_parameters_only_for_specialized_plans():
     assert executor._factor_tile_size(
         ("quantile_returns_full",), 4, 40, 5, 8) == 5
     assert session.calls[-1][1] == {}
+    assert executor._factor_tile_size(
+        ("coverage",), 4, 40, 5, 8, validity_mask=True) == 5
+    assert session.calls[-1][1] == {"metric_parameters": {}, "validity_mask": True}

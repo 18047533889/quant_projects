@@ -15,7 +15,7 @@ cp = pytest.importorskip("cupy")
 
 from quant_evaluator.kernels.gpu.correlation import batched_spearman_ic
 from quant_evaluator.runtime.device_session import DeviceEvaluationSession
-from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
+from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy, PrecisionPolicy
 
 
 def _cpu_spearman(x, y, min_obs=20):
@@ -118,6 +118,75 @@ def test_gpu_memory_no_linear_leak():
     free1, _ = cp.cuda.runtime.memGetInfo()
     # free VRAM should not shrink monotonically (leak) — allow small slack
     assert free1 >= free0 - 200 * 1024 * 1024  # within 200MB slack
+
+
+@pytest.mark.parametrize("dtype", [np.int16, np.uint64, np.float32, np.float64])
+@pytest.mark.parametrize("precision", [PrecisionPolicy.GPU_MIXED, PrecisionPolicy.GPU_FP64])
+def test_stage_masked_factors_matches_numpy_where_and_preserves_host(
+    dtype, precision, monkeypatch
+):
+    values = np.arange(12, dtype=dtype).reshape(2, 3, 2)
+    original = values.copy()
+    validity = np.array(
+        [[[True, False], [False, True], [True, True]],
+         [[False, True], [True, False], [False, False]]],
+        dtype=np.bool_,
+    )
+    expected = np.transpose(np.where(validity, values, np.nan), (0, 2, 1))
+    if precision is PrecisionPolicy.GPU_FP64:
+        expected = expected.astype(np.float64)
+    session = DeviceEvaluationSession(GPUExecutionPolicy(precision_policy=precision))
+    session._open()
+
+    def forbidden_host_mask_op(*args, **kwargs):
+        raise AssertionError("factor masking must not use host where/logical_not")
+
+    monkeypatch.setattr(np, "where", forbidden_host_mask_op)
+    monkeypatch.setattr(np, "logical_not", forbidden_host_mask_op)
+    staged = session.stage_masked_factors(
+        values, validity, ("f0", "f1"), layout="T,N,F")
+    monkeypatch.undo()
+    assert staged.dtype == expected.dtype
+    cp.testing.assert_array_equal(staged, expected)
+    np.testing.assert_array_equal(values, original)
+    assert session._h2d_bytes == staged.nbytes + validity.nbytes
+    session.release_factor_tile()
+    session.close()
+
+
+def test_stage_masked_factors_owns_device_input():
+    values = np.arange(12, dtype=np.float32).reshape(2, 3, 2)
+    device_values = cp.asarray(values)
+    original = device_values.copy()
+    validity = np.ones(values.shape, dtype=np.bool_)
+    validity[0, 1, 0] = False
+    session = DeviceEvaluationSession(GPUExecutionPolicy())
+    session._open()
+    staged = session.stage_masked_factors(
+        device_values, validity, ("f0", "f1"), layout="T,N,F")
+    assert staged.data.ptr != device_values.data.ptr
+    cp.testing.assert_array_equal(device_values, original)
+    assert session._h2d_bytes == validity.nbytes
+    session.release_factor_tile()
+    session.close()
+
+
+def test_masked_factor_staging_has_no_host_where_or_logical_not():
+    import ast
+    import inspect
+    import textwrap
+
+    source = textwrap.dedent(inspect.getsource(DeviceEvaluationSession.stage_masked_factors))
+    tree = ast.parse(source)
+    host_mask_calls = [
+        node.func.attr for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "np"
+        and node.func.attr in {"where", "logical_not"}
+    ]
+    assert host_mask_calls == []
 
 
 def test_cuda_strict_no_silent_cpu():

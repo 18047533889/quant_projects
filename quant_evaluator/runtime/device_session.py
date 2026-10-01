@@ -138,6 +138,40 @@ class DeviceEvaluationSession:
         self._h2d_bytes += dev.nbytes
         return dev
 
+    def stage_masked_factors(self, values, validity, factor_ids, layout: str = "T,F,N"):
+        """Upload factors and apply validity on-device without a host value copy."""
+        import numpy as np
+        cp = self._cp
+        device_values = isinstance(values, cp.ndarray)
+        if not device_values:
+            values = np.asarray(values)
+        validity = np.asarray(validity, dtype=np.bool_)
+        if values.shape != validity.shape:
+            raise ValueError("factor validity must match the factor tile shape")
+        # Match np.where(validity, values, np.nan), including integer inputs.
+        masked_dtype = np.result_type(np.dtype(values.dtype), np.nan)
+        dtype = (cp.float64 if self.policy.precision_policy in
+                 (PrecisionPolicy.GPU_FP64, PrecisionPolicy.REFERENCE_FP64)
+                 else masked_dtype)
+        # Always own the device buffer before masking; cp.asarray may alias.
+        dev = cp.array(values, dtype=dtype, copy=True)
+        mask = cp.asarray(validity, dtype=cp.bool_)
+        cp.cuda.get_current_stream().synchronize()
+        invalid_mask = cp.logical_not(mask)
+        self._peak_vram = max(self._peak_vram, self._pool.total_bytes())
+        cp.copyto(dev, cp.nan, where=invalid_mask)
+        cp.cuda.get_current_stream().synchronize()
+        mask_bytes = int(mask.nbytes)
+        del invalid_mask
+        del mask
+        self._storage_dtypes["factors"] = str(dev.dtype)
+        if layout == "T,N,F":
+            dev = cp.transpose(dev, (0, 2, 1))
+        self._staged_factors["__all__"] = dev
+        # An owned device-to-device copy is not a host upload.
+        self._h2d_bytes += mask_bytes + (0 if device_values else dev.nbytes)
+        return dev
+
     def release_factor_tile(self) -> None:
         """Release only tile-owned allocations; labels stay resident."""
         self._peak_vram = max(self._peak_vram, self._pool.total_bytes())
@@ -213,7 +247,7 @@ class DeviceEvaluationSession:
         return min(1 << 30, max(1, int(remaining * .8)))
 
     def estimate_tile(self, metric_plan, T: int, N: int, dtype_bytes: int,
-                      *, metric_parameters=None) -> int:
+                      *, metric_parameters=None, validity_mask=False) -> int:
         """Pick an initial factor tile from a candidate list (spec §7)."""
         if not hasattr(self, "_vram_budget") or self._vram_budget is None:
             self._open()  # ensure budget is computed (session may not be open yet)
@@ -241,6 +275,9 @@ class DeviceEvaluationSession:
                 est = self._estimate_working_set(
                     metric_plan, T, N, tile, dtype_bytes,
                     quantile_default=quantile_default)
+            mask_bytes = 2 * T * N * tile if validity_mask else 0
+            # Input and inverted boolean mask buffers coexist during staging.
+            est += mask_bytes
             if quantile_default:
                 # The quantile kernel requires one bounded cross-section even
                 # when the resident tile itself fits the device budget.
@@ -248,7 +285,7 @@ class DeviceEvaluationSession:
                     PrecisionPolicy.GPU_FP64, PrecisionPolicy.REFERENCE_FP64
                 ) else dtype_bytes
                 row_bytes = 4 * ((cell_bytes + 32) * N + 64 * 5) + 40 * N
-                factor_bytes = T * tile * N * cell_bytes
+                factor_bytes = T * tile * N * cell_bytes + mask_bytes
                 output_bytes = 16 * T * tile * 5
                 pool = getattr(self, "_pool", None)
                 other_live_bytes = pool.used_bytes() if pool is not None else 0

@@ -49,15 +49,35 @@ def test_public_api_tiles_before_upload_and_respects_validity(monkeypatch):
     fb, lb = _contracts()
     uploaded = []
     original = DeviceEvaluationSession.stage_factors
+    original_masked = DeviceEvaluationSession.stage_masked_factors
+    host_values = fb.values.copy()
+    host_validity = fb.validity.copy()
 
     def stage(self, values, factor_ids, layout="T,F,N"):
         uploaded.append(len(factor_ids))
-        return original(self, values, factor_ids, layout)
+        before = np.asarray(values).copy()
+        result = original(self, values, factor_ids, layout)
+        np.testing.assert_array_equal(values, before)
+        return result
+
+    def stage_masked(self, values, validity, factor_ids, layout="T,F,N"):
+        uploaded.append(len(factor_ids))
+        assert np.shares_memory(values, fb.values)
+        assert np.shares_memory(validity, fb.validity)
+        before_values = np.asarray(values).copy()
+        before_validity = np.asarray(validity).copy()
+        result = original_masked(self, values, validity, factor_ids, layout)
+        np.testing.assert_array_equal(values, before_values)
+        np.testing.assert_array_equal(validity, before_validity)
+        return result
 
     monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", lambda *a, **k: 2)
     monkeypatch.setattr(DeviceEvaluationSession, "stage_factors", stage)
+    monkeypatch.setattr(DeviceEvaluationSession, "stage_masked_factors", stage_masked)
     out = evaluate(fb, lb, backend="cuda_strict", metrics=("rank_ic_series", "coverage", "quantile_returns_full"))
     assert uploaded == [2, 2, 1]
+    np.testing.assert_array_equal(fb.values, host_values)
+    np.testing.assert_array_equal(fb.validity, host_validity)
     assert out.factor_ids == fb.factor_ids
     assert out.vector_metrics["quantile_returns_full"].shape == (5, 5)
     np.testing.assert_allclose(out.series_metrics["rank_ic_series"], _oracle(fb, lb), atol=1e-12)
@@ -291,13 +311,19 @@ def test_memmap_is_snapshotted_once_then_factor_tiles_share_snapshot(monkeypatch
     values[:] = 999
     assert not np.all(fb.values == 999)
     original = DeviceEvaluationSession.stage_factors
+    original_masked = DeviceEvaluationSession.stage_masked_factors
     shared = []
 
     def stage(self, chunk, ids, layout="T,F,N"):
         shared.append(np.shares_memory(chunk, fb.values))
         return original(self, chunk, ids, layout)
 
+    def stage_masked(self, chunk, validity, ids, layout="T,F,N"):
+        shared.append(np.shares_memory(chunk, fb.values))
+        return original_masked(self, chunk, ids, layout)
+
     monkeypatch.setattr(DeviceEvaluationSession, "estimate_tile", lambda *a, **k: 2)
     monkeypatch.setattr(DeviceEvaluationSession, "stage_factors", stage)
+    monkeypatch.setattr(DeviceEvaluationSession, "stage_masked_factors", stage_masked)
     evaluate(fb, lb, backend="cuda", metrics=("coverage",))
     assert shared == [True, True, True]

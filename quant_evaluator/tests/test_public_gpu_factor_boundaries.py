@@ -133,12 +133,24 @@ def test_public_cuda_coverage_budget_parity_with_validity_and_singleton_tail(mon
         validity=label_validity,
     )
 
-    budget = estimate_coverage_working_set_bytes(
+    estimate_two = estimate_coverage_working_set_bytes(
         num_times, num_assets, 2, values.dtype.itemsize, labels.dtype.itemsize,
     )
+    estimate_four = estimate_coverage_working_set_bytes(
+        num_times, num_assets, 4, values.dtype.itemsize, labels.dtype.itemsize,
+    )
+    budget = estimate_two + 2 * num_times * num_assets * 2
+    assert budget < estimate_four + 2 * num_times * num_assets * 4
+    sizing_session = DeviceEvaluationSession()
+    sizing_session._vram_budget = budget
+    assert sizing_session.estimate_tile(
+        ("coverage",), num_times, num_assets, values.dtype.itemsize,
+        validity_mask=True,
+    ) == 2
     uploaded = []
     original_open = DeviceEvaluationSession._open
     original_stage_factors = DeviceEvaluationSession.stage_factors
+    original_stage_masked_factors = DeviceEvaluationSession.stage_masked_factors
 
     def open_with_small_budget(session):
         original_open(session)
@@ -149,8 +161,17 @@ def test_public_cuda_coverage_budget_parity_with_validity_and_singleton_tail(mon
         uploaded.append(tuple(tile_factor_ids))
         return original_stage_factors(session, tile_values, tile_factor_ids, layout)
 
+    def track_stage_masked_factors(
+        session, tile_values, validity, tile_factor_ids, layout="T,F,N"
+    ):
+        uploaded.append(tuple(tile_factor_ids))
+        return original_stage_masked_factors(
+            session, tile_values, validity, tile_factor_ids, layout)
+
     monkeypatch.setattr(DeviceEvaluationSession, "_open", open_with_small_budget)
     monkeypatch.setattr(DeviceEvaluationSession, "stage_factors", track_stage_factors)
+    monkeypatch.setattr(
+        DeviceEvaluationSession, "stage_masked_factors", track_stage_masked_factors)
 
     cpu = evaluate(batch, label_bundle, metrics=("coverage",))
     cuda = evaluate(batch, label_bundle, metrics=("coverage",), backend="cuda_strict")
