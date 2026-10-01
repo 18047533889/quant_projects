@@ -167,3 +167,51 @@ def test_unknown_plan_gets_isolated_candidate_frame():
     assert candidate is not frame
     candidate.loc[:, "value"] = -100.0
     pd.testing.assert_series_equal(frame["value"], _frame()["value"])
+
+def test_layered_decay_plan_shares_frame_and_successful_execution_is_read_only():
+    from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
+
+    frame = _frame()
+    before = frame.copy(deep=True)
+    plan = LayeredDecayPlan((5.0,) * 20, "train:test")
+    candidate = _candidate_frame_for_plan(plan, frame)
+
+    assert candidate is frame
+    plan.execute(candidate, allow_research=True)
+    pd.testing.assert_frame_equal(frame, before, check_exact=True)
+
+
+def test_layered_decay_failed_execution_does_not_mutate_shared_frame(monkeypatch):
+    import pytest
+    import factor_optimizer.adapters.layered_decay as layered_decay
+    from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
+
+    frame = _frame()
+    before = frame.copy(deep=True)
+    plan = LayeredDecayPlan((5.0,) * 20, "train:test")
+    candidate = _candidate_frame_for_plan(plan, frame)
+
+    def fail_quantile_assignment(_values):
+        raise RuntimeError("synthetic candidate failure")
+
+    monkeypatch.setattr(layered_decay, "_assign_daily_quantiles", fail_quantile_assignment)
+    assert candidate is frame
+    with pytest.raises(RuntimeError, match="synthetic candidate failure"):
+        plan.execute(candidate, allow_research=True)
+    pd.testing.assert_frame_equal(frame, before, check_exact=True)
+
+
+def test_layered_decay_subclass_keeps_candidate_isolation():
+    from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
+
+    class CustomLayeredDecayPlan(LayeredDecayPlan):
+        pass
+
+    frame = _frame()
+    before = frame.copy(deep=True)
+    plan = CustomLayeredDecayPlan((5.0,) * 20, "train:test")
+    candidate = _candidate_frame_for_plan(plan, frame)
+
+    assert candidate is not frame
+    candidate.loc[:, "value"] = -100.0
+    pd.testing.assert_frame_equal(frame, before, check_exact=True)

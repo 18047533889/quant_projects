@@ -259,6 +259,9 @@ _READ_ONLY_VALUE_REPAIR_TRANSFORMS = frozenset({
 def _candidate_frame_for_plan(plan, frame):
     """Share exact audited read-only plans; isolate all other execution paths."""
     from factor_optimizer.adapters.repair_execution import ValueRepairPlan
+    from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
+    if type(plan) is LayeredDecayPlan:
+        return frame
     if (type(plan) is ValueRepairPlan and plan.transform in _READ_ONLY_VALUE_REPAIR_TRANSFORMS):
         return frame
     # Candidate isolation is a separate transient dataframe copy; it is not
