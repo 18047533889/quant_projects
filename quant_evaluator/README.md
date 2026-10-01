@@ -102,6 +102,16 @@ print(bundle.metadata["execution_receipt"])
 四指标改后真实回放已确认两轮 auto 均使用 CUDA，完整数值对照通过；见
 [v27 接入验证](docs/benchmarks/real_cos_f32_mixed_four_auto_v27_20261001.md)。
 
+v28 另覆盖同一精确 F32 面板的五指标组合
+`("rank_ic", "pearson_ic", "ic_ir", "quantile_spread", "coverage")`。
+该组合要求至少 12 GiB 有效空闲显存，默认显存比例下需 16 GiB 设备空闲显存。
+省略 `backend` 或传入 `"auto"` 使用同一选择流程。接入后真实六轮回放中，
+两轮 auto 的五项指标均使用 CUDA，完整数值对照通过；热运行中位数
+18.10 秒，CPU 为 117.93 秒。本次约快 6.52 倍，范围及手动后端用法见
+[v28 五指标接入验证](docs/benchmarks/real_cos_f32_default_five_auto_v28_20261001.md)。
+你仍可指定 `backend="cpu"` 获取参考结果，或用 `"cuda_strict"` 请求 GPU
+并在不可用时失败关闭。其他形状和指标组合需要独立证据。
+
 核心契约：
 - **LabelBundle** — 显式前向标签；时序全部由调用方提供；默认 `price_convention="vwap_to_vwap"`；
   `__post_init__` 强制校验严格递增 + 因果链。
