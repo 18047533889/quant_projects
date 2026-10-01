@@ -4,6 +4,8 @@ from __future__ import annotations
 import hashlib
 import math
 import numbers
+import sys
+from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
@@ -11,6 +13,9 @@ import pandas as pd
 
 RANK_CONTRACT = "fe.cs_rank.average.percentile.v1"
 DEFAULT_MAX_BYTES = 128 * 1024 * 1024
+# Peak of FE's returned rank bytes plus the immutable freeze-copy; excludes FE
+# operator workspace and all other optimizer memory.
+MAX_RANK_FREEZE_COPY_BYTES = 256 * 1024 * 1024
 MIN_REUSE_ROWS_BY_PLAN_COUNT = ((500_000, 14), (1_000_000, 6))
 
 
@@ -111,7 +116,11 @@ class RankFeatureCache:
                      training_context_ref: str) -> pd.Series | None:
         # A disabled/over-budget cache must not fingerprint or rank, including
         # the empty-frame case where the retained-size arithmetic is zero.
-        if self.max_bytes == 0 or len(frame) * np.dtype(np.float64).itemsize > self.max_bytes:
+        rank_bytes = len(frame) * np.dtype(np.float64).itemsize
+        # Freeze peak includes FE's returned rank buffer and its immutable
+        # bytes owner; FE operator workspace is outside this bound.
+        if (self.max_bytes == 0 or rank_bytes > self.max_bytes
+                or 2 * rank_bytes > MAX_RANK_FREEZE_COPY_BYTES):
             self.misses += 1
             self._bypass()
             return None
@@ -128,7 +137,10 @@ class RankFeatureCache:
         self.rank_calls += 1
         from factor_optimizer.adapters.repair_execution import _execute_fe_cs_rank
         computed = _execute_fe_cs_rank(frame)
-        rank = computed.to_numpy(dtype=np.float64, copy=True)
+        rank = computed.to_numpy(copy=False)
+        if rank.dtype != np.dtype(np.float64):
+            self._bypass()
+            return None
         if rank.nbytes > self.max_bytes:
             self._bypass()
             return None
@@ -136,9 +148,51 @@ class RankFeatureCache:
             self.evictions += 1
         # A bytes-owned ndarray cannot be made writable again via
         # Series.to_numpy().setflags(write=True).
-        self._rank = np.frombuffer(rank.tobytes(), dtype=np.float64)
+        immutable_bytes = rank.tobytes()
+        self._rank = np.frombuffer(immutable_bytes, dtype=np.float64)
+        del computed, rank, immutable_bytes
         self._key = key
         return pd.Series(self._rank, index=frame.index, name="value", copy=False)
+
+    def prepare_train_rank(self, frame: pd.DataFrame, *,
+                           training_context_ref: str) -> "_PreparedTrainRank | None":
+        """Compute FE rank once and freeze its bytes before candidate execution."""
+        if type(frame.index) is not pd.RangeIndex:
+            return None
+        ranked = self.average_rank(frame, training_context_ref=training_context_ref)
+        if ranked is None:
+            return None
+        index = pd.RangeIndex(frame.index.start, frame.index.stop,
+                              frame.index.step, name=frame.index.name)
+        prepared = _PreparedTrainRank(
+            training_context_ref=training_context_ref,
+            rank_contract=RANK_CONTRACT,
+            index=index,
+            _rank=self._rank,
+            metadata_bytes=(sys.getsizeof(index) + sys.getsizeof(training_context_ref)
+                            + sys.getsizeof(RANK_CONTRACT) + sys.getsizeof(index.name) + 512),
+        )
+        if prepared.retained_bytes > self.max_bytes:
+            self._bypass()
+            return None
+        return prepared
+
+
+@dataclass(frozen=True)
+class _PreparedTrainRank:
+    """Internal invocation-owned immutable rank bytes and alignment metadata."""
+    training_context_ref: str
+    rank_contract: str
+    index: pd.RangeIndex
+    _rank: np.ndarray
+    metadata_bytes: int
+
+    @property
+    def retained_bytes(self) -> int:
+        return self._rank.nbytes + self.metadata_bytes
+
+    def series(self) -> pd.Series:
+        return pd.Series(self._rank, index=self.index, name="value", copy=False)
 
 
 def apply_u_shape_from_rank(plan, frame: pd.DataFrame,
@@ -156,11 +210,16 @@ def apply_u_shape_from_rank(plan, frame: pd.DataFrame,
     if not is_eligible_u_shape_plan(plan):
         return None
     frame = _validate_frame(frame)
-    params = dict(plan.parameters)
-    center, power = params["center"], params["power"]
     rank = cache.average_rank(frame, training_context_ref=plan.training_context_ref)
     if rank is None:
         return None
+    return _apply_u_shape_formula(plan, rank)
+
+
+def _apply_u_shape_formula(plan, rank: pd.Series) -> pd.Series:
+    """Single implementation of the eligible U-shape value formula."""
+    params = dict(plan.parameters)
+    center, power = params["center"], params["power"]
     distance = (rank - center).abs()
     if params["asymmetric"]:
         left = rank < center
@@ -172,3 +231,36 @@ def apply_u_shape_from_rank(plan, frame: pd.DataFrame,
     if params["inverted"]:
         shaped = -shaped
     return shaped.rename("value")
+
+
+def apply_u_shape_from_prepared_rank(plan, prepared: _PreparedTrainRank, *,
+                                     expected_index: pd.Index,
+                                     allow_research: bool = False) -> pd.Series | None:
+    """Apply an eligible U-shape formula to a precomputed immutable FE rank."""
+    if allow_research is not True:
+        raise ValueError("this adapter is research-only; explicit allow_research=True required")
+    if (type(prepared) is not _PreparedTrainRank or not is_eligible_u_shape_plan(plan)
+            or prepared.training_context_ref != plan.training_context_ref
+            or prepared.rank_contract != RANK_CONTRACT
+            or type(expected_index) is not pd.RangeIndex
+            or prepared.index.name != expected_index.name
+            or not prepared.index.equals(expected_index)):
+        return None
+    return _apply_u_shape_formula(plan, prepared.series())
+
+
+_READ_ONLY_VALUE_REPAIR_TRANSFORMS = frozenset({
+    "raw", "sign", "rank_shape", "cs_rank", "fp_cs_rank_min",
+    "ts_rank_history", "ts_zscore_history", "trailing_sma",
+    "capped_zscore", "tail_hinge", "tail_saturation", "robust_scale",
+})
+
+
+def _candidate_frame_for_plan(plan, frame):
+    """Share exact audited read-only plans; isolate all other execution paths."""
+    from factor_optimizer.adapters.repair_execution import ValueRepairPlan
+    if (type(plan) is ValueRepairPlan and plan.transform in _READ_ONLY_VALUE_REPAIR_TRANSFORMS):
+        return frame
+    # Candidate isolation is a separate transient dataframe copy; it is not
+    # retained rank storage and is not covered by the rank-cache byte budget.
+    return frame.copy(deep=True)

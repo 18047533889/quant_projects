@@ -148,7 +148,23 @@ def test_shared_u_rank_preserves_train_candidate_scores_and_selection(monkeypatc
     reused = optimize(batch, labels, config=config, allow_research=True)
     monkeypatch.setattr(reuse_module, "apply_u_shape_from_rank",
                         lambda *args, **kwargs: None)
+    monkeypatch.setattr(reuse_module, "apply_u_shape_from_prepared_rank",
+                        lambda *args, **kwargs: None)
+    monkeypatch.setattr(reuse_module.RankFeatureCache, "prepare_train_rank",
+                        lambda *args, **kwargs: None)
+    from factor_optimizer.adapters import repair_execution
+    original_execute = repair_execution.ValueRepairPlan.execute
+    reference_rank_shape_executes = []
+
+    def observe_reference_execute(self, *args, **kwargs):
+        if self.transform == "rank_shape":
+            reference_rank_shape_executes.append(self.identity)
+        return original_execute(self, *args, **kwargs)
+
+    monkeypatch.setattr(repair_execution.ValueRepairPlan, "execute",
+                        observe_reference_execute)
     reference = optimize(batch, labels, config=config, allow_research=True)
+    assert reference_rank_shape_executes
 
     reused_factor = reused.factors["u"]
     reference_factor = reference.factors["u"]

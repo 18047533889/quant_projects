@@ -49,6 +49,7 @@ def _fake_result(batch, labels, *, config, allow_research):
 def _instrumented_globals():
     return (
         shape_rank_reuse.apply_u_shape_from_rank,
+        shape_rank_reuse.apply_u_shape_from_prepared_rank,
         shape_rank_reuse._frame_key,
         repair_execution._execute_fe_cs_rank,
         repair_execution.ValueRepairPlan.execute,
@@ -78,8 +79,18 @@ def test_run_restores_hooks_and_observes_actual_train_frame_rows(tmp_path):
         cache = shape_rank_reuse.RankFeatureCache()
         assert type(cache) is original_cache_class
         if mode["current"] == "cached":
-            cache.average_rank(frame, training_context_ref="stub-context")
-            cache.average_rank(frame, training_context_ref="stub-context")
+            prepared = cache.prepare_train_rank(frame, training_context_ref="stub-context")
+            assert prepared is not None
+            plan = repair_execution.compile_value_repair(
+                "U_SHAPE_REPAIR",
+                {"center": .5, "power": 1.0, "asymmetry": False},
+                natural_time_scale=10.0,
+                training_context_ref="stub-context",
+            )
+            shaped = shape_rank_reuse.apply_u_shape_from_prepared_rank(
+                plan, prepared, expected_index=frame.index, allow_research=True,
+            )
+            assert shaped is not None
         else:
             dummy_plan = SimpleNamespace(transform="rank_shape", identity="fake-plan")
             execute = repair_execution.ValueRepairPlan.execute
@@ -124,19 +135,25 @@ def test_run_restores_hooks_and_observes_actual_train_frame_rows(tmp_path):
     }
     assert cached["training_frame_rows"] == 1_200
     assert cached["training_frame_observations"]["consistent"] is True
-    assert cached["training_frame_observations"]["cached_fingerprint_rows"] == [1_200, 1_200]
+    assert cached["training_frame_observations"]["cached_fingerprint_rows"] == [1_200]
     assert cached["training_frame_observations"]["cached_fe_rank_rows"] == [1_200]
+    assert cached["training_frame_observations"]["prepared_rank_transform_rows"] == [1_200]
+    assert cached["prepared_rank_transform_calls"] == 1
     assert uncached["training_frame_rows"] == 1_200
     assert uncached["training_frame_observations"]["uncached_rank_shape_execute_rows"] == [1_200] * 14
     assert uncached["training_frame_observations"]["uncached_initial_train_execute_rows"] == [1_200] * 14
     assert cached["rank_cache_metrics"]["instance_count"] == 1
     assert cached["rank_cache_metrics"]["class_identity_preserved"] is True
-    assert cached["rank_cache_metrics"]["totals"]["hits"] == 1
+    # Prepared rank reuse no longer calls the mutable-frame cache a second time;
+    # the invocation-local prepared transform is reported separately above.
+    assert cached["rank_cache_metrics"]["totals"]["hits"] == 0
     assert cached["rank_cache_metrics"]["totals"]["rank_calls"] == 1
     assert uncached["rank_cache_metrics"]["instance_count"] == 1
     assert uncached["rank_cache_metrics"]["class_identity_preserved"] is True
     assert uncached["rank_cache_metrics"]["totals"]["hits"] == 0
     assert uncached["rank_cache_metrics"]["totals"]["rank_calls"] == 0
+    assert uncached["prepared_rank_transform_calls"] == 0
+    assert uncached["training_frame_observations"]["prepared_rank_transform_rows"] == []
     assert cached["fixture"]["panel_seed"] == 1234
     assert cached["fixture"]["optimizer_seed"] == 73
     assert cached["fixture"]["panel_values"] == "standard_normal"

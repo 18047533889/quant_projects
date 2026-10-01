@@ -170,10 +170,12 @@ def run(*, time_points: int, assets: int, mode: str, seed: int,
     fingerprint = {"calls": 0, "seconds": 0.0}
     fe_rank_calls = {"count": 0}
     fp_rank_shape_calls = {"count": 0}
+    prepared_transform_calls = {"count": 0}
     observed_plan_identities = set()
     observed_frames = {
         "cached_fingerprint_rows": [],
         "cached_fe_rank_rows": [],
+        "prepared_rank_transform_rows": [],
         "uncached_rank_shape_execute_rows": [],
     }
     original_key = shape_rank_reuse._frame_key
@@ -235,6 +237,11 @@ def run(*, time_points: int, assets: int, mode: str, seed: int,
                 "apply_u_shape_from_rank",
                 lambda *args, **kwargs: None,
             ))
+            patches.enter_context(patch.object(
+                shape_rank_reuse,
+                "apply_u_shape_from_prepared_rank",
+                lambda *args, **kwargs: None,
+            ))
         patches.enter_context(patch.object(
             shape_rank_reuse, "RankFeatureCache", capture_cache
         ))
@@ -252,6 +259,19 @@ def run(*, time_points: int, assets: int, mode: str, seed: int,
             return original_apply_u_shape(plan, *args, **kwargs)
         patches.enter_context(patch.object(
             shape_rank_reuse, "apply_u_shape_from_rank", observe_apply
+        ))
+        original_apply_prepared = shape_rank_reuse.apply_u_shape_from_prepared_rank
+
+        def observe_prepared_apply(plan, prepared, *args, **kwargs):
+            result = original_apply_prepared(plan, prepared, *args, **kwargs)
+            if result is not None:
+                prepared_transform_calls["count"] += 1
+                observed_plan_identities.add(plan.identity)
+                observed_frames["prepared_rank_transform_rows"].append(len(result))
+            return result
+
+        patches.enter_context(patch.object(
+            shape_rank_reuse, "apply_u_shape_from_prepared_rank", observe_prepared_apply
         ))
         result = optimize_factor_batch(
             batch,
@@ -335,6 +355,7 @@ def run(*, time_points: int, assets: int, mode: str, seed: int,
         "fe_average_rank_calls": fe_rank_calls["count"],
         "observed_distinct_train_rank_plan_identities": len(observed_plan_identities),
         "fp_rank_shape_execute_calls": fp_rank_shape_calls["count"],
+        "prepared_rank_transform_calls": prepared_transform_calls["count"],
         "candidate_count": len(evidence),
         "candidate_budget": dict(selected.training_diagnostics.get("candidate_budget", {})),
         "candidate_evidence_sha256": hashlib.sha256(encoded.encode()).hexdigest(),

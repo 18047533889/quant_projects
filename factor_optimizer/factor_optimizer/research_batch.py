@@ -538,6 +538,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     from factor_optimizer.adapters.preprocessing import compile_admissible_smoothing_grid
     from factor_optimizer.shape_rank_reuse import (
         DEFAULT_MAX_BYTES, RankFeatureCache, apply_u_shape_from_rank,
+        apply_u_shape_from_prepared_rank, _candidate_frame_for_plan,
         count_distinct_eligible_u_shape_plans, is_eligible_u_shape_plan,
         should_admit_u_shape_rank_reuse,
     )
@@ -760,6 +761,15 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                     len(search_frame), eligible_u_plan_count)
                 shape_rank_cache = RankFeatureCache(
                     max_bytes=DEFAULT_MAX_BYTES if reuse_admitted else 0)
+                prepared_train_rank = None
+                if reuse_admitted and eligible_u_plan_count:
+                    try:
+                        prepared_train_rank = shape_rank_cache.prepare_train_rank(
+                            search_frame, training_context_ref=train_ref)
+                    except Exception:
+                        # The ordinary FE plan path remains authoritative on
+                        # rank preparation failures.
+                        shape_rank_cache._bypass()
                 for family, params, precompiled, orientation in proposals:
                     record = {"family": family, "parameters": dict(params), "orientation": orientation}
                     record["diagnosed_issues"] = [issue["code"] for issue in diagnosis["issues"]
@@ -772,11 +782,18 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                             natural_time_scale=config.natural_time_scale, training_context_ref=train_ref)
                         record["transform"] = plan.transform
                         if plan.identity != last_base_identity:
-                            reused_shape = apply_u_shape_from_rank(
-                                plan, search_frame, shape_rank_cache, allow_research=True)
+                            reused_shape = (apply_u_shape_from_prepared_rank(
+                                plan, prepared_train_rank,
+                                expected_index=search_frame.index,
+                                allow_research=True)
+                                if prepared_train_rank is not None else
+                                apply_u_shape_from_rank(
+                                    plan, search_frame, shape_rank_cache,
+                                    allow_research=True))
                             if reused_shape is None:
+                                plan_frame = _candidate_frame_for_plan(plan, search_frame)
                                 base_values = np.asarray(plan.execute(
-                                    search_frame, allow_research=True), dtype=float).reshape(prefix.shape)
+                                    plan_frame, allow_research=True), dtype=float).reshape(prefix.shape)
                             else:
                                 base_values = np.asarray(reused_shape, dtype=float).reshape(prefix.shape)
                             last_base_identity, last_base_values = plan.identity, base_values
