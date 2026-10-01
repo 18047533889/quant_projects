@@ -13,6 +13,21 @@ from quant_evaluator.contracts._array_hash_cache import ArrayHashStateCache
 _RAW_ARRAY_HASH_STATE_CACHE = ArrayHashStateCache(capacity=32)
 
 
+def authoritative_array_hash_cache_state(value: np.ndarray) -> bool | None:
+    """Return hit, miss, or unknown for this exact array's raw-hash state."""
+    original = np.asarray(value)
+    if (original.ndim == 0 or not original.flags.c_contiguous
+            or original.dtype.hasobject or original.dtype.fields is not None):
+        return None
+    prefix = hashlib.sha256()
+    prefix.update(str(original.dtype).encode())
+    prefix.update(str(original.shape).encode())
+    if not _RAW_ARRAY_HASH_STATE_CACHE._eligible(
+            original, _RAW_ARRAY_HASH_STATE_CACHE.min_nbytes):
+        return None
+    return _RAW_ARRAY_HASH_STATE_CACHE.peek(original, prefix) is not None
+
+
 def _update_raw_payload(digest, array: np.ndarray) -> None:
     """Feed C-order array bytes without materializing a second full copy."""
     digest.update(memoryview(array.reshape(-1).view(np.uint8)))

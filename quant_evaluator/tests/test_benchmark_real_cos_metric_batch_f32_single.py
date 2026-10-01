@@ -9,6 +9,8 @@ import pytest
 from quant_evaluator.scripts import benchmark_real_cos_metric_batch as benchmark
 
 
+from quant_evaluator.tests.benchmark_repeat_receipt_fixture import fake_repeat_receipts
+
 @pytest.mark.parametrize("metric", ["rank_ic_series", "quantile_returns_full"])
 def test_f32_accepts_only_exact_single_metric_request(monkeypatch, capsys, metric):
     batch = SimpleNamespace(
@@ -37,6 +39,7 @@ def test_f32_accepts_only_exact_single_metric_request(monkeypatch, capsys, metri
             "peak_rss_kib": 100,
             "config_hash": "same",
             "artifacts": {},
+            "repeat_receipts": fake_repeat_receipts(backend, benchmark.METRICS),
         }
 
     monkeypatch.setattr(benchmark, "_BATCH", None)

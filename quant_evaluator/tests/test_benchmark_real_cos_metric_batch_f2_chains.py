@@ -8,6 +8,8 @@ import pytest
 from quant_evaluator.scripts import benchmark_real_cos_metric_batch as benchmark
 
 
+from quant_evaluator.tests.benchmark_repeat_receipt_fixture import fake_repeat_receipts
+
 @pytest.mark.parametrize("metrics", [benchmark.RANK_CHAIN, benchmark.QUANTILE_CHAIN])
 def test_f2_exact_chain_admitted_before_cos_load(monkeypatch, capsys, metrics):
     loaded = []
@@ -28,6 +30,8 @@ def test_f2_exact_chain_admitted_before_cos_load(monkeypatch, capsys, metrics):
                                 "peak_rss_kib": 100,
                                 "config_hash": "same",
                                 "artifacts": {},
+                                "repeat_receipts": fake_repeat_receipts(
+                                    backend, benchmark.METRICS),
                             }))
     monkeypatch.setattr(benchmark, "_compare",
                         lambda reference, candidate: {"pass": True})

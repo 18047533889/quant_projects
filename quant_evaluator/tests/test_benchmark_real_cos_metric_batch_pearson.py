@@ -11,6 +11,8 @@ from quant_evaluator.scripts import benchmark_real_cos_factor_batch as profile
 from quant_evaluator.scripts import benchmark_real_cos_metric_batch as benchmark
 
 
+from quant_evaluator.tests.benchmark_repeat_receipt_fixture import fake_repeat_receipts
+
 def _artifact():
     return {
         "descriptor": {"type": "ScalarMetricArtifact", "artifact_kind": "scalar"},
@@ -57,7 +59,8 @@ def test_f32_pearson_preflight_then_six_order_run(monkeypatch, capsys):
                 "auto_backend_reason": None, "cold_s": 0.1,
                 "warm_median_s": 0.1, "peak_vram": None, "peak_rss_kib": 100,
                 "config_hash": "same",
-                "artifacts": {metric: _artifact() for metric in benchmark.METRICS}}
+                "artifacts": {metric: _artifact() for metric in benchmark.METRICS},
+                "repeat_receipts": fake_repeat_receipts(backend, benchmark.METRICS)}
 
     monkeypatch.setattr(benchmark, "_run_one", fake_run_one)
     monkeypatch.setattr(sys, "argv", ["benchmark_real_cos_metric_batch.py",
@@ -129,7 +132,8 @@ def test_f32_pearson_singleton_runs_six_interleaved_workers_after_preflight(monk
         return {"backend_requested": backend, "backend_used": backend,
                 "auto_backend_reason": None, "cold_s": 0.1,
                 "warm_median_s": 0.1, "peak_vram": None, "peak_rss_kib": 100,
-                "config_hash": "same", "artifacts": {metric: _artifact()}}
+                "config_hash": "same", "artifacts": {metric: _artifact()},
+                "repeat_receipts": fake_repeat_receipts(backend, benchmark.METRICS)}
 
     monkeypatch.setattr(benchmark, "_run_one", fake_run_one)
     monkeypatch.setattr(sys, "argv", ["benchmark_real_cos_metric_batch.py",

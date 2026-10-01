@@ -24,6 +24,10 @@ from quant_evaluator.contracts.errors import (
 from quant_evaluator.contracts._hashutil import canonicalize
 from quant_evaluator.contracts.array_identity import authoritative_array_hash
 from quant_evaluator.api.requests import EvaluationRequest
+from quant_evaluator.runtime.evaluation_identity import (
+    build_evaluation_config_hash_fields,
+    evaluation_identity_cache_ready,
+)
 
 from quant_evaluator.planner.batch_plan import BatchPlan, ChunkDescriptor, create_batch_plan
 from quant_evaluator.planner.dependency_plan import (
@@ -107,12 +111,73 @@ def _auto_batch_cuda_rejection(
     return None
 
 
+def _evaluation_config_hash_fields(
+    factor_batch, label_bundle, metric_ids, *, metric_parameters, context,
+    quantile_builder_parameters, portfolio_returns, holding_returns,
+    portfolio_spec, trade_eligibility, calendar_snapshot, exposure_panel,
+    generalization_evidence, split_ref, request_fields, metric_versions=None,
+):
+    """Build the exact fields shared by config hashing and its cache probe."""
+    versions = (metric_versions if metric_versions is not None else
+                {mid: get_metric(_resolve_alias(mid)).metric_version for mid in metric_ids})
+    return build_evaluation_config_hash_fields(
+        factor_batch, label_bundle, metric_ids, metric_versions=versions,
+        metric_parameters=metric_parameters, context=context,
+        quantile_builder_parameters=quantile_builder_parameters,
+        portfolio_returns=portfolio_returns, holding_returns=holding_returns,
+        portfolio_spec=portfolio_spec, trade_eligibility=trade_eligibility,
+        calendar_snapshot=calendar_snapshot, exposure_panel=exposure_panel,
+        generalization_evidence=generalization_evidence, split_ref=split_ref,
+        request_fields=request_fields,
+    )
+
+
+def _f32_coverage_identity_cache_ready(factor_batch, label_bundle, config_fields):
+    """Require resident raw and exact config-stream states; unknown is cold.
+
+    Peeks do not promote LRU entries; concurrent hashing or cache pressure can
+    evict state between calls, so the exact shape has cold and warm winners.
+    """
+    raw_arrays = [factor_batch.values, label_bundle.values]
+    if factor_batch.validity is not None:
+        raw_arrays.append(factor_batch.validity)
+    return evaluation_identity_cache_ready(
+        raw_arrays=raw_arrays, fields=config_fields, tag="EvaluationConfig.v2",
+        array_keys=("factor_values", "factor_validity"),
+    )
+
+
+def _apply_f32_coverage_cache_route(backend, reason, cache_ready):
+    """Downgrade only the certified F32 coverage auto route on a cache miss.
+
+    A warm exact-shape route remains eligible for CUDA; measured registry
+    adoption still decides whether to keep that static winner.
+    """
+    if (backend == "cuda_strict"
+            and reason == "certified_single_metric_real_cos_f32_coverage"
+            and not cache_ready):
+        return "cpu", "identity_hash_cache_not_fully_warm_real_cos_f32_coverage"
+    return backend, reason
+
+
+def _is_f32_coverage_auto_candidate(factor_batch, label_bundle, metric_ids):
+    """Pure structural identity for the narrow certified single-coverage route."""
+    return (
+        metric_ids == ("coverage",)
+        and (factor_batch.num_times, factor_batch.num_assets,
+             factor_batch.num_factors) == _AUTO_REAL_COS_F32_SHAPE
+        and factor_batch.values.dtype == np.float64
+        and label_bundle.values.dtype == np.float64
+    )
+
+
 def _select_public_auto_backend(
     factor_batch, label_bundle, canonical_metrics, *, metric_parameters,
     context, quantile_builder_parameters, portfolio_returns, holding_returns,
     trade_eligibility, calendar_snapshot, exposure_panel,
     generalization_evidence, evaluator, gpu_policy=None, split_ref=None,
     portfolio_spec=None,
+    request_fields=None,
 ):
     """Return a bounded whole-request route and an auditable reason."""
     batch_name = None
@@ -375,9 +440,35 @@ def _select_public_auto_backend(
                   if profile in (_AUTO_LARGE_PROFILE, _AUTO_LARGE_EXTRAP_PROFILE)
                   else _AUTO_SINGLE_MIN_EFFECTIVE_VRAM_BYTES)
         )
+    if (_is_f32_coverage_auto_candidate(factor_batch, label_bundle, canonical_metrics)
+            and isinstance(factor_batch, FactorBatch)
+            and isinstance(label_bundle, LabelBundle)
+            ):
+        try:
+            config_fields = _evaluation_config_hash_fields(
+                factor_batch, label_bundle, canonical_metrics,
+                metric_parameters=metric_parameters, context=context,
+                quantile_builder_parameters=quantile_builder_parameters,
+                portfolio_returns=portfolio_returns, holding_returns=holding_returns,
+                portfolio_spec=portfolio_spec, trade_eligibility=trade_eligibility,
+                calendar_snapshot=calendar_snapshot, exposure_panel=exposure_panel,
+                generalization_evidence=generalization_evidence,
+                split_ref=split_ref, request_fields=request_fields or {},
+            )
+            cache_ready = _f32_coverage_identity_cache_ready(
+                factor_batch, label_bundle, config_fields)
+        except Exception:
+            cache_ready = False
+        if not cache_ready:
+            return _apply_f32_coverage_cache_route(
+                "cuda_strict", "certified_single_metric_real_cos_f32_coverage",
+                cache_ready)
     rejection = _auto_batch_cuda_rejection(gpu_policy, min_effective_vram)
     if rejection is not None:
         return "cpu", rejection
+    if _is_f32_coverage_auto_candidate(
+            factor_batch, label_bundle, canonical_metrics):
+        return "cuda_strict", "certified_single_metric_real_cos_f32_coverage"
     if profile == _AUTO_LARGE_PROFILE:
         if real_cos_f2_rank_series:
             return "cuda_strict", "certified_single_metric_real_cos_f2_rank_ic_series"
@@ -1905,6 +1996,7 @@ def evaluate(
                 exposure_panel=exposure_panel,
                 generalization_evidence=generalization_evidence, evaluator=evaluator,
                 gpu_policy=gpu_policy,
+                request_fields=request_fields,
             )
             simple_measured_auto = (
                 isinstance(factors, FactorBatch)
@@ -2497,28 +2589,23 @@ def evaluate(
     )
 
     versions = {mid: get_metric(_resolve_alias(mid)).metric_version for mid in metric_ids}
-    config_hash = stable_content_hex_streamed_arrays(tag="EvaluationConfig.v2", fields={
-        "metrics": metric_ids, "versions": versions, "parameters": metric_parameters,
-        "label_hash": label_bundle.content_hash,
-        "factor_ids": factor_batch.factor_ids,
-        "factor_values": factor_batch.values,
-        "factor_validity": factor_batch.validity,
-        "context": context,
-        "quantile_builder_parameters": quantile_builder_parameters,
-        "calendar_snapshot": None if calendar_snapshot is None else {
-            "id": calendar_snapshot.snapshot_id, "market": calendar_snapshot.market,
-            "timezone": calendar_snapshot.timezone, "source": calendar_snapshot.source_version,
-            "trading_days": calendar_snapshot.trading_days, "sessions": calendar_snapshot.sessions,
-            "early_close": calendar_snapshot.early_close},
-        "portfolio_returns": portfolio_returns.to_dict() if portfolio_returns is not None and holding_returns is None else None,
-        "holding_returns": holding_returns.content_hash if holding_returns is not None else None,
-        "portfolio_spec": portfolio_spec.to_dict() if portfolio_spec is not None else None,
-        "trade_eligibility": trade_eligibility.content_hash if trade_eligibility is not None else None,
-        "exposure_panel": exposure_panel.to_dict() if exposure_panel is not None else None,
-        "generalization_evidence": generalization_evidence.to_dict() if generalization_evidence is not None else None,
-        "split_ref": split_ref.to_dict() if split_ref is not None else None,
-        **request_fields,
-    }, array_keys=("factor_values", "factor_validity"))
+    config_hash = stable_content_hex_streamed_arrays(
+        tag="EvaluationConfig.v2",
+        fields=_evaluation_config_hash_fields(
+            factor_batch, label_bundle, metric_ids,
+            metric_parameters=metric_parameters, context=context,
+            quantile_builder_parameters=quantile_builder_parameters,
+            portfolio_returns=portfolio_returns,
+            holding_returns=holding_returns, portfolio_spec=portfolio_spec,
+            trade_eligibility=trade_eligibility,
+            calendar_snapshot=calendar_snapshot,
+            exposure_panel=exposure_panel,
+            generalization_evidence=generalization_evidence,
+            split_ref=split_ref, request_fields=request_fields,
+            metric_versions=versions,
+        ),
+        array_keys=("factor_values", "factor_validity"),
+    )
     artifacts = {}
     factor_artifacts = {fid: {} for fid in factor_batch.factor_ids}
     if adaptive_resolution_artifact is not None:

@@ -74,6 +74,19 @@ def test_immutable_payload_hit_skips_raw_hash_helper(monkeypatch):
     assert len(calls) == 1
 
 
+def test_raw_hash_cache_state_distinguishes_eligible_cold_and_resident(monkeypatch):
+    cache = ArrayHashStateCache(min_nbytes=0, capacity=8)
+    monkeypatch.setattr(array_identity, "_RAW_ARRAY_HASH_STATE_CACHE", cache)
+    values = np.arange(8, dtype=np.float64)
+    immutable = np.frombuffer(values.tobytes(), dtype=values.dtype)
+    mutable = np.arange(8, dtype=np.float64)
+
+    assert array_identity.authoritative_array_hash_cache_state(immutable) is False
+    assert array_identity.authoritative_array_hash_cache_state(mutable) is None
+    authoritative_array_hash(immutable)
+    assert array_identity.authoritative_array_hash_cache_state(immutable) is True
+
+
 def test_readonly_mutable_backing_bypasses_cache_and_observes_changes(monkeypatch):
     cache = ArrayHashStateCache(min_nbytes=0, capacity=32)
     monkeypatch.setattr(array_identity, "_RAW_ARRAY_HASH_STATE_CACHE", cache)
@@ -122,3 +135,51 @@ def test_mutable_subclass_and_noncontiguous_arrays_do_not_enter_raw_cache(monkey
     for value in (mutable, subclass, strided, scalar):
         assert authoritative_array_hash(value) == _historical_hash(value)
     assert len(cache._entries) == 0
+
+
+def test_f32_coverage_readiness_requires_raw_and_config_json_cache_hits(monkeypatch):
+    from types import SimpleNamespace
+    import quant_evaluator.contracts._hashutil as hashutil
+    from quant_evaluator.runtime.evaluator import (
+        _apply_f32_coverage_cache_route,
+        _f32_coverage_identity_cache_ready,
+    )
+
+    batch = SimpleNamespace(values=np.empty((1,)), validity=np.empty((1,), dtype=bool))
+    label = SimpleNamespace(values=np.empty((1,)))
+    raw_state = {"hit": True}
+    json_state = {"hit": True}
+    monkeypatch.setattr(
+        array_identity, "authoritative_array_hash_cache_state",
+        lambda _: raw_state["hit"],
+    )
+    monkeypatch.setattr(
+        hashutil, "streamed_arrays_cache_ready",
+        lambda **_: json_state["hit"],
+    )
+
+    ready = _f32_coverage_identity_cache_ready(batch, label, {})
+    assert ready
+    assert _apply_f32_coverage_cache_route(
+        "cuda_strict", "certified_single_metric_real_cos_f32_coverage", ready,
+    ) == ("cuda_strict", "certified_single_metric_real_cos_f32_coverage")
+    json_state["hit"] = False
+    ready = _f32_coverage_identity_cache_ready(batch, label, {})
+    assert not ready
+    assert _apply_f32_coverage_cache_route(
+        "cuda_strict", "certified_single_metric_real_cos_f32_coverage", ready,
+    )[0] == "cpu"
+    json_state["hit"] = True
+    raw_state["hit"] = False
+    ready = _f32_coverage_identity_cache_ready(batch, label, {})
+    assert not ready
+    assert _apply_f32_coverage_cache_route(
+        "cuda_strict", "certified_single_metric_real_cos_f32_coverage", ready,
+    )[0] == "cpu"
+    raw_state["hit"] = True
+    json_state["hit"] = None
+    assert not _f32_coverage_identity_cache_ready(batch, label, {})
+    assert _apply_f32_coverage_cache_route(
+        "cuda_strict", "certified_single_metric_real_cos_f32_coverage", False,
+    )[0] == "cpu"
+    assert _apply_f32_coverage_cache_route("cpu", "explicit", False) == ("cpu", "explicit")

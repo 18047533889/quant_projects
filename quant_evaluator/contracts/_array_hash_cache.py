@@ -65,6 +65,17 @@ class ArrayHashStateCache:
             self._entries.move_to_end(key)
             return entry[1].copy()
 
+    def peek(self, array: np.ndarray, prefix: Any) -> Any | None:
+        """Copy a cached digest state without changing LRU order or contents."""
+        if not self._eligible(array, self.min_nbytes):
+            return None
+        key = self._key(array, prefix)
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None or entry[0]() is not array:
+                return None
+            return entry[1].copy()
+
     def store(self, array: np.ndarray, prefix: Any, completed: Any) -> None:
         if not self._eligible(array, self.min_nbytes):
             return

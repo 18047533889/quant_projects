@@ -13,6 +13,7 @@ from quant_evaluator.contracts._array_hash_cache import ArrayHashStateCache
 from quant_evaluator.contracts._hashutil import (
     stable_content_hex,
     stable_content_hex_streamed_arrays,
+    streamed_arrays_cache_ready,
 )
 
 
@@ -62,6 +63,73 @@ def test_cache_hit_skips_array_encoding(monkeypatch):
     assert first_call_count > 0
     assert _digest(array) == first
     assert len(calls) == first_call_count
+
+
+def test_peek_does_not_promote_lru_entry():
+    cache = ArrayHashStateCache(min_nbytes=0, capacity=2)
+    arrays = [_immutable_array([float(index)]) for index in range(3)]
+    prefix = hashlib.sha256(b"p")
+    for array in arrays[:2]:
+        cache.store(array, prefix, hashlib.sha256(b"completed"))
+    before = tuple(cache._entries)
+    assert cache.peek(arrays[0], prefix) is not None
+    assert tuple(cache._entries) == before
+    cache.store(arrays[2], prefix, hashlib.sha256(b"new"))
+    assert cache.peek(arrays[0], prefix) is None
+    assert cache.peek(arrays[1], prefix) is not None
+
+
+def test_streamed_cache_probe_uses_exact_prefix_without_filling_or_promoting(monkeypatch):
+    cache = ArrayHashStateCache(min_nbytes=0, capacity=8)
+    monkeypatch.setattr(
+        "quant_evaluator.contracts._hashutil._ARRAY_HASH_STATE_CACHE", cache,
+    )
+    array = _immutable_array(np.arange(16, dtype=np.float64))
+    import quant_evaluator.contracts._hashutil as hashutil
+    encoded = []
+    original = hashutil.base64.b64encode
+    def counted(payload):
+        encoded.append(len(payload))
+        return original(payload)
+    monkeypatch.setattr(hashutil.base64, "b64encode", counted)
+    fields = {"factor_ids": ("f0",), "factor_values": array,
+              "factor_validity": None, "label_hash": "a" * 64}
+    arguments = dict(tag="EvaluationConfig.v2", fields=fields,
+                     array_keys=("factor_values", "factor_validity"))
+    assert streamed_arrays_cache_ready(**arguments) is False
+    assert len(cache._entries) == 0
+    assert encoded == []
+
+    stable_content_hex_streamed_arrays(**arguments)
+    assert encoded
+    original_order = tuple(cache._entries)
+    assert streamed_arrays_cache_ready(**arguments) is True
+    assert tuple(cache._entries) == original_order
+
+    changed_fields = dict(fields, factor_ids=("other",))
+    assert streamed_arrays_cache_ready(**dict(arguments, fields=changed_fields)) is False
+
+
+def test_streamed_cache_probe_bounds_metadata_and_never_reads_cold_payload(monkeypatch):
+    cache = ArrayHashStateCache(min_nbytes=0, capacity=8)
+    monkeypatch.setattr(
+        "quant_evaluator.contracts._hashutil._ARRAY_HASH_STATE_CACHE", cache,
+    )
+    array = _immutable_array(np.arange(16, dtype=np.float64))
+    fields = {"factor_values": array, "context": "x" * 32}
+    import quant_evaluator.contracts._hashutil as hashutil
+    encoded = []
+    original = hashutil.base64.b64encode
+    def counted(payload):
+        encoded.append(len(payload))
+        return original(payload)
+    monkeypatch.setattr(hashutil.base64, "b64encode", counted)
+    assert streamed_arrays_cache_ready(
+        tag="EvaluationConfig.v2", fields=fields,
+        array_keys=("factor_values",), max_metadata_text=8,
+    ) is None
+    assert encoded == []
+    assert len(cache._entries) == 0
 
 
 def test_readonly_mutable_backing_is_not_cached_and_changes_are_seen(monkeypatch):

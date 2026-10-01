@@ -9,6 +9,8 @@ import pytest
 from quant_evaluator.scripts import benchmark_real_cos_metric_batch as benchmark
 
 
+from quant_evaluator.tests.benchmark_repeat_receipt_fixture import fake_repeat_receipts
+
 @pytest.mark.parametrize("metric_arg, expected", [
     ("rank_ic_positive_ratio", ("rank_ic_positive_ratio",)),
     ("rank_ic,rank_ic_positive_ratio", ("rank_ic", "rank_ic_positive_ratio")),
@@ -30,9 +32,10 @@ def test_f13_accepts_exact_positive_ratio_requests(monkeypatch, capsys, metric_a
 
     def fake_run_one(context, backend, repeats, timeout_s):
         runs.append((backend, repeats, timeout_s, benchmark.METRICS))
+        actual_backend = "cpu" if backend == "auto" else backend
         return {
             "backend_requested": backend,
-            "backend_used": "cpu" if backend == "auto" else backend,
+            "backend_used": actual_backend,
             "auto_backend_reason": "shape_outside_certified_range" if backend == "auto" else None,
             "cold_s": 0.1,
             "warm_median_s": 0.1,
@@ -40,6 +43,9 @@ def test_f13_accepts_exact_positive_ratio_requests(monkeypatch, capsys, metric_a
             "peak_rss_kib": 100,
             "config_hash": "same",
             "artifacts": {},
+            "repeat_receipts": fake_repeat_receipts(
+                actual_backend, benchmark.METRICS,
+                reason="shape_outside_certified_range" if backend == "auto" else None),
         }
 
     monkeypatch.setattr(benchmark, "_BATCH", None)

@@ -11,6 +11,8 @@ from quant_evaluator.scripts import benchmark_real_cos_factor_batch as profile
 from quant_evaluator.scripts import benchmark_real_cos_metric_batch as benchmark
 
 
+from quant_evaluator.tests.benchmark_repeat_receipt_fixture import fake_repeat_receipts
+
 def _setup_run(monkeypatch, calls):
     batch = SimpleNamespace(
         num_times=2586,
@@ -30,9 +32,10 @@ def _setup_run(monkeypatch, calls):
 
     def fake_run_one(context, backend, repeats, timeout_s):
         calls.append(("run", backend, benchmark.METRICS, repeats, timeout_s))
+        actual_backend = "cuda" if backend == "auto" else backend
         return {
             "backend_requested": backend,
-            "backend_used": "cuda" if backend == "auto" else backend,
+            "backend_used": actual_backend,
             "auto_backend_reason": None,
             "cold_s": 0.1,
             "warm_median_s": 0.1,
@@ -40,6 +43,7 @@ def _setup_run(monkeypatch, calls):
             "peak_rss_kib": 100,
             "config_hash": "same",
             "artifacts": {},
+            "repeat_receipts": fake_repeat_receipts(actual_backend, benchmark.METRICS),
         }
 
     monkeypatch.setattr(profile, "preflight_factor_count_profile", fake_preflight)

@@ -119,6 +119,48 @@ def stable_content_hex(*, tag: str, fields: Mapping[str, Any]) -> str:
 
 _ARRAY_HASH_STATE_CACHE = ArrayHashStateCache()
 
+
+def _bounded_probe_metadata(value, *, remaining_nodes, remaining_text):
+    """Bound work before canonicalizing non-array fields in a cache probe."""
+    pending = [value]
+    nodes = 0
+    text_size = 0
+    while pending:
+        current = pending.pop()
+        nodes += 1
+        if nodes > remaining_nodes:
+            return None
+        current_type = type(current)
+        if current is None or current_type in (bool, float):
+            continue
+        if current_type is int:
+            if current.bit_length() > 256:
+                return None
+            continue
+        if current_type is str:
+            text_size += len(current)
+            if text_size > remaining_text:
+                return None
+            continue
+        if current_type in (tuple, list):
+            if len(current) > remaining_nodes - nodes + 1:
+                return None
+            pending.extend(current)
+            continue
+        if current_type is dict:
+            if len(current) * 2 > remaining_nodes - nodes + 1:
+                return None
+            for key, item in current.items():
+                if type(key) is not str:
+                    return None
+                text_size += len(key)
+                if text_size > remaining_text:
+                    return None
+                pending.append(item)
+            continue
+        return None
+    return nodes, text_size
+
 def stable_content_hex_streamed_arrays(
     *, tag: str, fields: Mapping[str, Any], array_keys: tuple[str, ...],
     chunk_bytes: int = 3 * 1024 * 1024,
@@ -129,8 +171,49 @@ def stable_content_hex_streamed_arrays(
     the exact digest of stable_content_hex. Other fields retain canonicalize's
     fail-closed rules. Non-contiguous arrays use the original allocating codec.
     """
+    return _stable_content_hex_streamed_arrays(
+        tag=tag, fields=fields, array_keys=array_keys, chunk_bytes=chunk_bytes,
+        probe_only=False,
+    )
+
+
+def streamed_arrays_cache_ready(*, tag: str, fields: Mapping[str, Any],
+                                array_keys: tuple[str, ...],
+                                max_metadata_nodes: int = 4096,
+                                max_metadata_text: int = 1024 * 1024) -> bool | None:
+    """Return hit, miss, or unknown without hashing missing array payloads."""
+    if (type(max_metadata_nodes) is not int or max_metadata_nodes < 1
+            or type(max_metadata_text) is not int or max_metadata_text < 0):
+        return False
+    try:
+        return _stable_content_hex_streamed_arrays(
+            tag=tag, fields=fields, array_keys=array_keys, chunk_bytes=3 * 1024 * 1024,
+            probe_only=True, max_metadata_nodes=max_metadata_nodes,
+            max_metadata_text=max_metadata_text,
+        )
+    except Exception:
+        return None
+
+
+def _stable_content_hex_streamed_arrays(
+    *, tag: str, fields: Mapping[str, Any], array_keys: tuple[str, ...],
+    chunk_bytes: int, probe_only: bool, max_metadata_nodes: int = 4096,
+    max_metadata_text: int = 1024 * 1024,
+):
     if not isinstance(fields, Mapping) or not isinstance(array_keys, tuple):
+        if probe_only:
+            return None
         raise TypeError("fields must be a mapping and array_keys a tuple")
+    if probe_only and (type(fields) is not dict or len(fields) > 512
+                       or len(array_keys) > 16):
+        return None
+    if probe_only:
+        if (type(tag) is not str or len(tag) > 256
+                or any(type(key) is not str for key in fields)
+                or any(type(key) is not str or len(key) > 256 for key in array_keys)
+                or sum(len(key) for key in fields) > max_metadata_text
+                or sum(len(key) for key in array_keys) > max_metadata_text):
+            return None
     if (isinstance(chunk_bytes, bool) or not isinstance(chunk_bytes, int)
             or chunk_bytes < 3):
         raise ValueError("chunk_bytes must be an integer >= 3")
@@ -141,6 +224,8 @@ def stable_content_hex_streamed_arrays(
     reserved = {'__ndarray__', '__datetime__', '__date__', '__timedelta__',
                 '__decimal__', '__enum__', '__bytes__', '__mapping__'}
     if reserved.intersection(fields):
+        if probe_only:
+            return None
         return stable_content_hex(tag=tag, fields=fields)
 
     digest = hashlib.sha256()
@@ -152,6 +237,8 @@ def stable_content_hex_streamed_arrays(
     emit(',{')
     selected = frozenset(array_keys)
     stride = chunk_bytes - chunk_bytes % 3
+    metadata_nodes = 0
+    metadata_text = 0
     for index, key in enumerate(sorted(fields)):
         if index:
             emit(',')
@@ -159,6 +246,17 @@ def stable_content_hex_streamed_arrays(
         emit(':')
         value = fields[key]
         if key not in selected or not isinstance(value, np.ndarray):
+            if probe_only:
+                if type(key) is not str:
+                    return None
+                metadata_text += len(key)
+                measured = _bounded_probe_metadata(
+                        value, remaining_nodes=max_metadata_nodes - metadata_nodes,
+                        remaining_text=max_metadata_text - metadata_text)
+                if metadata_text > max_metadata_text or measured is None:
+                    return None
+                metadata_nodes += measured[0]
+                metadata_text += measured[1]
             emit(json.dumps(canonicalize(value), sort_keys=True,
                             separators=(',', ':'), ensure_ascii=True))
             continue
@@ -168,14 +266,21 @@ def stable_content_hex_streamed_arrays(
             )
         array = np.asarray(value)
         if not array.flags.c_contiguous or not array.size or array.dtype.kind in "Mm":
+            if probe_only:
+                return None
             emit(json.dumps(canonicalize(array), sort_keys=True,
                             separators=(',', ':'), ensure_ascii=True))
             continue
         prefix = digest.copy()
-        cached_state = _ARRAY_HASH_STATE_CACHE.get(array, prefix)
+        cached_state = (_ARRAY_HASH_STATE_CACHE.peek(array, prefix) if probe_only
+                        else _ARRAY_HASH_STATE_CACHE.get(array, prefix))
         if cached_state is not None:
             digest = cached_state
             continue
+        if probe_only:
+            if not _ARRAY_HASH_STATE_CACHE._eligible(array, _ARRAY_HASH_STATE_CACHE.min_nbytes):
+                return None
+            return False
         emit('{"__ndarray__":true,"data_b64":"')
         raw = memoryview(array).cast('B')
         for offset in range(0, len(raw), stride):
@@ -187,7 +292,7 @@ def stable_content_hex_streamed_arrays(
         emit('}')
         _ARRAY_HASH_STATE_CACHE.store(array, prefix, digest)
     emit('}]')
-    return digest.hexdigest()
+    return True if probe_only else digest.hexdigest()
 #: Largest value CPython allows ``hash()`` to return (``sys.hash_info.modulus``).
 _HASH_MODULUS = getattr(sys.hash_info, "modulus", 2**63 - 1)
 

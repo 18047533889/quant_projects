@@ -11,6 +11,8 @@ from quant_evaluator.scripts import benchmark_real_cos_factor_batch as profile
 from quant_evaluator.scripts import benchmark_real_cos_metric_batch as benchmark
 
 
+from quant_evaluator.tests.benchmark_repeat_receipt_fixture import fake_repeat_receipts
+
 def _artifact():
     return {
         "descriptor": {"type": "DailyQuantileReturnArtifact",
@@ -62,12 +64,16 @@ def test_f32_daily_preflight_then_six_order_run(monkeypatch, capsys, tmp_path):
 
     def fake_run_one(context, backend, repeats, timeout_s):
         calls.append(("run", backend, benchmark.METRICS, repeats, timeout_s))
+        actual_backend = "cpu" if backend == "auto" else backend
         return {"backend_requested": backend,
-                "backend_used": "cpu" if backend == "auto" else backend,
+                "backend_used": actual_backend,
                 "auto_backend_reason": "metric_not_certified" if backend == "auto" else None,
                 "cold_s": 0.1, "warm_median_s": 0.1, "peak_vram": None,
                 "peak_rss_kib": 100, "config_hash": "same",
-                "artifacts": {"quantile_returns_daily": _artifact()}}
+                "artifacts": {"quantile_returns_daily": _artifact()},
+                "repeat_receipts": fake_repeat_receipts(
+                    actual_backend, benchmark.METRICS,
+                    reason="metric_not_certified" if backend == "auto" else None)}
 
     monkeypatch.setattr(benchmark, "_run_one", fake_run_one)
     argv = ["benchmark_real_cos_metric_batch.py", "--factors", "32",

@@ -306,57 +306,256 @@ def _metric_value(value):
         "warnings", "sample_unit")}
 
 
+def _bundle_artifacts(bundle):
+    artifacts = {}
+    for metric in METRICS:
+        artifact = bundle.artifacts[metric]
+        values = np.asarray(artifact.values)
+        finite_mask = np.isfinite(values)
+        explicit_mask = getattr(artifact, "valid_mask", None)
+        explicit_counts = getattr(artifact, "counts", None)
+        observations = tuple(
+            _metric_value(bundle.grouped_metrics[factor_id].get(metric))
+            for factor_id in bundle.factor_ids
+        )
+        descriptor = {
+            "type": type(artifact).__name__,
+            "artifact_kind": _plain(getattr(artifact, "artifact_kind", None)),
+        }
+        if is_dataclass(artifact):
+            descriptor.update({
+                field.name: _plain(getattr(artifact, field.name))
+                for field in fields(artifact)
+                if field.name not in {"values", "counts", "valid_mask", "provenance"}
+            })
+        else:
+            raise TypeError(f"unsupported non-dataclass artifact: {type(artifact).__name__}")
+        artifacts[metric] = {
+            "descriptor": descriptor,
+            "values": values.tolist(),
+            "finite_mask": finite_mask.tolist(),
+            "valid_mask": (finite_mask if explicit_mask is None else
+                           np.asarray(explicit_mask)).tolist(),
+            "counts": (None if explicit_counts is None else
+                       np.asarray(explicit_counts).tolist()),
+            "provenance_observation_counts": _plain(
+                artifact.provenance.get("observation_counts")),
+            "provenance": _plain(artifact.provenance),
+            "metric_values": observations,
+        }
+    return artifacts
+
+
+def _array_sha256(value):
+    array = np.asarray(value)
+    digest = hashlib.sha256()
+    digest.update(array.dtype.str.encode())
+    digest.update(json.dumps(array.shape, separators=(",", ":")).encode())
+    if array.dtype.hasobject:
+        digest.update(json.dumps(_plain(array.tolist()), sort_keys=True,
+                                 separators=(",", ":"), allow_nan=False).encode())
+    elif array.flags.c_contiguous:
+        digest.update(memoryview(array).cast("B"))
+    else:
+        chunks = np.nditer(array, flags=["external_loop", "buffered"],
+                           op_flags=["readonly"], order="C", buffersize=65536)
+        for chunk in chunks:
+            digest.update(memoryview(np.ascontiguousarray(chunk)).cast("B"))
+    return digest.hexdigest()
+
+
+def _repeat_receipt(bundle, elapsed_s, repeat_index):
+    """Keep full-output parity evidence small for repeated public harness runs."""
+    metric_receipts = {}
+    snapshots = {}
+    for metric in METRICS:
+        artifact = bundle.artifacts[metric]
+        values = np.asarray(artifact.values)
+        finite_mask = np.isfinite(values)
+        explicit_mask = getattr(artifact, "valid_mask", None)
+        valid_mask = finite_mask if explicit_mask is None else np.asarray(explicit_mask)
+        counts = getattr(artifact, "counts", None)
+        observations = tuple(
+            _metric_value(bundle.grouped_metrics[factor_id].get(metric))
+            for factor_id in bundle.factor_ids
+        )
+        descriptor = {
+            "type": type(artifact).__name__,
+            "artifact_kind": _plain(getattr(artifact, "artifact_kind", None)),
+        }
+        if is_dataclass(artifact):
+            descriptor.update({
+                field.name: _plain(getattr(artifact, field.name))
+                for field in fields(artifact)
+                if field.name not in {"values", "counts", "valid_mask", "provenance"}
+            })
+        else:
+            raise TypeError(f"unsupported non-dataclass artifact: {type(artifact).__name__}")
+        provenance_counts = _plain(artifact.provenance.get("observation_counts"))
+        observation_counts_array = (None if provenance_counts is None else
+                                    np.asarray(provenance_counts))
+        counts_array = None if counts is None else np.asarray(counts)
+        output_fingerprint = {
+            "descriptor": descriptor,
+            "values_sha256": _array_sha256(values),
+            "finite_mask_sha256": _array_sha256(finite_mask),
+            "valid_mask_sha256": _array_sha256(valid_mask),
+            "counts_sha256": (None if counts_array is None else
+                              _array_sha256(counts_array)),
+            "provenance_observation_counts": provenance_counts,
+            "provenance": _plain(artifact.provenance),
+            "metric_values": observations,
+        }
+        metric_receipt = {
+            "artifact_sha256": _artifact_sha256(output_fingerprint),
+            "value_shape": list(values.shape),
+            "value_count": int(values.size),
+            "finite_mask_sha256": _array_sha256(finite_mask),
+            "finite_mask_shape": list(finite_mask.shape),
+            "finite_count": int(finite_mask.sum()),
+            "valid_mask_sha256": _array_sha256(valid_mask),
+            "valid_mask_shape": list(valid_mask.shape),
+            "valid_count": int(np.asarray(valid_mask, dtype=bool).sum()),
+            "counts_sha256": (None if counts_array is None else
+                              _array_sha256(counts_array)),
+            "counts_shape": (None if counts_array is None else
+                             list(counts_array.shape)),
+            "count_sum": (None if counts_array is None else
+                          int(np.asarray(counts_array, dtype=np.int64).sum())),
+            "observation_counts": provenance_counts,
+            "observation_counts_sha256": _artifact_sha256(provenance_counts),
+            "observation_counts_shape": (
+                None if observation_counts_array is None else
+                list(observation_counts_array.shape)),
+            "parity_scope": "full_metric_artifact_exact_sha256",
+        }
+        metric_receipts[metric] = metric_receipt
+        # Retain bounded F32 coverage values for numeric parity checks. Compact
+        # reports remove these snapshots after comparisons have been computed.
+        if METRICS == F32_COVERAGE_SINGLE:
+            snapshots[metric] = _plain(values)
+    meta = bundle.metadata
+    receipt = {
+        "repeat": repeat_index,
+        "elapsed_s": elapsed_s,
+        "backend_used": meta.get("backend_used"),
+        "auto_backend_reason": meta.get("auto_backend_reason"),
+        "auto_backend_profile": meta.get("auto_backend_profile"),
+        "metric_backends": _plain(meta.get("metric_backends")),
+        "config_hash": bundle.config_hash,
+        "execution_receipt": _plain(meta.get("execution_receipt")),
+        "artifact_sha256": _artifact_sha256({
+            metric: receipt["artifact_sha256"]
+            for metric, receipt in metric_receipts.items()}),
+        "artifact_parity_scope": "full_metric_artifacts_exact_sha256",
+        "metrics": metric_receipts,
+    }
+    if snapshots:
+        receipt["value_snapshots"] = snapshots
+    return receipt
+
+
+def _compare_repeat_receipt(reference, candidate):
+    """Check exact repeat reproducibility within one actual backend."""
+    same_backend = reference.get("backend_used") == candidate.get("backend_used")
+    if not same_backend:
+        return {"compared": False, "pass": None,
+                "reason": "actual_backend_differs"}
+    metric_checks = {}
+    reference_metrics = reference.get("metrics", {})
+    candidate_metrics = candidate.get("metrics", {})
+    for metric in METRICS:
+        left, right = reference_metrics.get(metric, {}), candidate_metrics.get(metric, {})
+        metric_checks[metric] = {
+            "full_artifact_sha256": left.get("artifact_sha256") == right.get("artifact_sha256"),
+            "counts": all(left.get(field) == right.get(field) for field in (
+                "value_count", "finite_count", "valid_count", "count_sum",
+                "observation_counts")),
+        }
+        metric_checks[metric]["pass"] = all(metric_checks[metric].values())
+    result = {
+        "compared": True,
+        "reference_repeat": reference.get("repeat"),
+        "candidate_repeat": candidate.get("repeat"),
+        "reference_backend": reference.get("backend_used"),
+        "candidate_backend": candidate.get("backend_used"),
+        "config_hash": reference.get("config_hash") == candidate.get("config_hash"),
+        "metrics": metric_checks,
+    }
+    result["pass"] = result["config_hash"] and all(
+        item["pass"] for item in metric_checks.values())
+    return result
+
+
+def _compare_repeat_numeric(reference, candidate):
+    """Compare bounded coverage values across backends without provenance hashes."""
+    if METRICS != F32_COVERAGE_SINGLE:
+        return {"status": "not_compared_hash_only", "pass": None}
+    metric = F32_COVERAGE_SINGLE[0]
+    left = reference.get("value_snapshots", {}).get(metric)
+    right = candidate.get("value_snapshots", {}).get(metric)
+    values_match = left is not None and right is not None and _close_values(left, right)
+    left_counts = reference.get("metrics", {}).get(metric, {})
+    right_counts = candidate.get("metrics", {}).get(metric, {})
+    shapes_match = all(left_counts.get(field) == right_counts.get(field) for field in (
+        "value_shape", "finite_mask_shape", "valid_mask_shape", "counts_shape",
+        "observation_counts_shape"))
+    finite_mask_match = left_counts.get("finite_mask_sha256") == right_counts.get(
+        "finite_mask_sha256")
+    valid_mask_match = left_counts.get("valid_mask_sha256") == right_counts.get(
+        "valid_mask_sha256")
+    counts_match = (left_counts.get("counts_sha256") == right_counts.get("counts_sha256")
+                    and all(left_counts.get(field) == right_counts.get(field) for field in (
+                        "value_count", "finite_count", "valid_count", "count_sum")))
+    observation_counts_match = (
+        left_counts.get("observation_counts_sha256") ==
+        right_counts.get("observation_counts_sha256"))
+    result = {
+        "status": "compared_values_rtol_1e-8_atol_1e-10",
+        "reference_backend": reference.get("backend_used"),
+        "candidate_backend": candidate.get("backend_used"),
+        "config_hash": reference.get("config_hash") == candidate.get("config_hash"),
+        "metrics": {metric: {
+            "values": values_match, "shapes": shapes_match,
+            "finite_mask": finite_mask_match, "valid_mask": valid_mask_match,
+            "counts": counts_match, "observation_counts": observation_counts_match}},
+    }
+    result["pass"] = (result["config_hash"] and values_match and shapes_match
+                       and finite_mask_match and valid_mask_match and counts_match
+                       and observation_counts_match)
+    return result
+
+
+def _compact_repeat_run(run):
+    compact = {key: value for key, value in run.items() if key != "artifacts"}
+    compact["repeat_receipts"] = [
+        {key: value for key, value in receipt.items() if key != "value_snapshots"}
+        for receipt in run["repeat_receipts"]
+    ]
+    return compact
+
+
 def _worker(connection, backend, repeats):
     try:
         from quant_evaluator.runtime.evaluator import evaluate
 
         timings = []
-        for _ in range(repeats):
+        repeat_receipts = []
+        for repeat_index in range(1, repeats + 1):
             start = time.perf_counter()
             bundle = evaluate(_BATCH, _LABELS, metrics=METRICS, backend=backend)
-            timings.append(time.perf_counter() - start)
+            elapsed_s = time.perf_counter() - start
+            timings.append(elapsed_s)
+            # Artifact extraction and hashing happen after the timed call.
+            repeat_receipts.append(_repeat_receipt(bundle, elapsed_s, repeat_index))
 
-        artifacts = {}
-        for metric in METRICS:
-            artifact = bundle.artifacts[metric]
-            values = np.asarray(artifact.values)
-            finite_mask = np.isfinite(values)
-            explicit_mask = getattr(artifact, "valid_mask", None)
-            explicit_counts = getattr(artifact, "counts", None)
-            observations = tuple(
-                _metric_value(bundle.grouped_metrics[factor_id].get(metric))
-                for factor_id in bundle.factor_ids
-            )
-            descriptor = {
-                "type": type(artifact).__name__,
-                "artifact_kind": _plain(getattr(artifact, "artifact_kind", None)),
-            }
-            if is_dataclass(artifact):
-                descriptor.update({
-                    field.name: _plain(getattr(artifact, field.name))
-                    for field in fields(artifact)
-                    if field.name not in {"values", "counts", "valid_mask", "provenance"}
-                })
-            else:
-                raise TypeError(f"unsupported non-dataclass artifact: {type(artifact).__name__}")
-            artifacts[metric] = {
-                "descriptor": descriptor,
-                "values": values.tolist(),
-                "finite_mask": finite_mask.tolist(),
-                "valid_mask": (finite_mask if explicit_mask is None else
-                               np.asarray(explicit_mask)).tolist(),
-                "counts": (None if explicit_counts is None else
-                           np.asarray(explicit_counts).tolist()),
-                "provenance_observation_counts": _plain(
-                    artifact.provenance.get("observation_counts")),
-                "provenance": _plain(artifact.provenance),
-                "metric_values": observations,
-            }
+        artifacts = _bundle_artifacts(bundle)
         meta = bundle.metadata
         connection.send({
             "status": "ok", "backend_requested": backend,
             "seconds": timings, "cold_s": timings[0],
             "warm_median_s": statistics.median(timings[1:]) if len(timings) > 1 else None,
+            "repeat_receipts": repeat_receipts,
             "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
             "backend_used": meta.get("backend_used"),
             "auto_backend_reason": meta.get("auto_backend_reason"),
@@ -595,7 +794,8 @@ def main():
         expected_cuda_hash = reference_meta["cuda_artifact_sha256"]
         runs = []
         for index in range(args.auto_runs):
-            run = _run_one(context, "auto", repeats=args.repeats, timeout_s=args.timeout_s)
+            run = _run_one(context, "auto", repeats=args.repeats,
+                           timeout_s=args.timeout_s)
             artifact_hash = _artifact_sha256(run["artifacts"])
             run["round"] = index + 1
             run["artifact_sha256"] = artifact_hash
@@ -669,12 +869,36 @@ def main():
         backend: [_compare(reference, run) for run in selected]
         for backend, selected in by_backend.items()
     }
+    repeat_baselines = {}
+    for run in runs:
+        for repeat in run["repeat_receipts"]:
+            repeat_baselines.setdefault(repeat["backend_used"], repeat)
+    repeat_comparisons = []
+    numeric_comparisons = []
+    first_cpu_repeat = by_backend["cpu"][0]["repeat_receipts"][0]
+    for run in runs:
+        for repeat in run["repeat_receipts"]:
+            comparison = _compare_repeat_receipt(
+                repeat_baselines[repeat["backend_used"]], repeat)
+            repeat_comparisons.append({
+                "round": run["round"], "repeat": repeat["repeat"],
+                "backend_requested": run["backend_requested"],
+                "backend_used": repeat["backend_used"],
+                **comparison,
+            })
+            numeric_comparisons.append({
+                "round": run["round"], "repeat": repeat["repeat"],
+                "backend_requested": run["backend_requested"],
+                **_compare_repeat_numeric(first_cpu_repeat, repeat),
+            })
+    numeric_results = [item["pass"] for item in numeric_comparisons
+                       if item["pass"] is not None]
+    repeat_numeric_parity_pass = (all(numeric_results) if numeric_results else None)
     config_hashes = sorted({run["config_hash"] for run in runs})
     report_runs = runs if not args.compact else [
-        {key: value for key, value in run.items() if key != "artifacts"} | {
+        _compact_repeat_run(run) | {
             "artifact_sha256": _artifact_sha256(run["artifacts"])}
-        for run in runs
-    ]
+        for run in runs]
     report = {
         "created_utc": datetime.now().astimezone().isoformat(),
         "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
@@ -687,9 +911,15 @@ def main():
         "parent_peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
         "config_hashes": config_hashes,
         "runs": report_runs, "comparisons_to_first_cpu": comparisons,
+        "repeat_reproducibility_by_backend": repeat_comparisons,
+        "repeat_reproducibility_pass": all(item["pass"] for item in repeat_comparisons),
+        "repeat_numeric_comparisons_to_first_cpu": numeric_comparisons,
+        "repeat_numeric_parity_pass": repeat_numeric_parity_pass,
         "parity_pass": len(config_hashes) == 1 and all(
             comparison["pass"] for repeated in comparisons.values()
-            for comparison in repeated),
+            for comparison in repeated)
+            and all(item["pass"] for item in repeat_comparisons)
+            and repeat_numeric_parity_pass is not False,
     }
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
