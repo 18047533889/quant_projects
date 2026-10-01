@@ -118,6 +118,7 @@ def test_f32_coverage_preflight_only_never_loads_or_writes(monkeypatch, capsys, 
     assert preflights[0].profile_max_object_mib == 128
     assert preflights[0].profile_max_total_mib == 2048
     assert preflights[0].max_working_gib == 50
+    assert preflights[0].metric_ids == tuple(metrics.split(","))
     report = json.loads(capsys.readouterr().out.splitlines()[-1])
     assert report["status"] == "preflight_only"
 
