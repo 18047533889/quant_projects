@@ -13,6 +13,7 @@ from factor_assets.registry.snapshots import (
     SnapshotQuery,
     SnapshotResult,
 )
+import factor_assets.registry.snapshots as snapshots_module
 
 
 def create_test_asset(factor_id: str, registered_at: str, campaign_id=None) -> FactorAsset:
@@ -379,6 +380,90 @@ def test_snapshot_manager_reconstruct_timestamps():
     asset = result.assets[0]
     assert asset.first_evaluated_at == "2026-01-02T00:00:00Z"
     assert asset.approved_at == "2026-01-03T00:00:00Z"
+
+
+def test_snapshot_reconstructs_many_assets_with_one_event_sort(monkeypatch):
+    assets = [
+        create_test_asset(f"F{i:03d}", "2026-01-01T00:00:00Z")
+        for i in range(40)
+    ]
+    events = []
+    for asset in assets:
+        events.extend((
+            StateEvent(
+                factor_id=asset.factor_id,
+                from_state=LifecycleState.REGISTERED,
+                to_state=LifecycleState.REGISTERED,
+                timestamp="2026-01-01T00:00:00Z",
+                evidence_refs=(),
+            ),
+            StateEvent(
+                factor_id=asset.factor_id,
+                from_state=LifecycleState.REGISTERED,
+                to_state=LifecycleState.EVALUATED,
+                timestamp="2026-01-02T00:00:00Z",
+                evidence_refs=("evaluation_bundle_ref",),
+            ),
+        ))
+
+    real_sorted = sorted
+    sort_calls = 0
+    normalize_calls = 0
+    real_normalize = snapshots_module._normalize_ts
+
+    def counted_sorted(*args, **kwargs):
+        nonlocal sort_calls
+        sort_calls += 1
+        return real_sorted(*args, **kwargs)
+
+    def counted_normalize(timestamp):
+        nonlocal normalize_calls
+        normalize_calls += 1
+        return real_normalize(timestamp)
+
+    monkeypatch.setattr(snapshots_module, "sorted", counted_sorted, raising=False)
+    monkeypatch.setattr(snapshots_module, "_normalize_ts", counted_normalize)
+
+    result = SnapshotManager().create_snapshot(
+        assets, events, SnapshotQuery(as_of_timestamp="2026-01-03T00:00:00Z")
+    )
+
+    assert len(result.assets) == len(assets)
+    assert all(asset.lifecycle_state is LifecycleState.EVALUATED for asset in result.assets)
+    assert sort_calls == 1
+    # One query normalization, one sort key and one replay check per event,
+    # plus one registration timestamp check per asset.
+    assert normalize_calls <= 1 + 2 * len(events) + len(assets)
+
+
+def test_snapshot_includes_as_of_ties_in_input_order_and_excludes_future_events():
+    asset = create_test_asset("F001", "2026-01-01T00:00:00Z")
+    events = [
+        StateEvent("F001", LifecycleState.REGISTERED, LifecycleState.REGISTERED,
+                   "2026-01-01T00:00:00Z", ()),
+        StateEvent("F001", LifecycleState.REGISTERED, LifecycleState.EVALUATED,
+                   "2026-01-02T00:00:00Z", ("evaluation_bundle_ref",)),
+        StateEvent("F001", LifecycleState.EVALUATED, LifecycleState.APPROVED,
+                   "2026-01-02T00:00:00Z", ("gate_results",)),
+        StateEvent("F001", LifecycleState.APPROVED, LifecycleState.PRODUCTION_READY,
+                   "2026-01-03T00:00:00Z", ("certification",)),
+    ]
+    manager = SnapshotManager()
+
+    at_tie = manager.create_snapshot(
+        [asset], events, SnapshotQuery(as_of_timestamp="2026-01-02T00:00:00Z")
+    ).assets[0]
+    before_tie = manager.create_snapshot(
+        [asset], events, SnapshotQuery(as_of_timestamp="2026-01-01T23:59:59Z")
+    ).assets[0]
+
+    assert at_tie.lifecycle_state is LifecycleState.APPROVED
+    assert at_tie.first_evaluated_at == "2026-01-02T00:00:00Z"
+    assert at_tie.approved_at == "2026-01-02T00:00:00Z"
+    assert at_tie.production_ready_at is None
+    assert before_tie.lifecycle_state is LifecycleState.REGISTERED
+    assert before_tie.first_evaluated_at is None
+    assert before_tie.approved_at is None
 
 
 def test_snapshot_manager_multiple_factors():

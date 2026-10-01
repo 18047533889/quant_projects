@@ -94,8 +94,10 @@ class SnapshotManager:
         """
         as_of = _normalize_ts(query.as_of_timestamp)
 
-        # Build historical state map from events
-        historical_states = self._reconstruct_states(events, as_of)
+        # Build state and milestone maps together. Sorting/replaying the full
+        # event log once keeps large batch snapshots from rescanning it for
+        # each asset.
+        historical_states, historical_milestones = self._reconstruct_history(events, as_of)
 
         # Filter assets based on query
         matching_assets = []
@@ -125,7 +127,10 @@ class SnapshotManager:
                     continue
 
             # Reconstruct asset with historical state
-            historical_asset = self._reconstruct_asset_state(asset, events, as_of)
+            milestones = historical_milestones.get(factor_id, (None, None, None))
+            historical_asset = self._with_historical_state(
+                asset, historical_state, milestones
+            )
             matching_assets.append(historical_asset)
 
         return SnapshotResult(
@@ -150,19 +155,63 @@ class SnapshotManager:
         Returns:
             Map of factor_id -> LifecycleState as of the timestamp
         """
-        states: dict[str, LifecycleState] = {}
+        states, _ = self._reconstruct_history(events, as_of_timestamp)
+        return states
 
-        # Sort events by timestamp (normalized: "+00:00" vs "Z" mixing
-        # would mis-sort identical instants).
+    def _reconstruct_history(
+        self,
+        events: list[StateEvent],
+        as_of_timestamp: str,
+    ) -> tuple[
+        dict[str, LifecycleState],
+        dict[str, tuple[Optional[str], Optional[str], Optional[str]]],
+    ]:
+        """Rebuild each factor's state and milestone timestamps in one pass.
+
+        Python's sort is stable, so events with equal normalized timestamps
+        retain their input order, matching the historical replay behavior.
+        The as-of boundary is inclusive, as before.
+        """
+        states: dict[str, LifecycleState] = {}
+        milestones: dict[
+            str, tuple[Optional[str], Optional[str], Optional[str]]
+        ] = {}
         sorted_events = sorted(events, key=lambda e: _normalize_ts(e.timestamp))
 
         for event in sorted_events:
             if _normalize_ts(event.timestamp) > as_of_timestamp:
                 break
 
-            states[event.factor_id] = event.to_state
+            factor_id = event.factor_id
+            states[factor_id] = event.to_state
+            first_evaluated, approved, production_ready = milestones.get(
+                factor_id, (None, None, None)
+            )
+            if event.to_state == LifecycleState.EVALUATED and first_evaluated is None:
+                first_evaluated = event.timestamp
+            elif event.to_state == LifecycleState.APPROVED and approved is None:
+                approved = event.timestamp
+            elif event.to_state == LifecycleState.PRODUCTION_READY and production_ready is None:
+                production_ready = event.timestamp
+            milestones[factor_id] = (first_evaluated, approved, production_ready)
 
-        return states
+        return states, milestones
+
+    @staticmethod
+    def _with_historical_state(
+        asset: FactorAsset,
+        historical_state: LifecycleState,
+        milestones: tuple[Optional[str], Optional[str], Optional[str]],
+    ) -> FactorAsset:
+        from dataclasses import replace
+
+        return replace(
+            asset,
+            lifecycle_state=historical_state,
+            first_evaluated_at=milestones[0],
+            approved_at=milestones[1],
+            production_ready_at=milestones[2],
+        )
 
     def _reconstruct_asset_state(
         self,
