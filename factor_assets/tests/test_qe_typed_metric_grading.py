@@ -282,3 +282,51 @@ def test_d12_cost_budget_utilization_is_ungraded_without_explicit_budget():
             QEEvidenceProvider().grade_typed_metrics(
                 bundle, batch, cost_budget_bps=invalid
             )
+
+
+def test_repeated_typed_grade_reuses_immutable_hash_without_trusting_external_hash(monkeypatch):
+    from quant_evaluator.contracts import array_identity
+    from quant_evaluator.contracts._array_hash_cache import ArrayHashStateCache
+
+    batch, _, bundle = _inputs(value_hash="external:constant")
+    cache = ArrayHashStateCache(min_nbytes=0, capacity=32)
+    monkeypatch.setattr(array_identity, "_RAW_ARRAY_HASH_STATE_CACHE", cache)
+    update_raw_payload = array_identity._update_raw_payload
+    factor_value_hash_updates = []
+
+    def counted_update(digest, array):
+        if array is batch.values:
+            factor_value_hash_updates.append(array.nbytes)
+        update_raw_payload(digest, array)
+
+    monkeypatch.setattr(array_identity, "_update_raw_payload", counted_update)
+    provider = QEEvidenceProvider()
+    first = provider.grade_typed_metrics(bundle, batch)
+    assert len(factor_value_hash_updates) == 1
+    second = provider.grade_typed_metrics(bundle, batch)
+    assert [(g.metric_id, g.value, g.evidence_status) for g in second] == [
+        (g.metric_id, g.value, g.evidence_status) for g in first
+    ]
+    assert len(factor_value_hash_updates) == 1
+
+    # A readonly view over mutable storage is not cache-safe. Its digest must
+    # reflect a backing-buffer mutation, and a newly constructed FactorBatch
+    # with the same external value_hash must still fail against QE provenance.
+    backing = bytearray(batch.values.tobytes())
+    mutable_backing_view = np.frombuffer(
+        memoryview(backing).toreadonly(), dtype=batch.values.dtype
+    ).reshape(batch.values.shape)
+    before = array_identity.authoritative_array_hash(mutable_backing_view)
+    backing[:batch.values.dtype.itemsize] = np.asarray(
+        [batch.values[0, 0, 0] + 7.0], dtype=batch.values.dtype
+    ).tobytes()
+    after = array_identity.authoritative_array_hash(mutable_backing_view)
+    assert after != before
+
+    changed_batch = type(batch)(
+        batch.factor_ids, batch.time_axis, batch.asset_axis, mutable_backing_view,
+        validity=batch.validity, context_refs=batch.context_refs,
+        value_hash="external:constant",
+    )
+    with pytest.raises(ValueError, match="factor values"):
+        provider.grade_typed_metrics(bundle, changed_batch)

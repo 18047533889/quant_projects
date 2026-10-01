@@ -22,6 +22,7 @@ from quant_evaluator.contracts.errors import (
     UnsupportedMetricError,
 )
 from quant_evaluator.contracts._hashutil import canonicalize
+from quant_evaluator.contracts.array_identity import authoritative_array_hash
 from quant_evaluator.api.requests import EvaluationRequest
 
 from quant_evaluator.planner.batch_plan import BatchPlan, ChunkDescriptor, create_batch_plan
@@ -410,36 +411,6 @@ _RUNTIME_INPUTS = frozenset({
     "factor_batch", "label_bundle", "computed_metrics", "metadata",
     "factor_values", "forward_returns",
 })
-
-
-def authoritative_array_hash(value: np.ndarray) -> str:
-    """Hash ndarray values, never object-buffer pointer addresses.
-
-    Numeric arrays retain the historical dtype+shape+raw-bytes identity.
-    Object arrays use the lossless element codec; structured arrays continue
-    to fail closed until an explicit schema codec exists.
-    """
-    original = np.asarray(value)
-    array = np.ascontiguousarray(original)
-    digest = hashlib.sha256()
-    digest.update(str(original.dtype).encode())
-    digest.update(str(original.shape).encode())
-    if array.dtype.hasobject:
-        from quant_evaluator.contracts._ndarray_codec import encode_ndarray
-
-        encoded = encode_ndarray(original)
-        digest.update(json.dumps(
-            encoded["object_values"], sort_keys=True, separators=(",", ":")
-        ).encode("utf-8"))
-    elif array.dtype.fields is not None:
-        raise TypeError("structured arrays require an explicit schema codec")
-    else:
-        # Hash the same C-order bytes without allocating a second full panel.
-        # ascontiguousarray above also normalizes scalar/non-contiguous input.
-        digest.update(memoryview(array.reshape(-1).view(np.uint8)))
-    return digest.hexdigest()
-
-
 def _compile_public_artifact_plan(
     resolved_specs, *, portfolio_returns=None, holding_returns=None,
     exposure_panel=None,
