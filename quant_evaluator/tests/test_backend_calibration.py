@@ -102,6 +102,7 @@ def test_calibrates_whole_calls_and_returns_fastest(monkeypatch):
     assert output.metadata["winner"] == "cuda_strict"
     assert output.bundle is not None
     assert output.metadata["calibration_record"]["selection_basis"] == "steady_state_median"
+    assert "timing_winner" not in output.metadata["calibration_record"]
     assert output.metadata["calibration_record"]["cpu_first_call_seconds"] == 0.5
     assert np.isclose(output.metadata["calibration_record"]["cuda_first_call_seconds"], 0.1)
 
@@ -113,10 +114,13 @@ def test_parity_failure_falls_back_to_cpu_and_is_not_cached(monkeypatch):
     monkeypatch.setattr(calibration, "_device_admission", lambda policy: (None, {"id": 0}))
     cache = calibration.BoundedCalibrationCache()
 
+    now = [0.0]
+    monkeypatch.setattr(calibration.time, "monotonic", lambda: now[0])
     calls = []
 
     def evaluate(_batch, _label, *, metrics, backend, gpu_policy):
         calls.append(backend)
+        now[0] += 0.5 if backend == "cpu" else 0.1
         # First pair diverges; later pairs would match. Calibration must stop
         # on the first paired failure rather than hide it with a later result.
         return _result(_batch, 1.0 if backend == "cpu" or len(calls) > 2 else 2.0)
@@ -128,6 +132,13 @@ def test_parity_failure_falls_back_to_cpu_and_is_not_cached(monkeypatch):
     )
     assert output.metadata["status"] == "parity_failed_cpu_fallback"
     assert output.metadata["winner"] == "cpu"
+    record = output.metadata["calibration_record"]
+    assert record["winner"] == "cpu"
+    assert record["timing_winner"] == "cuda_strict"
+    assert record["timing_winner"] == (
+        "cpu" if record["cpu_median_seconds"] <= record["cuda_median_seconds"]
+        else "cuda_strict"
+    )
     assert len(cache) == 0
     assert calls == ["cpu", "cuda_strict"]
 

@@ -567,6 +567,12 @@ def evaluate_calibrated_batch(
               "parity": "pass" if mismatch is None else "fail",
               "parity_mismatch": mismatch, "repetitions": calibration_policy.repetitions,
               "warmups": calibration_policy.warmups}
+    if mismatch is not None:
+        # The measured timing winner is diagnostic only when parity fails;
+        # the effective route is the CPU fallback. Successful cached records
+        # retain their existing shape and winner semantics.
+        record["timing_winner"] = fastest
+        record["winner"] = "cpu"
     if mismatch is None and not injected_evaluator and not _PROCESS_SOURCE_DRIFTED:
         cache.put(key, record)
     winner = fastest if mismatch is None else "cpu"
