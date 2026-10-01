@@ -19,6 +19,7 @@ import time
 from typing import Callable, Mapping, Sequence
 
 import numpy as np
+from quant_evaluator.runtime.source_memory_budget import estimate_source_memory
 
 from quant_evaluator.contracts.factor_tile_source import FactorTile
 
@@ -160,9 +161,6 @@ class CosFactorTileSource:
         self.max_prefetch_memory_bytes = max_prefetch_memory_bytes
         self.extra_assembly_bytes_per_cell = extra_assembly_bytes_per_cell
         self._controller_close = _close_controller
-        cells_per_factor = int(time_axis.size) * int(asset_axis.size)
-        panel_bytes = cells_per_factor * normalized_dtype.itemsize
-        tile_factors = min(max_tile_size, len(records))
         # During the standard dense materializer, source frames coexist with a
         # mutable assembled array and FactorBatch's immutable value owner (3
         # panel copies). The validity mask and its immutable owner add 2 bytes
@@ -170,15 +168,17 @@ class CosFactorTileSource:
         # simultaneously-live scratch via extra_assembly_bytes_per_cell. This
         # is a logical payload estimate, not an RSS guarantee: allocator and
         # pandas object/index overhead are outside the bound.
-        estimated_assembly = (
-            3 * panel_bytes * tile_factors
-            + 2 * cells_per_factor * tile_factors
-            + extra_assembly_bytes_per_cell * cells_per_factor * tile_factors
-        )
+        estimate = estimate_source_memory(
+            time_size=time_axis.size, asset_size=asset_axis.size,
+            factor_count=len(records), max_tile_size=max_tile_size,
+            dtype_itemsize=normalized_dtype.itemsize,
+            prefetch_workers=self.prefetch_workers,
+            prefetch_enabled=self.prefetch_enabled,
+            extra_assembly_bytes_per_cell=extra_assembly_bytes_per_cell)
         # DataAccess research reads cap Arrow results at 128 MiB. Allow an
         # additional equal-sized pandas conversion buffer per active worker.
-        estimated_prefetch = self.prefetch_workers * 256 * 1024**2
-        estimated_bytes = estimated_assembly + estimated_prefetch
+        estimated_prefetch = estimate.prefetch_bytes
+        estimated_bytes = estimate.total_bytes
         if estimated_prefetch > max_prefetch_memory_bytes:
             if self._executor is not None:
                 self._executor.shutdown(wait=True, cancel_futures=True)
@@ -188,7 +188,7 @@ class CosFactorTileSource:
         self._executor = (ThreadPoolExecutor(max_workers=self.prefetch_workers,
                                              thread_name_prefix="qe-cos-prefetch")
                           if self.prefetch_enabled else None)
-        self.estimated_assembly_bytes = estimated_assembly
+        self.estimated_assembly_bytes = estimate.assembly_bytes
         self.estimated_peak_source_bytes = estimated_bytes
         self.estimated_prefetch_bytes = estimated_prefetch
 

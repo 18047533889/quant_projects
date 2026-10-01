@@ -554,9 +554,17 @@ def test_gpu_tile_width_ab_interleaves_and_checks_every_run(monkeypatch, tmp_pat
     monkeypatch.setattr("sys.argv", ["benchmark", "--factors", "61",
                                   "--gpu-tile-widths", "8", "16",
                                   "--metrics", "pearson_ic", "--output", str(tmp_path / "summary.json")])
+    monkeypatch.setattr(harness, "preflight", lambda *a: {"pass": True})
+    def prepare_axes(args, directory):
+        index = harness.Path(directory) / "source-axis-index.json"
+        index.write_text("bounded-index", encoding="utf-8")
+        return index, (3, 4, 2)
+    monkeypatch.setattr(harness.source_width_preparation, "prepare_axis_index", prepare_axes)
+    forwarded_indexes = []
 
     def fake_run(command, **kwargs):
         assert command[command.index("--metrics") + 1] == "pearson_ic"
+        forwarded_indexes.append(command[command.index("--axis-index") + 1])
         width = int(command[command.index("--tile-size") + 1])
         widths.append(width)
         output = harness.Path(command[command.index("--output") + 1])
@@ -579,6 +587,7 @@ def test_gpu_tile_width_ab_interleaves_and_checks_every_run(monkeypatch, tmp_pat
                         lambda report, output: reports.append(json.loads(json.dumps(report))))
     harness.main()
     assert widths == [8, 16, 16, 8]
+    assert len(set(forwarded_indexes)) == 1
     assert [item["status"] for item in reports] == ["partial"] * 4 + ["complete"]
     assert len(reports[-1]["comparisons_to_first_run"]) == 3
     assert all(item["pass"] for item in reports[-1]["comparisons_to_first_run"])
@@ -597,9 +606,15 @@ def test_gpu_tile_width_ab_failure_keeps_partial_receipt(monkeypatch, tmp_path):
         max_object_mib=128, max_total_mib=4096, axis_index=None,
         output=tmp_path / "summary.json",
     )
+    monkeypatch.setattr(harness, "preflight", lambda *a: {"pass": True})
+    def prepare_axes(args, directory):
+        index = harness.Path(directory) / "source-axis-index.json"
+        index.write_text("bounded-index", encoding="utf-8")
+        return index, (3, 4, 61)
+    monkeypatch.setattr(harness.source_width_preparation, "prepare_axis_index", prepare_axes)
     monkeypatch.setattr(
         harness.subprocess, "run",
-        lambda *a, **k: SimpleNamespace(returncode=9),
+        lambda *a, **k: SimpleNamespace(returncode=9, stderr="private stderr cos://secret", stdout="private stdout"),
     )
     with pytest.raises(SystemExit) as error:
         harness.run_gpu_tile_width_ab(args, harness.DEFAULT_METRICS)
@@ -607,7 +622,160 @@ def test_gpu_tile_width_ab_failure_keeps_partial_receipt(monkeypatch, tmp_path):
     receipt = json.loads(args.output.read_text(encoding="utf-8"))
     assert receipt["status"] == "interrupted"
     assert receipt["runs"] == []
+    assert receipt["failure"] == {"category": "worker_error", "worker_index": 0, "exit_code": 9}
+    assert "private" not in json.dumps(receipt) and "cos://secret" not in json.dumps(receipt)
     assert "median_seconds_by_width" not in receipt
+def test_cos_width8_over_default_source_budget_rejects_before_worker(monkeypatch, tmp_path):
+    args = SimpleNamespace(
+        gpu_tile_widths=(4, 8), factors=48, days=2586, assets=5461,
+        max_object_mib=128, max_total_mib=4096, axis_index=None,
+        max_source_memory_mib=4096, max_prefetch_memory_mib=512,
+        cos_prefetch_workers=2, cos_prefetch="auto", source_adapter="cos",
+        output=tmp_path / "summary.json")
+    monkeypatch.setattr(harness, "preflight", lambda *a: {"pass": True})
+    def prepare_axes(_args, directory):
+        index = harness.Path(directory) / "source-axis-index.json"
+        index.write_text("bounded-index", encoding="utf-8")
+        return index, (2586, 5461, 48)
+    monkeypatch.setattr(harness.source_width_preparation, "prepare_axis_index", prepare_axes)
+    monkeypatch.setattr(harness.subprocess, "run",
+                        lambda *a, **k: pytest.fail("worker launched before width admission"))
+    with pytest.raises(SystemExit) as error:
+        harness.run_gpu_tile_width_ab(args, harness.DEFAULT_METRICS)
+    assert error.value.code == 1
+    report = json.loads(args.output.read_text(encoding="utf-8"))
+    assert report["status"] == "resource_rejected"
+    assert report["failure"] == {
+        "category": "source_memory_budget", "rejected_widths": [8]}
+    assert report["source_memory_preflight"]["4"]["admitted"] is True
+    assert report["source_memory_preflight"]["8"]["admitted"] is False
+
+
+def test_source_axis_index_roundtrip_binds_manifest_selection_and_factor_axes(tmp_path):
+    times, asset_axis, _, _, records, source_rows = _fixtures()
+    index = harness.tiles.build_axis_index(
+        "a" * 64, records, times, asset_axis.values, source_rows)
+    path = tmp_path / "axes.json"
+    harness.tiles.write_axis_index_atomic(path, index)
+    dates, assets, restored_rows = harness.tiles.read_axis_index(
+        path, "a" * 64, records)
+    assert dates.equals(pd.DatetimeIndex(times))
+    assert assets == set(asset_axis.values)
+    assert restored_rows == source_rows
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["records"][0][2] = "f" * 64
+    payload["sources"][0][2] = "f" * 64
+    body = {key: value for key, value in payload.items() if key != "body_sha256"}
+    payload["body_sha256"] = harness.hashlib.sha256(
+        harness.tiles._axis_index_bytes(body)).hexdigest()
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="selection or manifest changed"):
+        harness.tiles.read_axis_index(path, "a" * 64, records)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    index = harness.tiles.build_axis_index(
+        "a" * 64, records, times, asset_axis.values, source_rows)
+    harness.tiles.write_axis_index_atomic(path, index)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["dates_ns"][0] += 1
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="axis index checksum mismatch"):
+        harness.tiles.read_axis_index(path, "a" * 64, records)
+
+def test_prepare_axis_index_intersects_and_builds_once(monkeypatch, tmp_path):
+    prep = harness.source_width_preparation
+    times, asset_axis, _, _, records, source_rows = _fixtures()
+    manifest_sha = "a" * 64
+    counts = {"manifest": 0, "selection": 0, "frames": 0, "intersect": 0,
+              "build": 0, "write": 0, "read": 0}
+    monkeypatch.setattr(prep.tiles, "MANIFEST_SHA256", manifest_sha)
+    monkeypatch.setattr(prep.tiles, "read_manifest",
+                        lambda sha: counts.__setitem__("manifest", counts["manifest"] + 1) or object())
+    monkeypatch.setattr(prep.tiles, "select_source_records",
+                        lambda *a: counts.__setitem__("selection", counts["selection"] + 1) or records)
+    monkeypatch.setattr(prep.tiles, "iter_frames",
+                        lambda *a, **k: counts.__setitem__("frames", counts["frames"] + 1) or iter(()))
+    def intersect(stream, count):
+        counts["intersect"] += 1
+        assert count == len(records)
+        return times, set(asset_axis.values), source_rows
+    monkeypatch.setattr(prep.tiles, "intersect_axes", intersect)
+    monkeypatch.setattr(prep.tiles, "build_axis_index",
+                        lambda *a: counts.__setitem__("build", counts["build"] + 1) or {"kind": "index"})
+    def write(path, index):
+        counts["write"] += 1
+        path.write_text("verified-index", encoding="utf-8")
+    monkeypatch.setattr(prep.tiles, "write_axis_index_atomic", write)
+    def read(path, sha, selected):
+        counts["read"] += 1
+        assert sha == manifest_sha and selected == records
+        return times, set(asset_axis.values), source_rows
+    monkeypatch.setattr(prep.tiles, "read_axis_index", read)
+    monkeypatch.setattr(prep.tiles, "load_labels", lambda dates, assets, days, nassets:
+                        (dates, sorted(assets)[:nassets], object()))
+    args = SimpleNamespace(axis_index=None, factors=2, max_object_mib=128,
+                           max_total_mib=4096, days=0, assets=4)
+    path, shape = prep.prepare_axis_index(args, tmp_path)
+    assert path.is_file() and shape == (3, 4, 2)
+    assert counts == {"manifest": 1, "selection": 1, "frames": 1, "intersect": 1,
+                      "build": 1, "write": 1, "read": 1}
+
+def test_prepare_axis_index_reuses_verified_index_without_intersection(monkeypatch, tmp_path):
+    prep = harness.source_width_preparation
+    times, asset_axis, _, _, records, source_rows = _fixtures()
+    index_path = tmp_path / "existing.json"
+    index_path.write_text("existing", encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(prep.tiles, "MANIFEST_SHA256", "a" * 64)
+    monkeypatch.setattr(prep.tiles, "read_manifest", lambda sha: object())
+    monkeypatch.setattr(prep.tiles, "select_source_records", lambda *a: records)
+    monkeypatch.setattr(prep.tiles, "read_axis_index",
+                        lambda path, sha, selected: calls.append((path, sha, selected)) or
+                        (times, set(asset_axis.values), source_rows))
+    monkeypatch.setattr(prep.tiles, "intersect_axes",
+                        lambda *a: pytest.fail("verified index must skip intersection"))
+    monkeypatch.setattr(prep.tiles, "build_axis_index",
+                        lambda *a: pytest.fail("verified index must skip build"))
+    monkeypatch.setattr(prep.tiles, "load_labels", lambda dates, assets, days, nassets:
+                        (dates, sorted(assets)[:nassets], object()))
+    args = SimpleNamespace(axis_index=index_path, factors=2, max_object_mib=128,
+                           max_total_mib=4096, days=0, assets=4)
+    path, shape = prep.prepare_axis_index(args, tmp_path)
+    assert path == index_path and shape == (3, 4, 2)
+    assert calls == [(index_path, "a" * 64, records)]
+
+def test_prepare_axis_index_rejects_tampered_axis_index(monkeypatch, tmp_path):
+    prep = harness.source_width_preparation
+    times, asset_axis, _, _, records, source_rows = _fixtures()
+    index = harness.tiles.build_axis_index(
+        "a" * 64, records, times, asset_axis.values, source_rows)
+    path = tmp_path / "tampered.json"
+    harness.tiles.write_axis_index_atomic(path, index)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["dates_ns"][0] += 1
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(prep.tiles, "MANIFEST_SHA256", "a" * 64)
+    monkeypatch.setattr(prep.tiles, "read_manifest", lambda sha: object())
+    monkeypatch.setattr(prep.tiles, "select_source_records", lambda *a: records)
+    monkeypatch.setattr(prep.tiles, "intersect_axes",
+                        lambda *a: pytest.fail("tampered index must not rebuild silently"))
+    args = SimpleNamespace(axis_index=path, factors=2, max_object_mib=128,
+                           max_total_mib=4096, days=0, assets=4)
+    with pytest.raises(ValueError, match="axis index checksum mismatch"):
+        prep.prepare_axis_index(args, tmp_path)
+
+@pytest.mark.parametrize("stderr,timeout,category", [
+    ("private cos://bucket/key OutOfMemoryError", False, "gpu_out_of_memory"),
+    ("private /srv/data MemoryError", False, "source_memory_admission"),
+    ("private path: insufficient RAM or COS cache disk headroom", False,
+     "resource_preflight"),
+    ("private cos://bucket/key trace", False, "worker_error"),
+    ("private stderr", True, "worker_timeout"),
+])
+def test_worker_failure_categories_never_include_private_output(stderr, timeout, category):
+    safe = harness._safe_worker_failure(stderr, timeout=timeout)
+    assert safe == category
+    assert "private" not in safe and "cos://" not in safe and "/srv/" not in safe
 def test_f8_rank_pair_profile_compares_full_scalar_and_series_outputs():
     factor_ids = tuple(f"f{index}" for index in range(8))
     scalar = np.linspace(-0.2, 0.2, 8)

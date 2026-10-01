@@ -35,6 +35,7 @@ from quant_evaluator.adapters.cos_factor_tile_source import (
 from quant_evaluator.scripts.f8_cap8_tile2_auto_references import (
     validate_cap8_tile2_references,
 )
+from quant_evaluator.scripts import source_width_preparation
 from quant_evaluator.scripts import benchmark_real_cos_factor_tiles as tiles
 
 F8_SOURCE_SHAPE = (2586, 5461, 8)
@@ -463,6 +464,20 @@ def _source_prefetch_report_fields(run_receipt):
     }
 
 
+def _safe_worker_failure(stderr, *, timeout=False):
+    """Return a sanitized category, never raw child stderr or source locators."""
+    if timeout:
+        return "worker_timeout"
+    text = str(stderr or "")
+    if "OutOfMemoryError" in text or "CUDA_ERROR_OUT_OF_MEMORY" in text:
+        return "gpu_out_of_memory"
+    if "MemoryError" in text:
+        return "source_memory_admission"
+    if "insufficient RAM or COS cache disk headroom" in text:
+        return "resource_preflight"
+    return "worker_error"
+
+
 def run_gpu_tile_width_ab(args, selected_metrics):
     """Interleave widths in isolated workers so source memory is reclaimed."""
     width_a, width_b = args.gpu_tile_widths
@@ -477,6 +492,51 @@ def run_gpu_tile_width_ab(args, selected_metrics):
                               "Separate CPU/CUDA reports establish CPU parity.",
                               "Partial runs must not select an auto backend."]}
     with tempfile.TemporaryDirectory(prefix="qe-gpu-width-") as directory:
+        try:
+            preparation_preflight = preflight(
+                args.max_object_mib, args.max_total_mib,
+                getattr(args, "max_source_memory_mib", 4096))
+            report["preflight_before_axis_preparation"] = preparation_preflight
+            if not preparation_preflight["pass"]:
+                raise RuntimeError("resource_preflight")
+            worker_axis_index, prepared_shape = source_width_preparation.prepare_axis_index(
+                args, directory)
+            report["prepared_shape"] = list(prepared_shape)
+            if getattr(args, "source_adapter", "legacy") == "cos":
+                panel_cells = int(prepared_shape[0]) * int(prepared_shape[1])
+                extra_bytes = ((256 * 1024**2 + panel_cells - 1) // panel_cells)
+                estimates = source_width_preparation.width_memory_admission(
+                    shape=prepared_shape, widths=(width_a, width_b),
+                    source_budget_bytes=getattr(args, "max_source_memory_mib", 4096) * 1024**2,
+                    max_prefetch_memory_bytes=getattr(args, "max_prefetch_memory_mib", 512) * 1024**2,
+                    prefetch_workers=(getattr(args, "cos_prefetch_workers", 2)
+                                      if getattr(args, "cos_prefetch", "auto") != "off" else 0),
+                    prefetch_enabled=getattr(args, "cos_prefetch", "auto") != "off",
+                    extra_assembly_bytes_per_cell=extra_bytes)
+                report["source_memory_preflight"] = estimates
+                rejected = [width for width in (width_a, width_b)
+                            if not estimates[str(width)]["admitted"]]
+                if rejected:
+                    reasons = {estimates[str(width)]["rejection_category"]
+                               for width in rejected}
+                    category = ("prefetch_memory_budget"
+                                if "prefetch_memory_budget" in reasons
+                                else "source_memory_budget")
+                    report.update(status="resource_rejected",
+                                  failure={"category": category,
+                                           "rejected_widths": rejected})
+                    emit_report(report, args.output)
+                    raise SystemExit(1)
+            if not Path(worker_axis_index).is_file():
+                raise ValueError("prepared axis index is unavailable")
+        except SystemExit:
+            raise
+        except Exception as exc:
+            category = ("resource_preflight" if str(exc) == "resource_preflight"
+                        else "axis_preparation_error")
+            report.update(status="interrupted", failure={"category": category})
+            emit_report(report, args.output)
+            raise SystemExit(1) from exc
         first = None
         for index, width in enumerate(order):
             output = Path(directory) / f"run-{index}.json"
@@ -498,19 +558,20 @@ def run_gpu_tile_width_ab(args, selected_metrics):
                        "--gpu-worker", "--output", str(output)]
             if getattr(args, "prefetch_objects", False):
                 command.append("--prefetch-objects")
-            if args.axis_index:
-                command.extend(("--axis-index", str(args.axis_index)))
+            command.extend(("--axis-index", str(worker_axis_index)))
             try:
                 worker = subprocess.run(command, stdout=subprocess.DEVNULL,
                                         stderr=subprocess.PIPE, text=True,
                                         timeout=1200, check=False)
             except subprocess.TimeoutExpired:
-                report.update(status="interrupted", failure=f"worker_{index}_timeout")
+                report.update(status="interrupted", failure={"category": _safe_worker_failure("", timeout=True),
+                                                              "worker_index": index})
                 emit_report(report, args.output)
                 raise SystemExit(1)
             if worker.returncode != 0 or not output.exists():
                 report.update(status="interrupted",
-                              failure=f"worker_{index}_exit_{worker.returncode}")
+                              failure={"category": _safe_worker_failure(getattr(worker, "stderr", "")),
+                                       "worker_index": index, "exit_code": int(worker.returncode)})
                 emit_report(report, args.output)
                 raise SystemExit(1)
             if output.stat().st_size > 1024**2:
