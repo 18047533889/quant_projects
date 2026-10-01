@@ -170,3 +170,41 @@ def test_fe_sma_preserves_supported_date_key_types(date_kind):
     reference = trailing_sma(frame, window=2, min_periods=2)
     np.testing.assert_allclose(actual.to_numpy(), reference.to_numpy(), equal_nan=True)
     assert actual.index.equals(frame.index)
+@pytest.mark.parametrize("interleaved", [False, True])
+def test_fe_cs_rank_grouped_chunks_preserve_semantics(monkeypatch, interleaved):
+    from factor_optimizer.adapters import repair_execution as execution
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+
+    # 3 assets per date and a six-cell cap force two complete-date chunks.
+    monkeypatch.setattr(execution, "_MAX_FE_RANK_CELLS", 6)
+    rows = [
+        (0, "A", 1.0), (0, "B", 1.0), (0, "C", np.nan),  # tie and missing
+        (1, "A", 4.0), (1, "B", 2.0), (1, "C", np.inf),  # non-finite
+        (2, "A", 7.0),                                    # singleton date
+        (3, "A", 2.0), (3, "C", -np.inf),                # sparse date
+    ]
+    if interleaved:
+        rows = [rows[i] for i in (0, 3, 6, 7, 1, 4, 8, 2, 5)]
+    frame = pd.DataFrame(rows, columns=["date", "asset_id", "value"])
+    frame.index = pd.Index([i % 4 for i in range(len(frame))], name="caller")
+
+    actual = execution._execute_fe_cs_rank(frame)
+    operator = OperatorRegistry.get("rank", backend="pandas_numpy", mode="any")
+    expected = np.empty(len(frame), dtype=float)
+    codes, _ = pd.factorize(frame["date"], sort=False)
+    for code in range(int(codes.max()) + 1):
+        positions = np.flatnonzero(codes == code)
+        group = frame.iloc[positions]
+        wide = group.set_index("asset_id")[["value"]].T
+        expected[positions] = operator.calculate(wide).to_numpy(dtype=float).reshape(-1)
+
+    np.testing.assert_allclose(actual.to_numpy(), expected, equal_nan=True)
+    assert actual.index.equals(frame.index)
+
+
+def test_fe_cs_rank_rejects_duplicate_date_asset_pairs():
+    from factor_optimizer.adapters.repair_execution import _validate_frame
+
+    frame = pd.DataFrame({"date": [0, 0], "asset_id": ["A", "A"], "value": [1.0, 2.0]})
+    with pytest.raises(ValueError, match="duplicate"):
+        _validate_frame(frame)

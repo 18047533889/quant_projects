@@ -675,7 +675,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### ValueRepairPlan
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L115)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L128)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -692,7 +692,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### ValueRepairPlan.identity
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L124)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L137)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -702,7 +702,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### ValueRepairPlan.execute
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L135)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L148)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -712,7 +712,7 @@ A valid registry candidate has no exact executable value primitive.
 
 ### compile_value_repair
 
-[实际实现](../factor_optimizer/adapters/repair_execution.py#L191)。
+[实际实现](../factor_optimizer/adapters/repair_execution.py#L204)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -10788,7 +10788,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/adapters/layered_decay.py` | `420afc6bc59543f65048458b8b370bc61a52e4387d27d492acf71d421c1d1788` |
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
-| `factor_optimizer/adapters/repair_execution.py` | `dbaa7096336773cf36001e4407a500831b7b223c6eb83cc10de2461cfbc73b14` |
+| `factor_optimizer/adapters/repair_execution.py` | `d64200649a33819d3013de96f89e18a02bb032ed3e20d6ce2c34d4490c7d3727` |
 | `factor_optimizer/capabilities.py` | `efb1fbf1b54b1b14f128ffe63c74f54f7a22f99a409a0761aac67fc1b6e3ed28` |
 | `factor_optimizer/complexity/__init__.py` | `79c8daf01ef8071b77eb7cbb8df4ae45fc9e2d4a4349f35d402a12f79936e696` |
 | `factor_optimizer/complexity/budget.py` | `d797ada6f52d0ccab3820450fb12e8f84f3f3dbb4e9f1e53f64eb5bb21a3469d` |
@@ -10857,7 +10857,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/search/winner_selector.py` | `3a2ff94402e3eb4b7e1b0a6c373362a96bab475d30c28c05e62db43edc70cb77` |
 | `factor_optimizer/seen/__init__.py` | `f37e222be83f53595c4ee7325542f299a1b6d64eeebce400e5296d0f56d33676` |
 | `factor_optimizer/seen/identity.py` | `dbf0d6cbbb1cd12f907a12fa2ce0089a9c2f1a25c9ee7da96b1735032163ff10` |
-| `factor_optimizer/shape_rank_reuse.py` | `93a695e3d5d4dad81039f5236ab8dcb823c60f53a564d8d499a5c5e380438fa7` |
+| `factor_optimizer/shape_rank_reuse.py` | `764fd5378e6158a753badc6285f9a3bdc0724ef30fb0dc9b1f9f2d2b839c53a5` |
 
 </details>
 

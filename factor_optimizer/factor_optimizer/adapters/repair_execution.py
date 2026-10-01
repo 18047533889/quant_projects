@@ -90,9 +90,22 @@ def _execute_fe_cs_rank(frame: pd.DataFrame) -> pd.Series:
     max_cells = _MAX_FE_RANK_CELLS
     dates_per_chunk = max(1, max_cells // max(1, len(assets)))
     ranked = np.empty(len(frame), dtype=float)
+    # Factorized codes may be interleaved when caller rows are unordered.
+    # Stable grouping preserves row order within each date. The usual sorted
+    # case uses slices and avoids allocating a second full-size row index.
+    sorted_dates = len(date_codes) < 2 or np.all(date_codes[1:] >= date_codes[:-1])
+    if not sorted_dates:
+        grouped_rows = np.argsort(date_codes, kind="stable")
+        grouped_codes = date_codes[grouped_rows]
     for start in range(0, len(dates), dates_per_chunk):
         stop = min(start + dates_per_chunk, len(dates))
-        rows = np.flatnonzero((date_codes >= start) & (date_codes < stop))
+        if sorted_dates:
+            rows = slice(int(np.searchsorted(date_codes, start)),
+                         int(np.searchsorted(date_codes, stop)))
+        else:
+            row_start = int(np.searchsorted(grouped_codes, start))
+            row_stop = int(np.searchsorted(grouped_codes, stop))
+            rows = grouped_rows[row_start:row_stop]
         long = pd.DataFrame({
             "_date": date_codes[rows], "_asset": asset_codes[rows],
             "_value": values[rows],
