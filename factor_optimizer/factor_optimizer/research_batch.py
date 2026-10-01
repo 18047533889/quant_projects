@@ -542,6 +542,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
         count_distinct_eligible_u_shape_plans, is_eligible_u_shape_plan,
         should_admit_u_shape_rank_reuse,
     )
+    from factor_optimizer.research_batch_diagnostics import diagnose_raw_batch_in_chunks
     from quant_evaluator.contracts.factor_batch import FactorBatch
     import pandas as pd
 
@@ -554,6 +555,17 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     train_raw_cache = RawSeriesCache()
     train_ic_cache = PairICCache()
     train_candidate_ic_cache = PairICCache()
+    # With no declared treatment lineage every baseline plan is a no-op, so
+    # the raw-input diagnoses are independent of per-factor baseline fitting.
+    # Share their IC/quantile preparation in bounded chunks; diagnose_training_batch
+    # still computes each factor's distinct layer-decay evidence separately.
+    shared_raw_diagnoses = None
+    if batch.factor_ids and all(lineages.get(fid) is None for fid in batch.factor_ids):
+        shared_raw_diagnoses = diagnose_raw_batch_in_chunks(
+            batch, labels, config=config,
+            diagnose_training_batch=diagnose_training_batch,
+            max_chunk_bytes=128 * 1024 * 1024,
+        )
     for k, factor_id in enumerate(batch.factor_ids):
         raw = np.array(batch.values[:, :, k], dtype=float, copy=True)
         if batch.validity is not None:
@@ -621,11 +633,14 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
             baseline_record['winsorization_attempt'] = winsorization_attempt
         search_frame = frame.copy()
         search_frame['value'] = baseline_values.ravel()
-        diagnostic_values = raw.copy()
-        diagnostic_values[:split.validation_start] = baseline_values
-        diagnostic_batch = replace(batch, factor_ids=(factor_id,),
-            values=diagnostic_values[:, :, None], validity=np.isfinite(diagnostic_values[:, :, None]))
-        diagnosis = diagnose_training_batch(diagnostic_batch, labels, config=config)[factor_id]
+        if shared_raw_diagnoses is None:
+            diagnostic_values = raw.copy()
+            diagnostic_values[:split.validation_start] = baseline_values
+            diagnostic_batch = replace(batch, factor_ids=(factor_id,),
+                values=diagnostic_values[:, :, None], validity=np.isfinite(diagnostic_values[:, :, None]))
+            diagnosis = diagnose_training_batch(diagnostic_batch, labels, config=config)[factor_id]
+        else:
+            diagnosis = dict(shared_raw_diagnoses[factor_id])
         diagnosis["input_stage"] = "accepted_baseline" if baseline_active else "raw"
         factor_specs = list(specs)
         if ('cs_rank_already_present' in baseline_plan.omissions

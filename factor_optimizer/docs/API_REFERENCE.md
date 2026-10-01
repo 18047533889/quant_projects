@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**80 个 Python 模块、955 个公开函数/类/方法定义**。
+扫描实际包目录：**81 个 Python 模块、956 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -62,6 +62,7 @@
 | [factor_optimizer/ports/factor_intelligence.py](../factor_optimizer/ports/factor_intelligence.py) | 29 | Factor Intelligence provider port (R61-FI-014 / plan §20 E6, matrix E6). |
 | [factor_optimizer/research_baseline.py](../factor_optimizer/research_baseline.py) | 9 | Research baseline recipes and TRAIN-only substantial-degradation guard. |
 | [factor_optimizer/research_batch.py](../factor_optimizer/research_batch.py) | 14 | Bounded research batch optimization with automatic chronological splitting. |
+| [factor_optimizer/research_batch_diagnostics.py](../factor_optimizer/research_batch_diagnostics.py) | 1 | Bounded shared raw-input diagnosis for research factor batches. |
 | [factor_optimizer/research_decay.py](../factor_optimizer/research_decay.py) | 1 | TRAIN-only twenty-layer stale-signal decay, not holding-period PnL. |
 | [factor_optimizer/research_diagnostics.py](../factor_optimizer/research_diagnostics.py) | 1 | TRAIN-only multi-dimensional research diagnosis using QE metric authorities. |
 | [factor_optimizer/research_final_report.py](../factor_optimizer/research_final_report.py) | 3 | Authority-side final research reporting; never called by candidate search. |
@@ -6697,6 +6698,18 @@ Optimize aligned QE contracts automatically, preserving every input ID.
 
 参数：`(batch, labels, *, config=None, allow_research=False, lineages=None, exposures=None, exposure_columns=(), maximum_baseline_loss=0.01)`。
 
+## factor_optimizer/research_batch_diagnostics.py
+
+Bounded shared raw-input diagnosis for research factor batches.
+
+### diagnose_raw_batch_in_chunks
+
+[实际实现](../factor_optimizer/research_batch_diagnostics.py#L13)。
+
+Diagnose unchanged raw columns together under an explicit memory bound.
+
+参数：`(batch, labels, *, config, diagnose_training_batch: Callable, max_chunk_bytes: int=DEFAULT_MAX_DIAGNOSTIC_CHUNK_BYTES)`。
+
 ## factor_optimizer/research_decay.py
 
 TRAIN-only twenty-layer stale-signal decay, not holding-period PnL.
@@ -10829,9 +10842,10 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
-| `factor_optimizer/research_batch.py` | `e2b4505d96aff96c6c6058a62c97852db4fa2d957f22591df420932e5a493c32` |
+| `factor_optimizer/research_batch.py` | `5df03b30600a68f98699ad0fe19b1e8f7a4a2c608df3cf800cdf5550b39dd6f1` |
+| `factor_optimizer/research_batch_diagnostics.py` | `0ec5186c413814db6457342e97236b582e95a460033c11a6804b815c64d24b89` |
 | `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
-| `factor_optimizer/research_diagnostics.py` | `26c82a50b2edcaa4eff8911da11a4fcd52fbad2f5235148202a300d396ced23d` |
+| `factor_optimizer/research_diagnostics.py` | `054ee2ad344395812656f1a7991983c58cade69e8c0b524d98981258cd6947ad` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |
 | `factor_optimizer/research_fitness.py` | `c7021a482a74b691f68ae6b706355b7f7c9544e8658d5aa81a921cceef4e6494` |
 | `factor_optimizer/research_manifest.py` | `b2a5d5ec912cb18fe065498965d092da0d1ab095a366ac7fa7c4f565d09d4ba5` |

@@ -218,3 +218,159 @@ def test_normal_small_frame_uses_ordinary_execute_without_cache_fingerprint(monk
     assert fingerprints == []
     assert executions
     assert result.factors["u"].candidates
+
+
+def test_shared_diagnosis_keeps_exact_zero_and_tiny_sign_boundaries(monkeypatch):
+    import quant_evaluator.metrics.ic as ic_metrics
+    from factor_optimizer.research_diagnostics import diagnose_training_batch
+    _, Config = api()
+    batch, labels = fixture()
+    names = batch.factor_ids[:3]
+    batch = replace(batch, factor_ids=names, values=batch.values[:, :, :3])
+    signs = dict(zip(names, (0.0, 1e-16, -1e-16)))
+
+    def boundary_ic(train, target, **kwargs):
+        series = np.zeros((train.values.shape[0], len(train.factor_ids)))
+        for k, name in enumerate(train.factor_ids):
+            series[0, k] = signs[name]
+        return series, np.full(series.shape, 40, dtype=np.int64)
+
+    monkeypatch.setattr(ic_metrics, "compute_daily_ic", boundary_ic)
+    config = Config(families=("SIGN_ORIENTATION",))
+    shared = diagnose_training_batch(batch, labels, config=config)
+    for k, name in enumerate(names):
+        one = replace(batch, factor_ids=(name,),
+                      values=batch.values[:, :, k:k+1].copy())
+        prior = diagnose_training_batch(one, labels, config=config)[name]
+        assert shared[name] == prior
+        mean = shared[name]["rank_ic"]
+        if signs[name] == 0:
+            assert mean == 0
+        else:
+            assert np.sign(mean) == np.sign(signs[name])
+        negative_issue = any(issue["code"] == "negative_rank_ic"
+                             for issue in shared[name]["issues"])
+        assert negative_issue == (signs[name] < 0)
+
+
+@pytest.mark.parametrize("families", [
+    ("SIGN_ORIENTATION",),
+    ("SIGN_ORIENTATION", "U_SHAPE_REPAIR", "INVERTED_U_REPAIR"),
+])
+def test_shared_diagnosis_preserves_complete_optimizer_selection(monkeypatch, families):
+    from dataclasses import fields
+    import factor_optimizer.research_diagnostics as diagnostics
+    optimize, Config = api()
+    batch, labels = fixture()
+    config = Config(families=families)
+    original = diagnostics.diagnose_training_batch
+    shared = optimize(batch, labels, config=config, allow_research=True)
+
+    def independent(diagnostic_batch, *args, **kwargs):
+        records = {}
+        for k, factor_id in enumerate(diagnostic_batch.factor_ids):
+            values = diagnostic_batch.values[:, :, k:k+1].copy()
+            validity = diagnostic_batch.validity
+            one = replace(
+                diagnostic_batch, factor_ids=(factor_id,), values=values,
+                validity=None if validity is None else validity[:, :, k:k+1].copy(),
+            )
+            records.update(original(one, *args, **kwargs))
+        return records
+
+    monkeypatch.setattr(diagnostics, "diagnose_training_batch", independent)
+    prior = optimize(batch, labels, config=config, allow_research=True)
+    assert shared.split == prior.split
+    assert shared.optimized.factor_ids == prior.optimized.factor_ids
+    np.testing.assert_array_equal(shared.optimized.values, prior.optimized.values)
+    np.testing.assert_array_equal(shared.optimized.validity, prior.optimized.validity)
+    for factor_id in batch.factor_ids:
+        actual, expected = shared.factors[factor_id], prior.factors[factor_id]
+        for field in fields(actual):
+            left, right = getattr(actual, field.name), getattr(expected, field.name)
+            if field.name == "plan":
+                assert left.identity == right.identity
+            else:
+                assert left == right, (factor_id, field.name)
+
+
+def test_raw_baseline_diagnostics_share_batch_preparation_and_preserve_per_factor_results(monkeypatch):
+    optimize, Config = api()
+    batch, labels = fixture()
+    config = Config(families=("SIGN_ORIENTATION",))
+    import factor_optimizer.research_diagnostics as diagnostics
+    original_diagnose = diagnostics.diagnose_training_batch
+
+    # Independent per-factor reference matching the prior raw diagnostic input.
+    expected = {}
+    for k, factor_id in enumerate(batch.factor_ids):
+        raw = np.array(batch.values[:, :, k], dtype=float, copy=True)
+        if batch.validity is not None:
+            raw[~batch.validity[:, :, k]] = np.nan
+        raw[~np.isfinite(raw)] = np.nan
+        one = replace(batch, factor_ids=(factor_id,), values=raw[:, :, None],
+                      validity=np.isfinite(raw[:, :, None]))
+        expected.update(original_diagnose(one, labels, config=config))
+        expected[factor_id]["input_stage"] = "raw"
+
+    calls = []
+    def observe(diagnostic_batch, *args, **kwargs):
+        calls.append(tuple(diagnostic_batch.factor_ids))
+        return original_diagnose(diagnostic_batch, *args, **kwargs)
+
+    monkeypatch.setattr(diagnostics, "diagnose_training_batch", observe)
+    result = optimize(batch, labels, config=config, allow_research=True)
+
+    assert calls == [batch.factor_ids]
+    assert tuple(result.factors) == batch.factor_ids
+    for factor_id in batch.factor_ids:
+        actual = dict(result.factors[factor_id].training_diagnostics)
+        # Search appends its budget after the shared TRAIN diagnosis.
+        assert actual.pop("candidate_budget") == {
+            "required": 1, "maximum": config.maximum_candidates,
+            "evaluated": sum(record["status"] == "train_evaluated"
+                             for record in result.factors[factor_id].candidates),
+            "status": "admitted",
+        }
+        assert actual == expected[factor_id]
+
+
+def test_raw_batch_diagnostic_helper_matches_independent_results_for_chunk_widths():
+    from factor_optimizer.research_batch_diagnostics import diagnose_raw_batch_in_chunks
+    from factor_optimizer.research_diagnostics import diagnose_training_batch
+
+    batch, labels = fixture()
+    config = api()[1]()
+    bytes_per_factor = batch.values.shape[0] * batch.values.shape[1] * 8
+    expected = {}
+    for k, factor_id in enumerate(batch.factor_ids):
+        one = replace(batch, factor_ids=(factor_id,),
+                      values=batch.values[:, :, k:k+1].copy(), validity=None)
+        expected.update(diagnose_training_batch(one, labels, config=config))
+
+    for width in (1, 2, len(batch.factor_ids)):
+        chunks = []
+
+        def observe(chunk, target, *, config):
+            chunks.append(chunk.factor_ids)
+            return diagnose_training_batch(chunk, target, config=config)
+
+        actual = diagnose_raw_batch_in_chunks(
+            batch, labels, config=config, diagnose_training_batch=observe,
+            max_chunk_bytes=width * bytes_per_factor,
+        )
+        assert actual == expected
+        assert tuple(fid for ids in chunks for fid in ids) == batch.factor_ids
+        assert all(len(ids) <= width for ids in chunks)
+
+
+@pytest.mark.parametrize("invalid", [0, -1, True, 1.5])
+def test_raw_batch_diagnostic_helper_rejects_invalid_memory_bound(invalid):
+    from factor_optimizer.research_batch_diagnostics import diagnose_raw_batch_in_chunks
+
+    batch, labels = fixture()
+    with pytest.raises(ValueError, match="max_chunk_bytes"):
+        diagnose_raw_batch_in_chunks(
+            batch, labels, config=None, diagnose_training_batch=lambda *_a, **_k: {},
+            max_chunk_bytes=invalid,
+        )

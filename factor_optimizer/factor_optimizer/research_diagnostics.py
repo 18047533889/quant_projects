@@ -74,6 +74,11 @@ def diagnose_training_batch(batch, labels, *, config=None, periods_per_year=252,
     nonoverlapping = all(target.label_end_time[i] <= target.label_start_time[i+1]
                          for i in range(len(idx)-1))
     ic, _ = compute_daily_ic(train, target, method="spearman", min_assets=config.minimum_assets)
+    # Keep each factor's time series contiguous: axis reductions must use the
+    # same summation layout as independent single-factor diagnosis. Otherwise
+    # batching can change last-bit evidence and flip threshold-boundary flags.
+    # This small (TRAIN days, factors) copy does not duplicate the stock panel.
+    ic = np.asfortranarray(ic)
     mean_ic = compute_mean_ic_value(ic, min_periods=config.minimum_train_days)
     icir = compute_icir(ic, min_periods=config.minimum_train_days)
     quantiles, counts = compute_quantile_returns(
