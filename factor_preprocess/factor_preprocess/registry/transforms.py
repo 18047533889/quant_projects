@@ -1069,7 +1069,7 @@ def create_default_registry() -> TransformRegistry:
     """
     from factor_preprocess.transforms import (
         cs_rank, cs_zscore, cs_demean, cs_winsor, cs_scale,
-        rolling_mean, rolling_std, rolling_zscore, ewma,
+        rolling_mean, rolling_std, ewma,
         trailing_sma, trailing_median, robust_ewma, kama,
         one_sided_iir_lowpass, kalman_local_level,
         volatility_scale, volatility_scale_returns, realized_volatility,
@@ -1077,6 +1077,7 @@ def create_default_registry() -> TransformRegistry:
         impute_with_fallback,
         days_since_update, observation_age, freshness_score, stale_data_indicator,
     )
+    from factor_preprocess.transforms.rolling import _rolling_zscore_fp_research
     from factor_preprocess.neutralization import ols_neutralize, compute_exposures
     from factor_preprocess.regime import detect_correlation_regime
     from factor_preprocess.transforms.decomposition import (
@@ -1175,7 +1176,7 @@ def create_default_registry() -> TransformRegistry:
         causal_safe=True,
     )
     register_builtin(
-        "rolling_zscore", rolling_zscore, TransformCategory.TEMPORAL,
+        "rolling_zscore", _rolling_zscore_fp_research, TransformCategory.TEMPORAL,
         version="1.0.0",
         description="Rolling z-score normalization",
         tags={"rolling", "zscore", "temporal"},

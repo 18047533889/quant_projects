@@ -7,6 +7,46 @@ import numpy as np
 import pandas as pd
 
 
+def _native_std_domain_safe(values: np.ndarray, valid: np.ndarray,
+                            group_codes: np.ndarray, *, window: int) -> bool:
+    """Conservatively screen input for native rolling-std numeric hazards.
+
+    Magnitude bounds include every finite value, not just a frame maximum, so
+    mixed-scale groups also fall back. A group-global adjacent-finite gap scan
+    catches near-constant windows/local plateaus in drifting series in O(N)
+    time and space; false positives only retain the generic FE route. This is a
+    dispatch heuristic, not an accuracy guarantee.
+    """
+    valid = np.asarray(valid, dtype=bool)
+    finite_values = np.asarray(values, dtype=np.float64)[valid]
+    if finite_values.size == 0:
+        return True
+
+    magnitudes = np.abs(finite_values)
+    nonzero = magnitudes[magnitudes != 0.0]
+    if nonzero.size:
+        info = np.finfo(np.float64)
+        lower = 4.0 * np.sqrt(info.tiny) * np.sqrt(max(1, int(window)))
+        upper = np.sqrt(info.max / (16.0 * max(1, int(window))))
+        if nonzero.min() < lower or magnitudes.max() > upper:
+            return False
+
+    finite_groups = np.asarray(group_codes)[valid]
+    pairs = pd.DataFrame({"group": finite_groups, "value": finite_values})
+    previous = pairs.groupby("group", sort=False)["value"].shift(1).to_numpy()
+    current = finite_values
+    has_previous = np.isfinite(previous)
+    distinct_same_sign = (current != previous) & (np.signbit(current) == np.signbit(previous))
+    scale = np.maximum(np.abs(current), np.abs(previous))
+    # A 1e-6 relative gap threshold is intentionally conservative. Exact
+    # constants are excluded because the native path repairs them via min/max.
+    near_constant = (
+        has_previous & distinct_same_sign & (scale > 0.0)
+        & (np.abs(current - previous) <= 1e-6 * scale)
+    )
+    return not bool(np.any(near_constant))
+
+
 def _validate_rolling_params(window: int, min_periods: int | None) -> tuple[int, int]:
     if isinstance(window, (bool, np.bool_)) or not isinstance(window, numbers.Integral) or window < 1:
         raise ValueError("window must be a positive integer")
@@ -64,7 +104,8 @@ def _std_expression(value_col: str, window: int, min_periods: int, ddof: int,
 
 def _lagged_rolling(frame: pd.DataFrame, *, window: int, min_periods: int | None,
                     asset_col: str, time_col: str, value_col: str,
-                    reducer: str, ddof: float = 1) -> pd.Series:
+                    reducer: str, ddof: float = 1,
+                    _native_std: bool = False) -> pd.Series:
     """Validate, compile, and restore a lagged rolling statistic by row position."""
     window, min_periods = _validate_rolling_params(window, min_periods)
     missing = {asset_col, time_col, value_col}.difference(frame.columns)
@@ -100,6 +141,25 @@ def _lagged_rolling(frame: pd.DataFrame, *, window: int, min_periods: int | None
     )
     valid_values = np.isfinite(numeric_values)
     numeric_values[~valid_values] = np.nan
+
+    if reducer == "std" and _native_std and _native_std_domain_safe(
+        numeric_values[observed], valid_values[observed], group_codes,
+        window=window,
+    ):
+        from factor_engine.backend.native_long_rolling_moments import collect_lagged_moments
+        result = collect_lagged_moments(
+            positions, group_codes.astype(np.int64, copy=False),
+            numeric_values[observed],
+            valid_values.astype(np.float64, copy=False)[observed],
+            window=window, min_periods=min_periods, ddof=int(ddof),
+            include_mean=False,
+        )
+        actual_positions = result.get_column("ts").to_numpy()
+        actual_groups = result.get_column("inst").to_numpy()
+        if not np.array_equal(actual_positions, positions) or not np.array_equal(actual_groups, group_codes):
+            raise RuntimeError("FactorEngine long rolling std changed row identity or order")
+        output[positions] = result.get_column("_std").to_numpy()
+        return pd.Series(output, index=frame.index, name=value_col)
 
     import polars as pl
     from factor_engine.backend.polars_expr_emitter import compile_plan_to_polars
@@ -169,6 +229,7 @@ def lagged_std(frame: pd.DataFrame, *, window: int, min_periods: int | None = No
     return _lagged_rolling(
         frame, window=window, min_periods=min_periods, asset_col=asset_col,
         time_col=time_col, value_col=value_col, reducer="std", ddof=ddof,
+        _native_std=True,
     )
 def lagged_zscore(frame: pd.DataFrame, *, window: int, min_periods: int | None = None,
                   ddof: float = 1, asset_col: str = "asset_id",
@@ -200,8 +261,12 @@ def lagged_zscore(frame: pd.DataFrame, *, window: int, min_periods: int | None =
     valid = np.isfinite(raw)
     clean = raw.copy()
     clean[~valid] = np.nan
-    from factor_engine.backend.native_long_rolling_moments import collect_lagged_moments
-    result = collect_lagged_moments(
+    from factor_engine.backend.native_long_rolling_moments import (
+        collect_lagged_moments, collect_lagged_zscores_stable,
+    )
+    if _native_std_domain_safe(clean[observed], valid[observed],
+                               group_codes, window=window):
+        result = collect_lagged_moments(
         positions,
         group_codes.astype(np.int64, copy=False),
         clean[observed],
@@ -209,12 +274,20 @@ def lagged_zscore(frame: pd.DataFrame, *, window: int, min_periods: int | None =
         window=window,
         min_periods=min_periods,
         ddof=ddof,
-    )
+        include_mean=False,
+        include_std=False,
+        current_values=raw[observed],
+        )
+    else:
+        result = collect_lagged_zscores_stable(
+            positions, group_codes.astype(np.int64, copy=False),
+            clean[observed], valid.astype(np.float64, copy=False)[observed],
+            raw[observed], window=window, min_periods=min_periods,
+            ddof=ddof,
+        )
     actual_positions = result.get_column("ts").to_numpy()
     actual_groups = result.get_column("inst").to_numpy()
     if not np.array_equal(actual_positions, positions) or not np.array_equal(actual_groups, group_codes):
         raise RuntimeError("FactorEngine long z-score changed row identity or order")
-    mean, std = result.get_column("_mean").to_numpy(), result.get_column("_std").to_numpy()
-    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
-        output[positions] = (raw[observed] - mean) / std
+    output[positions] = result.get_column("_zscore").to_numpy()
     return pd.Series(output, index=frame.index, name=value_col)

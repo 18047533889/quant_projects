@@ -4178,7 +4178,7 @@ Create registry with all built-in transforms.
 
 ### get_default_registry
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1659)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1660)。
 
 Get or create the default global registry.
 
@@ -5136,9 +5136,9 @@ Causal rolling standard deviation per asset.
 
 ### rolling_zscore
 
-[实际实现](../factor_preprocess/transforms/rolling.py#L238)。
+[实际实现](../factor_preprocess/transforms/rolling.py#L305)。
 
-Causal rolling z-score normalization per asset.
+Compute rolling z-scores through the FactorEngine authority route.
 
 参数：`(values: pd.DataFrame, window: int, min_periods: Optional[int]=None, ddof: int=1, asset_col: str='asset_id', time_col: str='date', value_col: str='value')`。
 
@@ -5146,7 +5146,7 @@ Causal rolling z-score normalization per asset.
 
 ### ewma
 
-[实际实现](../factor_preprocess/transforms/rolling.py#L305)。
+[实际实现](../factor_preprocess/transforms/rolling.py#L337)。
 
 Causal exponentially-weighted moving average per asset.
 
@@ -5367,7 +5367,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/regime/switching.py` | `a6114ab07de853206d2d705d79946a162efb5d8cb04a8c7352e87ca5e5c8c43a` |
 | `factor_preprocess/registry/__init__.py` | `f7d6d9c9d84116aa51d6c7d38695d2b439f63c69cb01d54327a998d970936329` |
 | `factor_preprocess/registry/policies.py` | `6f0c776875e25205ce2e8f072dfdb70ae15caacdb6f9dc516a6151cace7fd202` |
-| `factor_preprocess/registry/transforms.py` | `8ad2d901532d5ae3b8de322f1808c22b348400a048369052774ee830e6c7ab70` |
+| `factor_preprocess/registry/transforms.py` | `bc8323032262eb2dbd54bdc199d66d636fd9a44bbc95f4fe263927a66a9d2699` |
 | `factor_preprocess/representation/__init__.py` | `5b62691fd8b68400db3bcc025ec528ed68240d3dd127d5e036fe3e08fb58942d` |
 | `factor_preprocess/representation/linear_ready.py` | `c0f394448c6be34cc02bf83000e182da18d4f022fe83c82cd524b5582f20c81e` |
 | `factor_preprocess/representation/multichannel.py` | `f9edaba509c7bf1c12a1534eb9ca758e523f7efc62f955e09b8609bc6c346dfe` |
@@ -5386,7 +5386,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/transforms/layered_decay.py` | `eef9c4dae3e963e69fea4534b94879c4c04dd3379a6a2a59d80efde8fcaf650f` |
 | `factor_preprocess/transforms/missingness.py` | `42dcbf19613e38f7be1e18283ca4a67e208332b88a6a0fe625b6a86c0724ea4d` |
 | `factor_preprocess/transforms/repair_shapes.py` | `dccea81e1c00e68e144f530eb103e7c217677cc1ae82c5bd5b3ee12695cacea5` |
-| `factor_preprocess/transforms/rolling.py` | `dc7651cd457914eea0b28a15894b592ba9bd7d86313a5c457dc6e028b4f99878` |
+| `factor_preprocess/transforms/rolling.py` | `941adb638dcc15f6b09fd105e014112d26c9819c04b911633e8263d2a4b044d8` |
 | `factor_preprocess/transforms/smoothing.py` | `4b81bf3c26fcc47f36f9bc27fab225e16764cd3114f311732dfc88c32f3f69f3` |
 | `factor_preprocess/transforms/temporal_representation.py` | `bde5f0f504b38e4b8721786a217bf395dd31ac10cf8b31434a94807ce16c72c5` |
 | `factor_preprocess/transforms/treatment_variants.py` | `5d3a3dd9c7c0e014be750edcf9e37c628113acd17d8ec3dc09076e13aa3b2b4b` |

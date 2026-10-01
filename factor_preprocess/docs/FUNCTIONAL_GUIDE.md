@@ -68,6 +68,10 @@ z_t=\frac{x_t-\bar{x}_{t-1,w}}{s_{t-1,w}}
 
 rolling_zscore 的除法遵循 IEEE 语义：分子和标准差都为零时得到 NaN；分子非零而标准差为零时得到带符号的 Inf。生产注册表将该 lagged 统计 recipe 路由为 `FE_COMPOSITE:long_smoothing.lagged_zscore:v1`（FP→FE composite）；这不是默认包含当前行的 `ts_zscore`。FE recipe 不可用时生产路径 fail closed，FP 实现只保留给显式 research 模式。
 
+你直接调用 `factor_preprocess.transforms.rolling.rolling_zscore` 时也使用同一 FE 权威入口。
+FE 对普通数值使用原生 Polars 滚动表达式，对大偏移、小波动或极端量级使用有界的原生 Polars 稳定统计路径。
+我们用独立 1200 位 Decimal 公式验证精度；旧 pandas 研究实现不能作为高偏移场景的数值精度依据。注册表的 `allow_research=True` 在 FE 不可用时才允许显式研究回退。
+
 trailing_median 返回过去窗口中位数。
 
 ewma 先 shift(1)，再执行 adjust=False 的递归：

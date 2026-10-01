@@ -39,13 +39,14 @@ import pytest
 from factor_preprocess.transforms import rolling as R
 from factor_preprocess.transforms import smoothing as S
 
-# (public name, public fn, reference oracle, kwargs)
+# (name, public or explicit research implementation, reference oracle, kwargs)
 EQUIV_CASES = [
     ("rolling_mean", R.rolling_mean, R._rolling_mean_reference,
      dict(window=20, min_periods=10)),
     ("rolling_std", R.rolling_std, R._rolling_std_reference,
      dict(window=20, min_periods=10)),
-    ("rolling_zscore", R.rolling_zscore, R._rolling_zscore_reference,
+    ("rolling_zscore", R._rolling_zscore_fp_research,
+     R._rolling_zscore_reference,
      dict(window=20, min_periods=10)),
     ("ewma", R.ewma, R._ewma_reference, dict(halflife=10)),
     ("trailing_median", S.trailing_median, S._trailing_median_reference,

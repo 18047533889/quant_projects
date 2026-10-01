@@ -235,7 +235,7 @@ def rolling_std(
     )
 
 
-def rolling_zscore(
+def _rolling_zscore_fp_research(
     values: pd.DataFrame,
     window: int,
     min_periods: Optional[int] = None,
@@ -300,6 +300,38 @@ def rolling_zscore(
     result = (current - rolling_mean_val) / rolling_std_val
 
     return result
+
+
+def rolling_zscore(
+    values: pd.DataFrame,
+    window: int,
+    min_periods: Optional[int] = None,
+    ddof: int = 1,
+    asset_col: str = "asset_id",
+    time_col: str = "date",
+    value_col: str = "value",
+) -> pd.Series:
+    """Compute rolling z-scores through the FactorEngine authority route.
+
+    The numerically fragile FP pandas implementation remains available only
+    through the registry's explicit research fallback. Public calls fail
+    closed when the FE composite is unavailable; they never silently fall
+    back to the legacy rolling kernel.
+    """
+    from factor_preprocess.adapters.fe_composite import get_fe_composite_executor
+    from factor_preprocess.adapters.fe_smoothing import ROLLING_ZSCORE_RECIPE
+    from factor_preprocess.errors import GovernanceError
+
+    executor = get_fe_composite_executor("rolling_zscore", ROLLING_ZSCORE_RECIPE)
+    if executor is None:
+        raise GovernanceError(
+            "FE composite authority unavailable for 'rolling_zscore'; "
+            "no implicit FP-native fallback"
+        )
+    return executor(
+        values, window=window, min_periods=min_periods, ddof=ddof,
+        asset_col=asset_col, time_col=time_col, value_col=value_col,
+    )
 
 
 def ewma(
