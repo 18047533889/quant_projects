@@ -43,10 +43,21 @@ AXIS_INDEX_MAX_ASSETS = 5500
 
 def select_records(mapping, count, object_mib, total_mib):
     """Select verified factors; explicit total cap may reach 6144 MiB (CLI default 4096)."""
-    if not (type(count) is int and 33 <= count <= 64 and
+    return _select_verified_records(mapping, count, object_mib, total_mib, minimum_count=33)
+
+
+def select_source_records(mapping, count, object_mib, total_mib):
+    """Reuse bound selection rules for the exact F8 source profile or large batches."""
+    if type(count) is int and count == 8:
+        return _select_verified_records(mapping, count, object_mib, total_mib, minimum_count=8)
+    return select_records(mapping, count, object_mib, total_mib)
+
+
+def _select_verified_records(mapping, count, object_mib, total_mib, *, minimum_count):
+    if not (type(count) is int and minimum_count <= count <= 64 and
             type(object_mib) is int and 1 <= object_mib <= 128 and
             type(total_mib) is int and 1 <= total_mib <= 6144):
-        raise ValueError("count 33..64, object 1..128 MiB, total 1..6144 MiB required")
+        raise ValueError(f"count {minimum_count}..64, object 1..128 MiB, total 1..6144 MiB required")
     if not isinstance(mapping, dict):
         raise ValueError("manifest factors mapping required")
     eligible = []

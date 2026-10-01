@@ -721,7 +721,7 @@ def main():
         raise SystemExit("insufficient RAM or COS cache disk headroom")
 
     manifest_sha = tiles.MANIFEST_SHA256
-    records = tiles.select_records(
+    records = tiles.select_source_records(
         tiles.read_manifest(manifest_sha), args.factors,
         args.max_object_mib, args.max_total_mib,
     )
