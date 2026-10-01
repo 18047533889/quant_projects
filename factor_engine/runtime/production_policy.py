@@ -207,6 +207,9 @@ def assert_production_fastpath_runtime(
     if getattr(ctx, "execution_purpose", None) is not None:
         from factor_engine.runtime.default_execution_policy import operator_admission_mode
         mode = operator_admission_mode(ctx)
+    # Batch executors call this common finalizer. Pandas fallback enforcement
+    # is independent of optional fast-path certification, just as in run().
+    assert_no_production_pandas_fallbacks(ctx, mode=mode, context=context)
     if not is_production_mode(mode) or not _fastpath_gate_enabled():
         return
     from factor_engine.backend.production_fastpath_gate import audit_runtime_fastpath_violations
