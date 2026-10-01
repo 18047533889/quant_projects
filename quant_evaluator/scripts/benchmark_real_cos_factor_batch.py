@@ -117,8 +117,12 @@ def _gpu_memory_snapshot():
         return {"status": "unavailable", "detail": f"{type(exc).__name__}: {exc}"}
 
 
-def _estimate_f32_peak_bytes(manifest_sha256=None):
+def _estimate_f32_peak_bytes(manifest_sha256=None, *, metric_ids=None):
     """Bound the exact verified F32 manifest empirically; keep others conservative."""
+    from quant_evaluator.scripts.coverage_memory_profile import measured_coverage_peak_bytes
+    coverage_peak = measured_coverage_peak_bytes(manifest_sha256, metric_ids)
+    if coverage_peak is not None:
+        return coverage_peak
     array_upper_bytes = 3000 * 5500 * 32 * 8
     if manifest_sha256 == full.MANIFEST_SHA256:
         # Same immutable 32-object sample: largest observed parent RSS
@@ -210,7 +214,12 @@ def preflight_factor_count_profile(args):
         # manifests retain the conservative F24 extrapolation.
         array_upper_bytes = 3000 * 5500 * 32 * 8
         observed_f24_peak_bytes = 46 * 1024**3
-        estimated_peak_bytes = _estimate_f32_peak_bytes(requested_sha)
+        metric_ids = getattr(args, "metric_ids", None)
+        if metric_ids == ("coverage",):
+            estimated_peak_bytes = _estimate_f32_peak_bytes(
+                requested_sha, metric_ids=metric_ids)
+        else:
+            estimated_peak_bytes = _estimate_f32_peak_bytes(requested_sha)
         mem_available = _mem_available_bytes()
         gpu_memory = _gpu_memory_snapshot()
         budget_bytes = args.max_working_gib * 1024**3
@@ -232,7 +241,11 @@ def preflight_factor_count_profile(args):
             "max_object_bytes": args.profile_max_object_mib * 1024**2,
             "max_total_bytes": args.profile_max_total_mib * 1024**2,
             "estimated_peak_bytes": estimated_peak_bytes,
+            "memory_profile_metrics": list(metric_ids or ()),
             "estimated_peak_model": (
+                "exact F32 coverage: max(8x array bound, 1.2x coverage parent+worker RSS rounded to GiB); "
+                "evidence real_cos_f32_coverage_raw_identity_cache_ab_20261001.json"
+                if metric_ids == ("coverage",) and requested_sha == full.MANIFEST_SHA256 else
                 "exact manifest: max(8x array bound, 1.2x observed F32 parent+worker RSS rounded to GiB)"
                 if requested_sha == full.MANIFEST_SHA256 else
                 "unseen manifest: max(16x array bound, old F24 CPU peak 46 GiB * 32/24)"),
