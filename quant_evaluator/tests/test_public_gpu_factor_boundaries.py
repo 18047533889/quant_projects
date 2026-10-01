@@ -10,6 +10,7 @@ from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.runtime.device_session import DeviceEvaluationSession
 from quant_evaluator.runtime.evaluator import evaluate
 
+from quant_evaluator.runtime.gpu_working_set import estimate_coverage_working_set_bytes
 
 @pytest.mark.parametrize("num_factors", [33, 65])
 def test_public_cuda_ic_and_daily_quantile_preserve_factor_boundary(num_factors, monkeypatch):
@@ -95,3 +96,84 @@ def test_public_cuda_ic_and_daily_quantile_preserve_factor_boundary(num_factors,
     assert not cuda_quantiles.valid_mask[2, :, 0].any()
     assert not cuda_quantiles.valid_mask[4, :, -1].any()
     assert np.any(cuda_quantiles.counts > 0)
+
+
+def test_public_cuda_coverage_budget_parity_with_validity_and_singleton_tail(monkeypatch):
+    rng = np.random.default_rng(64032)
+    num_times, num_assets, num_factors = 16, 32, 5
+    time_index = tuple(f"2026-04-{day:02d}" for day in range(1, num_times + 1))
+    asset_ids = tuple(f"asset-{i:03d}" for i in range(num_assets))
+    factor_ids = tuple(f"factor-{i:03d}" for i in range(num_factors))
+
+    values = rng.normal(size=(num_times, num_assets, num_factors))
+    labels = rng.normal(size=(num_times, num_assets))
+    factor_validity = rng.random(values.shape) > 0.12
+    label_validity = rng.random(labels.shape) > 0.15
+    values[0, 0, 0] = np.nan
+    values[1, 1, 1] = np.inf
+    values[2, 2, 2] = -np.inf
+    labels[3, 3] = np.nan
+    labels[4, 4] = np.inf
+    labels[5, 5] = -np.inf
+
+    batch = FactorBatch(
+        factor_ids=factor_ids,
+        time_axis=AxisRef("time", "str", num_times, np.asarray(time_index)),
+        asset_axis=AxisRef("asset", "str", num_assets, np.asarray(asset_ids)),
+        values=values,
+        validity=factor_validity,
+    )
+    label_bundle = LabelBundle(
+        target_id="forward_return",
+        values=labels,
+        horizon=1,
+        decision_time=time_index,
+        label_start_time=tuple(f"2026-05-{day:02d}" for day in range(1, num_times + 1)),
+        label_end_time=tuple(f"2026-06-{day:02d}" for day in range(1, num_times + 1)),
+        validity=label_validity,
+    )
+
+    budget = estimate_coverage_working_set_bytes(
+        num_times, num_assets, 2, values.dtype.itemsize, labels.dtype.itemsize,
+    )
+    uploaded = []
+    original_open = DeviceEvaluationSession._open
+    original_stage_factors = DeviceEvaluationSession.stage_factors
+
+    def open_with_small_budget(session):
+        original_open(session)
+        session._vram_budget = budget
+        session._pool.set_limit(size=budget)
+
+    def track_stage_factors(session, tile_values, tile_factor_ids, layout="T,F,N"):
+        uploaded.append(tuple(tile_factor_ids))
+        return original_stage_factors(session, tile_values, tile_factor_ids, layout)
+
+    monkeypatch.setattr(DeviceEvaluationSession, "_open", open_with_small_budget)
+    monkeypatch.setattr(DeviceEvaluationSession, "stage_factors", track_stage_factors)
+
+    cpu = evaluate(batch, label_bundle, metrics=("coverage",))
+    cuda = evaluate(batch, label_bundle, metrics=("coverage",), backend="cuda_strict")
+
+    assert [len(tile) for tile in uploaded] == [2, 2, 1]
+    assert uploaded == [factor_ids[:2], factor_ids[2:4], factor_ids[4:]]
+    cpu_coverage = cpu.artifacts["coverage"]
+    cuda_coverage = cuda.artifacts["coverage"]
+    valid_pairs = (factor_validity & label_validity[:, :, None]
+                   & np.isfinite(values) & np.isfinite(labels)[:, :, None])
+    expected_counts = valid_pairs.sum(axis=(0, 1))
+    expected_coverage = expected_counts / (num_times * num_assets)
+    np.testing.assert_allclose(cuda_coverage.values, cpu_coverage.values, rtol=0, atol=0)
+    np.testing.assert_allclose(cuda_coverage.values, expected_coverage, rtol=0, atol=0)
+    assert cuda_coverage.factor_axis == cpu_coverage.factor_axis
+    assert cuda_coverage.factor_axis.factor_ids == factor_ids
+    np.testing.assert_array_equal(
+        cuda_coverage.provenance["observation_counts"],
+        cpu_coverage.provenance["observation_counts"],
+    )
+    np.testing.assert_array_equal(cuda_coverage.provenance["observation_counts"], expected_counts)
+    assert cuda_coverage.provenance["sample_unit"] == cpu_coverage.provenance["sample_unit"]
+    for factor_id in factor_ids:
+        actual = cuda.get_metric("coverage", factor_id)
+        expected = cpu.get_metric("coverage", factor_id)
+        assert actual.valid == expected.valid
