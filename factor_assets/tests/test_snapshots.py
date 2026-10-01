@@ -571,3 +571,47 @@ def test_snapshot_manager_multiple_factors():
     assert states["F001"] == LifecycleState.EVALUATED
     assert states["F002"] == LifecycleState.REGISTERED
     assert states["F003"] == LifecycleState.EVALUATED
+
+
+def test_one_pass_snapshot_matches_legacy_replay_for_offsets_and_ties():
+    import factor_assets.scripts.benchmark_snapshot_replay_20261001 as replay_benchmark
+
+    asset = create_test_asset("offset", "2026-01-02T07:00:00")
+    events = [
+        StateEvent("offset", LifecycleState.REGISTERED, LifecycleState.EVALUATED,
+                   "2026-01-02T10:00:00+02:00", ()),
+        StateEvent("offset", LifecycleState.EVALUATED, LifecycleState.APPROVED,
+                   "2026-01-02T08:00:00Z", ()),
+    ]
+    query = SnapshotQuery(as_of_timestamp="2026-01-02T03:00:00-05:00")
+    actual = SnapshotManager().create_snapshot([asset], events, query)
+    reference = replay_benchmark._legacy_snapshot([asset], events, query)
+
+    assert actual.assets == reference.assets
+    assert actual.assets[0].lifecycle_state is LifecycleState.APPROVED
+    assert actual.assets[0].first_evaluated_at == events[0].timestamp
+    assert actual.assets[0].approved_at == events[1].timestamp
+
+
+def test_snapshot_rereads_mutated_event_source_on_each_call():
+    asset = create_test_asset("F001", "2026-01-01T00:00:00Z")
+    events = [StateEvent(
+        "F001", LifecycleState.REGISTERED, LifecycleState.EVALUATED,
+        "2026-01-02T00:00:00Z", ("evaluation_bundle_ref",),
+    )]
+    manager = SnapshotManager()
+    first = manager.create_snapshot(
+        [asset], events, SnapshotQuery(as_of_timestamp="2026-01-02T00:00:00Z")
+    ).assets[0]
+    assert first.lifecycle_state is LifecycleState.EVALUATED
+
+    added = StateEvent(
+        "F001", LifecycleState.EVALUATED, LifecycleState.APPROVED,
+        "2026-01-03T00:00:00Z", ("gate_results",),
+    )
+    events.append(added)
+    second = manager.create_snapshot(
+        [asset], events, SnapshotQuery(as_of_timestamp="2026-01-03T00:00:00Z")
+    ).assets[0]
+    assert second.lifecycle_state is LifecycleState.APPROVED
+    assert second.approved_at == added.timestamp
