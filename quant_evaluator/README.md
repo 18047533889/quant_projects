@@ -101,6 +101,8 @@ print(bundle.metadata["execution_receipt"])
 [F32 coverage 对照说明](docs/benchmarks/real_cos_f32_coverage_comparison_20261001.md)。
 coverage 单项的当前六轮回放中，两轮 auto 均选 CUDA，完整对照通过；
 见 [coverage 接入验证](docs/benchmarks/real_cos_f32_coverage_single_auto_post_v28_20261001.md)。
+覆盖专用分块估算器的后续实测为 auto 13.75 秒、CPU 16.56 秒，GPU 峰值约 4.33 GiB；
+见 [分块与内存代价](docs/benchmarks/real_cos_f32_coverage_working_set_ab_20261001.md)。
 四指标改后真实回放已确认两轮 auto 均使用 CUDA，完整数值对照通过；见
 [v27 接入验证](docs/benchmarks/real_cos_f32_mixed_four_auto_v27_20261001.md)。
 
@@ -120,6 +122,9 @@ v28 另覆盖同一精确 F32 面板的五指标组合
 执行器仍按所选策略校验输入、设备与资源，并保留失败关闭行为。
 你仍可指定 `backend="cpu"` 获取参考结果，或用 `"cuda_strict"` 请求 GPU
 并在不可用时失败关闭。其他形状和指标组合需要独立证据。
+
+重复评估同一个不可变 FactorBatch 时，配置哈希缓存可跳过已编码的大数组，保持原有哈希。
+首次调用和重新创建数组仍需编码。限制与微测见 [数组哈希缓存](docs/benchmarks/immutable_array_hash_cache_20261001.md)。
 
 核心契约：
 - **LabelBundle** — 显式前向标签；时序全部由调用方提供；默认 `price_convention="vwap_to_vwap"`；
