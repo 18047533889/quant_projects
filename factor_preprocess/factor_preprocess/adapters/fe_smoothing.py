@@ -4,6 +4,7 @@ import pandas as pd
 from factor_preprocess.errors import GovernanceError
 
 TRAILING_SMA_RECIPE = "FE_COMPOSITE:long_smoothing.lagged_mean:v1"
+ROLLING_MEAN_RECIPE = TRAILING_SMA_RECIPE
 TRAILING_MEDIAN_RECIPE = "FE_COMPOSITE:long_smoothing.lagged_median:v1"
 ROLLING_STD_RECIPE = "FE_COMPOSITE:long_smoothing.lagged_std:v1"
 ROLLING_ZSCORE_RECIPE = "FE_COMPOSITE:long_smoothing.lagged_zscore:v1"
@@ -13,6 +14,7 @@ def get_fe_composite_executor(name: str, recipe_identity: str | None):
     """Resolve known semantics, not a content hash of the FE implementation."""
     recipes = {
         "trailing_sma": TRAILING_SMA_RECIPE,
+        "rolling_mean": ROLLING_MEAN_RECIPE,
         "trailing_median": TRAILING_MEDIAN_RECIPE,
         "rolling_std": ROLLING_STD_RECIPE,
         "rolling_zscore": ROLLING_ZSCORE_RECIPE,
@@ -24,7 +26,7 @@ def get_fe_composite_executor(name: str, recipe_identity: str | None):
         from factor_engine.backend.polars_expr_emitter import compile_plan_to_polars  # noqa: F401
     except (ImportError, ModuleNotFoundError):
         return None
-    if name == "trailing_sma":
+    if name in {"trailing_sma", "rolling_mean"}:
         from factor_engine.backend.long_smoothing import lagged_mean  # noqa: F401
         return execute_trailing_sma
     if name == "rolling_std":

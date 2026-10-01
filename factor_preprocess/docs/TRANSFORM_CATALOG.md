@@ -1,6 +1,6 @@
 # 默认变换目录与策略预设
 
-本目录来自当前环境的 `create_default_registry()` / `create_default_policies()`。共 40 项；当前环境 PyWavelets 未安装，三个 wavelet 函数未注册；源码采用条件注册，安装可选依赖并重新构造默认注册表后才会出现。所有默认项均 `requires_fit=False`、`fit_kind=stateless`；“历史”仅表示本次调用读取按资产隔离的过去输入。DataFrame 时间变换要求每资产日期单调，不会静默排序。公共列名默认 `asset_id/date/value`（收益列 `return`）。
+本目录来自当前环境的 `create_default_registry()` / `create_default_policies()`。当前注册 43 项：8 项 `FE_OPERATOR`、5 项 `FE_COMPOSITE`、30 项 `FP_NATIVE`。基础注册表含 40 项；源码按可选 PyWavelets 依赖条件注册三个 wavelet 函数，本次环境已注册这三项。所有默认项均 `requires_fit=False`、`fit_kind=stateless`；“历史”仅表示本次调用读取按资产隔离的过去输入。DataFrame 时间变换要求每资产日期单调，不会静默排序。公共列名默认 `asset_id/date/value`（收益列 `return`）。
 
 ## 全目录
 
@@ -11,12 +11,12 @@
 | `cs_demean` | `axis=-1` | 截面/否；生产；FE `cs_demean` | $`z_i=x_i-\bar x`$；均值忽略 NaN。 |
 | `cs_winsor` | `lower=.01, upper=.99, axis=-1` | 截面/否；生产；FE `winsorize` | $`z_i=\min\{q_u,\max(q_l,x_i)\}`$ 线性分位插值；要求 $`0\le l\lt u\le1`$。 |
 | `cs_scale` | `axis=-1, target_std=1, ddof=1` | 截面/否；生产；FP | $`z_i=x_i\,target\_std/s`$ 不中心化；零标准差保留原值。 |
-| `rolling_mean` | `window, min_periods=None` | 时间/严格滞后；生产；FP | None=window；$`z_t=\mathrm{mean}(x_{t-w:t-1})`$，有限数不足为 NaN。 |
-| `rolling_std` | `window, min_periods=None, ddof=1` | 时间/严格滞后；生产；FP | $`z_t=\mathrm{std}_{ddof}(x_{t-w:t-1})`$。 |
+| `rolling_mean` | `window, min_periods=None` | 时间/严格滞后；生产；FE_COMPOSITE | None=window；$`z_t=\mathrm{mean}(x_{t-w:t-1})`$，有限数不足为 NaN；复用 `FE_COMPOSITE:long_smoothing.lagged_mean:v1`，与 `trailing_sma` 共用执行器。 |
+| `rolling_std` | `window, min_periods=None, ddof=1` | 时间/严格滞后；生产；FE_COMPOSITE | $`z_t=\mathrm{std}_{ddof}(x_{t-w:t-1})`$；`FE_COMPOSITE:long_smoothing.lagged_std:v1`。 |
 | `rolling_zscore` | 同上 | 时间/历史；生产；FP→FE_COMPOSITE | $`z_t=(x_t-\bar x_{t-1,w})/s_{t-1,w}`$ 当前值仅进分子；按 IEEE 除法，`0/0` 为 NaN、非零/0 为带符号 Inf；FE recipe `FE_COMPOSITE:long_smoothing.lagged_zscore:v1`。 |
 | `ewma` | `halflife, min_periods=1` | 时间/严格滞后；生产；FP | 对 shift(1) 做 `ewm(adjust=False)`：$`z_t=(1-\alpha)z_{t-1}+\alpha x_{t-1},\ \alpha=1-e^{-\ln2/h}`$。 |
-| `trailing_sma` | `window, min_periods=None` | 时间/严格滞后；生产；FP | lagged 窗口均值；None=window。 |
-| `trailing_median` | 同上 | 时间/严格滞后；生产；FP | $`z_t=\mathrm{median}(x_{t-w:t-1})`$。 |
+| `trailing_sma` | `window, min_periods=None` | 时间/严格滞后；生产；FE_COMPOSITE | lagged 窗口均值；None=window；`FE_COMPOSITE:long_smoothing.lagged_mean:v1`。
+| `trailing_median` | 同上 | 时间/严格滞后；生产；FE_COMPOSITE | $`z_t=\mathrm{median}(x_{t-w:t-1})`$；`FE_COMPOSITE:long_smoothing.lagged_median:v1`。
 | `robust_ewma` | `halflife, winsor_std=4, min_periods=1` | 时间/严格滞后；生产；FP | lagged 值先按 10 期、至少2点的 $`\mu\pm cs`$ 夹断，再 EWMA；非正 c 钳为 $`10^{-12}`$。 |
 | `kama` | `period_fast=2, period_slow=30, period_er=10, use_current=False` | 时间/默认严格滞后；生产；FP | $`ER=\lvert x_t-x_{t-p}\rvert/\sum\lvert\Delta x\rvert,\ SC=[ER(a_f-a_s)+a_s]^2,\ K_t=K_{t-1}+SC(x_t-K_{t-1})`$ 平路径 ER=0；缺失效率保持前值。`use_current=True` 需外部 DecisionClock 证明。 |
 | `one_sided_iir_lowpass` | `alpha` | 时间/严格滞后；生产；FP | $`z_t=(1-\alpha)z_{t-1}+\alpha x_{t-1},\quad0\lt\alpha\le1`$。 |
@@ -50,7 +50,7 @@
 | `wavelet_smooth` | `wavelet="db4", level=1` | 时间/全 lagged 样本；条件注册、OFFLINE_ONLY；FP | 调用 `wavelet_decompose` 并返回 approximation 通道 $`a_{level}`$；若指定键不存在则取首个 approximation，否则全 NaN。 |
 | `wavelet_denoise` | `wavelet="db4", level=None, threshold_mode="soft", threshold_scale=1` | 时间/全 lagged 样本；条件注册、OFFLINE_ONLY；FP | 对 lagged 有限序列分解，以最细 detail 的 MAD 估计 $`\sigma=\mathrm{median}(\lvert d-\mathrm{median}(d)\rvert)/0.6745`$，阈值 $`\lambda=threshold\_scale\,\sigma\sqrt{2\ln n}`$；保留 approximation，对 details 做 soft/hard threshold 后全序列重构。少于 4 点或失败为 NaN。 |
 
-FE_OPERATOR 共 8 项：`cs_rank`、`cs_demean`、`cs_winsor`、`forward_fill`、`ols_neutralize` 及三个 neutral 别名；基础 40 项中的其余 32 项为 FP_NATIVE。三个 wavelet 项也始终在本目录列明，但仅在可选 PyWavelets 依赖使函数对象非 None 时才作为 FP_NATIVE/OFFLINE_ONLY 注册，因此运行时总数可能是 40 或 43。
+FE_OPERATOR 共 8 项：`cs_rank`、`cs_demean`、`cs_winsor`、`forward_fill`、`ols_neutralize` 及三个 neutral 别名。FE_COMPOSITE 共 5 项：`trailing_sma`、`rolling_mean`、`trailing_median`、`rolling_std`、`rolling_zscore`；基础 40 项中的其余 27 项为 FP_NATIVE。三个 wavelet 项也始终在本目录列明，但仅在可选 PyWavelets 依赖可用时才作为 FP_NATIVE/OFFLINE_ONLY 注册，因此运行时总数为 40 或 43；本次环境已注册，合计 30 项 FP_NATIVE。
 
 ## 默认策略
 

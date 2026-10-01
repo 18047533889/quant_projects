@@ -5,6 +5,7 @@ import pytest
 from factor_preprocess.adapters.fe_smoothing import execute_trailing_median
 from factor_preprocess.adapters.fe_smoothing import execute_trailing_sma
 from factor_preprocess.adapters.fe_smoothing import execute_rolling_std
+from factor_preprocess.transforms.rolling import rolling_mean
 from factor_preprocess.transforms.smoothing import trailing_sma
 
 
@@ -29,6 +30,85 @@ def test_fe_composite_matches_native_with_duplicate_times_and_indices(min_period
     np.testing.assert_allclose(actual.to_numpy(), expected.to_numpy(), equal_nan=True)
     pd.testing.assert_frame_equal(frame, original)
 
+@pytest.mark.parametrize("min_periods", [0, 1, 2, 3])
+def test_rolling_mean_registry_reuses_lagged_mean_composite(min_periods):
+    from factor_preprocess.adapters.fe_smoothing import (
+        ROLLING_MEAN_RECIPE, execute_trailing_sma, get_fe_composite_executor,
+    )
+    from factor_preprocess.registry.transforms import get_default_registry
+
+    frame = pd.DataFrame(
+        {
+            "asset_id": pd.Categorical(
+                ["a", "b", "a", None, "a", "b", "a"],
+                categories=["a", "b", "unused"],
+            ),
+            "date": [1, 1, 1, 1, 2, 2, 3],
+            "value": [10.0, 1.0, 20.0, 999.0, np.nan, 3.0, 30.0],
+        },
+        index=[7, 7, 4, 4, 7, 1, 1],
+    )
+    registry = get_default_registry()
+    meta = registry.get("rolling_mean")
+    assert meta.implementation_origin == "FE_COMPOSITE"
+    assert meta.fe_operator_id is None
+    assert meta.fe_equivalent_semantics == ROLLING_MEAN_RECIPE
+    assert ROLLING_MEAN_RECIPE == "FE_COMPOSITE:long_smoothing.lagged_mean:v1"
+    assert get_fe_composite_executor("rolling_mean", ROLLING_MEAN_RECIPE) is execute_trailing_sma
+
+    routed = registry.get_execution("rolling_mean")
+    actual = routed(frame, window=3, min_periods=min_periods)
+    expected = rolling_mean(frame, window=3, min_periods=min_periods)
+    assert actual.index.equals(frame.index)
+    np.testing.assert_allclose(actual.to_numpy(), expected.to_numpy(), equal_nan=True)
+
+
+def test_rolling_mean_fe_authority_fails_closed_and_research_fallback_is_explicit(monkeypatch):
+    import factor_preprocess.adapters.fe_smoothing as adapter
+    from factor_preprocess.errors import GovernanceError
+    from factor_preprocess.registry.transforms import get_default_registry
+
+    monkeypatch.setattr(adapter, "get_fe_composite_executor", lambda name, recipe_identity: None)
+    registry = get_default_registry()
+    with pytest.raises(GovernanceError, match="FE composite authority unavailable"):
+        registry.get_execution("rolling_mean")
+
+    frame = pd.DataFrame(
+        {"asset_id": ["a", "a", "a"], "date": [1, 2, 3], "value": [2.0, 4.0, 8.0]}
+    )
+    research = registry.get_execution("rolling_mean", allow_research=True)
+    np.testing.assert_allclose(
+        research(frame, window=2, min_periods=1).to_numpy(),
+        rolling_mean(frame, window=2, min_periods=1).to_numpy(),
+        equal_nan=True,
+    )
+
+
+@pytest.mark.parametrize("kwargs", [
+    {"window": True},
+    {"window": 2, "min_periods": True},
+    {"window": 2, "min_periods": 1.5},
+])
+def test_rolling_mean_fe_composite_rejects_invalid_integer_parameters(kwargs):
+    from factor_preprocess.registry.transforms import get_default_registry
+
+    frame = pd.DataFrame(
+        {"asset_id": ["a", "a"], "date": [1, 2], "value": [2.0, 4.0]}
+    )
+    routed = get_default_registry().get_execution("rolling_mean")
+    with pytest.raises(ValueError):
+        routed(frame, **kwargs)
+
+
+def test_rolling_mean_fe_composite_rejects_null_dates_for_observed_assets():
+    from factor_preprocess.registry.transforms import get_default_registry
+
+    frame = pd.DataFrame(
+        {"asset_id": ["a", "a"], "date": [1, None], "value": [1.0, 2.0]}
+    )
+    routed = get_default_registry().get_execution("rolling_mean")
+    with pytest.raises(ValueError, match="dates must be non-null"):
+        routed(frame, window=1)
 
 def test_fe_composite_handles_nullable_ids_empty_and_all_missing_assets():
     frame = pd.DataFrame(

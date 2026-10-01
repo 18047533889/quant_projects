@@ -1542,6 +1542,12 @@ def create_default_registry() -> TransformRegistry:
     )
 
     registry.enrich(
+        "rolling_mean", implementation_origin="FE_COMPOSITE", fe_operator_id=None,
+        fit_kind="stateless",
+        fe_equivalent_semantics="FE_COMPOSITE:long_smoothing.lagged_mean:v1",
+    )
+
+    registry.enrich(
         "trailing_median", implementation_origin="FE_COMPOSITE", fe_operator_id=None,
         fit_kind="stateless",
         fe_equivalent_semantics="FE_COMPOSITE:long_smoothing.lagged_median:v1",
@@ -1566,7 +1572,7 @@ def create_default_registry() -> TransformRegistry:
         if _meta.name in {
             "cs_rank", "cs_demean", "cs_winsor",
             "forward_fill", "ols_neutralize", "industry_neutral", "rolling_zscore",
-            "size_neutral", "dual_neutral", "trailing_sma", "trailing_median", "rolling_std",
+            "size_neutral", "dual_neutral", "trailing_sma", "rolling_mean", "trailing_median", "rolling_std",
         }:
             continue
         _kind = "fitted" if _meta.requires_fit else "stateless"

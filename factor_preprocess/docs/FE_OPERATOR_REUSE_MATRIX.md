@@ -29,9 +29,9 @@ Columns:
 - **FP-native reason** — why the transform stays FP (fitted / degenerate-row
   divergence / FE has no equivalent / offline-only / exposure-vs-fitted).
 - **implementation_origin** — `FE_OPERATOR` (routed through
-  `adapters/fe_operator.py`; production fails closed when FE is unavailable,
-  and FP kernel fallback requires explicit research opt-in) or
-  `FP_NATIVE`.
+  `adapters/fe_operator.py`), `FE_COMPOSITE` (routed through a named FE recipe),
+  or `FP_NATIVE`. FE-backed routes fail closed when FE is unavailable;
+  FP-kernel fallback requires explicit research opt-in.
 
 Parity evidence: `tests/test_fe_operator_parity.py` (per-FE-backed-transform
 parity test; tolerance contract explicit — cross-sectional and ffill exact
@@ -75,7 +75,7 @@ missing before quantile estimation, matching FE `winsorize`.
 | `ewma` | `SMOOTH:ewma` | lagged EWMA `ewm(halflife, adjust=False)` on `shift(1)` | `ts_ema` (`EMA`) | tags `(smoothing,)` stage `smoothing` causal `causal` stateless | **partial** — FE `ts_ema` is a **span-parameterized trailing-INCLUSIVE** EMA (span 3 → inclusive `ewm(span=3, adjust=False)`); FP is **halflife-parameterized and lagged** (current excluded). Different parameterization AND different current-bar inclusion → not a safe duplicate | no | yes | halflife vs span + lagged-vs-inclusive current-bar semantics; FP causal smoothing contract excludes current obs (`shift(1)`) | **FP_NATIVE** |
 | `trailing_sma` | `SMOOTH:trailing_sma` | lagged trailing SMA `[t-window, t-1]` over prior observed asset rows | composite `ts_mean(ts_delay(x, 1), min_periods=min_periods)` on long panels | stateless causal FE expression | **exact for sorted per-asset dates**; duplicate dates retain input order through positional ordinal | no | yes | empty/missing asset rows are NaN; null observed-asset dates reject, same as sort contract | **FE_COMPOSITE** |
 | `trailing_median` | `SMOOTH:trailing_median` | finite-only lagged median over prior observed rows `[t-window, t-1]` | composite `ts_median(ts_delay(x, 1))` with finite-observation count gate | stateless causal FE expression | **exact for sorted per-asset dates**; interleaved assets and duplicate dates retain input row order through positional ordinal | no | yes | null asset rows omitted; null dates for observed assets reject; NaN and ±Inf are excluded from the median and `min_periods` count | **FE_COMPOSITE** |
-| `rolling_mean` | `SMOOTH:trailing_sma` | causal rolling mean per asset (long frame) | `ts_mean` | causal | **partial** — current-inclusive vs lagged | no | yes | lagged current-bar semantics | **FP_NATIVE** |
+| `rolling_mean` | `SMOOTH:trailing_sma` | lagged rolling mean over prior observed asset rows `[t-window, t-1]` | `FE_COMPOSITE:long_smoothing.lagged_mean:v1` (shared with `trailing_sma`) | stateless causal FE expression | **exact for sorted per-asset dates**; duplicate dates retain input order through positional ordinal | no | yes | same lagged-mean executor and recipe as `trailing_sma`; empty/missing asset rows are NaN and null observed-asset dates reject | **FE_COMPOSITE** |
 | `rolling_std` | — | finite-only lagged rolling std over prior observed rows | `FE_COMPOSITE:long_smoothing.lagged_std:v1`: population `ts_std(ts_delay(x, 1))` plus finite count gate | stateless causal FE expression | **exact**; pandas-compatible `d=int(ddof)` coercion, then `sigma_d = sigma_0 * sqrt(n/(n-d))` for `n>d` and the required `min_periods` | no | yes | excludes current observation; missing assets remain NaN; positional restoration preserves interleaved assets and duplicate dates; NaN ddof rejects and infinite ddof raises overflow | **FE_COMPOSITE** |
 | `rolling_zscore` | — | causal paired lagged z-score; numerator is current row, mean/std exclude it | `FE_COMPOSITE:long_smoothing.lagged_zscore:v1` | stateless causal paired mean/std recipe; not `ts_zscore` (current-bar by default) | **numerically equivalent within tested tolerances; exact IEEE classifications** — parity-tested against the FP rolling-zscore oracle | no | yes | FP implementation is retained as the research oracle; production routes FP→FE composite and fails closed if FE recipe is unavailable | **FE_COMPOSITE** |
 | `robust_ewma` | `SMOOTH:robust_ewma` | EWMA on winsorized lagged values | `ts_robust_ema` | experimental | none/partial | no | yes | FP winsorizes against a lagged rolling mean/std window=10 then EWMA — FE `ts_robust_ema` semantics differ (robustness construction not the same); unannotated experimental | **FP_NATIVE** |
@@ -114,7 +114,9 @@ missing before quantile estimation, matching FE `winsorize`.
 
 - **FE_OPERATOR (8):** `cs_rank`, `cs_demean`, `cs_winsor`, `forward_fill`,
   `ols_neutralize`, `industry_neutral`, `size_neutral`, `dual_neutral`.
-- **FP_NATIVE (35):** everything else. Each FE-backed transform retains its
+- **FE_COMPOSITE (5):** `trailing_sma`, `rolling_mean`, `trailing_median`,
+  `rolling_std`, `rolling_zscore`.
+- **FP_NATIVE (30):** everything else. FE-backed transforms retain their
   FP-native kernel for explicit research fallback (plan §26 F3). Production
   execution requires FE and fails closed when FE is unavailable; FE remains
   an optional dependency of FP.
