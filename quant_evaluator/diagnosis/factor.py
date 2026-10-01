@@ -27,7 +27,9 @@ def diagnose_factor(
         raise ValueError(f"factor_idx {factor_idx} out of range (max {factor_batch.num_factors - 1})")
 
     factor_id = factor_batch.factor_ids[factor_idx]
-    values = factor_batch.values[:, :, factor_idx].flatten()
+    # Keep the factor as a strided 2-D view. NumPy's reductions and boolean
+    # indexing traverse it in C order, matching flatten() without its full copy.
+    values = factor_batch.values[:, :, factor_idx]
 
     # Validity checks
     finite_mask = np.isfinite(values)
@@ -36,13 +38,13 @@ def diagnose_factor(
 
     # Apply validity mask if present
     if factor_batch.validity is not None:
-        validity_mask = factor_batch.validity[:, :, factor_idx].flatten()
+        validity_mask = factor_batch.validity[:, :, factor_idx]
         valid_mask = finite_mask & validity_mask
     else:
         valid_mask = finite_mask
 
     num_valid = int(np.sum(valid_mask))
-    num_total = len(values)
+    num_total = values.size
     num_missing = num_total - num_valid
     coverage = num_valid / num_total if num_total > 0 else 0.0
 
@@ -50,11 +52,15 @@ def diagnose_factor(
     valid_values = values[valid_mask]
 
     if num_valid > 0:
-        min_value = float(np.min(valid_values))
-        max_value = float(np.max(valid_values))
+        raw_min_value = np.min(valid_values)
+        raw_max_value = np.max(valid_values)
+        min_value = float(raw_min_value)
+        max_value = float(raw_max_value)
         # Equality of finite extrema is exact; variance can underflow for
         # distinct tiny values and overflow for large constant values.
-        is_constant = (min_value == max_value)
+        # Compare in the input dtype: float conversion can merge adjacent
+        # integers above 2**53 even though the extrema are distinct.
+        is_constant = bool(raw_min_value == raw_max_value)
         with np.errstate(over="ignore", invalid="ignore"):
             mean_value = float(np.mean(valid_values))
         if not np.isfinite(mean_value):

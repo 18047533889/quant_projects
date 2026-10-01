@@ -159,3 +159,35 @@ def test_random_mask_diagnosis_matches_legacy_for_frozen_noncontiguous_input(fac
         expected = _legacy_diagnosis(batch, index)
         assert _diagnosis_tuple(diagnostics[factor_id]) == expected
         assert _diagnosis_tuple(diagnose_factor(batch, index)) == expected
+
+
+@pytest.mark.parametrize("dtype,values", [
+    (np.int8, [[-128, 0, 127], [5, -5, 5]]),
+    (np.uint64, [[0, 2**63, 2**64 - 1], [7, 7, 7]]),
+])
+def test_factor_view_matches_flatten_oracle_for_non_float_dtypes(dtype, values):
+    source = np.asarray(values, dtype=dtype).reshape(2, 3, 1)
+    batch = FactorBatch(
+        ("typed",),
+        AxisRef("time", "int64", 2, np.arange(2, dtype=np.int64)),
+        AxisRef("asset", "int64", 3, np.arange(3, dtype=np.int64)),
+        source,
+    )
+    with np.errstate(over="ignore", invalid="ignore"):
+        assert _diagnosis_tuple(diagnose_factor(batch)) == _legacy_diagnosis(batch, 0)
+        assert _diagnosis_tuple(diagnose_all_factors(batch)["typed"]) == _legacy_diagnosis(batch, 0)
+
+
+def test_uint64_adjacent_values_are_not_reported_constant_after_float_conversion():
+    values = np.array([2**63, 2**63 + 1], dtype=np.uint64).reshape(1, 2, 1)
+    batch = FactorBatch(
+        ("wide_int",),
+        AxisRef("time", "int64", 1, np.array([0], dtype=np.int64)),
+        AxisRef("asset", "int64", 2, np.arange(2, dtype=np.int64)),
+        values,
+    )
+    diagnosis = diagnose_factor(batch)
+    assert diagnosis.is_constant is False
+    assert "Factor is constant" not in diagnosis.warnings
+    # Existing public extrema are float-valued, even when this collapses them.
+    assert diagnosis.min_value == diagnosis.max_value
