@@ -211,40 +211,6 @@ def _trix_pandas(close: pd.DataFrame, window: int) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def _cci_1d(high: np.ndarray, low: np.ndarray, close: np.ndarray, w: int) -> np.ndarray:
-    tp = (high + low + close) / 3.0
-    n = tp.shape[0]
-    out = np.full(n, np.nan, dtype=float)
-    if n < w:
-        return out
-    win = np.lib.stride_tricks.sliding_window_view(tp, w)
-    ok = np.isfinite(win).all(axis=1)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        ma = np.where(ok, _seq_sum(win) / w, np.nan)
-        mad = np.where(ok, _seq_sum(np.abs(win - ma[:, None])) / w, np.nan)
-        val = (tp[w - 1 :] - ma) / (_CCI_SCALE * mad)
-    # flat window (every TP identical) -> MD is 0 -> CCI undefined -> NaN
-    flat = win.max(axis=1) == win.min(axis=1)
-    gate = ok & (~flat) & (mad != 0.0) & np.isfinite(tp[w - 1 :])
-    out[w - 1 :] = np.where(gate, val, np.nan)
-    return out
-
-
-def _bias_1d(close: np.ndarray, w: int) -> np.ndarray:
-    n = close.shape[0]
-    out = np.full(n, np.nan, dtype=float)
-    if n < w:
-        return out
-    win = np.lib.stride_tricks.sliding_window_view(close, w)
-    ok = np.isfinite(win).all(axis=1)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        ma = np.where(ok, _seq_sum(win) / w, np.nan)
-        val = 100.0 * (close[w - 1 :] - ma) / ma
-    gate = ok & (ma != 0.0) & np.isfinite(close[w - 1 :])
-    out[w - 1 :] = np.where(gate, val, np.nan)
-    return out
-
-
 def _psy_1d(close: np.ndarray, w: int) -> np.ndarray:
     n = close.shape[0]
     out = np.full(n, np.nan, dtype=float)
@@ -491,26 +457,6 @@ def _np(frame: pl.DataFrame, col: str) -> np.ndarray:
     return frame[col].cast(pl.Float64).to_numpy()
 
 
-def _cci_polars(
-    high: pl.DataFrame, low: pl.DataFrame, close: pl.DataFrame, window: int
-) -> pl.DataFrame:
-    w = _window(window, minimum=2)
-    cols = _value_cols_pl(close)
-    out = np.full((close.height, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        out[:, i] = _cci_1d(_np(high, c), _np(low, c), _np(close, c), w)
-    return _make(close, cols, out)
-
-
-def _bias_polars(close: pl.DataFrame, window: int) -> pl.DataFrame:
-    w = _window(window, minimum=1)
-    cols = _value_cols_pl(close)
-    out = np.full((close.height, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        out[:, i] = _bias_1d(_np(close, c), w)
-    return _make(close, cols, out)
-
-
 def _psy_polars(close: pl.DataFrame, window: int) -> pl.DataFrame:
     w = _window(window, minimum=1)
     cols = _value_cols_pl(close)
@@ -527,33 +473,6 @@ def _trix_polars(close: pl.DataFrame, window: int) -> pl.DataFrame:
     for i, c in enumerate(cols):
         out[:, i] = _trix_1d(_np(close, c), w)
     return _make(close, cols, out)
-
-
-class _PolarsCci(base_polars.SeriesOperator):
-    metadata = _metadata(
-        "cci",
-        "Commodity Channel Index (polars backend)。",
-        ["high", "low", "close", "window"],
-        panel_params=("high", "low", "close"),
-        tags=("CCI",),
-        window_minimum=2,
-    )
-
-    def _calculate_series(self, high, low, close, window: int = 14, **_):
-        return _cci_polars(high, low, close, window)
-
-
-class _PolarsBias(base_polars.SeriesOperator):
-    metadata = _metadata(
-        "bias",
-        "BIAS / 乖离率 (polars backend)。",
-        ["close", "window"],
-        panel_params=("close",),
-        tags=("BIAS",),
-    )
-
-    def _calculate_series(self, close, window: int = 6, **_):
-        return _bias_polars(close, window)
 
 
 class _PolarsPsy(base_polars.SeriesOperator):
@@ -603,8 +522,6 @@ def _build_polars_spec(canonical: str, kernel: str):
 
 
 _POLARS_IMPLS = (
-    ("cci", _PolarsCci, "ClassicTrendCciPolars"),
-    ("bias", _PolarsBias, "ClassicTrendBiasPolars"),
     ("psy", _PolarsPsy, "ClassicTrendPsyPolars"),
     ("trix", _PolarsTrix, "ClassicTrendTrixPolars"),
 )

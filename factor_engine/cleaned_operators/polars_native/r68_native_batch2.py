@@ -179,30 +179,10 @@ class TsSignPersistenceNative(SeriesOperator):
         return _like(x, _sign_persistence_series(_np(x), w, mp))
 
 
-class TsLowerPartialMomentNative(SeriesOperator):
-    """下偏矩 mean(max(threshold-x,0)^order)，有限样本均值 + min_periods 门槛。"""
-
-    def _calculate_series(self, x: pl.DataFrame, window: int = 20, threshold: float = 0.0,
-                          order: float = 1.0, min_periods: int = 2, **_: Any) -> pl.DataFrame:
-        w = _int(window, "window", 2)
-        thr = float(threshold)
-        ord_ = float(order)
-        if ord_ < 1.0:
-            raise ValueError("order must be >= 1")
-        mp = max(2, _int(min_periods, "min_periods", 2))
-        a = _np(x)
-        with np.errstate(all="ignore"):
-            below = np.where(np.isfinite(a), np.maximum(thr - a, 0.0), np.nan)
-            below = np.power(below, ord_)
-        out = _rolling_nan_agg(below, w, mp, lambda win: np.nanmean(win, axis=-1))
-        return _like(x, out)
-
-
 _IMPLEMENTATIONS = {
     "ts_vol_acceleration": TsVolAccelerationNative,
     "ts_vol_clustering": TsVolClusteringNative,
     "ts_sign_persistence": TsSignPersistenceNative,
-    "ts_lower_partial_moment": TsLowerPartialMomentNative,
 }
 
 
@@ -397,36 +377,6 @@ class CompositionIlrBalanceNative(SeriesOperator):
         return _like(x1, out)
 
 
-class CompositionAitchisonDistanceNative(SeriesOperator):
-    """Aitchison 距离 ‖clr(A) − clr(B)‖₂（等维 2..6 组分）。"""
-
-    def _calculate_series(self, x1: pl.DataFrame, x2: pl.DataFrame, x3: pl.DataFrame,
-                          y1: pl.DataFrame, y2: pl.DataFrame, y3: pl.DataFrame,
-                          x4: pl.DataFrame | None = None, x5: pl.DataFrame | None = None,
-                          x6: pl.DataFrame | None = None, y4: pl.DataFrame | None = None,
-                          y5: pl.DataFrame | None = None, y6: pl.DataFrame | None = None,
-                          **_: Any) -> pl.DataFrame:
-        a = [p for p in (x1, x2, x3, x4, x5, x6) if p is not None]
-        b = [p for p in (y1, y2, y3, y4, y5, y6) if p is not None]
-        if len(a) < 2 or len(b) < 2 or len(a) != len(b):
-            raise ValueError(
-                "composition_aitchison_distance requires equal-size compositions (2..6 parts each)"
-            )
-        with np.errstate(divide="ignore", invalid="ignore"):
-            logs = np.stack([np.log(_np(p)) for p in a + b])
-        valid = np.all(np.isfinite(logs), axis=0)
-        na = len(a)
-        la = logs[:na]
-        lb = logs[na:]
-        clr_a = la - la.mean(axis=0, keepdims=True)
-        clr_b = lb - lb.mean(axis=0, keepdims=True)
-        with np.errstate(invalid="ignore"):
-            dist = np.sqrt(np.sum((clr_a - clr_b) ** 2, axis=0))
-        out = np.full(dist.shape, np.nan, dtype=float)
-        out[valid] = dist[valid]
-        return _like(x1, out)
-
-
 class TsLowerTailCoexceedanceProbabilityNative(SeriesOperator):
     """P(y ≤ Qy(q) | x ≤ Qx(q))（固定 q 下尾同超概率，以 x 为条件）。"""
 
@@ -597,31 +547,6 @@ class TsVolPvariationRoughnessNative(SeriesOperator):
         return _like(x, _apply_vec(_np(x), _vec_roughness, w, pp, sc, mp, mpf, _MAX_COVERAGE_IMBALANCE))
 
 
-class TsTailImbalanceNative(SeriesOperator):
-    """MAD 阈值上下尾计数失衡 (U−L)/n（向量化滑动窗，两遍中位数与权威同构）。"""
-
-    def _calculate_series(self, x: pl.DataFrame, window: int = 60, k: float = 1.0,
-                          min_periods: int = 8, **_: Any) -> pl.DataFrame:
-        w = _int(window, "window", 2)
-        kk = float(k)
-        if kk <= 0.0:
-            raise ValueError("k must be > 0")
-        mp = max(4, int(min_periods))
-        win = _windows(_finite_matrix(_np(x)), w)
-        cnt = np.isfinite(win).sum(axis=-1)
-        with np.errstate(all="ignore"):
-            m = np.nanmedian(win, axis=-1)
-            s = 1.4826 * np.nanmedian(np.abs(win - m[..., None]), axis=-1)
-            upper = np.sum(win > m[..., None] + kk * s[..., None], axis=-1)
-            lower = np.sum(win < m[..., None] - kk * s[..., None], axis=-1)
-            out = np.where(
-                (cnt >= mp) & np.isfinite(s) & (s > _EPS),
-                (upper - lower) / cnt,
-                np.nan,
-            )
-        return _like(x, out)
-
-
 class CsLocalDensityScoreNative(SeriesOperator):
     """局部密度异常度 −log(KNN 平均距离 + eps)（行级横截面循环权威移植）。"""
 
@@ -683,10 +608,12 @@ class TsEmaNative(SeriesOperator):
         import inspect as _inspect
         kw = "min_samples" if "min_samples" in _inspect.signature(pl.Expr.ewm_mean).parameters else "min_periods"
         exprs = [
-            pl.col(c).ewm_mean(
-                alpha=alpha, adjust=contract.adjust, ignore_na=contract.ignore_na,
+            pl.when(pl.col(c).cast(pl.Float64).is_finite())
+            .then(pl.col(c).cast(pl.Float64)).otherwise(None)
+            .ewm_mean(
+                alpha=alpha, adjust=contract.adjust, ignore_nulls=contract.ignore_na,
                 **{kw: int(contract.min_periods)},
-            ).alias(c)
+            ).forward_fill().alias(c)
             for c in _cols(x)
         ]
         return x.with_columns(exprs)
@@ -759,38 +686,6 @@ class CsRelativeDensityRatioNative(SeriesOperator):
             Xn = Xv / np.where(sd > _EPS, sd, 1.0)
             out[row, valid] = _relative_density_row(Xn, eff_k)
         return _like(f1, out)
-
-
-class BvcSignPctNative(SeriesOperator):
-    """sum(sign(Δclose)·volume)/sum(volume)（trailing window，fail-closed 掩码）。"""
-
-    def _calculate_series(self, close: pl.DataFrame, volume: pl.DataFrame,
-                          window: int = 20, **_: Any) -> pl.DataFrame:
-        w = _int(window, "window", 2)
-        c = _np(close)
-        v = _np(volume)
-        rows, cols = c.shape
-        with np.errstate(invalid="ignore"):
-            prev = np.vstack([np.full((1, cols), np.nan), c[:-1]])
-            valid = (
-                np.isfinite(c) & (c > 0.0)
-                & np.isfinite(prev) & (prev > 0.0)
-                & np.isfinite(v) & (v > 0.0)
-            )
-            flow = np.where(valid, np.sign(c - prev) * v, np.nan)
-            vflow = np.where(valid, v, np.nan)
-
-        def _roll_sum(a: np.ndarray) -> np.ndarray:
-            win = _windows(a, w)
-            cnt = np.isfinite(win).sum(axis=-1)
-            s = np.nansum(win, axis=-1)
-            return np.where(cnt >= w, s, np.nan)
-
-        num = _roll_sum(flow)
-        den = _roll_sum(vflow)
-        with np.errstate(divide="ignore", invalid="ignore"):
-            out = np.where(den > 0.0, num / den, np.nan)
-        return _like(close, out)
 
 
 class VpinPctNative(SeriesOperator):
@@ -1362,7 +1257,6 @@ class TsStructuralLevelDensityNative(SeriesOperator):
 
 _WAVE2_IMPLEMENTATIONS = {
     "composition_ilr_balance": CompositionIlrBalanceNative,
-    "composition_aitchison_distance": CompositionAitchisonDistanceNative,
     "ts_lower_tail_coexceedance_probability": TsLowerTailCoexceedanceProbabilityNative,
     "ts_matrix_profile_novelty": TsMatrixProfileNoveltyNative,
     "ts_matrix_profile_motif_age": TsMatrixProfileMotifAgeNative,
@@ -1370,14 +1264,12 @@ _WAVE2_IMPLEMENTATIONS = {
     "ts_multiscale_trend_curvature": TsMultiscaleTrendCurvatureNative,
     "ts_multiscale_trend_dispersion": TsMultiscaleTrendDispersionNative,
     "ts_vol_pvariation_roughness": TsVolPvariationRoughnessNative,
-    "ts_tail_imbalance": TsTailImbalanceNative,
     "cs_local_density_score": CsLocalDensityScoreNative,
     "ts_glr_mean_shift_score": TsGlrMeanShiftScoreNative,
     "ts_ema": TsEmaNative,
     "ts_max_drawdown": TsMaxDrawdownNative,
     "ts_extrema_confirmation_rate": TsExtremaConfirmationRateNative,
     "cs_relative_density_ratio": CsRelativeDensityRatioNative,
-    "bvc_sign_pct": BvcSignPctNative,
     "vpin_pct": VpinPctNative,
     "cs_robust_mahalanobis_mad": CsRobustMahalanobisMadNative,
     "ts_cross_spectral_coherence": TsCrossSpectralCoherenceNative,
@@ -1407,25 +1299,38 @@ _IMPLEMENTATIONS.update(_WAVE2_IMPLEMENTATIONS)
 # entry was missing) — register it so the polars slot goes native.
 _IMPLEMENTATIONS["ts_glr_variance_shift_score"] = TsGlrVarianceShiftScoreNative
 
+# Source-bound physical execution classification. TsEma is the sole Expr
+# kernel; every other registered class materializes a NumPy panel.
+_EXPR_CANONICALS = frozenset({"ts_ema"})
+_EXECUTION_KINDS = {
+    canonical: (
+        ExecutionKind.POLARS_NATIVE_EXPR
+        if canonical in _EXPR_CANONICALS
+        else ExecutionKind.POLARS_NUMPY_KERNEL
+    )
+    for canonical in _IMPLEMENTATIONS
+}
+if set(_EXECUTION_KINDS) != set(_IMPLEMENTATIONS):
+    raise RuntimeError("R68 batch2 execution-kind map does not match implementations")
+
 # ---------------------------------------------------------------------------
 # registration
 # ---------------------------------------------------------------------------
-def _native_spec(canonical: str, cls: type) -> PhysicalImplementationSpec:
+def _native_spec(canonical: str, cls: type, metadata: Any) -> PhysicalImplementationSpec:
     kernel_source = inspect.getsource(inspect.getmodule(cls)).encode("utf-8")
     source_hash = hashlib.sha256(kernel_source).hexdigest()
-    parameter_hash = hashlib.sha256(repr(cls.metadata.param_specs).encode("utf-8")).hexdigest()
+    parameter_hash = hashlib.sha256(repr(metadata.param_specs).encode("utf-8")).hexdigest()
     semantic_hash = hashlib.sha256(
-        repr((cls.metadata.param_names, cls.metadata.panel_params, cls.metadata.scalar_params)).encode("utf-8")
+        repr((metadata.param_names, metadata.panel_params, metadata.scalar_params)).encode("utf-8")
     ).hexdigest()
     return PhysicalImplementationSpec(
         canonical=canonical, backend="polars",
-        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        execution_kind=_EXECUTION_KINDS[canonical],
         supports_lazy=False, supports_streaming=False, materializes_full_panel=True,
         supports_nulls=True, supports_nan=True, supports_inf=True,
         notes=(
-            "R68 batch-2 genuine native polars kernel: pure pl expressions or "
-            "vectorized numpy-batch compute on the pl frame written back with "
-            "pl.Series; no pandas DataFrame round-trip anywhere in the kernel path."
+            "R68 batch-2 native Polars kernel: Expr only for ts_ema; other "
+            "canonicals materialize a NumPy panel and write results as pl.Series."
         ),
         implementation_source_hash=source_hash,
         kernel_identity=f"{cls.__module__}.{cls.__qualname__}._calculate_series",
@@ -1443,14 +1348,35 @@ def register_r68_native_batch2() -> tuple[str, ...]:
         replace_backend,
     )
     from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.polars_native.native_registration import (
+        RegistrationDecision, registration_decision,
+    )
 
     registered = []
     for canonical, cls in _IMPLEMENTATIONS.items():
+        frozen_decision = registration_decision(
+            canonical=canonical, source=_SOURCE, desired_spec=None,
+            registry=OperatorRegistry,
+        )
+        if frozen_decision is RegistrationDecision.FROZEN:
+            break
         reference = OperatorRegistry.get(canonical, "pandas_numpy", mode="any")
         if reference is None:
             raise RuntimeError(f"missing pandas_numpy reference for {canonical}")
-        cls.metadata = copy.deepcopy(reference.metadata)
-        cls._physical_spec = _native_spec(canonical, cls)
+        metadata = copy.deepcopy(reference.metadata)
+        desired_spec = _native_spec(canonical, cls, metadata)
+        decision = registration_decision(
+            canonical=canonical, source=_SOURCE, desired_spec=desired_spec,
+            registry=OperatorRegistry,
+        )
+        if decision in {
+            RegistrationDecision.FROZEN,
+            RegistrationDecision.CURRENT_SOURCE_FRESH,
+            RegistrationDecision.KEEP_EXISTING_NATIVE,
+        }:
+            continue
+        cls.metadata = metadata
+        cls._physical_spec = desired_spec
         migration = replace_backend(
             canonical, "polars",
             reason="R68 batch-2 native polars replacement of pandas UDF delegate",

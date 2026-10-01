@@ -330,70 +330,8 @@ class _FiscalEventView:
 # ---------------------------------------------------------------------------
 # kernels
 # ---------------------------------------------------------------------------
-def _k_CoppockCurve(b: dict) -> pl.DataFrame:
-    close = _panel(b["close"])
-    roc1 = max(1, int(b.get("roc1", 14)))
-    roc2 = max(1, int(b.get("roc2", 11)))
-    wma_window = max(1, int(b.get("wma_window", 10)))
-    roc_mode = str(b.get("roc_mode", "pct"))
-    rows, cols = close.shape
-    out = np.full_like(close, np.nan)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        for j in range(cols):
-            c = np.ascontiguousarray(close[:, j])
-            if roc_mode == "pct":
-                r1 = c / _np_shift(c, roc1) - 1.0
-                r2 = c / _np_shift(c, roc2) - 1.0
-            else:
-                r1 = np.log(c / _np_shift(c, roc1))
-                r2 = np.log(c / _np_shift(c, roc2))
-            out[:, j] = _np_wma(r1 + r2, wma_window)
-    return _rebuild(b["close"], out)
 
 
-def _k_reg_slope_tstat(b: dict) -> pl.DataFrame:
-    w = _pi(b.get("window", 20), "window", 3)
-    close = _panel(b["close"])
-    pos = np.where(close > 0.0, close, np.nan)
-    rows, cols = close.shape
-    out = np.full_like(close, np.nan)
-    for j in range(cols):
-        col = np.ascontiguousarray(pos[:, j])
-        for t in range(w - 1, rows):
-            fit = _np_reg_fit(col[t - w + 1: t + 1])
-            if fit is None:
-                continue
-            slope, _intercept, _resid_std, _r2, slope_se = fit
-            if not (np.isfinite(slope_se) and slope_se > 0.0):
-                continue
-            out[t, j] = float(slope / slope_se)
-    return _rebuild(b["close"], out)
-
-
-def _k_bvc_imbalance_ma(b: dict) -> pl.DataFrame:
-    f = _pi(b.get("fast_window", 5), "fast_window", 1)
-    s = _pi(b.get("slow_window", 40), "slow_window", 1)
-    if f >= s:
-        raise ValueError("fast_window must be < slow_window")
-    close = _panel(b["close"])
-    volume = _panel(b["volume"])
-    prev = _np_shift(close, 1)
-    with np.errstate(invalid="ignore"):
-        valid = (
-            np.isfinite(close) & (close > 0.0)
-            & np.isfinite(prev) & (prev > 0.0)
-            & np.isfinite(volume) & (volume > 0.0)
-        )
-        diff = close - prev
-        sign = np.sign(diff)
-    flow = np.where(valid, sign, np.nan) * np.where(valid, volume, np.nan)
-    vol_m = np.where(valid, volume, np.nan)
-    num = _np_ewm_panel(flow, 2.0 / (f + 1.0), f) - _np_ewm_panel(flow, 2.0 / (s + 1.0), s)
-    den = _np_ewm_panel(vol_m, 2.0 / (s + 1.0), s)
-    den = np.where(den > 0.0, den, np.nan)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        out = num / den
-    return _rebuild(b["close"], out)
 
 
 def _k_keltner_breakout_strength(b: dict) -> pl.DataFrame:
@@ -457,12 +395,8 @@ def _k_day_diff(b: dict, left_key: str, right_key: str) -> pl.DataFrame:
     return _rebuild(b[left_key], out)
 
 
-def _k_fin_announcement_lag(b: dict) -> pl.DataFrame:
-    return _k_day_diff(b, "period_end_date", "pub_date")
 
 
-def _k_calendar_day_diff(b: dict) -> pl.DataFrame:
-    return _k_day_diff(b, "date1", "date2")
 
 
 def _k_intra_supply_absorption_score(b: dict) -> pl.DataFrame:
@@ -616,24 +550,6 @@ def _k_group_distribution_js_divergence(b: dict) -> pl.DataFrame:
     return _rebuild(b["x"], out)
 
 
-def _k_consolidation_pct(b: dict) -> pl.DataFrame:
-    w = _pi(b.get("window", 20), "window", 2)
-    close = _panel(b["close"])
-    pos = np.where(close > 0.0, close, np.nan)
-    rows, cols = close.shape
-    out = np.full_like(close, np.nan)
-    for j in range(cols):
-        col = np.ascontiguousarray(pos[:, j])
-        for t in range(w - 1, rows):
-            seg = col[t - w + 1: t + 1]
-            if np.any(~np.isfinite(seg)):
-                continue
-            mean = float(seg.mean())
-            if not (mean > 0.0):
-                continue
-            std = float(seg.std(ddof=1))
-            out[t, j] = std / mean
-    return _rebuild(b["close"], out)
 
 
 def _k_ts_poly2(b: dict, z: bool) -> pl.DataFrame:
@@ -666,31 +582,6 @@ def _k_ts_multifractal_spectrum_width(b: dict) -> pl.DataFrame:
     return _rebuild(b["x"], _spectrum_width_series(_panel(b["x"]), w))
 
 
-def _k_relation_topk_sum(b: dict) -> pl.DataFrame:
-    from factor_engine.cleaned_operators.relation.ops import (
-        _MISSING_SEMANTIC_CHOICES, HolderRankMissingSemantic,
-    )
-    panels = []
-    for i in range(1, 11):
-        v = b.get(f"s{i}")
-        if isinstance(v, (pl.DataFrame, pl.Series)):
-            panels.append(v)
-    missing_semantic = str(b.get("missing_semantic", "outside_top_k"))
-    if len(panels) < 2:
-        raise ValueError("relation_topk_sum requires at least two ranked panels")
-    if missing_semantic not in _MISSING_SEMANTIC_CHOICES:
-        raise ValueError(
-            f"missing_semantic must be one of {_MISSING_SEMANTIC_CHOICES!r}; "
-            f"got {missing_semantic!r}"
-        )
-    stacked = np.stack([_panel(p) for p in panels], axis=0)
-    if HolderRankMissingSemantic.permits_zero(missing_semantic):
-        values = np.nan_to_num(stacked, nan=0.0)
-    else:
-        values = stacked
-    total = np.nansum(values, axis=0)
-    total = np.where(np.isfinite(values).sum(axis=0) > 0, total, np.nan)
-    return _rebuild(panels[0], total)
 
 
 def _k_transition_count(b: dict, forward: bool) -> pl.DataFrame:
@@ -722,12 +613,8 @@ def _k_transition_count(b: dict, forward: bool) -> pl.DataFrame:
     return _rebuild(b["member"], out)
 
 
-def _k_relation_entry_count(b: dict) -> pl.DataFrame:
-    return _k_transition_count(b, forward=True)
 
 
-def _k_relation_exit_count(b: dict) -> pl.DataFrame:
-    return _k_transition_count(b, forward=False)
 
 
 def _k_report_change_breadth(b: dict) -> pl.DataFrame:
@@ -780,59 +667,12 @@ def _k_donchian_channels(b: dict):
     return u, l
 
 
-def _k_donchian_breakout_up(b: dict) -> pl.DataFrame:
-    u, _l = _k_donchian_channels(b)
-    prev_u = _np_shift(u, 1)
-    close = _panel(b["close"])
-    rows, cols = close.shape
-    out = np.full_like(close, np.nan)
-    for j in range(cols):
-        for t in range(rows):
-            pu = prev_u[t, j]
-            cv = close[t, j]
-            if not (np.isfinite(pu) and np.isfinite(cv) and cv > 0.0):
-                continue
-            out[t, j] = (cv / pu - 1.0) if cv >= pu else 0.0
-    return _rebuild(b["high"], out)
 
 
-def _k_donchian_breakout_down(b: dict) -> pl.DataFrame:
-    _u, l = _k_donchian_channels(b)
-    prev_l = _np_shift(l, 1)
-    close = _panel(b["close"])
-    rows, cols = close.shape
-    out = np.full_like(close, np.nan)
-    for j in range(cols):
-        for t in range(rows):
-            pl_ = prev_l[t, j]
-            cv = close[t, j]
-            if not (np.isfinite(pl_) and np.isfinite(cv) and cv > 0.0):
-                continue
-            out[t, j] = (cv / pl_ - 1.0) if cv <= pl_ else 0.0
-    return _rebuild(b["high"], out)
 
 
-def _k_donchian_width_pct(b: dict) -> pl.DataFrame:
-    u, l = _k_donchian_channels(b)
-    close = _panel(b["close"])
-    pos = np.where(close > 0.0, close, np.nan)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        out = (u - l) / pos
-    return _rebuild(b["high"], out)
 
 
-def _k_chikou_distance_pct(b: dict) -> pl.DataFrame:
-    w = _pi(b.get("kijun_window", 26), "kijun_window", 2)
-    high = _panel(b["high"])
-    low = _panel(b["low"])
-    close = _panel(b["close"])
-    hi = _np_rolling_fullwindow(high, w, lambda seg: float(seg.max()))
-    lo = _np_rolling_fullwindow(low, w, lambda seg: float(seg.min()))
-    kijun = (hi + lo) / 2.0
-    pos = np.where(close > 0.0, close, np.nan)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        out = (pos - kijun) / pos
-    return _rebuild(b["high"], out)
 
 
 def _k_event_hawkes_branching_ratio_proxy(b: dict) -> pl.DataFrame:
@@ -888,20 +728,6 @@ def _fin_divergence_kernel(a_key: str) -> Callable[[dict], pl.DataFrame]:
     return _k
 
 
-def _k_true_range_surprise(b: dict) -> pl.DataFrame:
-    w = _pi(b.get("window", 2), "window", 2)
-    high = _panel(b["high"])
-    low = _panel(b["low"])
-    close = _panel(b["close"])
-    prev = _np_shift(close, 1)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        tr = np.maximum.reduce([high - low, np.abs(high - prev), np.abs(low - prev)])
-        prev_pos = np.where(np.isfinite(prev) & (prev > 0.0), prev, np.nan)
-        ratio = tr / prev_pos
-        mean = _np_rolling_fullwindow(ratio, w, lambda seg: float(seg.mean()))
-        mean = np.where(mean == 0.0, np.nan, mean)
-        out = ratio / mean - 1.0
-    return _rebuild(b["high"], out)
 
 
 def _k_spectral_energy_ratio(b: dict) -> pl.DataFrame:
@@ -930,24 +756,6 @@ def _k_spectral_energy_ratio(b: dict) -> pl.DataFrame:
     return _rebuild(b["close"], out)
 
 
-def _k_reg_forecast_error_pct(b: dict) -> pl.DataFrame:
-    w = _pi(b.get("window", 20), "window", 4)
-    close = _panel(b["close"])
-    pos = np.where(close > 0.0, close, np.nan)
-    rows, cols = close.shape
-    out = np.full_like(close, np.nan)
-    for j in range(cols):
-        col = np.ascontiguousarray(pos[:, j])
-        for t in range(w - 1, rows):
-            seg = col[t - w + 1: t + 1]
-            y = seg[:-1]
-            x_t = seg[-1]
-            fit = _np_reg_fit(y)
-            if fit is None:
-                continue
-            slope, intercept = fit[0], fit[1]
-            out[t, j] = float((x_t - (intercept + slope * float(y.size))) / x_t)
-    return _rebuild(b["close"], out)
 
 
 def _k_report_revision_magnitude(b: dict) -> pl.DataFrame:
@@ -994,55 +802,10 @@ def _candle_geometry(b: dict):
     return o, h, l, c, valid, rng, body, wick
 
 
-def _k_candle_body_strength(b: dict) -> pl.DataFrame:
-    w = _pi(b.get("window", 2), "window", 2)
-    o, _h, _l, _c, _valid, _rng, body, _wick = _candle_geometry(b)
-    out = _np_rolling_fullwindow(body, w, lambda seg: float(seg.mean()))
-    return _rebuild(b["open"], out)
 
 
-def _k_candle_wick_balance(b: dict) -> pl.DataFrame:
-    w = _pi(b.get("window", 2), "window", 2)
-    o, _h, _l, _c, _valid, _rng, _body, wick = _candle_geometry(b)
-    out = _np_rolling_fullwindow(wick, w, lambda seg: float(seg.mean()))
-    return _rebuild(b["open"], out)
 
 
-def _k_candle_pattern_count(b: dict) -> pl.DataFrame:
-    w = _pi(b.get("window", 2), "window", 2)
-    o, h, l, c, valid, rng, _body, _wick = _candle_geometry(b)
-    upper = np.where(valid, h - np.maximum(o, c), np.nan)
-    lower = np.where(valid, np.minimum(o, c) - l, np.nan)
-    body_abs = np.where(valid, np.abs(c - o), np.nan)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        doji = body_abs / rng < 0.1
-        dom_upper = upper / rng >= 0.7
-        dom_lower = lower / rng >= 0.7
-        small_lower = lower / rng <= 0.15
-        small_upper = upper / rng <= 0.15
-    pattern = doji | (dom_upper & small_lower) | (dom_lower & small_upper)
-    pat_f = np.where(valid, pattern.astype(float), np.nan)
-    valid_f = valid.astype(float)
-    all_present = (np.isfinite(o) & np.isfinite(h) & np.isfinite(l) & np.isfinite(c)).astype(float)
-    rows_n, cols_n = o.shape
-    num = np.full((rows_n, cols_n), np.nan, dtype=float)
-    den = np.full((rows_n, cols_n), np.nan, dtype=float)
-    rows_cnt = np.full((rows_n, cols_n), np.nan, dtype=float)
-    for j in range(cols_n):
-        pat_col = np.ascontiguousarray(pat_f[:, j])
-        val_col = np.ascontiguousarray(valid_f[:, j])
-        all_col = np.ascontiguousarray(all_present[:, j])
-        for t in range(w - 1, rows_n):
-            seg_pat = pat_col[t - w + 1: t + 1]
-            fin = np.isfinite(seg_pat)
-            if fin.any():
-                num[t, j] = float(seg_pat[fin].sum())
-            den[t, j] = float(val_col[t - w + 1: t + 1].sum())
-            rows_cnt[t, j] = float(all_col[t - w + 1: t + 1].sum())
-    with np.errstate(divide="ignore", invalid="ignore"):
-        frac = num / np.where(den > 0.0, den, np.nan)
-    out = np.where(rows_cnt >= float(w), frac, np.nan)
-    return _rebuild(b["open"], out)
 
 
 def _k_ts_transfer_entropy(b: dict) -> pl.DataFrame:
@@ -1085,45 +848,8 @@ def _k_ts_ssa_prior_reconstruction_error(b: dict) -> pl.DataFrame:
         _panel(b["x"]), w, e, k, "strict_contiguous", mcf))
 
 
-def _k_HMA(b: dict) -> pl.DataFrame:
-    x = _panel(b["x"])
-    w = max(2, int(b.get("window", 16)))
-    rounding = str(b.get("rounding", "floor"))
-    n2 = max(1, _round_rule(w / 2.0, rounding))
-    ns = max(1, _round_rule(np.sqrt(w), rounding))
-    rows, cols = x.shape
-    out = np.full_like(x, np.nan)
-    for j in range(cols):
-        col = np.ascontiguousarray(x[:, j])
-        inner = 2.0 * _np_wma(col, n2) - _np_wma(col, w)
-        out[:, j] = _np_wma(inner, ns)
-    return _rebuild(b["x"], out)
 
 
-def _k_ALMA(b: dict) -> pl.DataFrame:
-    x = _panel(b["x"])
-    w = max(2, int(b.get("window", 10)))
-    offset = float(b.get("offset", 0.85))
-    sigma = float(b.get("sigma", 6.0))
-    m = offset * (w - 1)
-    s = w / max(sigma, 1e-6)
-    weights = np.array(
-        [np.exp(-((i - m) ** 2) / (2.0 * s * s)) for i in range(w)], dtype=float)
-    total = weights.sum()
-    if total <= _EPS:
-        weights = np.ones(w, dtype=float) / w
-    else:
-        weights = weights / total
-    rows, cols = x.shape
-    out = np.full_like(x, np.nan)
-    for j in range(cols):
-        col = np.ascontiguousarray(x[:, j])
-        for t in range(w - 1, rows):
-            seg = col[t - w + 1: t + 1]
-            if np.any(~np.isfinite(seg)):
-                continue
-            out[t, j] = float(np.dot(seg, weights))
-    return _rebuild(b["x"], out)
 
 
 def _quantile_stat(yv: np.ndarray, xv: np.ndarray, w: int, mp: int, q: float,
@@ -1235,93 +961,44 @@ def _k_group_multi_level_rank_consistency(b: dict) -> pl.DataFrame:
     return _rebuild(b["x"], out)
 
 
-def _state_flip_age_chunk(chunk: np.ndarray) -> float:
-    if np.any(np.isnan(chunk)):
-        return np.nan
-    compressed = chunk[np.concatenate(([True], chunk[1:] != chunk[:-1]))]
-    if compressed.size < 2:
-        return np.nan
-    last_flip_idx = None
-    for i in range(compressed.size - 1, 0, -1):
-        if compressed[i] != compressed[i - 1]:
-            last_flip_idx = i
-            break
-    if last_flip_idx is None:
-        return np.nan
-    orig_idx = 0
-    comp_count = 0
-    for i in range(chunk.size):
-        if i == 0 or chunk[i] != chunk[i - 1]:
-            if comp_count == last_flip_idx:
-                orig_idx = i
-                break
-            comp_count += 1
-    return float(chunk.size - 1 - orig_idx)
 
 
-def _k_state_flip_age(b: dict) -> pl.DataFrame:
-    w = _pi(b.get("window", 2), "window", 2)
-    arr = _panel(b["state"])
-    if not bool(np.all(np.isnan(arr) | np.isfinite(arr))):
-        raise ValueError(
-            "state panel must contain finite state codes or NaN; ±Inf is "
-            "out-of-domain"
-        )
-    rows, cols = arr.shape
-    out = np.full((rows, cols), np.nan, dtype=float)
-    for c in range(cols):
-        col = arr[:, c]
-        for r in range(w - 1, rows):
-            out[r, c] = _state_flip_age_chunk(col[r - w + 1: r + 1])
-    return _rebuild(b["state"], out)
 
 
 _KERNELS: dict[str, Callable[[dict], pl.DataFrame]] = {
-    "CoppockCurve": _k_CoppockCurve,
-    "reg_slope_tstat": _k_reg_slope_tstat,
-    "bvc_imbalance_ma": _k_bvc_imbalance_ma,
     "keltner_breakout_strength": _k_keltner_breakout_strength,
     "group_feature_mode_share": _k_group_feature_mode_share,
     "group_feature_effective_rank": _k_group_feature_effective_rank,
     "group_feature_spectral_gap": _k_group_feature_spectral_gap,
-    "fin_announcement_lag": _k_fin_announcement_lag,
     "intra_supply_absorption_score": _k_intra_supply_absorption_score,
     "fiscal_pair_direction_agreement": _k_fiscal_pair_direction_agreement,
     "group_distribution_js_divergence": _k_group_distribution_js_divergence,
-    "consolidation_pct": _k_consolidation_pct,
     "ts_poly2_forecast_error": _k_ts_poly2_forecast_error,
     "ts_multifractal_spectrum_width": _k_ts_multifractal_spectrum_width,
-    "relation_topk_sum": _k_relation_topk_sum,
-    "relation_entry_count": _k_relation_entry_count,
-    "relation_exit_count": _k_relation_exit_count,
     "report_change_breadth": _k_report_change_breadth,
     "group_feature_second_mode_localization": _k_group_feature_second_mode_localization,
     "ts_poly2_forecast_error_z": _k_ts_poly2_forecast_error_z,
-    "donchian_breakout_up": _k_donchian_breakout_up,
-    "donchian_breakout_down": _k_donchian_breakout_down,
-    "calendar_day_diff": _k_calendar_day_diff,
     "event_hawkes_branching_ratio_proxy": _k_event_hawkes_branching_ratio_proxy,
-    "donchian_width_pct": _k_donchian_width_pct,
-    "chikou_distance_pct": _k_chikou_distance_pct,
     "fin_receivable_sales_divergence": _fin_divergence_kernel("account_receivable"),
     "fin_inventory_sales_divergence": _fin_divergence_kernel("inventories"),
     "fin_cash_sales_divergence": _fin_divergence_kernel("goods_sale_cash"),
-    "true_range_surprise": _k_true_range_surprise,
     "spectral_energy_ratio": _k_spectral_energy_ratio,
-    "reg_forecast_error_pct": _k_reg_forecast_error_pct,
     "report_revision_magnitude": _k_report_revision_magnitude,
-    "candle_body_strength": _k_candle_body_strength,
-    "candle_wick_balance": _k_candle_wick_balance,
-    "candle_pattern_count": _k_candle_pattern_count,
     "ts_transfer_entropy": _k_ts_transfer_entropy,
     "ts_ssa_prior_reconstruction_error": _k_ts_ssa_prior_reconstruction_error,
-    "HMA": _k_HMA,
-    "ALMA": _k_ALMA,
     "ts_quantile_regression_coeff": _k_ts_quantile_regression_coeff,
     "ts_quantile_regression_resid": _k_ts_quantile_regression_resid,
     "ts_quantile_beta_spread_prior": _k_ts_quantile_beta_spread_prior,
     "group_multi_level_rank_consistency": _k_group_multi_level_rank_consistency,
-    "state_flip_age": _k_state_flip_age,
+}
+
+# Every batch11 path, including wrapper helpers, converts the panel to NumPy
+# and rebuilds a Polars frame; there are no pure Expr entries.
+_EXPR_KERNEL_CANONICALS = frozenset()
+_NUMPY_KERNEL_CANONICALS = frozenset(_KERNELS) - _EXPR_KERNEL_CANONICALS
+_KERNEL_EXECUTION_KIND = {
+    name: ExecutionKind.POLARS_NATIVE_EXPR if name in _EXPR_KERNEL_CANONICALS
+    else ExecutionKind.POLARS_NUMPY_KERNEL for name in _KERNELS
 }
 
 
@@ -1350,10 +1027,10 @@ def register_r68_native_batch11() -> list[str]:
     from factor_engine.cleaned_operators import (
         record_backend_replacement_after, replace_backend,
     )
-    from factor_engine.backend.polars_backend_kind import (
-        PolarsImplementationKind, canonical_polars_kind,
-    )
     from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_engine.cleaned_operators.polars_native.native_registration import (
+        RegistrationDecision, registration_decision,
+    )
 
     registered: list[str] = []
     source_hash = hashlib.sha256(open(__file__, "rb").read()).hexdigest()
@@ -1361,22 +1038,6 @@ def register_r68_native_batch11() -> list[str]:
         ref = OperatorRegistry.get(canonical, "pandas_numpy", mode="any")
         if ref is None:
             continue  # not a registry canonical in this environment
-        current_meta = (
-            ((OperatorRegistry._catalog.get(canonical, {}) or {}).get("backend_meta") or {})
-            .get("polars") or {}
-        )
-        if current_meta.get("source") == _SOURCE:
-            continue
-        current = OperatorRegistry.get(canonical, "polars", mode="any")
-        if current is not None:
-            cur_kind = getattr(getattr(current, "_physical_spec", None), "execution_kind", None)
-            try:
-                if cur_kind is None:
-                    cur_kind = canonical_polars_kind(canonical)
-            except Exception:
-                cur_kind = None
-            if cur_kind is PolarsImplementationKind.POLARS_NATIVE:
-                continue  # first native registrant wins
         metadata = copy.deepcopy(ref.metadata)
         op = _R68NativeOperator(canonical, metadata, kernel)
         parameter_hash = hashlib.sha256(
@@ -1384,12 +1045,12 @@ def register_r68_native_batch11() -> list[str]:
         ).hexdigest()
         op._physical_spec = PhysicalImplementationSpec(
             canonical=canonical, backend="polars",
-            execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+            execution_kind=_KERNEL_EXECUTION_KIND[canonical],
             supports_lazy=False, supports_streaming=False,
             materializes_full_panel=True,
             supports_nulls=True, supports_nan=True, supports_inf=True,
             implementation_source_hash=source_hash,
-            emitter_identity=f"{_SOURCE}:pl.Expr/numpy:v1",
+            emitter_identity=f"{_SOURCE}:{_KERNEL_EXECUTION_KIND[canonical].value}:v1",
             kernel_identity=f"{_SOURCE}._KERNELS:{canonical}",
             parameter_domain_hash=parameter_hash,
             semantic_contract_hash=hashlib.sha256(
@@ -1400,6 +1061,16 @@ def register_r68_native_batch11() -> list[str]:
                 "pl->numpy columns; no pandas conversion, no pandas-delegate UDF."
             ),
         )
+        decision = registration_decision(
+            canonical=canonical, source=_SOURCE, desired_spec=op._physical_spec,
+            registry=OperatorRegistry,
+        )
+        if decision in {
+            RegistrationDecision.FROZEN,
+            RegistrationDecision.CURRENT_SOURCE_FRESH,
+            RegistrationDecision.KEEP_EXISTING_NATIVE,
+        }:
+            continue
         migration = replace_backend(
             canonical, "polars",
             reason="R68 replace pandas-delegate UDF with genuine Polars implementation",

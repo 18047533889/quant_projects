@@ -289,12 +289,6 @@ def _k_cs_weighted_percentile_rank(b: dict) -> pl.DataFrame:
     return _rebuild(b["x"], out)
 
 
-def _k_atan2(b: dict) -> pl.DataFrame:
-    with np.errstate(invalid="ignore"):
-        out = np.arctan2(_panel(b["y"]), _panel(b["x"]))
-    return _rebuild(b["y"], out)
-
-
 def _k_ts_distance_cov(b: dict) -> pl.DataFrame:
     from factor_engine.cleaned_operators.rolling_pack import (
         aligned_pairs, check_window, map_pair_rolling,
@@ -336,26 +330,6 @@ def _k_spectral_trend_share(b: dict) -> pl.DataFrame:
         if chunk.size < w or not np.all(np.isfinite(chunk)):
             return np.nan
         return _share(chunk)
-
-    return _rebuild(b["close"], map_rolling(pos, w, _fn))
-
-
-def _k_reg_r2_trailing(b: dict) -> pl.DataFrame:
-    from factor_engine.cleaned_operators.rolling_pack import map_rolling
-    from factor_engine.cleaned_operators.technical.indicators_v2 import (
-        _pi, _reg_fit_window,
-    )
-    w = _pi(b.get("window", 60), "window", 3)
-    close = _panel(b["close"])
-    pos = np.where(close > 0.0, close, np.nan)
-
-    def _fn(chunk: np.ndarray) -> float:
-        if chunk.size < w:
-            return np.nan
-        fit = _reg_fit_window(chunk)
-        if fit is None:
-            return np.nan
-        return fit[3]
 
     return _rebuild(b["close"], map_rolling(pos, w, _fn))
 
@@ -430,32 +404,6 @@ def _k_ts_autocorrelation_time(b: dict) -> pl.DataFrame:
     if ml >= w:
         raise ValueError("max_lag must be < window")
     return _rebuild(b["x"], _autocorrelation_time_series(_panel(b["x"]), w, ml))
-
-
-def _k_atr_short_long_ratio(b: dict) -> pl.DataFrame:
-    from factor_engine.cleaned_operators.technical.indicators_v2 import _pi
-    s = _pi(b.get("short_window", 5), "short_window", 2)
-    l = _pi(b.get("long_window", 20), "long_window", 2)
-    if s >= l:
-        raise ValueError("short_window must be < long_window")
-    high = _panel(b["high"])
-    low = _panel(b["low"])
-    close = _panel(b["close"])
-    prev_c = _np_shift(close, 1)
-    with np.errstate(invalid="ignore"):
-        tr = np.maximum.reduce([
-            high - low,
-            np.abs(high - prev_c),
-            np.abs(low - prev_c),
-        ])
-    atr_s = _np_ewm_mean(tr, 1.0 / s, s)
-    atr_l = _np_ewm_mean(tr, 1.0 / l, l)
-    denom = np.where(close > 0.0, close, np.nan)
-    with np.errstate(divide="ignore", invalid="ignore"):
-        ap_s = atr_s / denom
-        ap_l = atr_l / denom
-        out = np.where(ap_l == 0.0, np.nan, ap_s / ap_l)
-    return _rebuild(b["high"], out)
 
 
 def _k_ts_binned_response_monotonicity(b: dict) -> pl.DataFrame:
@@ -939,41 +887,6 @@ def _k_ashare_limit_open_down_streak(b: dict) -> pl.DataFrame:
     return _rebuild(b["open"], _consecutive_streak(condition, tradeable, rows, cols))
 
 
-def _k_ts_turning_rate(b: dict) -> pl.DataFrame:
-    from factor_engine.cleaned_operators.rolling_pack import check_window, map_rolling
-    from factor_engine.cleaned_operators.alpha_language_shape import _trailing_contiguous
-    w = check_window(b.get("window", 20))
-    eps = float(b.get("epsilon", 0.0))
-    mp = max(2, int(b.get("min_periods", 2)))
-    xv = _panel(b["x"])
-
-    def _sign(d: float) -> int:
-        if d > eps:
-            return 1
-        if d < -eps:
-            return -1
-        return 0
-
-    def _fn(chunk: np.ndarray) -> float:
-        v = _trailing_contiguous(chunk)
-        if v.size < mp + 1:
-            return np.nan
-        d = np.diff(v)
-        flips = 0
-        pairs = 0
-        for i in range(1, d.size):
-            s0 = _sign(float(d[i - 1]))
-            s1 = _sign(float(d[i]))
-            pairs += 1
-            if s0 != 0 and s1 != 0 and s0 != s1:
-                flips += 1
-        if pairs == 0:
-            return np.nan
-        return float(flips / pairs)
-
-    return _rebuild(b["x"], map_rolling(xv, w, _fn))
-
-
 def _k_cs_wls_resid(b: dict) -> pl.DataFrame:
     from factor_engine.cleaned_operators.common.daily_panel import _ols_residual
     yv = _panel(b["y"])
@@ -1066,43 +979,6 @@ def _k_intra_abs_return_profile_cosine(b: dict) -> pl.DataFrame:
         return _daily_out(b["close"], np.asarray(union_days), out)
     empty = np.full((0, cols), np.nan, dtype=float)
     return _daily_out(b["close"], np.array([], dtype="datetime64[D]"), empty)
-
-
-def _k_category_transition_surprise(b: dict) -> pl.DataFrame:
-    from factor_engine.cleaned_operators.rolling_pack import map_rolling
-    w = int(b.get("window", 20))
-    if w < 2:
-        raise ValueError("window must be >= 2")
-    eps = 1e-12
-    arr = _panel(b["state"])
-    if not bool(np.all(np.isnan(arr) | np.isfinite(arr))):
-        raise ValueError(
-            "state panel must contain finite state codes or NaN; ±Inf is out-of-domain"
-        )
-
-    def _surprise(chunk: np.ndarray) -> float:
-        if np.any(np.isnan(chunk)):
-            return np.nan
-        transitions = float(np.count_nonzero(np.diff(chunk) != 0.0))
-        distinct = len(np.unique(chunk[~np.isnan(chunk)]))
-        if distinct <= 1:
-            return np.nan
-        expected = float(w - 1) * (1.0 - 1.0 / float(distinct))
-        variance = float(w - 1) * (1.0 / float(distinct)) * (1.0 - 1.0 / float(distinct))
-        if variance <= eps:
-            return np.nan
-        return (transitions - expected) / np.sqrt(variance)
-
-    rows, cols = arr.shape
-    out = np.full((rows, cols), np.nan, dtype=float)
-    for c in range(cols):
-        for r in range(rows):
-            lo = max(0, r - w + 1)
-            if r - lo + 1 < w:
-                continue
-            out[r, c] = _surprise(arr[lo: r + 1, c])
-    del map_rolling
-    return _rebuild(b["state"], out)
 
 
 def _k_fiscal_perpetual_inventory(b: dict) -> pl.DataFrame:
@@ -1210,26 +1086,6 @@ def _k_ts_max_chord_excursion(b: dict) -> pl.DataFrame:
     return _rebuild(b["x"], map_rolling(xv, w, _fn))
 
 
-def _k_asin_bounded(b: dict) -> pl.DataFrame:
-    base = _panel(b["x"])
-    in_domain = np.abs(base) <= 1.0
-    with np.errstate(invalid="ignore"):
-        result = np.arcsin(base)
-    result = np.where(in_domain, result, np.nan)
-    result = np.where(np.isinf(result), np.nan, result)
-    return _rebuild(b["x"], result)
-
-
-def _k_acos_bounded(b: dict) -> pl.DataFrame:
-    base = _panel(b["x"])
-    in_domain = np.abs(base) <= 1.0
-    with np.errstate(invalid="ignore"):
-        result = np.arccos(base)
-    result = np.where(in_domain, result, np.nan)
-    result = np.where(np.isinf(result), np.nan, result)
-    return _rebuild(b["x"], result)
-
-
 def _k_intra_high_low_affinity(b: dict) -> pl.DataFrame:
     from factor_engine.cleaned_operators.intraday._core import minute_of_day
     w = max(2, int(b.get("window", 20)))
@@ -1284,255 +1140,6 @@ def _k_intra_high_low_affinity(b: dict) -> pl.DataFrame:
     return _daily_out(b["high"], all_days, out)
 
 
-def _k_candlestick_pattern(b: dict) -> pl.DataFrame:
-    from factor_engine.cleaned_operators.price_volume.candle_pattern_engine_v2 import (
-        _CANDLE_PARAM_DEPS, _pi,
-    )
-    o = _panel(b["open"])
-    h = _panel(b["high"])
-    l = _panel(b["low"])
-    c = _panel(b["close"])
-    bw = _pi(b.get("body_window", 10), "body_window", 2)
-    sw = _pi(b.get("shadow_window", 10), "shadow_window", 2)
-    pen = float(b.get("penetration", 0.3))
-    if not 0 <= pen <= 1:
-        raise ValueError("penetration must be in [0,1]")
-    p = str(b.get("pattern", "")).strip().lower().removeprefix("cdl_")
-    if p not in _CANDLE_PARAM_DEPS:
-        raise ValueError(f"unsupported candlestick pattern: {b.get('pattern')!r}")
-
-    def _near(a: np.ndarray, bb: np.ndarray, tol: np.ndarray) -> np.ndarray:
-        with np.errstate(invalid="ignore"):
-            return np.abs(a - bb) <= tol
-
-    def _emit(mask: np.ndarray, direction, validmask: np.ndarray) -> np.ndarray:
-        base = np.where(validmask, 0.0, np.nan)
-        if np.isscalar(direction):
-            return np.where(mask & validmask, float(direction), base)
-        return np.where(mask & validmask, np.asarray(direction, dtype=float), base)
-
-    def _valid_ohlc() -> np.ndarray:
-        valid = np.ones(o.shape, dtype=bool)
-        with np.errstate(invalid="ignore"):
-            for arr in (o, h, l, c):
-                valid &= arr > 0.0
-            valid &= h >= l
-            valid &= h >= np.maximum(o, c)
-            valid &= l <= np.minimum(o, c)
-        return valid
-
-    body = np.abs(c - o)
-    rng = np.abs(h - l)
-    with np.errstate(invalid="ignore"):
-        upper = h - np.maximum(o, c)
-        lower = np.minimum(o, c) - l
-    bavg = _np_rolling_mean(_np_shift(body, 1), bw, bw)
-    ravg = _np_rolling_mean(_np_shift(rng, 1), sw, sw)
-    tol = 0.1 * ravg
-    bull = c > o
-    bear = c < o
-    with np.errstate(invalid="ignore"):
-        doji = body <= 0.1 * bavg
-        long_body = body >= 1.3 * bavg
-        short_body = body <= 0.6 * bavg
-        long_upper = upper >= 0.8 * ravg
-        long_lower = lower >= 0.8 * ravg
-    po, pc, ph, pl_ = (_np_shift(x, 1) for x in (o, c, h, l))
-    pbull = pc > po
-    pbear = pc < po
-    pbody = np.abs(pc - po)
-    finite = np.isfinite
-    cur = finite(o) & finite(h) & finite(l) & finite(c)
-    with np.errstate(invalid="ignore"):
-        cur = cur & (rng > 1e-6 * np.abs(c))
-    valid = _valid_ohlc()
-    cur = cur & valid
-    prev1 = finite(po) & finite(pc) & finite(ph) & finite(pl_) & _np_shift_bool(valid, 1)
-    o2, c2, h2, l2 = (_np_shift(x, 2) for x in (o, c, h, l))
-    o3, c3, h3, l3 = (_np_shift(x, 3) for x in (o, c, h, l))
-    o4, c4, h4, l4 = (_np_shift(x, 4) for x in (o, c, h, l))
-    prev2 = prev1 & finite(o2) & finite(c2) & finite(h2) & finite(l2) & _np_shift_bool(valid, 2)
-    prev3 = prev2 & finite(o3) & finite(c3) & finite(h3) & finite(l3) & _np_shift_bool(valid, 3)
-    prev4 = prev3 & finite(o4) & finite(c4) & finite(h4) & finite(l4) & _np_shift_bool(valid, 4)
-    has_b = finite(bavg)
-    has_r = finite(ravg)
-    has_b1 = finite(_np_shift(bavg, 1))
-    has_b2 = finite(_np_shift(bavg, 2))
-    sign_dir = np.sign(c - o)
-
-    if p == "2_crows":
-        # production repair (candle_pattern_engine_repairs_v2)
-        bull2 = c2 > o2
-        mask = bull2 & pbear & bear & (pl_ > h2) & (o > po) & (c < c2) & (c > o2)
-        validm = cur & prev1 & prev2
-        out = np.where(mask, -1.0, np.nan)
-        return _rebuild(b["open"], np.where(validm, out, np.nan))
-    if p == "evening_doji_star":
-        doji1r = np.abs(pc - po) <= 0.1 * _np_shift(bavg, 1)
-        mid = o2 + (c2 - o2) * (1.0 - pen)
-        mask = (c2 > o2) & doji1r & (pl_ > h2) & bear & (c < mid)
-        validm = cur & prev1 & prev2 & finite(_np_shift(bavg, 1))
-        out = np.where(mask, -1.0, np.nan)
-        return _rebuild(b["open"], np.where(validm, out, np.nan))
-
-    if p == "hammer":
-        with np.errstate(invalid="ignore"):
-            safe_body = np.clip(body, 1e-12, None)
-            mask = (body <= 0.35 * rng) & (lower >= 2.0 * body) & (upper <= 0.35 * safe_body)
-        return _rebuild(b["open"], _emit(mask, 1.0, cur))
-    if p == "long_line":
-        return _rebuild(b["open"], _emit(long_body, sign_dir, cur & has_b))
-    if p == "short_line":
-        return _rebuild(b["open"], _emit(short_body, sign_dir, cur & has_b))
-    if p == "high_wave":
-        return _rebuild(b["open"], _emit(short_body & long_upper & long_lower, sign_dir, cur & has_b & has_r))
-    if p == "long_legged_doji":
-        return _rebuild(b["open"], _emit(doji & long_upper & long_lower, 1.0, cur & has_b & has_r))
-    if p == "rickshaw_man":
-        with np.errstate(invalid="ignore"):
-            m = np.abs((o + c) / 2 - (h + l) / 2) <= 0.15 * rng
-        return _rebuild(b["open"], _emit(doji & long_upper & long_lower & m, 1.0, cur & has_b & has_r))
-    if p == "takuri":
-        with np.errstate(invalid="ignore"):
-            mask = doji & (lower >= 2.5 * bavg) & (upper <= 0.3 * bavg)
-        return _rebuild(b["open"], _emit(mask, 1, cur & has_b))
-    if p == "belt_hold":
-        with np.errstate(invalid="ignore"):
-            mask = long_body & ((bull & (o - l <= 0.1 * rng)) | (bear & (h - o <= 0.1 * rng)))
-        return _rebuild(b["open"], _emit(mask, sign_dir, cur & has_b))
-    if p == "closing_marubozu":
-        with np.errstate(invalid="ignore"):
-            mask = long_body & ((bull & (h - c <= 0.05 * rng)) | (bear & (c - l <= 0.05 * rng)))
-        return _rebuild(b["open"], _emit(mask, sign_dir, cur & has_b))
-    if p == "homing_pigeon":
-        return _rebuild(b["open"], _emit(pbear & bear & (o < po) & (c > pc), 1, cur & prev1))
-    if p == "matching_low":
-        return _rebuild(b["open"], _emit(pbear & bear & _near(c, pc, tol), 1, cur & prev1 & has_r))
-    if p == "counterattack":
-        return _rebuild(b["open"], _emit(((pbear & bull) | (pbull & bear)) & _near(c, pc, tol), sign_dir, cur & prev1 & has_r))
-    if p == "separating_lines":
-        return _rebuild(b["open"], _emit(((pbear & bull) | (pbull & bear)) & _near(o, po, tol) & long_body, sign_dir, cur & prev1 & has_r & has_b))
-    if p in {"on_neck", "in_neck", "thrusting"}:
-        prev_mid = (po + pc) / 2
-        bull2 = pbear & bull & (o < pc)
-        if p == "on_neck":
-            mask = bull2 & _near(c, pc, tol)
-        elif p == "in_neck":
-            with np.errstate(invalid="ignore"):
-                mask = bull2 & (c > pc) & (c < pc + 0.25 * pbody)
-        else:
-            with np.errstate(invalid="ignore"):
-                mask = bull2 & (c > pc + 0.25 * pbody) & (c < prev_mid)
-        return _rebuild(b["open"], _emit(mask, -1, cur & prev1))
-    if p == "doji_star":
-        return _rebuild(b["open"], _emit(
-            doji & ((pbear & (h < pc)) | (pbull & (l > pc))),
-            np.sign(pc - po), cur & prev1 & has_b,
-        ))
-
-    bull2 = c2 > o2
-    bear2 = c2 < o2
-    body2 = np.abs(c2 - o2)
-    doji1 = _np_shift_bool(doji, 1)
-    doji2 = _np_shift_bool(doji, 2)
-    b1_hi = np.maximum(o2, c2)
-    b1_lo = np.minimum(o2, c2)
-    b2_hi = np.maximum(po, pc)
-    b2_lo = np.minimum(po, pc)
-    harami1 = (bull2 | bear2) & (b2_hi <= b1_hi) & (b2_lo >= b1_lo)
-    engulf1 = (
-        (bear2 & pbull & (po <= c2) & (pc >= o2))
-        | (bull2 & pbear & (po >= c2) & (pc <= o2))
-    )
-    if p == "3_inside":
-        with np.errstate(invalid="ignore"):
-            mask = harami1 & ((bear2 & (c > o2)) | (bull2 & (c < o2)))
-        return _rebuild(b["open"], _emit(mask, np.where(c > o2, 1, -1), cur & prev1 & prev2))
-    if p == "3_outside":
-        with np.errstate(invalid="ignore"):
-            mask = engulf1 & ((bear2 & (c > pc)) | (bull2 & (c < pc)))
-        return _rebuild(b["open"], _emit(mask, np.where(c > pc, 1, -1), cur & prev1 & prev2))
-    if p == "tristar":
-        return _rebuild(b["open"], _emit(doji & doji1 & doji2, np.where(c > _np_shift(c, 2), 1, -1), cur & prev2 & has_b & has_b1 & has_b2))
-    if p == "abandoned_baby":
-        with np.errstate(invalid="ignore"):
-            bullmask = bear2 & doji1 & (_np_shift(h, 1) < l2) & bull & (l > _np_shift(h, 1)) & (c > o2 - body2 * pen)
-            bearmask = bull2 & doji1 & (_np_shift(l, 1) > h2) & bear & (h < _np_shift(l, 1)) & (c < o2 + body2 * pen)
-        return _rebuild(b["open"], _emit(bullmask | bearmask, np.where(bullmask, 1, -1), cur & prev1 & prev2 & has_b1))
-    if p == "stick_sandwich":
-        return _rebuild(b["open"], _emit(bear2 & pbull & bear & _near(c, c2, tol), 1, cur & prev2 & has_r))
-    if p == "identical_3_crows":
-        return _rebuild(b["open"], _emit(bear & pbear & bear2 & _near(o, pc, tol) & _near(po, c2, tol), -1, cur & prev1 & prev2 & has_r))
-    if p == "advance_block":
-        with np.errstate(invalid="ignore"):
-            mask = bull & pbull & bull2 & (body < _np_shift(body, 1)) & (_np_shift(body, 1) < _np_shift(body, 2))
-        return _rebuild(b["open"], _emit(mask, -1, cur & prev2 & has_b & has_b1 & has_b2))
-    if p == "stalled_pattern":
-        with np.errstate(invalid="ignore"):
-            mask = bull & pbull & bull2 & short_body & (_np_shift(body, 1) >= _np_shift(body, 2))
-        return _rebuild(b["open"], _emit(mask, -1, cur & prev2 & has_b & has_b1 & has_b2))
-    if p == "3_stars_south":
-        with np.errstate(invalid="ignore"):
-            mask = (bear & pbear & bear2 & (l > pl_) & (pl_ > l2)
-                    & (body < _np_shift(body, 1)) & (_np_shift(body, 1) < _np_shift(body, 2)))
-        return _rebuild(b["open"], _emit(mask, 1, cur & prev1 & prev2 & has_b & has_b1 & has_b2))
-    if p == "unique_3_river":
-        with np.errstate(invalid="ignore"):
-            mask = bear2 & pbear & bull & (l2 > pl_) & (l > pl_) & short_body
-        return _rebuild(b["open"], _emit(mask, 1, cur & prev1 & prev2 & has_b))
-    if p == "upside_gap_2_crows":
-        with np.errstate(invalid="ignore"):
-            mask = bull2 & pbear & bear & (pl_ > h2) & (o > po) & (c < c2)
-        return _rebuild(b["open"], _emit(mask, -1, cur & prev1 & prev2))
-    if p == "tasuki_gap":
-        with np.errstate(invalid="ignore"):
-            up = bull2 & pbull & bear & (_np_shift(l, 1) > h2) & (o > pc) & (c < _np_shift(o, 1)) & (c > h2)
-            dn = bear2 & pbear & bull & (_np_shift(h, 1) < l2) & (o < pc) & (c > _np_shift(o, 1)) & (c < l2)
-        return _rebuild(b["open"], _emit(up | dn, np.where(up, 1, -1), cur & prev1 & prev2))
-    if p == "xside_gap_3_methods":
-        with np.errstate(invalid="ignore"):
-            up = bull2 & pbull & bear & (_np_shift(l, 1) > h2) & (o > c2) & (c < c2)
-            dn = bear2 & pbear & bull & (_np_shift(h, 1) < l2) & (o < c2) & (c > c2)
-        return _rebuild(b["open"], _emit(up | dn, np.where(up, 1, -1), cur & prev1 & prev2))
-
-    bull3 = c3 > o3
-    bear3 = c3 < o3
-    if p == "3_line_strike":
-        with np.errstate(invalid="ignore"):
-            up = bull3 & _np_shift_bool(bull, 2) & pbull & bear & (c < o3) & (o > pc)
-            dn = bear3 & _np_shift_bool(bear, 2) & pbear & bull & (c > o3) & (o < pc)
-        return _rebuild(b["open"], _emit(up | dn, np.where(up, -1, 1), cur & prev1 & prev2 & prev3))
-    if p == "rise_fall_3_methods":
-        bull4 = c4 > o4
-        bear4 = c4 < o4
-        with np.errstate(invalid="ignore"):
-            inside3 = (
-                (_np_shift(h, 3) < _np_shift(h, 4))
-                & (_np_shift(l, 3) > _np_shift(l, 4))
-                & (_np_shift(h, 2) < _np_shift(h, 4))
-                & (_np_shift(l, 2) > _np_shift(l, 4))
-                & (_np_shift(h, 1) < _np_shift(h, 4))
-                & (_np_shift(l, 1) > _np_shift(l, 4))
-            )
-            up = bull4 & inside3 & bull & (c > c4)
-            dn = bear4 & inside3 & bear & (c < c4)
-        return _rebuild(b["open"], _emit(up | dn, np.where(up, 1, -1), cur & prev1 & prev2 & prev3 & prev4))
-    if p == "ladder_bottom":
-        with np.errstate(invalid="ignore"):
-            mask = (c4 < o4) & bear3 & bear2 & pbear & bull & (c > po)
-        return _rebuild(b["open"], _emit(mask, 1, cur & prev1 & prev2 & prev3 & prev4))
-    if p == "breakaway":
-        with np.errstate(invalid="ignore"):
-            up = (c4 < o4) & (_np_shift(h, 3) < _np_shift(l, 4)) & bull & (c > _np_shift(c, 2))
-            dn = (c4 > o4) & (_np_shift(l, 3) > _np_shift(h, 4)) & bear & (c < _np_shift(c, 2))
-        return _rebuild(b["open"], _emit(up | dn, np.where(up, 1, -1), cur & prev2 & prev3 & prev4))
-    if p == "mat_hold":
-        with np.errstate(invalid="ignore"):
-            mask = (c4 > o4) & (_np_shift(l, 3) > c4) & bull & (c > c4)
-        return _rebuild(b["open"], _emit(mask, 1, cur & prev3 & prev4))
-    raise ValueError(f"unsupported candlestick pattern: {b.get('pattern')!r}")
-
-
 _KERNELS: dict[str, Callable[[dict], pl.DataFrame]] = {
     "ts_variogram_slope": _k_ts_variogram_slope,
     "ts_multifractal_curvature": _k_ts_multifractal_curvature,
@@ -1540,14 +1147,11 @@ _KERNELS: dict[str, Callable[[dict], pl.DataFrame]] = {
     "ts_roughness": _k_ts_roughness,
     "ts_interval_exploration_efficiency": _k_ts_interval_exploration_efficiency,
     "cs_weighted_percentile_rank": _k_cs_weighted_percentile_rank,
-    "atan2": _k_atan2,
     "ts_distance_cov": _k_ts_distance_cov,
     "spectral_trend_share": _k_spectral_trend_share,
-    "reg_r2_trailing": _k_reg_r2_trailing,
     "ts_run_efficiency": _k_ts_run_efficiency,
     "ts_interval_overlap_connected_component_ratio": _k_ts_interval_overlap_connected_component_ratio,
     "ts_autocorrelation_time": _k_ts_autocorrelation_time,
-    "atr_short_long_ratio": _k_atr_short_long_ratio,
     "ts_binned_response_monotonicity": _k_ts_binned_response_monotonicity,
     "ts_har_rv_next_var_forecast": _k_ts_har_rv_next_var_forecast,
     "ts_har_from_return_next_vol": _k_ts_har_from_return_next_vol,
@@ -1565,20 +1169,46 @@ _KERNELS: dict[str, Callable[[dict], pl.DataFrame]] = {
     "intra_idiosyncratic_skewness_ex_self": _k_intra_idiosyncratic_skewness_ex_self,
     "ts_pseudocount_sample_entropy": _k_ts_pseudocount_sample_entropy,
     "ashare_limit_open_up_streak": _k_ashare_limit_open_up_streak,
-    "ts_turning_rate": _k_ts_turning_rate,
     "cs_wls_resid": _k_cs_wls_resid,
     "intra_abs_return_profile_cosine": _k_intra_abs_return_profile_cosine,
-    "category_transition_surprise": _k_category_transition_surprise,
     "fiscal_perpetual_inventory": _k_fiscal_perpetual_inventory,
     "ts_max_chord_excursion": _k_ts_max_chord_excursion,
     "ts_forbidden_ordinal_pattern_signed_excess": _k_ts_forbidden_ordinal_pattern_signed_excess,
     "intra_idiosyncratic_kurtosis_ex_self": _k_intra_idiosyncratic_kurtosis_ex_self,
     "ts_two_state_regime_probability": _k_ts_two_state_regime_probability,
     "state_deadband": _k_state_deadband,
-    "asin_bounded": _k_asin_bounded,
     "ashare_limit_open_down_streak": _k_ashare_limit_open_down_streak,
-    "candlestick_pattern": _k_candlestick_pattern,
-    "acos_bounded": _k_acos_bounded,
+}
+
+# Source-bound execution inventory. Every entry above materializes one or
+# more Polars columns to NumPy arrays and rebuilds a DataFrame; none emits a
+# Polars Expr. Keep this explicit so a new kernel cannot inherit a wrong kind.
+_NUMPY_KERNEL_CANONICALS = frozenset({
+    "ts_variogram_slope", "ts_multifractal_curvature", "ts_qn_scale",
+    "ts_roughness", "ts_interval_exploration_efficiency",
+    "cs_weighted_percentile_rank", "ts_distance_cov",
+    "spectral_trend_share", "ts_run_efficiency",
+    "ts_interval_overlap_connected_component_ratio", "ts_autocorrelation_time",
+    "ts_binned_response_monotonicity",
+    "ts_har_rv_next_var_forecast", "ts_har_from_return_next_vol",
+    "ts_permutation_transition_entropy", "ashare_one_price_limit_streak",
+    "ts_forbidden_ordinal_pattern_excess", "fin_net_debt_issuance",
+    "ts_rank_if", "intra_high_low_affinity", "ts_regression_tstat",
+    "cs_actual_lof_score", "fin_core_earnings_ratio", "fin_noncore_income_ratio",
+    "state_slew_limit", "intra_idiosyncratic_skewness_ex_self",
+    "ts_pseudocount_sample_entropy", "ashare_limit_open_up_streak",
+    "cs_wls_resid", "intra_abs_return_profile_cosine",
+    "fiscal_perpetual_inventory",
+    "ts_max_chord_excursion", "ts_forbidden_ordinal_pattern_signed_excess",
+    "intra_idiosyncratic_kurtosis_ex_self", "ts_two_state_regime_probability",
+    "state_deadband", "ashare_limit_open_down_streak",
+})
+_EXPR_KERNEL_CANONICALS = frozenset()
+if set(_KERNELS) != _NUMPY_KERNEL_CANONICALS | _EXPR_KERNEL_CANONICALS:
+    raise RuntimeError("R68 batch9 kernel execution inventory is out of sync with _KERNELS")
+_KERNEL_EXECUTION_KIND = {
+    **{name: ExecutionKind.POLARS_NUMPY_KERNEL for name in _NUMPY_KERNEL_CANONICALS},
+    **{name: ExecutionKind.POLARS_NATIVE_EXPR for name in _EXPR_KERNEL_CANONICALS},
 }
 
 
@@ -1631,10 +1261,10 @@ def register_r68_native_batch9() -> list[str]:
             # implementation blocks registration.  (canonical_polars_kind is a
             # heuristic that mislabels some simple UDF delegates — e.g. atan2 —
             # as native, so the registered op's own spec is authoritative.)
-            cur_kind = getattr(getattr(current, "_physical_spec", None), "execution_kind", None)
             try:
-                if cur_kind is None:
-                    cur_kind = canonical_polars_kind(canonical)
+                # Use the classifier's enum consistently. A raw ExecutionKind
+                # cannot be compared by identity to PolarsImplementationKind.
+                cur_kind = canonical_polars_kind(canonical, production_mode=False)
             except Exception:
                 cur_kind = None
             if cur_kind is PolarsImplementationKind.POLARS_NATIVE:
@@ -1646,12 +1276,12 @@ def register_r68_native_batch9() -> list[str]:
         ).hexdigest()
         op._physical_spec = PhysicalImplementationSpec(
             canonical=canonical, backend="polars",
-            execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+            execution_kind=_KERNEL_EXECUTION_KIND[canonical],
             supports_lazy=False, supports_streaming=False,
             materializes_full_panel=True,
             supports_nulls=True, supports_nan=True, supports_inf=True,
             implementation_source_hash=source_hash,
-            emitter_identity=f"{_SOURCE}:pl.Expr/numpy:v1",
+            emitter_identity=f"{_SOURCE}:pl.DataFrame/numpy/pl.DataFrame:v1",
             kernel_identity=f"{_SOURCE}._KERNELS:{canonical}",
             parameter_domain_hash=parameter_hash,
             semantic_contract_hash=hashlib.sha256(

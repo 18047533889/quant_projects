@@ -8,6 +8,8 @@ wrapped into ``pl.DataFrame`` without constructing pandas DataFrames.
 from __future__ import annotations
 
 import copy
+import hashlib
+from pathlib import Path
 from collections.abc import Callable
 
 import numpy as np
@@ -47,13 +49,6 @@ def _make(base: pl.DataFrame, cols: list[str], values: np.ndarray) -> pl.DataFra
     return pl.DataFrame({c: values[:, i] for i, c in enumerate(cols)})
 
 
-def _safe_ratio_1d(num: np.ndarray, den: np.ndarray) -> np.ndarray:
-    out = np.full(num.shape, np.nan, dtype=float)
-    np.divide(num, den, out=out, where=den != 0)
-    out[~np.isfinite(out)] = np.nan
-    return out
-
-
 def _touch_1d(close, upper, tolerance):
     valid = np.isfinite(close) & np.isfinite(upper)
     return np.where(valid, (close >= upper - tolerance).astype(float), np.nan)
@@ -75,15 +70,6 @@ def _rolling_max_1d(x: np.ndarray, w: int, min_periods: int = 1) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # limit-state
 # ---------------------------------------------------------------------------
-
-
-def ashare_limit_distance(close, upper_limit):
-    cols = _cols(close, upper_limit)
-    rows = close.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        out[:, i] = _safe_ratio_1d(close[c].to_numpy(), upper_limit[c].to_numpy()) - 1.0
-    return _make(close, cols, out)
 
 
 def ashare_limit_up_touch(high, upper_limit, tick_tolerance=0.005):
@@ -108,128 +94,9 @@ def ashare_limit_down_touch(low, lower_limit, tick_tolerance=0.005):
     return _make(low, cols, out)
 
 
-def ashare_open_at_upper_limit(open_px, upper_limit, tick_tolerance=0.005):
-    tolerance = _pf(tick_tolerance, "tick_tolerance", 0)
-    cols = _cols(open_px, upper_limit)
-    rows = open_px.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        op, ul = open_px[c].to_numpy(), upper_limit[c].to_numpy()
-        valid = np.isfinite(op) & np.isfinite(ul)
-        out[:, i] = np.where(valid, (op >= ul - tolerance).astype(float), np.nan)
-    return _make(open_px, cols, out)
-
-
-def ashare_limit_open_failed(open_px, low, upper_limit, tick_tolerance=0.005):
-    tolerance = _pf(tick_tolerance, "tick_tolerance", 0)
-    cols = _cols(open_px, low, upper_limit)
-    rows = open_px.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        op, lo, ul = open_px[c].to_numpy(), low[c].to_numpy(), upper_limit[c].to_numpy()
-        valid = np.isfinite(op) & np.isfinite(lo) & np.isfinite(ul)
-        opened = op >= ul - tolerance
-        broke = lo < ul - tolerance
-        out[:, i] = np.where(valid, (opened & broke).astype(float), np.nan)
-    return _make(open_px, cols, out)
-
-
-def ashare_limit_one_price(open_px, high, low, close, upper_limit, lower_limit, side="up", tick_tolerance=0.005):
-    tolerance = _pf(tick_tolerance, "tick_tolerance", 0)
-    cols = _cols(open_px, high, low, close, upper_limit, lower_limit)
-    rows = open_px.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    direction = str(side).lower()
-    for i, c in enumerate(cols):
-        op, hi, lo, cl = (f[c].to_numpy() for f in (open_px, high, low, close))
-        ul, ll = upper_limit[c].to_numpy(), lower_limit[c].to_numpy()
-        limit = ul if direction == "up" else ll
-        valid = np.isfinite(op) & np.isfinite(hi) & np.isfinite(lo) & np.isfinite(cl) & np.isfinite(limit)
-        at = (
-            (op >= limit - tolerance) & (op <= limit + tolerance)
-            & (hi >= limit - tolerance) & (hi <= limit + tolerance)
-            & (lo >= limit - tolerance) & (lo <= limit + tolerance)
-            & (cl >= limit - tolerance) & (cl <= limit + tolerance)
-        )
-        if direction == "up":
-            out[:, i] = np.where(valid, (at & (cl >= ul - tolerance)).astype(float), np.nan)
-        elif direction == "down":
-            out[:, i] = np.where(valid, (at & (cl <= ll + tolerance)).astype(float), np.nan)
-        else:
-            raise ValueError("side must be 'up' or 'down'")
-    return _make(open_px, cols, out)
-
-
-def ashare_limit_failed(high, close, upper_limit, tick_tolerance=0.005):
-    tolerance = _pf(tick_tolerance, "tick_tolerance", 0)
-    cols = _cols(high, close, upper_limit)
-    rows = high.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        hi, cl, ul = high[c].to_numpy(), close[c].to_numpy(), upper_limit[c].to_numpy()
-        valid = np.isfinite(hi) & np.isfinite(cl) & np.isfinite(ul)
-        touched = hi >= ul - tolerance
-        held = cl >= ul - tolerance
-        out[:, i] = np.where(valid, (touched & ~held).astype(float), np.nan)
-    return _make(high, cols, out)
-
-
 # ---------------------------------------------------------------------------
 # benchmark / masks / cash-flow stage
 # ---------------------------------------------------------------------------
-
-
-def benchmark_excess_return(ret, benchmark_ret):
-    cols = _cols(ret, benchmark_ret)
-    rows = ret.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        out[:, i] = ret[c].to_numpy() - benchmark_ret[c].to_numpy()
-    return _make(ret, cols, out)
-
-
-def benchmark_relative_price(numerator, denominator):
-    cols = _cols(numerator, denominator)
-    rows = numerator.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        out[:, i] = _safe_ratio_1d(numerator[c].to_numpy(), denominator[c].to_numpy())
-    return _make(numerator, cols, out)
-
-
-def fin_applicability_mask(value, threshold=0.0):
-    thr = _pf(threshold, "threshold", None)
-    cols = _cols(value)
-    rows = value.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        values = value[c].to_numpy()
-        finite = np.isfinite(values)
-        # Unknown (NaN) stays NaN; 1 when finite and > threshold, 0 when finite
-        # and <= threshold (audit §4.6) — mirrors the pandas backend.
-        out[:, i] = np.where(
-            finite,
-            np.where(values > thr, 1.0, 0.0),
-            np.nan,
-        )
-    return _make(value, cols, out)
-
-
-def cash_flow_lifecycle_stage(operating, investing, financing):
-    cols = _cols(operating, investing, financing)
-    rows = operating.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        o = operating[c].to_numpy()
-        iv = investing[c].to_numpy()
-        f = financing[c].to_numpy()
-        valid = np.isfinite(o) & np.isfinite(iv) & np.isfinite(f)
-        out[:, i] = np.where(valid & (o > 0) & (iv < 0) & (f < 0), 1.0,
-            np.where(valid & (o > 0) & (iv < 0) & (f >= 0), 2.0,
-            np.where(valid & (o <= 0) & (iv < 0), 3.0,
-            np.where(valid & (o <= 0) & (iv >= 0), 4.0,
-            np.where(valid & (o > 0) & (iv >= 0) & (f < 0), 5.0, np.nan)))))
-    return _make(operating, cols, out)
 
 
 # ---------------------------------------------------------------------------
@@ -272,67 +139,13 @@ def fin_announcement_lag(period_end_date, pub_date):
 # ---------------------------------------------------------------------------
 
 
-def event_decay_asof(event, half_life=20.0, missing_policy="carry", event_kind="marked"):
-    hl = _pf(half_life, "half_life", 1.0)
-    if missing_policy not in {"carry", "break"}:
-        raise ValueError("missing_policy must be 'carry' or 'break'")
-    kind = str(event_kind).lower()
-    if kind not in {"bool", "marked"}:
-        raise ValueError("event_kind must be 'bool' or 'marked'")
-    weight = 0.5 ** (1.0 / hl)
-    cols = _cols(event)
-    rows = event.height
-    out = np.full((rows, len(cols)), np.nan, dtype=float)
-    for i, c in enumerate(cols):
-        ev = event[c].to_numpy()
-        if kind == "bool":
-            from factor_engine.cleaned_operators.common.polars_state_event import _truth
-            _truth(ev)
-        acc = 0.0
-        seen = False
-        for t in range(rows):
-            finite = bool(np.isfinite(ev[t]))
-            if finite:
-                seen = True
-                # #148: EventBool counts a finite non-zero occurrence as exactly
-                # 1 and a confirmed ``0`` as 0 (no event); MarkedEvent ("marked",
-                # default) keeps the magnitude.
-                if kind == "bool":
-                    contribution = 1.0 if float(ev[t]) != 0.0 else 0.0
-                else:
-                    contribution = float(ev[t])
-                acc = acc * weight + contribution
-            elif not seen:
-                out[t, i] = np.nan
-                continue
-            elif missing_policy == "break":
-                out[t, i] = np.nan
-                seen = False
-                acc = 0.0
-                continue
-            else:  # "carry"（默认）
-                acc = acc * weight
-            out[t, i] = acc
-    return _make(event, cols, out)
-
-
 # ---------------------------------------------------------------------------
 # registration
 # ---------------------------------------------------------------------------
 
 _SPECS: tuple[tuple[str, tuple[str, ...], Callable, str], ...] = (
-    ("ashare_limit_distance", ("close", "upper_limit"), ashare_limit_distance, "Distance to upper limit."),
     ("ashare_limit_up_touch", ("high", "upper_limit", "tick_tolerance"), ashare_limit_up_touch, "High touched upper limit within tolerance."),
     ("ashare_limit_down_touch", ("low", "lower_limit", "tick_tolerance"), ashare_limit_down_touch, "Low touched lower limit within tolerance."),
-    ("ashare_open_at_upper_limit", ("open", "upper_limit", "tick_tolerance"), ashare_open_at_upper_limit, "Opened at the upper limit."),
-    ("ashare_limit_open_failed", ("open", "low", "upper_limit", "tick_tolerance"), ashare_limit_open_failed, "Opened at the limit then broke intraday."),
-    ("ashare_limit_one_price", ("open", "high", "low", "close", "upper_limit", "lower_limit", "side", "tick_tolerance"), ashare_limit_one_price, "One-price limit lock (OHLC at the same limit)."),
-    ("ashare_limit_failed", ("high", "close", "upper_limit", "tick_tolerance"), ashare_limit_failed, "Touched the limit but failed to hold at close."),
-    ("benchmark_excess_return", ("ret", "benchmark_ret"), benchmark_excess_return, "Return minus benchmark return."),
-    ("benchmark_relative_price", ("numerator", "denominator"), benchmark_relative_price, "Numerator over denominator."),
-    ("fin_applicability_mask", ("value", "threshold"), fin_applicability_mask, "1 where value exceeds threshold."),
-    ("cash_flow_lifecycle_stage", ("operating", "investing", "financing"), cash_flow_lifecycle_stage, "Cash-flow lifecycle stage 1-5."),
-    ("event_decay_asof", ("event", "half_life", "missing_policy", "event_kind"), event_decay_asof, "Exponential decay of past events (EventBool counts 1; MarkedEvent keeps magnitude)."),
 )
 
 

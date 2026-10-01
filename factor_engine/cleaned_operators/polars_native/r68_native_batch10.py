@@ -206,12 +206,6 @@ def _trailing_apply(a: np.ndarray, w: int, fn: Callable[[np.ndarray], float]) ->
 # ===========================================================================
 # kernels
 # ===========================================================================
-def _k_atan2(b: dict) -> pl.DataFrame:
-    with np.errstate(invalid="ignore"):
-        out = np.arctan2(_panel(b["y"]), _panel(b["x"]))
-    return _rebuild(b["y"], out)
-
-
 def _k_cs_valid_count(b: dict) -> pl.DataFrame:
     arr = _panel(b["x"])
     counts = np.sum(np.isfinite(arr), axis=1, keepdims=True)
@@ -219,32 +213,10 @@ def _k_cs_valid_count(b: dict) -> pl.DataFrame:
     return _rebuild(b["x"], out)
 
 
-def _cs_impute_bounded(arr: np.ndarray, kind: str, min_finite: Any, label: str) -> np.ndarray:
-    mf = int(min_finite)
-    if mf < 1:
-        raise ValueError(f"{label}: min_finite must be >= 1")
-    finite_count = np.isfinite(arr).sum(axis=1)
-    impute_rows = finite_count >= mf
-    with np.errstate(invalid="ignore", divide="ignore"):
-        stat = np.full(arr.shape[0], np.nan, dtype=float)
-        for r in range(arr.shape[0]):
-            vals = arr[r][np.isfinite(arr[r])]
-            if vals.size:
-                stat[r] = float(np.mean(vals)) if kind == "mean" else float(np.median(vals))
-    out = arr.copy()
-    mask = np.isnan(out) & impute_rows[:, None]
-    out[mask] = np.broadcast_to(stat[:, None], arr.shape)[mask]
-    return out
 
 
-def _k_cs_impute_mean(b: dict) -> pl.DataFrame:
-    arr = _panel(b["x"])
-    return _rebuild(b["x"], _cs_impute_bounded(arr, "mean", b.get("min_finite", 1), "cs_impute_mean"))
 
 
-def _k_cs_impute_median(b: dict) -> pl.DataFrame:
-    arr = _panel(b["x"])
-    return _rebuild(b["x"], _cs_impute_bounded(arr, "median", b.get("min_finite", 1), "cs_impute_median"))
 
 
 def _finite_scalar(value: Any, name: str, *, minimum=None, maximum=None) -> float:
@@ -259,28 +231,6 @@ def _finite_scalar(value: Any, name: str, *, minimum=None, maximum=None) -> floa
     return out
 
 
-def _k_cs_quantile(b: dict) -> pl.DataFrame:
-    arr = _panel(b["x"])
-    p = _finite_scalar(b.get("p", 0.5), "p", minimum=0.0, maximum=1.0)
-    rows, cols = arr.shape
-    out = np.full((rows, cols), np.nan, dtype=float)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        for r in range(rows):
-            vals = arr[r][np.isfinite(arr[r])]
-            if vals.size:
-                q = float(np.quantile(vals, p))
-                out[r, :] = q
-    return _rebuild(b["x"], out)
-
-
-def _k_true_range_pct(b: dict) -> pl.DataFrame:
-    h, l, c = _panel(b["high"]), _panel(b["low"]), _panel(b["close"])
-    prev = _np_shift(c, 1)
-    with np.errstate(invalid="ignore"):
-        tr = np.maximum.reduce([h - l, np.abs(h - prev), np.abs(l - prev)])
-        out = np.where(np.isfinite(prev) & (prev > 0.0), tr / prev, np.nan)
-    return _rebuild(b["close"], out)
 
 
 def _k_atr_acceleration(b: dict) -> pl.DataFrame:
@@ -555,96 +505,6 @@ def _k_FisherTransform(b: dict) -> pl.DataFrame:
     return _rebuild(b["high"], out)
 
 
-def _k_state_transition_rate(b: dict) -> pl.DataFrame:
-    from factor_engine.cleaned_operators.parameter_validation import strict_integer
-    w = strict_integer(b.get("window", 2), "window", minimum=2)
-    state = _panel(b["state"])
-    if not bool(np.all(np.isnan(state) | np.isfinite(state))):
-        raise ValueError(
-            "state panel must contain finite state codes or NaN; ±Inf is out-of-domain"
-        )
-
-    def _rate(chunk: np.ndarray) -> float:
-        if np.any(np.isnan(chunk)):
-            return np.nan
-        pairs = float(chunk.size - 1)
-        return float(np.count_nonzero(np.diff(chunk) != 0.0)) / pairs
-
-    return _rebuild(b["state"], _trailing_apply(state, w, _rate))
-
-
-def _k_category_frequency(b: dict) -> pl.DataFrame:
-    from factor_engine.cleaned_operators.parameter_validation import strict_integer
-    w = strict_integer(b.get("window", 2), "window", minimum=2)
-    state = _panel(b["state"])
-    if not bool(np.all(np.isnan(state) | np.isfinite(state))):
-        raise ValueError(
-            "state panel must contain finite state codes or NaN; ±Inf is out-of-domain"
-        )
-
-    def _freq(chunk: np.ndarray) -> float:
-        if np.any(np.isnan(chunk)):
-            return np.nan
-        cur = chunk[-1]
-        if np.isnan(cur):
-            return np.nan
-        return float(np.count_nonzero(chunk == cur)) / float(w)
-
-    return _rebuild(b["state"], _trailing_apply(state, w, _freq))
-
-
-def _k_capital_change_age(b: dict) -> pl.DataFrame:
-    frame = b["change_date"]
-    if isinstance(frame, pl.Series):
-        frame = frame.to_frame()
-    cols = _ncols(frame)
-    index_array = _time_numpy(frame)
-    if index_array is None:
-        raise ValueError("capital_change_age: panel has no time axis")
-    out = np.full((frame.height, len(cols)), np.nan, dtype=float)
-    for j, c in enumerate(cols):
-        raw = frame[c].to_numpy(allow_copy=True)
-        last_pos: int | None = None
-        for i in range(frame.height):
-            cd = raw[i]
-            if cd is not None:
-                try:
-                    if isinstance(cd, float) and np.isnan(cd):
-                        cd_ts = None
-                    elif isinstance(cd, np.datetime64):
-                        cd_ts = None if np.isnat(cd) else (
-                            cd.astype("datetime64[D]").astype("datetime64[ns]")
-                        )
-                    elif isinstance(cd, str):
-                        cd_ts = np.datetime64(cd, "D").astype("datetime64[ns]")
-                    elif isinstance(cd, (int, float, np.integer, np.floating)):
-                        # pandas authority: pd.Timestamp(<number>) treats the
-                        # value as nanoseconds since epoch; mirror that (and
-                        # its .normalize() day-floor) for numeric panels.
-                        if isinstance(cd, (float, np.floating)) and np.isnan(cd):
-                            cd_ts = None
-                        else:
-                            cd_ts = (
-                                np.datetime64(int(np.floor(cd)), "ns")
-                                .astype("datetime64[D]")
-                                .astype("datetime64[ns]")
-                            )
-                    elif hasattr(cd, "year"):
-                        # datetime.date / datetime.datetime
-                        cd_ts = np.datetime64(cd, "D").astype("datetime64[ns]")
-                    else:
-                        cd_ts = None
-                    if cd_ts is not None:
-                        pos_arr = np.searchsorted(index_array, cd_ts, side="left")
-                        if 0 <= pos_arr < len(index_array) and pos_arr <= i:
-                            last_pos = int(pos_arr)
-                        else:
-                            last_pos = None
-                except Exception:
-                    last_pos = None
-            if last_pos is not None:
-                out[i, j] = float(i - last_pos)
-    return _rebuild(frame, out)
 
 
 def _k_ts_overnight_intraday_sign_agreement(b: dict) -> pl.DataFrame:
@@ -736,34 +596,6 @@ def _k_index_membership_age(b: dict) -> pl.DataFrame:
 _ZERO_PERMITTED_SEMANTICS = ("structural_zero", "outside_top_k")
 
 
-def _k_relation_entropy(b: dict) -> pl.DataFrame:
-    panels = [v for v in (b.get(f"s{i}") for i in range(1, 11)) if v is not None]
-    missing_semantic = str(b.get("missing_semantic", "outside_top_k"))
-    choices = ("structural_zero", "outside_top_k", "not_reported", "source_missing", "unknown")
-    if missing_semantic not in choices:
-        raise ValueError(
-            f"missing_semantic must be one of {choices!r}; got {missing_semantic!r}"
-        )
-    if len(panels) < 2:
-        raise ValueError("relation_entropy requires at least two ranked panels")
-    base = panels[0]
-    arrays = [_panel(p) for p in panels]
-    shape = arrays[0].shape
-    for a in arrays[1:]:
-        if a.shape != shape:
-            raise ValueError("relation_entropy panels must share the exact same grid")
-    stacked = np.stack(arrays, axis=0)
-    if missing_semantic in _ZERO_PERMITTED_SEMANTICS:
-        values = np.nan_to_num(stacked, nan=0.0)
-    else:
-        values = stacked
-    with np.errstate(divide="ignore", invalid="ignore"):
-        total = values.sum(axis=0)
-        shares = values / total
-        entropy = -np.sum(shares * np.log(np.where(shares > 0, shares, 1.0)), axis=0)
-        count = (np.isfinite(values)).sum(axis=0).astype(float)
-        normalized = np.where(count > 1, entropy / np.log(count), 0.0)
-    return _rebuild(base, np.where(total > 0, normalized, np.nan))
 
 
 def _k_ts_partial_corr(b: dict) -> pl.DataFrame:
@@ -1446,7 +1278,6 @@ def _k_intraday_barrier_approach_acceleration(b: dict) -> pl.DataFrame:
 
 _KERNELS: dict[str, Any] = {
     "ts_expectile_beta_spread": _k_ts_expectile_beta_spread,
-    "atan2": _k_atan2,
     "index_membership_age": _k_index_membership_age,
     "ts_overnight_intraday_sign_agreement": _k_ts_overnight_intraday_sign_agreement,
     "ts_ar_prior_forecast": _k_ar_prior("forecast", fit_lag=1),
@@ -1467,29 +1298,69 @@ _KERNELS: dict[str, Any] = {
     "ts_huber_regression_coeff_prior": _k_multi_regression("huber", None, "coeff", fit_lag=1),
     "ts_huber_regression_forecast_error": _k_multi_regression("huber", None, "resid", fit_lag=1),
     "ts_expectile_regression_coeff_prior": _k_expectile_regression("coeff", fit_lag=1),
-    "capital_change_age": _k_capital_change_age,
     "ts_multi_regression_coeff_stability": _k_multi_regression("ols", None, "coeff", fit_lag=1, stability_k=5),
-    "state_transition_rate": _k_state_transition_rate,
-    "cs_impute_median": _k_cs_impute_median,
-    "relation_entropy": _k_relation_entropy,
     "ts_ar_prior_coeff": _k_ar_prior("coeff", fit_lag=1),
-    "true_range_pct": _k_true_range_pct,
     "wavelet_detail_energy_ratio": _k_wavelet_detail_energy_ratio,
     "ts_multi_regression_adjusted_r2_prior": _k_multi_regression("ols", None, "r2_adj", fit_lag=1),
     "FisherTransform": _k_FisherTransform,
-    "category_frequency": _k_category_frequency,
     "report_change_coherence": _k_report_change_coherence,
-    "cs_quantile": _k_cs_quantile,
     "ts_nth_value": _k_ts_nth_value,
     "ts_multi_regression_forecast_error_z": _k_multi_regression("ols", None, "resid_z", fit_lag=1),
     "ts_ridge_regression_forecast_error_z": _k_multi_regression("ridge", 0.1, "resid_z", fit_lag=1),
-    "cs_impute_mean": _k_cs_impute_mean,
     "ts_multi_regression_coeff_prior": _k_multi_regression("ols", None, "coeff", fit_lag=1),
     "intraday_barrier_approach_acceleration": _k_intraday_barrier_approach_acceleration,
     "ts_quantilogram": _k_ts_quantilogram,
     "RSX": _k_RSX,
     "atr_acceleration": _k_atr_acceleration,
     "group_feature_mode_localization": _k_group_feature_mode_localization,
+}
+
+# Source-bound execution inventory. Each kernel consumes materialized NumPy
+# columns and returns a rebuilt eager DataFrame; none emits Polars Expr nodes.
+_NUMPY_KERNEL_CANONICALS = frozenset({
+    'FisherTransform',
+    'RSX',
+    'atr_acceleration',
+    'cs_valid_count',
+    'fin_earnings_cash_gap_volatility',
+    'fin_earnings_smoothness',
+    'group_feature_mode_localization',
+    'index_membership_age',
+    'intraday_barrier_approach_acceleration',
+    'psar_direction',
+    'report_change_coherence',
+    'state_episode_excursion_balance',
+    'ts_ar_prior_coeff',
+    'ts_ar_prior_forecast',
+    'ts_ar_prior_innovation',
+    'ts_expectile_beta_spread',
+    'ts_expectile_regression_coeff_prior',
+    'ts_expectile_regression_forecast_error',
+    'ts_huber_regression_coeff_prior',
+    'ts_huber_regression_forecast_error',
+    'ts_huber_regression_forecast_error_z',
+    'ts_interval_occupancy_mode_distance',
+    'ts_multi_regression_adjusted_r2_prior',
+    'ts_multi_regression_coeff_prior',
+    'ts_multi_regression_coeff_stability',
+    'ts_multi_regression_forecast_error',
+    'ts_multi_regression_forecast_error_z',
+    'ts_multi_regression_r2_prior',
+    'ts_nth_value',
+    'ts_overnight_intraday_sign_agreement',
+    'ts_partial_corr',
+    'ts_quantilogram',
+    'ts_ridge_regression_coeff_prior',
+    'ts_ridge_regression_forecast_error',
+    'ts_ridge_regression_forecast_error_z',
+    'wavelet_detail_energy_ratio',
+})
+_EXPR_KERNEL_CANONICALS = frozenset()
+if set(_KERNELS) != _NUMPY_KERNEL_CANONICALS | _EXPR_KERNEL_CANONICALS:
+    raise RuntimeError("R68 batch10 kernel execution inventory is out of sync with _KERNELS")
+_KERNEL_EXECUTION_KIND = {
+    **{name: ExecutionKind.POLARS_NUMPY_KERNEL for name in _NUMPY_KERNEL_CANONICALS},
+    **{name: ExecutionKind.POLARS_NATIVE_EXPR for name in _EXPR_KERNEL_CANONICALS},
 }
 
 
@@ -1507,7 +1378,7 @@ def _physical_spec(op: str, source_hash: str) -> PhysicalImplementationSpec:
     return PhysicalImplementationSpec(
         canonical=op,
         backend="polars",
-        execution_kind=ExecutionKind.POLARS_NATIVE_EXPR,
+        execution_kind=_KERNEL_EXECUTION_KIND[op],
         supports_lazy=False,
         supports_streaming=False,
         materializes_full_panel=True,
@@ -1515,7 +1386,7 @@ def _physical_spec(op: str, source_hash: str) -> PhysicalImplementationSpec:
         supports_nan=True,
         supports_inf=True,
         implementation_source_hash=source_hash,
-        emitter_identity=f"{_SOURCE}:pl.Expr/numpy:v1",
+        emitter_identity=f"{_SOURCE}:pl.DataFrame/numpy/pl.DataFrame:v1",
         kernel_identity=f"{_SOURCE}._KERNELS:{op}",
         semantic_contract_hash=hashlib.sha256(
             (op + ":pandas-authority-parity:r68b10").encode()
@@ -1567,6 +1438,9 @@ def register_r68_native_batch10() -> list[str]:
         record_backend_replacement_after,
         replace_backend,
     )
+    from factor_engine.backend.polars_backend_kind import (
+        PolarsImplementationKind, canonical_polars_kind,
+    )
 
     registered: list[str] = []
     source_hash = hashlib.sha256(open(__file__, "rb").read()).hexdigest()
@@ -1583,28 +1457,15 @@ def register_r68_native_batch10() -> list[str]:
             continue
         current = OperatorRegistry.get(canonical, "polars", mode="any")
         if current is not None:
-            # First *genuine native* registrant wins.  The registered op's own
-            # _physical_spec is authoritative; canonical_polars_kind is only a
-            # heuristic that mislabels simple UDF delegates (e.g. atan2) as
-            # native, so it is deliberately NOT consulted here.  The
-            # rolling_pack delegate class carries a SHARED class-level
-            # _physical_spec that some audit layers overwrite per canonical, so
-            # a stale NATIVE spec can leak onto a delegate instance — the
-            # delegate module identity is therefore checked explicitly.
-            cur_kind = getattr(
-                getattr(current, "_physical_spec", None), "execution_kind", None
-            )
-            cur_module = getattr(type(current), "__module__", "")
-            is_delegate = (
-                cur_module == "factor_engine.cleaned_operators.rolling_pack"
-                or type(current).__name__ == "_PolarsUdf"
-            )
-            if (
-                cur_kind is ExecutionKind.POLARS_NATIVE_EXPR
-                and not is_delegate
-                and "polars_native" in cur_module
-            ):
-                _SKIP_LOG.append(f"{canonical}: native-current ({cur_module})")
+            # Compare the classifier enum, not ExecutionKind. The classifier
+            # also checks the callable for an actual delegate, so a stale spec
+            # cannot make a pandas wrapper block or replace a native slot.
+            try:
+                cur_kind = canonical_polars_kind(canonical, production_mode=False)
+            except Exception:
+                cur_kind = PolarsImplementationKind.UNSUPPORTED
+            if cur_kind is PolarsImplementationKind.POLARS_NATIVE:
+                _SKIP_LOG.append(f"{canonical}: native-current ({type(current).__module__})")
                 continue  # first native registrant wins
         _SKIP_LOG.append(f"{canonical}: REGISTER")
         migration = replace_backend(
@@ -1645,6 +1506,8 @@ def _install_gap_coverage_repair() -> None:
     def _repaired(*args: Any, **kwargs: Any):
         result = original(*args, **kwargs)
         try:
+            if OperatorRegistry.lifecycle() == "frozen":
+                return result
             register_r68_native_batch10()
         except Exception:
             pass
