@@ -676,6 +676,8 @@ def main():
                         help="number of auto requests in reference verification")
     parser.add_argument("--repeats", type=int, choices=(1, 2), default=1,
                         help="evaluations per auto request in reference verification")
+    parser.add_argument("--batch-repeats", type=int, choices=(2, 3, 4), default=2,
+                        help="evaluations per child in the normal six-order batch run")
     args = parser.parse_args()
     if args.timeout_s <= 0:
         parser.error("timeout-s must be positive")
@@ -853,7 +855,7 @@ def main():
     context = mp.get_context("fork")
     runs = []
     for index, backend in enumerate(order):
-        run = _run_one(context, backend, repeats=2, timeout_s=args.timeout_s)
+        run = _run_one(context, backend, repeats=args.batch_repeats, timeout_s=args.timeout_s)
         run["round"] = index + 1
         runs.append(run)
         print(json.dumps({"round": index + 1, "backend": backend,
@@ -905,7 +907,7 @@ def main():
         "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "request": {"metrics": METRICS, "backend_order": order,
                     "factors": args.factors,
-                    "repeats_per_child": 2, "timeout_s": args.timeout_s,
+                    "repeats_per_child": args.batch_repeats, "timeout_s": args.timeout_s,
                     "shape": shape, "dtype": str(_BATCH.values.dtype),
                     "manifest_sha256": MANIFEST_SHA256, "compact_artifacts": args.compact},
         "source": _public_source_report(source, include_binding=f24_mixed_request), "load_s": load_s,
