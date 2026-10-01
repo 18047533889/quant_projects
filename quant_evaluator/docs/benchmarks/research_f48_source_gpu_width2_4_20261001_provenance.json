@@ -1,0 +1,19 @@
+{
+  "kind": "external_source_fingerprint_check.v1",
+  "receipt": "research_f48_source_gpu_width2_4_20261001.json",
+  "receipt_sha256": "1153a58f14a1bcecea81f21f36677cff6e444e2a4adecfacdfd85dbdbf583587",
+  "head_before": "4a98bd73240036d38ab8133f29666c88dd014ad6",
+  "head_after": "4a98bd73240036d38ab8133f29666c88dd014ad6",
+  "source_sha256_before_and_after": {
+    "quant_evaluator/runtime/source_memory_budget.py": "004a6ceaa1e2d0cd778bbd42ce0ff5a767dee5deaebd45ab29fd82c6ef7ab333",
+    "quant_evaluator/adapters/cos_factor_tile_source.py": "c4bf8537a7aa4e63d2bc606ae3ebf5fdedd29f4ab0136d47d98da8a85555ca7a",
+    "quant_evaluator/scripts/source_width_preparation.py": "2d218a0e0d072110349e91bafb7ce1d252b2263a3f75a287d188c634d51ea457",
+    "quant_evaluator/scripts/benchmark_real_cos_source_batch.py": "445029f2f7c55b1bd7bc7dfd9d8f83320b78a2536b45e323d586a3af2833939d",
+    "quant_evaluator/scripts/benchmark_real_cos_factor_tiles.py": "071e2e1b09632296eae1f593bba20678594366311e4f500fd18eea3ce1055eac",
+    "quant_evaluator/runtime/evaluator.py": "fa616afedba6b769c782f34ad9915e9a2163f4e03235c1c35630a22bf247cbfe",
+    "factor_optimizer/factor_optimizer/research_manifest.py": "4ed34125751aea2cdedc7e75fecc96e3f2f09f5e9fae70afc42ff60486c1c90f"
+  },
+  "checked_source_files": 7,
+  "head_and_checked_source_hashes_unchanged": true,
+  "scope": "External before/after checks of these seven files, not a fingerprint of every imported module or all concurrent host activity. GPU-width comparisons only; no CPU/CUDA or auto certification."
+}
