@@ -1317,6 +1317,11 @@ def _load_all_impl(*, include_research: bool = True) -> None:
 
     register_axis_effects_for_surface()
 
+    # R69 batch A: strict pure-Polars kernels for state_quantile_hysteresis
+    # and state_l2_partial_adjustment (numpy-kernel retirement, no UDF).
+    from factor_engine.cleaned_operators.polars_native.r69_native_batchA import register_r69_native_batch_a
+    register_r69_native_batch_a()
+
     # 100k GO P0#1-followup: complete every registered operator's
     # ``_physical_spec`` with the four 64-hex binding digests that
     # ``PhysicalImplementationSpec`` requires for an immutable physical
