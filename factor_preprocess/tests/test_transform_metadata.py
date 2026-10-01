@@ -105,6 +105,24 @@ def test_fitted_transforms_are_fp_native():
             assert m.implementation_origin == "FP_NATIVE", m.name
 
 
+def test_full_sample_research_transforms_do_not_claim_reusable_fitted_state():
+    """Research admission is distinct from a persisted fit/apply contract."""
+    registry = get_default_registry()
+    for name in ("detect_correlation_regime", "impute_with_fallback"):
+        metadata = registry.get(name)
+        assert metadata.admission == "RESEARCH_ONLY"
+        assert not metadata.causal_safe
+        # Both compute/use full-sample statistics within one call, but expose
+        # no fitted state object for later application.
+        assert not metadata.requires_fit
+        assert metadata.fit_kind == "stateless"
+        assert metadata.implementation_origin == "FP_NATIVE"
+        with pytest.raises(ValueError, match=f"Transform '{name}' is RESEARCH_ONLY"):
+            registry.get_execution(name)
+        # Resolution only: do not invoke the full-sample transform.
+        assert callable(registry.get_execution(name, allow_research=True))
+
+
 def test_fe_operator_ids_match_registry_and_adapter_surface():
     registry = get_default_registry()
     for m in registry.all_transforms():

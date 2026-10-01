@@ -108,7 +108,12 @@ missing before quantile estimation, matching FE `winsorize`.
 |---|---|---|---|---|---|---|---|---|---|
 | `hp_filter` / `hp_decompose` | — | full-sample HP objective (symmetric, non-causal) | FE `ts_hp`-style? none in daily | — | none | no | **no** (OFFLINE_ONLY) | full-sample zero-phase; not production-causal; no FE daily equivalent | **FP_NATIVE** |
 | `bandpass_filter` / `extract_cycle` / `christiano_fitzgerald_filter` / `wavelet_*` | — | full-series filter banks | FE spectral family is separate authoring | — | none | no | **no** (OFFLINE_ONLY) | offline research decompositions | **FP_NATIVE** |
-| `detect_correlation_regime` | — | full-sample regime detector | — | — | none | yes | **no** (RESEARCH_ONLY) | full-sample fitted; research-only | **FP_NATIVE** |
+| `detect_correlation_regime` | — | full-sample regime detector; thresholds are computed and consumed in one call | — | — | none | no reusable fit/apply state | **no** (RESEARCH_ONLY) | full-sample statistics are non-causal; no persisted fit state | **FP_NATIVE** |
+
+`requires_fit` marks reusable fitted state consumed by a later apply call.
+`detect_correlation_regime` and `impute_with_fallback` estimate full-sample
+statistics inside each call. They remain `RESEARCH_ONLY` (`causal_safe=False`)
+with `requires_fit=False`.
 
 ## Routing summary (R61-FI-041)
 

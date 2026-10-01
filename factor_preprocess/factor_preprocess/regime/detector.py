@@ -1,8 +1,9 @@
 """
 Online regime detection for volatility and correlation regimes.
 
-All detectors are causal: state at time t uses only data up to t-1.
-Regime transitions are based on rolling statistics with explicit lags.
+The variance detector uses lagged rolling statistics. The correlation detector
+fits regime boundaries across the full sample, so its labels can depend on
+future observations and it remains research-only.
 """
 import numpy as np
 import pandas as pd
@@ -235,6 +236,7 @@ def detect_correlation_regime(
     -----
     - Computes average pairwise correlation across all value_cols at each time
     - Uses shift(1) to exclude current observation
+    - Fits boundaries with full-sample quantiles, so labels can depend on future observations
     - Regime is constant across all assets/factors at each time point
     - First `window` observations are NaN
 

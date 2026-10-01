@@ -1232,6 +1232,9 @@ def create_default_registry() -> TransformRegistry:
 
     # Correlation-regime boundaries are fit over the full sample. Keep this
     # implementation available for research while failing closed in production.
+    # This transform estimates full-sample boundaries inside each call.
+    # `requires_fit` marks a reusable fit/apply state contract; RegimeState
+    # contains row-aligned outputs and no parameters for a later apply call.
     register_builtin(
         "detect_correlation_regime", detect_correlation_regime, TransformCategory.TEMPORAL,
         version="1.0.0",
