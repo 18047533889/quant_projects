@@ -180,13 +180,35 @@ def test_probe_metrics_batch_single_repeat_and_source_perturbation(typed_inputs)
 
 def test_holding_input_batch_single_repeat(typed_inputs):
     fb, lb, _, _, holding, spec = typed_inputs
-    fb = FactorBatch((fb.factor_ids[0],), fb.time_axis, fb.asset_axis, fb.values[:, :, :1])
     kw = {"holding_returns": holding, "portfolio_spec": spec}
     ids = tuple(i for i in list_all_metric_ids() if i in {
         "max_drawdown", "sharpe_ratio", "calmar_ratio", "sortino_ratio",
     })
     assert len(ids) >= 3
-    _assert_single_batch_repeat(ids, {**kw, "_fb_lb": (fb, lb)})
+    batch = evaluate(fb, lb, metrics=ids, **kw)
+    repeated = evaluate(fb, lb, metrics=ids, **kw)
+    assert _fingerprint(batch) == _fingerprint(repeated)
+    for metric_id in ids:
+        batch_artifact = batch.artifacts[metric_id]
+        assert batch_artifact.factor_axis.factor_ids == fb.factor_ids
+        batch_values = _observable(batch, metric_id)
+        _assert_finite_output(batch_values, metric_id)
+        counts = batch_artifact.provenance.get("observation_counts")
+        assert counts is not None and len(counts) == len(fb.factor_ids)
+        for factor_index, factor_id in enumerate(fb.factor_ids):
+            single_fb = FactorBatch(
+                (factor_id,), fb.time_axis, fb.asset_axis,
+                fb.values[:, :, factor_index:factor_index + 1],
+            )
+            single = evaluate(single_fb, lb, metrics=(metric_id,), **kw)
+            single_again = evaluate(single_fb, lb, metrics=(metric_id,), **kw)
+            assert _fingerprint(single) == _fingerprint(single_again), (metric_id, factor_id)
+            single_artifact = single.artifacts[metric_id]
+            assert single_artifact.factor_axis.factor_ids == (factor_id,)
+            _assert_finite_output(single_artifact.values, metric_id)
+            np.testing.assert_allclose(single_artifact.values[0], batch_values[factor_index], rtol=1e-12, atol=1e-14)
+            single_counts = single_artifact.provenance.get("observation_counts")
+            assert single_counts is not None and single_counts[0] == counts[factor_index]
 
 
 def test_turnover_cost_repeat_matches_mean_cost_drag_oracle(typed_inputs):
@@ -207,7 +229,6 @@ def test_turnover_cost_repeat_matches_mean_cost_drag_oracle(typed_inputs):
 
 def test_holding_input_source_perturbation(typed_inputs):
     fb, lb, _, _, holding, spec = typed_inputs
-    fb = FactorBatch((fb.factor_ids[0],), fb.time_axis, fb.asset_axis, fb.values[:, :, :1])
     changed = HoldingReturnPanel(
         np.ascontiguousarray(holding.values * 1.25), holding.time_axis, holding.asset_axis,
         holding.source_ref + ":changed", holding.price_basis,
