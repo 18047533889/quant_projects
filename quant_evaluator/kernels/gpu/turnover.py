@@ -45,11 +45,19 @@ def batched_turnover(factor_values, return_series: bool = False):
     return cp.nanmean(turnover[1:], axis=0)  # (F,)
 
 
-def batched_membership_turnover(factor_values, quantile=.9):
+def batched_membership_turnover(
+    factor_values, quantile=.9, *, return_device: bool = False,
+):
     """CPU temporal.compute_factor_turnover_rate semantics, shape (T-1,F).
 
     This diagnostic uses the jointly observed universe, not executed trades.
     Its denominator is the joint security count, not gross traded notional.
+    The explicit ``return_device=True`` option is intended for internal GPU
+    callers; the default preserves the established wrapper behavior.
     """
     from .tradability import batched_factor_turnover_rate
-    return _import_cp().asarray(batched_factor_turnover_rate(factor_values, quantile))
+    if type(return_device) is not bool:
+        raise TypeError("return_device must be a boolean")
+    result = batched_factor_turnover_rate(
+        factor_values, quantile, return_device=return_device)
+    return result if return_device else _import_cp().asarray(result)

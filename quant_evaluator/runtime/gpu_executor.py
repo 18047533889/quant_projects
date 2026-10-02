@@ -705,7 +705,9 @@ class GPUExecutor:
                     scalar[m] = _to_cpu(cp.where(count >= min_periods - 1, cp.nanmean(turnover, axis=0), cp.nan))
                 elif m == "factor_turnover_rate":
                     from quant_evaluator.kernels.gpu.turnover import batched_membership_turnover
-                    membership = batched_membership_turnover(factors, quantile=parameters.get("quantile", .9))
+                    membership = batched_membership_turnover(
+                        factors, quantile=parameters.get("quantile", .9),
+                        return_device=True)
                     count = cp.isfinite(membership).sum(axis=0)
                     scalar[m] = _to_cpu(cp.where(count >= min_periods, cp.nanmean(membership, axis=0), cp.nan))
                 counts[m] = _to_cpu(count)

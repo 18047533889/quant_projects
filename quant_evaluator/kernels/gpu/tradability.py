@@ -70,7 +70,9 @@ def _nanquantile_rows(safe, n_fin, q):
     return cp.where(frac >= 0.5, upper_lerp, lower_lerp)  # (R,)
 
 
-def batched_factor_turnover_rate(factor_values, quantile: float = 0.9):
+def batched_factor_turnover_rate(
+    factor_values, quantile: float = 0.9, *, return_device: bool = False,
+):
     """Top/bottom quantile membership turnover, (T-1, F).
 
     Matches ``compute_factor_turnover_rate``: for each date and factor the
@@ -79,20 +81,23 @@ def batched_factor_turnover_rate(factor_values, quantile: float = 0.9):
     turnover = mean of membership changes between adjacent days.  NaN where
     fewer than 10 finite assets on either date.
     """
+    if not isinstance(return_device, bool):
+        raise TypeError("return_device must be a boolean")
     cp = _import_cp()
     x = _as_tfn(factor_values)
     T, F, N = x.shape
     if not (0.0 < quantile < 1.0):
         raise ValueError(f"quantile must be in (0, 1), got {quantile}")
     if T < 2:
-        return cp.full((0, F), cp.nan, dtype=cp.float64).get()
+        result = cp.full((0, F), cp.nan, dtype=cp.float64)
+        return result if return_device else result.get()
     out = cp.full((T - 1, F), cp.nan, dtype=cp.float64)
 
     # Every adjacent pair requires at least ten finite values on both dates.
     # Besides avoiding useless work, this handles N < 2 without asking the
     # quantile helper to index a nonexistent second order statistic.
     if N < 10:
-        return out.get()
+        return out if return_device else out.get()
 
     # A date appears in two adjacent pairs, so sorting both sides of every
     # pair repeats nearly every cross-sectional quantile sort. Stream new date
@@ -144,7 +149,7 @@ def batched_factor_turnover_rate(factor_values, quantile: float = 0.9):
         out[start:stop] = cp.where(ok, rate, cp.nan).reshape(stop - start, F)
         threshold_prev = cp.array(threshold_new[-1], copy=True)
         del threshold_new
-    return out.get()
+    return out if return_device else out.get()
 
 
 def batched_weighted_turnover(weights, position_sizes):
