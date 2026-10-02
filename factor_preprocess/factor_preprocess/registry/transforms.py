@@ -1604,6 +1604,12 @@ def create_default_registry() -> TransformRegistry:
     )
 
     registry.enrich(
+        "robust_ewma", implementation_origin="FE_COMPOSITE", fe_operator_id=None,
+        fit_kind="stateless",
+        fe_equivalent_semantics="FE_COMPOSITE:long_robust_ewm.lagged_robust_ewma:v1",
+    )
+
+    registry.enrich(
         "one_sided_iir_lowpass", implementation_origin="FE_COMPOSITE",
         fe_operator_id=None, fit_kind="stateless",
         fe_equivalent_semantics="FE_COMPOSITE:long_ewm.lagged_iir_lowpass:v1",
@@ -1650,11 +1656,9 @@ def create_default_registry() -> TransformRegistry:
     # ``implementation_origin`` is never None on a production transform so a
     # routing audit can enumerate the full catalog without guessing).
     for _meta in registry.all_transforms():
-        if _meta.name in {
-            "cs_rank", "cs_demean", "cs_winsor",
-            "forward_fill", "ols_neutralize", "industry_neutral", "rolling_zscore", "ewma", "one_sided_iir_lowpass",
-            "size_neutral", "dual_neutral", "trailing_sma", "rolling_mean", "trailing_median", "rolling_std",
-        }:
+        # Preserve the declared routing authority; a second name allowlist
+        # can silently overwrite newly registered FE composite bindings.
+        if _meta.implementation_origin in {"FE_OPERATOR", "FE_COMPOSITE"}:
             continue
         _kind = "fitted" if _meta.requires_fit else "stateless"
         registry.enrich(

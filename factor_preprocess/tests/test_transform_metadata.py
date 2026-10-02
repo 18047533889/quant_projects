@@ -87,6 +87,7 @@ def test_fe_composite_set_and_recipe_identities_are_exact():
         "rolling_zscore": "FE_COMPOSITE:long_smoothing.lagged_zscore:v1",
         "ewma": "FE_COMPOSITE:long_smoothing.lagged_ewma:v1",
         "one_sided_iir_lowpass": "FE_COMPOSITE:long_ewm.lagged_iir_lowpass:v1",
+        "robust_ewma": "FE_COMPOSITE:long_robust_ewm.lagged_robust_ewma:v1",
     }
     for name in ("ols_neutralize", "industry_neutral", "size_neutral", "dual_neutral"):
         expected[name] = "FE_COMPOSITE:long_neutralization.ols_effective_rank:v1"

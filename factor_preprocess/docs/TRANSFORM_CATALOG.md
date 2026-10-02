@@ -14,10 +14,10 @@
 | `rolling_mean` | `window, min_periods=None` | 时间/严格滞后；生产；FE_COMPOSITE | None=window；$`z_t=\mathrm{mean}(x_{t-w:t-1})`$，有限数不足为 NaN；复用 `FE_COMPOSITE:long_smoothing.lagged_mean:v1`，与 `trailing_sma` 共用执行器。 |
 | `rolling_std` | `window, min_periods=None, ddof=1` | 时间/严格滞后；生产；FE_COMPOSITE | $`z_t=\mathrm{std}_{ddof}(x_{t-w:t-1})`$；`FE_COMPOSITE:long_smoothing.lagged_std:v1`。 |
 | `rolling_zscore` | 同上 | 时间/历史；生产；FP→FE_COMPOSITE | $`z_t=(x_t-\bar x_{t-1,w})/s_{t-1,w}`$ 当前值仅进分子；按 IEEE 除法，`0/0` 为 NaN、非零/0 为带符号 Inf；FE recipe `FE_COMPOSITE:long_smoothing.lagged_zscore:v1`。 |
-| `ewma` | `halflife, min_periods=1` | 时间/严格滞后；生产；FP | 对 shift(1) 做 `ewm(adjust=False)`：$`z_t=(1-\alpha)z_{t-1}+\alpha x_{t-1},\ \alpha=1-e^{-\ln2/h}`$。 |
+| `ewma` | `halflife, min_periods=1` | 时间/严格滞后；生产；FE_COMPOSITE | 对 shift(1) 做 `ewm(adjust=False, ignore_nulls=False)`；相邻有限输入满足 $`z_t=(1-\alpha)z_{t-1}+\alpha x_{t-1},\ \alpha=1-e^{-\ln2/h}`$；缺口按原始行间距加权；recipe `FE_COMPOSITE:long_smoothing.lagged_ewma:v1`。 |
 | `trailing_sma` | `window, min_periods=None` | 时间/严格滞后；生产；FE_COMPOSITE | lagged 窗口均值；None=window；`FE_COMPOSITE:long_smoothing.lagged_mean:v1`。
 | `trailing_median` | 同上 | 时间/严格滞后；生产；FE_COMPOSITE | $`z_t=\mathrm{median}(x_{t-w:t-1})`$；`FE_COMPOSITE:long_smoothing.lagged_median:v1`。
-| `robust_ewma` | `halflife, winsor_std=4, min_periods=1` | 时间/严格滞后；生产；FP | lagged 值先按 10 期、至少2点的 $`\mu\pm cs`$ 夹断，再 EWMA；非正 c 钳为 $`10^{-12}`$。 |
+| `robust_ewma` | `halflife, winsor_std=4, min_periods=1` | 时间/严格滞后；生产；FE_COMPOSITE | lagged 值先按 10 期、至少2点的 $`\mu\pm cs`$ 夹断，再 EWMA；非正 c 钳为 $`10^{-12}`$。公式、缺口规则和调用见 [原生稳健 EWMA](ROBUST_EWMA_FE_COMPOSITE_20261002.md)。 |
 | `kama` | `period_fast=2, period_slow=30, period_er=10, use_current=False` | 时间/默认严格滞后；生产；FP | $`ER=\lvert x_t-x_{t-p}\rvert/\sum\lvert\Delta x\rvert,\ SC=[ER(a_f-a_s)+a_s]^2,\ K_t=K_{t-1}+SC(x_t-K_{t-1})`$ 平路径 ER=0；缺失效率保持前值。`use_current=True` 需外部 DecisionClock 证明。 |
 | `one_sided_iir_lowpass` | `alpha` | 时间/严格滞后；生产；FE_COMPOSITE | $`z_t=(1-\alpha)z_{t-1}+\alpha x_{t-1},\quad0\lt\alpha\le1`$；非有限滞后重置状态；recipe `FE_COMPOSITE:long_ewm.lagged_iir_lowpass:v1`。默认搜索域 `0.05–0.5`，直接调用范围 `(0,1]`。 |
 | `kalman_local_level` | `process_noise, measurement_noise` | 时间/严格滞后；生产；FP | $`P^-=P+q,\ K=P^-/(P^-+r),\ m=m^-+K(x_{t-1}-m^-)`$；lagged NaN 输出 NaN，并把水平与协方差状态都重置；下一有限值重新播种，绝非“只预测”。 |

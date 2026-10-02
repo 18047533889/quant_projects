@@ -10,6 +10,7 @@ ROLLING_STD_RECIPE = "FE_COMPOSITE:long_smoothing.lagged_std:v1"
 ROLLING_ZSCORE_RECIPE = "FE_COMPOSITE:long_smoothing.lagged_zscore:v1"
 EWMA_RECIPE = "FE_COMPOSITE:long_smoothing.lagged_ewma:v1"
 IIR_RECIPE = "FE_COMPOSITE:long_ewm.lagged_iir_lowpass:v1"
+ROBUST_EWMA_RECIPE = "FE_COMPOSITE:long_robust_ewm.lagged_robust_ewma:v1"
 
 
 def get_fe_composite_executor(name: str, recipe_identity: str | None):
@@ -22,6 +23,7 @@ def get_fe_composite_executor(name: str, recipe_identity: str | None):
         "rolling_zscore": ROLLING_ZSCORE_RECIPE,
         "ewma": EWMA_RECIPE,
         "one_sided_iir_lowpass": IIR_RECIPE,
+        "robust_ewma": ROBUST_EWMA_RECIPE,
     }
     if name not in recipes or recipe_identity != recipes[name]:
         raise GovernanceError(f"FE composite recipe is not registered for {name!r}")
@@ -41,6 +43,13 @@ def get_fe_composite_executor(name: str, recipe_identity: str | None):
         except (ImportError, ModuleNotFoundError):
             return None
         return execute_iir_lowpass
+    if name == "robust_ewma":
+        try:
+            import polars  # noqa: F401
+            from factor_engine.backend.long_robust_ewm import lagged_robust_ewma  # noqa: F401
+        except (ImportError, ModuleNotFoundError):
+            return None
+        return execute_robust_ewma
     try:
         import polars  # noqa: F401
         from factor_engine.backend.polars_expr_emitter import compile_plan_to_polars  # noqa: F401
@@ -113,4 +122,17 @@ def execute_iir_lowpass(values: pd.DataFrame, alpha: float,
     return lagged_iir_lowpass(
         values, alpha=alpha, asset_col=asset_col, time_col=time_col,
         value_col=value_col,
+    ).rename(None)
+
+
+def execute_robust_ewma(values: pd.DataFrame, halflife: float,
+                        winsor_std: float = 4.0, min_periods: int = 1,
+                        asset_col: str = "asset_id", time_col: str = "date",
+                        value_col: str = "value") -> pd.Series:
+    """Delegate lagged rolling-winsorized EWMA to the distinct FE recipe."""
+    from factor_engine.backend.long_robust_ewm import lagged_robust_ewma
+    return lagged_robust_ewma(
+        values, halflife=halflife, winsor_std=winsor_std,
+        min_periods=min_periods, asset_col=asset_col,
+        time_col=time_col, value_col=value_col,
     ).rename(None)
