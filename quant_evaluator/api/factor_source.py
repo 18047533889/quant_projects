@@ -242,6 +242,7 @@ def evaluate_factor_source_batch(
         "auto_backend_evidence_artifacts": receipt["auto_backend_evidence_artifacts"],
         "execution_receipt": receipt,
         "auto_backend_evidence_status": receipt["auto_backend_evidence_status"],
+        "admitted_source_tile_size": memory_tile_limit,
         "effective_max_tile_size": effective_tile_size,
         "source_snapshot_id": metadata.snapshot_id,
         "source_api": "columnar_factor_source_v1",

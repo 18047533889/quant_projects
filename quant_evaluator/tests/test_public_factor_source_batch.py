@@ -103,6 +103,7 @@ def test_source_memory_hint_bounds_execution_without_changing_declared_cap(backe
     assert source.max_tile_size == 5
     assert source.reads == [(i, i + 1) for i in range(5)]
     assert result.metadata["effective_max_tile_size"] == 1
+    assert result.metadata["admitted_source_tile_size"] == 1
     assert result.metadata["execution_receipt"]["admitted_source_tile_size"] == 1
     _assert_against_full_cpu(result, evaluate(batch, label, metrics=metrics, backend="cpu"), metrics)
 

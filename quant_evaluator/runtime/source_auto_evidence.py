@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 
-SOURCE_AUTO_EVIDENCE_VERSION = "source_routes_20261002_v6"
+SOURCE_AUTO_EVIDENCE_VERSION = "source_routes_20261002_v7"
 SOURCE_F61_ALL_SHAPES = frozenset({(2586, 5461, 61), (2400, 5000, 61)})
 SOURCE_F8_RANK_PAIR_SHAPE = (2586, 5461, 8)
 
@@ -61,6 +61,16 @@ class SourceAutoEvidence:
 # three has measured tile widths 8 and 16; it selects the largest certified
 # width no greater than the caller's cap. No other route is interpolated.
 SOURCE_AUTO_EVIDENCE = (
+    SourceAutoEvidence(
+        "real_cos_f48_mixed_three_cap16_tile2", (2586, 5461, 48), _MIXED_THREE,
+        minimum_requested_tile=16, exact_requested_tile=16,
+        certified_tile_widths=(2,),
+        legacy_reason="bounded_f48_mixed_three_gpu_cap16_tile2",
+        evidence_artifacts=(
+            "quant_evaluator/docs/benchmarks/real_cos_f48_source_cpu_first_telemetry_20261002.json",
+            "quant_evaluator/docs/benchmarks/real_cos_f48_source_cuda_first_telemetry_20261002.json",
+            "quant_evaluator/docs/benchmarks/f48_cap16_default_candidate_retry_20261002.json"),
+        evidence_status="measured_source_ab"),
     # Opposite-order source A/B and integrated candidate verification cover
     # only this exact shape, dtype, metric set and requested tile width.
     SourceAutoEvidence(

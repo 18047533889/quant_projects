@@ -5,7 +5,7 @@
 维护者已保存 2,586 日×5,461 股票×48 因子的 CPU/严格 CUDA 源端 A/B。
 两份记录采用相反运行顺序，比较 RankIC、分位收益差和因子换手率。
 维护者在候选验证通过后，将正式选择器中的该条证据注册为
-`measured_source_ab`，版本为 `source_routes_20261002_v6`。
+`measured_source_ab`。当前版本 `source_routes_20261002_v7` 另含请求上限 16、执行宽度 2 的条目。
 
 历史 `--auto-f48-references` 命令用于独立基准进程内的候选注入，要求注册表
 仍处于 pending 状态。注册后请用 `--verify-auto` 验证普通 auto；候选工具会
@@ -83,8 +83,9 @@ print(result.metadata["auto_backend_reason"])
 
 本条注册只覆盖 2,586 日、5,461 股票、48 因子、float64 因子和标签，以及上述
 三指标集合。集合内重排指标不会改变选择，重复或增减指标会超出范围。
-有效请求 tile 上限须为 2；`max_tile_size` 未传时采用源声明的上限，不能假定
-任意源的默认上限都是 2。F47、F49、F63、F64、F65 等形状没有从本证据获得准入。
+本条 cap2 的有效请求 tile 上限须为 2；新增 cap16 条目要求上限恰为 16，
+两者均执行二因子 tile。`max_tile_size` 未传时采用源声明的上限。
+F47、F49、F63、F64、F65 等形状没有从这两条证据获得准入。
 不满足范围或 GPU 资源门槛时，普通 auto 回退 CPU，并在 metadata 中记录原因。
 该范围的速度结论不等于任意数据、任意指标的全局最快。
 
@@ -111,9 +112,11 @@ GPU 宽度，auto 退回 CPU，原因是
 `source_memory_budget_outside_certified_tile`。
 调用方需给自定义组装回调声明额外临时内存；估算不覆盖进程 RSS 的全部开销。
 
-本轮正在验证声明上限 16、公开调用省略 `max_tile_size` 的 F48 路径。
-该路径尚未获得本条 cap2 证据的准入，维护者不能把候选注入运行当作普通 auto。
-此前 cap2 记录的源摘要也不证明这些新增内存逻辑的代码等价性。
+维护者已完成声明上限 16、公开调用省略 `max_tile_size` 的 F48 验证。
+正式条目为 `real_cos_f48_mixed_three_cap16_tile2`，auto 原因是
+`bounded_f48_mixed_three_gpu_cap16_tile2`。4 GiB 源预算允许批宽 5，
+选择器仍采用经过测量的执行宽度 2；你不能将内存允许宽度当作性能最优宽度。
+此前 cap2 记录的源摘要不证明本轮内存逻辑的代码等价性。
 
 ## 宽度 2/4 的追加对照
 
@@ -122,3 +125,54 @@ GPU 宽度，auto 退回 CPU，原因是
 61.083 / 58.398 秒，宽度 4 为 60.257 / 58.800 秒；
 中位数为 59.740 / 59.529 秒，差约 0.35%，样本耗时范围重叠。
 结果比较通过，但这次对照不足以证明宽度 4 稳定胜出；正式路径继续采用已验证宽度 2。
+
+## 正式默认 cap16 路径的使用与记录
+
+你可省略公开 API 的批宽参数，前提是源声明上限为 16，且满足上文的精确形状、
+float64 和三指标集合。COS 源工厂的声明上限默认值为 16。
+
+```python
+try:
+    result = evaluate_factor_source_batch(
+        source, labels,
+        metrics=("rank_ic", "quantile_spread", "factor_turnover_rate"),
+        backend="auto",
+    )
+    print(result.metadata["auto_backend_reason"])
+    print(result.metadata["admitted_source_tile_size"])  # 本次资源配置为 5
+    print(result.metadata["effective_max_tile_size"])   # 已验证执行宽度为 2
+finally:
+    source.close()
+```
+
+仍可通过 `backend="cpu"` 或 `backend="cuda_strict"` 指定后端，
+并用 `max_tile_size` 限制批宽。auto 对其他请求上限保持现有准入边界；
+cap16 证据没有覆盖 cap8、cap15、cap17 或任意因子数量。
+
+维护者保留首轮失败记录 `f48_cap16_default_candidate_20261002.json`：
+其数值与读取比较通过，但 API 顶层 metadata 漏报内存允许批宽，
+导致路线检查失败。修复后，候选重跑记录
+`f48_cap16_default_candidate_retry_20261002.json` 通过。
+随后，维护者运行正式选择器、无候选注入的默认调用，记录为
+`f48_cap16_ordinary_default_auto_20261002.json`：
+
+- 默认 auto 为 56.159 秒，显式 CUDA tile2 为 54.847 秒。
+- 两个请求都读取 24 个二因子 tile，覆盖 48 因子和 144 个标量结果。
+- 历史参考与本轮直接对照的数值、有效值掩码和观测数检查通过。
+- 两次 GPU 峰值为 2,586,991,616 字节，OOM 重试为零。
+- 声明范围内源摘要前后相同：
+  `f3dbf3243f54954161097677ad1406b258a221d32cdda8bf205ef6bc41357870`。
+
+这次测试没有重跑 CPU；维护者不以历史 CPU 耗时宣称本轮 CPU/GPU 加速比。
+追踪到的传输字节不覆盖内核内部自行发起的传输；GPU 换手率路径的隐式
+主机往返仍待单独修复和计量。这项准入也没有证明所有后端或全部指标的最优性能。
+
+复验默认正式路径时使用新输出文件名，并沿用上文授权的数据环境：
+
+```bash
+.venv/bin/python -m quant_evaluator.scripts.benchmark_f48_cap16_auto \
+  --ordinary \
+  --references quant_evaluator/docs/benchmarks/real_cos_f48_source_cpu_first_telemetry_20261002.json \
+               quant_evaluator/docs/benchmarks/real_cos_f48_source_cuda_first_telemetry_20261002.json \
+  --output quant_evaluator/docs/benchmarks/f48_cap16_ordinary_UNIQUE.json
+```

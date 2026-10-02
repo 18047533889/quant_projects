@@ -55,6 +55,10 @@ least 14 GiB effective free VRAM. They are:
 - 2586 × 5461 × 32 factors with that same metric pair and an effective source
   tile width of 2, or with the exact three-metric set `rank_ic`,
   `quantile_spread`, and `factor_turnover_rate` at tile width 2.
+- 2586 × 5461 × 48 factors with exactly `rank_ic`, `quantile_spread`, and
+  `factor_turnover_rate`. Requested tile cap must be exactly 2 or 16; both
+  routes execute width 2. A source declaring cap 16 can omit the public API
+  `max_tile_size` argument. See [F48 default-route evidence](benchmarks/F48_AUTO_ADMISSION_20261002.md).
 - 2586 × 5461 × 61 factors with the exact 15-metric set listed above, with
   `rank_ic` plus `quantile_spread` plus `factor_turnover_rate`, with the single
   metric `pearson_ic`, or with the four-metric Pearson chain
