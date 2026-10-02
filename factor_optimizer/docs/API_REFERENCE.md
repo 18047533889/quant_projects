@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**82 个 Python 模块、957 个公开函数/类/方法定义**。
+扫描实际包目录：**83 个 Python 模块、958 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -68,6 +68,7 @@
 | [factor_optimizer/research_diagnostics.py](../factor_optimizer/research_diagnostics.py) | 1 | TRAIN-only multi-dimensional research diagnosis using QE metric authorities. |
 | [factor_optimizer/research_final_report.py](../factor_optimizer/research_final_report.py) | 3 | Authority-side final research reporting; never called by candidate search. |
 | [factor_optimizer/research_fitness.py](../factor_optimizer/research_fitness.py) | 12 | QE-owned research portfolio metrics and joint paired selection policy. |
+| [factor_optimizer/research_ic_antithetic.py](../factor_optimizer/research_ic_antithetic.py) | 1 | Exact sign-antithetic RankIC cache support for adjacent TRAIN proposals. |
 | [factor_optimizer/research_manifest.py](../factor_optimizer/research_manifest.py) | 6 | Bind declared COS factor values to their exact research landing record. |
 | [factor_optimizer/search/__init__.py](../factor_optimizer/search/__init__.py) | 0 | Search orchestration for factor mutation optimization. |
 | [factor_optimizer/search/categorical_strategy.py](../factor_optimizer/search/categorical_strategy.py) | 10 | Categorical search strategy (TPE-style) for treatment auto-optimization. |
@@ -6705,7 +6706,7 @@ At most two IC references, private to one batch's TRAIN search.
 
 ### optimize_factor_batch
 
-[实际实现](../factor_optimizer/research_batch.py#L460)。
+[实际实现](../factor_optimizer/research_batch.py#L474)。
 
 Optimize aligned QE contracts automatically, preserving every input ID.
 
@@ -6881,6 +6882,20 @@ QE metric inputs share signal availability, never ex-post label membership.
 Recompute all nonlinear metrics within each shared moving-block draw.
 
 参数：`(raw_series, candidate_series, config)`。
+
+## factor_optimizer/research_ic_antithetic.py
+
+Exact sign-antithetic RankIC cache support for adjacent TRAIN proposals.
+
+显式导出（含重导出）：`cache_negated_candidate_ic`。
+
+### cache_negated_candidate_ic
+
+[实际实现](../factor_optimizer/research_ic_antithetic.py#L47)。
+
+Cache exact sign-opposite IC and return its normal key, or None to fall back.
+
+参数：`(candidate_cache, candidate_values, common_mask, target, minimum_assets, positive_ic)`。
 
 ## factor_optimizer/research_manifest.py
 
@@ -10856,12 +10871,13 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
-| `factor_optimizer/research_batch.py` | `0a223c81c0f5a49d3c2cbb4b2eb181b33196f285b20617aeef5fe13b12879307` |
+| `factor_optimizer/research_batch.py` | `41a83d067d6abf41c824f7d250a631bc0b054d278c8ef255404ba80857f73a48` |
 | `factor_optimizer/research_batch_diagnostics.py` | `0ec5186c413814db6457342e97236b582e95a460033c11a6804b815c64d24b89` |
 | `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
 | `factor_optimizer/research_diagnostics.py` | `054ee2ad344395812656f1a7991983c58cade69e8c0b524d98981258cd6947ad` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |
 | `factor_optimizer/research_fitness.py` | `c7021a482a74b691f68ae6b706355b7f7c9544e8658d5aa81a921cceef4e6494` |
+| `factor_optimizer/research_ic_antithetic.py` | `b6b5241e9925bb7d4145c7005be6aa9cf56d8e3c8d7a4babbae1ae205b6ce704` |
 | `factor_optimizer/research_manifest.py` | `4ed34125751aea2cdedc7e75fecc96e3f2f09f5e9fae70afc42ff60486c1c90f` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |

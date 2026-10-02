@@ -1,0 +1,51 @@
+{
+  "head": "61602ac72bb829018adc1d7cda86d0264135cb66",
+  "source_sha256_at_measurement": {
+    "factor_optimizer/factor_optimizer/research_batch.py": "41a83d067d6abf41c824f7d250a631bc0b054d278c8ef255404ba80857f73a48",
+    "factor_optimizer/factor_optimizer/research_fitness.py": "c7021a482a74b691f68ae6b706355b7f7c9544e8658d5aa81a921cceef4e6494",
+    "quant_evaluator/metrics/ic.py": "df9b12ea5f0ae658bf1c8d52c0a34ca0e8a8fab50a57930ddc1f5100dbdd5cc0",
+    "factor_optimizer/factor_optimizer/research_ic_antithetic.py": "1e25f484f3bf6292aba85c7bfa4a32997a2d8449b9876526442db2a2423f83d1"
+  },
+  "fixture": {
+    "time_rows": 128,
+    "assets": 2000,
+    "dtype": "float64",
+    "seed": 20261002,
+    "candidate_pairs": 1,
+    "candidate_specific_missingness": true,
+    "label_validity": true,
+    "ties": true
+  },
+  "method": {
+    "baseline": "positive and negative _pair_ic calls with shared PairICCache RAW/RAW_FULL references and candidate cache",
+    "reuse": "positive _pair_ic call with cache_opposite_candidate=True, then normal negative _pair_ic key lookup",
+    "backend": "compute_daily_ic exact Spearman",
+    "warmup": "one baseline run, then one reuse run; excluded from timing",
+    "timing_order": "baseline three runs, then reuse three runs",
+    "parity": "all returned float arrays matched byte-for-byte; bool arrays and scalar coverage matched exactly"
+  },
+  "compute_daily_ic_calls": {
+    "baseline": 2,
+    "reuse": 1
+  },
+  "timings_seconds": {
+    "baseline_samples": [0.164733, 0.163147, 0.164223],
+    "baseline_median": 0.164223,
+    "reuse_samples": [0.133963, 0.134034, 0.13571],
+    "reuse_median": 0.134034,
+    "median_speedup_fraction": 0.18382931
+  },
+  "estimated_memory_mib": {
+    "one_float64_panel": 1.95,
+    "three_column_pair_panel": 5.86,
+    "three_column_validity_mask": 0.73,
+    "extra_antithetic_peak_estimate": 5.86,
+    "scope": "helper and key serializer arrays only; excludes QE rank scratch and process RSS"
+  },
+  "limitations": [
+    "This is a synthetic paired-IC microbenchmark, not an end-to-end optimizer benchmark or a production performance claim.",
+    "Three timing samples were run sequentially in fixed baseline-then-reuse order; no confidence interval or process-RSS peak was collected.",
+    "Any finite exact-zero IC causes the helper to decline reuse so the regular exact path preserves signed-zero bytes."
+  ],
+  "reproduction": ".venv/bin/python factor_optimizer/scripts/benchmark_pair_ic_antithetic_20261002.py"
+}

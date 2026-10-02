@@ -1,5 +1,7 @@
 # 优化库自动研究入口与方法公式（2026-09-22 更新）
 
+2026-10-02 的相邻方向计算复用见 [TRAIN 正负方向 RankIC 复用](ANTITHETIC_TRAIN_IC.md)，其中列明内容键、零 IC 回退和验证边界。
+
 后续已接通指定 COS 因子池的 DataAccess 有界读取、TRAIN-only 多维诊断，
 以及基于真实 20 层谷底/峰顶的修复中心提案，见
 [COS 与 20 层诊断报告](COS_DIAGNOSTICS_20260922.md)。

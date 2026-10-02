@@ -334,9 +334,15 @@ def _pair_ic_evaluate_reference(raw, candidate, batch, labels, indices, config, 
 
 
 def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=None,
-             candidate_cache=None, prepared_split: _PairICPreparedSplit | None = None):
+             candidate_cache=None, prepared_split: _PairICPreparedSplit | None = None,
+             cache_opposite_candidate: bool = False):
     from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
     from quant_evaluator.metrics.ic import compute_daily_ic
+
+    if type(cache_opposite_candidate) is not bool:
+        raise ValueError("cache_opposite_candidate must be bool")
+    if cache_opposite_candidate and candidate_cache is None:
+        raise ValueError("opposite candidate reuse requires a candidate cache")
 
     idx = np.asarray(indices)
     a, b = raw[idx], candidate[idx]
@@ -426,6 +432,14 @@ def _pair_ic(raw, candidate, batch, labels, indices, config, *, reference_cache=
                 ic[:, column] = ic[:, pending[key]]
     if candidate_cache is not None:
         candidate_cache.put(candidate_key, ic[:, 1])
+        if cache_opposite_candidate:
+            # Adjacent TRAIN sign proposals share the effective universe.
+            # Store only a bounded series; the next request still verifies its
+            # own canonical content key before consuming the cached evidence.
+            from factor_optimizer.research_ic_antithetic import cache_negated_candidate_ic
+            cache_negated_candidate_ic(
+                candidate_cache, b, common, target, config.minimum_assets, ic[:, 1]
+            )
     good = np.isfinite(ic[:, :2]).all(axis=1)
     day_retention = float(good.sum() / max(1, np.isfinite(ic[:, 2]).sum()))
     retention = min(retention, day_retention)
@@ -784,7 +798,11 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                         delta, good, coverage = _pair_ic(prefix, values, batch, labels, split.train_indices, config,
                                                        reference_cache=train_ic_cache,
                                                        candidate_cache=train_candidate_ic_cache,
-                                                       prepared_split=train_pair_ic_split)
+                                                       prepared_split=train_pair_ic_split,
+                                                       cache_opposite_candidate=(
+                                                           compose and orientation == 1 and family in {
+                                                               "CAUSAL_SMOOTHING", "DECAY_REFINEMENT"}
+                                                       ))
                         record.update(coverage=coverage, valid_train_days=int(good.sum()))
                         if coverage < config.minimum_coverage or good.sum() < config.minimum_train_days:
                             raise ValueError("insufficient common coverage or training IC")
