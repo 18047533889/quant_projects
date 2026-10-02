@@ -118,10 +118,11 @@ with `requires_fit=False`.
 ## Routing summary (R61-FI-041)
 
 - **FE_OPERATOR (4):** `cs_rank`, `cs_demean`, `cs_winsor`, `forward_fill`.
-- **FE_COMPOSITE (11):** `trailing_sma`, `rolling_mean`, `trailing_median`,
+- **FE_COMPOSITE (12):** `trailing_sma`, `rolling_mean`, `trailing_median`,
   `rolling_std`, `rolling_zscore`, `ewma`, `one_sided_iir_lowpass`,
-  `ols_neutralize`, `industry_neutral`, `size_neutral`, `dual_neutral`.
-- **FP_NATIVE (28):** everything else. FE-backed transforms retain their
+  `robust_ewma`, `ols_neutralize`, `industry_neutral`, `size_neutral`,
+  `dual_neutral`.
+- **FP_NATIVE (27):** everything else. FE-backed transforms retain their
   FP-native kernel for explicit research fallback (plan §26 F3). Production
   execution requires FE and fails closed when FE is unavailable; FE remains
   an optional dependency of FP.
