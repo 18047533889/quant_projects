@@ -1322,6 +1322,12 @@ def _load_all_impl(*, include_research: bool = True) -> None:
     from factor_engine.cleaned_operators.polars_native.r69_native_batchA import register_r69_native_batch_a
     register_r69_native_batch_a()
 
+    # R69 batch N1 (strict pure-polars): 13 in-use numpy-kernel slots become
+    # genuine expression-native Polars kernels (no pandas / NumPy / UDF in the
+    # kernel path).  Runs after batch A so first-registrant-wins stays intact.
+    from factor_engine.cleaned_operators.polars_native.r69_native_batchN1 import register_r69_native_batch_n1
+    register_r69_native_batch_n1()
+
     # 100k GO P0#1-followup: complete every registered operator's
     # ``_physical_spec`` with the four 64-hex binding digests that
     # ``PhysicalImplementationSpec`` requires for an immutable physical
