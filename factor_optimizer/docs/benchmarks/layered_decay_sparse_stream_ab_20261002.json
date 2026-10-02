@@ -1,0 +1,125 @@
+{
+  "baseline_commit": "120f51720da822bf7f2a6fa47d435af6440e2027",
+  "benchmark": "layered-decay-sparse-stream-vs-historical-head",
+  "candidate_checkout_head": "120f51720da822bf7f2a6fa47d435af6440e2027",
+  "candidate_source_sha256": {
+    "factor_optimizer/benchmarks/benchmark_layered_decay_sparse.py": "21cacc97e8453a6aa776786d1cca161d8a8cc6404da671b4c4b95ed636c073ac",
+    "factor_optimizer/factor_optimizer/adapters/layered_decay.py": "a26a0571b8885686be5e151ab279d9be9826a21f3a9982be094a3c7671196fdc",
+    "factor_optimizer/factor_optimizer/adapters/layered_decay_long.py": "0dc9f3e1d8ea4be5ab6e9adc4ed5be1c630cc63a6af08228aa88f5a3581ef457",
+    "factor_optimizer/factor_optimizer/adapters/repair_execution.py": "d64200649a33819d3013de96f89e18a02bb032ed3e20d6ce2c34d4490c7d3727",
+    "factor_preprocess/factor_preprocess/transforms/layered_decay.py": "ba8b178f2c7e85198214a26386e0d87bd8a491e3aac046e8d013d742256d73d1",
+    "factor_preprocess/factor_preprocess/transforms/layered_decay_state.py": "587fcb3b51410de45702ff1aa8c0f6f2897c7e882db2d38a1a838211e605fc4e"
+  },
+  "cases": [
+    {
+      "density": 1.0,
+      "finite_mask_sha256": "f30659165f8a194ac51c492c2dbe0938f92679a6d91135729c5c8aa3f937bef8",
+      "finite_values_sha256": "5e277aab20c9593a6c45b35479fae3a5f753d90e13c9e3868abf94cc181463b8",
+      "median_speedup_candidate_vs_head": 1.1319124861419683,
+      "output_sha256": "b9eec899f2d32e48be0a07a12ff63c77a9c87bcdebd98747945d8737299b46ef",
+      "raw_seconds": {
+        "candidate_seconds": [
+          0.5012978370068595,
+          0.5171832169871777,
+          0.49585399095667526
+        ],
+        "historical_head_seconds": [
+          0.586850134015549,
+          0.5674252809840254,
+          0.5434003760456108
+        ]
+      },
+      "rows": 1440000
+    },
+    {
+      "density": 0.55,
+      "finite_mask_sha256": "90ce8943715de6184cec22bbbae0d9225c7310d38ac4ded13ea90203b6b45341",
+      "finite_values_sha256": "7bd02f3f19e63d8c4b06750dfad6dbf02aa733ee063c46a32ea3811ad59d29bf",
+      "median_speedup_candidate_vs_head": 1.1162615677117984,
+      "output_sha256": "5575b86f71ad14b1b0c54f5e41f7af32de2e35ca69c4943eed7441b7a138d54a",
+      "raw_seconds": {
+        "candidate_seconds": [
+          0.37495825003134087,
+          0.38058954098960385,
+          0.37443670601351187
+        ],
+        "historical_head_seconds": [
+          0.41855148400645703,
+          0.41951598500600085,
+          0.4090471210074611
+        ]
+      },
+      "rows": 792000
+    },
+    {
+      "density": 0.25,
+      "finite_mask_sha256": "bd733e49f5f2a6271829f54d5ed2d2f3362e0fbf2f2763918bcb90b077300358",
+      "finite_values_sha256": "c1a6d2cb3a0b1b7b65bafa8e9d63771b7c6296e0d19da3dd7c61ec44e45adfc0",
+      "median_speedup_candidate_vs_head": 1.259012393872276,
+      "output_sha256": "8437006fbc83635b9cba827324e1e01042319b3761aa3053317945c9624b00dc",
+      "raw_seconds": {
+        "candidate_seconds": [
+          0.26669379899976775,
+          0.2306399479857646,
+          0.22828278795350343
+        ],
+        "historical_head_seconds": [
+          0.2903785530361347,
+          0.2892591670388356,
+          0.2937431629979983
+        ]
+      },
+      "rows": 360000
+    },
+    {
+      "density": 0.1,
+      "finite_mask_sha256": "7808595c755270833d05f8c826cd8682318bd6e8949ca42187eb6a618dee1730",
+      "finite_values_sha256": "f220f45be1ea7ee6b3c0dfd1c1dee7b603022b2b2cf53fbea5ecfdd5715656b2",
+      "median_speedup_candidate_vs_head": 1.420276061759654,
+      "output_sha256": "66bd75288716ae405e7e027947d1dffe09c584038eee77568dfd762ae3b4700b",
+      "raw_seconds": {
+        "candidate_seconds": [
+          0.17110346397385,
+          0.16762393899261951,
+          0.18047010200098157
+        ],
+        "historical_head_seconds": [
+          0.24194330698810518,
+          0.2430141539662145,
+          0.24333403399214149
+        ]
+      },
+      "rows": 144000
+    }
+  ],
+  "environment": {
+    "cpu_count": 32,
+    "numpy": "2.2.6",
+    "pandas": "2.3.3",
+    "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
+    "processor": "x86_64",
+    "python": "3.12.3"
+  },
+  "historical_recurrence": {
+    "loaded_in_memory_from_git_show": true,
+    "path": "factor_preprocess/factor_preprocess/transforms/layered_decay.py",
+    "source_sha256": "eef9c4dae3e963e69fea4534b94879c4c04dd3379a6a2a59d80efde8fcaf650f"
+  },
+  "method": {
+    "alternation": "HEAD,candidate; candidate,HEAD; HEAD,candidate",
+    "candidate_boundary": "LayeredDecayPlan.execute including frame validation + sparse quantile blocks + shared state + output mapping",
+    "half_lives": 20,
+    "head_boundary": "frame validation + per-asset monotonic check + pivot + bounded QE quantiles + frozen historical recurrence + output mapping",
+    "mask": "keep if (date*7 + asset_id*11) % 100 < int(density*100); density=1 uses all rows",
+    "parity": "exact including NaN positions on warmup and every timed result",
+    "seed": 8087,
+    "shape": [
+      480,
+      3000
+    ],
+    "shared_live_helpers": "Both paths use the current _validate_frame and _assign_daily_quantiles implementations; their owner files are hashed in candidate_source_sha256.",
+    "timed_repetitions": 3,
+    "validation_scope": "matched for valid benchmark fixtures; duplicate-column rejection guard is not exercised because fixture columns are unique",
+    "warmups_per_case": 1
+  }
+}

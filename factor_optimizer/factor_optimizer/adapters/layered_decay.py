@@ -73,12 +73,5 @@ class LayeredDecayPlan:
             raise ValueError("per-asset dates must be monotone increasing")
         if frame.empty:
             return pd.Series(index=frame.index, dtype=float, name='value')
-        from factor_preprocess.transforms.layered_decay import layered_decay
-        panel = frame.pivot(index='date', columns='asset_id', values='value').sort_index()
-        x = panel.to_numpy(dtype=float)
-        x = np.where(np.isfinite(x), x, np.nan)
-        bins = _assign_daily_quantiles(x)
-        output = layered_decay(x, bins, self.half_lives, allow_research=True)
-        rows = panel.index.get_indexer(frame['date'])
-        cols = panel.columns.get_indexer(frame['asset_id'])
-        return pd.Series(output[rows, cols], index=frame.index, name='value')
+        from factor_optimizer.adapters.layered_decay_long import _execute_sparse_layered_decay_validated
+        return _execute_sparse_layered_decay_validated(frame, self.half_lives)

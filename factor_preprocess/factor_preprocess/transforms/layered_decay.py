@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 import numbers
 import numpy as np
+from factor_preprocess.transforms.layered_decay_state import LayeredDecayState
 
 
 def layered_decay(values, layers, half_lives, *, allow_research=False):
@@ -29,33 +30,8 @@ def layered_decay(values, layers, half_lives, *, allow_research=False):
         raise ValueError("matching T x N value and layer panels required")
     if bins.dtype.kind not in "iu" or np.any(bins < -1) or np.any(bins >= len(half_lives)):
         raise ValueError("integer layers must be -1 or a declared layer index")
-    alpha = -np.expm1(-np.log(2.)/np.asarray(half_lives, float))
-    rho = 1.-alpha
-    numerator = np.zeros((x.shape[1], len(alpha)))
-    mass = np.zeros_like(numerator)
-    scale = np.zeros(x.shape[1])
+    state = LayeredDecayState(x.shape[1], half_lives)
     out = np.full(x.shape, np.nan)
     for t in range(1, len(x)):
-        source, layer = x[t-1], bins[t-1]
-        good = np.isfinite(source) & (layer >= 0)
-        numerator *= rho
-        mass *= rho
-        numerator[~good] = 0.
-        mass[~good] = 0.
-        scale[~good] = 0.
-        assets = np.flatnonzero(good)
-        if not len(assets):
-            continue
-        # Normalize state by a running magnitude to avoid overflow when sums
-        # of differently aged layer weights temporarily exceed one.
-        new_scale = np.maximum(scale[assets], np.abs(source[assets]))
-        ratio = np.divide(scale[assets], new_scale, out=np.zeros(len(assets)), where=new_scale > 0)
-        numerator[assets] *= ratio[:, None]
-        scale[assets] = new_scale
-        normalized = np.divide(source[assets], new_scale, out=np.zeros(len(assets)), where=new_scale > 0)
-        selected = layer[assets]
-        numerator[assets, selected] += alpha[selected]*normalized
-        mass[assets, selected] += alpha[selected]
-        weighted = numerator[assets].sum(axis=1)/mass[assets].sum(axis=1)
-        out[t, assets] = np.clip(weighted, -1., 1.)*new_scale
+        out[t] = state.step(x[t-1], bins[t-1])
     return out

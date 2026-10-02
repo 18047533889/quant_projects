@@ -191,10 +191,11 @@ def test_layered_decay_failed_execution_does_not_mutate_shared_frame(monkeypatch
     plan = LayeredDecayPlan((5.0,) * 20, "train:test")
     candidate = _candidate_frame_for_plan(plan, frame)
 
-    def fail_quantile_assignment(_values):
+    def fail_quantile_assignment(_values, **_kwargs):
         raise RuntimeError("synthetic candidate failure")
 
-    monkeypatch.setattr(layered_decay, "_assign_daily_quantiles", fail_quantile_assignment)
+    from quant_evaluator.metrics import quantile
+    monkeypatch.setattr(quantile, "assign_quantiles_batch", fail_quantile_assignment)
     assert candidate is frame
     with pytest.raises(RuntimeError, match="synthetic candidate failure"):
         plan.execute(candidate, allow_research=True)

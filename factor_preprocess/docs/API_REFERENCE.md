@@ -1,7 +1,7 @@
 # factor_preprocess 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**78 个 Python 模块、444 个公开函数/类/方法定义**。
+扫描实际包目录：**80 个 Python 模块、449 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -19,6 +19,7 @@
 | [factor_preprocess/adapters/fe_composite.py](../factor_preprocess/adapters/fe_composite.py) | 2 | Central resolver for explicit FactorEngine composite identities. |
 | [factor_preprocess/adapters/fe_neutralization.py](../factor_preprocess/adapters/fe_neutralization.py) | 4 | Lazy adapter for FE-owned OLS neutralization composites. |
 | [factor_preprocess/adapters/fe_operator.py](../factor_preprocess/adapters/fe_operator.py) | 7 | FE operator adapter (R61-FI-041, plan §26 F2/F3). |
+| [factor_preprocess/adapters/fe_robust_ewma_identity.py](../factor_preprocess/adapters/fe_robust_ewma_identity.py) | 1 | FP boundary for FactorEngine's scoped robust EWMA identity. |
 | [factor_preprocess/adapters/fe_smoothing.py](../factor_preprocess/adapters/fe_smoothing.py) | 8 | FactorEngine-backed long-panel smoothing adapter (lazy FE dependency). |
 | [factor_preprocess/adapters/fitted_recipe.py](../factor_preprocess/adapters/fitted_recipe.py) | 2 | Apply-only execution of narrowly supported frozen FP fitted state. |
 | [factor_preprocess/backends/__init__.py](../factor_preprocess/backends/__init__.py) | 0 | Automatic backend selection for factor_preprocess. |
@@ -81,6 +82,7 @@
 | [factor_preprocess/transforms/event_decay.py](../factor_preprocess/transforms/event_decay.py) | 1 | Short-halflife event-decay persistence (causal, one-sided). |
 | [factor_preprocess/transforms/freshness.py](../factor_preprocess/transforms/freshness.py) | 4 | Data freshness transforms for tracking observation age and staleness. |
 | [factor_preprocess/transforms/layered_decay.py](../factor_preprocess/transforms/layered_decay.py) | 1 | Research-only lagged, normalized decay with observation-origin layer states. |
+| [factor_preprocess/transforms/layered_decay_state.py](../factor_preprocess/transforms/layered_decay_state.py) | 4 | Shared research NumPy recurrence for dense and sparse layered decay. |
 | [factor_preprocess/transforms/missingness.py](../factor_preprocess/transforms/missingness.py) | 7 | Missingness transforms for handling missing data. |
 | [factor_preprocess/transforms/repair_shapes.py](../factor_preprocess/transforms/repair_shapes.py) | 6 | Stateless value-repair primitives used by research repair plans. |
 | [factor_preprocess/transforms/rolling.py](../factor_preprocess/transforms/rolling.py) | 4 | Rolling (time-series) transforms with explicit causality. |
@@ -613,6 +615,22 @@ Return a lazily-FE-backed executor for ``canonical``.
 参数：`(canonical: str, fallback: Optional[Callable]=None, *, allow_research_fallback: bool=False)`。
 
 返回类型：`Optional[FeOperatorExecutor]`。
+
+## factor_preprocess/adapters/fe_robust_ewma_identity.py
+
+FP boundary for FactorEngine's scoped robust EWMA identity.
+
+显式导出（含重导出）：`get_robust_ewma_identity`。
+
+### get_robust_ewma_identity
+
+[实际实现](../factor_preprocess/adapters/fe_robust_ewma_identity.py#L13)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(name: str, recipe_identity: str \| None)`。
+
+返回类型：`dict`。
 
 ## factor_preprocess/adapters/fe_smoothing.py
 
@@ -4996,11 +5014,45 @@ Research-only lagged, normalized decay with observation-origin layer states.
 
 ### layered_decay
 
-[实际实现](../factor_preprocess/transforms/layered_decay.py#L9)。
+[实际实现](../factor_preprocess/transforms/layered_decay.py#L10)。
 
 Filter T x N values using strictly previous-row values and layer labels.
 
 参数：`(values, layers, half_lives, *, allow_research=False)`。
+
+## factor_preprocess/transforms/layered_decay_state.py
+
+Shared research NumPy recurrence for dense and sparse layered decay.
+
+### LayeredDecayState
+
+[实际实现](../factor_preprocess/transforms/layered_decay_state.py#L8)。
+
+Per-asset observation-origin state; intentionally a NumPy research kernel.
+
+### LayeredDecayState.__init__
+
+[实际实现](../factor_preprocess/transforms/layered_decay_state.py#L11)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self, n_assets: int, half_lives)`。
+
+### LayeredDecayState.step
+
+[实际实现](../factor_preprocess/transforms/layered_decay_state.py#L27)。
+
+Consume a dense date row and return its lagged output by asset.
+
+参数：`(self, values, layers, *, asset_codes=None)`。
+
+### LayeredDecayState.step_sparse
+
+[实际实现](../factor_preprocess/transforms/layered_decay_state.py#L46)。
+
+Update only prior/current active assets; codes and state are sorted.
+
+参数：`(self, values, layers, asset_codes)`。
 
 ## factor_preprocess/transforms/missingness.py
 
@@ -5349,9 +5401,10 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/adapters/data_access.py` | `4bb432d31734d8b16062d1e36010082d829388ca60916c4e0dd0db6b8992e71f` |
 | `factor_preprocess/adapters/ewma_full_replay.py` | `f5d653976ab97b8581d299dddbd49494e65639cba164ee4cea722f30a74d5fb5` |
 | `factor_preprocess/adapters/factor_assets.py` | `75478a4f2c9cc80b7c30aacf729fe33ab722cfc2be7dfb63f11e3f562b92e878` |
-| `factor_preprocess/adapters/fe_composite.py` | `7e5841b643da5cad3dd1aee5f147c53623c04e0c05063dd8193da0cee951a075` |
+| `factor_preprocess/adapters/fe_composite.py` | `dc8bf40c80c0cf97b59d9076d4a0f0f33660cb500a8bea1a36249b502aab3d83` |
 | `factor_preprocess/adapters/fe_neutralization.py` | `f9f9a62bd357b2f1b85ae3c78e884a5c952fdae45b7677895af67e40d0dfe93a` |
 | `factor_preprocess/adapters/fe_operator.py` | `9ec69415707feac974eed219f15910f22cde9650aac57b00873df1c3bbf977b2` |
+| `factor_preprocess/adapters/fe_robust_ewma_identity.py` | `2d4074ff7790a1694e92de906ed0b6f79f0f34b693efcb2f1f2e20185620a531` |
 | `factor_preprocess/adapters/fe_smoothing.py` | `e68f7d78dd132f57b3728d52644fc902ebc6c31f72038ffd733f088c60875534` |
 | `factor_preprocess/adapters/fitted_recipe.py` | `f6e770d3b0ad1090b52ce527169005b4ca7f06b58b06462c35db06e9c2c42e2e` |
 | `factor_preprocess/backends/__init__.py` | `764cb2de6fa732845a8040a4910996e1c0c19c210e659b9d9688100589ced7cc` |
@@ -5413,7 +5466,8 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/transforms/decomposition/wavelet.py` | `b746ea2d02d1589735f3afe1ee6b1f1a1bcdc3f81d8f907a91941560edd29da1` |
 | `factor_preprocess/transforms/event_decay.py` | `f384f17802b5ed0c0b6de29bc21c2addc0b64d4d9f1f75de6773d738842ba13d` |
 | `factor_preprocess/transforms/freshness.py` | `cb62293004c74338f715e75a91f849a4b2b3b4d6f11d2d258ddfcbcf3b97e69a` |
-| `factor_preprocess/transforms/layered_decay.py` | `eef9c4dae3e963e69fea4534b94879c4c04dd3379a6a2a59d80efde8fcaf650f` |
+| `factor_preprocess/transforms/layered_decay.py` | `ba8b178f2c7e85198214a26386e0d87bd8a491e3aac046e8d013d742256d73d1` |
+| `factor_preprocess/transforms/layered_decay_state.py` | `587fcb3b51410de45702ff1aa8c0f6f2897c7e882db2d38a1a838211e605fc4e` |
 | `factor_preprocess/transforms/missingness.py` | `42dcbf19613e38f7be1e18283ca4a67e208332b88a6a0fe625b6a86c0724ea4d` |
 | `factor_preprocess/transforms/repair_shapes.py` | `dccea81e1c00e68e144f530eb103e7c217677cc1ae82c5bd5b3ee12695cacea5` |
 | `factor_preprocess/transforms/rolling.py` | `688a501d3cf8eb7f9aff7da8f7ef889caa877dc8045b76f786c360e9094b5551` |

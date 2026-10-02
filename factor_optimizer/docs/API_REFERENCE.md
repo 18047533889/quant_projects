@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**83 个 Python 模块、958 个公开函数/类/方法定义**。
+扫描实际包目录：**84 个 Python 模块、958 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -18,6 +18,7 @@
 | [factor_optimizer/adapters/fe_tail_saturation.py](../factor_optimizer/adapters/fe_tail_saturation.py) | 1 | Date-local tail saturation through FactorEngine's canonical winsorize. |
 | [factor_optimizer/adapters/fitness.py](../factor_optimizer/adapters/fitness.py) | 2 | Fitness adapter: dimension/desirability mapping for generalized treatment decisions. |
 | [factor_optimizer/adapters/layered_decay.py](../factor_optimizer/adapters/layered_decay.py) | 4 | TRAIN-frozen research plan for observation-origin twenty-layer decay. |
+| [factor_optimizer/adapters/layered_decay_long.py](../factor_optimizer/adapters/layered_decay_long.py) | 0 | Sparse long-panel driver for the shared research NumPy layered-decay state. |
 | [factor_optimizer/adapters/preprocessing.py](../factor_optimizer/adapters/preprocessing.py) | 6 | Versioned research bridge from smoothing proposals to real FP kernels. |
 | [factor_optimizer/adapters/quant_evaluator.py](../factor_optimizer/adapters/quant_evaluator.py) | 14 | QuantEvaluatorAdapter: protocol for QE integration (optional dependency). |
 | [factor_optimizer/adapters/repair_execution.py](../factor_optimizer/adapters/repair_execution.py) | 5 | Versioned, research-only execution plans for value-level repair families. |
@@ -458,6 +459,10 @@ TRAIN-frozen research plan for observation-origin twenty-layer decay.
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
 参数：`(self, values, *, allow_research=False)`。
+
+## factor_optimizer/adapters/layered_decay_long.py
+
+Sparse long-panel driver for the shared research NumPy layered-decay state.
 
 ## factor_optimizer/adapters/preprocessing.py
 
@@ -10826,7 +10831,8 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/adapters/fe_smoothing.py` | `54929a09f6c907d0f8242de384a50c59568003d4091d3c97d7a9a1ebbb433770` |
 | `factor_optimizer/adapters/fe_tail_saturation.py` | `b458a1726f9fda82dddab6c48d8140860a3d661d927f88c609f166bcaa9c10fc` |
 | `factor_optimizer/adapters/fitness.py` | `4486884657f730c65064fe6e1aebc7555a515fbc3cba41c71c1bf8c9e4c48ce5` |
-| `factor_optimizer/adapters/layered_decay.py` | `420afc6bc59543f65048458b8b370bc61a52e4387d27d492acf71d421c1d1788` |
+| `factor_optimizer/adapters/layered_decay.py` | `a26a0571b8885686be5e151ab279d9be9826a21f3a9982be094a3c7671196fdc` |
+| `factor_optimizer/adapters/layered_decay_long.py` | `0dc9f3e1d8ea4be5ab6e9adc4ed5be1c630cc63a6af08228aa88f5a3581ef457` |
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
 | `factor_optimizer/adapters/repair_execution.py` | `d64200649a33819d3013de96f89e18a02bb032ed3e20d6ce2c34d4490c7d3727` |
