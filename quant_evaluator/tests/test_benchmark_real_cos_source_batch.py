@@ -255,7 +255,7 @@ def test_cos_builder_uses_registered_descriptors_and_existing_make_tile_semantic
     del source_frames
 
     def consume_stream(stream, expected, received_dates, received_assets,
-                       received_labels):
+                       received_labels, *, load_phases=None):
         iterator = iter(stream)
         first = next(iterator)
         assert first[1] == rows[0]
@@ -293,6 +293,7 @@ def test_cos_builder_uses_registered_descriptors_and_existing_make_tile_semantic
     assert captured["prefetch_workers"] == 4
     assert captured["max_prefetch_memory_bytes"] == 1024**3
     assert captured["extra_assembly_bytes_per_cell"] > 0
+    assert isinstance(captured["stage_telemetry"], harness.SourceStageTelemetry)
     assert [ctx.store.engine.kwargs for ctx in contexts] == [{"threads": 1}, {"threads": 2}]
     for context in contexts:
         context.close()

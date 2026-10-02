@@ -440,6 +440,8 @@ def make_tile(stream, expected, dates, assets, labels, *,
             values[:, :, seen] = frame.reindex(index=dates, columns=assets).to_numpy(dtype=np.float64, copy=False)
             if load_phases is not None:
                 load_phases["reindex_write_s"] += time.perf_counter() - write_started
+                if "reindex_write_count" in load_phases:
+                    load_phases["reindex_write_count"] += 1
             seen += 1
             frame = None
             source = None

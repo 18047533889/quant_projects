@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
+from quant_evaluator.adapters.source_stage_telemetry import SourceStageTelemetry
 import hashlib
 import json
 from threading import Lock
@@ -106,6 +107,7 @@ class CosFactorTileSource:
                  max_source_memory_bytes: int = 4 * 1024**3,
                  max_prefetch_memory_bytes: int = 512 * 1024**2,
                  extra_assembly_bytes_per_cell: int = 0,
+                 stage_telemetry: SourceStageTelemetry | None = None,
                  _close_controller: Callable[[], None] | None = None):
         if prefetch not in {"off", "on", "auto"}:
             raise ValueError("prefetch must be 'off', 'on' or 'auto'")
@@ -160,6 +162,7 @@ class CosFactorTileSource:
         self.max_source_memory_bytes = max_source_memory_bytes
         self.max_prefetch_memory_bytes = max_prefetch_memory_bytes
         self.extra_assembly_bytes_per_cell = extra_assembly_bytes_per_cell
+        self.stage_telemetry = stage_telemetry or SourceStageTelemetry()
         self._controller_close = _close_controller
         # During the standard dense materializer, source frames coexist with a
         # mutable assembled array and FactorBatch's immutable value owner (3
@@ -222,6 +225,7 @@ class CosFactorTileSource:
                          max_source_memory_bytes: int = 4 * 1024**3,
                          max_prefetch_memory_bytes: int = 512 * 1024**2,
                          extra_assembly_bytes_per_cell: int = 0,
+                         stage_telemetry: SourceStageTelemetry | None = None,
                          prefetch: str = "auto", expected_manifest_sha256: str | None = None):
         """Build a COS source using caller-injected bound-manifest helpers.
 
@@ -245,7 +249,9 @@ class CosFactorTileSource:
         if (not factor_ids or len(set(factor_ids)) != len(factor_ids)
                 or any(not isinstance(fid, str) or not fid for fid in factor_ids)):
             raise ValueError("factor_ids must be ordered, nonempty and unique")
-        controller = manifest_context_factory()
+        stage_telemetry = stage_telemetry or SourceStageTelemetry()
+        with stage_telemetry.measure("context_setup"):
+            controller = manifest_context_factory()
         controller_closed = False
 
         def close_controller():
@@ -274,30 +280,35 @@ class CosFactorTileSource:
                 records.append(BoundCosFactor(factor_id, uri, sha, size))
 
             def read_factor(record, manifest_snapshot):
-                context = factor_context_factory(record)
+                with stage_telemetry.measure("context_setup"):
+                    context = factor_context_factory(record)
                 if (context.manifest_dataset != controller.manifest_dataset
                         or context.factor_dataset is None):
                     context.close()
                     raise ValueError("factor context must target the bound manifest and a factor dataset")
                 try:
-                    bound = read_bound_factor(
-                        context.store, context.manifest_dataset, context.factor_dataset,
-                        record.factor_id, manifest_params=context.manifest_params,
-                        factor_params=context.factor_params, allow_research=True,
-                        max_object_mib=max_object_mib, manifest_snapshot=manifest_snapshot)
+                    with stage_telemetry.measure("bound_factor_read"):
+                        bound = read_bound_factor(
+                            context.store, context.manifest_dataset, context.factor_dataset,
+                            record.factor_id, manifest_params=context.manifest_params,
+                            factor_params=context.factor_params, allow_research=True,
+                            max_object_mib=max_object_mib, manifest_snapshot=manifest_snapshot)
                     factor = bound.factor
                     identity = {"uri": factor.source_uri, "sha256": factor.content_sha256,
                                 "size_bytes": factor.downloaded_bytes,
                                 "manifest_sha256": bound.manifest_sha256,
                                 "source_etag": factor.source_etag}
-                    return factor.table.to_pandas(), identity
+                    with stage_telemetry.measure("arrow_to_pandas_axis"):
+                        payload = factor.table.to_pandas()
+                    return payload, identity
                 finally:
                     context.close()
 
             def verify_manifest(manifest_snapshot):
-                verify_bound_manifest_unchanged(
-                    controller.store, controller.manifest_dataset, manifest_snapshot,
-                    manifest_params=controller.manifest_params)
+                with stage_telemetry.measure("manifest_verify"):
+                    verify_bound_manifest_unchanged(
+                        controller.store, controller.manifest_dataset, manifest_snapshot,
+                        manifest_params=controller.manifest_params)
 
             return cls(
                 records=records, time_axis=time_axis, asset_axis=asset_axis,
@@ -309,6 +320,7 @@ class CosFactorTileSource:
                 max_source_memory_bytes=max_source_memory_bytes,
                 max_prefetch_memory_bytes=max_prefetch_memory_bytes,
                 extra_assembly_bytes_per_cell=extra_assembly_bytes_per_cell,
+                stage_telemetry=stage_telemetry,
                 _close_controller=close_controller)
         except BaseException:
             close_controller()

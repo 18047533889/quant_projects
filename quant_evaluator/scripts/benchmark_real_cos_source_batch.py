@@ -31,6 +31,7 @@ from quant_evaluator.contracts.errors import InvalidContractError
 from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
 from quant_evaluator.adapters.cos_factor_tile_source import (
     BoundManifestHelpers, CosFactorTileSource, DataAccessReadContext,
+    SourceStageTelemetry,
 )
 from quant_evaluator.scripts.f8_cap8_tile2_auto_references import (
     validate_cap8_tile2_references,
@@ -109,6 +110,7 @@ def _make_cos_source(records, source_rows, dates, assets, labels,
     manifest_uri = f"{tiles.BASE}/metadata/{manifest_sha}/landing_manifest.json"
     manifest_ds = tiles._ds("source_manifest", manifest_uri.rsplit("/", 1)[0],
                             "landing_manifest.json", "json")
+    stage_telemetry = SourceStageTelemetry()
 
     def manifest_context_factory():
         engine = DuckDBEngine(threads=1)
@@ -143,25 +145,32 @@ def _make_cos_source(records, source_rows, dates, assets, labels,
                 item = payloads[index]
                 identity = item.identity
                 frame = item.payload
-                if "timestamp" not in frame.columns:
-                    raise ValueError("factor timestamp missing after bound COS read")
-                frame = frame.set_index("timestamp")
-                frame.index = pd.to_datetime(frame.index).normalize()
-                if frame.index.has_duplicates or frame.columns.has_duplicates:
-                    raise ValueError("duplicate factor axis")
-                frame = frame.loc[:, [column for column in frame
-                                      if column.endswith((".SZ", ".SH"))]].sort_index()
-                if ((record.factor_id, record.uri, record.sha256, record.size_bytes)
-                        != (row[0], row[1], row[2], row[3])):
-                    raise ValueError("COS bound identity differs from the axis preflight")
-                if (identity.get("source_etag") != row[4]
-                        or tiles.axis_hash(frame) != row[5]):
-                    raise ValueError("COS source ETag or panel axes changed after preflight")
+                with stage_telemetry.measure("arrow_to_pandas_axis"):
+                    if "timestamp" not in frame.columns:
+                        raise ValueError("factor timestamp missing after bound COS read")
+                    frame = frame.set_index("timestamp")
+                    frame.index = pd.to_datetime(frame.index).normalize()
+                    if frame.index.has_duplicates or frame.columns.has_duplicates:
+                        raise ValueError("duplicate factor axis")
+                    frame = frame.loc[:, [column for column in frame
+                                          if column.endswith((".SZ", ".SH"))]].sort_index()
+                    if ((record.factor_id, record.uri, record.sha256, record.size_bytes)
+                            != (row[0], row[1], row[2], row[3])):
+                        raise ValueError("COS bound identity differs from the axis preflight")
+                    if (identity.get("source_etag") != row[4]
+                            or tiles.axis_hash(frame) != row[5]):
+                        raise ValueError("COS source ETag or panel axes changed after preflight")
                 yield frame, row
                 # make_tile drops the yielded frame before requesting another.
                 del frame, item, identity
                 payloads[index] = None
-        return tiles.make_tile(consuming_stream(), expected, dates, assets, labels)
+        phases = {"reindex_write_s": 0.0, "reindex_write_count": 0}
+        try:
+            return tiles.make_tile(consuming_stream(), expected, dates, assets, labels,
+                                   load_phases=phases)
+        finally:
+            stage_telemetry.record("reindex_write", phases["reindex_write_count"],
+                                   phases["reindex_write_s"])
 
     return CosFactorTileSource.from_data_access(
         factor_ids=tuple(row[0] for row in records), time_axis=AxisRef(
@@ -178,6 +187,7 @@ def _make_cos_source(records, source_rows, dates, assets, labels,
         max_source_memory_bytes=max_source_memory_mib * 1024**2,
         prefetch_workers=prefetch_workers,
         max_prefetch_memory_bytes=max_prefetch_memory_mib * 1024**2,
+        stage_telemetry=stage_telemetry,
         # Allow one 128 MiB bounded Arrow result plus an equal-sized pandas
         # conversion per selected object. Arrow's cap is not a pandas/RSS hard
         # limit; this remains a conservative logical estimate only.
@@ -423,6 +433,12 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         "estimated_peak_source_bytes": getattr(source, "estimated_peak_source_bytes", None),
         "max_source_memory_bytes": getattr(source, "max_source_memory_bytes", None),
         "tile_read_timings": source.tile_read_timings,
+        "source_stage_timings": ({
+            "aggregation": "summed_stage_durations_seconds",
+            "scope": "source lifecycle; includes setup before and final verify after evaluator timing",
+            "phases": source.stage_telemetry.snapshot(),
+        } if source_adapter == "cos" and
+             getattr(source, "stage_telemetry", None) is not None else None),
         "source_read_wall_seconds": sum(item["wall_seconds"]
                                         for item in source.tile_read_timings),
         "observation_counts_sha256": {

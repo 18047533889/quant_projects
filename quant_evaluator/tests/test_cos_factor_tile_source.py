@@ -262,6 +262,57 @@ def test_data_access_builder_uses_injected_helpers_without_factor_optimizer(monk
     source.close()
     assert controller_closed == [True]
     assert len(verify_calls) == 2  # first read and final post-read snapshot check
+    phases = source.stage_telemetry.snapshot()
+    assert phases["context_setup"]["count"] == 2
+    assert phases["bound_factor_read"]["count"] == 1
+    assert phases["arrow_to_pandas_axis"]["count"] == 1
+    assert phases["manifest_verify"]["count"] == 2
+    assert all(value["total_seconds"] >= 0 for value in phases.values())
+
+
+def test_stage_telemetry_keeps_fixed_phase_set_and_records_failures():
+    from quant_evaluator.adapters.cos_factor_tile_source import SourceStageTelemetry
+    telemetry = SourceStageTelemetry()
+    with pytest.raises(OSError, match="read failed"):
+        with telemetry.measure("bound_factor_read"):
+            raise OSError("read failed")
+    snapshot = telemetry.snapshot()
+    assert tuple(snapshot) == SourceStageTelemetry.PHASES
+    assert snapshot["bound_factor_read"]["count"] == 1
+    with pytest.raises(ValueError, match="unknown"):
+        telemetry.record("raw_uri", 1, 0.0)
+    with pytest.raises(ValueError, match="unknown"):
+        with telemetry.measure("raw_uri"):
+            pytest.fail("unknown telemetry phase entered its context")
+
+
+@pytest.mark.parametrize("count,seconds", [
+    (True, 0.0), (-1, 0.0), (1.5, 0.0), (0, -1.0), (0, float("nan")),
+    (0, float("inf")), (0, True),
+])
+def test_stage_telemetry_rejects_invalid_counts_and_durations(count, seconds):
+    from quant_evaluator.adapters.cos_factor_tile_source import SourceStageTelemetry
+    with pytest.raises(ValueError):
+        SourceStageTelemetry().record("context_setup", count, seconds)
+
+
+def test_stage_telemetry_concurrent_fixed_counts_and_detached_snapshots():
+    from quant_evaluator.adapters.cos_factor_tile_source import SourceStageTelemetry
+    telemetry = SourceStageTelemetry()
+
+    def record_many():
+        for _ in range(500):
+            telemetry.record("bound_factor_read", 1, 0.25)
+
+    workers = [threading.Thread(target=record_many) for _ in range(8)]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join()
+    snapshot = telemetry.snapshot()
+    assert snapshot["bound_factor_read"] == {"count": 4000, "total_seconds": 1000.0}
+    snapshot["bound_factor_read"]["count"] = -1
+    assert telemetry.snapshot()["bound_factor_read"]["count"] == 4000
 
 
 def test_prefetch_future_failure_waits_for_and_retires_other_reads():
