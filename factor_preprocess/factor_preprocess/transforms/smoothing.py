@@ -304,7 +304,9 @@ def robust_ewma(
     rs_s = rs_s.clip(lower=1e-12)  # pandas clip leaves NaN untouched
     lower = rmean_s - winsor_std * rs_s
     upper = rmean_s + winsor_std * rs_s
-    robust = lagged.clip(lower=lower, upper=upper)  # NaN bound -> NaN
+    # pandas treats a NaN bound as no clipping constraint; a NaN value itself
+    # remains NaN. Keep this behavior for the warmup rows with missing bounds.
+    robust = lagged.clip(lower=lower, upper=upper)
     ewmr = robust.groupby(keys, sort=False, observed=True).ewm(
         halflife=halflife, min_periods=min_periods, adjust=False
     ).mean()
