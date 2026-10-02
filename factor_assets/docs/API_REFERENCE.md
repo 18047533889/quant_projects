@@ -3,6 +3,8 @@
 **Version:** 0.1.0  
 **Last Updated:** 2026-08-14
 
+ANN 搜索的归一化公式与数值边界见 [ANN 余弦计算](ANN_NUMERIC_BOUNDARY_20261002.md)。
+
 ## Table of Contents
 
 1. [Contracts](#contracts)

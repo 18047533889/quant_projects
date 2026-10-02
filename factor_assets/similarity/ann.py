@@ -10,6 +10,8 @@ from typing import Optional, Protocol, List, Tuple
 from enum import Enum
 import warnings
 
+from factor_assets.similarity.unit_vectors import _canonical_cosine, _unit_rows
+
 
 def _validate_embedding_dim(embedding_dim: int) -> None:
     if not isinstance(embedding_dim, int) or isinstance(embedding_dim, bool) or embedding_dim <= 0:
@@ -26,9 +28,11 @@ def _validate_build_inputs(factor_ids: List[str], embeddings: "np.ndarray", embe
         raise ValueError(f"Expected embedding_dim={embedding_dim}, got {embeddings.shape[1]}")
     if len(set(factor_ids)) != len(factor_ids):
         raise ValueError("factor_ids must be unique")
+    if embeddings.dtype.kind not in "fiu":
+        raise ValueError("embeddings must contain real numeric values")
     if not np.isfinite(embeddings).all():
         raise ValueError("embeddings must contain only finite values")
-    if np.any(np.linalg.norm(embeddings, axis=1) == 0):
+    if np.any(~np.any(embeddings != 0, axis=1)):
         raise ValueError("zero vectors are not valid embeddings")
 
 
@@ -43,11 +47,13 @@ def _validate_query(query_embedding: "np.ndarray", embedding_dim: int, k: int) -
         raise ValueError("query_embedding must be a 1D numpy array")
     if query_embedding.shape[0] != embedding_dim:
         raise ValueError(f"Expected embedding_dim={embedding_dim}, got {query_embedding.shape[0]}")
+    if query_embedding.dtype.kind not in "fiu":
+        raise ValueError("query_embedding must contain real numeric values")
     if not np.isfinite(query_embedding).all():
         raise ValueError("query_embedding must contain only finite values")
-    if np.linalg.norm(query_embedding) == 0:
+    if not np.any(query_embedding != 0):
         raise ValueError("zero query vectors are not valid embeddings")
-    return np.ascontiguousarray(query_embedding, dtype=np.float32)
+    return np.ascontiguousarray(_unit_rows(query_embedding.reshape(1, -1))[0], dtype=np.float32)
 
 try:
     import numpy as np
@@ -213,7 +219,7 @@ class FaissANNIndex:
         """
         _validate_build_inputs(factor_ids, embeddings, self.embedding_dim)
 
-        staged_embeddings = np.ascontiguousarray(embeddings, dtype=np.float32).copy()
+        staged_embeddings = np.ascontiguousarray(_unit_rows(embeddings), dtype=np.float32)
         if self.normalize:
             faiss.normalize_L2(staged_embeddings)
 
@@ -265,8 +271,8 @@ class FaissANNIndex:
 
             # FAISS IndexFlatIP returns inner-product similarity; expose the
             # backend's equivalent non-negative distance alongside canonical score.
-            similarity = float(dist) if self.normalize else None
-            backend_distance = 1.0 - float(dist) if self.normalize else abs(float(dist))
+            similarity = _canonical_cosine(dist) if self.normalize else None
+            backend_distance = 1.0 - similarity if self.normalize else abs(float(dist))
 
             if min_similarity is not None and (similarity is None or similarity < min_similarity):
                 continue
@@ -359,7 +365,7 @@ class AnnoyANNIndex:
             embeddings: 2D array of shape (n_factors, embedding_dim)
         """
         _validate_build_inputs(factor_ids, embeddings, self.embedding_dim)
-        staged_embeddings = np.ascontiguousarray(embeddings, dtype=np.float32).copy()
+        staged_embeddings = np.ascontiguousarray(_unit_rows(embeddings), dtype=np.float32)
         staged_index = AnnoyIndex(self.embedding_dim, 'angular')
 
         for idx, embedding in enumerate(staged_embeddings):
@@ -402,7 +408,7 @@ class AnnoyANNIndex:
         for idx, dist in zip(indices, distances):
             # Annoy angular distance is backend distance; canonical signed
             # cosine similarity is 1 - distance^2 / 2.
-            similarity = 1.0 - (float(dist) ** 2 / 2.0)
+            similarity = _canonical_cosine(1.0 - (float(dist) ** 2 / 2.0))
 
             # Apply threshold
             if min_similarity is not None and similarity < min_similarity:
