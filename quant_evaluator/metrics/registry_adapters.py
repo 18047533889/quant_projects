@@ -194,8 +194,14 @@ def compute_quantile_spread_value(
     # (T, n_quantiles, F) -> mean over time of Q_top - Q_bottom per factor.
     with np.errstate(invalid="ignore"):
         spread_series = quantile_returns[:, -1, :] - quantile_returns[:, 0, :]
-    valid_counts = np.sum(np.isfinite(spread_series), axis=0)
-    means = np.nanmean(spread_series, axis=0) if spread_series.size else np.array([])
+    finite = np.isfinite(spread_series)
+    valid_counts = np.sum(finite, axis=0)
+    totals = np.sum(np.where(finite, spread_series, 0.0), axis=0)
+    means = np.divide(
+        totals, valid_counts,
+        out=np.full(valid_counts.shape, np.nan, dtype=np.float64),
+        where=valid_counts > 0,
+    )
     return np.where(valid_counts >= min_periods, means, np.nan)
 
 
