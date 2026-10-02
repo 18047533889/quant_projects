@@ -6,6 +6,7 @@ Works with EvidenceRef-based embeddings, not raw factor values.
 """
 
 from dataclasses import dataclass
+import numbers
 from typing import Optional, Protocol, List, Tuple
 from enum import Enum
 import warnings
@@ -39,6 +40,21 @@ def _validate_build_inputs(factor_ids: List[str], embeddings: "np.ndarray", embe
 def _validate_positive_k(k: int) -> None:
     if not isinstance(k, int) or isinstance(k, bool) or k <= 0:
         raise ValueError("k must be a positive integer")
+
+
+def _validate_min_similarity(min_similarity: Optional[float]) -> None:
+    """Require an optional similarity threshold to be a finite real number."""
+    if min_similarity is None:
+        return
+    if isinstance(min_similarity, bool) or not isinstance(min_similarity, numbers.Real):
+        raise TypeError("min_similarity must be a finite real number or None")
+    # Compare in the input's own numeric precision: math.isfinite() first
+    # converts NumPy longdouble values to C double and can misclassify finite
+    # values above the double range as infinity.
+    if (min_similarity != min_similarity
+            or min_similarity == float("inf")
+            or min_similarity == float("-inf")):
+        raise ValueError("min_similarity must be finite")
 
 
 def _validate_query(query_embedding: "np.ndarray", embedding_dim: int, k: int) -> "np.ndarray":
@@ -250,6 +266,7 @@ class FaissANNIndex:
         Returns:
             List of ANNSearchResult ordered by similarity (descending)
         """
+        _validate_min_similarity(min_similarity)
         query = _validate_query(query_embedding, self.embedding_dim, k)
         if len(self._factor_ids) == 0:
             return []
@@ -303,6 +320,7 @@ class FaissANNIndex:
             List of ANNSearchResult ordered by similarity (descending)
         """
         _validate_positive_k(k)
+        _validate_min_similarity(min_similarity)
         if factor_id not in self._id_to_idx:
             return []
 
@@ -395,6 +413,7 @@ class AnnoyANNIndex:
         Returns:
             List of ANNSearchResult ordered by similarity (descending)
         """
+        _validate_min_similarity(min_similarity)
         query = _validate_query(query_embedding, self.embedding_dim, k)
         if not self._built or len(self._factor_ids) == 0:
             return []
@@ -440,6 +459,7 @@ class AnnoyANNIndex:
             List of ANNSearchResult ordered by similarity (descending)
         """
         _validate_positive_k(k)
+        _validate_min_similarity(min_similarity)
         if not self._built or factor_id not in self._id_to_idx:
             return []
 

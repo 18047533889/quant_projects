@@ -446,6 +446,51 @@ class ANNContractMixin:
         with pytest.raises(ValueError, match="k must be a positive integer"):
             index.search_by_id("UNKNOWN", k=k)
 
+    @pytest.mark.parametrize("threshold", [
+        float("nan"), float("inf"), float("-inf"),
+        np.longdouble("nan"), np.longdouble("inf"), np.longdouble("-inf"),
+    ])
+    def test_nonfinite_threshold_rejected_on_search_and_empty_paths(self, threshold):
+        index = self.make_index()
+        query = np.array([1., 0.])
+
+        with pytest.raises(ValueError, match="min_similarity must be finite"):
+            index.search(query, min_similarity=threshold)
+        with pytest.raises(ValueError, match="min_similarity must be finite"):
+            index.search_by_id("MISSING", min_similarity=threshold)
+
+        index.build(["F001"], np.array([[1., 0.]]))
+        with pytest.raises(ValueError, match="min_similarity must be finite"):
+            index.search_by_id("MISSING", min_similarity=threshold)
+
+    @pytest.mark.parametrize("threshold", [True, 1 + 0j, "0.5"])
+    def test_nonreal_threshold_rejected_on_search_and_empty_paths(self, threshold):
+        index = self.make_index()
+        query = np.array([1., 0.])
+
+        with pytest.raises(TypeError, match="min_similarity must be a finite real number"):
+            index.search(query, min_similarity=threshold)
+        with pytest.raises(TypeError, match="min_similarity must be a finite real number"):
+            index.search_by_id("MISSING", min_similarity=threshold)
+
+    def test_finite_thresholds_keep_existing_unbounded_semantics(self):
+        index = self.make_index()
+        index.build(["SAME", "ORTHOGONAL"], np.array([[1., 0.], [0., 1.]]))
+        query = np.array([1., 0.])
+
+        assert [r.factor_id for r in index.search(query, k=2, min_similarity=1.0)] == ["SAME"]
+        assert {r.factor_id for r in index.search(query, k=2, min_similarity=-1.0)} == {"SAME", "ORTHOGONAL"}
+        assert index.search(query, k=2, min_similarity=1.01) == []
+        assert {r.factor_id for r in index.search(query, k=2, min_similarity=-1.01)} == {"SAME", "ORTHOGONAL"}
+
+    def test_large_finite_thresholds_are_accepted_and_filter_all_results(self):
+        index = self.make_index()
+        index.build(["SAME", "ORTHOGONAL"], np.array([[1., 0.], [0., 1.]]))
+        query = np.array([1., 0.])
+
+        for threshold in (np.finfo(np.longdouble).max, 10 ** 10000):
+            assert index.search(query, k=2, min_similarity=threshold) == []
+
     def test_query_shape_dimension_and_zero_rejected(self):
         index = self.make_index()
         index.build(["F001"], np.array([[1., 0.]]))
