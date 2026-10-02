@@ -15,7 +15,7 @@ from dataclasses import dataclass
 from quant_evaluator.adapters.source_stage_telemetry import SourceStageTelemetry
 import hashlib
 import json
-from threading import Lock
+from threading import Event, Lock, get_ident
 import time
 from typing import Callable, Mapping, Sequence
 
@@ -151,6 +151,9 @@ class CosFactorTileSource:
         self.next_start = 0
         self._closed = False
         self._lock = Lock()
+        self._cleanup_done = Event()
+        self._cleanup_owner: int | None = None
+        self._cleanup_error: BaseException | None = None
         self._executor = None
         self._pending: deque[tuple[int, Future]] = deque()
         self._submitted = 0
@@ -342,58 +345,107 @@ class CosFactorTileSource:
             self._pending.append((index, self._executor.submit(self._read_one, index)))
             self._submitted += 1
 
+    def _claim_cleanup_locked(self, *, failed: bool, verify: bool):
+        """Claim the one cleanup pass. Caller must hold _lock."""
+        self._closed = True
+        if failed:
+            self._failed = True
+        self._cleanup_owner = get_ident()
+        should_verify = verify and not self._failed and not self._final_verified
+        for _, future in self._pending:
+            future.cancel()
+        self._pending.clear()
+        executor, self._executor = self._executor, None
+        return executor, should_verify
+
+    def _finish_cleanup(self, executor, should_verify: bool) -> None:
+        """Finish the claimed cleanup and wake every concurrent close caller."""
+        error = None
+        try:
+            if executor is not None:
+                try:
+                    executor.shutdown(wait=True, cancel_futures=True)
+                except BaseException as exc:
+                    error = exc
+            if should_verify and error is None:
+                try:
+                    self.verify_manifest(self.manifest_snapshot)
+                    with self._lock:
+                        self._final_verified = True
+                except BaseException as exc:
+                    error = exc
+        finally:
+            try:
+                self._close_controller()
+            except BaseException as exc:
+                if error is None:
+                    error = exc
+            finally:
+                with self._lock:
+                    self._cleanup_error = error
+                    self._cleanup_owner = None
+                    self._cleanup_done.set()
+        if error is not None:
+            raise error
+
     def read_tile(self, start: int, end: int) -> FactorTile:
-        executor = None
         started = time.perf_counter()
+        cleanup_plan = None
         try:
             with self._lock:
-                if self._closed:
-                    raise RuntimeError("COS factor tile source is closed")
-                if (type(start) is not int or type(end) is not int or start != self.next_start
-                        or end <= start or end > len(self.records)
-                        or end - start > self.max_tile_size):
-                    raise ValueError("tile range must be the next bounded source range")
-                if not self._verified_manifest:
-                    self.verify_manifest(self.manifest_snapshot)
-                    self._verified_manifest = True
-                payloads = []
-                if self.prefetch_enabled:
-                    # Keep one full worker window beyond this tile so these
-                    # bounded reads can finish while the consumer evaluates it.
-                    self._fill(min(len(self.records), end + self.prefetch_window))
-                    for expected_index in range(start, end):
-                        index, future = self._pending.popleft()
-                        if index != expected_index:
-                            raise RuntimeError("prefetch queue order was corrupted")
-                        payloads.append(future.result())
+                try:
+                    if self._closed:
+                        raise RuntimeError("COS factor tile source is closed")
+                    if (type(start) is not int or type(end) is not int or start != self.next_start
+                            or end <= start or end > len(self.records)
+                            or end - start > self.max_tile_size):
+                        raise ValueError("tile range must be the next bounded source range")
+                    if not self._verified_manifest:
+                        self.verify_manifest(self.manifest_snapshot)
+                        self._verified_manifest = True
+                    payloads = []
+                    if self.prefetch_enabled:
+                        # Keep one full worker window beyond this tile so these
+                        # bounded reads can finish while the consumer evaluates it.
                         self._fill(min(len(self.records), end + self.prefetch_window))
-                else:
-                    for index in range(start, end):
-                        payloads.append(self._read_one(index))
-                batch = self.make_tile(start, end, self.records[start:end], payloads)
-                self.next_start = end
-                if end == len(self.records):
-                    self.verify_manifest(self.manifest_snapshot)
-                    self._final_verified = True
-                self.reads.append((start, end))
-                self.tile_read_timings.append({
-                    "tile_range": [start, end],
-                    "wall_seconds": time.perf_counter() - started,
-                    "prefetch_mode": self.prefetch_mode,
-                    "prefetch_window": self.prefetch_window,
-                })
-                return FactorTile(start, end, batch, self.snapshot_id)
-        except BaseException:
-            with self._lock:
-                self._failed = True
-                self._closed = True
-                for _, future in self._pending:
-                    future.cancel()
-                self._pending.clear()
-                executor, self._executor = self._executor, None
-            if executor is not None:
-                executor.shutdown(wait=True, cancel_futures=True)
-            self._close_controller()
+                        for expected_index in range(start, end):
+                            index, future = self._pending.popleft()
+                            if index != expected_index:
+                                raise RuntimeError("prefetch queue order was corrupted")
+                            payloads.append(future.result())
+                            self._fill(min(len(self.records), end + self.prefetch_window))
+                    else:
+                        for index in range(start, end):
+                            payloads.append(self._read_one(index))
+                    batch = self.make_tile(start, end, self.records[start:end], payloads)
+                    self.next_start = end
+                    if end == len(self.records):
+                        self.verify_manifest(self.manifest_snapshot)
+                        self._final_verified = True
+                    self.reads.append((start, end))
+                    self.tile_read_timings.append({
+                        "tile_range": [start, end],
+                        "wall_seconds": time.perf_counter() - started,
+                        "prefetch_mode": self.prefetch_mode,
+                        "prefetch_window": self.prefetch_window,
+                    })
+                    return FactorTile(start, end, batch, self.snapshot_id)
+                except BaseException:
+                    # Mark failure and claim teardown before releasing the read
+                    # lock, so close() cannot mistake this for normal completion.
+                    if self._cleanup_owner is None and not self._cleanup_done.is_set():
+                        cleanup_plan = self._claim_cleanup_locked(failed=True, verify=False)
+                    raise
+        except BaseException as read_error:
+            if cleanup_plan is not None:
+                try:
+                    self._finish_cleanup(*cleanup_plan)
+                except BaseException as cleanup_error:
+                    try:
+                        read_error.add_note(
+                            f"COS source cleanup also failed: {type(cleanup_error).__name__}")
+                    except AttributeError:
+                        pass
             raise
 
     def _close_controller(self):
@@ -403,29 +455,35 @@ class CosFactorTileSource:
             callback()
 
     def close(self) -> None:
+        """Close from the controller thread.
+
+        Read-factor callbacks and prefetch workers must not call close; cleanup
+        callbacks may re-enter close on the owning thread.
+        """
+        caller = get_ident()
+        cleanup_plan = None
+        wait_for_owner = False
+        error = None
         with self._lock:
-            if self._closed:
+            owner = self._cleanup_owner
+            if owner == caller:
+                # A callback may close the source while its cleanup is running.
                 return
-            self._closed = True
-            should_verify = not self._failed and not self._final_verified
-            for _, future in self._pending:
-                future.cancel()
-            self._pending.clear()
-            executor, self._executor = self._executor, None
-        if executor is not None:
-            executor.shutdown(wait=True, cancel_futures=True)
-        verify_error = None
-        if should_verify:
-            try:
-                self.verify_manifest(self.manifest_snapshot)
-                self._final_verified = True
-            except BaseException as exc:
-                verify_error = exc
-        try:
-            self._close_controller()
-        finally:
-            if verify_error is not None:
-                raise verify_error
+            if owner is not None or (self._closed and not self._cleanup_done.is_set()):
+                wait_for_owner = True
+            elif self._cleanup_done.is_set():
+                error = self._cleanup_error
+            else:
+                cleanup_plan = self._claim_cleanup_locked(failed=False, verify=True)
+        if wait_for_owner:
+            self._cleanup_done.wait()
+            with self._lock:
+                error = self._cleanup_error
+        elif cleanup_plan is not None:
+            self._finish_cleanup(*cleanup_plan)
+            return
+        if error is not None:
+            raise error
 
     def __enter__(self):
         return self
