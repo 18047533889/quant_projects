@@ -1,0 +1,31 @@
+{
+  "kind": "rolling_sharpe_constant_scan_ab.v1",
+  "date": "2026-10-02",
+  "environment": "server-c official tree; .venv/bin/python; CPU NumPy",
+  "baseline_commit": "6e359a7c113f4d914f15b4f1574a9db3ab41292f",
+  "candidate_portfolio_stats_sha256": "4e440ef8ae86e0b5c562151b596da6311acb4e04fc8bd724f20eb0a6c816dc63",
+  "function": "quant_evaluator.metrics.portfolio_stats._rolling_sharpe_per_window",
+  "baseline_loading": "AST-extract function from git show baseline_commit:quant_evaluator/metrics/portfolio_stats.py; execute with NumPy namespace",
+  "shape": [3000],
+  "window": 20,
+  "min_periods": 16,
+  "periods_per_year": 252,
+  "random_seed": 20261002,
+  "timing": "median of 20 calls per kernel; alternating baseline/candidate order",
+  "cases": [
+    {"name": "ordinary", "input": "rng.normal(0.0005, 0.02, 3000)", "baseline_seconds": 0.00022705801529809833, "candidate_seconds": 0.00022706302115693688, "bitwise_equal": true},
+    {"name": "flat", "input": "np.full(3000, 0.01)", "baseline_seconds": 0.0110478425049223, "candidate_seconds": 0.00026631701621226966, "bitwise_equal": true},
+    {"name": "missing_flat", "input": "flat.copy(); values[::11] = np.nan", "baseline_seconds": 0.01115027948981151, "candidate_seconds": 0.011155719490488991, "bitwise_equal": true},
+    {"name": "near_flat", "input": "1e12 + np.arange(3000) * 0.25", "baseline_seconds": 0.04548955100472085, "candidate_seconds": 0.04548626148607582, "bitwise_equal": true},
+    {"name": "step", "input": "np.repeat([0.01, 0.02, -0.01], 1000)", "baseline_seconds": 0.010970440489472821, "candidate_seconds": 0.0002674770075827837, "bitwise_equal": true}
+  ],
+  "equality_check": "np.array_equal(baseline.view(np.uint64), candidate.view(np.uint64))",
+  "regression": {
+    "tests": ["quant_evaluator/tests/test_portfolio_empty_division_guards.py", "quant_evaluator/tests/metrics/test_backtest_perf_equivalence.py"],
+    "passed": 188
+  },
+  "limitations": [
+    "Synthetic return-series microbenchmark, not real COS factor-source or end-to-end batch evaluation.",
+    "The constant scan runs only when variance cancellation already requires fallback; missing windows retain finite-slice reductions."
+  ]
+}

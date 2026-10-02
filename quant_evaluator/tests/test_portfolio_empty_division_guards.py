@@ -118,3 +118,25 @@ def test_rolling_sharpe_missing_near_constant_large_offset_matches_window_oracle
                 )
 
     np.testing.assert_allclose(actual, expected, rtol=1e-13, atol=0.0, equal_nan=True)
+
+
+@pytest.mark.parametrize("window_size", [3, 7, 20])
+def test_rolling_sharpe_constant_fast_path_preserves_changes_and_missing_windows(window_size):
+    returns = np.repeat(np.array([0.01, 0.02, -0.01, 0.0]), 24)
+    returns[[8, 25, 53, 80]] = np.nan
+    returns[60] = np.inf
+    actual = _rolling_sharpe_per_window(
+        returns, window=window_size, periods_per_year=252, min_periods=2,
+    )
+    expected = np.full(returns.shape, np.nan)
+    for start in range(returns.size - window_size + 1):
+        values = returns[start:start + window_size]
+        values = values[np.isfinite(values)]
+        if values.size < 2 or np.all(values == values[0]):
+            continue
+        std = np.std(values, ddof=1)
+        if std > 1e-10:
+            expected[start + window_size - 1] = (
+                np.mean(values) / std * np.sqrt(252)
+            )
+    np.testing.assert_allclose(actual, expected, rtol=1e-11, atol=1e-12, equal_nan=True)

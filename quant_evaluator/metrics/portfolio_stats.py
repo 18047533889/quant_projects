@@ -1187,7 +1187,21 @@ def _rolling_sharpe_per_window(
     )
     window_mean = np.full(sum_v.shape, np.nan, dtype=np.float64)
     np.divide(sum_v, n_good, out=window_mean, where=valid & (n_good > 0))
-    for index in np.flatnonzero(suspicious):
+    # Complete constant windows can be identified in O(T), avoiding repeated
+    # O(window) reductions on long flat histories. Incomplete windows retain
+    # the finite-slice fallback below; no missing observation is filled here.
+    fallback_indices = np.flatnonzero(suspicious)
+    if fallback_indices.size:
+        changes = np.concatenate((
+            [0], np.cumsum(ret[1:] != ret[:-1], dtype=np.int64),
+        ))
+        complete_constant = valid & (n == window) & (
+            changes[i_end - 1] == changes[i_start]
+        )
+        window_mean[complete_constant] = ret[i_start[complete_constant]]
+        std[complete_constant] = 0.0
+        fallback_indices = fallback_indices[~complete_constant[fallback_indices]]
+    for index in fallback_indices:
         observed_window = ret[i_start[index]:i_end[index]]
         observed_window = observed_window[np.isfinite(observed_window)]
         if observed_window.size < min_periods:
