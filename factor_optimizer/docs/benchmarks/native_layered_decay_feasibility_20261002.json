@@ -1,0 +1,112 @@
+{
+  "benchmark": "native-layered-decay-feasibility",
+  "recorded_at": "2026-10-02",
+  "classification": "exploratory feasibility only; does not establish production/admission eligibility",
+  "repo_head_at_measurement": "a5a7eb29ada2ec37b6fc817a1bcf0d809e6d0a1f",
+  "baseline": {
+    "implementation": "published factor_preprocess.transforms.layered_decay.layered_decay",
+    "source": "factor_preprocess/factor_preprocess/transforms/layered_decay.py",
+    "sha256": "ba8b178f2c7e85198214a26386e0d87bd8a491e3aac046e8d013d742256d73d1",
+    "recurrence_state_sha256": "587fcb3b51410de45702ff1aa8c0f6f2897c7e882db2d38a1a838211e605fc4e"
+  },
+  "supporting_source_sha256": {
+    "factor_optimizer/factor_optimizer/adapters/layered_decay.py": "a26a0571b8885686be5e151ab279d9be9826a21f3a9982be094a3c7671196fdc",
+    "factor_optimizer/factor_optimizer/adapters/layered_decay_long.py": "0dc9f3e1d8ea4be5ab6e9adc4ed5be1c630cc63a6af08228aa88f5a3581ef457"
+  },
+  "harness_sha256": "cf38702c93049a79f726d4047b7ee89e2e435c4c84ba37c91c7a1fa97b472a1a",
+  "environment": {
+    "host": "qs-server-c",
+    "python": "3.12",
+    "numpy": "installed project .venv",
+    "polars": "1.42.1",
+    "memory_available_before_run_bytes": 65589301248,
+    "filesystem_available_before_run_bytes": 3804938240,
+    "peak_process_rss_gib": 2.599
+  },
+  "method": {
+    "input": "synthetic, in-memory only; no repository/data copies",
+    "panel": "480 dates x 3000 assets; 1,440,000 dense rows",
+    "layers": "20 daily QE quantile IDs precomputed for native streams; half-lives linspace(1,60,20)",
+    "native_streams": 40,
+    "native_sort_restore": "asset/date sort before recurrence, then original row-index restoration",
+    "e2e_boundary": "QE assign_daily_quantiles plus published FP recurrence versus QE assignment plus Polars frame construction/sort, 40 adjusted EWM streams, alpha-weighted mass reconstruction and original-order restoration",
+    "validation": "fixture is unique, dense and date-monotone; duplicate/invalid-frame rejection overhead not included",
+    "repetitions": 3,
+    "timing_order": "FP,Polars; Polars,FP; FP,Polars",
+    "tolerance": {
+      "ordinary": {"rtol": 1e-12, "atol": 1e-12},
+      "tie_gap": {"rtol": 1e-12, "atol": 0},
+      "tiny": {"atol": 0, "report": "relative error"}
+    }
+  },
+  "correctness": {
+    "tie_gap_panel_seed92": {
+      "shape": [64, 80],
+      "present_rows": 4930,
+      "finite_outputs": 4669,
+      "mask_equal": true,
+      "max_abs_difference": 5.953570969552402e-15,
+      "max_relative_difference_nonzero": 5.229350104530494e-13,
+      "strict_relative_only_pass": true,
+      "passed_rtol_1e-12_atol_0": true
+    },
+    "tie_gap_diagnostic_seed8092": {
+      "shape": [64, 80],
+      "present_rows": 4947,
+      "finite_outputs": 4710,
+      "mask_equal": true,
+      "max_abs_difference": 8.31279489688086e-15,
+      "max_relative_difference_nonzero": 5.8741440099793696e-12,
+      "strict_relative_only_pass": false,
+      "allclose_rtol_1e-12_atol_1e-12": true,
+      "note": "Relative-only miss is concentrated at near-zero/cancellation outputs; mask is equal and max absolute error is below 1e-14."
+    },
+    "dense_480x3000": {
+      "finite_outputs": 1437000,
+      "mask_equal": true,
+      "max_abs_difference": 3.885780586188048e-15,
+      "max_relative_difference": 9.055024557839574e-10,
+      "allclose_rtol_1e-12_atol_1e-12": true,
+      "strict_relative_only_note": "1016 finite outputs exceed 1e-12 relative error, concentrated near cancellation/zero; absolute error remains below 4e-15"
+    },
+    "tiny_inputs_fixed_divide_by_20": [
+      {"magnitude": 1e-300, "half_lives": [1, 20], "reference_nonzero": 252, "native_zeros": 0, "max_relative_error_atol_0": 4.973427635074857e-16},
+      {"magnitude": 1e-300, "half_lives": [1, 60], "reference_nonzero": 252, "native_zeros": 0, "max_relative_error_atol_0": 4.973427635074857e-16},
+      {"magnitude": 1e-310, "half_lives": [1, 20], "reference_nonzero": 252, "native_zeros": 0, "max_relative_error_atol_0": 1.131410328976458e-11},
+      {"magnitude": 1e-310, "half_lives": [1, 60], "reference_nonzero": 252, "native_zeros": 0, "max_relative_error_atol_0": 2.3270491919122784e-11},
+      {"magnitude": 1e-320, "half_lives": [1, 20], "reference_nonzero": 252, "native_zeros": 0, "max_relative_error_atol_0": 0.7292490118577075},
+      {"magnitude": 1e-320, "half_lives": [1, 60], "reference_nonzero": 252, "native_zeros": 0, "max_relative_error_atol_0": 1.2826086956521738}
+    ],
+    "float64_extreme": {
+      "tested_upper_envelope_abs_max": 1.7976931348623158e307,
+      "upper_envelope_finite_outputs": 316,
+      "upper_envelope_reference_finite_outputs": 316,
+      "upper_envelope_allclose_rtol_1e-12_atol_1e-12": true,
+      "float64_max_abs_input": 1.7976931348623157e308,
+      "float64_max_nonfinite_native_outputs": 1,
+      "float64_max_reference_finite_outputs": 316,
+      "float64_max_match": false,
+      "tested": "alternating signs over 80 dates x 4 assets and 20 changing layers"
+    }
+  },
+  "timing_s": {
+    "published_fp_qe_plus_recurrence": [0.3494195130188018, 0.35164660698501393, 0.36408726999070495],
+    "native_polars_qe_sort_recurrence_restore": [0.5491578939836472, 0.5543648659950122, 0.5700578020187095],
+    "median_published_fp": 0.35164660698501393,
+    "median_native_polars": 0.5543648659950122,
+    "published_over_native_ratio": 0.6343234006250638,
+    "interpretation": "Polars prototype was about 1.58x slower end-to-end for this dense sorted/restored fixture; raw stream throughput alone does not justify a default switch."
+  },
+  "numeric_envelope": {
+    "tested_probes": "fixed /20 scale; rho derived from h in [1,60]; discrete magnitudes 1e-300 and float64_max/10 passed; float64_max produced one nonfinite output; tiny probes at 1e-300, 1e-310, 1e-320",
+    "conservative_fallback": "fallback to published FP scale-normalized recurrence when nonzero inputs may be below 1e-300 or above float64_max/10; boundaries are conservative, discrete probes only",
+    "future_scale_rule": "no future-derived segment maximum or value scaling used",
+    "not_certified": "No production module, FE integration, or production eligibility conclusion follows from these probes."
+  },
+  "reproduction": {
+    "script": "factor_optimizer/benchmarks/benchmark_native_layered_decay_feasibility.py",
+    "default": "small 64x80 in-memory panel, 3 timings",
+    "full_panel": ".venv/bin/python factor_optimizer/benchmarks/benchmark_native_layered_decay_feasibility.py --full-panel --repetitions 3",
+    "saved_measurement": "The script was authored after this measurement and was not re-run at 480x3000 to avoid competing with the main agent's F48 test."
+  }
+}
