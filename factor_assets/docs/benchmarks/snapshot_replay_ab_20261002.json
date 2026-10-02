@@ -1,0 +1,92 @@
+{
+  "completed_at_utc": "2026-10-02T06:40:26.783074+00:00",
+  "fixture_generator": "deterministic_step_timestamp_v1",
+  "guards": {
+    "available_memory_bytes_at_start": 52168052736,
+    "disk_free_bytes_at_start": 4670111744,
+    "max_assets": 1000,
+    "max_events": 50000,
+    "max_events_per_asset": 50,
+    "max_repetitions": 21,
+    "peak_rss_bytes_at_end": 30932992
+  },
+  "head_before_and_after": "8f7818c2121d833a8a28ec3eefaf364acb40c5d3",
+  "host": "qs-compute-gpu-hk-01",
+  "kind": "bounded_factor_assets_snapshot_replay_ab",
+  "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
+  "python": "3.12.3",
+  "results": [
+    {
+      "assets": 100,
+      "events": 1200,
+      "events_per_asset": 12,
+      "legacy_median_seconds": 0.13709480949910358,
+      "one_pass_median_seconds": 0.003319435490993783,
+      "outputs_equal_including_order_and_timestamps": true,
+      "repetitions_per_route": 2,
+      "speedup": 41.30063978380243,
+      "trials": [
+        {
+          "legacy_seconds": 0.13712594896787778,
+          "one_pass_seconds": 0.003322149976156652,
+          "outputs_equal_including_order_and_timestamps": true,
+          "repetition": 1,
+          "route_order": [
+            "legacy",
+            "one_pass"
+          ]
+        },
+        {
+          "legacy_seconds": 0.13706367003032938,
+          "one_pass_seconds": 0.0033167210058309138,
+          "outputs_equal_including_order_and_timestamps": true,
+          "repetition": 2,
+          "route_order": [
+            "one_pass",
+            "legacy"
+          ]
+        }
+      ]
+    },
+    {
+      "assets": 1000,
+      "events": 12000,
+      "events_per_asset": 12,
+      "legacy_median_seconds": 14.625159165007062,
+      "one_pass_median_seconds": 0.03480519802542403,
+      "outputs_equal_including_order_and_timestamps": true,
+      "repetitions_per_route": 2,
+      "speedup": 420.2004296692659,
+      "trials": [
+        {
+          "legacy_seconds": 14.395685978000984,
+          "one_pass_seconds": 0.034607199020683765,
+          "outputs_equal_including_order_and_timestamps": true,
+          "repetition": 1,
+          "route_order": [
+            "legacy",
+            "one_pass"
+          ]
+        },
+        {
+          "legacy_seconds": 14.854632352013141,
+          "one_pass_seconds": 0.0350031970301643,
+          "outputs_equal_including_order_and_timestamps": true,
+          "repetition": 2,
+          "route_order": [
+            "one_pass",
+            "legacy"
+          ]
+        }
+      ]
+    }
+  ],
+  "source_sha256": {
+    "benchmark_script": "e6833ead2e1890dab2b7064c50404f68f231943561b7d0fd515193240294929a",
+    "contract_asset.py": "31bd4b22eff19fee7d280e097daed68276840c49cdbc8fda73604a6925b9762a",
+    "contract_lifecycle.py": "ca197dc01bd23f7007d822c6199e46c11af0f01d8b1826a838f82053d0f260b3",
+    "contract_lineage.py": "cca2a8a798efac9a098031ecaa158b222e5a63d674dbb96f9b57b7f49ac00fee",
+    "snapshots.py": "f2e30a68258b53dec747e39464936cf02e196ef432c7e95dc74b872fb3fdee46"
+  },
+  "started_at_utc": "2026-10-02T06:39:42.642966+00:00"
+}

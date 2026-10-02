@@ -45,10 +45,12 @@ class SourceAutoEvidence:
 
     def matches(self, shape, metrics, requested_tile_width) -> bool:
         shapes = self.shape if isinstance(self.shape, frozenset) else (self.shape,)
+        metrics = tuple(metrics)
+        metric_set = frozenset(metrics)
         return (
             tuple(shape) in shapes
-            and frozenset(metrics) == self.metrics
-            and len(tuple(metrics)) == len(self.metrics)
+            and metric_set == self.metrics
+            and len(metrics) == len(self.metrics)
             and requested_tile_width >= self.minimum_requested_tile
             and (self.exact_requested_tile is None
                  or requested_tile_width == self.exact_requested_tile)

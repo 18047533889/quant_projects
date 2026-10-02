@@ -89,6 +89,14 @@ def test_registry_evidence_ids_are_stable_and_artifact_paths_exist():
         assert all((root / path).is_file() for path in entry.evidence_artifacts)
 
 
+def test_matches_handles_one_shot_metric_iterators():
+    entry = next(e for e in SOURCE_AUTO_EVIDENCE
+                 if e.evidence_id == "real_cos_f8_rank_pair")
+
+    assert entry.matches(F8, iter(RANK_PAIR), 2)
+    assert not entry.matches(F8, iter((*RANK_PAIR, RANK_PAIR[0])), 2)
+
+
 def test_measured_f8_is_selected_only_for_exact_tile2(monkeypatch):
     import quant_evaluator.runtime.source_auto_evidence as registry
 
