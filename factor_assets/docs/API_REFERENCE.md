@@ -622,8 +622,8 @@ class SnapshotManager:
 ```python
 def create_snapshot(
     self,
-    assets: List[FactorAsset],
-    events: Dict[str, List[StateEvent]],
+    assets: list[FactorAsset],
+    events: list[StateEvent],
     query: SnapshotQuery,
 ) -> SnapshotResult:
 ```
@@ -632,10 +632,22 @@ Create point-in-time snapshot.
 
 **Parameters:**
 - `assets`: All assets
-- `events`: All events by factor_id
+- `events`: Complete lifecycle and health event history as one flat list
 - `query`: Snapshot query with filters
 
 **Returns:** SnapshotResult with matched assets
+
+Supply complete event history for the included assets. The manager replays
+lifecycle and health transitions through the inclusive `as_of_timestamp`.
+Equal normalized UTC instants retain event input order. Health events do not
+change lifecycle milestones. Before the first health transition, the manager
+uses its `health_from`, including when that transition follows the query cut.
+It does not apply a future `health_to`.
+
+A current non-ACTIVE asset without health history raises `ValueError` after
+asset filtering. With no health events, the manager assumes ACTIVE. An
+incomplete log can omit an earlier transition even for a current ACTIVE asset;
+the caller must not treat this default as proof of history completeness.
 
 **Example:**
 ```python
@@ -643,16 +655,16 @@ manager = SnapshotManager()
 
 query = SnapshotQuery(
     as_of_timestamp="2026-08-14T10:00:00Z",
-    include_states=[LifecycleState.APPROVED],
+    lifecycle_state=LifecycleState.APPROVED,
 )
 
 snapshot = manager.create_snapshot(
     assets=repo.list_all(),
-    events={f.factor_id: repo.get_events(f.factor_id) for f in repo.list_all()},
+    events=repo.get_events(),
     query=query,
 )
 
-print(f"Snapshot: {len(snapshot.matched_assets)} factors")
+print(f"Snapshot: {snapshot.total_count} factors")
 ```
 
 ---

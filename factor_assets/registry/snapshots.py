@@ -10,7 +10,7 @@ from typing import Optional
 from datetime import datetime, timezone
 
 from factor_assets.contracts.asset import FactorAsset
-from factor_assets.contracts.lifecycle import LifecycleState, StateEvent
+from factor_assets.contracts.lifecycle import HealthState, LifecycleState, StateEvent, StateEventKind
 
 
 def _normalize_ts(ts: str) -> str:
@@ -103,7 +103,7 @@ class SnapshotManager:
         # Build state and milestone maps together. Sorting/replaying the full
         # event log once keeps large batch snapshots from rescanning it for
         # each asset.
-        historical_states, historical_milestones = self._reconstruct_history(events, as_of)
+        historical_states, historical_milestones, historical_health = self._reconstruct_history_with_health(events, as_of)
 
         # Filter assets based on query
         matching_assets = []
@@ -132,10 +132,16 @@ class SnapshotManager:
                 if not set(query.tags).issubset(set(asset.tags)):
                     continue
 
+            if factor_id not in historical_health and asset.health_state is not HealthState.ACTIVE:
+                raise ValueError(
+                    f"missing health history for {factor_id}; cannot reconstruct point-in-time health"
+                )
+            historical_health_state = historical_health.get(factor_id, HealthState.ACTIVE)
+
             # Reconstruct asset with historical state
             milestones = historical_milestones.get(factor_id, (None, None, None))
             historical_asset = self._with_historical_state(
-                asset, historical_state, milestones
+                asset, historical_state, milestones, historical_health_state
             )
             matching_assets.append(historical_asset)
 
@@ -172,23 +178,57 @@ class SnapshotManager:
         dict[str, LifecycleState],
         dict[str, tuple[Optional[str], Optional[str], Optional[str]]],
     ]:
-        """Rebuild each factor's state and milestone timestamps in one pass.
+        """Return historical lifecycle state and milestones (legacy shape)."""
+        states, milestones, _ = self._reconstruct_history_with_health(
+            events, as_of_timestamp
+        )
+        return states, milestones
 
-        Python's sort is stable, so events with equal normalized timestamps
-        retain their input order, matching the historical replay behavior.
-        The as-of boundary is inclusive, as before.
+    def _reconstruct_history_with_health(
+        self,
+        events: list[StateEvent],
+        as_of_timestamp: str,
+    ) -> tuple[
+        dict[str, LifecycleState],
+        dict[str, tuple[Optional[str], Optional[str], Optional[str]]],
+        dict[str, HealthState],
+    ]:
+        """Rebuild lifecycle and health history in one stable sorted sweep.
+
+        The as-of boundary is inclusive. Equal normalized timestamps retain
+        their input order.
         """
         states: dict[str, LifecycleState] = {}
         milestones: dict[
             str, tuple[Optional[str], Optional[str], Optional[str]]
         ] = {}
+        health_states: dict[str, HealthState] = {}
         sorted_events = sorted(events, key=lambda e: _normalize_ts(e.timestamp))
 
         for event in sorted_events:
-            if _normalize_ts(event.timestamp) > as_of_timestamp:
-                break
-
             factor_id = event.factor_id
+            event_timestamp = _normalize_ts(event.timestamp)
+
+            # Health is orthogonal to lifecycle. The first typed transition's
+            # health_from records the state immediately before that event,
+            # even when the event itself is after the query boundary. A future
+            # health_to is never applied to this snapshot.
+            if event.event_kind is StateEventKind.HEALTH_TRANSITION:
+                if factor_id not in health_states:
+                    health_states[factor_id] = event.health_from
+                if event_timestamp <= as_of_timestamp:
+                    if event.health_from is not health_states[factor_id]:
+                        raise ValueError(
+                            f"Inconsistent health event history for {factor_id}: "
+                            f"expected {health_states[factor_id].value}, "
+                            f"found {event.health_from.value} at {event.timestamp}"
+                        )
+                    health_states[factor_id] = event.health_to
+                continue
+
+            if event_timestamp > as_of_timestamp:
+                continue
+
             states[factor_id] = event.to_state
             first_evaluated, approved, production_ready = milestones.get(
                 factor_id, (None, None, None)
@@ -201,23 +241,26 @@ class SnapshotManager:
                 production_ready = event.timestamp
             milestones[factor_id] = (first_evaluated, approved, production_ready)
 
-        return states, milestones
+        return states, milestones, health_states
 
     @staticmethod
     def _with_historical_state(
         asset: FactorAsset,
         historical_state: LifecycleState,
         milestones: tuple[Optional[str], Optional[str], Optional[str]],
+        historical_health_state: Optional[HealthState] = None,
     ) -> FactorAsset:
         from dataclasses import replace
 
-        return replace(
-            asset,
-            lifecycle_state=historical_state,
-            first_evaluated_at=milestones[0],
-            approved_at=milestones[1],
-            production_ready_at=milestones[2],
-        )
+        updates = {
+            "lifecycle_state": historical_state,
+            "first_evaluated_at": milestones[0],
+            "approved_at": milestones[1],
+            "production_ready_at": milestones[2],
+        }
+        if historical_health_state is not None:
+            updates["health_state"] = historical_health_state
+        return replace(asset, **updates)
 
     def _reconstruct_asset_state(
         self,
@@ -240,6 +283,8 @@ class SnapshotManager:
 
         for event in sorted(events, key=lambda e: _normalize_ts(e.timestamp)):
             if event.factor_id != asset.factor_id:
+                continue
+            if event.event_kind is not StateEventKind.LIFECYCLE_TRANSITION:
                 continue
 
             if _normalize_ts(event.timestamp) > as_of_timestamp:
@@ -284,6 +329,8 @@ class SnapshotManager:
 
         for event in sorted(events, key=lambda e: _normalize_ts(e.timestamp)):
             if event.factor_id != factor_id:
+                continue
+            if event.event_kind is not StateEventKind.LIFECYCLE_TRANSITION:
                 continue
 
             if _normalize_ts(event.timestamp) > as_of_timestamp:

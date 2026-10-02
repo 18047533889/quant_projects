@@ -2,12 +2,15 @@
 Test point-in-time snapshot manager and time-travel queries.
 """
 
+from dataclasses import replace
+
 import pytest
 from datetime import datetime, timezone, timedelta
 
 from factor_assets.contracts.asset import FactorAsset, AssetMetadata
 from factor_assets.contracts.lineage import LineageRef
-from factor_assets.contracts.lifecycle import LifecycleState, StateEvent
+from factor_assets.contracts.lifecycle import HealthState, LifecycleState, StateEvent, StateEventKind
+from factor_assets.registry.sqlite_repository import SQLiteLifecycleRepository
 from factor_assets.registry.snapshots import (
     SnapshotManager,
     SnapshotQuery,
@@ -615,3 +618,164 @@ def test_snapshot_rereads_mutated_event_source_on_each_call():
     ).assets[0]
     assert second.lifecycle_state is LifecycleState.APPROVED
     assert second.approved_at == added.timestamp
+
+
+def health_event(
+    timestamp: str,
+    health_from: HealthState,
+    health_to: HealthState,
+    lifecycle_state: LifecycleState = LifecycleState.REGISTERED,
+) -> StateEvent:
+    return StateEvent(
+        factor_id="F001",
+        from_state=lifecycle_state,
+        to_state=lifecycle_state,
+        timestamp=timestamp,
+        evidence_refs=(),
+        event_kind=StateEventKind.HEALTH_TRANSITION,
+        health_from=health_from,
+        health_to=health_to,
+    )
+
+
+def test_snapshot_reconstructs_health_from_repository_events_as_of(tmp_path):
+    repo = SQLiteLifecycleRepository(tmp_path / "snapshot-health.sqlite")
+    asset = create_test_asset("F001", "2026-01-01T00:00:00Z")
+    repo.register(asset.metadata, asset.lineage)
+    repo.commit_transition(
+        "F001", LifecycleState.EVALUATED, evidence_refs=("evaluation_bundle_ref",)
+    )
+    repo.update_asset_health("F001", HealthState.DEPRECATED)
+    current_asset = repo.get("F001")
+    events = repo.get_events("F001")
+    health_event_record = next(
+        event for event in events
+        if event.event_kind is StateEventKind.HEALTH_TRANSITION
+    )
+    before_health = (
+        datetime.fromisoformat(health_event_record.timestamp) - timedelta(microseconds=1)
+    ).isoformat()
+    manager = SnapshotManager()
+
+    before = manager.create_snapshot(
+        [current_asset], events, SnapshotQuery(as_of_timestamp=before_health)
+    ).assets[0]
+    after = manager.create_snapshot(
+        [current_asset], events,
+        SnapshotQuery(as_of_timestamp=health_event_record.timestamp),
+    ).assets[0]
+
+    assert current_asset.health_state is HealthState.DEPRECATED
+    assert before.health_state is HealthState.ACTIVE
+    assert after.health_state is HealthState.DEPRECATED
+    assert after.lifecycle_state is LifecycleState.EVALUATED
+    assert after.first_evaluated_at is not None
+
+
+def test_snapshot_does_not_treat_health_event_as_lifecycle_or_milestone():
+    asset = replace(
+        create_test_asset("F001", "2026-01-01T00:00:00Z"),
+        health_state=HealthState.DEPRECATED,
+    )
+    events = [
+        StateEvent("F001", LifecycleState.REGISTERED, LifecycleState.REGISTERED,
+                   "2026-01-01T00:00:00Z", ()),
+        health_event(
+            "2026-01-02T00:00:00Z", HealthState.ACTIVE, HealthState.DEPRECATED,
+            lifecycle_state=LifecycleState.EVALUATED,
+        ),
+    ]
+    historical = SnapshotManager().create_snapshot(
+        [asset], events, SnapshotQuery(as_of_timestamp="2026-01-03T00:00:00Z")
+    ).assets[0]
+    assert historical.lifecycle_state is LifecycleState.REGISTERED
+    assert historical.first_evaluated_at is None
+    assert historical.health_state is HealthState.DEPRECATED
+
+
+@pytest.mark.parametrize("health_first", [False, True])
+def test_equal_instant_health_and_lifecycle_events_replay_independently(health_first):
+    asset = create_test_asset("F001", "2026-01-01T00:00:00Z")
+    registration = StateEvent(
+        "F001", LifecycleState.REGISTERED, LifecycleState.REGISTERED,
+        "2026-01-01T00:00:00Z", (),
+    )
+    lifecycle = StateEvent(
+        "F001", LifecycleState.REGISTERED, LifecycleState.EVALUATED,
+        "2026-01-02T00:00:00Z", ("evaluation_bundle_ref",),
+    )
+    # Same instant expressed with different offsets; health carries a stale
+    # lifecycle snapshot, but only its typed fields are replayed.
+    health = health_event(
+        "2026-01-02T01:00:00+01:00", HealthState.ACTIVE, HealthState.DEPRECATED,
+        lifecycle_state=LifecycleState.REGISTERED,
+    )
+    events = [registration, health, lifecycle] if health_first else [registration, lifecycle, health]
+    historical = SnapshotManager().create_snapshot(
+        [asset], events, SnapshotQuery(as_of_timestamp="2026-01-02T00:00:00Z")
+    ).assets[0]
+    assert historical.lifecycle_state is LifecycleState.EVALUATED
+    assert historical.first_evaluated_at == "2026-01-02T00:00:00Z"
+    assert historical.health_state is HealthState.DEPRECATED
+
+
+def test_snapshot_uses_registration_health_default_without_health_events():
+    asset = create_test_asset("F001", "2026-01-01T00:00:00Z")
+    historical = SnapshotManager().create_snapshot(
+        [asset], [], SnapshotQuery(as_of_timestamp="2026-01-02T00:00:00Z")
+    ).assets[0]
+    assert historical.health_state is HealthState.ACTIVE
+
+
+def test_snapshot_rejects_non_active_current_health_without_health_history():
+    asset = replace(
+        create_test_asset("F001", "2026-01-01T00:00:00Z"),
+        health_state=HealthState.RETIRED,
+    )
+    with pytest.raises(ValueError, match="missing health history"):
+        SnapshotManager().create_snapshot(
+            [asset], [], SnapshotQuery(as_of_timestamp="2026-01-02T00:00:00Z")
+        )
+
+
+def test_unmatched_asset_without_health_history_does_not_fail_other_snapshot():
+    retired = replace(
+        create_test_asset("F001", "2026-01-01T00:00:00Z"),
+        health_state=HealthState.RETIRED,
+    )
+    active = create_test_asset("F002", "2026-01-01T00:00:00Z")
+    result = SnapshotManager().create_snapshot(
+        [retired, active], [],
+        SnapshotQuery(as_of_timestamp="2026-01-02T00:00:00Z", factor_id="F002"),
+    )
+    assert [item.factor_id for item in result.assets] == ["F002"]
+    assert result.assets[0].health_state is HealthState.ACTIVE
+
+
+def test_snapshot_rejects_inconsistent_health_event_chain():
+    asset = replace(
+        create_test_asset("F001", "2026-01-01T00:00:00Z"),
+        health_state=HealthState.RETIRED,
+    )
+    events = [
+        health_event("2026-01-02T00:00:00Z", HealthState.ACTIVE, HealthState.DEPRECATED),
+        health_event("2026-01-03T00:00:00Z", HealthState.ACTIVE, HealthState.RETIRED),
+    ]
+    with pytest.raises(ValueError, match="Inconsistent health event history"):
+        SnapshotManager().create_snapshot(
+            [asset], events, SnapshotQuery(as_of_timestamp="2026-01-04T00:00:00Z")
+        )
+
+
+def test_snapshot_uses_first_health_from_before_future_first_transition():
+    asset = replace(
+        create_test_asset("F001", "2026-01-01T00:00:00Z"),
+        health_state=HealthState.RETIRED,
+    )
+    event = health_event(
+        "2026-01-03T00:00:00Z", HealthState.DEPRECATED, HealthState.RETIRED
+    )
+    result = SnapshotManager().create_snapshot(
+        [asset], [event], SnapshotQuery(as_of_timestamp="2026-01-02T00:00:00Z")
+    )
+    assert result.assets[0].health_state is HealthState.DEPRECATED
