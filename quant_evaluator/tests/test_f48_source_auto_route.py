@@ -8,14 +8,14 @@ F48_SHAPE = (2586, 5461, 48)
 F48_METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
 
 
-def _activate_f48_candidate(monkeypatch):
+def _activate_f48_candidate(monkeypatch, status="measured_source_ab"):
     from dataclasses import replace
 
     import quant_evaluator.runtime.source_auto_evidence as registry
 
     entry = next(item for item in registry.SOURCE_AUTO_EVIDENCE
                  if item.evidence_id == "real_cos_f48_mixed_three_tile2")
-    activated = replace(entry, evidence_status="measured_source_ab")
+    activated = replace(entry, evidence_status=status)
     monkeypatch.setattr(
         registry, "SOURCE_AUTO_EVIDENCE",
         tuple(activated if item.evidence_id == entry.evidence_id else item
@@ -31,8 +31,17 @@ def _select(**overrides):
 
 
 @pytest.mark.parametrize("metrics", list(permutations(F48_METRICS)))
-def test_f48_source_ab_pending_auto_does_not_select_route(metrics):
+def test_f48_source_ab_pending_auto_does_not_select_route(monkeypatch, metrics):
+    _activate_f48_candidate(monkeypatch, "measured_source_ab_pending_auto")
     assert _select(metrics=metrics) is None
+
+
+@pytest.mark.parametrize("metrics", list(permutations(F48_METRICS)))
+def test_f48_registered_auto_routes_without_candidate_injection(metrics):
+    route = _select(metrics=metrics)
+    assert route.evidence_id == "real_cos_f48_mixed_three_tile2"
+    assert route.evidence_status == "measured_source_ab"
+    assert route.effective_tile_width == 2
 
 
 def test_f48_pending_auto_record_can_be_activated_after_integrated_evidence(monkeypatch):
@@ -40,7 +49,9 @@ def test_f48_pending_auto_record_can_be_activated_after_integrated_evidence(monk
 
     entry = next(item for item in registry.SOURCE_AUTO_EVIDENCE
                  if item.evidence_id == "real_cos_f48_mixed_three_tile2")
-    assert entry.evidence_status == "measured_source_ab_pending_auto"
+    assert entry.evidence_status == "measured_source_ab"
+    _activate_f48_candidate(monkeypatch, "measured_source_ab_pending_auto")
+    assert _select() is None
     _activate_f48_candidate(monkeypatch)
 
     route = _select()
@@ -50,13 +61,15 @@ def test_f48_pending_auto_record_can_be_activated_after_integrated_evidence(monk
     assert route.evidence_status == "measured_source_ab"
 
 
-def test_f48_one_shot_metric_iterator_is_not_routed_while_pending():
-    assert _select(metrics=iter(F48_METRICS)) is None
+def test_f48_one_shot_metric_iterator_is_routed_after_admission():
+    assert _select(metrics=iter(F48_METRICS)).effective_tile_width == 2
 
 
 @pytest.mark.parametrize("overrides", [
     {"shape": (2585, 5461, 48)}, {"shape": (2586, 5460, 48)},
     {"shape": (2586, 5461, 47)}, {"shape": (2586, 5461, 49)},
+    {"shape": (2586, 5461, 63)}, {"shape": (2586, 5461, 64)},
+    {"shape": (2586, 5461, 65)},
     {"source_dtype": "float32"}, {"label_dtype": "float32"},
     {"metrics": F48_METRICS[:-1]},
     {"metrics": (*F48_METRICS, "coverage")},

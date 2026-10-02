@@ -753,7 +753,7 @@ def main():
     parser.add_argument("--cos-prefetch", choices=("off", "on", "auto"), default="auto",
                         help="COS adapter object prefetch policy (default: bounded auto)")
     parser.add_argument("--verify-auto", action="store_true",
-                        help="also verify the exact certified F61 Pearson or all-source auto route")
+                        help="also verify an exact certified F8, F48, or F61 ordinary auto route")
     parser.add_argument("--auto-references", nargs=2, type=Path,
                         metavar=("CUDA_CPU_REPORT", "CPU_CUDA_REPORT"),
                         help="run only auto against two opposite-order, matching F61 all-source A/B reports")
@@ -805,20 +805,26 @@ def main():
         parser.error("--gpu-tile-widths requires two distinct widths in 1..32")
     if args.gpu_worker and (selected == RANK_PAIR or is_pearson_chain(selected) or selected == ALL_SOURCE_METRICS):
         parser.error("series metrics are supported only by whole-source CPU/CUDA A/B")
+    f48_auto_profile = (args.factors == 48 and selected == DEFAULT_METRICS
+                        and args.days == 2586 and args.assets == 5461
+                        and args.tile_size == 2)
+    f48_certified_auto_profile = (f48_auto_profile
+        and args.source_adapter == "cos" and args.cos_prefetch == "auto"
+        and args.cos_prefetch_workers == 2 and args.max_prefetch_memory_mib == 512
+        and args.max_source_memory_mib == 4096
+        and args.max_object_mib == 128 and args.max_total_mib == 4096)
     f61_auto_profile = (args.factors == 61
                         and (is_pearson_chain(selected) or selected == ALL_SOURCE_METRICS)
                         and args.tile_size >= 16)
-    if args.verify_auto and (not (f8_certified_auto_profile or f61_auto_profile)
+    if args.verify_auto and (not (f8_certified_auto_profile or f61_auto_profile
+                                 or f48_certified_auto_profile)
                              or args.gpu_worker or args.gpu_tile_widths):
-        parser.error("--verify-auto requires exact F8 rank-pair or certified F61 profile in whole-source mode")
+        parser.error("--verify-auto requires exact F8 rank-pair, F48 COS tile-2, or certified F61 profile in whole-source mode")
     f61_reference_profile = (args.factors == 61 and selected == ALL_SOURCE_METRICS
                              and args.tile_size == 16)
     f8_cap8_tile2_profile = (args.factors == 8 and selected == RANK_PAIR
                              and args.days == 2586 and args.assets == 5461
                              and args.tile_size == 8)
-    f48_auto_profile = (args.factors == 48 and selected == DEFAULT_METRICS
-                        and args.days == 2586 and args.assets == 5461
-                        and args.tile_size == 2)
     if args.auto_f48_references and (
             not f48_auto_profile or args.gpu_worker or args.gpu_tile_widths
             or args.verify_auto or args.auto_references
@@ -1083,13 +1089,15 @@ def main():
         auto_run["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
         if f8_rank_pair_profile:
             expected_reason, expected_tile = "bounded_f8_rank_pair_gpu", 2
+        elif f48_certified_auto_profile:
+            expected_reason, expected_tile = "bounded_f48_mixed_three_gpu_tile2", 2
         elif selected == ALL_SOURCE_METRICS:
             expected_reason, expected_tile = "bounded_f61_all_source_15_gpu_tile16", 16
         else:
             expected_reason, expected_tile = "bounded_f61_pearson_chain_gpu_tile16", 16
         if (auto_run["auto_backend_reason"] != expected_reason
                 or auto_run["effective_max_tile_size"] != expected_tile):
-            raise ValueError("auto did not use the certified F61 source route")
+            raise ValueError("auto did not use the certified source route")
         auto_comparison = compare(cpu, auto, selected, expected_days=len(dates))
     report = {
         "status": "complete" if comparison["pass"] and
@@ -1114,7 +1122,7 @@ def main():
         "source_api": "columnar_factor_source_v1",
         "limitations": [
             "Research-source metrics only; no PIT or production certification.",
-            ("Auto exercised only for the exact certified F61 Pearson chain profile."
+            ("Ordinary auto exercised for the recorded certified source profile without candidate injection."
              if args.verify_auto else
              "This A/B alone does not establish automatic backend routing."),
         ],

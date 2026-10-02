@@ -14,6 +14,43 @@ from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.scripts import benchmark_real_cos_source_batch as harness
 
 
+def _f48_normal_auto_args():
+    return ["benchmark", "--factors", "48", "--tile-size", "2",
+            "--days", "2586", "--assets", "5461", "--source-adapter", "cos",
+            "--verify-auto"]
+
+
+def test_f48_ordinary_auto_cli_reaches_preflight_without_injection(monkeypatch):
+    monkeypatch.setattr("sys.argv", _f48_normal_auto_args())
+    monkeypatch.setattr(harness, "preflight", lambda *a: {"pass": False})
+    monkeypatch.setattr(harness, "f48_benchmark_candidate_scope",
+                        lambda **kw: pytest.fail("ordinary auto must not inject"))
+    with pytest.raises(SystemExit, match="insufficient RAM or COS cache disk headroom"):
+        harness.main()
+
+
+@pytest.mark.parametrize("option,value", [
+    ("--factors", "61"), ("--tile-size", "1"), ("--tile-size", "4"),
+    ("--days", "2585"), ("--assets", "5460"),
+    ("--source-adapter", "legacy"), ("--cos-prefetch", "off"),
+    ("--cos-prefetch-workers", "3"), ("--max-prefetch-memory-mib", "256"),
+    ("--max-source-memory-mib", "2048"), ("--max-object-mib", "64"),
+    ("--max-total-mib", "2048"),
+])
+def test_f48_ordinary_auto_cli_rejects_unmeasured_profile_before_io(
+        monkeypatch, option, value):
+    args = _f48_normal_auto_args()
+    if option in args:
+        args[args.index(option) + 1] = value
+    else:
+        args.extend([option, value])
+    monkeypatch.setattr("sys.argv", args)
+    monkeypatch.setattr(harness, "preflight", lambda *a: pytest.fail("unexpected preflight"))
+    with pytest.raises(SystemExit) as exc:
+        harness.main()
+    assert exc.value.code == 2
+
+
 def _fixtures():
     times = pd.date_range("2024-01-01", periods=3, freq="B")
     time_axis = AxisRef("time", "datetime64[ns]", 3,

@@ -4,14 +4,12 @@
 
 维护者已保存 2,586 日×5,461 股票×48 因子的 CPU/严格 CUDA 源端 A/B。
 两份记录采用相反运行顺序，比较 RankIC、分位收益差和因子换手率。
-生产选择器仍将该条证据标为 `measured_source_ab_pending_auto`，不会凭这两份
-显式后端记录启用默认 GPU 路径。
+维护者在候选验证通过后，将正式选择器中的该条证据注册为
+`measured_source_ab`，版本为 `source_routes_20261002_v6`。
 
-`--auto-f48-references` 只在独立基准进程内注入待验证的 auto 候选。
-候选状态为 `benchmark_only_pending_auto`；生产证据注册表保持原样。
-维护者需检查实际 auto 输出、显式 CUDA 输出、相反顺序源 A/B 的输出摘要、
-有限值掩码及观测计数，再决定生产准入。你不能把注入候选的成功记录称为
-普通默认 auto 已经验证。
+历史 `--auto-f48-references` 命令用于独立基准进程内的候选注入，要求注册表
+仍处于 pending 状态。注册后请用 `--verify-auto` 验证普通 auto；候选工具会
+拒绝已准入记录，防止维护者把注入测试误记为正式路径验证。
 
 维护者已完成候选验证，记录为
 `f48_pending_auto_verification_20261002_resume.json`。该次运行覆盖 48 个因子、
@@ -20,7 +18,16 @@
 24 个二因子 tile，显存峰值约 2.41 GiB，OOM 重试为零。
 历史两种运行顺序的 CPU 耗时为 220.312 / 231.666 秒，CUDA 耗时为
 57.264 / 58.449 秒；这些历史记录不证明本次代码的 CPU 性能。
-维护者还需单独验证正式注册表下的普通 auto；候选注入记录本身不能替代该验证。
+维护者随后使用 `--verify-auto` 完成正式注册表下的普通 auto 验证，记录为
+[f48_ordinary_auto_cpu_cuda_ab_20261002.json](f48_ordinary_auto_cpu_cuda_ab_20261002.json)。
+本轮 CPU 为 227.497 秒，显式 CUDA 为 60.825 秒，普通 auto 为 58.012 秒；
+CPU/auto 比值约 3.92。三个请求的源请求指纹相同，48 因子、144 个指标结果的
+CPU/CUDA 及 CPU/auto 比较均通过，有效值掩码和观测数一致。
+RankIC、分位收益差、因子换手率的最大绝对差分别为
+`1.08e-16`、`2.93e-18`、`3.89e-16`。普通 auto 返回
+`bounded_f48_mixed_three_gpu_tile2`，显存峰值 2,586,991,616 字节，OOM 重试为零。
+记录中的源文件摘要在本次运行前后保持一致。该次运行顺序为 CPU、CUDA、auto，
+不能据此声称 auto 比显式 CUDA 内核更快；两者使用相同的 GPU 计算路径。
 
 ## 精确请求与资源门槛
 
@@ -47,14 +54,39 @@ DATA_ACCESS_COS_CACHE_ROOT=/home/sunhaiwei/.cache/quant-dataaccess/research \
   --source-adapter cos --cos-prefetch auto --cos-prefetch-workers 2 \
   --max-prefetch-memory-mib 512 --max-source-memory-mib 4096 \
   --max-object-mib 128 --max-total-mib 4096 \
-  --auto-f48-references \
-  quant_evaluator/docs/benchmarks/real_cos_f48_source_cpu_first_telemetry_20261002.json \
-  quant_evaluator/docs/benchmarks/real_cos_f48_source_cuda_first_telemetry_20261002.json \
-  --output quant_evaluator/docs/benchmarks/f48_pending_auto_verification_UNIQUE.json
+  --verify-auto \
+  --output quant_evaluator/docs/benchmarks/f48_ordinary_auto_cpu_cuda_ab_UNIQUE.json
 ```
 
 先将 `UNIQUE` 换成新的运行标识，避免覆盖已有证据。这条命令读取现有授权
 COS 数据，不发布生产因子。
+
+## 公开调用与选项
+
+调用方可用已有的、绑定元数据的因子源及 `LabelBundle` 请求批评估：
+
+```python
+from quant_evaluator.api.factor_source import evaluate_factor_source_batch
+
+result = evaluate_factor_source_batch(
+    source, labels,
+    metrics=("rank_ic", "quantile_spread", "factor_turnover_rate"),
+    backend="auto", max_tile_size=2,
+)
+print(result.metadata["backend_used"])
+print(result.metadata["auto_backend_reason"])
+```
+
+`backend` 默认为 `auto`；传 `cpu` 可强制 CPU，传 `cuda_strict` 可强制 CUDA。
+调用方负责关闭 `source`。可通过 `gpu_policy=GPUExecutionPolicy(...)` 设置
+显存比例、结果内存预算与 OOM 重分块；改变精度策略会超出已认证的 auto 范围。
+
+本条注册只覆盖 2,586 日、5,461 股票、48 因子、float64 因子和标签，以及上述
+三指标集合。集合内重排指标不会改变选择，重复或增减指标会超出范围。
+有效请求 tile 上限须为 2；`max_tile_size` 未传时采用源声明的上限，不能假定
+任意源的默认上限都是 2。F47、F49、F63、F64、F65 等形状没有从本证据获得准入。
+不满足范围或 GPU 资源门槛时，普通 auto 回退 CPU，并在 metadata 中记录原因。
+该范围的速度结论不等于任意数据、任意指标的全局最快。
 
 ## 记录可信度
 

@@ -8,6 +8,69 @@ from quant_evaluator.runtime.source_auto_evidence import (
     SOURCE_AUTO_EVIDENCE, SOURCE_AUTO_EVIDENCE_VERSION, select_source_auto_route,
 )
 
+def test_f48_registered_entry_has_integrated_candidate_receipt():
+    import json
+    entry = next(item for item in SOURCE_AUTO_EVIDENCE
+                 if item.evidence_id == "real_cos_f48_mixed_three_tile2")
+    assert entry.evidence_status == "measured_source_ab"
+    assert entry.shape == (2586, 5461, 48)
+    assert entry.exact_requested_tile == 2
+    assert entry.certified_tile_widths == (2,)
+    root = Path(__file__).resolve().parents[2]
+    candidate_path = "quant_evaluator/docs/benchmarks/f48_pending_auto_verification_20261002_resume.json"
+    assert candidate_path in entry.evidence_artifacts
+    report = json.loads((root / candidate_path).read_text())
+    assert report["status"] == "complete"
+    assert tuple(report["shape"]) == entry.shape
+    assert frozenset(report["metric_ids"]) == entry.metrics
+    assert report["factor_dtype"] == "float64"
+    assert report["tile_size"] == 2
+    assert report["route_pass"] is True
+    assert report["reference_comparison"]["pass"] is True
+    assert report["direct_comparison"]["pass"] is True
+    assert report["source_provenance_verification"]["pass"] is True
+    assert (report["source_provenance"]["aggregate_sha256"]
+            == report["source_provenance_verification"]["after_aggregate_sha256"])
+    assert report["run"]["backend_used"] == "cuda"
+    assert report["run"]["effective_max_tile_size"] == 2
+    assert report["benchmark_auto_candidate"]["evidence_status"] == "benchmark_only_pending_auto"
+    # Preserve the historical injection status: it is not an ordinary-auto receipt.
+    assert report["run"]["benchmark_auto_candidate"]["evidence_status"] == "benchmark_only_pending_auto"
+
+
+
+def test_f48_ordinary_auto_receipt_covers_whole_request_without_injection():
+    import json
+    root = Path(__file__).resolve().parents[2]
+    report = json.loads((root / "quant_evaluator/docs/benchmarks/f48_ordinary_auto_cpu_cuda_ab_20261002.json").read_text())
+    assert report["kind"] == "real_cos_whole_source_batch_ab.v1"
+    assert report["status"] == "complete"
+    assert report["shape"] == [2586, 5461, 48]
+    assert report["factor_dtype"] == "float64"
+    assert report["tile_size"] == 2
+    assert report.get("benchmark_auto_candidate") is None
+    auto = report["auto_run"]
+    assert auto["backend_requested"] == "auto"
+    assert auto["backend_used"] == "cuda"
+    assert auto["auto_backend_reason"] == "bounded_f48_mixed_three_gpu_tile2"
+    assert auto["effective_max_tile_size"] == 2
+    assert auto.get("benchmark_auto_candidate") is None
+    assert auto["factor_tiles_processed"] == 24
+    assert auto["oom_retries"] == 0
+    assert len({run["source_request_fingerprint"] for run in [*report["runs"], auto]}) == 1
+    for comparison in (report["comparison"], report["auto_comparison"]):
+        assert comparison["pass"] is True
+        assert comparison["compared_factor_count"] == 48
+        assert comparison["compared_metric_count"] == 144
+        assert set(comparison["metrics"]) == {"rank_ic", "quantile_spread", "factor_turnover_rate"}
+        for metric in comparison["metrics"].values():
+            assert metric["finite_mask_equal"] is True
+            assert metric["observation_counts_equal"] is True
+    assert report["source_provenance_verification"]["pass"] is True
+    assert (report["source_provenance"]["aggregate_sha256"]
+            == report["source_provenance_verification"]["after_aggregate_sha256"])
+
+
 F8, F32, F61, F61_ALT = ((2586, 5461, 8), (2586, 5461, 32),
                          (2586, 5461, 61), (2400, 5000, 61))
 RANK_PAIR = ("rank_ic", "rank_ic_series")

@@ -16,6 +16,27 @@ from quant_evaluator.scripts.f48_benchmark_candidate import (
 )
 
 
+@pytest.fixture(autouse=True)
+def pending_registry_for_candidate_tests(monkeypatch):
+    from dataclasses import replace
+    monkeypatch.setattr(source_auto_evidence, "SOURCE_AUTO_EVIDENCE", tuple(
+        replace(item, evidence_status="measured_source_ab_pending_auto")
+        if item.evidence_id == F48_EVIDENCE_ID else item
+        for item in source_auto_evidence.SOURCE_AUTO_EVIDENCE))
+
+
+def test_candidate_injection_rejects_already_registered_route(monkeypatch):
+    from dataclasses import replace
+    monkeypatch.setattr(source_auto_evidence, "SOURCE_AUTO_EVIDENCE", tuple(
+        replace(item, evidence_status="measured_source_ab")
+        if item.evidence_id == F48_EVIDENCE_ID else item
+        for item in source_auto_evidence.SOURCE_AUTO_EVIDENCE))
+    assert _select().evidence_status == "measured_source_ab"
+    with pytest.raises(RuntimeError, match="envelope changed"):
+        with f48_benchmark_candidate_scope(**_args()):
+            pytest.fail("candidate injection accepted an admitted route")
+
+
 def _args(**overrides):
     values = dict(shape=F48_SHAPE, metrics=F48_METRICS,
                   source_dtype="float64", label_dtype="float64",
@@ -102,6 +123,12 @@ def test_candidate_override_does_not_leak_across_processes():
     code = """
 from quant_evaluator.api import factor_source
 from quant_evaluator.scripts.f48_benchmark_candidate import f48_benchmark_candidate_scope
+from quant_evaluator.runtime import source_auto_evidence as registry
+from dataclasses import replace
+registry.SOURCE_AUTO_EVIDENCE = tuple(
+    replace(item, evidence_status='measured_source_ab_pending_auto')
+    if item.evidence_id == 'real_cos_f48_mixed_three_tile2' else item
+    for item in registry.SOURCE_AUTO_EVIDENCE)
 shape = (2586, 5461, 48)
 metrics = ('rank_ic', 'quantile_spread', 'factor_turnover_rate')
 args = dict(shape=shape, metrics=metrics, source_dtype='float64',
