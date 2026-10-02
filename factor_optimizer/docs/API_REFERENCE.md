@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**84 个 Python 模块、958 个公开函数/类/方法定义**。
+扫描实际包目录：**85 个 Python 模块、960 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -78,6 +78,7 @@
 | [factor_optimizer/search/desirability_registry.py](../factor_optimizer/search/desirability_registry.py) | 14 | DesirabilityPolicyRegistry (DLIB-FO-003). |
 | [factor_optimizer/search/diagnosis_routing.py](../factor_optimizer/search/diagnosis_routing.py) | 10 | Deterministic V5 diagnosis routing with bounded, non-Cartesian trials. |
 | [factor_optimizer/search/dimensions.py](../factor_optimizer/search/dimensions.py) | 5 | Dimension aggregation primitives for factor optimization. |
+| [factor_optimizer/search/execution_dedup.py](../factor_optimizer/search/execution_dedup.py) | 2 | TRAIN-context-bound deduplication of executable repair proposals. |
 | [factor_optimizer/search/lineage.py](../factor_optimizer/search/lineage.py) | 27 | Mutation lineage tracking for provenance and genealogy analysis. |
 | [factor_optimizer/search/multifidelity.py](../factor_optimizer/search/multifidelity.py) | 37 | Multi-fidelity evaluation: Stage0-5 profile-bound tiers (R61-FI-036). |
 | [factor_optimizer/search/paired_comparison.py](../factor_optimizer/search/paired_comparison.py) | 5 | V5 paired common-draw factor comparison. |
@@ -7744,6 +7745,33 @@ Aggregate per-dimension desirabilities into a single score.
 
 返回类型：`float`。
 
+## factor_optimizer/search/execution_dedup.py
+
+TRAIN-context-bound deduplication of executable repair proposals.
+
+显式导出（含重导出）：`DeduplicatedProposal`、`deduplicate_proposals`。
+
+### DeduplicatedProposal
+
+[实际实现](../factor_optimizer/search/execution_dedup.py#L12)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+本类声明字段（继承字段见基类；实际限制仍需合同校验）：
+
+| 字段 | 类型 | 默认值/值 |
+|---|---|---|
+| `proposal` | `tuple` | `必填/未声明默认` |
+| `aliases` | `tuple[dict, ...]` | `必填/未声明默认` |
+
+### deduplicate_proposals
+
+[实际实现](../factor_optimizer/search/execution_dedup.py#L114)。
+
+Group only plans with the same resolved execution and TRAIN context.
+
+参数：`(proposals, *, compile_plan, final_identity=None, baseline_context=None)`。
+
 ## factor_optimizer/search/lineage.py
 
 Mutation lineage tracking for provenance and genealogy analysis.
@@ -10877,7 +10905,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
-| `factor_optimizer/research_batch.py` | `41a83d067d6abf41c824f7d250a631bc0b054d278c8ef255404ba80857f73a48` |
+| `factor_optimizer/research_batch.py` | `e8fd2504701d6ed83f7a9c4276600cb3d9512b5b408dfe1ed7f9074a9b70c491` |
 | `factor_optimizer/research_batch_diagnostics.py` | `0ec5186c413814db6457342e97236b582e95a460033c11a6804b815c64d24b89` |
 | `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
 | `factor_optimizer/research_diagnostics.py` | `054ee2ad344395812656f1a7991983c58cade69e8c0b524d98981258cd6947ad` |
@@ -10892,6 +10920,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/search/desirability_registry.py` | `f2e2c47cdb4dc24cf4621e9b6d2d78331272b650ff0fbf374214f83bc3dcc6b0` |
 | `factor_optimizer/search/diagnosis_routing.py` | `997ca9033fddbdb6248d3c06620edb528357b116c879c84c6a3e4d31f20ed229` |
 | `factor_optimizer/search/dimensions.py` | `d96278aa024bf275edc88072a5abfe0b749f023047971b94bccc99ae67964d90` |
+| `factor_optimizer/search/execution_dedup.py` | `5678d4ad22953715c7028ec10335fbe13024b07d7c9eabc0be8a84afabe3bf55` |
 | `factor_optimizer/search/lineage.py` | `979031c4c987a40cbb1987b360704ffd8fe0749792a21db0352c41497657b25b` |
 | `factor_optimizer/search/multifidelity.py` | `6967520ca3f3f78f5648cfccaa397f759514091f2dbb2bc3977506990f1747df` |
 | `factor_optimizer/search/paired_comparison.py` | `9bfdabf2b4e3c26b41697553fcdcbbcf49f49aa9ef20222546c69f57dfbce3be` |

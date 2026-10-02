@@ -5,10 +5,9 @@
 后续已接通指定 COS 因子池的 DataAccess 有界读取、TRAIN-only 多维诊断，
 以及基于真实 20 层谷底/峰顶的修复中心提案，见
 [COS 与 20 层诊断报告](COS_DIAGNOSTICS_20260922.md)。
-此前的 95 项网格是历史基线。当前 server-c 默认 FE/FP 参数域下，基础提案为 104 项，
-有效形态诊断和分层状态诊断最多各再增加 2 项；实际提案数会随可执行参数域及诊断结果变化。
-一次 240×40 合成批次实测每因子 required=104、evaluated=96；8 项未进入训练评分，
-其中 7 项缺少值级实现所需的 DSL/暴露输入，1 项未通过有效训练 IC 覆盖门槛。
+此前的 95 项网格是历史基线。去重前的默认 FE/FP 网格记录为 104 项；
+一次 240×40 合成批次的旧回放为 required=104、evaluated=96。该计数没有执行去重，
+不能代表当前预算口径。形态与分层状态诊断仍可各增加最多 2 项原始提案。
 基础预处理已接入批量入口（需要显式处理谱系和可选暴露），见
 [基础预处理与退化保护](BASELINE_PIPELINE.md)。未知谱系不会被假定为未处理。
 默认已接入 [joint.v1 联合多指标选优](JOINT_SELECTION.md)，不是只展示诊断。
@@ -23,11 +22,13 @@ COS 谱系/暴露自动加载仍未完成。独立报告接口已有
 下面 2026-09-21 的回放数字保留为历史证据；最新结果见
 [逐方法复核报告](METHOD_AUDIT_20260922.md)。
 
-默认候选上限为 128。`candidate_budget.required` 统计所有提案，包括不适用候选、
-方向组合及数据驱动补充候选；`evaluated` 只统计完成 TRAIN 评分的提案，不等于接受数。
-当前默认 FE/FP 域在无额外动态诊断提案时为 104 项，超出上限时整因子保留 RAW，不截断搜索。
-每个有足够 RAW 证据的因子逐条记录 transform、orientation、覆盖率及有效训练日数。
-真实执行错误保留原因；不会跳过失败后仍声称全方法执行成功。
+默认候选上限为 128。优化器先按已解析的变换、参数、执行路由、TRAIN 上下文、
+baseline 身份和方向合并等价提案，再把去重后的候选计入预算；编译失败的候选仍单独计数。
+candidate_budget.required 与 evaluated 分别表示去重后的提案数（含单独计数的编译失败提案）和完成 TRAIN 评分数；
+发生合并时，raw_required、unique_required 和 deduplicated 同时报告去重前后数量。
+候选记录保留所有别名的 family、parameters、orientation、可用 proposal source 与诊断问题。
+不同方向、TRAIN 上下文或执行绑定不会合并；编译失败的提案仍单独报告为不适用。
+预算超限时整因子保留 RAW，不截断搜索。完成评分不代表候选胜出或获得改进。
 
 当允许 SIGN_ORIENTATION 和平滑/衰减族时，新增复合方案：
 
@@ -35,7 +36,7 @@ $$f'_{t,i}=s\,S_\theta(f)_{t,i},\qquad s\in\{-1,+1\}.$$
 
 方向 s 与平滑参数 θ 都在 TRAIN 选择，VALIDATION 只检验一个冻结赢家。
 配置 compose_smoothing_sign=False 可禁用组合；显式 families 不包含
-SIGN_ORIENTATION 时不额外翻转。所有组合计入 maximum_candidates，
+SIGN_ORIENTATION 时不额外翻转。组合经执行去重后计入 maximum_candidates，
 预算不足明确拒绝，不静默截断，也不在验证集更换方向。
 
 尾部自动搜索现在包含 hinge 的 top/bottom，以及 saturation 的 top/bottom/both。

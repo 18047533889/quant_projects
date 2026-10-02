@@ -684,10 +684,31 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                      for f, p, plan in proposals
                      for sign in ((1, -1) if compose and f in {
                          "CAUSAL_SMOOTHING", "DECAY_REFINEMENT"} else (1,))]
+        from factor_optimizer.search.execution_dedup import deduplicate_proposals
+        raw_proposal_count = len(proposals)
+        def compile_proposal(family, params):
+            return compile_value_repair(family, params,
+                natural_time_scale=config.natural_time_scale,
+                training_context_ref=train_ref)
+        def final_proposal_identity(plan, orientation):
+            final_plan = plan if orientation == 1 else OrientedRepairPlan(plan)
+            if baseline_active:
+                final_plan = BaselineRepairPlan(baseline_plan, final_plan)
+            return final_plan.identity
+        deduplicated = deduplicate_proposals(
+            proposals, compile_plan=compile_proposal,
+            final_identity=final_proposal_identity,
+            baseline_context=baseline_plan.identity if baseline_active else None)
+        proposals = [item.proposal for item in deduplicated]
+        proposal_aliases = [item.aliases for item in deduplicated]
         budget_exceeded = len(proposals) > config.maximum_candidates
         diagnosis['candidate_budget'] = {
             'required': len(proposals), 'maximum': config.maximum_candidates,
             'status': 'exceeded' if budget_exceeded else 'admitted', 'evaluated': 0}
+        if raw_proposal_count != len(proposals):
+            diagnosis['candidate_budget'].update(
+                raw_required=raw_proposal_count, unique_required=len(proposals),
+                deduplicated=raw_proposal_count-len(proposals))
         raw_plan = compile_value_repair("NO_OP_RAW", {"keep_raw": True},
                                        natural_time_scale=config.natural_time_scale,
                                        training_context_ref=train_ref)
@@ -764,6 +785,17 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                         shape_rank_cache._bypass()
                 for family, params, precompiled, orientation in proposals:
                     record = {"family": family, "parameters": dict(params), "orientation": orientation}
+                    aliases = proposal_aliases[len(records)]
+                    if len(aliases) > 1:
+                        record["execution_aliases"] = tuple({
+                            **alias,
+                            **({"proposal_source": proposal_sources[alias["base_plan_identity"]]}
+                               if alias["base_plan_identity"] in proposal_sources else {}),
+                            "diagnosed_issues": [issue["code"] for issue in diagnosis["issues"]
+                                if alias["family"] in issue["families"] or (
+                                    alias["orientation"] == -1
+                                    and "SIGN_ORIENTATION" in issue["families"])],
+                        } for alias in aliases)
                     record["diagnosed_issues"] = [issue["code"] for issue in diagnosis["issues"]
                                                   if family in issue["families"] or (
                                                       orientation == -1 and "SIGN_ORIENTATION" in issue["families"])]
