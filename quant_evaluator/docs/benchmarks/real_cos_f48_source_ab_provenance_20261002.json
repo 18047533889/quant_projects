@@ -1,0 +1,28 @@
+{
+  "schema": "f48_source_ab_provenance.v1",
+  "head_before_and_after": "3cb659a309bbba7221a09e32b190bf3507fde6a1",
+  "receipts": [
+    "real_cos_f48_source_cpu_first_telemetry_20261002.json",
+    "real_cos_f48_source_cuda_first_telemetry_20261002.json"
+  ],
+  "source_sha256": {
+    "quant_evaluator/adapters/cos_factor_tile_source.py": "ddc54af02edffb77f94d5e7941f208abff5a8063d09320e25933dc4a68d6a918",
+    "quant_evaluator/adapters/source_stage_telemetry.py": "16ab84c6058f23f21f7a89ed6cb9d735e04c91d6f256376a00df63ee7f969803",
+    "quant_evaluator/scripts/benchmark_real_cos_source_batch.py": "05fad545fbabca1796e04a7972876e5e9c3c4bb51075c4561fbbe2b1c1fa2690",
+    "quant_evaluator/scripts/benchmark_real_cos_factor_tiles.py": "c468be4caf6cd73aeed70984e2ebd3fc4042428a558dc96694d618cb47faa4bf",
+    "quant_evaluator/runtime/evaluator.py": "fa616afedba6b769c782f34ad9915e9a2163f4e03235c1c35630a22bf247cbfe",
+    "quant_evaluator/runtime/source_auto_evidence.py": "d65617fb9b4c2b4f6cd2f7850327bdc906ad6578c3d7f2ac2053320c22d7d657",
+    "factor_optimizer/factor_optimizer/research_manifest.py": "4ed34125751aea2cdedc7e75fecc96e3f2f09f5e9fae70afc42ff60486c1c90f"
+  },
+  "verification": {
+    "reverse_run_before_and_after_hashes_equal": true,
+    "cpu_first_hash_check_scope": "first capture about 40 seconds after launch, compared with terminal capture; not a pre-launch capture",
+    "cross_order_comparison_receipts_equal": true,
+    "cross_order_source_request_fingerprints_equal": true
+  },
+  "limitations": [
+    "Seven source files only; this is not a whole-dependency or production/PIT attestation.",
+    "Exactly three scalar metrics across 48 factors; no unrequested series comparison.",
+    "No auto route was exercised by these two receipts."
+  ]
+}
