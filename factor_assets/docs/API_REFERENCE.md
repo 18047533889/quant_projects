@@ -625,6 +625,7 @@ def create_snapshot(
     assets: list[FactorAsset],
     events: list[StateEvent],
     query: SnapshotQuery,
+    *, health_history_coverage: Optional[HealthHistoryCoverage] = None,
 ) -> SnapshotResult:
 ```
 
@@ -634,6 +635,7 @@ Create point-in-time snapshot.
 - `assets`: All assets
 - `events`: Complete lifecycle and health event history as one flat list
 - `query`: Snapshot query with filters
+- `health_history_coverage`: Optional caller-attested interval and per-factor baseline; see [covered health replay](HEALTH_HISTORY_COVERAGE.md).
 
 **Returns:** SnapshotResult with matched assets
 
@@ -648,6 +650,13 @@ A current non-ACTIVE asset without health history raises `ValueError` after
 asset filtering. With no health events, the manager assumes ACTIVE. An
 incomplete log can omit an earlier transition even for a current ACTIVE asset;
 the caller must not treat this default as proof of history completeness.
+
+With `HealthHistoryCoverage`, the manager uses the declared state immediately
+before the interval start, checks matched factors' transitions through the
+interval end, and returns only transitions through the query cut. Missing
+baselines, out-of-range cuts and discontinuous chains raise errors. The caller
+still owns the completeness claim: a missing whole transition cycle can leave
+a consistent remaining chain. The interval includes both boundaries.
 
 **Example:**
 ```python

@@ -11,6 +11,7 @@ from factor_assets.contracts.asset import FactorAsset, AssetMetadata
 from factor_assets.contracts.lineage import LineageRef
 from factor_assets.contracts.lifecycle import HealthState, LifecycleState, StateEvent, StateEventKind
 from factor_assets.registry.sqlite_repository import SQLiteLifecycleRepository
+from factor_assets.registry.health_history import HealthHistoryCoverage
 from factor_assets.registry.snapshots import (
     SnapshotManager,
     SnapshotQuery,
@@ -779,3 +780,214 @@ def test_snapshot_uses_first_health_from_before_future_first_transition():
         [asset], [event], SnapshotQuery(as_of_timestamp="2026-01-02T00:00:00Z")
     )
     assert result.assets[0].health_state is HealthState.DEPRECATED
+
+
+def test_strict_health_coverage_rejects_truncated_suffix_but_replays_complete_history():
+    asset = create_test_asset("F001", "2026-01-01T00:00:00Z")
+    complete_events = [
+        health_event(
+            "2026-01-02T00:00:00Z", HealthState.ACTIVE, HealthState.DEPRECATED
+        ),
+        health_event(
+            "2026-01-04T00:00:00Z", HealthState.DEPRECATED, HealthState.ACTIVE
+        ),
+    ]
+    coverage = HealthHistoryCoverage(
+        "2026-01-01T00:00:00Z", "2026-01-05T00:00:00Z", {"F001": HealthState.ACTIVE}
+    )
+    manager = SnapshotManager()
+    query = SnapshotQuery(as_of_timestamp="2026-01-01T12:00:00Z")
+
+    result = manager.create_snapshot(
+        [asset], complete_events, query, health_history_coverage=coverage
+    )
+    assert result.assets[0].health_state is HealthState.ACTIVE
+
+    with pytest.raises(ValueError, match="Inconsistent covered health event history"):
+        manager.create_snapshot(
+            [asset], complete_events[1:], query, health_history_coverage=coverage
+        )
+
+
+def test_strict_health_coverage_baseline_overrides_current_nonactive_default():
+    asset = replace(
+        create_test_asset("F001", "2026-01-01T00:00:00Z"),
+        health_state=HealthState.RETIRED,
+    )
+    coverage = HealthHistoryCoverage(
+        "2026-01-01T00:00:00Z", "2026-01-05T00:00:00Z", {"F001": HealthState.ACTIVE}
+    )
+    result = SnapshotManager().create_snapshot(
+        [asset], [], SnapshotQuery(as_of_timestamp="2026-01-02T00:00:00Z"),
+        health_history_coverage=coverage,
+    ).assets[0]
+    assert result.health_state is HealthState.ACTIVE
+
+@pytest.mark.parametrize(
+    "as_of",
+    ["2025-12-31T23:59:59Z", "2026-01-05T00:00:01Z"],
+)
+def test_strict_health_coverage_rejects_snapshot_cut_outside_interval(as_of):
+    coverage = HealthHistoryCoverage(
+        "2026-01-01T00:00:00Z", "2026-01-05T00:00:00Z", {"F001": HealthState.ACTIVE}
+    )
+    with pytest.raises(ValueError, match="outside health history coverage interval"):
+        SnapshotManager().create_snapshot(
+            [create_test_asset("F001", "2026-01-01T00:00:00Z")],
+            [],
+            SnapshotQuery(as_of_timestamp=as_of),
+            health_history_coverage=coverage,
+        )
+
+
+def test_strict_health_coverage_requires_baseline_for_each_matched_asset():
+    coverage = HealthHistoryCoverage(
+        "2026-01-01T00:00:00Z", "2026-01-05T00:00:00Z", {}
+    )
+    with pytest.raises(ValueError, match="missing health coverage baseline for factor"):
+        SnapshotManager().create_snapshot(
+            [create_test_asset("F001", "2026-01-01T00:00:00Z")],
+            [],
+            SnapshotQuery(as_of_timestamp="2026-01-02T00:00:00Z"),
+            health_history_coverage=coverage,
+        )
+
+
+@pytest.mark.parametrize(
+    "covered_from,covered_through",
+    [
+        ("bad", "2026-01-05T00:00:00Z"),
+        ("2026-01-01T00:00:00Z", "bad"),
+        ("2026-01-05T00:00:00Z", "2026-01-01T00:00:00Z"),
+        ("0001-01-01T00:00:00+01:00", "2026-01-05T00:00:00Z"),
+        ("2026-01-01T00:00:00Z", "9999-12-31T23:59:59-01:00"),
+    ],
+)
+def test_health_history_coverage_validates_interval_timestamps(covered_from, covered_through):
+    with pytest.raises(ValueError):
+        HealthHistoryCoverage(covered_from, covered_through, {})
+
+
+def test_health_history_coverage_rejects_duplicate_and_untyped_baselines_and_copies_mapping():
+    with pytest.raises(ValueError, match="duplicate health baseline"):
+        HealthHistoryCoverage(
+            "2026-01-01T00:00:00Z",
+            "2026-01-05T00:00:00Z",
+            [("F001", HealthState.ACTIVE), ("F001", HealthState.RETIRED)],
+        )
+    with pytest.raises(TypeError, match="must be HealthState"):
+        HealthHistoryCoverage(
+            "2026-01-01T00:00:00Z", "2026-01-05T00:00:00Z", {"F001": "ACTIVE"}
+        )
+
+    source = {"F001": HealthState.ACTIVE}
+    coverage = HealthHistoryCoverage(
+        "2026-01-01T00:00:00Z", "2026-01-05T00:00:00Z", source
+    )
+    source["F001"] = HealthState.RETIRED
+    assert coverage.baseline_health_by_factor["F001"] is HealthState.ACTIVE
+    with pytest.raises(TypeError):
+        coverage.baseline_health_by_factor["F001"] = HealthState.RETIRED
+
+
+def test_strict_health_coverage_only_checks_matched_assets_registered_by_cut():
+    excluded = create_test_asset("F001", "2026-01-01T00:00:00Z")
+    matched = create_test_asset("F002", "2026-01-01T00:00:00Z")
+    future_registered = create_test_asset("F003", "2026-01-03T00:00:00Z")
+    coverage = HealthHistoryCoverage(
+        "2026-01-01T00:00:00Z", "2026-01-05T00:00:00Z", {"F002": HealthState.ACTIVE}
+    )
+    invalid_excluded_history = [
+        health_event("2026-01-02T00:00:00Z", HealthState.RETIRED, HealthState.ACTIVE),
+    ]
+
+    result = SnapshotManager().create_snapshot(
+        [excluded, matched, future_registered],
+        invalid_excluded_history,
+        SnapshotQuery(as_of_timestamp="2026-01-02T00:00:00Z", factor_id="F002"),
+        health_history_coverage=coverage,
+    )
+
+    assert [asset.factor_id for asset in result.assets] == ["F002"]
+    assert result.assets[0].health_state is HealthState.ACTIVE
+
+
+def test_strict_health_coverage_checks_boundary_ties_inclusive_cut_and_future_chain():
+    asset = create_test_asset("F001", "2026-01-01T00:00:00Z")
+    events = [
+        # Valid pre-baseline events are outside this declared coverage interval.
+        health_event(
+            "2025-12-31T00:00:00Z", HealthState.RETIRED, HealthState.DEPRECATED
+        ),
+        health_event(
+            "2026-01-01T00:00:00Z", HealthState.ACTIVE, HealthState.DEPRECATED
+        ),
+        health_event(
+            "2026-01-02T01:00:00+01:00", HealthState.DEPRECATED, HealthState.RETIRED
+        ),
+        health_event(
+            "2026-01-02T00:00:00Z", HealthState.RETIRED, HealthState.ACTIVE
+        ),
+        health_event(
+            "2026-01-04T00:00:00Z", HealthState.ACTIVE, HealthState.DEPRECATED
+        ),
+    ]
+    lifecycle = StateEvent(
+        "F001", LifecycleState.REGISTERED, LifecycleState.EVALUATED,
+        "2026-01-02T00:00:00Z", ("evaluation_bundle_ref",),
+    )
+    events.insert(2, lifecycle)
+    coverage = HealthHistoryCoverage(
+        "2026-01-01T00:00:00Z", "2026-01-05T00:00:00Z", {"F001": HealthState.ACTIVE}
+    )
+
+    result = SnapshotManager().create_snapshot(
+        [asset], events, SnapshotQuery(as_of_timestamp="2026-01-02T00:00:00Z"),
+        health_history_coverage=coverage,
+    ).assets[0]
+
+    assert result.health_state is HealthState.ACTIVE
+    assert result.lifecycle_state is LifecycleState.EVALUATED
+
+
+def test_strict_health_coverage_rejects_bad_matched_event_timestamps():
+    coverage = HealthHistoryCoverage(
+        "2026-01-01T00:00:00Z", "2026-01-05T00:00:00Z", {"F001": HealthState.ACTIVE}
+    )
+    with pytest.raises(ValueError, match="health event timestamp for F001"):
+        SnapshotManager().create_snapshot(
+            [create_test_asset("F001", "2026-01-01T00:00:00Z")],
+            [health_event("not-a-timestamp", HealthState.ACTIVE, HealthState.DEPRECATED)],
+            SnapshotQuery(as_of_timestamp="2026-01-02T00:00:00Z"),
+            health_history_coverage=coverage,
+        )
+
+def test_truncated_history_can_misstate_health_for_current_active_asset():
+    """Current ACTIVE plus an event suffix cannot prove prior history complete.
+
+    This records the present API ambiguity, not a desired inference rule: the
+    same current asset and truncated event list reconstruct differently from
+    the complete history, and the caller has no completeness marker to expose
+    that difference.
+    """
+    asset = create_test_asset("F001", "2026-01-01T00:00:00Z")
+    complete_events = [
+        health_event(
+            "2026-01-02T00:00:00Z", HealthState.ACTIVE, HealthState.DEPRECATED
+        ),
+        health_event(
+            "2026-01-04T00:00:00Z", HealthState.DEPRECATED, HealthState.ACTIVE
+        ),
+    ]
+    truncated_events = complete_events[1:]
+    query = SnapshotQuery(as_of_timestamp="2026-01-01T12:00:00Z")
+    manager = SnapshotManager()
+
+    complete = manager.create_snapshot([asset], complete_events, query).assets[0]
+    truncated = manager.create_snapshot([asset], truncated_events, query).assets[0]
+
+    assert asset.health_state is HealthState.ACTIVE
+    assert complete.health_state is HealthState.ACTIVE
+    # The future suffix's health_from is treated as an earlier baseline. With
+    # no coverage metadata, the replay cannot know the Jan 2 edge was omitted.
+    assert truncated.health_state is HealthState.DEPRECATED

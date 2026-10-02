@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from factor_assets.contracts.asset import FactorAsset
 from factor_assets.contracts.lifecycle import HealthState, LifecycleState, StateEvent, StateEventKind
+from factor_assets.registry.health_history import HealthHistoryCoverage, normalize_utc_timestamp
 
 
 def _normalize_ts(ts: str) -> str:
@@ -85,7 +86,8 @@ class SnapshotManager:
         self,
         assets: list[FactorAsset],
         events: list[StateEvent],
-        query: SnapshotQuery
+        query: SnapshotQuery,
+        *, health_history_coverage: Optional[HealthHistoryCoverage] = None,
     ) -> SnapshotResult:
         """
         Create a point-in-time snapshot from assets and events.
@@ -99,14 +101,32 @@ class SnapshotManager:
             SnapshotResult containing assets as of the specified time
         """
         as_of = _normalize_ts(query.as_of_timestamp)
+        as_of_instant = None
+        if health_history_coverage is not None:
+            if not isinstance(health_history_coverage, HealthHistoryCoverage):
+                raise TypeError("health_history_coverage must be HealthHistoryCoverage")
+            as_of_instant = normalize_utc_timestamp(
+                query.as_of_timestamp, field_name="as_of_timestamp"
+            )
+            coverage_start = normalize_utc_timestamp(
+                health_history_coverage.covered_from, field_name="covered_from"
+            )
+            coverage_end = normalize_utc_timestamp(
+                health_history_coverage.covered_through, field_name="covered_through"
+            )
+            if not coverage_start <= as_of_instant <= coverage_end:
+                raise ValueError("as_of_timestamp is outside health history coverage interval")
 
         # Build state and milestone maps together. Sorting/replaying the full
         # event log once keeps large batch snapshots from rescanning it for
         # each asset.
-        historical_states, historical_milestones, historical_health = self._reconstruct_history_with_health(events, as_of)
+        historical_states, historical_milestones, historical_health = self._reconstruct_history_with_health(
+            events, as_of, replay_health=health_history_coverage is None
+        )
 
         # Filter assets based on query
         matching_assets = []
+        strict_candidates = []
 
         for asset in assets:
             # Check if asset was registered before as_of
@@ -132,18 +152,34 @@ class SnapshotManager:
                 if not set(query.tags).issubset(set(asset.tags)):
                     continue
 
-            if factor_id not in historical_health and asset.health_state is not HealthState.ACTIVE:
-                raise ValueError(
-                    f"missing health history for {factor_id}; cannot reconstruct point-in-time health"
-                )
-            historical_health_state = historical_health.get(factor_id, HealthState.ACTIVE)
-
-            # Reconstruct asset with historical state
             milestones = historical_milestones.get(factor_id, (None, None, None))
-            historical_asset = self._with_historical_state(
-                asset, historical_state, milestones, historical_health_state
+            if health_history_coverage is None:
+                if factor_id not in historical_health and asset.health_state is not HealthState.ACTIVE:
+                    raise ValueError(
+                        f"missing health history for {factor_id}; cannot reconstruct point-in-time health"
+                    )
+                historical_health_state = historical_health.get(factor_id, HealthState.ACTIVE)
+                historical_asset = self._with_historical_state(
+                    asset, historical_state, milestones, historical_health_state
+                )
+                matching_assets.append(historical_asset)
+            else:
+                strict_candidates.append((asset, historical_state, milestones))
+
+
+        if health_history_coverage is not None:
+            covered_health = self._reconstruct_covered_health(
+                events,
+                {asset.factor_id for asset, _, _ in strict_candidates},
+                as_of_instant,
+                health_history_coverage,
             )
-            matching_assets.append(historical_asset)
+            matching_assets = [
+                self._with_historical_state(
+                    asset, state, milestones, covered_health[asset.factor_id]
+                )
+                for asset, state, milestones in strict_candidates
+            ]
 
         return SnapshotResult(
             query=query,
@@ -188,6 +224,7 @@ class SnapshotManager:
         self,
         events: list[StateEvent],
         as_of_timestamp: str,
+        *, replay_health: bool = True,
     ) -> tuple[
         dict[str, LifecycleState],
         dict[str, tuple[Optional[str], Optional[str], Optional[str]]],
@@ -214,6 +251,8 @@ class SnapshotManager:
             # even when the event itself is after the query boundary. A future
             # health_to is never applied to this snapshot.
             if event.event_kind is StateEventKind.HEALTH_TRANSITION:
+                if not replay_health:
+                    continue
                 if factor_id not in health_states:
                     health_states[factor_id] = event.health_from
                 if event_timestamp <= as_of_timestamp:
@@ -242,6 +281,57 @@ class SnapshotManager:
             milestones[factor_id] = (first_evaluated, approved, production_ready)
 
         return states, milestones, health_states
+
+    @staticmethod
+    def _reconstruct_covered_health(
+        events: list[StateEvent],
+        factor_ids: set[str],
+        as_of: datetime,
+        coverage: HealthHistoryCoverage,
+    ) -> dict[str, HealthState]:
+        """Replay covered health once per matched factor and validate to interval end."""
+        missing = sorted(factor_ids.difference(coverage.baseline_health_by_factor))
+        if missing:
+            raise ValueError(
+                "missing health coverage baseline for factor(s): " + ", ".join(missing)
+            )
+        if not factor_ids:
+            return {}
+
+        start = normalize_utc_timestamp(coverage.covered_from, field_name="covered_from")
+        end = normalize_utc_timestamp(coverage.covered_through, field_name="covered_through")
+        chain_states = {
+            factor_id: coverage.baseline_health_by_factor[factor_id]
+            for factor_id in factor_ids
+        }
+        snapshot_states = dict(chain_states)
+        indexed_events = []
+        for event in events:
+            if (
+                event.factor_id not in factor_ids
+                or event.event_kind is not StateEventKind.HEALTH_TRANSITION
+            ):
+                continue
+            instant = normalize_utc_timestamp(
+                event.timestamp, field_name=f"health event timestamp for {event.factor_id}"
+            )
+            if start <= instant <= end:
+                indexed_events.append((instant, event))
+        indexed_events.sort(key=lambda item: item[0])
+
+        for instant, event in indexed_events:
+            expected = chain_states[event.factor_id]
+            if event.health_from is not expected:
+                raise ValueError(
+                    f"Inconsistent covered health event history for {event.factor_id}: "
+                    f"expected {expected.value}, found {event.health_from.value} "
+                    f"at {event.timestamp}"
+                )
+            chain_states[event.factor_id] = event.health_to
+            if instant <= as_of:
+                snapshot_states[event.factor_id] = event.health_to
+
+        return snapshot_states
 
     @staticmethod
     def _with_historical_state(

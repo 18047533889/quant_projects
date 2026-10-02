@@ -17,6 +17,7 @@ from factor_assets.registry.lifecycle import (
     TransitionRequest,
     TransitionResult,
 )
+from factor_assets.registry.health_history import HealthHistoryCoverage
 from factor_assets.registry.lineage import (
     LineageGraph,
     LineageEdge,
@@ -41,6 +42,7 @@ __all__ = [
     "LifecycleOrchestrator",
     "TransitionRequest",
     "TransitionResult",
+    "HealthHistoryCoverage",
     "LineageGraph",
     "LineageEdge",
     "CampaignMetadata",
