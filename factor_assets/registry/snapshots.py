@@ -30,7 +30,7 @@ def _normalize_ts(ts: str) -> str:
         if parsed.tzinfo is None:
             parsed = parsed.replace(tzinfo=timezone.utc)
         return parsed.astimezone(timezone.utc).isoformat()
-    except (ValueError, AttributeError):
+    except (ValueError, AttributeError, OverflowError):
         return ts
 
 
