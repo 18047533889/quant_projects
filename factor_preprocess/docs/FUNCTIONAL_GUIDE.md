@@ -107,7 +107,11 @@ one_sided_iir_lowpass 使用：
 y_t=(1-a)y_{t-1}+a x_{t-1}
 ```
 
-alpha 必须在 (0,1]；滞后 NaN 或 ±Inf 会重置状态，后续有限值重新播种。
+alpha 必须在 (0,1]；滞后 NaN 或 ±Inf 会重置状态，后续有限值重新播种。生产注册表将此变换路由到 FactorEngine recipe `FE_COMPOSITE:long_ewm.lagged_iir_lowpass:v1`，直接传递 alpha，并保留严格使用前一行数据的时序。
+
+执行器按资产隔离状态，并通过稳定行顺序还原交错输入。若输入 x_t 为 NaN 或 ±Inf，y_t 仍消费 x_{t-1}。y_{t+1} 消费该非有限值，输出 NaN 并清空状态；若 x_{t+1} 有限，y_{t+2} 以 x_{t+1} 重新初始化递归。
+
+此 recipe 提供 FE 的 long-panel 原生执行，不声明 FE DSL 或导出接口支持该滤波器。eligibility 默认搜索域为 alpha ∈ [0.05, 0.5]；直接变换接受 (0, 1]。
 
 kalman_local_level 使用局部水平模型：
 

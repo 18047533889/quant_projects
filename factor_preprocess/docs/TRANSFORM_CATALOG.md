@@ -1,6 +1,6 @@
 # 默认变换目录与策略预设
 
-本目录来自当前环境的 `create_default_registry()` / `create_default_policies()`。当前注册 43 项：4 项 `FE_OPERATOR`、9 项 `FE_COMPOSITE`、30 项 `FP_NATIVE`。基础注册表含 40 项；源码按可选 PyWavelets 依赖条件注册三个 wavelet 函数，本次环境已注册这三项。所有默认项均 `requires_fit=False`、`fit_kind=stateless`；“历史”仅表示本次调用读取按资产隔离的过去输入。DataFrame 时间变换要求每资产日期单调，不会静默排序。公共列名默认 `asset_id/date/value`（收益列 `return`）。
+本目录来自当前环境的 `create_default_registry()` / `create_default_policies()`。当前注册 43 项：4 项 `FE_OPERATOR`、11 项 `FE_COMPOSITE`、28 项 `FP_NATIVE`。基础注册表含 40 项；源码按可选 PyWavelets 依赖条件注册三个 wavelet 函数，本次环境已注册这三项。所有默认项均 `requires_fit=False`、`fit_kind=stateless`；“历史”仅表示本次调用读取按资产隔离的过去输入。DataFrame 时间变换要求每资产日期单调，不会静默排序。公共列名默认 `asset_id/date/value`（收益列 `return`）。
 
 ## 全目录
 
@@ -19,7 +19,7 @@
 | `trailing_median` | 同上 | 时间/严格滞后；生产；FE_COMPOSITE | $`z_t=\mathrm{median}(x_{t-w:t-1})`$；`FE_COMPOSITE:long_smoothing.lagged_median:v1`。
 | `robust_ewma` | `halflife, winsor_std=4, min_periods=1` | 时间/严格滞后；生产；FP | lagged 值先按 10 期、至少2点的 $`\mu\pm cs`$ 夹断，再 EWMA；非正 c 钳为 $`10^{-12}`$。 |
 | `kama` | `period_fast=2, period_slow=30, period_er=10, use_current=False` | 时间/默认严格滞后；生产；FP | $`ER=\lvert x_t-x_{t-p}\rvert/\sum\lvert\Delta x\rvert,\ SC=[ER(a_f-a_s)+a_s]^2,\ K_t=K_{t-1}+SC(x_t-K_{t-1})`$ 平路径 ER=0；缺失效率保持前值。`use_current=True` 需外部 DecisionClock 证明。 |
-| `one_sided_iir_lowpass` | `alpha` | 时间/严格滞后；生产；FP | $`z_t=(1-\alpha)z_{t-1}+\alpha x_{t-1},\quad0\lt\alpha\le1`$。 |
+| `one_sided_iir_lowpass` | `alpha` | 时间/严格滞后；生产；FE_COMPOSITE | $`z_t=(1-\alpha)z_{t-1}+\alpha x_{t-1},\quad0\lt\alpha\le1`$；非有限滞后重置状态；recipe `FE_COMPOSITE:long_ewm.lagged_iir_lowpass:v1`。默认搜索域 `0.05–0.5`，直接调用范围 `(0,1]`。 |
 | `kalman_local_level` | `process_noise, measurement_noise` | 时间/严格滞后；生产；FP | $`P^-=P+q,\ K=P^-/(P^-+r),\ m=m^-+K(x_{t-1}-m^-)`$；lagged NaN 输出 NaN，并把水平与协方差状态都重置；下一有限值重新播种，绝非“只预测”。 |
 | `event_decay` | `halflife, min_periods=1` | 时间/严格滞后；生产；FP | $`\alpha=\min(1,\ln2/h),\ z_t=(1-\alpha)z_{t-1}+\alpha x_{t-1}`$ lagged NaN 重置，后续有限值重播种。 |
 | `volatility_scale` | `window, min_periods=None, ddof=1, target_vol=1` | 时间/历史；生产；FP | $`s_t=\mathrm{std}(x_{t-w:t-1}),\ z_t=x_t target\_vol/s_t`$ None=window；零波动 NaN。 |
@@ -50,7 +50,7 @@
 | `wavelet_smooth` | `wavelet="db4", level=1` | 时间/全 lagged 样本；条件注册、OFFLINE_ONLY；FP | 调用 `wavelet_decompose` 并返回 approximation 通道 $`a_{level}`$；若指定键不存在则取首个 approximation，否则全 NaN。 |
 | `wavelet_denoise` | `wavelet="db4", level=None, threshold_mode="soft", threshold_scale=1` | 时间/全 lagged 样本；条件注册、OFFLINE_ONLY；FP | 对 lagged 有限序列分解，以最细 detail 的 MAD 估计 $`\sigma=\mathrm{median}(\lvert d-\mathrm{median}(d)\rvert)/0.6745`$，阈值 $`\lambda=threshold\_scale\,\sigma\sqrt{2\ln n}`$；保留 approximation，对 details 做 soft/hard threshold 后全序列重构。少于 4 点或失败为 NaN。 |
 
-FE_OPERATOR 共 4 项：`cs_rank`、`cs_demean`、`cs_winsor`、`forward_fill`。FE_COMPOSITE 共 9 项：`trailing_sma`、`rolling_mean`、`trailing_median`、`rolling_std`、`rolling_zscore`、`ols_neutralize` 及三个 neutral 别名；基础 40 项中的其余 27 项为 FP_NATIVE。三个 wavelet 项也始终在本目录列明，但仅在可选 PyWavelets 依赖可用时才作为 FP_NATIVE/OFFLINE_ONLY 注册，因此运行时总数为 40 或 43；本次环境已注册，合计 30 项 FP_NATIVE。
+FE_OPERATOR 共 4 项：`cs_rank`、`cs_demean`、`cs_winsor`、`forward_fill`。FE_COMPOSITE 共 11 项：`trailing_sma`、`rolling_mean`、`trailing_median`、`rolling_std`、`rolling_zscore`、`ewma`、`one_sided_iir_lowpass`、`ols_neutralize` 及三个 neutral 别名；基础 40 项中的其余 25 项为 FP_NATIVE。三个 wavelet 项也始终在本目录列明，但仅在可选 PyWavelets 依赖可用时才作为 FP_NATIVE/OFFLINE_ONLY 注册，因此运行时总数为 40 或 43；本次环境已注册，合计 28 项 FP_NATIVE。
 
 ### OLS 有效秩口径
 

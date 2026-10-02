@@ -80,7 +80,7 @@ missing before quantile estimation, matching FE `winsorize`.
 | `rolling_zscore` | — | causal paired lagged z-score; numerator is current row, mean/std exclude it | `FE_COMPOSITE:long_smoothing.lagged_zscore:v1` | native Polars rolling expressions; bounded stable interval joins for hazardous magnitudes; not current-inclusive `ts_zscore` | independent 1200-digit Decimal tests validate exact binary64 inputs, including high offsets and extreme magnitudes; public/adapter/registry routes match FE bit-for-bit | no | yes | public function and production registry delegate to FE and fail closed if unavailable; legacy FP kernel remains an explicit research fallback, not the high-precision oracle | **FE_COMPOSITE** |
 | `robust_ewma` | `SMOOTH:robust_ewma` | EWMA on winsorized lagged values | `ts_robust_ema` | experimental | none/partial | no | yes | FP winsorizes against a lagged rolling mean/std window=10 then EWMA — FE `ts_robust_ema` semantics differ (robustness construction not the same); unannotated experimental | **FP_NATIVE** |
 | `kama` | `SMOOTH:kama` | Kaufman adaptive MA (recursive, ER lookback) | `KAMA` | technical | none/partial | no | yes | FE `KAMA` is the technical TA-Lib family with different period semantics; FP KAMA is recursive forward-only with explicit ER window and shift(1) causality — not numerically interchangeable | **FP_NATIVE** |
-| `one_sided_iir_lowpass` | `SMOOTH:one_sided_iir_lowpass` | one-pole IIR `y=(1-α)y+αx` lagged; non-finite lag resets state | `ts_super_smoother` / filters | — | none | no | yes | FE filter family differs (super-smoother is 2-pole); FE `ts_ema` also differs in gap handling; no exact FE equivalent preserves FP shift(1) and reset semantics | **FP_NATIVE** |
+| `one_sided_iir_lowpass` | `SMOOTH:one_sided_iir_lowpass` | one-pole IIR `y_t=(1-α)y_{t-1}+αx_{t-1}`; non-finite lag resets state | native long-panel recipe `long_ewm.lagged_iir_lowpass` | `FE_COMPOSITE:long_ewm.lagged_iir_lowpass:v1`; exact alpha, prior-row timing, and gap reset | exact; stable per-asset order restores interleaved rows | no | yes | Production search domain is alpha ∈ [0.05, 0.5]; direct transform accepts (0, 1]. This recipe covers native long-panel execution, not FE DSL or export support. | **FE_COMPOSITE** |
 | `kalman_local_level` | `SMOOTH:kalman_local_level` | scalar Kalman local-level filter (lagged); non-finite lag resets state | — | — | none | no | yes | no FE equivalent (stateful filter); FP fitted/state recursion | **FP_NATIVE** |
 | `event_decay` | `EVENT_DECAY:short_halflife` | causal short-halflife event persistence | FE `event_*` decay family exists (e.g. `erd_recency_decay`, `ts_decay_exp_window`) | — | none | no | yes | FE event-decay operators are separate authoring surfaces with different halflife/event-response semantics; FP `event_decay` (DLIB-FP-014) is the eligibility-engine executable | **FP_NATIVE** |
 
@@ -118,10 +118,10 @@ with `requires_fit=False`.
 ## Routing summary (R61-FI-041)
 
 - **FE_OPERATOR (4):** `cs_rank`, `cs_demean`, `cs_winsor`, `forward_fill`.
-- **FE_COMPOSITE (9):** `trailing_sma`, `rolling_mean`, `trailing_median`,
-  `rolling_std`, `rolling_zscore`, `ols_neutralize`, `industry_neutral`,
-  `size_neutral`, `dual_neutral`.
-- **FP_NATIVE (30):** everything else. FE-backed transforms retain their
+- **FE_COMPOSITE (11):** `trailing_sma`, `rolling_mean`, `trailing_median`,
+  `rolling_std`, `rolling_zscore`, `ewma`, `one_sided_iir_lowpass`,
+  `ols_neutralize`, `industry_neutral`, `size_neutral`, `dual_neutral`.
+- **FP_NATIVE (28):** everything else. FE-backed transforms retain their
   FP-native kernel for explicit research fallback (plan §26 F3). Production
   execution requires FE and fails closed when FE is unavailable; FE remains
   an optional dependency of FP.

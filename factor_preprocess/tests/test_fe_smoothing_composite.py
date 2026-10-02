@@ -580,3 +580,86 @@ def test_ewma_fe_empty_and_min_periods_beyond_input_length():
     assert empty.empty and empty.index.equals(frame.iloc[:0].index)
     result = R.ewma(frame, halflife=2.0, min_periods=3)
     assert result.isna().all()
+
+
+def _iir_scalar_oracle(frame, alpha, asset_col="asset_id", value_col="value"):
+    out = np.full(len(frame), np.nan, dtype=float)
+    raw = frame[value_col].reset_index(drop=True).to_numpy(dtype=float)
+    for positions in frame.groupby(asset_col, sort=False).indices.values():
+        state = np.nan
+        for local_pos, pos in enumerate(positions):
+            lagged = raw[positions[local_pos - 1]] if local_pos else np.nan
+            if not np.isfinite(lagged):
+                state = np.nan
+            elif not np.isfinite(state):
+                state = lagged
+            else:
+                state = (1.0 - alpha) * state + alpha * lagged
+            out[pos] = state
+    return pd.Series(out, index=frame.index)
+
+
+@pytest.mark.parametrize("alpha", [0.05, 0.37, 0.5, 1.0, np.nextafter(0.0, 1.0)])
+def test_fe_iir_lowpass_exact_alpha_matches_scalar_oracle_and_routes(alpha):
+    from factor_preprocess.adapters.fe_smoothing import (
+        IIR_RECIPE, execute_iir_lowpass, get_fe_composite_executor,
+    )
+    from factor_preprocess.registry.transforms import get_default_registry
+    from factor_preprocess.transforms.smoothing import one_sided_iir_lowpass
+
+    frame = pd.DataFrame({
+        "asset_id": pd.Categorical(
+            ["a", "b", "a", None, "b", "a", "b", "a", "b", "a"],
+            categories=["a", "b", "unused"],
+        ),
+        "date": [1, 1, 1, 1, 2, 2, 3, 3, 4, 4],
+        "value": [1e100, 7., 2e100, 999., -3., np.inf, 5., 4., -np.inf, 8.],
+    }, index=[4, 4, 7, 7, 4, 1, 7, 1, 4, 1])
+    original = frame.copy(deep=True)
+    expected = _iir_scalar_oracle(frame, alpha)
+    direct = one_sided_iir_lowpass(frame, alpha=alpha)
+    registry = get_default_registry()
+    routed = registry.get_execution("one_sided_iir_lowpass")
+    # Search-domain governance remains narrower than the numerical API.
+    if 0.05 <= alpha <= 0.5:
+        execute = routed
+    else:
+        with pytest.raises(ValueError, match="alpha"):
+            routed(frame, alpha=alpha)
+        execute = execute_iir_lowpass
+    actual = execute(frame, alpha=alpha)
+    np.testing.assert_allclose(actual.to_numpy(), expected.to_numpy(), rtol=2e-15,
+                               atol=0.0, equal_nan=True)
+    np.testing.assert_allclose(direct.to_numpy(), expected.to_numpy(), rtol=2e-15,
+                               atol=0.0, equal_nan=True)
+    assert actual.index.equals(frame.index)
+    pd.testing.assert_frame_equal(frame, original)
+    meta = registry.get("one_sided_iir_lowpass")
+    assert meta.implementation_origin == "FE_COMPOSITE"
+    assert meta.fe_equivalent_semantics == IIR_RECIPE
+    assert get_fe_composite_executor("one_sided_iir_lowpass", IIR_RECIPE) is execute_iir_lowpass
+    for stop in range(1, len(frame) + 1):
+        prefix = execute(frame.iloc[:stop].copy(), alpha=alpha)
+        np.testing.assert_allclose(prefix.to_numpy(), actual.iloc[:stop].to_numpy(),
+                                   rtol=2e-15, atol=0.0, equal_nan=True)
+
+
+def test_iir_native_route_preserves_true_alpha_and_fails_closed(monkeypatch):
+    import factor_preprocess.adapters.fe_smoothing as adapter
+    from factor_preprocess.errors import GovernanceError
+    from factor_preprocess.registry.transforms import get_default_registry
+    from factor_preprocess.transforms.smoothing import one_sided_iir_lowpass
+
+    frame = pd.DataFrame({"asset_id": ["a", "a"], "date": [1, 2], "value": [2., 4.]})
+    registry = get_default_registry()
+    routed = registry.get_execution("one_sided_iir_lowpass")
+    np.testing.assert_allclose(adapter.execute_iir_lowpass(frame, alpha=True),
+                               one_sided_iir_lowpass(frame, alpha=True), equal_nan=True)
+    with pytest.raises(ValueError, match="alpha"):
+        routed(frame, alpha=True)
+    monkeypatch.setattr(adapter, "get_fe_composite_executor", lambda *args: None)
+    with pytest.raises(GovernanceError, match="FE composite authority unavailable"):
+        registry.get_execution("one_sided_iir_lowpass")
+    research = registry.get_execution("one_sided_iir_lowpass", allow_research=True)
+    np.testing.assert_allclose(research(frame, alpha=0.5),
+                               one_sided_iir_lowpass(frame, alpha=0.5), equal_nan=True)

@@ -1,0 +1,23 @@
+{
+  "status": "complete",
+  "scope": "synthetic interleaved long panel; not COS or production acceptance",
+  "shape": [1200, 1000],
+  "alpha": 0.37,
+  "random_seed": 20261002,
+  "input_nonfinite_pattern": "normal values; every 173rd NaN; every 1973rd positive infinity",
+  "run_orders": [["fp_scalar_reference", "fe_native_polars"], ["fe_native_polars", "fp_scalar_reference"], ["fp_scalar_reference", "fe_native_polars"]],
+  "seconds": {
+    "fp_scalar_reference": [1.9301528690266423, 1.9586547270300798, 1.909650971996598],
+    "fe_native_polars": [0.23953593103215098, 0.23517852096119896, 0.24560102896066383]
+  },
+  "median_seconds": {"fp_scalar_reference": 1.9301528690266423, "fe_native_polars": 0.23953593103215098},
+  "max_abs_error": 5.551115123125783e-16,
+  "finite_masks_equal": true,
+  "output_indices_equal_input": true,
+  "head_before_and_after": "60484715de6eabf6c6763a8a42b380b558d93b6d",
+  "source_hashes_before_equal_after": {
+    "factor_engine/backend/long_ewm.py": "643b2923f08b5d8c1109f021cbcf926923e6644b5242e529653a39951af289bd",
+    "factor_engine/backend/native_long_ewm.py": "a79fcc6338acd3c198753e0a4ba2a2d080e86f0cba02cdbcb7bf624c1699bbac",
+    "factor_preprocess/factor_preprocess/transforms/smoothing.py": "4b81bf3c26fcc47f36f9bc27fab225e16764cd3114f311732dfc88c32f3f69f3"
+  }
+}

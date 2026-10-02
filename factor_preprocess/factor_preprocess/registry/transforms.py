@@ -1604,6 +1604,12 @@ def create_default_registry() -> TransformRegistry:
     )
 
     registry.enrich(
+        "one_sided_iir_lowpass", implementation_origin="FE_COMPOSITE",
+        fe_operator_id=None, fit_kind="stateless",
+        fe_equivalent_semantics="FE_COMPOSITE:long_ewm.lagged_iir_lowpass:v1",
+    )
+
+    registry.enrich(
         "trailing_sma", implementation_origin="FE_COMPOSITE", fe_operator_id=None,
         fit_kind="stateless",
         fe_equivalent_semantics="FE_COMPOSITE:long_smoothing.lagged_mean:v1",
@@ -1646,7 +1652,7 @@ def create_default_registry() -> TransformRegistry:
     for _meta in registry.all_transforms():
         if _meta.name in {
             "cs_rank", "cs_demean", "cs_winsor",
-            "forward_fill", "ols_neutralize", "industry_neutral", "rolling_zscore", "ewma",
+            "forward_fill", "ols_neutralize", "industry_neutral", "rolling_zscore", "ewma", "one_sided_iir_lowpass",
             "size_neutral", "dual_neutral", "trailing_sma", "rolling_mean", "trailing_median", "rolling_std",
         }:
             continue
