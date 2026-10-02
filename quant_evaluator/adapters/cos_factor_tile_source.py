@@ -176,7 +176,7 @@ class CosFactorTileSource:
         # pandas object/index overhead are outside the bound.
         estimate = estimate_source_memory(
             time_size=time_axis.size, asset_size=asset_axis.size,
-            factor_count=len(records), max_tile_size=max_tile_size,
+            factor_count=len(records), max_tile_size=1,
             dtype_itemsize=normalized_dtype.itemsize,
             prefetch_workers=self.prefetch_workers,
             prefetch_enabled=self.prefetch_enabled,
@@ -184,19 +184,32 @@ class CosFactorTileSource:
         # DataAccess research reads cap Arrow results at 128 MiB. Allow an
         # additional equal-sized pandas conversion buffer per active worker.
         estimated_prefetch = estimate.prefetch_bytes
-        estimated_bytes = estimate.total_bytes
         if estimated_prefetch > max_prefetch_memory_bytes:
-            if self._executor is not None:
-                self._executor.shutdown(wait=True, cancel_futures=True)
             raise MemoryError("bounded prefetch exceeds max_prefetch_memory_bytes")
-        if estimated_bytes > max_source_memory_bytes:
-            raise MemoryError("tile assembly plus bounded prefetch exceeds max_source_memory_bytes")
+        if estimate.total_bytes > max_source_memory_bytes:
+            raise MemoryError("one-factor tile assembly plus bounded prefetch exceeds max_source_memory_bytes")
+        self.admitted_max_tile_size = 1
+        for width in range(2, min(max_tile_size, len(records)) + 1):
+            candidate = self._estimate_for_width(width)
+            if candidate.total_bytes > max_source_memory_bytes:
+                break
+            self.admitted_max_tile_size = width
         self._executor = (ThreadPoolExecutor(max_workers=self.prefetch_workers,
                                              thread_name_prefix="qe-cos-prefetch")
                           if self.prefetch_enabled else None)
         self.estimated_assembly_bytes = estimate.assembly_bytes
-        self.estimated_peak_source_bytes = estimated_bytes
+        self.estimated_peak_source_bytes = estimate.total_bytes
         self.estimated_prefetch_bytes = estimated_prefetch
+
+    def _estimate_for_width(self, width: int):
+        """Conservatively estimate the source peak for one actual tile width."""
+        return estimate_source_memory(
+            time_size=self.time_axis.size, asset_size=self.asset_axis.size,
+            factor_count=len(self.records), max_tile_size=width,
+            dtype_itemsize=np.dtype(self.dtype).itemsize,
+            prefetch_workers=self.prefetch_workers,
+            prefetch_enabled=self.prefetch_enabled,
+            extra_assembly_bytes_per_cell=self.extra_assembly_bytes_per_cell)
 
     @staticmethod
     def _request_snapshot_id(manifest_sha256, factor_ids, time_axis, asset_axis, dtype,
@@ -400,6 +413,13 @@ class CosFactorTileSource:
                             or end <= start or end > len(self.records)
                             or end - start > self.max_tile_size):
                         raise ValueError("tile range must be the next bounded source range")
+                    tile_estimate = self._estimate_for_width(end - start)
+                    if tile_estimate.total_bytes > self.max_source_memory_bytes:
+                        raise MemoryError(
+                            "tile assembly plus bounded prefetch exceeds max_source_memory_bytes")
+                    if tile_estimate.prefetch_bytes > self.max_prefetch_memory_bytes:
+                        raise MemoryError(
+                            "bounded prefetch exceeds max_prefetch_memory_bytes")
                     if not self._verified_manifest:
                         self.verify_manifest(self.manifest_snapshot)
                         self._verified_manifest = True
@@ -418,6 +438,10 @@ class CosFactorTileSource:
                         for index in range(start, end):
                             payloads.append(self._read_one(index))
                     batch = self.make_tile(start, end, self.records[start:end], payloads)
+                    self.estimated_assembly_bytes = max(
+                        self.estimated_assembly_bytes, tile_estimate.assembly_bytes)
+                    self.estimated_peak_source_bytes = max(
+                        self.estimated_peak_source_bytes, tile_estimate.total_bytes)
                     self.next_start = end
                     if end == len(self.records):
                         self.verify_manifest(self.manifest_snapshot)

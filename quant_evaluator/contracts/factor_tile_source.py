@@ -6,6 +6,7 @@ EvaluationBundles or claim to implement evaluate_source.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from numbers import Integral
 from typing import Iterator, Protocol, runtime_checkable
 
 import numpy as np
@@ -72,6 +73,21 @@ def _same_axis(left: AxisRef, right: AxisRef) -> bool:
 def capture_factor_tile_source(source: FactorTileSource) -> FactorTileSourceMetadata:
     """Freeze source metadata before reads; fail closed on incomplete axes."""
     return _capture_factor_tile_source(source)
+
+
+def admitted_source_tile_limit(declared_width: int, memory_admitted_width=None) -> int:
+    """Validate an optional source-owned memory limit without changing its cap."""
+    if (not isinstance(declared_width, Integral) or isinstance(declared_width, bool)
+            or declared_width <= 0):
+        raise ValueError("declared source tile width must be a positive integer")
+    if memory_admitted_width is None:
+        return int(declared_width)
+    if (not isinstance(memory_admitted_width, Integral)
+            or isinstance(memory_admitted_width, bool)
+            or not 1 <= memory_admitted_width <= declared_width):
+        raise ValueError(
+            "admitted source tile width must be a positive integer within its declared cap")
+    return int(memory_admitted_width)
 
 
 def _capture_factor_tile_source(source, *, known_ids=None):
@@ -155,7 +171,12 @@ def iter_validated_factor_tiles(
     metadata = capture_factor_tile_source(source)
     if max_tile_size is not None and (type(max_tile_size) is not int or max_tile_size <= 0):
         raise InvalidContractError("max_tile_size override must be a positive integer")
-    width = min(metadata.max_tile_size, max_tile_size or metadata.max_tile_size)
+    try:
+        admitted_width = admitted_source_tile_limit(
+            metadata.max_tile_size, getattr(source, "admitted_max_tile_size", None))
+    except ValueError as exc:
+        raise InvalidContractError(str(exc)) from exc
+    width = min(admitted_width, max_tile_size or metadata.max_tile_size)
     for start in range(0, len(metadata.factor_ids), width):
         end = min(start + width, len(metadata.factor_ids))
         yield read_validated_factor_tile(source, metadata, start, end)

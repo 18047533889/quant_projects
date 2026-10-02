@@ -154,26 +154,90 @@ def test_run_backend_forwards_object_cap_and_validates_receipt(monkeypatch):
         timing["seconds"] for _, timing in results]
 
 
-def test_run_backend_auto_validates_effective_not_requested_tile_width(monkeypatch):
+@pytest.mark.parametrize("backend", ("cpu", "cuda_strict", "auto"))
+def test_run_backend_all_backends_validate_effective_not_requested_tile_width(
+        monkeypatch, backend):
     _, asset_axis, _, label, _, _ = _fixtures()
     records = tuple((f"f{i}", f"cos://test/f{i}", "0" * 64, 1) for i in range(5))
     source_rows = tuple((*row, "etag", "2" * 64) for row in records)
 
+    api_widths = []
+
     def fake_evaluate(source, labels, *, metrics, backend, max_tile_size, gpu_policy):
+        api_widths.append(max_tile_size)
         source.reads.extend([(0, 2), (2, 4), (4, 5)])
         return SimpleNamespace(metadata={
-            "factor_tiles_processed": 3, "backend_used": "cuda",
-            "effective_max_tile_size": 2,
+            "factor_tiles_processed": 3,
+            "backend_used": "cuda" if backend in ("cuda_strict", "auto") else "cpu",
+            "effective_max_tile_size": 2, "admitted_source_tile_size": 3,
         })
 
     monkeypatch.setattr(harness, "evaluate_factor_source_batch", fake_evaluate)
     _, receipt = harness.run_backend(
-        "auto", records, source_rows,
+        backend, records, source_rows,
         pd.date_range("2024-01-01", periods=3, freq="B"),
         asset_axis.values, label, "a" * 64, 4, 16, GPUExecutionPolicy(),
-        harness.DEFAULT_METRICS, expected_auto_cuda=True,
+        harness.DEFAULT_METRICS, expected_auto_cuda=backend == "auto",
     )
+    assert api_widths == [4]
     assert receipt["tile_ranges"] == [(0, 2), (2, 4), (4, 5)]
+
+    assert receipt["effective_max_tile_size"] == 2
+    assert receipt["declared_source_tile_size"] == 4
+    assert receipt["admitted_source_tile_size"] == 3
+
+
+def test_run_backend_default_tile_size_passes_none_and_reports_widths(monkeypatch):
+    _, asset_axis, _, label, _, _ = _fixtures()
+    records = tuple((f"f{i}", f"cos://test/f{i}", "0" * 64, 1) for i in range(5))
+    source_rows = tuple((*row, "etag", "2" * 64) for row in records)
+    source = SimpleNamespace(
+        factor_ids=tuple(row[0] for row in records), snapshot_id="a" * 64,
+        manifest_sha256="b" * 64, max_tile_size=4, prefetch_mode="auto",
+        prefetch_window=2, prefetch_objects=False, reads=[], tile_read_timings=[],
+        close=lambda: None,
+    )
+    api_widths = []
+
+    def fake_evaluate(received_source, labels, *, metrics, backend,
+                      max_tile_size, gpu_policy):
+        assert received_source is source
+        api_widths.append(max_tile_size)
+        received_source.reads.extend([(0, 2), (2, 4), (4, 5)])
+        return SimpleNamespace(metadata={
+            "factor_tiles_processed": 3, "backend_used": "cpu",
+            "effective_max_tile_size": 2, "admitted_source_tile_size": 3,
+        })
+
+    monkeypatch.setattr(harness, "RealCosSource", lambda *args, **kwargs: source)
+    monkeypatch.setattr(harness, "evaluate_factor_source_batch", fake_evaluate)
+    _, receipt = harness.run_backend(
+        "cpu", records, source_rows,
+        pd.date_range("2024-01-01", periods=3, freq="B"),
+        asset_axis.values, label, "a" * 64, 4, 16, GPUExecutionPolicy(),
+        harness.DEFAULT_METRICS, use_default_tile_size=True,
+    )
+    assert api_widths == [None]
+    assert receipt["api_default_tile_size"] is True
+    assert receipt["declared_source_tile_size"] == 4
+    assert receipt["admitted_source_tile_size"] == 3
+    assert receipt["effective_max_tile_size"] == 2
+    assert receipt["tile_ranges"] == [(0, 2), (2, 4), (4, 5)]
+
+
+@pytest.mark.parametrize("invalid", (0, 1, "true", None))
+def test_run_backend_rejects_non_bool_default_tile_flag_before_source_construction(
+        monkeypatch, invalid):
+    _, asset_axis, _, label, records, source_rows = _fixtures()
+    monkeypatch.setattr(harness, "RealCosSource",
+                        lambda *args, **kwargs: pytest.fail("source constructed"))
+    with pytest.raises(TypeError, match="use_default_tile_size must be bool"):
+        harness.run_backend(
+            "cpu", records, source_rows,
+            pd.date_range("2024-01-01", periods=3, freq="B"),
+            asset_axis.values, label, "a" * 64, 2, 16, GPUExecutionPolicy(),
+            harness.DEFAULT_METRICS, use_default_tile_size=invalid,
+        )
 
 
 @pytest.mark.parametrize("source_adapter", ("legacy", "cos"))

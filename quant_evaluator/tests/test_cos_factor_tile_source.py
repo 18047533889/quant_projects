@@ -457,39 +457,86 @@ def test_source_memory_bound_accounts_assembly_and_validity_copies():
                     for i in range(2))
     times = AxisRef("time", "int64", 2, np.array([1, 2], dtype=np.int64))
     assets = AxisRef("asset", "str", 2, np.array(["A", "B"]))
+    reads = []
+
+    def read_factor(record, _snapshot):
+        reads.append(record.factor_id)
+        return None, {"uri": record.uri, "sha256": record.sha256,
+                      "size_bytes": record.size_bytes, "manifest_sha256": "m" * 64}
+
+    def make_tile(start, end, selected, _payloads):
+        values = np.zeros((2, 2, end - start), dtype=np.float64)
+        return FactorBatch(tuple(record.factor_id for record in selected),
+                           times, assets, values)
+
     args = dict(
         records=records, time_axis=times, asset_axis=assets, dtype="float64",
-        manifest_snapshot={}, manifest_sha256="m" * 64, max_tile_size=2,
-        read_factor=lambda *_: None, verify_manifest=lambda *_: None,
-        make_tile=lambda *_: None, prefetch="off",
+        manifest_snapshot={}, manifest_sha256="m" * 64, max_tile_size=16,
+        read_factor=read_factor, verify_manifest=lambda *_: None,
+        make_tile=make_tile, prefetch="off",
     )
     # 3 value panels + raw/frozen bool masks, with no extra callback scratch.
     expected = 3 * (2 * 2 * 8 * 2) + (2 * 2 * 2 * 2)
+    too_tight = CosFactorTileSource(**args, max_source_memory_bytes=expected - 1)
+    assert too_tight.max_tile_size == 16
+    assert too_tight.admitted_max_tile_size == 1
+    assert too_tight.estimated_peak_source_bytes < expected
     with pytest.raises(MemoryError, match="tile assembly"):
-        CosFactorTileSource(**args, max_source_memory_bytes=expected - 1)
-    source = CosFactorTileSource(**args, max_source_memory_bytes=expected)
-    assert source.estimated_assembly_bytes == expected
-    source.close()
+        too_tight.read_tile(0, 2)
+    assert reads == []
+    assert too_tight._closed
+
+    admitted = CosFactorTileSource(**args, max_source_memory_bytes=expected)
+    assert admitted.max_tile_size == 16
+    assert admitted.admitted_max_tile_size == 2
+    admitted.read_tile(0, 2)
+    assert reads == ["f0", "f1"]
+    assert admitted.estimated_assembly_bytes == expected
+    assert admitted.estimated_peak_source_bytes == expected
+    admitted.close()
 
     with_extra = CosFactorTileSource(
         **args, max_source_memory_bytes=expected + 7 * 2 * 2 * 2,
         extra_assembly_bytes_per_cell=7)
-    assert with_extra.estimated_assembly_bytes == expected + 7 * 2 * 2 * 2
+    assert with_extra.admitted_max_tile_size == 2
     with_extra.close()
 
 
-def test_f61_tile16_assembly_bound_does_not_fit_four_gibibytes():
+def test_f61_tile16_assembly_bound_is_checked_before_factor_io():
     records = tuple(BoundCosFactor(f"f{i}", f"cos://b/{i}", "a" * 64, 1)
                     for i in range(16))
     times = AxisRef("time", "int64", 2586, np.arange(2586, dtype=np.int64))
     assets = AxisRef("asset", "int64", 5461, np.arange(5461, dtype=np.int64))
+    reads, verifications = [], []
+    source = CosFactorTileSource(
+        records=records, time_axis=times, asset_axis=assets, dtype="float64",
+        manifest_snapshot={}, manifest_sha256="m" * 64, max_tile_size=16,
+        read_factor=lambda *args: reads.append(args),
+        verify_manifest=lambda *args: verifications.append(args),
+        make_tile=lambda *_: pytest.fail("over-budget tile reached assembly"),
+        prefetch="auto", max_source_memory_bytes=4 * 1024**3)
+    assert source.max_tile_size == 16
+    assert 1 <= source.admitted_max_tile_size < 16
     with pytest.raises(MemoryError, match="tile assembly"):
+        source.read_tile(0, 16)
+    assert reads == []
+    assert verifications == []
+    assert source._closed
+
+
+def test_constructor_still_rejects_when_minimum_tile_cannot_fit(monkeypatch):
+    monkeypatch.setattr(
+        "quant_evaluator.adapters.cos_factor_tile_source.ThreadPoolExecutor",
+        lambda **_: pytest.fail("executor created before minimum-tile admission"))
+    with pytest.raises(MemoryError, match="one-factor tile assembly"):
         CosFactorTileSource(
-            records=records, time_axis=times, asset_axis=assets, dtype="float64",
-            manifest_snapshot={}, manifest_sha256="m" * 64, max_tile_size=16,
-            read_factor=lambda *_: None, verify_manifest=lambda *_: None,
-            make_tile=lambda *_: None, prefetch="auto",
-            max_source_memory_bytes=4 * 1024**3)
+            records=(BoundCosFactor("f", "cos://b/f", "a" * 64, 1),),
+            time_axis=AxisRef("time", "int64", 1, np.array([1], dtype=np.int64)),
+            asset_axis=AxisRef("asset", "int64", 1, np.array([1], dtype=np.int64)),
+            dtype="float64", manifest_snapshot={}, manifest_sha256="m" * 64,
+            max_tile_size=16, read_factor=lambda *_: None,
+            verify_manifest=lambda *_: None, make_tile=lambda *_: None,
+            prefetch="auto", max_source_memory_bytes=1)
 
 
 

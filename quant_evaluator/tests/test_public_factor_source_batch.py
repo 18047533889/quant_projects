@@ -91,6 +91,48 @@ def _assert_against_full_cpu(result, reference, metrics):
 
 
 @pytest.mark.parametrize("backend", ["cpu", "auto", "cuda_strict"])
+def test_source_memory_hint_bounds_execution_without_changing_declared_cap(backend):
+    if backend == "cuda_strict":
+        pytest.importorskip("cupy")
+    batch, label = _inputs()
+    source = Source(batch)
+    source.max_tile_size = 5
+    source.admitted_max_tile_size = 1
+    metrics = ("rank_ic", "rank_ic_series", "coverage")
+    result = evaluate_factor_source_batch(source, label, metrics=metrics, backend=backend)
+    assert source.max_tile_size == 5
+    assert source.reads == [(i, i + 1) for i in range(5)]
+    assert result.metadata["effective_max_tile_size"] == 1
+    assert result.metadata["execution_receipt"]["admitted_source_tile_size"] == 1
+    _assert_against_full_cpu(result, evaluate(batch, label, metrics=metrics, backend="cpu"), metrics)
+
+
+@pytest.mark.parametrize("hint", [0, -1, 6, True, 1.0, "1"])
+def test_invalid_source_memory_hint_fails_before_reads(hint):
+    batch, label = _inputs()
+    source = Source(batch)
+    source.max_tile_size = 5
+    source.admitted_max_tile_size = hint
+    with pytest.raises(InvalidContractError, match="admitted source tile width"):
+        evaluate_factor_source_batch(source, label, backend="cpu")
+    assert source.reads == []
+
+
+def test_source_memory_hint_revokes_gpu_width_instead_of_silently_reducing_it(monkeypatch):
+    import quant_evaluator.runtime.evaluator as evaluator
+    batch, label = _inputs()
+    source = Source(batch)
+    source.admitted_max_tile_size = 1
+    _patch_source_evidence_shape(monkeypatch, "synthetic_f32_rank_pair_tile2", (8, 48, 5))
+    monkeypatch.setattr(evaluator, "_auto_batch_cuda_rejection", lambda *args: None)
+    result = evaluate_factor_source_batch(source, label, metrics=("rank_ic", "rank_ic_series"))
+    assert result.metadata["backend_used"] == "cpu"
+    assert result.metadata["auto_backend_reason"] == "source_memory_budget_outside_certified_tile"
+    assert result.metadata["effective_max_tile_size"] == 1
+    assert source.reads == [(i, i + 1) for i in range(5)]
+
+
+@pytest.mark.parametrize("backend", ["cpu", "auto", "cuda_strict"])
 def test_public_source_batch_matches_full_cpu(backend):
     if backend == "cuda_strict":
         pytest.importorskip("cupy")

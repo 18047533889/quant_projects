@@ -1,0 +1,1851 @@
+{
+  "status": "complete",
+  "kind": "real_cos_gpu_tile_width_ab.v2",
+  "run_order": [
+    2,
+    4,
+    4,
+    2
+  ],
+  "metric_ids": [
+    "rank_ic",
+    "quantile_spread",
+    "factor_turnover_rate"
+  ],
+  "source_adapter": "cos",
+  "cos_prefetch": "auto",
+  "caller_settings": {
+    "cos_prefetch_workers": 2,
+    "max_prefetch_memory_mib": 512,
+    "max_object_mib": 128,
+    "max_total_mib": 4096
+  },
+  "prefetch_objects": true,
+  "prefetch_mode": "auto",
+  "prefetch_window": 2,
+  "runs": [
+    {
+      "status": "complete",
+      "kind": "real_cos_source_gpu_worker.v1",
+      "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+      "shape": [
+        2586,
+        5461,
+        48
+      ],
+      "source_request_fingerprint": "c264f803974b23d10100511915ea2c16e81cb5ca610187436260b7bdb11b34ab",
+      "tile_size": 2,
+      "metric_ids": [
+        "rank_ic",
+        "quantile_spread",
+        "factor_turnover_rate"
+      ],
+      "source_adapter": "cos",
+      "cos_prefetch": "auto",
+      "caller_settings": {
+        "cos_prefetch_workers": 2,
+        "max_prefetch_memory_mib": 512,
+        "max_object_mib": 128,
+        "max_total_mib": 4096
+      },
+      "prefetch_objects": true,
+      "prefetch_mode": "auto",
+      "prefetch_window": 2,
+      "run": {
+        "source_adapter": "cos",
+        "backend_requested": "cuda_strict",
+        "backend_used": "cuda",
+        "source_request_fingerprint": "c264f803974b23d10100511915ea2c16e81cb5ca610187436260b7bdb11b34ab",
+        "effective_max_tile_size": 2,
+        "peak_vram_bytes": 2586991616,
+        "pool_reserved_peak_bytes": 2586991616,
+        "vram_budget_bytes": 30444945408.0,
+        "h2d_bytes": 6213744240,
+        "d2h_bytes": 2304,
+        "oom_retries": 0,
+        "seconds": 61.08266948204255,
+        "total_wall_seconds": 61.08266948204255,
+        "factor_tiles_processed": 24,
+        "tile_ranges": [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            4
+          ],
+          [
+            4,
+            6
+          ],
+          [
+            6,
+            8
+          ],
+          [
+            8,
+            10
+          ],
+          [
+            10,
+            12
+          ],
+          [
+            12,
+            14
+          ],
+          [
+            14,
+            16
+          ],
+          [
+            16,
+            18
+          ],
+          [
+            18,
+            20
+          ],
+          [
+            20,
+            22
+          ],
+          [
+            22,
+            24
+          ],
+          [
+            24,
+            26
+          ],
+          [
+            26,
+            28
+          ],
+          [
+            28,
+            30
+          ],
+          [
+            30,
+            32
+          ],
+          [
+            32,
+            34
+          ],
+          [
+            34,
+            36
+          ],
+          [
+            36,
+            38
+          ],
+          [
+            38,
+            40
+          ],
+          [
+            40,
+            42
+          ],
+          [
+            42,
+            44
+          ],
+          [
+            44,
+            46
+          ],
+          [
+            46,
+            48
+          ]
+        ],
+        "factor_ids_sha256": "690ea504f2c93f59fa4639f08927ec67a8863c80a1f7dc1c207ca4d06085857d",
+        "source_request_identity_sha256": "63a922d6284c02633f4843f07c30a8bd1a273817d2f4e3f347ee2b0591f76b7a",
+        "source_snapshot_id": "89f7a80dcd8cfbe56875467f5c80a6d92f22a5253fddb029950425187f094928",
+        "source_manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "prefetch_objects": true,
+        "prefetch_mode": "auto",
+        "cos_prefetch": "auto",
+        "prefetch_window": 2,
+        "estimated_peak_source_bytes": 1836108344,
+        "max_source_memory_bytes": 4294967296,
+        "tile_read_timings": [
+          {
+            "tile_range": [
+              0,
+              2
+            ],
+            "wall_seconds": 3.0253736060112715,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              2,
+              4
+            ],
+            "wall_seconds": 1.828812015010044,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              4,
+              6
+            ],
+            "wall_seconds": 1.6761494189850055,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              6,
+              8
+            ],
+            "wall_seconds": 2.052488756016828,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              8,
+              10
+            ],
+            "wall_seconds": 1.7463721969979815,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              10,
+              12
+            ],
+            "wall_seconds": 1.650848183024209,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              12,
+              14
+            ],
+            "wall_seconds": 2.1003615289810114,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              14,
+              16
+            ],
+            "wall_seconds": 1.9509088259655982,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              16,
+              18
+            ],
+            "wall_seconds": 2.188414477976039,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              18,
+              20
+            ],
+            "wall_seconds": 2.332101156003773,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              20,
+              22
+            ],
+            "wall_seconds": 2.7561315820203163,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              22,
+              24
+            ],
+            "wall_seconds": 2.199596050020773,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              24,
+              26
+            ],
+            "wall_seconds": 2.3572896249825135,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              26,
+              28
+            ],
+            "wall_seconds": 2.2978758810204454,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              28,
+              30
+            ],
+            "wall_seconds": 2.2324132680078037,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              30,
+              32
+            ],
+            "wall_seconds": 2.219900847005192,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              32,
+              34
+            ],
+            "wall_seconds": 2.07930491596926,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              34,
+              36
+            ],
+            "wall_seconds": 2.158080703986343,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              36,
+              38
+            ],
+            "wall_seconds": 3.6532946809893474,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              38,
+              40
+            ],
+            "wall_seconds": 2.2756819910136983,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              40,
+              42
+            ],
+            "wall_seconds": 2.314654503017664,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              42,
+              44
+            ],
+            "wall_seconds": 2.0989619820029475,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              44,
+              46
+            ],
+            "wall_seconds": 3.3961503519676626,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              46,
+              48
+            ],
+            "wall_seconds": 2.42171057802625,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          }
+        ],
+        "source_stage_timings": {
+          "aggregation": "summed_stage_durations_seconds",
+          "scope": "source lifecycle; includes setup before and final verify after evaluator timing",
+          "phases": {
+            "context_setup": {
+              "count": 49,
+              "total_seconds": 0.7119107488542795
+            },
+            "bound_factor_read": {
+              "count": 48,
+              "total_seconds": 109.14718705799896
+            },
+            "arrow_to_pandas_axis": {
+              "count": 96,
+              "total_seconds": 6.6910340719041415
+            },
+            "reindex_write": {
+              "count": 48,
+              "total_seconds": 6.41459196707001
+            },
+            "manifest_verify": {
+              "count": 2,
+              "total_seconds": 0.9341382620041259
+            }
+          }
+        },
+        "source_read_wall_seconds": 55.01287712500198,
+        "observation_counts_sha256": {
+          "rank_ic": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "quantile_spread": "375fcee627b4d35196eb2046ff7c442e6201dd030ec6490884df4aea26b127a7",
+          "factor_turnover_rate": "e06f446abd743212115bbadabca58e944d50111e9f9afcf8acbf24c3de1e49d4"
+        },
+        "peak_process_rss_kib": 4077124,
+        "tile_size": 2,
+        "preflight": {
+          "pass": true,
+          "available_ram_bytes": 55836987392,
+          "minimum_available_ram_bytes": 34359738368,
+          "cos_cache_disk_free_bytes": 635333939200,
+          "required_disk_bytes": 5368709120
+        }
+      },
+      "source_provenance": {
+        "algorithm": "sha256_path_length_prefixed_v1",
+        "aggregate_sha256": "96a6009b5df820fa741803503718168566007bc483fba02489d2df84fd399876",
+        "file_count": 165,
+        "scope": {
+          "directories": [
+            "quant_evaluator/api",
+            "quant_evaluator/adapters",
+            "quant_evaluator/contracts",
+            "quant_evaluator/kernels",
+            "quant_evaluator/metrics",
+            "quant_evaluator/runtime"
+          ],
+          "files": [
+            "quant_evaluator/scripts/benchmark_real_cos_source_batch.py",
+            "quant_evaluator/scripts/benchmark_real_cos_factor_tiles.py",
+            "quant_evaluator/scripts/source_width_preparation.py",
+            "quant_evaluator/scripts/f48_auto_references.py",
+            "quant_evaluator/scripts/f48_benchmark_candidate.py",
+            "quant_evaluator/scripts/source_tree_provenance.py"
+          ]
+        },
+        "versions": {
+          "python": "3.12.3",
+          "numpy": "2.2.6",
+          "pandas": "2.3.3",
+          "cupy": null
+        },
+        "limitations": [
+          "This receipt hashes only the declared current Python source-file scope.",
+          "External DataAccess and Factor Optimizer dependencies are not attested.",
+          "Already-imported in-memory code is not attested; this is not a transitive runtime closure."
+        ]
+      },
+      "source_provenance_verification": {
+        "pass": true,
+        "status": "unchanged",
+        "after_aggregate_sha256": "96a6009b5df820fa741803503718168566007bc483fba02489d2df84fd399876",
+        "after_versions": {
+          "python": "3.12.3",
+          "numpy": "2.2.6",
+          "pandas": "2.3.3",
+          "cupy": "14.2.0"
+        }
+      }
+    },
+    {
+      "status": "complete",
+      "kind": "real_cos_source_gpu_worker.v1",
+      "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+      "shape": [
+        2586,
+        5461,
+        48
+      ],
+      "source_request_fingerprint": "c264f803974b23d10100511915ea2c16e81cb5ca610187436260b7bdb11b34ab",
+      "tile_size": 4,
+      "metric_ids": [
+        "rank_ic",
+        "quantile_spread",
+        "factor_turnover_rate"
+      ],
+      "source_adapter": "cos",
+      "cos_prefetch": "auto",
+      "caller_settings": {
+        "cos_prefetch_workers": 2,
+        "max_prefetch_memory_mib": 512,
+        "max_object_mib": 128,
+        "max_total_mib": 4096
+      },
+      "prefetch_objects": true,
+      "prefetch_mode": "auto",
+      "prefetch_window": 2,
+      "run": {
+        "source_adapter": "cos",
+        "backend_requested": "cuda_strict",
+        "backend_used": "cuda",
+        "source_request_fingerprint": "c264f803974b23d10100511915ea2c16e81cb5ca610187436260b7bdb11b34ab",
+        "effective_max_tile_size": 4,
+        "peak_vram_bytes": 4434622976,
+        "pool_reserved_peak_bytes": 4434622976,
+        "vram_budget_bytes": 30444945408.0,
+        "h2d_bytes": 6213744240,
+        "d2h_bytes": 2304,
+        "oom_retries": 0,
+        "seconds": 60.25691275700228,
+        "total_wall_seconds": 60.25691275700228,
+        "factor_tiles_processed": 12,
+        "tile_ranges": [
+          [
+            0,
+            4
+          ],
+          [
+            4,
+            8
+          ],
+          [
+            8,
+            12
+          ],
+          [
+            12,
+            16
+          ],
+          [
+            16,
+            20
+          ],
+          [
+            20,
+            24
+          ],
+          [
+            24,
+            28
+          ],
+          [
+            28,
+            32
+          ],
+          [
+            32,
+            36
+          ],
+          [
+            36,
+            40
+          ],
+          [
+            40,
+            44
+          ],
+          [
+            44,
+            48
+          ]
+        ],
+        "factor_ids_sha256": "690ea504f2c93f59fa4639f08927ec67a8863c80a1f7dc1c207ca4d06085857d",
+        "source_request_identity_sha256": "63a922d6284c02633f4843f07c30a8bd1a273817d2f4e3f347ee2b0591f76b7a",
+        "source_snapshot_id": "89f7a80dcd8cfbe56875467f5c80a6d92f22a5253fddb029950425187f094928",
+        "source_manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "prefetch_objects": true,
+        "prefetch_mode": "auto",
+        "cos_prefetch": "auto",
+        "prefetch_window": 2,
+        "estimated_peak_source_bytes": 3135345776,
+        "max_source_memory_bytes": 4294967296,
+        "tile_read_timings": [
+          {
+            "tile_range": [
+              0,
+              4
+            ],
+            "wall_seconds": 5.236187887960114,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              4,
+              8
+            ],
+            "wall_seconds": 3.0446629229700193,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              8,
+              12
+            ],
+            "wall_seconds": 3.73095167404972,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              12,
+              16
+            ],
+            "wall_seconds": 3.947022555046715,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              16,
+              20
+            ],
+            "wall_seconds": 4.797039658005815,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              20,
+              24
+            ],
+            "wall_seconds": 4.413635513978079,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              24,
+              28
+            ],
+            "wall_seconds": 4.598221666004974,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              28,
+              32
+            ],
+            "wall_seconds": 4.143729350995272,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              32,
+              36
+            ],
+            "wall_seconds": 4.204255601973273,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              36,
+              40
+            ],
+            "wall_seconds": 6.2932463440229185,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              40,
+              44
+            ],
+            "wall_seconds": 5.186441501020454,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              44,
+              48
+            ],
+            "wall_seconds": 4.840964310977142,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          }
+        ],
+        "source_stage_timings": {
+          "aggregation": "summed_stage_durations_seconds",
+          "scope": "source lifecycle; includes setup before and final verify after evaluator timing",
+          "phases": {
+            "context_setup": {
+              "count": 49,
+              "total_seconds": 0.8986935801221989
+            },
+            "bound_factor_read": {
+              "count": 48,
+              "total_seconds": 104.12872840388445
+            },
+            "arrow_to_pandas_axis": {
+              "count": 96,
+              "total_seconds": 5.707060296088457
+            },
+            "reindex_write": {
+              "count": 48,
+              "total_seconds": 6.5134310986613855
+            },
+            "manifest_verify": {
+              "count": 2,
+              "total_seconds": 0.9766578460112214
+            }
+          }
+        },
+        "source_read_wall_seconds": 54.436358987004496,
+        "observation_counts_sha256": {
+          "rank_ic": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "quantile_spread": "375fcee627b4d35196eb2046ff7c442e6201dd030ec6490884df4aea26b127a7",
+          "factor_turnover_rate": "e06f446abd743212115bbadabca58e944d50111e9f9afcf8acbf24c3de1e49d4"
+        },
+        "peak_process_rss_kib": 4959352,
+        "tile_size": 4,
+        "preflight": {
+          "pass": true,
+          "available_ram_bytes": 54825914368,
+          "minimum_available_ram_bytes": 34359738368,
+          "cos_cache_disk_free_bytes": 635327647744,
+          "required_disk_bytes": 5368709120
+        }
+      },
+      "source_provenance": {
+        "algorithm": "sha256_path_length_prefixed_v1",
+        "aggregate_sha256": "96a6009b5df820fa741803503718168566007bc483fba02489d2df84fd399876",
+        "file_count": 165,
+        "scope": {
+          "directories": [
+            "quant_evaluator/api",
+            "quant_evaluator/adapters",
+            "quant_evaluator/contracts",
+            "quant_evaluator/kernels",
+            "quant_evaluator/metrics",
+            "quant_evaluator/runtime"
+          ],
+          "files": [
+            "quant_evaluator/scripts/benchmark_real_cos_source_batch.py",
+            "quant_evaluator/scripts/benchmark_real_cos_factor_tiles.py",
+            "quant_evaluator/scripts/source_width_preparation.py",
+            "quant_evaluator/scripts/f48_auto_references.py",
+            "quant_evaluator/scripts/f48_benchmark_candidate.py",
+            "quant_evaluator/scripts/source_tree_provenance.py"
+          ]
+        },
+        "versions": {
+          "python": "3.12.3",
+          "numpy": "2.2.6",
+          "pandas": "2.3.3",
+          "cupy": null
+        },
+        "limitations": [
+          "This receipt hashes only the declared current Python source-file scope.",
+          "External DataAccess and Factor Optimizer dependencies are not attested.",
+          "Already-imported in-memory code is not attested; this is not a transitive runtime closure."
+        ]
+      },
+      "source_provenance_verification": {
+        "pass": true,
+        "status": "unchanged",
+        "after_aggregate_sha256": "96a6009b5df820fa741803503718168566007bc483fba02489d2df84fd399876",
+        "after_versions": {
+          "python": "3.12.3",
+          "numpy": "2.2.6",
+          "pandas": "2.3.3",
+          "cupy": "14.2.0"
+        }
+      }
+    },
+    {
+      "status": "complete",
+      "kind": "real_cos_source_gpu_worker.v1",
+      "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+      "shape": [
+        2586,
+        5461,
+        48
+      ],
+      "source_request_fingerprint": "c264f803974b23d10100511915ea2c16e81cb5ca610187436260b7bdb11b34ab",
+      "tile_size": 4,
+      "metric_ids": [
+        "rank_ic",
+        "quantile_spread",
+        "factor_turnover_rate"
+      ],
+      "source_adapter": "cos",
+      "cos_prefetch": "auto",
+      "caller_settings": {
+        "cos_prefetch_workers": 2,
+        "max_prefetch_memory_mib": 512,
+        "max_object_mib": 128,
+        "max_total_mib": 4096
+      },
+      "prefetch_objects": true,
+      "prefetch_mode": "auto",
+      "prefetch_window": 2,
+      "run": {
+        "source_adapter": "cos",
+        "backend_requested": "cuda_strict",
+        "backend_used": "cuda",
+        "source_request_fingerprint": "c264f803974b23d10100511915ea2c16e81cb5ca610187436260b7bdb11b34ab",
+        "effective_max_tile_size": 4,
+        "peak_vram_bytes": 4434622976,
+        "pool_reserved_peak_bytes": 4434622976,
+        "vram_budget_bytes": 30444945408.0,
+        "h2d_bytes": 6213744240,
+        "d2h_bytes": 2304,
+        "oom_retries": 0,
+        "seconds": 58.80048028798774,
+        "total_wall_seconds": 58.80048028798774,
+        "factor_tiles_processed": 12,
+        "tile_ranges": [
+          [
+            0,
+            4
+          ],
+          [
+            4,
+            8
+          ],
+          [
+            8,
+            12
+          ],
+          [
+            12,
+            16
+          ],
+          [
+            16,
+            20
+          ],
+          [
+            20,
+            24
+          ],
+          [
+            24,
+            28
+          ],
+          [
+            28,
+            32
+          ],
+          [
+            32,
+            36
+          ],
+          [
+            36,
+            40
+          ],
+          [
+            40,
+            44
+          ],
+          [
+            44,
+            48
+          ]
+        ],
+        "factor_ids_sha256": "690ea504f2c93f59fa4639f08927ec67a8863c80a1f7dc1c207ca4d06085857d",
+        "source_request_identity_sha256": "63a922d6284c02633f4843f07c30a8bd1a273817d2f4e3f347ee2b0591f76b7a",
+        "source_snapshot_id": "89f7a80dcd8cfbe56875467f5c80a6d92f22a5253fddb029950425187f094928",
+        "source_manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "prefetch_objects": true,
+        "prefetch_mode": "auto",
+        "cos_prefetch": "auto",
+        "prefetch_window": 2,
+        "estimated_peak_source_bytes": 3135345776,
+        "max_source_memory_bytes": 4294967296,
+        "tile_read_timings": [
+          {
+            "tile_range": [
+              0,
+              4
+            ],
+            "wall_seconds": 5.063928894000128,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              4,
+              8
+            ],
+            "wall_seconds": 2.729626853018999,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              8,
+              12
+            ],
+            "wall_seconds": 3.670549390022643,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              12,
+              16
+            ],
+            "wall_seconds": 3.7282841649721377,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              16,
+              20
+            ],
+            "wall_seconds": 4.440164781990461,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              20,
+              24
+            ],
+            "wall_seconds": 5.688055912964046,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              24,
+              28
+            ],
+            "wall_seconds": 4.49047988204984,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              28,
+              32
+            ],
+            "wall_seconds": 4.482399536995217,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              32,
+              36
+            ],
+            "wall_seconds": 4.071229282009881,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              36,
+              40
+            ],
+            "wall_seconds": 4.817269427003339,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              40,
+              44
+            ],
+            "wall_seconds": 4.796670718991663,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              44,
+              48
+            ],
+            "wall_seconds": 4.852928830019664,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          }
+        ],
+        "source_stage_timings": {
+          "aggregation": "summed_stage_durations_seconds",
+          "scope": "source lifecycle; includes setup before and final verify after evaluator timing",
+          "phases": {
+            "context_setup": {
+              "count": 49,
+              "total_seconds": 0.8450993332080543
+            },
+            "bound_factor_read": {
+              "count": 48,
+              "total_seconds": 101.10119561321335
+            },
+            "arrow_to_pandas_axis": {
+              "count": 96,
+              "total_seconds": 5.682048147718888
+            },
+            "reindex_write": {
+              "count": 48,
+              "total_seconds": 6.445632314076647
+            },
+            "manifest_verify": {
+              "count": 2,
+              "total_seconds": 0.9254202450392768
+            }
+          }
+        },
+        "source_read_wall_seconds": 52.83158767403802,
+        "observation_counts_sha256": {
+          "rank_ic": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "quantile_spread": "375fcee627b4d35196eb2046ff7c442e6201dd030ec6490884df4aea26b127a7",
+          "factor_turnover_rate": "e06f446abd743212115bbadabca58e944d50111e9f9afcf8acbf24c3de1e49d4"
+        },
+        "peak_process_rss_kib": 4685692,
+        "tile_size": 4,
+        "preflight": {
+          "pass": true,
+          "available_ram_bytes": 55045095424,
+          "minimum_available_ram_bytes": 34359738368,
+          "cos_cache_disk_free_bytes": 635315712000,
+          "required_disk_bytes": 5368709120
+        }
+      },
+      "source_provenance": {
+        "algorithm": "sha256_path_length_prefixed_v1",
+        "aggregate_sha256": "96a6009b5df820fa741803503718168566007bc483fba02489d2df84fd399876",
+        "file_count": 165,
+        "scope": {
+          "directories": [
+            "quant_evaluator/api",
+            "quant_evaluator/adapters",
+            "quant_evaluator/contracts",
+            "quant_evaluator/kernels",
+            "quant_evaluator/metrics",
+            "quant_evaluator/runtime"
+          ],
+          "files": [
+            "quant_evaluator/scripts/benchmark_real_cos_source_batch.py",
+            "quant_evaluator/scripts/benchmark_real_cos_factor_tiles.py",
+            "quant_evaluator/scripts/source_width_preparation.py",
+            "quant_evaluator/scripts/f48_auto_references.py",
+            "quant_evaluator/scripts/f48_benchmark_candidate.py",
+            "quant_evaluator/scripts/source_tree_provenance.py"
+          ]
+        },
+        "versions": {
+          "python": "3.12.3",
+          "numpy": "2.2.6",
+          "pandas": "2.3.3",
+          "cupy": null
+        },
+        "limitations": [
+          "This receipt hashes only the declared current Python source-file scope.",
+          "External DataAccess and Factor Optimizer dependencies are not attested.",
+          "Already-imported in-memory code is not attested; this is not a transitive runtime closure."
+        ]
+      },
+      "source_provenance_verification": {
+        "pass": true,
+        "status": "unchanged",
+        "after_aggregate_sha256": "96a6009b5df820fa741803503718168566007bc483fba02489d2df84fd399876",
+        "after_versions": {
+          "python": "3.12.3",
+          "numpy": "2.2.6",
+          "pandas": "2.3.3",
+          "cupy": "14.2.0"
+        }
+      }
+    },
+    {
+      "status": "complete",
+      "kind": "real_cos_source_gpu_worker.v1",
+      "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+      "shape": [
+        2586,
+        5461,
+        48
+      ],
+      "source_request_fingerprint": "c264f803974b23d10100511915ea2c16e81cb5ca610187436260b7bdb11b34ab",
+      "tile_size": 2,
+      "metric_ids": [
+        "rank_ic",
+        "quantile_spread",
+        "factor_turnover_rate"
+      ],
+      "source_adapter": "cos",
+      "cos_prefetch": "auto",
+      "caller_settings": {
+        "cos_prefetch_workers": 2,
+        "max_prefetch_memory_mib": 512,
+        "max_object_mib": 128,
+        "max_total_mib": 4096
+      },
+      "prefetch_objects": true,
+      "prefetch_mode": "auto",
+      "prefetch_window": 2,
+      "run": {
+        "source_adapter": "cos",
+        "backend_requested": "cuda_strict",
+        "backend_used": "cuda",
+        "source_request_fingerprint": "c264f803974b23d10100511915ea2c16e81cb5ca610187436260b7bdb11b34ab",
+        "effective_max_tile_size": 2,
+        "peak_vram_bytes": 2586991616,
+        "pool_reserved_peak_bytes": 2586991616,
+        "vram_budget_bytes": 30444945408.0,
+        "h2d_bytes": 6213744240,
+        "d2h_bytes": 2304,
+        "oom_retries": 0,
+        "seconds": 58.39789902395569,
+        "total_wall_seconds": 58.39789902395569,
+        "factor_tiles_processed": 24,
+        "tile_ranges": [
+          [
+            0,
+            2
+          ],
+          [
+            2,
+            4
+          ],
+          [
+            4,
+            6
+          ],
+          [
+            6,
+            8
+          ],
+          [
+            8,
+            10
+          ],
+          [
+            10,
+            12
+          ],
+          [
+            12,
+            14
+          ],
+          [
+            14,
+            16
+          ],
+          [
+            16,
+            18
+          ],
+          [
+            18,
+            20
+          ],
+          [
+            20,
+            22
+          ],
+          [
+            22,
+            24
+          ],
+          [
+            24,
+            26
+          ],
+          [
+            26,
+            28
+          ],
+          [
+            28,
+            30
+          ],
+          [
+            30,
+            32
+          ],
+          [
+            32,
+            34
+          ],
+          [
+            34,
+            36
+          ],
+          [
+            36,
+            38
+          ],
+          [
+            38,
+            40
+          ],
+          [
+            40,
+            42
+          ],
+          [
+            42,
+            44
+          ],
+          [
+            44,
+            46
+          ],
+          [
+            46,
+            48
+          ]
+        ],
+        "factor_ids_sha256": "690ea504f2c93f59fa4639f08927ec67a8863c80a1f7dc1c207ca4d06085857d",
+        "source_request_identity_sha256": "63a922d6284c02633f4843f07c30a8bd1a273817d2f4e3f347ee2b0591f76b7a",
+        "source_snapshot_id": "89f7a80dcd8cfbe56875467f5c80a6d92f22a5253fddb029950425187f094928",
+        "source_manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+        "prefetch_objects": true,
+        "prefetch_mode": "auto",
+        "cos_prefetch": "auto",
+        "prefetch_window": 2,
+        "estimated_peak_source_bytes": 1836108344,
+        "max_source_memory_bytes": 4294967296,
+        "tile_read_timings": [
+          {
+            "tile_range": [
+              0,
+              2
+            ],
+            "wall_seconds": 2.679488538997248,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              2,
+              4
+            ],
+            "wall_seconds": 1.1337507690186612,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              4,
+              6
+            ],
+            "wall_seconds": 1.7229781529749744,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              6,
+              8
+            ],
+            "wall_seconds": 1.887890879996121,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              8,
+              10
+            ],
+            "wall_seconds": 1.73487640399253,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              10,
+              12
+            ],
+            "wall_seconds": 1.4558926839963533,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              12,
+              14
+            ],
+            "wall_seconds": 2.03685765794944,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              14,
+              16
+            ],
+            "wall_seconds": 2.841569790034555,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              16,
+              18
+            ],
+            "wall_seconds": 3.4213041710318066,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              18,
+              20
+            ],
+            "wall_seconds": 2.0649161199689843,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              20,
+              22
+            ],
+            "wall_seconds": 2.3073784330044873,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              22,
+              24
+            ],
+            "wall_seconds": 2.244351978006307,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              24,
+              26
+            ],
+            "wall_seconds": 2.7888903120183386,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              26,
+              28
+            ],
+            "wall_seconds": 2.556877713999711,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              28,
+              30
+            ],
+            "wall_seconds": 2.29895710805431,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              30,
+              32
+            ],
+            "wall_seconds": 1.953592124977149,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              32,
+              34
+            ],
+            "wall_seconds": 2.1660700929933228,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              34,
+              36
+            ],
+            "wall_seconds": 1.7947471240186132,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              36,
+              38
+            ],
+            "wall_seconds": 2.0436631020274945,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              38,
+              40
+            ],
+            "wall_seconds": 2.4173562100040726,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              40,
+              42
+            ],
+            "wall_seconds": 2.1347677399753593,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              42,
+              44
+            ],
+            "wall_seconds": 1.834911270008888,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              44,
+              46
+            ],
+            "wall_seconds": 1.9990751600125805,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          },
+          {
+            "tile_range": [
+              46,
+              48
+            ],
+            "wall_seconds": 2.573732533957809,
+            "prefetch_mode": "auto",
+            "prefetch_window": 2
+          }
+        ],
+        "source_stage_timings": {
+          "aggregation": "summed_stage_durations_seconds",
+          "scope": "source lifecycle; includes setup before and final verify after evaluator timing",
+          "phases": {
+            "context_setup": {
+              "count": 49,
+              "total_seconds": 0.7108599236817099
+            },
+            "bound_factor_read": {
+              "count": 48,
+              "total_seconds": 104.98170553392265
+            },
+            "arrow_to_pandas_axis": {
+              "count": 96,
+              "total_seconds": 6.599359364248812
+            },
+            "reindex_write": {
+              "count": 48,
+              "total_seconds": 5.767183605930768
+            },
+            "manifest_verify": {
+              "count": 2,
+              "total_seconds": 0.9470254210173152
+            }
+          }
+        },
+        "source_read_wall_seconds": 52.09389607101912,
+        "observation_counts_sha256": {
+          "rank_ic": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "quantile_spread": "375fcee627b4d35196eb2046ff7c442e6201dd030ec6490884df4aea26b127a7",
+          "factor_turnover_rate": "e06f446abd743212115bbadabca58e944d50111e9f9afcf8acbf24c3de1e49d4"
+        },
+        "peak_process_rss_kib": 4077124,
+        "tile_size": 2,
+        "preflight": {
+          "pass": true,
+          "available_ram_bytes": 55579680768,
+          "minimum_available_ram_bytes": 34359738368,
+          "cos_cache_disk_free_bytes": 635315019776,
+          "required_disk_bytes": 5368709120
+        }
+      },
+      "source_provenance": {
+        "algorithm": "sha256_path_length_prefixed_v1",
+        "aggregate_sha256": "96a6009b5df820fa741803503718168566007bc483fba02489d2df84fd399876",
+        "file_count": 165,
+        "scope": {
+          "directories": [
+            "quant_evaluator/api",
+            "quant_evaluator/adapters",
+            "quant_evaluator/contracts",
+            "quant_evaluator/kernels",
+            "quant_evaluator/metrics",
+            "quant_evaluator/runtime"
+          ],
+          "files": [
+            "quant_evaluator/scripts/benchmark_real_cos_source_batch.py",
+            "quant_evaluator/scripts/benchmark_real_cos_factor_tiles.py",
+            "quant_evaluator/scripts/source_width_preparation.py",
+            "quant_evaluator/scripts/f48_auto_references.py",
+            "quant_evaluator/scripts/f48_benchmark_candidate.py",
+            "quant_evaluator/scripts/source_tree_provenance.py"
+          ]
+        },
+        "versions": {
+          "python": "3.12.3",
+          "numpy": "2.2.6",
+          "pandas": "2.3.3",
+          "cupy": null
+        },
+        "limitations": [
+          "This receipt hashes only the declared current Python source-file scope.",
+          "External DataAccess and Factor Optimizer dependencies are not attested.",
+          "Already-imported in-memory code is not attested; this is not a transitive runtime closure."
+        ]
+      },
+      "source_provenance_verification": {
+        "pass": true,
+        "status": "unchanged",
+        "after_aggregate_sha256": "96a6009b5df820fa741803503718168566007bc483fba02489d2df84fd399876",
+        "after_versions": {
+          "python": "3.12.3",
+          "numpy": "2.2.6",
+          "pandas": "2.3.3",
+          "cupy": "14.2.0"
+        }
+      }
+    }
+  ],
+  "comparisons_to_first_run": [
+    {
+      "pass": true,
+      "compared_factor_count": 48,
+      "compared_metric_count": 144,
+      "metrics": {
+        "rank_ic": {
+          "pass": true,
+          "artifact_kind": "scalar",
+          "cpu_shape": [
+            48
+          ],
+          "cuda_shape": [
+            48
+          ],
+          "shape_valid": true,
+          "factor_count": 48,
+          "compared_value_count": 48,
+          "finite_value_count": 48,
+          "finite_mask_equal": true,
+          "max_abs_error": 1.0408340855860843e-17,
+          "observation_counts_equal": true,
+          "observation_counts_shape_valid": true,
+          "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cpu_values_sha256": "1fee6725c8252f5af6cb0519b4ff67498243707e64fbe6fb347c6e1d0c87e532",
+          "cuda_values_sha256": "fd496dc1e4b3311004af6f4b9f21ee69e6215ad5ddae6f280dedfa1c15ee9e16"
+        },
+        "quantile_spread": {
+          "pass": true,
+          "artifact_kind": "scalar",
+          "cpu_shape": [
+            48
+          ],
+          "cuda_shape": [
+            48
+          ],
+          "shape_valid": true,
+          "factor_count": 48,
+          "compared_value_count": 48,
+          "finite_value_count": 48,
+          "finite_mask_equal": true,
+          "max_abs_error": 2.168404344971009e-19,
+          "observation_counts_equal": true,
+          "observation_counts_shape_valid": true,
+          "cpu_observation_counts_sha256": "375fcee627b4d35196eb2046ff7c442e6201dd030ec6490884df4aea26b127a7",
+          "cuda_observation_counts_sha256": "375fcee627b4d35196eb2046ff7c442e6201dd030ec6490884df4aea26b127a7",
+          "cpu_values_sha256": "4d84e284f9f8bb95fce1722252d72e30d0ea252e435b1b33eac3297d248c4db0",
+          "cuda_values_sha256": "708f1798558a8d454746d8355cb0fffd33addc81a6c9656bfcfe40730e52dcf6"
+        },
+        "factor_turnover_rate": {
+          "pass": true,
+          "artifact_kind": "scalar",
+          "cpu_shape": [
+            48
+          ],
+          "cuda_shape": [
+            48
+          ],
+          "shape_valid": true,
+          "factor_count": 48,
+          "compared_value_count": 48,
+          "finite_value_count": 48,
+          "finite_mask_equal": true,
+          "max_abs_error": 1.3877787807814457e-17,
+          "observation_counts_equal": true,
+          "observation_counts_shape_valid": true,
+          "cpu_observation_counts_sha256": "e06f446abd743212115bbadabca58e944d50111e9f9afcf8acbf24c3de1e49d4",
+          "cuda_observation_counts_sha256": "e06f446abd743212115bbadabca58e944d50111e9f9afcf8acbf24c3de1e49d4",
+          "cpu_values_sha256": "9dd379858107f44c949e50a35f36146485e3ff172552a24bd341e522b7f296b9",
+          "cuda_values_sha256": "d9e169296be211d5c78d0b4caadf76242cd8b31e6b00a08088751c161ecd977d"
+        }
+      }
+    },
+    {
+      "pass": true,
+      "compared_factor_count": 48,
+      "compared_metric_count": 144,
+      "metrics": {
+        "rank_ic": {
+          "pass": true,
+          "artifact_kind": "scalar",
+          "cpu_shape": [
+            48
+          ],
+          "cuda_shape": [
+            48
+          ],
+          "shape_valid": true,
+          "factor_count": 48,
+          "compared_value_count": 48,
+          "finite_value_count": 48,
+          "finite_mask_equal": true,
+          "max_abs_error": 1.0408340855860843e-17,
+          "observation_counts_equal": true,
+          "observation_counts_shape_valid": true,
+          "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cpu_values_sha256": "1fee6725c8252f5af6cb0519b4ff67498243707e64fbe6fb347c6e1d0c87e532",
+          "cuda_values_sha256": "fd496dc1e4b3311004af6f4b9f21ee69e6215ad5ddae6f280dedfa1c15ee9e16"
+        },
+        "quantile_spread": {
+          "pass": true,
+          "artifact_kind": "scalar",
+          "cpu_shape": [
+            48
+          ],
+          "cuda_shape": [
+            48
+          ],
+          "shape_valid": true,
+          "factor_count": 48,
+          "compared_value_count": 48,
+          "finite_value_count": 48,
+          "finite_mask_equal": true,
+          "max_abs_error": 2.168404344971009e-19,
+          "observation_counts_equal": true,
+          "observation_counts_shape_valid": true,
+          "cpu_observation_counts_sha256": "375fcee627b4d35196eb2046ff7c442e6201dd030ec6490884df4aea26b127a7",
+          "cuda_observation_counts_sha256": "375fcee627b4d35196eb2046ff7c442e6201dd030ec6490884df4aea26b127a7",
+          "cpu_values_sha256": "4d84e284f9f8bb95fce1722252d72e30d0ea252e435b1b33eac3297d248c4db0",
+          "cuda_values_sha256": "708f1798558a8d454746d8355cb0fffd33addc81a6c9656bfcfe40730e52dcf6"
+        },
+        "factor_turnover_rate": {
+          "pass": true,
+          "artifact_kind": "scalar",
+          "cpu_shape": [
+            48
+          ],
+          "cuda_shape": [
+            48
+          ],
+          "shape_valid": true,
+          "factor_count": 48,
+          "compared_value_count": 48,
+          "finite_value_count": 48,
+          "finite_mask_equal": true,
+          "max_abs_error": 1.3877787807814457e-17,
+          "observation_counts_equal": true,
+          "observation_counts_shape_valid": true,
+          "cpu_observation_counts_sha256": "e06f446abd743212115bbadabca58e944d50111e9f9afcf8acbf24c3de1e49d4",
+          "cuda_observation_counts_sha256": "e06f446abd743212115bbadabca58e944d50111e9f9afcf8acbf24c3de1e49d4",
+          "cpu_values_sha256": "9dd379858107f44c949e50a35f36146485e3ff172552a24bd341e522b7f296b9",
+          "cuda_values_sha256": "d9e169296be211d5c78d0b4caadf76242cd8b31e6b00a08088751c161ecd977d"
+        }
+      }
+    },
+    {
+      "pass": true,
+      "compared_factor_count": 48,
+      "compared_metric_count": 144,
+      "metrics": {
+        "rank_ic": {
+          "pass": true,
+          "artifact_kind": "scalar",
+          "cpu_shape": [
+            48
+          ],
+          "cuda_shape": [
+            48
+          ],
+          "shape_valid": true,
+          "factor_count": 48,
+          "compared_value_count": 48,
+          "finite_value_count": 48,
+          "finite_mask_equal": true,
+          "max_abs_error": 0.0,
+          "observation_counts_equal": true,
+          "observation_counts_shape_valid": true,
+          "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cpu_values_sha256": "1fee6725c8252f5af6cb0519b4ff67498243707e64fbe6fb347c6e1d0c87e532",
+          "cuda_values_sha256": "1fee6725c8252f5af6cb0519b4ff67498243707e64fbe6fb347c6e1d0c87e532"
+        },
+        "quantile_spread": {
+          "pass": true,
+          "artifact_kind": "scalar",
+          "cpu_shape": [
+            48
+          ],
+          "cuda_shape": [
+            48
+          ],
+          "shape_valid": true,
+          "factor_count": 48,
+          "compared_value_count": 48,
+          "finite_value_count": 48,
+          "finite_mask_equal": true,
+          "max_abs_error": 0.0,
+          "observation_counts_equal": true,
+          "observation_counts_shape_valid": true,
+          "cpu_observation_counts_sha256": "375fcee627b4d35196eb2046ff7c442e6201dd030ec6490884df4aea26b127a7",
+          "cuda_observation_counts_sha256": "375fcee627b4d35196eb2046ff7c442e6201dd030ec6490884df4aea26b127a7",
+          "cpu_values_sha256": "4d84e284f9f8bb95fce1722252d72e30d0ea252e435b1b33eac3297d248c4db0",
+          "cuda_values_sha256": "4d84e284f9f8bb95fce1722252d72e30d0ea252e435b1b33eac3297d248c4db0"
+        },
+        "factor_turnover_rate": {
+          "pass": true,
+          "artifact_kind": "scalar",
+          "cpu_shape": [
+            48
+          ],
+          "cuda_shape": [
+            48
+          ],
+          "shape_valid": true,
+          "factor_count": 48,
+          "compared_value_count": 48,
+          "finite_value_count": 48,
+          "finite_mask_equal": true,
+          "max_abs_error": 0.0,
+          "observation_counts_equal": true,
+          "observation_counts_shape_valid": true,
+          "cpu_observation_counts_sha256": "e06f446abd743212115bbadabca58e944d50111e9f9afcf8acbf24c3de1e49d4",
+          "cuda_observation_counts_sha256": "e06f446abd743212115bbadabca58e944d50111e9f9afcf8acbf24c3de1e49d4",
+          "cpu_values_sha256": "9dd379858107f44c949e50a35f36146485e3ff172552a24bd341e522b7f296b9",
+          "cuda_values_sha256": "9dd379858107f44c949e50a35f36146485e3ff172552a24bd341e522b7f296b9"
+        }
+      }
+    }
+  ],
+  "limitations": [
+    "One real COS manifest and host; research use only.",
+    "Separate CPU/CUDA reports establish CPU parity.",
+    "Partial runs must not select an auto backend."
+  ],
+  "preflight_before_axis_preparation": {
+    "pass": true,
+    "available_ram_bytes": 58696519680,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 635339673600,
+    "required_disk_bytes": 5368709120
+  },
+  "prepared_shape": [
+    2586,
+    5461,
+    48
+  ],
+  "source_memory_preflight": {
+    "2": {
+      "tile_factors": 2,
+      "estimated_assembly_bytes": 1299237432,
+      "estimated_prefetch_bytes": 536870912,
+      "estimated_peak_source_bytes": 1836108344,
+      "admitted": true,
+      "rejection_category": null
+    },
+    "4": {
+      "tile_factors": 4,
+      "estimated_assembly_bytes": 2598474864,
+      "estimated_prefetch_bytes": 536870912,
+      "estimated_peak_source_bytes": 3135345776,
+      "admitted": true,
+      "rejection_category": null
+    }
+  },
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "shape": [
+    2586,
+    5461,
+    48
+  ],
+  "median_seconds_by_width": {
+    "2": 59.74028425299912,
+    "4": 59.52869652249501
+  },
+  "source_provenance": {
+    "algorithm": "sha256_path_length_prefixed_v1",
+    "aggregate_sha256": "96a6009b5df820fa741803503718168566007bc483fba02489d2df84fd399876",
+    "file_count": 165,
+    "scope": {
+      "directories": [
+        "quant_evaluator/api",
+        "quant_evaluator/adapters",
+        "quant_evaluator/contracts",
+        "quant_evaluator/kernels",
+        "quant_evaluator/metrics",
+        "quant_evaluator/runtime"
+      ],
+      "files": [
+        "quant_evaluator/scripts/benchmark_real_cos_source_batch.py",
+        "quant_evaluator/scripts/benchmark_real_cos_factor_tiles.py",
+        "quant_evaluator/scripts/source_width_preparation.py",
+        "quant_evaluator/scripts/f48_auto_references.py",
+        "quant_evaluator/scripts/f48_benchmark_candidate.py",
+        "quant_evaluator/scripts/source_tree_provenance.py"
+      ]
+    },
+    "versions": {
+      "python": "3.12.3",
+      "numpy": "2.2.6",
+      "pandas": "2.3.3",
+      "cupy": null
+    },
+    "limitations": [
+      "This receipt hashes only the declared current Python source-file scope.",
+      "External DataAccess and Factor Optimizer dependencies are not attested.",
+      "Already-imported in-memory code is not attested; this is not a transitive runtime closure."
+    ]
+  },
+  "source_provenance_verification": {
+    "pass": true,
+    "status": "unchanged",
+    "after_aggregate_sha256": "96a6009b5df820fa741803503718168566007bc483fba02489d2df84fd399876",
+    "after_versions": {
+      "python": "3.12.3",
+      "numpy": "2.2.6",
+      "pandas": "2.3.3",
+      "cupy": null
+    }
+  }
+}

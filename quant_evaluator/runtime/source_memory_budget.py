@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from numbers import Integral
 
+from quant_evaluator.contracts.factor_tile_source import admitted_source_tile_limit
+
 
 PREFETCH_BYTES_PER_WORKER = 256 * 1024**2
 

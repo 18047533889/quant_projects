@@ -20,6 +20,7 @@ from quant_evaluator.contracts.factor_tile_source import (
 from quant_evaluator.runtime.source_auto_evidence import (
     SOURCE_AUTO_EVIDENCE_VERSION, SOURCE_AUTO_METRICS, select_source_auto_route,
 )
+from quant_evaluator.contracts.factor_tile_source import admitted_source_tile_limit
 
 
 _SOURCE_METRICS = SOURCE_AUTO_METRICS
@@ -153,6 +154,11 @@ def evaluate_factor_source_batch(
     route = backend
     reason = "explicit"
     requested_tile_width = min(metadata.max_tile_size, max_tile_size or metadata.max_tile_size)
+    try:
+        memory_tile_limit = admitted_source_tile_limit(
+            metadata.max_tile_size, getattr(source, "admitted_max_tile_size", None))
+    except ValueError as exc:
+        raise InvalidContractError(str(exc)) from exc
     effective_tile_size = requested_tile_width
     evidence_id = None
     evidence_artifacts = ()
@@ -180,9 +186,14 @@ def evaluate_factor_source_batch(
             tile_width = evidence.effective_tile_width
         else:
             route, reason = "cpu", "source_shape_or_metrics_not_certified"
-    if route == "cuda_strict":
-        if backend == "auto":
+    if route == "cuda_strict" and backend == "auto":
+        if memory_tile_limit < tile_width:
+            # A measured GPU width cannot silently become an unmeasured one.
+            route, reason = "cpu", "source_memory_budget_outside_certified_tile"
+        else:
             effective_tile_size = tile_width
+    effective_tile_size = min(effective_tile_size, memory_tile_limit)
+    if route == "cuda_strict":
         from quant_evaluator.runtime.device_session import DeviceEvaluationSession
         from quant_evaluator.runtime.gpu_executor import GPUExecutor
 
@@ -191,7 +202,7 @@ def evaluate_factor_source_batch(
                 source, label_bundle, selected, max_tile_size=effective_tile_size,
                 source_metadata=metadata)
     else:
-        out = _cpu_source_batch(source, metadata, label_bundle, selected, policy, max_tile_size)
+        out = _cpu_source_batch(source, metadata, label_bundle, selected, policy, effective_tile_size)
     backend_used = "cuda" if route == "cuda_strict" else "cpu"
     metric_backends = {metric: backend_used for metric in selected}
     receipt = {
@@ -214,6 +225,7 @@ def evaluate_factor_source_batch(
         "double_buffer": policy.double_buffer,
         "required_capabilities": policy.required_capabilities,
         "max_tile_size": max_tile_size,
+        "admitted_source_tile_size": memory_tile_limit,
         "effective_max_tile_size": effective_tile_size,
     }
     receipt["receipt_hash"] = stable_content_hex(

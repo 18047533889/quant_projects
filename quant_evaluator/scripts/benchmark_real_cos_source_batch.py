@@ -361,7 +361,9 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
                 *, expected_auto_cuda=False, prefetch_objects=False,
                 source_adapter="legacy", cos_prefetch="auto",
                 max_source_memory_mib=4096, cos_prefetch_workers=2,
-                max_prefetch_memory_mib=512):
+                max_prefetch_memory_mib=512, use_default_tile_size=False):
+    if not isinstance(use_default_tile_size, bool):
+        raise TypeError("use_default_tile_size must be bool")
     if source_adapter == "legacy":
         if cos_prefetch != "auto":
             raise ValueError("cos_prefetch applies only to source_adapter='cos'")
@@ -386,11 +388,11 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
     try:
         result = evaluate_factor_source_batch(
             source, labels, metrics=selected_metrics, backend=backend,
-            max_tile_size=tile_size, gpu_policy=policy,
+            max_tile_size=None if use_default_tile_size else tile_size,
+            gpu_policy=policy,
         )
         elapsed = time.perf_counter() - started
-        effective_tile_size = (result.metadata.get("effective_max_tile_size", tile_size)
-                               if backend == "auto" else tile_size)
+        effective_tile_size = result.metadata.get("effective_max_tile_size", tile_size)
         if not isinstance(effective_tile_size, int) or not 1 <= effective_tile_size <= tile_size:
             raise ValueError("source API reported an invalid effective tile width")
         expected_reads = [
@@ -419,6 +421,9 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         "backend_used": result.metadata["backend_used"],
         "source_request_fingerprint": result.metadata.get("source_request_fingerprint"),
         "effective_max_tile_size": effective_tile_size,
+        "api_default_tile_size": use_default_tile_size,
+        "declared_source_tile_size": source.max_tile_size,
+        "admitted_source_tile_size": result.metadata.get("admitted_source_tile_size"),
         "peak_vram_bytes": result.metadata.get("peak_vram"),
         "pool_reserved_peak_bytes": result.metadata.get("pool_reserved_peak_bytes"),
         "vram_budget_bytes": result.metadata.get("vram_budget_bytes"),

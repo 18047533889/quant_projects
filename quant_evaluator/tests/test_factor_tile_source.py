@@ -111,6 +111,26 @@ def test_caller_can_cap_tile_width_below_source_maximum():
     assert tuple(fid for tile in tiles for fid in tile.batch.factor_ids) == source.factor_ids
 
 
+def test_default_iterator_width_respects_source_memory_admission_hint():
+    source = Source()
+    source.max_tile_size = 5
+    source.admitted_max_tile_size = 2
+    tiles = list(iter_validated_factor_tiles(source))
+    assert source.max_tile_size == 5
+    assert source.reads == [(0, 2), (2, 4), (4, 5)]
+    assert tuple(fid for tile in tiles for fid in tile.batch.factor_ids) == source.factor_ids
+
+
+@pytest.mark.parametrize("hint", [0, -1, 6, True, 1.5, "2"])
+def test_invalid_source_memory_hint_fails_before_iterator_reads(hint):
+    source = Source()
+    source.max_tile_size = 5
+    source.admitted_max_tile_size = hint
+    with pytest.raises(InvalidContractError, match="admitted source tile width"):
+        list(iter_validated_factor_tiles(source))
+    assert source.reads == []
+
+
 @pytest.mark.parametrize("width", [0, -1, True, 1.5])
 def test_invalid_caller_tile_width_fails_before_read(width):
     source = Source()
