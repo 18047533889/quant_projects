@@ -25,6 +25,11 @@ def get_fe_composite_identity(name: str, recipe_identity: str | None) -> dict:
             get_fe_neutralization_identity,
         )
         return get_fe_neutralization_identity(name, recipe_identity)
+    if name == "robust_ewma":
+        from factor_preprocess.adapters.fe_robust_ewma_identity import (
+            get_robust_ewma_identity,
+        )
+        return get_robust_ewma_identity(name, recipe_identity)
     raise GovernanceError(
         f"No scoped FE composite identity provider is bound for {name!r}; "
         "execution identity is not bound"
