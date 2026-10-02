@@ -881,7 +881,7 @@ def compute_calmar_ratio(
 
     calmar = np.full(F, np.nan)
     good = use & np.isfinite(max_dd) & (max_dd > 1e-12)
-    calmar = np.where(good, ann_ret / max_dd, np.nan)
+    np.divide(ann_ret, max_dd, out=calmar, where=good)
     return calmar[0] if squeeze else calmar
 
 
@@ -1002,7 +1002,12 @@ def compute_sortino_ratio(
     downside_sum_sq = np.sum(np.where(neg, excess ** 2, 0.0), axis=0)
     n_downside = np.sum(neg, axis=0)
     denominator = n_downside if downside_denominator == "negative" else n_valid
-    downside_std = np.sqrt(downside_sum_sq / denominator)
+    downside_variance = np.full(F, np.nan, dtype=np.float64)
+    np.divide(
+        downside_sum_sq, denominator, out=downside_variance,
+        where=denominator > 0,
+    )
+    downside_std = np.sqrt(downside_variance)
 
     scale = np.sqrt(periods_per_year) if annualization == "sqrt_frequency" else 1.0
     good = (
@@ -1011,7 +1016,8 @@ def compute_sortino_ratio(
         & np.isfinite(downside_std)
         & (downside_std > 1e-12)
     )
-    sortino = np.where(good, mean_excess / downside_std * scale, np.nan)
+    sortino = np.full(F, np.nan, dtype=np.float64)
+    sortino[good] = mean_excess[good] / downside_std[good] * scale
     return sortino[0] if squeeze else sortino
 
 
@@ -1121,11 +1127,12 @@ def _rolling_sharpe_per_window(
     std; otherwise NaN.  Shared by the rolling-Sharpe tail / quantile kernels
     so the closed-form math lives in exactly one place.
 
-    Equivalence note: the per-window mean is the zero-filled cumsum mean
-    (bit-identical to ``np.mean`` over the finite slice); the std uses the
-    algebraic ``(sum(x**2) - sum(x)**2 / n) / (n - 1)`` form, which differs
-    from ``np.std(ddof=1)`` only at the ulp level (GPU-parity tolerance tests
-    document the measured maximum deviation).
+    Ordinary windows use prefix-sum mean and sample-variance moments, with
+    floating-point differences from direct finite-slice reductions. A bound
+    covering cumulative accumulation and prefix subtraction detects unsafe
+    cancellation; those windows use a finite-slice mean/std reduction. Exact
+    constant windows have zero variance and return NaN rather than a large
+    spurious Sharpe. Temporary arrays scale with T, not T * window.
     """
     ret = np.asarray(returns, dtype=np.float64)
     T = ret.shape[0]
@@ -1138,6 +1145,7 @@ def _rolling_sharpe_per_window(
     cf = np.concatenate(([0.0], np.cumsum(finite.astype(np.float64))))
     cs = np.concatenate(([0.0], np.cumsum(v)))
     cs2 = np.concatenate(([0.0], np.cumsum(v2)))
+    cs_abs = np.concatenate(([0.0], np.cumsum(np.abs(v))))
     i_start = np.arange(0, T - window + 1)
     i_end = i_start + window
     sum_v = cs[i_end] - cs[i_start]
@@ -1146,10 +1154,55 @@ def _rolling_sharpe_per_window(
     valid = n >= min_periods
     n_good = np.where(valid, n, np.nan)
     with np.errstate(divide="ignore", invalid="ignore"):
-        var = (sum_v2 - sum_v ** 2 / n_good) / (n_good - 1.0)
+        correction = sum_v ** 2 / n_good
+        centered_sum_sq = sum_v2 - correction
+        var = centered_sum_sq / (n_good - 1.0)
         std = np.sqrt(var)
+        eps = np.finfo(np.float64).eps
+        # Include cumulative accumulation and prefix subtraction errors.
+        # A local-window bound alone misses flat windows late in a long panel.
+        gamma_end = i_end * eps / (1.0 - i_end * eps)
+        gamma_start = i_start * eps / (1.0 - i_start * eps)
+        sum_error = (
+            gamma_end * cs_abs[i_end] + gamma_start * cs_abs[i_start]
+            + eps * (np.abs(cs[i_end]) + np.abs(cs[i_start]))
+        )
+        squares_error = (
+            gamma_end * np.abs(cs2[i_end]) + gamma_start * np.abs(cs2[i_start])
+            + eps * (np.abs(cs2[i_end]) + np.abs(cs2[i_start]))
+        )
+        correction_error = (
+            (2.0 * np.abs(sum_v) * sum_error + sum_error ** 2) / n_good
+            + eps * np.abs(correction)
+        )
+        cancellation_bound = 8.0 * (
+            squares_error + correction_error
+            + eps * (np.abs(sum_v2) + np.abs(correction))
+        )
+    # Prefix-sum subtraction can turn a flat window into a small positive
+    # variance when squared-return totals dwarf the centered sum of squares.
+    # Recompute only cancellation-dominated windows from finite observations.
+    suspicious = valid & (n_good > 1) & (
+        ~np.isfinite(centered_sum_sq) | (centered_sum_sq <= cancellation_bound)
+    )
+    window_mean = np.full(sum_v.shape, np.nan, dtype=np.float64)
+    np.divide(sum_v, n_good, out=window_mean, where=valid & (n_good > 0))
+    for index in np.flatnonzero(suspicious):
+        observed_window = ret[i_start[index]:i_end[index]]
+        observed_window = observed_window[np.isfinite(observed_window)]
+        if observed_window.size < min_periods:
+            continue
+        if np.all(observed_window == observed_window[0]):
+            window_mean[index] = observed_window[0]
+            std[index] = 0.0
+            continue
+        window_mean[index] = np.mean(observed_window)
+        std[index] = np.std(observed_window, ddof=1)
     good = valid & np.isfinite(std) & (std > 1e-10)
-    sharpe = np.where(good, sum_v / n_good / std * np.sqrt(periods_per_year), np.nan)
+    sharpe = np.full(sum_v.shape, np.nan, dtype=np.float64)
+    sharpe[good] = (
+        window_mean[good] / std[good] * np.sqrt(periods_per_year)
+    )
     ends = i_end - 1
     roll[ends[good]] = sharpe[good]
     return roll

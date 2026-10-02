@@ -259,10 +259,11 @@ def compute_daily_ic(
             groupby).  Its numerics also differ from the exact path at the
             ulp level (measured max |dIC| ~5.6e-17; asserted < 1e-12) and it
             shares the numba caveat: evidence hashes differ from "exact".
-            One documented semantic divergence: days/factors whose
-            pairwise-finite count is below ``min_assets`` report
-            ``valid_counts == 0`` on the polars path (the group is filtered
-            out of the plan), where the exact path records the true count.
+            The raw ``polars_ic_batch`` kernel filters out groups below
+            ``min_assets`` and reports zero counts for those groups. This
+            ``compute_daily_ic`` wrapper restores their true pairwise-finite
+            counts, matching the exact count contract; the raw kernel and
+            wrapper should not be confused.
             NaN positions are identical across all backends.  2026-09-25
             AB benchmark (T=1250, N=300): polars beats "exact" at every
             measured width (F=1: 29ms vs 48ms; F=10: 209ms vs 427ms;
