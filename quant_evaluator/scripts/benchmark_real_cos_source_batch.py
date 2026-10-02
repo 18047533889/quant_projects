@@ -36,8 +36,16 @@ from quant_evaluator.adapters.cos_factor_tile_source import (
 from quant_evaluator.scripts.f8_cap8_tile2_auto_references import (
     validate_cap8_tile2_references,
 )
+from quant_evaluator.scripts.f48_auto_references import validate_f48_auto_references
+from quant_evaluator.scripts.f48_benchmark_candidate import (
+    F48_BENCHMARK_CANDIDATE_STATUS, f48_benchmark_candidate_scope,
+)
 from quant_evaluator.scripts import source_width_preparation
 from quant_evaluator.scripts import benchmark_real_cos_factor_tiles as tiles
+from quant_evaluator.scripts.source_tree_provenance import (
+    capture_source_tree, finalize_source_tree,
+)
+SOURCE_ROOT = Path(__file__).resolve().parents[2]
 
 F8_SOURCE_SHAPE = (2586, 5461, 8)
 DEFAULT_METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
@@ -480,6 +488,16 @@ def _source_prefetch_report_fields(run_receipt):
     }
 
 
+def _caller_settings_report_fields(args):
+    """Record caller resource/prefetch settings separately from semantic identity."""
+    return {"caller_settings": {
+        "cos_prefetch_workers": int(getattr(args, "cos_prefetch_workers", 2)),
+        "max_prefetch_memory_mib": int(getattr(args, "max_prefetch_memory_mib", 512)),
+        "max_object_mib": int(args.max_object_mib),
+        "max_total_mib": int(args.max_total_mib),
+    }}
+
+
 def _safe_worker_failure(stderr, *, timeout=False):
     """Return a sanitized category, never raw child stderr or source locators."""
     if timeout:
@@ -498,10 +516,12 @@ def run_gpu_tile_width_ab(args, selected_metrics):
     """Interleave widths in isolated workers so source memory is reclaimed."""
     width_a, width_b = args.gpu_tile_widths
     order = (width_a, width_b, width_b, width_a)
+    provenance_before = capture_source_tree(SOURCE_ROOT)
     report = {"status": "partial", "kind": "real_cos_gpu_tile_width_ab.v2",
               "run_order": list(order), "metric_ids": list(selected_metrics),
               "source_adapter": getattr(args, "source_adapter", "legacy"),
               "cos_prefetch": getattr(args, "cos_prefetch", "auto"),
+              **_caller_settings_report_fields(args),
               "prefetch_objects": None, "prefetch_mode": None, "prefetch_window": None,
               "runs": [], "comparisons_to_first_run": [],
               "limitations": ["One real COS manifest and host; research use only.",
@@ -624,7 +644,10 @@ def run_gpu_tile_width_ab(args, selected_metrics):
                                      if item["tile_size"] == width]))
         for width in (width_a, width_b)}
     report["status"] = "complete"
+    finalize_source_tree(report, provenance_before, SOURCE_ROOT)
     emit_report(report, args.output)
+    if report["status"] != "complete":
+        raise SystemExit(1)
 
 
 def certified_cuda_hashes(paths, selected_metrics, manifest_sha):
@@ -737,6 +760,9 @@ def main():
     parser.add_argument("--auto-cap8-tile2-references", nargs=2, type=Path,
                         metavar=("CPU_CUDA_TILE2_REPORT", "CUDA_CPU_TILE2_REPORT"),
                         help="verify F8 auto cap 8 selecting measured effective tile 2")
+    parser.add_argument("--auto-f48-references", nargs=2, type=Path,
+                        metavar=("CPU_CUDA_REPORT", "CUDA_CPU_REPORT"),
+                        help="verify F48 auto against two opposite-order strict CUDA references")
     parser.add_argument("--days", type=int, default=0)
     parser.add_argument("--assets", type=int, default=5500)
     parser.add_argument("--max-object-mib", type=int, default=128)
@@ -790,6 +816,18 @@ def main():
     f8_cap8_tile2_profile = (args.factors == 8 and selected == RANK_PAIR
                              and args.days == 2586 and args.assets == 5461
                              and args.tile_size == 8)
+    f48_auto_profile = (args.factors == 48 and selected == DEFAULT_METRICS
+                        and args.days == 2586 and args.assets == 5461
+                        and args.tile_size == 2)
+    if args.auto_f48_references and (
+            not f48_auto_profile or args.gpu_worker or args.gpu_tile_widths
+            or args.verify_auto or args.auto_references
+            or args.auto_cap8_tile2_references or args.output is None
+            or args.source_adapter != "cos" or args.cos_prefetch != "auto"
+            or args.cos_prefetch_workers != 2 or args.max_prefetch_memory_mib != 512
+            or args.max_source_memory_mib != 4096
+            or args.max_object_mib != 128 or args.max_total_mib != 4096):
+        parser.error("--auto-f48-references requires exact F48 COS tile-2 mixed-three profile, --output, and no other mode")
     if args.auto_cap8_tile2_references and (
             not f8_cap8_tile2_profile or args.gpu_worker or args.gpu_tile_widths
             or args.verify_auto or args.auto_references or args.output is None
@@ -816,6 +854,10 @@ def main():
     elif args.auto_cap8_tile2_references:
         reference = validate_cap8_tile2_references(
             args.auto_cap8_tile2_references, selected, tiles.MANIFEST_SHA256)
+    elif args.auto_f48_references:
+        reference = validate_f48_auto_references(
+            args.auto_f48_references, selected, tiles.MANIFEST_SHA256)
+    provenance_before = capture_source_tree(SOURCE_ROOT)
 
     if args.max_source_memory_mib < 1:
         parser.error("--max-source-memory-mib must be positive")
@@ -854,14 +896,27 @@ def main():
         gate = preflight(args.max_object_mib, args.max_total_mib, args.max_source_memory_mib)
         if not gate["pass"]:
             raise SystemExit("RAM or COS cache disk headroom fell below preflight before auto run")
-        auto, receipt = run_backend(
-            "auto", records, source_rows, dates, assets, labels, manifest_sha,
-            args.tile_size, args.max_object_mib, policy, selected,
-            expected_auto_cuda=True, prefetch_objects=args.prefetch_objects,
-            source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
-            max_source_memory_mib=args.max_source_memory_mib,
-            cos_prefetch_workers=args.cos_prefetch_workers,
-            max_prefetch_memory_mib=args.max_prefetch_memory_mib)
+        if args.auto_f48_references:
+            candidate_scope = f48_benchmark_candidate_scope(
+                shape=(len(dates), len(assets), len(records)), metrics=selected,
+                source_dtype="float64", label_dtype=str(labels.values.dtype),
+                requested_tile_width=args.tile_size,
+            )
+        else:
+            from contextlib import nullcontext
+            candidate_scope = nullcontext(None)
+        with candidate_scope as benchmark_candidate:
+            auto, receipt = run_backend(
+                "auto", records, source_rows, dates, assets, labels, manifest_sha,
+                args.tile_size, args.max_object_mib, policy, selected,
+                expected_auto_cuda=True, prefetch_objects=args.prefetch_objects,
+                source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
+                max_source_memory_mib=args.max_source_memory_mib,
+                cos_prefetch_workers=args.cos_prefetch_workers,
+                max_prefetch_memory_mib=args.max_prefetch_memory_mib)
+        if benchmark_candidate is not None:
+            auto.metadata["benchmark_auto_candidate"] = benchmark_candidate
+            receipt["benchmark_auto_candidate"] = benchmark_candidate
         receipt["preflight"] = gate
         receipt["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
         receipt["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")
@@ -884,14 +939,23 @@ def main():
         direct_comparison = compare(auto, cuda, selected, expected_days=len(dates))
         expected_reason, expected_tile = (
             ("bounded_f8_rank_pair_gpu_cap8_tile2", 2) if args.auto_cap8_tile2_references else
+            ("bounded_f48_mixed_three_gpu_tile2", 2) if args.auto_f48_references else
             ("bounded_f8_rank_pair_gpu", 2) if f8_rank_pair_profile else
             ("bounded_f61_all_source_15_gpu_tile16", 16))
-        fingerprint_pass = (args.auto_cap8_tile2_references is None or
+        fingerprint_pass = (args.auto_cap8_tile2_references is None
+                            and args.auto_f48_references is None or
                             auto.metadata.get("source_request_fingerprint") ==
                             reference.get("verified_source_request_fingerprint"))
+        candidate_pass = (not args.auto_f48_references or (
+            auto.metadata.get("auto_backend_evidence_status")
+            == F48_BENCHMARK_CANDIDATE_STATUS
+            and auto.metadata.get("auto_backend_evidence_id")
+            == benchmark_candidate["evidence_id"]
+            and receipt.get("benchmark_auto_candidate") == benchmark_candidate
+        ))
         route_pass = (receipt["auto_backend_reason"] == expected_reason
                       and receipt["effective_max_tile_size"] == expected_tile
-                      and fingerprint_pass)
+                      and fingerprint_pass and candidate_pass)
         complete = route_pass and reference_comparison["pass"] and direct_comparison["pass"]
         report = {
             "status": "complete" if complete else "verification_failed",
@@ -902,17 +966,30 @@ def main():
             "source_adapter": args.source_adapter,
             "cos_prefetch": args.cos_prefetch if args.source_adapter == "cos" else None,
             "metric_ids": list(selected),
+            **_caller_settings_report_fields(args),
             **_source_prefetch_report_fields(receipt),
             "run": receipt,
             "explicit_cuda_run": cuda_receipt,
             "route_pass": route_pass,
+            "benchmark_auto_candidate": benchmark_candidate,
             "reference_comparison": reference_comparison,
             "direct_comparison": direct_comparison,
             "reference_reports": [str(path) for path in
-                                  (args.auto_references or args.auto_cap8_tile2_references or ())],
-            "reference_effective_tile_size": 2 if args.auto_cap8_tile2_references else args.tile_size,
-            "limitations": ["Research-source metrics only; no PIT or production certification."],
+                                  (args.auto_references or args.auto_cap8_tile2_references
+                                   or args.auto_f48_references or ())],
+            "reference_effective_tile_size": (2 if (args.auto_cap8_tile2_references
+                                                    or args.auto_f48_references)
+                                              else args.tile_size),
+            "limitations": ([
+                "Research-source metrics only; no PIT or production certification.",
+                "F48 auto route was injected for this benchmark process only; it is not a production route registration.",
+            ] if benchmark_candidate is not None else
+                ["Research-source metrics only; no PIT or production certification."]),
         }
+        if reference is not None:
+            report["limitations"].append(
+                "Reference reports are validated as stored benchmark evidence; their source-code equivalence is not attested.")
+        finalize_source_tree(report, provenance_before, SOURCE_ROOT)
         emit_report(report, args.output)
         if report["status"] != "complete":
             raise SystemExit(1)
@@ -950,11 +1027,15 @@ def main():
             "tile_size": args.tile_size, "metric_ids": list(selected),
             "source_adapter": args.source_adapter,
             "cos_prefetch": args.cos_prefetch if args.source_adapter == "cos" else None,
+            **_caller_settings_report_fields(args),
             **_source_prefetch_report_fields(run),
             "run": run, "scalar_metrics": scalar_metrics,
             "observation_counts": observation_counts,
         }
+        finalize_source_tree(report, provenance_before, SOURCE_ROOT)
         emit_report(report, args.output)
+        if report["status"] != "complete":
+            raise SystemExit(1)
         return
 
     runs = {}
@@ -1021,6 +1102,7 @@ def main():
         "source_adapter": args.source_adapter,
         "cos_prefetch": args.cos_prefetch if args.source_adapter == "cos" else None,
         **_source_prefetch_report_fields(cpu_run),
+        **_caller_settings_report_fields(args),
         "run_order": list(order),
         "metric_ids": list(selected),
         "preflight_before_cpu": cpu_run["preflight"],
@@ -1037,6 +1119,7 @@ def main():
              "This A/B alone does not establish automatic backend routing."),
         ],
     }
+    finalize_source_tree(report, provenance_before, SOURCE_ROOT)
     emit_report(report, args.output)
     if report["status"] != "complete":
         raise SystemExit(1)

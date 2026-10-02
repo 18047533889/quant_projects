@@ -1,0 +1,19 @@
+{
+  "status": "complete",
+  "scope": "synthetic in-memory remap only; excludes COS, Arrow conversion, FactorBatch copies and GPU evaluation",
+  "shape_one_factor": [2586, 5461],
+  "panel_bytes": 112977168,
+  "estimated_logical_peak_bytes": 477138872,
+  "run_orders": [["old_membership_reindex", "shared_helper_reindex"], ["shared_helper_reindex", "old_membership_reindex"], ["old_membership_reindex", "shared_helper_reindex"]],
+  "seconds": {
+    "old_membership_reindex": [0.033047352044377476, 0.031156178971286863, 0.032349383051041514],
+    "shared_helper_reindex": [0.032042851962614805, 0.030575405980926007, 0.033927696000318974]
+  },
+  "median_seconds": {"old_membership_reindex": 0.032349383051041514, "shared_helper_reindex": 0.032042851962614805},
+  "all_masks_values_and_hashes_match": true,
+  "interpretation": "sub-one-percent median difference; no demonstrated speedup",
+  "source_hashes_before_equal_after": {
+    "quant_evaluator/scripts/benchmark_real_cos_factor_tiles.py": "707c849779248c7e560d1cfc9dcafe95355b811bc1332f1b107ca735c6fbce09",
+    "quant_evaluator/adapters/source_axis_materializer.py": "fa11abdfee785956b97b089aa7c71df94e3f84d7248adc6de8ca9a3e034ffa97"
+  }
+}

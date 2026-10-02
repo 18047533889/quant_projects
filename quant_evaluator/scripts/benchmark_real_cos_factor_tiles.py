@@ -33,6 +33,7 @@ from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.runtime.evaluator import evaluate
 from quant_evaluator.scripts.benchmark_real_cos_metric_batch import MANIFEST_SHA256
 from quant_evaluator.scripts.load_real_cos_factor_batch import BASE, MIRROR, POOL, _ds
+from quant_evaluator.adapters import source_axis_materializer
 
 METRICS = ("rank_ic", "quantile_spread", "factor_turnover_rate")
 LOAD_PHASES = ("bound_factor_read_s", "arrow_to_pandas_axis_s", "reindex_write_s")
@@ -430,18 +431,18 @@ def make_tile(stream, expected, dates, assets, labels, *,
         for frame, source in stream:
             if seen >= len(expected) or source != expected[seen]:
                 raise ValueError("factor source or axes changed between passes")
-            if (required_dates is not None and
-                    (not required_dates.isin(frame.index).all() or
-                     not required_assets.issubset(frame.columns))):
-                raise ValueError("indexed shared axes changed between passes")
-            if not dates.isin(frame.index).all() or not set(assets).issubset(frame.columns):
-                raise ValueError("factor final axes changed between passes")
             write_started = time.perf_counter()
-            values[:, :, seen] = frame.reindex(index=dates, columns=assets).to_numpy(dtype=np.float64, copy=False)
-            if load_phases is not None:
-                load_phases["reindex_write_s"] += time.perf_counter() - write_started
-                if "reindex_write_count" in load_phases:
-                    load_phases["reindex_write_count"] += 1
+            try:
+                source_axis_materializer.write_axis_aligned_float64(
+                    frame, dates, assets, values[:, :, seen],
+                    required_dates=required_dates,
+                    required_assets=required_assets,
+                    chunk_bytes=source_axis_materializer.AXIS_REINDEX_CHUNK_BYTES)
+            finally:
+                if load_phases is not None:
+                    load_phases["reindex_write_s"] += time.perf_counter() - write_started
+                    if "reindex_write_count" in load_phases:
+                        load_phases["reindex_write_count"] += 1
             seen += 1
             frame = None
             source = None

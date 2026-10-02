@@ -342,6 +342,14 @@ def test_top_level_prefetch_fields_are_projected_from_effective_run_receipt():
     assert fields == {"prefetch_objects": True, "prefetch_mode": "auto",
                       "prefetch_window": 2}
 
+def test_caller_settings_projection_records_effective_limits():
+    args = SimpleNamespace(cos_prefetch_workers=4, max_prefetch_memory_mib=768,
+                           max_object_mib=64, max_total_mib=1024)
+    assert harness._caller_settings_report_fields(args) == {"caller_settings": {
+        "cos_prefetch_workers": 4, "max_prefetch_memory_mib": 768,
+        "max_object_mib": 64, "max_total_mib": 1024,
+    }}
+
 
 def test_cos_prefetch_cli_conflicts_with_legacy_prefetch_flag(monkeypatch):
     monkeypatch.setattr("sys.argv", ["benchmark", "--factors", "61",
@@ -597,6 +605,10 @@ def test_gpu_tile_width_ab_interleaves_and_checks_every_run(monkeypatch, tmp_pat
     assert reports[-1]["prefetch_objects"] is True
     assert reports[-1]["prefetch_mode"] == "auto"
     assert reports[-1]["prefetch_window"] == 2
+    assert reports[-1]["caller_settings"] == {
+        "cos_prefetch_workers": 2, "max_prefetch_memory_mib": 512,
+        "max_object_mib": 128, "max_total_mib": 4096,
+    }
     assert all("factor_ids" not in item and "scalar_metrics" not in item
                and "observation_counts" not in item for item in reports[-1]["runs"])
 

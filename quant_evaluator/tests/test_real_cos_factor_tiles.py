@@ -258,6 +258,200 @@ def test_two_pass_axes_and_source_drift():
                         sources, common_dates, ["A.SZ"], Labels())
 
 
+def test_make_tile_reuses_axis_indexers_for_shuffled_subset_and_nan():
+    source_dates = pd.DatetimeIndex([
+        "2024-01-03", "2024-01-01", "2024-01-02",
+    ])
+    frame = pd.DataFrame({
+        "B.SZ": np.asarray([30.0, 10.0, np.nan], dtype=np.float64),
+        "EXTRA.SH": np.asarray([3.0, 1.0, 2.0], dtype=np.float64),
+        "A.SZ": np.asarray([300.0, 100.0, 200.0], dtype=np.float64),
+    }, index=source_dates)
+    target_dates = source_dates[[1, 2]]
+    target_assets = ["A.SZ", "B.SZ"]
+    source = ("f0", "uri", "sha", 1, "etag", tiles.axis_hash(frame))
+    labels = type("Labels", (), {
+        "asset_axis": AxisRef("asset", "str", 2,
+                              np.asarray(target_assets, dtype=str)),
+    })()
+
+    batch = tiles.make_tile(iter([(frame, source)]), (source,), target_dates,
+                            target_assets, labels)
+    expected = frame.reindex(index=target_dates,
+                             columns=target_assets).to_numpy(dtype=np.float64)
+
+    assert batch.values.dtype == np.float64
+    np.testing.assert_array_equal(batch.values[:, :, 0], expected)
+    assert np.isnan(batch.values[1, 1, 0])
+
+
+def test_axis_materializer_memory_bounded_mode_uses_multiple_row_chunks():
+    module = tiles.source_axis_materializer
+    dates = pd.date_range("2024-01-01", periods=3)
+    assets = ["A.SZ", "B.SH"]
+    frame = pd.DataFrame({
+        "B.SH": [2.0, np.nan, 6.0],
+        "EXTRA.SZ": [9.0, 8.0, 7.0],
+        "A.SZ": [1.0, 3.0, 5.0],
+    }, index=dates[::-1])
+    target_dates = dates[:2]
+    output = np.empty((len(target_dates), len(assets)), dtype=np.float64)
+
+    module.write_axis_aligned_float64(
+        frame, target_dates, assets, output,
+        memory_bounded=True, chunk_bytes=40)
+    expected = frame.reindex(index=target_dates, columns=assets).to_numpy(
+        dtype=np.float64, copy=False)
+
+    assert output.dtype == np.float64
+    np.testing.assert_array_equal(output, expected)
+    assert np.isnan(output[1, 1])
+
+
+@pytest.mark.parametrize("memory_bounded", [1, None, "yes"])
+def test_axis_materializer_rejects_non_boolean_memory_mode(memory_bounded):
+    module = tiles.source_axis_materializer
+    dates = pd.date_range("2024-01-01", periods=2)
+    frame = pd.DataFrame({"A.SZ": [1.0, 2.0]}, index=dates)
+    output = np.empty((len(dates), 1), dtype=np.float64)
+
+    with pytest.raises(ValueError, match="memory_bounded must be bool"):
+        module.write_axis_aligned_float64(
+            frame, dates, ["A.SZ"], output, memory_bounded=memory_bounded)
+
+
+@pytest.mark.parametrize("output_kind", ["shape", "dtype", "readonly"])
+def test_axis_materializer_rejects_invalid_output(output_kind):
+    module = tiles.source_axis_materializer
+    dates = pd.date_range("2024-01-01", periods=2)
+    frame = pd.DataFrame({"A.SZ": [1.0, 2.0]}, index=dates)
+    if output_kind == "shape":
+        output = np.empty((1, 1), dtype=np.float64)
+    elif output_kind == "dtype":
+        output = np.empty((len(dates), 1), dtype=np.float32)
+    else:
+        output = np.empty((len(dates), 1), dtype=np.float64)
+        output.flags.writeable = False
+
+    with pytest.raises(ValueError, match="output must be a writable float64 array"):
+        module.write_axis_aligned_float64(frame, dates, ["A.SZ"], output)
+
+
+@pytest.mark.parametrize("missing_axis", ["dates", "assets"])
+def test_axis_materializer_requires_shared_axes_as_a_pair(missing_axis):
+    module = tiles.source_axis_materializer
+    dates = pd.date_range("2024-01-01", periods=2)
+    frame = pd.DataFrame({"A.SZ": [1.0, 2.0]}, index=dates)
+    output = np.empty((len(dates), 1), dtype=np.float64)
+    kwargs = ({"required_dates": dates} if missing_axis == "assets" else
+              {"required_assets": {"A.SZ"}})
+
+    with pytest.raises(ValueError, match="must be provided together"):
+        module.write_axis_aligned_float64(
+            frame, dates, ["A.SZ"], output, **kwargs)
+
+
+def test_axis_materializer_rejects_chunk_budget_below_one_logical_row():
+    module = tiles.source_axis_materializer
+    dates = pd.date_range("2024-01-01", periods=3)
+    assets = ["A.SZ", "B.SH"]
+    frame = pd.DataFrame({
+        "B.SH": [2.0, np.nan, 6.0],
+        "EXTRA.SZ": [9.0, 8.0, 7.0],
+        "A.SZ": [1.0, 3.0, 5.0],
+    }, index=dates[::-1])
+    output = np.empty((2, len(assets)), dtype=np.float64)
+
+    with pytest.raises(ValueError, match="at least one logical row"):
+        module.write_axis_aligned_float64(
+            frame, dates[:2], assets, output,
+            memory_bounded=True, chunk_bytes=39)
+
+
+def test_axis_materializer_empty_date_axis_needs_no_chunk_budget():
+    module = tiles.source_axis_materializer
+    dates = pd.date_range("2024-01-01", periods=2)
+    assets = ["A.SZ", "B.SH"]
+    frame = pd.DataFrame({"A.SZ": [1.0, 2.0], "B.SH": [3.0, 4.0]},
+                         index=dates)
+    output = np.empty((0, len(assets)), dtype=np.float64)
+
+    module.write_axis_aligned_float64(
+        frame, dates[:0], assets, output,
+        memory_bounded=True, chunk_bytes=1)
+
+    assert output.shape == (0, len(assets))
+
+
+@pytest.mark.parametrize("missing_axis", ["date", "asset"])
+def test_make_tile_fails_closed_when_target_axis_is_missing(missing_axis):
+    dates = pd.date_range("2024-01-01", periods=2)
+    frame = pd.DataFrame({"A.SZ": [1.0, np.nan], "B.SH": [2.0, 3.0]},
+                         index=dates)
+    target_dates = dates if missing_axis == "asset" else dates.append(
+        pd.DatetimeIndex(["2024-01-03"]))
+    target_assets = ["A.SZ", "B.SH"] if missing_axis == "date" else [
+        "A.SZ", "MISSING.SZ"]
+    source = ("f0", "uri", "sha", 1, "etag", tiles.axis_hash(frame))
+    labels = type("Labels", (), {
+        "asset_axis": AxisRef("asset", "str", len(target_assets),
+                              np.asarray(target_assets, dtype=str)),
+    })()
+
+    with pytest.raises(ValueError, match="factor final axes changed"):
+        tiles.make_tile(iter([(frame, source)]), (source,), target_dates,
+                        target_assets, labels)
+
+
+def test_make_tile_checks_required_shared_axes_before_final_axes():
+    dates = pd.date_range("2024-01-01", periods=2)
+    frame = pd.DataFrame({"A.SZ": [1.0, 2.0]}, index=dates)
+    source = ("f0", "uri", "sha", 1, "etag", tiles.axis_hash(frame))
+    labels = type("Labels", (), {
+        "asset_axis": AxisRef("asset", "str", 1, np.asarray(["A.SZ"])),
+    })()
+
+    with pytest.raises(ValueError, match="indexed shared axes changed"):
+        tiles.make_tile(
+            iter([(frame, source)]), (source,),
+            dates.append(pd.DatetimeIndex(["2024-01-03"])), ["MISSING.SZ"],
+            labels, required_dates=dates.append(
+                pd.DatetimeIndex(["2024-01-04"])), required_assets={"A.SZ"})
+
+
+def test_make_tile_rejects_non_numeric_object_values():
+    dates = pd.date_range("2024-01-01", periods=2)
+    frame = pd.DataFrame({"A.SZ": np.asarray([1.0, "bad"], dtype=object)},
+                         index=dates)
+    source = ("f0", "uri", "sha", 1, "etag", tiles.axis_hash(frame))
+    labels = type("Labels", (), {
+        "asset_axis": AxisRef("asset", "str", 1, np.asarray(["A.SZ"])),
+    })()
+
+    with pytest.raises((TypeError, ValueError)):
+        tiles.make_tile(iter([(frame, source)]), (source,), dates,
+                        ["A.SZ"], labels)
+
+
+@pytest.mark.parametrize("duplicate_axis", ["date", "asset"])
+def test_make_tile_rejects_duplicate_source_axes(duplicate_axis):
+    dates = pd.date_range("2024-01-01", periods=2)
+    if duplicate_axis == "date":
+        frame = pd.DataFrame({"A.SZ": [1.0, 2.0]},
+                             index=pd.DatetimeIndex([dates[0], dates[0]]))
+    else:
+        frame = pd.DataFrame([[1.0, 2.0], [3.0, 4.0]],
+                             index=dates, columns=["A.SZ", "A.SZ"])
+    source = ("f0", "uri", "sha", 1, "etag", tiles.axis_hash(frame))
+    labels = type("Labels", (), {
+        "asset_axis": AxisRef("asset", "str", 1, np.asarray(["A.SZ"])),
+    })()
+
+    with pytest.raises((ValueError, pd.errors.InvalidIndexError)):
+        tiles.make_tile(iter([(frame, source)]), (source,), dates[:1],
+                        ["A.SZ"], labels)
+
+
 def test_load_phase_timing_preserves_factor_values_and_axis_checks(monkeypatch):
     dates = pd.date_range("2024-01-01", periods=2)
     table = SimpleNamespace(to_pandas=lambda: pd.DataFrame(

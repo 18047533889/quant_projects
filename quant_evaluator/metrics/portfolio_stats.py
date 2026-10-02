@@ -7,6 +7,13 @@ Provides Sharpe ratio, drawdown analysis, and portfolio return metrics.
 from typing import Tuple, Optional
 import numpy as np
 
+from quant_evaluator.metrics.rolling_window_constancy import (
+    finite_constant_windows,
+)
+from quant_evaluator.metrics.rolling_sharpe_moments import (
+    conditioned_window_moments,
+)
+
 # QE-METRIC P0-10: canonical missing-return policy strings shared by the
 # return-computation paths. Semantics:
 #   "zero_fill" — NaN returns are treated as 0 (flat period). Back-compat
@@ -1185,12 +1192,18 @@ def _rolling_sharpe_per_window(
     suspicious = valid & (n_good > 1) & (
         ~np.isfinite(centered_sum_sq) | (centered_sum_sq <= cancellation_bound)
     )
+    # Two-observation windows are especially vulnerable to sum-of-squares cancellation.
+    near_flat = (
+        valid & (n_good > 1) & np.isfinite(centered_sum_sq)
+        & (centered_sum_sq >= 0.0)
+        & ((window == 2) | (centered_sum_sq <= 1e-3 * np.abs(sum_v2)))
+    )
     window_mean = np.full(sum_v.shape, np.nan, dtype=np.float64)
     np.divide(sum_v, n_good, out=window_mean, where=valid & (n_good > 0))
-    # Complete constant windows can be identified in O(T), avoiding repeated
-    # O(window) reductions on long flat histories. Incomplete windows retain
-    # the finite-slice fallback below; no missing observation is filled here.
-    fallback_indices = np.flatnonzero(suspicious)
+    # Constant finite observations can be identified in O(T), including
+    # windows with missing or infinite rows. Numeric inputs are not filled;
+    # non-finite values are skipped only by the detector.
+    fallback_indices = np.flatnonzero(suspicious | near_flat)
     if fallback_indices.size:
         changes = np.concatenate((
             [0], np.cumsum(ret[1:] != ret[:-1], dtype=np.int64),
@@ -1201,6 +1214,28 @@ def _rolling_sharpe_per_window(
         window_mean[complete_constant] = ret[i_start[complete_constant]]
         std[complete_constant] = 0.0
         fallback_indices = fallback_indices[~complete_constant[fallback_indices]]
+        constant_windows = complete_constant.copy()
+        if fallback_indices.size:
+            finite_constants, constant_values = finite_constant_windows(ret, window)
+            finite_constants &= valid & (n > 1)
+            window_mean[finite_constants] = constant_values[finite_constants]
+            std[finite_constants] = 0.0
+            constant_windows |= finite_constants
+            fallback_indices = fallback_indices[~finite_constants[fallback_indices]]
+        # Center near-flat windows on the first finite input value. The helper
+        # accepts centered moments only within its explicit relative-error
+        # budget; uncertain windows use bounded vectorized finite-slice reductions.
+        centered_mask = near_flat & ~suspicious & ~constant_windows
+        centered_indices = np.flatnonzero(centered_mask)
+        if centered_indices.size:
+            centered_mean, centered_std = conditioned_window_moments(
+                ret, window, i_start[centered_indices], n[centered_indices],
+            )
+            window_mean[centered_indices] = centered_mean
+            std[centered_indices] = centered_std
+            fallback_indices = fallback_indices[
+                ~centered_mask[fallback_indices]
+            ]
     for index in fallback_indices:
         observed_window = ret[i_start[index]:i_end[index]]
         observed_window = observed_window[np.isfinite(observed_window)]
