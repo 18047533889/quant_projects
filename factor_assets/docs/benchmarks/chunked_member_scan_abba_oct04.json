@@ -1,0 +1,284 @@
+{
+  "bounded_over_legacy_time_ratio": 0.8097941797075845,
+  "equivalence": {
+    "bitwise_similarity_promise": false,
+    "input_fingerprint": "10d215c2fcf901c764afd6a2e7777b22984c01563f69ec7fee3e0a1232577a16",
+    "query_count": 4,
+    "similarity_epsilon": 2e-12,
+    "similarity_within_epsilon": true,
+    "winner_identity_matches": true
+  },
+  "limitations": [
+    "Synthetic embeddings; not a production-data performance claim.",
+    "Fresh processes regenerate identical seeded fingerprints; no source dataset is copied.",
+    "The legacy comparison prepares one full matrix per query when the existing member-cache admission estimate exceeds 32 MiB.",
+    "Peak RSS includes imports and synthetic input objects, not only scan scratch.",
+    "Declared source hashes are not a complete transitive runtime closure."
+  ],
+  "median_process_peak_rss_bytes": {
+    "bounded": 307843072,
+    "legacy": 484227072
+  },
+  "medians_seconds": {
+    "bounded": 0.7044126749678981,
+    "legacy": 0.8698663100076374
+  },
+  "ordering": [
+    "legacy",
+    "bounded",
+    "bounded",
+    "legacy"
+  ],
+  "report_limit_bytes_strictly_less_than": 1048576,
+  "report_overwrite": "refused via exclusive create",
+  "runtime_parent_after": {
+    "cpu_count": 32,
+    "host": "qs-compute-gpu-hk-01",
+    "machine": "x86_64",
+    "numpy": "2.2.6",
+    "python": "3.12.3",
+    "python_executable": "/home/sunhaiwei/quant_projects/.venv/bin/python",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1"
+    }
+  },
+  "runtime_parent_before": {
+    "cpu_count": 32,
+    "host": "qs-compute-gpu-hk-01",
+    "machine": "x86_64",
+    "numpy": "2.2.6",
+    "python": "3.12.3",
+    "python_executable": "/home/sunhaiwei/quant_projects/.venv/bin/python",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1"
+    }
+  },
+  "runtime_workers": {
+    "cpu_count": 32,
+    "host": "qs-compute-gpu-hk-01",
+    "machine": "x86_64",
+    "numpy": "2.2.6",
+    "python": "3.12.3",
+    "python_executable": "/home/sunhaiwei/quant_projects/.venv/bin/python",
+    "thread_environment": {
+      "MKL_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1"
+    }
+  },
+  "samples": [
+    {
+      "elapsed_seconds": 0.7770247139851563,
+      "input_estimate_bytes": 243771392,
+      "input_fingerprint": "10d215c2fcf901c764afd6a2e7777b22984c01563f69ec7fee3e0a1232577a16",
+      "mode": "legacy",
+      "process_peak_rss_bytes": 484012032,
+      "runtime": {
+        "cpu_count": 32,
+        "host": "qs-compute-gpu-hk-01",
+        "machine": "x86_64",
+        "numpy": "2.2.6",
+        "python": "3.12.3",
+        "python_executable": "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "thread_environment": {
+          "MKL_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1"
+        }
+      },
+      "source_hashes": {
+        "factor_assets/clustering/incremental.py": "6d81abd393774c5f80bd56c22c40b8b50952b829685a0cd94af44b40cb72db28",
+        "factor_assets/clustering/incremental_recall.py": "49a90ef906d1b5bd499ce8102e7135530e1b7f058fe87d67f4f5ca6ecf0747bc",
+        "factor_assets/contracts/fingerprint.py": "3510218720c5c17bb5db0011a5308cb85c6d21c2ca1af638c13029a4a51cb302",
+        "factor_assets/scripts/benchmark_chunked_member_scan_oct04.py": "010a8dff62fbb1c464ec3aac6ad860b52fc862e4fc1c0830d7101a1c6504e374",
+        "factor_assets/similarity/unit_vectors.py": "4e5234254e812dcd5b557ae2280a9427c790457eab5c96b93b4454839f1158af"
+      },
+      "winners": [
+        [
+          "M02056",
+          0.23038949535927958
+        ],
+        [
+          "M06527",
+          0.25408612909309475
+        ],
+        [
+          "M01068",
+          0.26069587805287997
+        ],
+        [
+          "M08721",
+          0.2639249600943869
+        ]
+      ]
+    },
+    {
+      "elapsed_seconds": 0.6769028409617022,
+      "input_estimate_bytes": 243771392,
+      "input_fingerprint": "10d215c2fcf901c764afd6a2e7777b22984c01563f69ec7fee3e0a1232577a16",
+      "mode": "bounded",
+      "process_peak_rss_bytes": 307851264,
+      "runtime": {
+        "cpu_count": 32,
+        "host": "qs-compute-gpu-hk-01",
+        "machine": "x86_64",
+        "numpy": "2.2.6",
+        "python": "3.12.3",
+        "python_executable": "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "thread_environment": {
+          "MKL_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1"
+        }
+      },
+      "source_hashes": {
+        "factor_assets/clustering/incremental.py": "6d81abd393774c5f80bd56c22c40b8b50952b829685a0cd94af44b40cb72db28",
+        "factor_assets/clustering/incremental_recall.py": "49a90ef906d1b5bd499ce8102e7135530e1b7f058fe87d67f4f5ca6ecf0747bc",
+        "factor_assets/contracts/fingerprint.py": "3510218720c5c17bb5db0011a5308cb85c6d21c2ca1af638c13029a4a51cb302",
+        "factor_assets/scripts/benchmark_chunked_member_scan_oct04.py": "010a8dff62fbb1c464ec3aac6ad860b52fc862e4fc1c0830d7101a1c6504e374",
+        "factor_assets/similarity/unit_vectors.py": "4e5234254e812dcd5b557ae2280a9427c790457eab5c96b93b4454839f1158af"
+      },
+      "winners": [
+        [
+          "M02056",
+          0.2303894953592796
+        ],
+        [
+          "M06527",
+          0.2540861290930947
+        ],
+        [
+          "M01068",
+          0.26069587805287997
+        ],
+        [
+          "M08721",
+          0.2639249600943868
+        ]
+      ]
+    },
+    {
+      "elapsed_seconds": 0.7319225089740939,
+      "input_estimate_bytes": 243771392,
+      "input_fingerprint": "10d215c2fcf901c764afd6a2e7777b22984c01563f69ec7fee3e0a1232577a16",
+      "mode": "bounded",
+      "process_peak_rss_bytes": 307834880,
+      "runtime": {
+        "cpu_count": 32,
+        "host": "qs-compute-gpu-hk-01",
+        "machine": "x86_64",
+        "numpy": "2.2.6",
+        "python": "3.12.3",
+        "python_executable": "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "thread_environment": {
+          "MKL_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1"
+        }
+      },
+      "source_hashes": {
+        "factor_assets/clustering/incremental.py": "6d81abd393774c5f80bd56c22c40b8b50952b829685a0cd94af44b40cb72db28",
+        "factor_assets/clustering/incremental_recall.py": "49a90ef906d1b5bd499ce8102e7135530e1b7f058fe87d67f4f5ca6ecf0747bc",
+        "factor_assets/contracts/fingerprint.py": "3510218720c5c17bb5db0011a5308cb85c6d21c2ca1af638c13029a4a51cb302",
+        "factor_assets/scripts/benchmark_chunked_member_scan_oct04.py": "010a8dff62fbb1c464ec3aac6ad860b52fc862e4fc1c0830d7101a1c6504e374",
+        "factor_assets/similarity/unit_vectors.py": "4e5234254e812dcd5b557ae2280a9427c790457eab5c96b93b4454839f1158af"
+      },
+      "winners": [
+        [
+          "M02056",
+          0.2303894953592796
+        ],
+        [
+          "M06527",
+          0.2540861290930947
+        ],
+        [
+          "M01068",
+          0.26069587805287997
+        ],
+        [
+          "M08721",
+          0.2639249600943868
+        ]
+      ]
+    },
+    {
+      "elapsed_seconds": 0.9627079060301185,
+      "input_estimate_bytes": 243771392,
+      "input_fingerprint": "10d215c2fcf901c764afd6a2e7777b22984c01563f69ec7fee3e0a1232577a16",
+      "mode": "legacy",
+      "process_peak_rss_bytes": 484442112,
+      "runtime": {
+        "cpu_count": 32,
+        "host": "qs-compute-gpu-hk-01",
+        "machine": "x86_64",
+        "numpy": "2.2.6",
+        "python": "3.12.3",
+        "python_executable": "/home/sunhaiwei/quant_projects/.venv/bin/python",
+        "thread_environment": {
+          "MKL_NUM_THREADS": "1",
+          "OMP_NUM_THREADS": "1",
+          "OPENBLAS_NUM_THREADS": "1"
+        }
+      },
+      "source_hashes": {
+        "factor_assets/clustering/incremental.py": "6d81abd393774c5f80bd56c22c40b8b50952b829685a0cd94af44b40cb72db28",
+        "factor_assets/clustering/incremental_recall.py": "49a90ef906d1b5bd499ce8102e7135530e1b7f058fe87d67f4f5ca6ecf0747bc",
+        "factor_assets/contracts/fingerprint.py": "3510218720c5c17bb5db0011a5308cb85c6d21c2ca1af638c13029a4a51cb302",
+        "factor_assets/scripts/benchmark_chunked_member_scan_oct04.py": "010a8dff62fbb1c464ec3aac6ad860b52fc862e4fc1c0830d7101a1c6504e374",
+        "factor_assets/similarity/unit_vectors.py": "4e5234254e812dcd5b557ae2280a9427c790457eab5c96b93b4454839f1158af"
+      },
+      "winners": [
+        [
+          "M02056",
+          0.23038949535927958
+        ],
+        [
+          "M06527",
+          0.25408612909309475
+        ],
+        [
+          "M01068",
+          0.26069587805287997
+        ],
+        [
+          "M08721",
+          0.2639249600943869
+        ]
+      ]
+    }
+  ],
+  "schema": "factor_assets.chunked_member_scan_abba.v1",
+  "scope": {
+    "dimensions": 256,
+    "fresh_process_per_measurement": true,
+    "input_cap_bytes": 268435456,
+    "input_estimate_bytes": 243771392,
+    "legacy_cache_estimate_bytes": 35904256,
+    "legacy_full_preparation_per_query": true,
+    "members": 17000,
+    "queries": 4,
+    "seed": 20261004,
+    "source_dataset_copy": false,
+    "timing": "member preparation plus exact winner queries; synthetic only"
+  },
+  "source_hashes_after": {
+    "factor_assets/clustering/incremental.py": "6d81abd393774c5f80bd56c22c40b8b50952b829685a0cd94af44b40cb72db28",
+    "factor_assets/clustering/incremental_recall.py": "49a90ef906d1b5bd499ce8102e7135530e1b7f058fe87d67f4f5ca6ecf0747bc",
+    "factor_assets/contracts/fingerprint.py": "3510218720c5c17bb5db0011a5308cb85c6d21c2ca1af638c13029a4a51cb302",
+    "factor_assets/scripts/benchmark_chunked_member_scan_oct04.py": "010a8dff62fbb1c464ec3aac6ad860b52fc862e4fc1c0830d7101a1c6504e374",
+    "factor_assets/similarity/unit_vectors.py": "4e5234254e812dcd5b557ae2280a9427c790457eab5c96b93b4454839f1158af"
+  },
+  "source_hashes_before": {
+    "factor_assets/clustering/incremental.py": "6d81abd393774c5f80bd56c22c40b8b50952b829685a0cd94af44b40cb72db28",
+    "factor_assets/clustering/incremental_recall.py": "49a90ef906d1b5bd499ce8102e7135530e1b7f058fe87d67f4f5ca6ecf0747bc",
+    "factor_assets/contracts/fingerprint.py": "3510218720c5c17bb5db0011a5308cb85c6d21c2ca1af638c13029a4a51cb302",
+    "factor_assets/scripts/benchmark_chunked_member_scan_oct04.py": "010a8dff62fbb1c464ec3aac6ad860b52fc862e4fc1c0830d7101a1c6504e374",
+    "factor_assets/similarity/unit_vectors.py": "4e5234254e812dcd5b557ae2280a9427c790457eab5c96b93b4454839f1158af"
+  },
+  "status": "complete"
+}
