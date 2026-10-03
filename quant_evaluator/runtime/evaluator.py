@@ -304,6 +304,10 @@ def _select_public_auto_backend(
             or evaluator is not None or split_ref is not None
             or portfolio_spec is not None):
         return "cpu", "special_input_or_parameters"
+    # Static profiles were measured with the default tile policy. Measured-auto
+    # calibration remains available and keys records by every GPU policy field.
+    if gpu_policy is not None and gpu_policy.max_factor_tile_size is not None:
+        return "cpu", "gpu_factor_tile_cap_outside_certified_profile"
     if batch_name is not None:
         if real_cos_f5_mixed_three:
             minimum = _AUTO_REAL_COS_F5_MIXED_MIN_EFFECTIVE_VRAM_BYTES

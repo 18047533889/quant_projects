@@ -31,9 +31,17 @@ columnar = evaluate_factor_source_batch(
 ```
 
 `max_tile_size` 是 source 读取上限，不保证实际 GPU tile 等于该值，
-也不是 materialized evaluate 的 GPU tile 参数。现有 GPUExecutionPolicy
-还没有显式 factor tile 上限字段；不可把上面的 source 参数套到 materialized API。
+也不是 materialized evaluate 的 GPU tile 参数。
+`GPUExecutionPolicy(max_factor_tile_size=8)` 可为所有 GPU 路径指定因子分块上限，
+省略或 `None` 保持原有候选。该字段只接受正的内置整数（拒绝 bool），
+是上限而非精确宽度或速度保证；内存准入及 OOM 缩块仍生效。
+CPU source 不受 GPU 专用上限约束，仍按自身 `max_tile_size` 读取。
+静态 materialized auto 对自定义上限回退 CPU，因为旧测速证据未认证该政策；
+实测校准可继续运行，缓存身份包含上限字段，不能借用默认政策的校准结果。
+source auto 在上限不小于已认证宽度时保留该宽度，低于它则明确回退 CPU。
+显式 `cuda_strict` 也受上限约束，执行回执记录请求上限及实际 GPU 宽度。
 源接口目前提供 auto/cpu/cuda_strict；两接口返回类型及支持指标集合不同。
+完整选项见 [SOURCE_BATCH_OPTIONS.md](SOURCE_BATCH_OPTIONS.md)。
 
 ## 实现与数值语义
 
@@ -78,10 +86,32 @@ CuPy pool 增长未减少。这些均不是 COS 整批或全部指标的端到�
 `python -m quant_evaluator.scripts.preflight_materialized_f48_auto`
 仅读取已绑定 manifest，不读取因子或执行评价；失败输出脱敏 JSON 并返回非零。
 它使用保守内存估计，预期 shape 不是已经读取对象后的轴认证。
-本轮 COS CLI 默认不可启动，改用已安装 CLI 的单进程只读试验仍未取得对象元数据；
-没有获取当前 48 对象实际总字节、没有绕过授权/HEAD/hash/预算门槛。
-所以本轮不能提供新内核的真实 COS 全流程重测结果，也未把 F48 materialized auto
+早先默认 CLI `clean-cos-ro` 不存在，直接试用 `coscli` 也未取得元数据。
+随后按 DataAccess 研究运行手册使用服务器已有的 `admin-cos` 网关，
+仅设置当前测试进程环境（不修改凭据或持久配置），已成功读取并校验固定 manifest。
+固定 manifest SHA256 为
+`b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864`。
+按现有 source 4096 MiB 总预算选出的 48 个不同内容哈希对象共
+3,620,857,809 字节（3453.1191 MiB），最大单对象 105,227,272 字节。
+本次诊断只读清单，未读取因子对象；因此证明的是网关可用及清单字节预算，
+不是因子轴、ETag 或评估结果已通过新一轮验证。
+整批 materialized 预检的 2048 MiB 门槛确实不足以装下该批对象；
+保守主存估计加 24 GiB 余量也高于本次约 37 GiB 可用主存。
+未降低这些保护，也未扩大加载默认预算；真实全量测试优先走现有有界 source 路线。
+截至本节记录，新内核真实 COS 全流程重测仍待运行；未把 F48 materialized auto
 从 CPU 擅自改为 GPU。
+
+网关使用示例（仅当前命令环境）：
+
+```bash
+ASHARE_PARQUET_ROOT=/home/sunhaiwei/cos_data \
+DATA_ACCESS_COS_CLI=admin-cos \
+DATA_ACCESS_COS_CACHE_ROOT=/home/sunhaiwei/.cache/quant-dataaccess/research \
+.venv/bin/python -m quant_evaluator.scripts.preflight_materialized_f48_auto
+```
+
+该 materialized 预检现在会因明确的总对象预算不足而非认证失败返回非零。
+不要为解决默认 CLI 名称问题读取凭据、切换角色或绕过 DataAccess。
 
 FE 原生 EWM 的 4 个独立 Decimal 极值反例仍失败，不属于本轮已修复内容；
 全部 FE 原生复用、所有指标最快及无 bug 的总目标仍未完成。
@@ -89,3 +119,27 @@ FE 原生 EWM 的 4 个独立 Decimal 极值反例仍失败，不属于本轮已
 复现与完整范围见
 [排序 A/B](benchmarks/gpu_rank_scatter_cleanup_ab_20261003.md)、
 [Pearson A/B](benchmarks/pearson_centered_fused_ab_20261003.md)及对应 JSON。
+
+## 后续分块控制与运行证据
+
+新增 policy cap、source 路由/回执、OOM 防御限制及测速预检失败回执后，
+完整 `quant_evaluator/tests` 为 **5075 passed、26 skipped、53 warnings，230.78 秒**。
+定向分块/OOM/初始准入回执测试另为 35 passed；source benchmark harness
+与失败回执测试联合为 73 passed。真实 L20 的
+`_device_admission(GPUExecutionPolicy(max_factor_tile_size=2))`
+也返回通过，未将自定义 cap 错误放入共享设备拒绝条件。
+校准身份测试验证 cap None/1/2 生成不同 key，不能复用旧缓存。
+
+本次真实 F48 混合三指标测试首次完成因子扫描，但在读取标签前被
+DataAccess 默认镜像 `/home/shw/...` 的目录权限拒绝，评估没有开始。
+现有正式镜像是 `/home/sunhaiwei/cos_data`，项目目录的 A 股数据路径
+已符号链接到该镜像；测试进程可使用已有 `ASHARE_PARQUET_ROOT` 选项，
+无需改凭据、修改 DataAccess 或创建另一个数据副本。
+
+后续启动时主存余量下降，32 GiB source 准入门槛拒绝执行；
+可审查的 [失败回执](benchmarks/real_cos_f48_source_resource_rejection_20261003.json)
+标明 `preflight_rejected`、`evaluation_started=false`、`factor_objects_read=0`，
+该回执只描述最后一次启动，不否认首次尝试曾扫描因子对象。
+它没有耗时/结果数据，绝不能作为新内核端到端加速证据或 auto 认证输入。
+当前尚无新一轮匹配的真实 F48 CPU/CUDA 性能对照，不扩大自动认证区域。
+所有指标最快、全部真实场景无 bug、FE 极值递推及完整 FE 原生复用仍未闭合。

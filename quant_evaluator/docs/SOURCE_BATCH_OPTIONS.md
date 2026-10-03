@@ -13,6 +13,13 @@ This is not a guarantee of the fastest backend for every possible input.
 `cuda_strict` explicitly requests CUDA; it does not silently promise numerical support
 for unsupported metrics. `max_tile_size` is a cap, not a guarantee of actual read width.
 GPU policy controls device selection, VRAM fraction, host-result budget and OOM retiling.
+`GPUExecutionPolicy.max_factor_tile_size` is an optional positive integer cap on each
+GPU factor tile. It is a GPU execution limit; CPU source execution is unchanged. The
+session selects a fitting power-of-two tile below the cap and may reduce it further
+after OOM. Static batch auto uses the default tile policy, so custom caps route
+materialized requests to CPU. Source auto retains a certified width when the cap is at
+least that width and falls back to CPU when the cap would reduce it. Measured auto can
+measure capped policies.
 Source assembly budget and GPU/result budgets are distinct.
 
 For example, keep the existing numerical policy and request bounded execution:

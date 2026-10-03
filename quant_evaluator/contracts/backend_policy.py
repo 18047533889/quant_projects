@@ -59,8 +59,15 @@ class GPUExecutionPolicy:
     # The default remains per-tile staging until representative evidence shows a
     # stable wall-time benefit; resident staging may fall back safely.
     prefer_resident_labels: bool = False
+    # Upper bound, not an exact width: admission retains power-of-two
+    # candidates and may select a smaller tile for memory/OOM safety.
+    max_factor_tile_size: Optional[int] = None
 
     def __post_init__(self) -> None:
+        if (self.max_factor_tile_size is not None
+                and (type(self.max_factor_tile_size) is not int
+                     or self.max_factor_tile_size <= 0)):
+            raise ValueError("max_factor_tile_size must be None or a positive integer")
         if (isinstance(self.max_host_result_bytes, bool)
                 or not isinstance(self.max_host_result_bytes, int)
                 or self.max_host_result_bytes <= 0):
@@ -76,6 +83,16 @@ class GPUExecutionPolicy:
         object.__setattr__(self, 'required_capabilities', tuple(self.required_capabilities))
         if any(x not in ('async_transfer', 'pinned_host_memory', 'double_buffer') for x in self.required_capabilities):
             raise ValueError('unknown mandatory GPU capability')
+
+    def factor_tile_candidates(self) -> Tuple[int, ...]:
+        """Canonical ordered candidates under the caller's optional cap.
+
+        This only supplies candidates. The session still applies working-set,
+        live-allocation and OOM checks; it is not a memory or speed guarantee.
+        """
+        candidates = (128, 64, 32, 16, 8, 4, 2, 1)
+        cap = self.max_factor_tile_size
+        return candidates if cap is None else tuple(tile for tile in candidates if tile <= cap)
 
 
 class DeviceFactorBatch:

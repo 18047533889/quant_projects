@@ -297,11 +297,14 @@ class GPUExecutor:
             raise InvalidContractError("label decision times must match the factor source")
         source_dtype = np.dtype(metadata.dtype)
         source_dtype_bytes = np.result_type(source_dtype, np.nan).itemsize
+        policy_tile_limit = (self.session.policy.max_factor_tile_size
+                             or metadata.max_tile_size)
         tile_width = min(
             self._factor_tile_size(metrics, T, N, F, source_dtype_bytes,
                                    validity_mask=True),
             metadata.max_tile_size,
             max_tile_size or metadata.max_tile_size,
+            policy_tile_limit,
         )
         cp = _import_cp()
         labels = label_bundle.values
@@ -378,7 +381,7 @@ class GPUExecutor:
             return self._factor_tile_size(
                 metrics, T, N, F, dtype_bytes, validity_mask=validity_mask)
         live_bytes = self.session._pool.used_bytes()
-        for candidate in (128, 64, 32, 16, 8, 4, 2, 1):
+        for candidate in self.session.policy.factor_tile_candidates():
             tile = min(F, candidate)
             if tile > candidate_limit:
                 continue

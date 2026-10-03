@@ -259,7 +259,7 @@ class DeviceEvaluationSession:
                 "daily_quantile_monotonicity_rate"))
             and not metric_parameters)
         coverage_default = plan == ("coverage",) and not metric_parameters
-        for tile in (128, 64, 32, 16, 8, 4, 2, 1):
+        for tile in self.policy.factor_tile_candidates():
             other_live_bytes = 0
             if coverage_default:
                 precision_is_fp64 = self.policy.precision_policy in (
@@ -333,6 +333,8 @@ class DeviceEvaluationSession:
         """Halve the tile on OOM; record retry (spec §7)."""
         self._oom_retries += 1
         nxt = max(current_tile // 2, 1)
+        if self.policy.max_factor_tile_size is not None:
+            nxt = min(nxt, self.policy.max_factor_tile_size)
         self._final_tile = nxt
         logger.warning("OOM retile: %d -> %d (retries=%d)", current_tile, nxt, self._oom_retries)
         return nxt

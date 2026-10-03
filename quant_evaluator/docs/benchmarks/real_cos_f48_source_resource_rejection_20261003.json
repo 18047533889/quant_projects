@@ -1,0 +1,22 @@
+{
+  "kind": "real_cos_source_admission_failure.v1",
+  "status": "preflight_rejected",
+  "pass": false,
+  "evaluation_started": false,
+  "factor_objects_read": 0,
+  "requested_factor_count": 48,
+  "requested_tile_size": 2,
+  "metric_ids": [
+    "rank_ic",
+    "quantile_spread",
+    "factor_turnover_rate"
+  ],
+  "failure_reason": "insufficient_ram_or_cos_cache_disk_headroom",
+  "preflight": {
+    "pass": false,
+    "available_ram_bytes": 19325763584,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 369981423616,
+    "required_disk_bytes": 5368709120
+  }
+}

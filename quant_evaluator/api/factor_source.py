@@ -118,8 +118,8 @@ def evaluate_factor_source_batch(
     """Evaluate every source factor once in bounded tiles.
 
     Supported options: backend is auto/cpu/cuda_strict; max_tile_size caps
-    source reads; gpu_policy controls VRAM fraction, OOM retiling and output
-    budget. The caller owns source.close(). The result is columnar and omits
+    source reads; gpu_policy.max_factor_tile_size caps GPU factor tiles.
+    The caller owns source.close(). The result is columnar and omits
     the richer EvaluationBundle diagnostics/probe artifacts.
     """
     if isinstance(metrics, (str, bytes)):
@@ -170,6 +170,10 @@ def evaluate_factor_source_batch(
             label_dtype=str(label_bundle.values.dtype),
             requested_tile_width=requested_tile_width,
         )
+        if (evidence is not None and policy.max_factor_tile_size is not None
+                and policy.max_factor_tile_size < evidence.effective_tile_width):
+            route, reason = "cpu", "source_policy_tile_cap_outside_certified_tile"
+            evidence = None
         if evidence is not None:
             from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
 
@@ -184,7 +188,7 @@ def evaluate_factor_source_batch(
             evidence_id = evidence.evidence_id
             evidence_status = evidence.evidence_status
             tile_width = evidence.effective_tile_width
-        else:
+        elif reason == "explicit":
             route, reason = "cpu", "source_shape_or_metrics_not_certified"
     if route == "cuda_strict" and backend == "auto":
         if memory_tile_limit < tile_width:
@@ -192,6 +196,10 @@ def evaluate_factor_source_batch(
             route, reason = "cpu", "source_memory_budget_outside_certified_tile"
         else:
             effective_tile_size = tile_width
+    if route == "cuda_strict":
+        effective_tile_size = min(
+            effective_tile_size,
+            policy.max_factor_tile_size or effective_tile_size)
     effective_tile_size = min(effective_tile_size, memory_tile_limit)
     if route == "cuda_strict":
         from quant_evaluator.runtime.device_session import DeviceEvaluationSession
@@ -225,8 +233,11 @@ def evaluate_factor_source_batch(
         "double_buffer": policy.double_buffer,
         "required_capabilities": policy.required_capabilities,
         "max_tile_size": max_tile_size,
+        "max_factor_tile_size": policy.max_factor_tile_size,
         "admitted_source_tile_size": memory_tile_limit,
         "effective_max_tile_size": effective_tile_size,
+        "effective_gpu_factor_tile_size": (
+            out.metadata.get("factor_tile_size") if route == "cuda_strict" else None),
     }
     receipt["receipt_hash"] = stable_content_hex(
         tag="FactorSourceBatchExecutionReceipt.v1", fields=receipt)

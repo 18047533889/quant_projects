@@ -876,6 +876,18 @@ def main():
                                   args.max_source_memory_mib)
     print(json.dumps({"preflight": initial_preflight}), flush=True)
     if not initial_preflight["pass"]:
+        # Admission failure is evidence, never a completed timing run.
+        if args.output is not None:
+            emit_report({
+                "kind": "real_cos_source_admission_failure.v1",
+                "status": "preflight_rejected", "pass": False,
+                "evaluation_started": False, "factor_objects_read": 0,
+                "requested_factor_count": args.factors,
+                "requested_tile_size": args.tile_size,
+                "metric_ids": list(selected),
+                "failure_reason": "insufficient_ram_or_cos_cache_disk_headroom",
+                "preflight": initial_preflight,
+            }, args.output)
         raise SystemExit("insufficient RAM or COS cache disk headroom")
 
     manifest_sha = tiles.MANIFEST_SHA256
