@@ -26,6 +26,8 @@ FE pandas 兼容路径前仅将扩展标量 boxing 为 object，解决 pandas pi
 2026-10-03 修复后的三个回归文件合跑：23 passed，47.22s。
 包含公共注册 float128、UInt64 最大值、nullable 数值、无穷、重复索引、
 行顺序、身份校验、registry 热替换和显式 research fallback。
+最终运行时源码的全库回归：912 passed、1 xfailed、95 warnings，122.18s；
+API 索引检查通过。这不证明所有 dtype 都已测试或不存在其他问题。
 
 此前 `benchmarks/missing_indicator_fe_native_20261003.json` 对 30 万行
 交错 AB/BA 七轮测得原生中位 0.047853s、旧 FE pandas 0.360917s，约 7.54 倍。

@@ -76,6 +76,9 @@ pandas 输入/输出转换仅是现有适配边界；保留原始行顺序及重
 普通、大偏移、正负最大 Float64、subnormal、常数、NaN/Inf、singleton、
 ddof 0/1/2、axis 0/-1、非连续数组、重复 pandas index 和 null 分组均有反例测试。
 
+完整 FP 回归已在最终运行时源码快照执行：912 passed、1 xfailed、
+95 warnings，122.18s；API 索引生成和检查通过。另一次此前快照全套也为
+912 passed、1 xfailed。预期失败不是全部功能无 bug 的证明。
 尚未完成：所有输入 dtype 的全面准入、大批量峰值内存及速度测量、
-FE v2 生产路由，以及当前最终源码上的完整 FP 全套。不要把这些写成已认证。
+FE v2 生产路由。不要把这些写成已认证。
 空 NumPy 输入仍保持历史的同 dtype 副本返回，但必须先校验 numeric policy。
