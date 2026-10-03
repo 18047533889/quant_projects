@@ -1,0 +1,1209 @@
+{
+  "kind": "real_cos_profile_abba_f48_pearson.v2",
+  "status": "complete",
+  "run_started": true,
+  "shape": [
+    2586,
+    5461,
+    48
+  ],
+  "metric_ids": [
+    "pearson_ic",
+    "pearson_ic_series",
+    "pearson_ic_std",
+    "pearson_ic_ir"
+  ],
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "requested_tile_cap": 16,
+  "preflight": {
+    "pass": true,
+    "available_ram_bytes": 64603144192,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 250946568192,
+    "required_disk_bytes": 5368709120
+  },
+  "request_shape": [
+    2586,
+    5461,
+    48
+  ],
+  "oracle": "independent scipy/decimal Pearson chain",
+  "profile_records": [
+    {
+      "context": {
+        "request_content_sha256": "8ab3e727799b8056a202f2fe9a9556d570ff98b0bedad6a10e0e0bed76b5a2a0",
+        "source_identity_sha256": "c4e72bca26600b580058738420ed0f7cb6942f3493123109ee3947b284fbd52c",
+        "source_content_sha256": "992f66d03322b40eb72d1779e993d72fae1a9b7b15730d701735c6040e587fb2",
+        "executable_source_sha256": "c763d9b53cd010b152273dc0f6b97a31cef83a77902275bb7d281218d6ac0dd1",
+        "runtime_fingerprint_sha256": "a1f0b87c3a9e4b03398d8b077be3741c0aafc5765ed8b21e63e847d04ea00a8d",
+        "package_fingerprint_sha256": "1f92182dd26ed022ef66e0af54104965281406f307a862784c130731927ca46a",
+        "thread_fingerprint_sha256": "f8e8c8132d238f53969cd4488b29f210db621b2e9471885f1992222c129e2d05",
+        "device_fingerprint_sha256": "78f7e741c128013e808138552fd330090e20662b63ed955c2f48cf88d8925c05",
+        "common_config_fingerprint_sha256": "fb33135a0ce379be3ec702f7dbba8285c976e0425ec08faafabcc5098f695676",
+        "request_shape": [
+          2586,
+          5461,
+          48
+        ],
+        "metric_ids": [
+          "pearson_ic",
+          "pearson_ic_series",
+          "pearson_ic_std",
+          "pearson_ic_ir"
+        ],
+        "expected_coverage_count": 124272,
+        "requested_tile_size": 16,
+        "timing_scope": "evaluate_factor_source_batch_wall_v1",
+        "metric_coverage": [
+          [
+            "pearson_ic",
+            48
+          ],
+          [
+            "pearson_ic_series",
+            124128
+          ],
+          [
+            "pearson_ic_std",
+            48
+          ],
+          [
+            "pearson_ic_ir",
+            48
+          ]
+        ],
+        "metric_error_tolerances": [
+          [
+            "pearson_ic",
+            1e-10
+          ],
+          [
+            "pearson_ic_series",
+            1e-10
+          ],
+          [
+            "pearson_ic_std",
+            1e-10
+          ],
+          [
+            "pearson_ic_ir",
+            1e-10
+          ]
+        ],
+        "live_source_admitted_max_tile_size": 5,
+        "gpu_admitted_max_tile_size": 5
+      },
+      "execution_order": [
+        "cpu",
+        "cuda"
+      ],
+      "cpu": {
+        "backend": "cpu",
+        "seconds": 107.75855016201967,
+        "oom_count": 0,
+        "source_tile_size": 5,
+        "source_ranges": [
+          [
+            0,
+            5
+          ],
+          [
+            5,
+            10
+          ],
+          [
+            10,
+            15
+          ],
+          [
+            15,
+            20
+          ],
+          [
+            20,
+            25
+          ],
+          [
+            25,
+            30
+          ],
+          [
+            30,
+            35
+          ],
+          [
+            35,
+            40
+          ],
+          [
+            40,
+            45
+          ],
+          [
+            45,
+            48
+          ]
+        ],
+        "actual_tile_size": 5,
+        "compute_ranges": [
+          [
+            0,
+            5
+          ],
+          [
+            5,
+            10
+          ],
+          [
+            10,
+            15
+          ],
+          [
+            15,
+            20
+          ],
+          [
+            20,
+            25
+          ],
+          [
+            25,
+            30
+          ],
+          [
+            30,
+            35
+          ],
+          [
+            35,
+            40
+          ],
+          [
+            40,
+            45
+          ],
+          [
+            45,
+            48
+          ]
+        ],
+        "execution_config_sha256": "9da695782079c2091cc3c42c43aec0b827d74fa3232d9caab7e2f7f35482db6a",
+        "execution_schedule_sha256": "074dfe6b737e75b18521184b19478d227991c2d82095b6cdb17e16abaffeb18e",
+        "execution_schedule_scope": "zero_oom_source_equals_compute_v1",
+        "correctness_validated": true,
+        "coverage_expected": 124272,
+        "coverage_observed": 124272,
+        "outputs": [
+          {
+            "metric_id": "pearson_ic",
+            "values_sha256": "161c498aa5b1b8ba893fc6df9dc97c6d8d80dfb24f36f7c1df606037c1c934de",
+            "finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 48,
+            "coverage_observed": 48
+          },
+          {
+            "metric_id": "pearson_ic_series",
+            "values_sha256": "180bf4aab8b6f3ed1c49104b83849a5094e2c8acdd058036bb5b5baa4ec0771a",
+            "finite_mask_sha256": "c56d1a6fc66dd3d5e64663a48355819fd5436bb057eefd9a3f9d22181e3a7127",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 124128,
+            "coverage_observed": 124128
+          },
+          {
+            "metric_id": "pearson_ic_std",
+            "values_sha256": "b53cc7abdadd28e24a9c75b97fa07181c59455865a358782612bfd535cc7321c",
+            "finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 48,
+            "coverage_observed": 48
+          },
+          {
+            "metric_id": "pearson_ic_ir",
+            "values_sha256": "d4e98b3397dacfe889e9595e75fd2f2e7fcb447832a9a9912e101217c7e43f75",
+            "finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 48,
+            "coverage_observed": 48
+          }
+        ]
+      },
+      "cuda": {
+        "backend": "cuda",
+        "seconds": 69.4166021370329,
+        "oom_count": 0,
+        "source_tile_size": 5,
+        "source_ranges": [
+          [
+            0,
+            5
+          ],
+          [
+            5,
+            10
+          ],
+          [
+            10,
+            15
+          ],
+          [
+            15,
+            20
+          ],
+          [
+            20,
+            25
+          ],
+          [
+            25,
+            30
+          ],
+          [
+            30,
+            35
+          ],
+          [
+            35,
+            40
+          ],
+          [
+            40,
+            45
+          ],
+          [
+            45,
+            48
+          ]
+        ],
+        "actual_tile_size": 5,
+        "compute_ranges": [
+          [
+            0,
+            5
+          ],
+          [
+            5,
+            10
+          ],
+          [
+            10,
+            15
+          ],
+          [
+            15,
+            20
+          ],
+          [
+            20,
+            25
+          ],
+          [
+            25,
+            30
+          ],
+          [
+            30,
+            35
+          ],
+          [
+            35,
+            40
+          ],
+          [
+            40,
+            45
+          ],
+          [
+            45,
+            48
+          ]
+        ],
+        "execution_config_sha256": "45d4d65ba507e2a9661f5fe73796ecae91e318278716b9c0a8eb431b53be687f",
+        "execution_schedule_sha256": "074dfe6b737e75b18521184b19478d227991c2d82095b6cdb17e16abaffeb18e",
+        "execution_schedule_scope": "zero_oom_source_equals_compute_v1",
+        "correctness_validated": true,
+        "coverage_expected": 124272,
+        "coverage_observed": 124272,
+        "outputs": [
+          {
+            "metric_id": "pearson_ic",
+            "values_sha256": "b9eb9cf5988d2246828edadcb10ed10e9005aef2f53bc2429b1bf75540abb1b6",
+            "finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 48,
+            "coverage_observed": 48
+          },
+          {
+            "metric_id": "pearson_ic_series",
+            "values_sha256": "8430f77a64c44a3b837937a044bf5813a66cbeaafad0f33ed9e38042452fb092",
+            "finite_mask_sha256": "c56d1a6fc66dd3d5e64663a48355819fd5436bb057eefd9a3f9d22181e3a7127",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 124128,
+            "coverage_observed": 124128
+          },
+          {
+            "metric_id": "pearson_ic_std",
+            "values_sha256": "a46018fb518337c8e5c3b8cb3b6b32d4f14d3bd0fbdb707a8254fe47c21b7c59",
+            "finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 48,
+            "coverage_observed": 48
+          },
+          {
+            "metric_id": "pearson_ic_ir",
+            "values_sha256": "b8c170401a30403882b650fdf78febd5833dc754e930148c6f5933cba13a42e0",
+            "finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 48,
+            "coverage_observed": 48
+          }
+        ]
+      },
+      "comparison_evidence": [
+        {
+          "metric_id": "pearson_ic",
+          "cpu_values_sha256": "161c498aa5b1b8ba893fc6df9dc97c6d8d80dfb24f36f7c1df606037c1c934de",
+          "cuda_values_sha256": "b9eb9cf5988d2246828edadcb10ed10e9005aef2f53bc2429b1bf75540abb1b6",
+          "cpu_finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+          "cuda_finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+          "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "compared_value_count": 48,
+          "finite_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.1796119636642288e-16,
+          "max_abs_error_tolerance": 1e-10,
+          "evidence_sha256": "b9d1adeef786c344cb71919937409cd3c8c3fb9d4940bed6b419760802620910"
+        },
+        {
+          "metric_id": "pearson_ic_series",
+          "cpu_values_sha256": "180bf4aab8b6f3ed1c49104b83849a5094e2c8acdd058036bb5b5baa4ec0771a",
+          "cuda_values_sha256": "8430f77a64c44a3b837937a044bf5813a66cbeaafad0f33ed9e38042452fb092",
+          "cpu_finite_mask_sha256": "c56d1a6fc66dd3d5e64663a48355819fd5436bb057eefd9a3f9d22181e3a7127",
+          "cuda_finite_mask_sha256": "c56d1a6fc66dd3d5e64663a48355819fd5436bb057eefd9a3f9d22181e3a7127",
+          "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "compared_value_count": 124128,
+          "finite_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 8.881784197001252e-16,
+          "max_abs_error_tolerance": 1e-10,
+          "evidence_sha256": "95c8863b9f977f1e73611c005110ae16ed6aa50b339a228bcd5e4478725e4a56"
+        },
+        {
+          "metric_id": "pearson_ic_std",
+          "cpu_values_sha256": "b53cc7abdadd28e24a9c75b97fa07181c59455865a358782612bfd535cc7321c",
+          "cuda_values_sha256": "a46018fb518337c8e5c3b8cb3b6b32d4f14d3bd0fbdb707a8254fe47c21b7c59",
+          "cpu_finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+          "cuda_finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+          "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "compared_value_count": 48,
+          "finite_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.5265566588595902e-16,
+          "max_abs_error_tolerance": 1e-10,
+          "evidence_sha256": "39dfc398e19ac53fb2bf17189af646d8f13c38ae47e31eb7e23be92527d1a1a5"
+        },
+        {
+          "metric_id": "pearson_ic_ir",
+          "cpu_values_sha256": "d4e98b3397dacfe889e9595e75fd2f2e7fcb447832a9a9912e101217c7e43f75",
+          "cuda_values_sha256": "b8c170401a30403882b650fdf78febd5833dc754e930148c6f5933cba13a42e0",
+          "cpu_finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+          "cuda_finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+          "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "compared_value_count": 48,
+          "finite_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.3877787807814457e-16,
+          "max_abs_error_tolerance": 1e-10,
+          "evidence_sha256": "a2162e8234b5551fa1842d935cd00f2f6d1b0c2a288dde1fc3e3f7db66a39720"
+        }
+      ]
+    },
+    {
+      "context": {
+        "request_content_sha256": "8ab3e727799b8056a202f2fe9a9556d570ff98b0bedad6a10e0e0bed76b5a2a0",
+        "source_identity_sha256": "c4e72bca26600b580058738420ed0f7cb6942f3493123109ee3947b284fbd52c",
+        "source_content_sha256": "992f66d03322b40eb72d1779e993d72fae1a9b7b15730d701735c6040e587fb2",
+        "executable_source_sha256": "c763d9b53cd010b152273dc0f6b97a31cef83a77902275bb7d281218d6ac0dd1",
+        "runtime_fingerprint_sha256": "a1f0b87c3a9e4b03398d8b077be3741c0aafc5765ed8b21e63e847d04ea00a8d",
+        "package_fingerprint_sha256": "1f92182dd26ed022ef66e0af54104965281406f307a862784c130731927ca46a",
+        "thread_fingerprint_sha256": "f8e8c8132d238f53969cd4488b29f210db621b2e9471885f1992222c129e2d05",
+        "device_fingerprint_sha256": "78f7e741c128013e808138552fd330090e20662b63ed955c2f48cf88d8925c05",
+        "common_config_fingerprint_sha256": "fb33135a0ce379be3ec702f7dbba8285c976e0425ec08faafabcc5098f695676",
+        "request_shape": [
+          2586,
+          5461,
+          48
+        ],
+        "metric_ids": [
+          "pearson_ic",
+          "pearson_ic_series",
+          "pearson_ic_std",
+          "pearson_ic_ir"
+        ],
+        "expected_coverage_count": 124272,
+        "requested_tile_size": 16,
+        "timing_scope": "evaluate_factor_source_batch_wall_v1",
+        "metric_coverage": [
+          [
+            "pearson_ic",
+            48
+          ],
+          [
+            "pearson_ic_series",
+            124128
+          ],
+          [
+            "pearson_ic_std",
+            48
+          ],
+          [
+            "pearson_ic_ir",
+            48
+          ]
+        ],
+        "metric_error_tolerances": [
+          [
+            "pearson_ic",
+            1e-10
+          ],
+          [
+            "pearson_ic_series",
+            1e-10
+          ],
+          [
+            "pearson_ic_std",
+            1e-10
+          ],
+          [
+            "pearson_ic_ir",
+            1e-10
+          ]
+        ],
+        "live_source_admitted_max_tile_size": 5,
+        "gpu_admitted_max_tile_size": 5
+      },
+      "execution_order": [
+        "cuda",
+        "cpu"
+      ],
+      "cpu": {
+        "backend": "cpu",
+        "seconds": 91.63435164501425,
+        "oom_count": 0,
+        "source_tile_size": 5,
+        "source_ranges": [
+          [
+            0,
+            5
+          ],
+          [
+            5,
+            10
+          ],
+          [
+            10,
+            15
+          ],
+          [
+            15,
+            20
+          ],
+          [
+            20,
+            25
+          ],
+          [
+            25,
+            30
+          ],
+          [
+            30,
+            35
+          ],
+          [
+            35,
+            40
+          ],
+          [
+            40,
+            45
+          ],
+          [
+            45,
+            48
+          ]
+        ],
+        "actual_tile_size": 5,
+        "compute_ranges": [
+          [
+            0,
+            5
+          ],
+          [
+            5,
+            10
+          ],
+          [
+            10,
+            15
+          ],
+          [
+            15,
+            20
+          ],
+          [
+            20,
+            25
+          ],
+          [
+            25,
+            30
+          ],
+          [
+            30,
+            35
+          ],
+          [
+            35,
+            40
+          ],
+          [
+            40,
+            45
+          ],
+          [
+            45,
+            48
+          ]
+        ],
+        "execution_config_sha256": "9da695782079c2091cc3c42c43aec0b827d74fa3232d9caab7e2f7f35482db6a",
+        "execution_schedule_sha256": "074dfe6b737e75b18521184b19478d227991c2d82095b6cdb17e16abaffeb18e",
+        "execution_schedule_scope": "zero_oom_source_equals_compute_v1",
+        "correctness_validated": true,
+        "coverage_expected": 124272,
+        "coverage_observed": 124272,
+        "outputs": [
+          {
+            "metric_id": "pearson_ic",
+            "values_sha256": "161c498aa5b1b8ba893fc6df9dc97c6d8d80dfb24f36f7c1df606037c1c934de",
+            "finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 48,
+            "coverage_observed": 48
+          },
+          {
+            "metric_id": "pearson_ic_series",
+            "values_sha256": "180bf4aab8b6f3ed1c49104b83849a5094e2c8acdd058036bb5b5baa4ec0771a",
+            "finite_mask_sha256": "c56d1a6fc66dd3d5e64663a48355819fd5436bb057eefd9a3f9d22181e3a7127",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 124128,
+            "coverage_observed": 124128
+          },
+          {
+            "metric_id": "pearson_ic_std",
+            "values_sha256": "b53cc7abdadd28e24a9c75b97fa07181c59455865a358782612bfd535cc7321c",
+            "finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 48,
+            "coverage_observed": 48
+          },
+          {
+            "metric_id": "pearson_ic_ir",
+            "values_sha256": "d4e98b3397dacfe889e9595e75fd2f2e7fcb447832a9a9912e101217c7e43f75",
+            "finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 48,
+            "coverage_observed": 48
+          }
+        ]
+      },
+      "cuda": {
+        "backend": "cuda",
+        "seconds": 75.33598495798651,
+        "oom_count": 0,
+        "source_tile_size": 5,
+        "source_ranges": [
+          [
+            0,
+            5
+          ],
+          [
+            5,
+            10
+          ],
+          [
+            10,
+            15
+          ],
+          [
+            15,
+            20
+          ],
+          [
+            20,
+            25
+          ],
+          [
+            25,
+            30
+          ],
+          [
+            30,
+            35
+          ],
+          [
+            35,
+            40
+          ],
+          [
+            40,
+            45
+          ],
+          [
+            45,
+            48
+          ]
+        ],
+        "actual_tile_size": 5,
+        "compute_ranges": [
+          [
+            0,
+            5
+          ],
+          [
+            5,
+            10
+          ],
+          [
+            10,
+            15
+          ],
+          [
+            15,
+            20
+          ],
+          [
+            20,
+            25
+          ],
+          [
+            25,
+            30
+          ],
+          [
+            30,
+            35
+          ],
+          [
+            35,
+            40
+          ],
+          [
+            40,
+            45
+          ],
+          [
+            45,
+            48
+          ]
+        ],
+        "execution_config_sha256": "45d4d65ba507e2a9661f5fe73796ecae91e318278716b9c0a8eb431b53be687f",
+        "execution_schedule_sha256": "074dfe6b737e75b18521184b19478d227991c2d82095b6cdb17e16abaffeb18e",
+        "execution_schedule_scope": "zero_oom_source_equals_compute_v1",
+        "correctness_validated": true,
+        "coverage_expected": 124272,
+        "coverage_observed": 124272,
+        "outputs": [
+          {
+            "metric_id": "pearson_ic",
+            "values_sha256": "b9eb9cf5988d2246828edadcb10ed10e9005aef2f53bc2429b1bf75540abb1b6",
+            "finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 48,
+            "coverage_observed": 48
+          },
+          {
+            "metric_id": "pearson_ic_series",
+            "values_sha256": "8430f77a64c44a3b837937a044bf5813a66cbeaafad0f33ed9e38042452fb092",
+            "finite_mask_sha256": "c56d1a6fc66dd3d5e64663a48355819fd5436bb057eefd9a3f9d22181e3a7127",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 124128,
+            "coverage_observed": 124128
+          },
+          {
+            "metric_id": "pearson_ic_std",
+            "values_sha256": "a46018fb518337c8e5c3b8cb3b6b32d4f14d3bd0fbdb707a8254fe47c21b7c59",
+            "finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 48,
+            "coverage_observed": 48
+          },
+          {
+            "metric_id": "pearson_ic_ir",
+            "values_sha256": "b8c170401a30403882b650fdf78febd5833dc754e930148c6f5933cba13a42e0",
+            "finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+            "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+            "coverage_expected": 48,
+            "coverage_observed": 48
+          }
+        ]
+      },
+      "comparison_evidence": [
+        {
+          "metric_id": "pearson_ic",
+          "cpu_values_sha256": "161c498aa5b1b8ba893fc6df9dc97c6d8d80dfb24f36f7c1df606037c1c934de",
+          "cuda_values_sha256": "b9eb9cf5988d2246828edadcb10ed10e9005aef2f53bc2429b1bf75540abb1b6",
+          "cpu_finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+          "cuda_finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+          "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "compared_value_count": 48,
+          "finite_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.1796119636642288e-16,
+          "max_abs_error_tolerance": 1e-10,
+          "evidence_sha256": "b9d1adeef786c344cb71919937409cd3c8c3fb9d4940bed6b419760802620910"
+        },
+        {
+          "metric_id": "pearson_ic_series",
+          "cpu_values_sha256": "180bf4aab8b6f3ed1c49104b83849a5094e2c8acdd058036bb5b5baa4ec0771a",
+          "cuda_values_sha256": "8430f77a64c44a3b837937a044bf5813a66cbeaafad0f33ed9e38042452fb092",
+          "cpu_finite_mask_sha256": "c56d1a6fc66dd3d5e64663a48355819fd5436bb057eefd9a3f9d22181e3a7127",
+          "cuda_finite_mask_sha256": "c56d1a6fc66dd3d5e64663a48355819fd5436bb057eefd9a3f9d22181e3a7127",
+          "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "compared_value_count": 124128,
+          "finite_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 8.881784197001252e-16,
+          "max_abs_error_tolerance": 1e-10,
+          "evidence_sha256": "95c8863b9f977f1e73611c005110ae16ed6aa50b339a228bcd5e4478725e4a56"
+        },
+        {
+          "metric_id": "pearson_ic_std",
+          "cpu_values_sha256": "b53cc7abdadd28e24a9c75b97fa07181c59455865a358782612bfd535cc7321c",
+          "cuda_values_sha256": "a46018fb518337c8e5c3b8cb3b6b32d4f14d3bd0fbdb707a8254fe47c21b7c59",
+          "cpu_finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+          "cuda_finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+          "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "compared_value_count": 48,
+          "finite_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.5265566588595902e-16,
+          "max_abs_error_tolerance": 1e-10,
+          "evidence_sha256": "39dfc398e19ac53fb2bf17189af646d8f13c38ae47e31eb7e23be92527d1a1a5"
+        },
+        {
+          "metric_id": "pearson_ic_ir",
+          "cpu_values_sha256": "d4e98b3397dacfe889e9595e75fd2f2e7fcb447832a9a9912e101217c7e43f75",
+          "cuda_values_sha256": "b8c170401a30403882b650fdf78febd5833dc754e930148c6f5933cba13a42e0",
+          "cpu_finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+          "cuda_finite_mask_sha256": "5bf90435cd45d0475cbb0ace7e7e3a672ed2a3a4984ad3e8624d8878725a9c2e",
+          "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+          "compared_value_count": 48,
+          "finite_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.3877787807814457e-16,
+          "max_abs_error_tolerance": 1e-10,
+          "evidence_sha256": "a2162e8234b5551fa1842d935cd00f2f6d1b0c2a288dde1fc3e3f7db66a39720"
+        }
+      ]
+    }
+  ],
+  "run_order": [
+    "cpu",
+    "cuda_strict",
+    "cuda_strict",
+    "cpu"
+  ],
+  "oracle_reports": [
+    {
+      "pass": true,
+      "backend": "cpu",
+      "run_index": 0,
+      "metrics": {
+        "pearson_ic": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.1796119636642288e-16,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_series": {
+          "pass": true,
+          "expected_coverage": 124128,
+          "observed_coverage": 124128,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 8.881784197001252e-16,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_std": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.5265566588595902e-16,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_ir": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 8.326672684688674e-17,
+          "tolerance": 1e-10
+        }
+      }
+    },
+    {
+      "pass": true,
+      "backend": "cuda",
+      "run_index": 1,
+      "metrics": {
+        "pearson_ic": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 6.938893903907228e-18,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_series": {
+          "pass": true,
+          "expected_coverage": 124128,
+          "observed_coverage": 124128,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.220446049250313e-16,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_std": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.7755575615628914e-17,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_ir": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 8.326672684688674e-17,
+          "tolerance": 1e-10
+        }
+      }
+    },
+    {
+      "pass": true,
+      "backend": "cuda",
+      "run_index": 2,
+      "metrics": {
+        "pearson_ic": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 6.938893903907228e-18,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_series": {
+          "pass": true,
+          "expected_coverage": 124128,
+          "observed_coverage": 124128,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.220446049250313e-16,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_std": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.7755575615628914e-17,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_ir": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 8.326672684688674e-17,
+          "tolerance": 1e-10
+        }
+      }
+    },
+    {
+      "pass": true,
+      "backend": "cpu",
+      "run_index": 3,
+      "metrics": {
+        "pearson_ic": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.1796119636642288e-16,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_series": {
+          "pass": true,
+          "expected_coverage": 124128,
+          "observed_coverage": 124128,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 8.881784197001252e-16,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_std": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.5265566588595902e-16,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_ir": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 8.326672684688674e-17,
+          "tolerance": 1e-10
+        }
+      }
+    }
+  ],
+  "qualification_winner": "cuda",
+  "default_auto_verification": {
+    "backend_used": "cuda",
+    "qualification_status": "qualified_current_source",
+    "qualification_applied": true,
+    "qualification_winner": "cuda",
+    "cache_status": "cache_hit",
+    "output_matches_independent_oracle": true,
+    "oracle_report": {
+      "pass": true,
+      "backend": "cuda",
+      "run_index": 5,
+      "metrics": {
+        "pearson_ic": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 6.938893903907228e-18,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_series": {
+          "pass": true,
+          "expected_coverage": 124128,
+          "observed_coverage": 124128,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.220446049250313e-16,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_std": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.7755575615628914e-17,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_ir": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 8.326672684688674e-17,
+          "tolerance": 1e-10
+        }
+      }
+    },
+    "values_sha256": {
+      "pearson_ic": "b9eb9cf5988d2246828edadcb10ed10e9005aef2f53bc2429b1bf75540abb1b6",
+      "pearson_ic_series": "8430f77a64c44a3b837937a044bf5813a66cbeaafad0f33ed9e38042452fb092",
+      "pearson_ic_std": "a46018fb518337c8e5c3b8cb3b6b32d4f14d3bd0fbdb707a8254fe47c21b7c59",
+      "pearson_ic_ir": "b8c170401a30403882b650fdf78febd5833dc754e930148c6f5933cba13a42e0"
+    }
+  },
+  "auto_verification": {
+    "backend_used": "cuda",
+    "qualification_status": "qualified_current_source",
+    "qualification_applied": true,
+    "qualification_winner": "cuda",
+    "output_matches_independent_oracle": true,
+    "oracle_report": {
+      "pass": true,
+      "backend": "cuda",
+      "run_index": 4,
+      "metrics": {
+        "pearson_ic": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 6.938893903907228e-18,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_series": {
+          "pass": true,
+          "expected_coverage": 124128,
+          "observed_coverage": 124128,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.220446049250313e-16,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_std": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.7755575615628914e-17,
+          "tolerance": 1e-10
+        },
+        "pearson_ic_ir": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 8.326672684688674e-17,
+          "tolerance": 1e-10
+        }
+      }
+    },
+    "values_sha256": {
+      "pearson_ic": "b9eb9cf5988d2246828edadcb10ed10e9005aef2f53bc2429b1bf75540abb1b6",
+      "pearson_ic_series": "8430f77a64c44a3b837937a044bf5813a66cbeaafad0f33ed9e38042452fb092",
+      "pearson_ic_std": "a46018fb518337c8e5c3b8cb3b6b32d4f14d3bd0fbdb707a8254fe47c21b7c59",
+      "pearson_ic_ir": "b8c170401a30403882b650fdf78febd5833dc754e930148c6f5933cba13a42e0"
+    }
+  }
+}

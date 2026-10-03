@@ -1,0 +1,87 @@
+{
+  "kind": "real_cos_f48_provider_verification.v1",
+  "status": "complete",
+  "fresh_process": true,
+  "shape": [
+    2586,
+    5461,
+    48
+  ],
+  "metric_ids": [
+    "pearson_ic",
+    "pearson_ic_series",
+    "pearson_ic_std",
+    "pearson_ic_ir"
+  ],
+  "qualification_applied": true,
+  "route": {
+    "source_qualification_origin": "report_candidate",
+    "source_qualification_provider_status": "candidate_validated",
+    "source_qualification_status": "qualified_current_source",
+    "source_qualification_cache_status": "supplied",
+    "source_qualification_winner": "cuda",
+    "backend_used": "cuda"
+  },
+  "effective_max_tile_size": 5,
+  "oom_retries": 0,
+  "seconds": 63.6435100689996,
+  "oracle_report": {
+    "pass": true,
+    "backend": "cuda",
+    "run_index": 6,
+    "metrics": {
+      "pearson_ic": {
+        "pass": true,
+        "expected_coverage": 48,
+        "observed_coverage": 48,
+        "shape_equal": true,
+        "finite_mask_equal": true,
+        "nan_mask_equal": true,
+        "positive_infinity_mask_equal": true,
+        "negative_infinity_mask_equal": true,
+        "observation_counts_equal": true,
+        "max_abs_error": 6.938893903907228e-18,
+        "tolerance": 1e-10
+      },
+      "pearson_ic_series": {
+        "pass": true,
+        "expected_coverage": 124128,
+        "observed_coverage": 124128,
+        "shape_equal": true,
+        "finite_mask_equal": true,
+        "nan_mask_equal": true,
+        "positive_infinity_mask_equal": true,
+        "negative_infinity_mask_equal": true,
+        "observation_counts_equal": true,
+        "max_abs_error": 2.220446049250313e-16,
+        "tolerance": 1e-10
+      },
+      "pearson_ic_std": {
+        "pass": true,
+        "expected_coverage": 48,
+        "observed_coverage": 48,
+        "shape_equal": true,
+        "finite_mask_equal": true,
+        "nan_mask_equal": true,
+        "positive_infinity_mask_equal": true,
+        "negative_infinity_mask_equal": true,
+        "observation_counts_equal": true,
+        "max_abs_error": 2.7755575615628914e-17,
+        "tolerance": 1e-10
+      },
+      "pearson_ic_ir": {
+        "pass": true,
+        "expected_coverage": 48,
+        "observed_coverage": 48,
+        "shape_equal": true,
+        "finite_mask_equal": true,
+        "nan_mask_equal": true,
+        "positive_infinity_mask_equal": true,
+        "negative_infinity_mask_equal": true,
+        "observation_counts_equal": true,
+        "max_abs_error": 8.326672684688674e-17,
+        "tolerance": 1e-10
+      }
+    }
+  }
+}
