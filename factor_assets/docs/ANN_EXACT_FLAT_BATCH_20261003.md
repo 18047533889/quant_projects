@@ -6,6 +6,32 @@ FaissANNIndex.search_batch 接受 shape 为 (Q, D) 的实数 NumPy 矩阵，
 Q 为零时返回空列表；空索引对每个合法查询返回一个空结果列表。
 k 与 min_similarity 沿用标量 API 的边界。batch 查询不排除自身。
 
+## 批量结果准入（2026-10-04）
+
+`search_batch(..., max_result_rows=100_000)` 增加 keyword-only 结果行数上限。
+准入按 `Q * min(k, index.num_factors)` 计算，在调用 FAISS 归一化和检索前
+检查；即使 `min_similarity` 可能过滤大部分结果，也不放宽这个潜在结果上限。
+默认 100,000 行，允许显式提高，但硬上限为 2,000,000 行。参数必须为正的
+内置 `int`，不接受 bool、浮点数、None 或无界设置；空查询/空索引也校验参数。
+超限抛出 `ValueError` 并提示降低 k 或分批，不会静默截断结果或改变排序语义。
+
+此限制只约束输出行数，不是 query 矩阵临时工作区或进程总 RSS 保证。
+结果对象开销仍随返回量增长；一次全库 k=N 不因此变成最快路径。
+已有三个位置参数的调用与 list-of-lists 返回形式保持不变，但之前无界的大结果
+请求现在可能被拒绝。若旧 benchmark 的 Q*k 超过默认值，也会被准入拒绝；
+这是边界变化，不应解释为数值错误或伪造该配置的性能结果。
+
+例如：`index.search_batch(queries, k=10, max_result_rows=200_000)`。
+需要更多查询时逐块消费返回结果，避免将所有块重新拼成一个巨大 Python 列表。
+
+新准入用例在正式 server-c 工作树独立验证为 12 passed，覆盖 Q=1 标量等价、
+Q=0/空索引的非法上限、恰好达到上限和超限-before-backend。
+全库回归 session 73902 以单线程设置运行 `pytest -q factor_assets/tests`：
+1758 passed、47 warnings、78.88 秒，退出 0。警告包含 FE 算子分类和旧 UTC
+接口弃用；这些测试不是 production qualification，也不构成本改动的加速证据。
+独立 review 后另加硬上限 2,000,000 本身可作为合法选项的边界用例；
+最终准入文件独立补测为 13 passed，不生成两百万结果对象来验证参数边界。
+
 精确平面索引只承诺按 cosine 分数降序。分数相同时不承诺 factor ID 顺序；
 在 top-k 截断位置的相等分数也不承诺选中哪个 ID。独立 oracle 按文档
 规定的 scale-safe 归一化步骤和 float32 FAISS 输入精度计算 cosine。

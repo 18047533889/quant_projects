@@ -1,9 +1,13 @@
 # FactorAssets API Reference
 
 **Version:** 0.1.0  
-**Last Updated:** 2026-08-14
+**Last Updated:** 2026-10-04
 
 ANN 搜索的归一化公式与数值边界见 [ANN 余弦计算](ANN_NUMERIC_BOUNDARY_20261002.md)。
+
+Exact-flat 批量检索入口与上限说明见
+[多查询检索](ANN_EXACT_FLAT_BATCH_20261003.md)。`FaissANNIndex.search_batch`
+新增 keyword-only `max_result_rows=100_000`，可显式提高至 2,000,000。
 
 ## Table of Contents
 

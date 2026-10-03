@@ -47,6 +47,19 @@ def _validate_positive_k(k: int) -> None:
         raise ValueError("k must be a positive integer")
 
 
+DEFAULT_MAX_BATCH_RESULT_ROWS = 100_000
+MAX_BATCH_RESULT_ROWS = 2_000_000
+
+
+def _validate_max_result_rows(max_result_rows: int) -> None:
+    if type(max_result_rows) is not int or max_result_rows <= 0:
+        raise ValueError("max_result_rows must be a positive built-in integer")
+    if max_result_rows > MAX_BATCH_RESULT_ROWS:
+        raise ValueError(
+            f"max_result_rows must not exceed {MAX_BATCH_RESULT_ROWS}"
+        )
+
+
 def _validate_min_similarity(min_similarity: Optional[float]) -> None:
     """Require an optional similarity threshold to be a finite real number."""
     if min_similarity is None:
@@ -218,6 +231,8 @@ class BatchANNIndex(Protocol):
         query_embeddings: "np.ndarray",
         k: int = 10,
         min_similarity: Optional[float] = None,
+        *,
+        max_result_rows: int = DEFAULT_MAX_BATCH_RESULT_ROWS,
     ) -> List[List[ANNSearchResult]]:
         """Return one ordered neighbor list per query row."""
         ...
@@ -344,27 +359,40 @@ class FaissANNIndex:
         query_embeddings: "np.ndarray",
         k: int = 10,
         min_similarity: Optional[float] = None,
+        *,
+        max_result_rows: int = DEFAULT_MAX_BATCH_RESULT_ROWS,
     ) -> List[List[ANNSearchResult]]:
         """Search many queries in one exact FAISS call.
 
         The outer result position corresponds to the same input query row;
         each inner list follows scalar search semantics. Equal-score neighbors
         have no stable factor-ID ordering guarantee.
+        Result rows are admitted against `Q * min(k, index size)` before FAISS
+        is called. Reduce `k` or chunk queries when a call exceeds the cap.
+        This row-count cap is not a query-workspace or total-process RSS limit.
 
         The whole query matrix is validated before FAISS is called, so an
         invalid row rejects the batch without partially running a search.
         An empty matrix returns [] after validating its shape and options.
         """
+        _validate_max_result_rows(max_result_rows)
         _validate_min_similarity(min_similarity)
         queries = _validate_query_batch(query_embeddings, self.embedding_dim, k)
         if len(queries) == 0:
             return []
-        if len(self._factor_ids) == 0:
+
+        k_actual = min(k, len(self._factor_ids))
+        requested_rows = len(queries) * k_actual
+        if requested_rows > max_result_rows:
+            raise ValueError(
+                f"batch may return {requested_rows} result rows, above "
+                f"max_result_rows={max_result_rows}; reduce k or chunk queries"
+            )
+        if k_actual == 0:
             return [[] for _ in queries]
 
         if self.normalize:
             faiss.normalize_L2(queries)
-        k_actual = min(k, len(self._factor_ids))
         distances, indices = self._index.search(queries, k_actual)
 
         batch_results: List[List[ANNSearchResult]] = []
