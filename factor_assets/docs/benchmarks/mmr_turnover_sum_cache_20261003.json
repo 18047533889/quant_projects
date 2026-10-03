@@ -1,0 +1,38 @@
+{
+  "kind": "controlled_mmr_turnover_sum_cache_ab",
+  "date": "2026-10-03",
+  "source": {
+    "path": "factor_assets/assembly/engine.py",
+    "sha256": "731e0e7e63c86d0c5ee85e632003b9025ba8b2ec6d3de51fefa4a6d4d3dc075b2",
+    "matches_current_engine_sha256": true,
+    "baseline_commit": "cf21d7da6"
+  },
+  "workload": {
+    "candidates_n": 1000,
+    "selected_k": 50,
+    "warmups_per_arm": 1,
+    "rounds": 3,
+    "samples_per_arm": 6,
+    "order": "ABBA",
+    "stdout_precision_seconds": 6
+  },
+  "public_assembly": {
+    "similarity_callback": "returns zero; inexpensive test callback, not a real expensive similarity workload",
+    "old_seconds": [0.369061, 0.379792, 0.368289, 0.386312, 0.356747, 0.388827],
+    "new_seconds": [0.130638, 0.169784, 0.128919, 0.177188, 0.149043, 0.125577],
+    "old_median_seconds": 0.374426,
+    "new_median_seconds": 0.139840,
+    "median_speedup_approx": 2.68,
+    "selected_50_artifacts_equal": true
+  },
+  "turnover_sum_kernel_microbenchmark": {
+    "old_seconds": [0.089590, 0.095488, 0.089427, 0.106993, 0.104371, 0.096779],
+    "new_seconds": [0.002631, 0.003134, 0.002454, 0.002477, 0.002437, 0.002456],
+    "old_median_seconds": 0.096133,
+    "new_median_seconds": 0.002466,
+    "median_speedup_approx": 39.0,
+    "scope": "isolated selected-turnover sum work only; not end-to-end public assembly"
+  },
+  "interpretation": "The cache recomputes Python built-in sum once after each selected-set commit to preserve compensated summation and boundary behavior; it does not use incremental +=.",
+  "timing_values_are_rounded_stdout": true
+}

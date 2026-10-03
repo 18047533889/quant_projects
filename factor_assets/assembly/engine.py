@@ -1301,6 +1301,9 @@ def _constrained_mmr_select(
     pair_refs: set[str] = set()
     capacity = policy.capacity_budget if policy.capacity_budget is not None else len(assets)
     target = min(spec.max_factors if spec.max_factors is not None else len(assets), capacity)
+    # Public assembly snapshots the mapping and freezes each evidence record.
+    # sum(empty) is the integer zero; retain the original empty-set semantics.
+    used_turnover: Optional[float] = 0 if policy.turnover_budget is not None else None
 
     def groups(factor_id: str) -> tuple[str, str]:
         membership = clusters.get(factor_id)
@@ -1309,7 +1312,9 @@ def _constrained_mmr_select(
             membership.macrocluster_id if membership and membership.macrocluster_id else "UNKNOWN_MACRO",
         )
 
-    def infeasible(asset: FactorAsset) -> Optional[str]:
+    def infeasible(
+        asset: FactorAsset, used_turnover: Optional[float]
+    ) -> Optional[str]:
         if family_limit is not None:
             family = asset.family
             if family_counter_compatible and (family is None or type(family) is str):
@@ -1337,13 +1342,12 @@ def _constrained_mmr_select(
         if policy.turnover_budget is not None:
             if typed is None or typed.turnover_score is None:
                 return "MISSING_TURNOVER_EVIDENCE"
-            # Python 3.12 sum uses compensated float accumulation; keep it to
-            # preserve exact turnover-budget boundary decisions.
-            used = sum(
-                assembly_evidence[item.factor_id].turnover_score or 0.0
-                for item in selected
-            )
-            if used + typed.turnover_score > policy.turnover_budget:
+            # Reuse the built-in sum for this unchanged selected set. Python
+            # 3.12 uses compensated float accumulation; never use incremental
+            # += because it can change turnover-budget boundary decisions.
+            if used_turnover is None:
+                raise AssertionError("turnover budget requires cached selected turnover")
+            if used_turnover + typed.turnover_score > policy.turnover_budget:
                 return "TURNOVER_BUDGET"
         return None
 
@@ -1389,7 +1393,7 @@ def _constrained_mmr_select(
 
     while remaining and len(selected) < target:
         for factor_id in sorted(tuple(remaining)):
-            reason = infeasible(by_id[factor_id])
+            reason = infeasible(by_id[factor_id], used_turnover)
             if reason is not None:
                 rejections[factor_id] = reason
                 remaining.remove(factor_id)
@@ -1405,6 +1409,11 @@ def _constrained_mmr_select(
         chosen = by_id[best_id]
         selected.append(chosen)
         remaining.remove(best_id)
+        if policy.turnover_budget is not None:
+            used_turnover = sum(
+                assembly_evidence[item.factor_id].turnover_score or 0.0
+                for item in selected
+            )
         if family_limit is not None:
             family = chosen.family
             if family_counter_compatible and (family is None or type(family) is str):
@@ -1426,16 +1435,14 @@ def _constrained_mmr_select(
                 "set_slots": target - len(selected),
                 "capacity_slots": capacity - len(selected),
                 "turnover_remaining": (
-                    None if policy.turnover_budget is None else policy.turnover_budget - sum(
-                        assembly_evidence[item.factor_id].turnover_score or 0.0 for item in selected
-                    )
+                    None if policy.turnover_budget is None else policy.turnover_budget - used_turnover
                 ),
             },
         ))
         if len(selected) >= target:
             break
         for factor_id in sorted(tuple(remaining)):
-            reason = infeasible(by_id[factor_id])
+            reason = infeasible(by_id[factor_id], used_turnover)
             if reason is not None:
                 rejections[factor_id] = reason
                 remaining.remove(factor_id)
