@@ -4,7 +4,9 @@
 
 已有批量调用选择 `backend="auto"` 时，仍按已测量的形状、指标组合、
 dtype、设备资格和当前内存门槛确定路由；未认证的区域保留 CPU 路径。
-本轮没有扩大 auto 的认证区域。进入 CUDA 的普通 Pearson f32/f64 分支
+初始融合内核轮次没有扩大 auto 认证区域；后续已完成
+[F48 Pearson 默认 auto 验收](F48_PEARSON_DEFAULT_AUTO_20261003.md)，
+新增精确 requested cap 4/16、有效宽度 4 的来源路由。进入 CUDA 的普通 Pearson f32/f64 分支
 自动使用新的融合归约，无需另一个开关；Spearman 的 bounded 排名归约保持原路径。
 
 ```python
