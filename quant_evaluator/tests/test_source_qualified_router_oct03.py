@@ -91,6 +91,10 @@ def live(monkeypatch):
     monkeypatch.setattr(router, "ProcessSourceIdentity", _Identity)
     monkeypatch.setattr(router, "capture_source_dependency_identity", lambda: SimpleNamespace(
         schema=router.DEPENDENCY_IDENTITY_SCHEMA, digest=_h("3"),
+        component_digests=(("quant_evaluator", _h("f")),
+                          ("data_access", _h("a")),
+                          ("factor_optimizer", _h("b")),
+                          ("factor_preprocess", _h("c"))),
     ))
     return source, metadata, GPUExecutionPolicy()
 
@@ -134,6 +138,10 @@ def test_dependency_digest_drift_rejects_cached_evidence(live, monkeypatch):
     router.qualify_source_route(**_route_args(live, records=records))
     monkeypatch.setattr(router, "capture_source_dependency_identity", lambda: SimpleNamespace(
         schema=router.DEPENDENCY_IDENTITY_SCHEMA, digest=_h("4"),
+        component_digests=(("quant_evaluator", _h("f")),
+                          ("data_access", _h("a")),
+                          ("factor_optimizer", _h("b")),
+                          ("factor_preprocess", _h("c"))),
     ))
     with pytest.raises(router.SourceQualificationError, match="qualified_receipt_mismatch"):
         router.qualify_source_route(**_route_args(live, records=None))
@@ -388,6 +396,8 @@ def test_cuda_execution_deviation_revokes_application_and_cache(
         def run_source_tiled(self, *args, **kwargs):
             from quant_evaluator.api.batch_bundle import BatchEvaluationBundle
             out = BatchEvaluationBundle(("f0", "f1"), "ret")
+            out.scalar_metrics = {"rank_ic": np.zeros(2, dtype=np.float64)}
+            out.observation_counts = {"rank_ic": np.zeros(2, dtype=np.int64)}
             out.metadata = {"factor_tile_size": actual_width,
                             "oom_retries": oom_retries}
             return out

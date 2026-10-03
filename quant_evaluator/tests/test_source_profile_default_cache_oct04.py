@@ -159,6 +159,12 @@ def test_output_identity_mismatch_revokes_public_api_qualification_and_cache(
         return replace(output, factor_ids=output.factor_ids[::-1])
 
     monkeypatch.setattr(api, "_cpu_source_batch", corrupt_after_compute)
+    if identity_change == "factor_ids":
+        with pytest.raises(api.InvalidContractError):
+            api.evaluate_factor_source_batch(
+                source, labels, **_request(source), source_qualification=records)
+        assert router.profile_cache.get_validated_records(cache_key) is None
+        return
     result = api.evaluate_factor_source_batch(
         source, labels, **_request(source), source_qualification=records)
     assert result.metadata["source_qualification_applied"] is False

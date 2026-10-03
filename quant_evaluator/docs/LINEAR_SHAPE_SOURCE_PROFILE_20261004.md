@@ -90,21 +90,28 @@ tile 前释放。这个预算不是整个进程 RSS 上限。DataAccess source �
 及真实 typed-record/report roundtrip；CLI 的数据读取与计时执行仍使用测试替身。
 这些不是性能测量。公开与 source CUDA 接线已通过 22 项实测并双仓发布；
 独立发布读回证据保存在 `benchmarks/linear_shape_publication_verified_20261004.json`。
-**真实 F48 六形态 ABBA 尚未运行，最快后端与性能资格仍未确认。**
+当时真实 F48 六形态 ABBA 尚未运行；后续成功结果与适用范围见下文。
 
 ## 下一轮性能定位：设备标量同步
 
-只读源码审查发现 `kernels/gpu/shape_linear_numeric.py` 的每指标精确修复
-路径分别读取 guard error flag 和 risk count；风险列存在时还读取精确修复
-error flag。六项指标即使没有风险列，也会在最终结果一次打包回传前执行
-12 个显式 `.item()` 标量读取；风险路径最多有 18 个显式读取，此外
+旧实现每指标分别读取 guard error flag 和 risk count；风险列存在时还读取
+精确修复 error flag，六项指标合计 12 个显式 `.item()`，风险路径最多 18 个。
+2026-10-04 修复只删除从不被 guard 内核写入的 flag 读取；保留紧随其后
+的 risk count 同步和精确修复错误检查，分配、内核参数与 workspace 预算不变。
+现在六指标安全路径为 6 个显式读取，风险路径最多 12 个；此外
 `nonzero` 等操作可能另有同步。这里不把标量读取误称为全输入 CPU fallback。
 
-这是待测的延迟来源，不是已经证明的端到端瓶颈。下一步先完成固定源码的
-真实 F48 ABBA 基线，再单独测 guard 元数据合并读取是否减少同步并带来
+同步次数反例先失败后通过；修后独立运行真实 CUDA/source、Fraction 极值
+及 CPU 边界联合测试 25 passed、1 skipped（仅单 GPU 无法测试跨设备）。
+这证明本轮测试范围的正确性和显式同步减少，不是端到端性能收益。
+旧真实 F48 基线已完成；新源码需重新做批量 A/B，再判断是否有
 稳定收益。任何改动都必须保留错误 fail-closed、危险尺度精确修复、工作
 空间 admission 和数值/counts parity；不得通过去掉校验获得速度。修改
 Python 源码后重新生成性能资格，不能沿用旧源码的 auto 记录。
+
+guard-only 微型真实 GPU A/B 见 `benchmarks/shape_guard_sync_micro_ab_20261004.json`：
+Q=5、F=5，六项各重复 100 次，三组交错顺序中新实现两组更快、一组更慢。
+它不计算完整指标或读取 COS，不构成稳定加速证据；保留混合结果供后续批量验证。
 
 ## 进度证据的并发写入保护
 
@@ -137,3 +144,26 @@ live guards 实跑 73 passed / 1.11 秒（session 14637，退出码 0）。包�
 已有授权入口的 metadata 探测及有界 manifest/轴索引验证已通过，未构建
 因子 cube、未开始计时。新 gate 与原有范围联合实跑 79 passed / 0.99 秒
 （session 9508，退出码 0）。失败资源侧车保留，不能作为性能资格。
+
+## 真实 F48 六形态 ABBA 完成（2026-10-04）
+
+权威报告为 `benchmarks/real_cos_f48_linear_shape_profile_abba_shared_20261004_r2.json`，
+严格 reader 已独立读取通过，状态为 `complete`。输入规模为 2586 个交易日、
+5461 个资产、48 个因子；只覆盖本文六项形状指标，不是全部 QE 指标。
+CPU 两轮完整 API 耗时为 119.579、126.254 秒；CUDA 为 69.193、64.373 秒。
+四轮均通过独立 oracle，未发生 OOM，实际 tile 宽度均为 5。
+显式资格与同进程默认 `auto` 均选择 CUDA，输出通过独立参考校验，后者命中缓存。
+这是共享服务器、已预读 COS 缓存条件下的有限样本，不证明其他请求都最快。
+源码依赖改变后必须重新验证资格。此前 `real_cos_f48_provider_verification_20261004.json`
+仅是 Pearson 四指标的新进程证据，不能替代六形态的新进程 provider 验证。
+
+已确认成功路径没有把 `.progress.json` 从 `running` 更新为 `complete`；
+r2 进度含四轮记录但状态仍为 `running`。最终报告、严格 reader 和退出码
+是该历史运行完成依据，不要据旧进度状态重启。本轮已修复成功路径终态，
+旧 r2 文件保留原始证据，不回写历史状态。如果最终报告保存成功但诊断
+终态写入失败，异常继续传播，却不把已完成的报告/计算误标为失败。
+成功路径与模拟诊断 I/O 失败路径均先观察到状态反例，再修复通过。
+修后 CLI/writer、同步错误检测、实际 CUDA/source、Fraction 极值与 CPU
+边界联合独立实跑 48 passed、1 skipped（单 GPU 无法测试异设备），diff 检查通过。
+这不是新源码的真实 COS 性能资格；提交后仍须重新生成并验证性能报告。
+资源侧车的 `validated_runs` 是资源快照，不是通过 oracle 的指标运行次数。

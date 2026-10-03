@@ -167,7 +167,9 @@ def test_auto_verification_checks_context_width_status_cache_and_oracle(monkeypa
         cli._verify_auto(_bundle(), receipt, _qualification(), context, object(), run_index=5, require_cache_hit=True)
 
 
-def test_main_orchestrates_four_abba_and_two_auto_verifications(fake_live, monkeypatch):
+@pytest.mark.parametrize("fail_terminal_progress_update", [False, True])
+def test_main_orchestrates_four_abba_and_two_auto_verifications(
+        fake_live, monkeypatch, fail_terminal_progress_update):
     from test_source_linear_shape_report_reader_oct04 import _payload, _records
     from quant_evaluator.runtime.source_route_profiles import (
         validate_source_route_profile_qualification,
@@ -210,6 +212,13 @@ def test_main_orchestrates_four_abba_and_two_auto_verifications(fake_live, monke
     monkeypatch.setattr(cli, "_auto_batch_cuda_rejection", lambda *a: None)
     monkeypatch.setattr(cli, "_runtime_ready", lambda: True)
     monkeypatch.setattr(cli, "_warm", lambda policy, backend: warm.append(backend))
+    if fail_terminal_progress_update:
+        class FailingTerminalProgressWriter(cli.ExclusiveProgressWriter):
+            def write(self, base, events, *, status="running", error_type=None):
+                if status == "complete":
+                    raise OSError("diagnostic progress finalization failed")
+                return super().write(base, events, status=status, error_type=error_type)
+        monkeypatch.setattr(cli, "ExclusiveProgressWriter", FailingTerminalProgressWriter)
 
     def run_backend(backend, **kwargs):
         calls.append((backend, kwargs))
@@ -259,10 +268,18 @@ def test_main_orchestrates_four_abba_and_two_auto_verifications(fake_live, monke
             oracle_reports=tuple(oracle_reports))
     monkeypatch.setattr(cli, "produce_source_route_profile_abba", produce)
 
-    assert cli.main(["--run", "--axis-index", str(state.axis), "--output", str(state.output)]) == 0
+    args = ["--run", "--axis-index", str(state.axis), "--output", str(state.output)]
+    if fail_terminal_progress_update:
+        with pytest.raises(OSError, match="diagnostic progress finalization failed"):
+            cli.main(args)
+    else:
+        assert cli.main(args) == 0
     assert [name for name, _ in calls] == ["cpu", "cuda_strict", "cuda_strict", "cpu", "auto", "auto"]
     progress_path = state.output.with_suffix(state.output.suffix + ".progress.json")
     progress_report = __import__("json").loads(progress_path.read_text(encoding="utf-8"))
+    assert progress_report["status"] == (
+        "running" if fail_terminal_progress_update else "complete")
+    assert "error_type" not in progress_report
     assert [row["run_index"] for row in progress_report["validated_runs"]] == list(range(4))
     assert [row["backend_used"] for row in progress_report["validated_runs"]] == ["cpu", "cuda", "cuda", "cpu"]
     assert progress_report["qualification_available"] is False

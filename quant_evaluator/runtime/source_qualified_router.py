@@ -24,6 +24,7 @@ from quant_evaluator.contracts._hashutil import stable_content_hex
 from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
 from quant_evaluator.runtime.source_identity import ProcessSourceIdentity
 from quant_evaluator.runtime.source_dependency_identity import (
+    COMPONENT_MODULES as DEPENDENCY_IDENTITY_COMPONENTS,
     SCHEMA_VERSION as DEPENDENCY_IDENTITY_SCHEMA,
     capture_source_dependency_identity,
 )
@@ -206,6 +207,23 @@ def _capture_live_context_state(
             or type(dependency_receipt.digest) is not str
             or _SHA256.fullmatch(dependency_receipt.digest) is None):
         raise SourceQualificationError("current_dependency_source_identity_incomplete")
+    component_digests = getattr(dependency_receipt, "component_digests", None)
+    required_components = DEPENDENCY_IDENTITY_COMPONENTS
+    if type(component_digests) is not tuple or len(component_digests) != len(required_components):
+        raise SourceQualificationError("current_dependency_component_binding_invalid")
+    bound_digests = {}
+    for component in component_digests:
+        if (type(component) is not tuple or len(component) != 2
+                or type(component[0]) is not str
+                or type(component[1]) is not str
+                or _SHA256.fullmatch(component[1]) is None
+                or component[0] in bound_digests):
+            raise SourceQualificationError("current_dependency_component_binding_invalid")
+        bound_digests[component[0]] = component[1]
+    if tuple(bound_digests) != required_components:
+        raise SourceQualificationError("current_dependency_component_binding_invalid")
+    if bound_digests["quant_evaluator"] != source_receipt.digest:
+        raise SourceQualificationError("current_qe_dependency_identity_mismatch")
     executable_sha = stable_content_hex(
         tag="SourceRouteExecutableClosure.v1",
         fields={"qe": source_receipt.digest, "dependency_closure": dependency_receipt.digest},

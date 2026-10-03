@@ -195,6 +195,7 @@ def main(argv=None):
     # Acquire immediately before ABBA and outside the error-saving handler.
     progress_writer = ExclusiveProgressWriter(progress_path)
     progress_writer.__enter__()
+    report_written = False
     try:
         result = produce_source_route_profile_abba(
             oracle=lambda **_: oracle_bundle, run_kwargs=common,
@@ -224,8 +225,11 @@ def main(argv=None):
             "auto_verification": verifications[0],
             "default_auto_verification": verifications[1]}
         _write_report(body, args.output)
+        report_written = True
+        progress_writer.write(base, events, status="complete")
     except (Exception, SystemExit, KeyboardInterrupt) as exc:
-        progress_writer.write(base, events, status="failed", error_type=type(exc).__name__)
+        if not report_written:
+            progress_writer.write(base, events, status="failed", error_type=type(exc).__name__)
         raise
     finally:
         progress_writer.close()

@@ -1,0 +1,31 @@
+{
+  "kind": "source_cross_digest_live_probe.v1",
+  "date": "2026-10-04",
+  "scope": "read-only real formal dirty working-tree content identity comparison; not runtime qualification or imported bytecode verification",
+  "component_imports": [
+    "data_access",
+    "factor_optimizer",
+    "factor_preprocess"
+  ],
+  "strict_qe_scan": {
+    "strict_full_content": true,
+    "max_records": 10000,
+    "max_bytes": 268435456,
+    "full_content_checked": true,
+    "drifted": false
+  },
+  "dependency_components": [
+    "quant_evaluator",
+    "data_access",
+    "factor_optimizer",
+    "factor_preprocess"
+  ],
+  "qe_component_digest_equal": true,
+  "preimport_attempt": "fail-closed: data_access unavailable/not loaded; no guard relaxed",
+  "limitations": [
+    "No atomic snapshot across sequential component scans",
+    "A-B-A entirely between observations cannot be excluded",
+    "No imported-code-object identity certification",
+    "Source freeze still required for benchmark validity"
+  ]
+}

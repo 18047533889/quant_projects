@@ -10,6 +10,7 @@ from uuid import uuid4
 import numpy as np
 
 from quant_evaluator.api.batch_bundle import BatchEvaluationBundle
+from quant_evaluator.runtime.source_batch_output_validation import validate_source_batch_output
 from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy, PrecisionPolicy
 from quant_evaluator.contracts._hashutil import stable_content_hex
 from quant_evaluator.contracts.errors import InvalidContractError, UnsupportedMetricError
@@ -363,6 +364,27 @@ def evaluate_factor_source_batch(
                 source_metadata=metadata)
     else:
         out = _cpu_source_batch(source, metadata, label_bundle, selected, policy, effective_tile_size)
+    try:
+        validate_source_batch_output(
+            out, factor_ids=metadata.factor_ids, label_id=label_bundle.target_id,
+            metrics=selected, time_size=metadata.time_axis.size)
+    except InvalidContractError:
+        if profile_decision is not None:
+            discard_source_route_profile_cache(
+                source=source, metadata=metadata, metrics=selected,
+                request_fingerprint=request_fingerprint,
+                requested_tile_size=requested_tile_width, policy=policy,
+                cache_key=getattr(profile_decision, "cache_key", None))
+        elif qualification_applied:
+            discard_source_route_cache(
+                source=source, metadata=metadata, metrics=selected,
+                request_fingerprint=request_fingerprint,
+                requested_tile_size=requested_tile_width,
+                maximum_effective_tile_size=min(
+                    requested_tile_width, memory_tile_limit,
+                    policy.max_factor_tile_size or requested_tile_width),
+                policy=policy)
+        raise
     if profile_decision is not None and qualification_status in {
             "qualified_current_source", "qualified_cuda_ineligible"}:
         chosen_profile = (profile_decision.cuda_profile if route == "cuda_strict"

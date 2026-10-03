@@ -1,0 +1,35 @@
+{
+  "kind": "shape_guard_sync_micro_ab.v1",
+  "scope": "guard-only helper; Q5 F5 safe profile; warm shared GPU; not complete metric/evaluation latency",
+  "source_change": "remove only unwritten guard error flag item; exact error check retained",
+  "iterations": 100,
+  "metrics": 6,
+  "pairs": [
+    {
+      "order": [
+        "old",
+        "new"
+      ],
+      "old_seconds": 0.04507171199657023,
+      "new_seconds": 0.04639098298503086
+    },
+    {
+      "order": [
+        "new",
+        "old"
+      ],
+      "old_seconds": 0.042464431026019156,
+      "new_seconds": 0.036253465979825705
+    },
+    {
+      "order": [
+        "old",
+        "new"
+      ],
+      "old_seconds": 0.042751921981107444,
+      "new_seconds": 0.0377016729908064
+    }
+  ],
+  "interpretation": "Two pairs improve, one regresses. No stable or end-to-end speedup claim.",
+  "baseline_reconstruction": "in-memory compilation inserts removed readback into current function; no source file copy"
+}

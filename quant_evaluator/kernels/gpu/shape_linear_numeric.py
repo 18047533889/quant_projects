@@ -223,8 +223,6 @@ def repair_shape_linear_gpu(
     metric_id = _METRIC_IDS[metric]
     guard(((nfeatures + _GUARD_THREADS - 1) // _GUARD_THREADS,), (_GUARD_THREADS,),
           (values, risk, nq, nfeatures, metric_id, error_flag))
-    if int(error_flag.item()):
-        raise ValueError("shape-linear risk guard failed")
     risk_count = int(cp.sum(risk, dtype=cp.int64).item())
     if risk_count == 0:
         return output
