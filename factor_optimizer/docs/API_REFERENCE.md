@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**95 个 Python 模块、979 个公开函数/类/方法定义**。
+扫描实际包目录：**96 个 Python 模块、980 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -27,6 +27,7 @@
 | [factor_optimizer/adapters/repair_execution.py](../factor_optimizer/adapters/repair_execution.py) | 5 | Versioned, research-only execution plans for value-level repair families. |
 | [factor_optimizer/adapters/repair_execution_identity.py](../factor_optimizer/adapters/repair_execution_identity.py) | 1 | Scoped identity for direct Factor Preprocess repair kernels. |
 | [factor_optimizer/candidate_catalog.py](../factor_optimizer/candidate_catalog.py) | 1 | Shared, deterministic static candidate catalog for batch research. |
+| [factor_optimizer/candidate_recovery.py](../factor_optimizer/candidate_recovery.py) | 1 | Rebuild candidate TRAIN input after failed shared-frame execution. |
 | [factor_optimizer/capabilities.py](../factor_optimizer/capabilities.py) | 5 | Truthful runtime capability metadata for factor_optimizer. |
 | [factor_optimizer/cohort_materialization.py](../factor_optimizer/cohort_materialization.py) | 7 | Bounded, ordered staging of decoded COS panels into a FactorBatch array. |
 | [factor_optimizer/complexity/__init__.py](../factor_optimizer/complexity/__init__.py) | 0 | Complexity estimation and budget tracking. |
@@ -810,6 +811,18 @@ Shared, deterministic static candidate catalog for batch research.
 Return the optimizer's ordered, prespecified (family, parameters) grid.
 
 参数：`(config)`。
+
+## factor_optimizer/candidate_recovery.py
+
+Rebuild candidate TRAIN input after failed shared-frame execution.
+
+### rebuild_train_frame
+
+[实际实现](../factor_optimizer/candidate_recovery.py#L8)。
+
+Restore ordered axes and detached baseline values, on failure only.
+
+参数：`(time_axis, asset_axis, baseline_values)`。
 
 ## factor_optimizer/capabilities.py
 
@@ -11090,6 +11103,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/adapters/repair_execution.py` | `d64200649a33819d3013de96f89e18a02bb032ed3e20d6ce2c34d4490c7d3727` |
 | `factor_optimizer/adapters/repair_execution_identity.py` | `7a040606e3c67cb15a14564073afc43cc8887476ed2aa52a218b4a39125b95d2` |
 | `factor_optimizer/candidate_catalog.py` | `0280e26add401da06be47cb4580abcb60f408238ddd13817abdcd299fb282987` |
+| `factor_optimizer/candidate_recovery.py` | `aa323aa85a92fdf0524a043e8fb67964aec56e20a250e2ed34503c42b3b672a0` |
 | `factor_optimizer/capabilities.py` | `efb1fbf1b54b1b14f128ffe63c74f54f7a22f99a409a0761aac67fc1b6e3ed28` |
 | `factor_optimizer/cohort_materialization.py` | `bf663447783af203e3ecedb1367f36e26b58c2a6d079c1006d3caddb8760a7cd` |
 | `factor_optimizer/complexity/__init__.py` | `79c8daf01ef8071b77eb7cbb8df4ae45fc9e2d4a4349f35d402a12f79936e696` |
@@ -11131,7 +11145,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
-| `factor_optimizer/research_batch.py` | `595438434da3886df2de3757d903b681352abc0969e8e87705106e0148c0dbdb` |
+| `factor_optimizer/research_batch.py` | `0980421894602f161a6722aab301458194478de9a305890ccd2f59abc37fa0f8` |
 | `factor_optimizer/research_batch_diagnostics.py` | `0ec5186c413814db6457342e97236b582e95a460033c11a6804b815c64d24b89` |
 | `factor_optimizer/research_decay.py` | `4dc4801f9197a9016df0dc36e5525e63d9120b9bc3f663d7f5bcde8e685ecfcb` |
 | `factor_optimizer/research_diagnostics.py` | `054ee2ad344395812656f1a7991983c58cade69e8c0b524d98981258cd6947ad` |

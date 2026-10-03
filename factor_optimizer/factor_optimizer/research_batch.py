@@ -809,6 +809,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                                                       orientation == -1 and "SIGN_ORIENTATION" in issue["families"])]
                     if precompiled is not None and precompiled.identity in proposal_sources:
                         record["proposal_source"] = proposal_sources[precompiled.identity]
+                    recovery_failed = False
                     try:
                         plan = precompiled or compile_value_repair(family, params,
                             natural_time_scale=config.natural_time_scale, training_context_ref=train_ref)
@@ -824,8 +825,25 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                                     allow_research=True))
                             if reused_shape is None:
                                 plan_frame = _candidate_frame_for_plan(plan, search_frame)
-                                base_values = np.asarray(plan.execute(
-                                    plan_frame, allow_research=True), dtype=float).reshape(prefix.shape)
+                                try:
+                                    base_values = np.asarray(plan.execute(
+                                        plan_frame, allow_research=True), dtype=float).reshape(prefix.shape)
+                                except Exception as execution_error:
+                                    if plan_frame is search_frame:
+                                        try:
+                                            from factor_optimizer.candidate_recovery import rebuild_train_frame
+                                            search_frame = rebuild_train_frame(
+                                                batch.time_axis, batch.asset_axis, baseline_values)
+                                            last_base_identity, last_base_values = None, None
+                                            prepared_train_rank = None
+                                            shape_rank_cache._bypass()
+                                        except Exception as recovery_error:
+                                            # Abort this factor rather than score corrupted input.
+                                            # Keep the execution failure primary and chain cleanup.
+                                            record["recovery_error"] = f"{type(recovery_error).__name__}: {recovery_error}"
+                                            recovery_failed = True
+                                            raise execution_error from recovery_error
+                                    raise
                             else:
                                 base_values = np.asarray(reused_shape, dtype=float).reshape(prefix.shape)
                             last_base_identity, last_base_values = plan.identity, base_values
@@ -873,6 +891,9 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                                 best = entry
                     except Exception as exc:
                         record.update(status="ineligible", reason=f"{type(exc).__name__}: {exc}")
+                        if recovery_failed:
+                            records.append(MappingProxyType(record))
+                            raise
                     records.append(MappingProxyType(record))
                 if best is not None:
                     gain, _, winner, values = best
