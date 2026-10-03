@@ -753,7 +753,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                                 minimum_assets=config.minimum_assets, cost_rate=config.research_cost_rate,
                                 empty_leg_policy=config.research_empty_leg_policy,
                                 candidate_ic_cache=train_candidate_ic_cache,
-                                raw_cache=train_raw_cache)
+                                raw_cache=train_raw_cache,
+                                prepared_split=train_pair_ic_split)
                             mr = train_raw_summary_cache.summarize(ar)
                             mc = summarize(ac)
                             baseline_gain = joint_utility(mc)-joint_utility(mr)
@@ -855,7 +856,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                                 minimum_assets=config.minimum_assets, cost_rate=config.research_cost_rate,
                                 empty_leg_policy=config.research_empty_leg_policy,
                                 candidate_ic_cache=train_candidate_ic_cache,
-                                raw_cache=train_raw_cache)
+                                raw_cache=train_raw_cache,
+                                prepared_split=train_pair_ic_split)
                             mr = train_raw_summary_cache.summarize(ar)
                             mc = summarize(ac)
                             record.update(train_raw_metrics=mr, train_candidate_metrics=mc,

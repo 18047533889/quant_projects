@@ -6996,11 +6996,13 @@ One-entry RAW evidence cache; returned arrays never alias stored state.
 
 QE metric inputs share signal availability, never ex-post label membership.
 
-参数：`(raw, candidate, batch, labels, indices, *, minimum_assets=20, cost_rate=0.001, raw_cache=None, empty_leg_policy='signal_cash', candidate_ic_cache=None)`。
+参数：`(raw, candidate, batch, labels, indices, *, minimum_assets=20, cost_rate=0.001, raw_cache=None, empty_leg_policy='signal_cash', candidate_ic_cache=None, prepared_split=None)`。
+
+`prepared_split` 是内部 TRAIN 优化复用入口：必须由 `_prepare_pair_ic_split` 为同一 batch、同一 labels 对象及完全相同的有序 indices 创建。它复用不可变标签切片与时间轴，避免每个候选重复切片、冻结和计算标签内容指纹；错配请求拒绝。默认 `None` 保留原有路径；RAW 缓存仍按实际值、缺失掩码与成本配置检查，VALIDATION 不复用 TRAIN 切片。此项不代表已测得整体耗时提升。
 
 ### compare_joint
 
-[实际实现](../factor_optimizer/research_fitness.py#L207)。
+[实际实现](../factor_optimizer/research_fitness.py#L220)。
 
 Recompute all nonlinear metrics within each shared moving-block draw.
 

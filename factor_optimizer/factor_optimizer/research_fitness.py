@@ -140,10 +140,13 @@ class RawSeriesCache:
 
 
 def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, cost_rate=.001,
-                  raw_cache=None, empty_leg_policy='signal_cash', candidate_ic_cache=None):
+                  raw_cache=None, empty_leg_policy='signal_cash', candidate_ic_cache=None,
+                  prepared_split=None):
     """QE metric inputs share signal availability, never ex-post label membership."""
     from dataclasses import replace
-    from factor_optimizer.research_batch import _subset_labels, PairICCache, _candidate_ic_key
+    from factor_optimizer.research_batch import (
+        _PairICPreparedSplit, _subset_labels, PairICCache, _candidate_ic_key,
+    )
     from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
     from quant_evaluator.metrics.ic import compute_daily_ic
     if labels.horizon != 1:
@@ -154,7 +157,17 @@ def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, 
             or np.any(idx < 0) or np.any(idx >= len(labels.values))
             or np.any(idx[1:] <= idx[:-1])):
         raise ValueError('indices must be a nonempty, strictly increasing integer vector in range')
-    target = _subset_labels(labels, indices)
+    if prepared_split is None:
+        target = _subset_labels(labels, indices)
+        time_axis = AxisRef('time', batch.time_axis.dtype, len(idx), batch.time_axis.values[idx])
+    else:
+        if (type(prepared_split) is not _PairICPreparedSplit
+                or prepared_split.source_batch is not batch
+                or prepared_split.source_labels is not labels
+                or prepared_split.indices != tuple(indices)):
+            raise ValueError('prepared pair-IC split does not match this request')
+        target = prepared_split.target
+        time_axis = prepared_split.time_axis
     if any(target.label_end_time[i] > target.label_start_time[i+1] for i in range(len(idx)-1)):
         raise JointMetricsUnavailable('unsupported_label_accounting',
                                       'overlapping labels require cohort portfolio accounting')
@@ -162,7 +175,7 @@ def paired_series(raw, candidate, batch, labels, indices, *, minimum_assets=20, 
     common = np.isfinite(a) & np.isfinite(b)
     a, b = np.where(common, a, np.nan), np.where(common, b, np.nan)
     pair = FactorBatch(('RAW', 'CANDIDATE'),
-        AxisRef('time', batch.time_axis.dtype, len(idx), batch.time_axis.values[idx]),
+        time_axis,
         batch.asset_axis, np.stack((a, b), axis=-1))
     y = target.values if target.validity is None else np.where(target.validity, target.values, np.nan)
     cached, key = None, None
