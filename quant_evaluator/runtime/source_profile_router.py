@@ -26,11 +26,13 @@ from quant_evaluator.runtime.source_route_profiles import (
     route_profile_execution_config_sha256,
     validate_source_route_profile_qualification,
 )
-from quant_evaluator.runtime.source_auto_evidence import SOURCE_AUTO_METRICS
+from quant_evaluator.runtime.source_metric_catalog import (
+    SOURCE_IMPLEMENTED_METRICS, SOURCE_SERIES_METRICS,
+)
 
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
-_SERIES_METRICS = frozenset({"rank_ic_series", "pearson_ic_series"})
+_SERIES_METRICS = SOURCE_SERIES_METRICS
 _METRIC_ABS_ERROR_TOLERANCE = 1e-10
 PROFILE_QUALIFICATION_SCOPE = "exact_request_bound_cos_runtime_policy_profiles_v2"
 PROFILE_CACHE_TAG = "SourceRouteProfileCache.v2"
@@ -83,7 +85,7 @@ def _metric_contract(metrics, request_shape) -> tuple[tuple, tuple, tuple]:
     selected = tuple(metrics)
     if (not selected or any(type(item) is not str or not item for item in selected)
             or len(set(selected)) != len(selected)
-            or set(selected) - SOURCE_AUTO_METRICS):
+            or set(selected) - SOURCE_IMPLEMENTED_METRICS):
         raise SourceProfileQualificationError("profile_metrics_invalid")
     T, _, F = request_shape
     coverage = tuple((metric, T * F if metric in _SERIES_METRICS else F)

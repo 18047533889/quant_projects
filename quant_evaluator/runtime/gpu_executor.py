@@ -16,6 +16,11 @@ import numpy as np
 
 from quant_evaluator.api.batch_bundle import BatchEvaluationBundle
 from quant_evaluator.runtime.device_session import DeviceEvaluationSession
+from quant_evaluator.runtime.gpu_quantile_shape_adapter import (
+    GPU_LINEAR_QUANTILE_METRICS, GPU_PROFILE_QUANTILE_METRICS,
+    compute_linear_quantile_shape_device,
+    materialize_linear_quantile_shape_results,
+)
 
 
 def _import_cp():
@@ -41,7 +46,7 @@ class GPUExecutor:
         "industry_exposure", "size_exposure", "beta_exposure",
         "liquidity_exposure", "volatility_exposure", "momentum_exposure",
         "max_absolute_style_exposure", "exposure_drift", "purity_ratio",
-    })
+    }) | GPU_LINEAR_QUANTILE_METRICS
 
     @classmethod
     def validate_metric_plan(cls, metrics):
@@ -54,6 +59,7 @@ class GPUExecutor:
     def __init__(self, session: DeviceEvaluationSession):
         self.session = session
         self.metric_parameters = {}
+        self.quantile_builder_parameters = {}
         self.holding_return_id = None
         self.portfolio_spec = None
         self.trade_eligibility = None
@@ -360,6 +366,9 @@ class GPUExecutor:
             start = source_stop
         out.metadata = self.session.metadata()
         out.metadata["factor_tiles_processed"] = count
+        out.metadata["shape_kernel_dispatches"] = self.shape_kernel_dispatches
+        out.metadata["shape_kernel_backend"] = "cuda_strict" if self.shape_kernel_dispatches else None
+        out.metadata["shape_kernel_no_fallback"] = bool(self.shape_kernel_dispatches)
         out.metadata["source_snapshot_id"] = metadata.snapshot_id
         out.metadata["host_result_bytes_reserved"] = self._host_result_bytes
         out.metadata["host_result_budget_bytes"] = self.session.policy.max_host_result_bytes
@@ -525,6 +534,9 @@ class GPUExecutor:
             output.metadata["device_session_counter_scope"] = "shared_session_total"
             output.metadata["shared_session_label_count"] = len(label_bundles)
             output.metadata["shared_session_factor_tiles_processed"] = count
+            output.metadata["shape_kernel_dispatches"] = self.shape_kernel_dispatches
+            output.metadata["shape_kernel_backend"] = "cuda_strict" if self.shape_kernel_dispatches else None
+            output.metadata["shape_kernel_no_fallback"] = bool(self.shape_kernel_dispatches)
         return outputs
 
 
@@ -543,6 +555,7 @@ class GPUExecutor:
         series: Dict[str, np.ndarray] = {}
         vector: Dict[str, np.ndarray] = {}
         counts: Dict[str, np.ndarray] = {}
+        shape_device_results = {}
 
         # shared intermediates (spec §9)
         rank_cache = {}
@@ -555,6 +568,7 @@ class GPUExecutor:
         # Raw means/counts are un-gated and scoped to this run's fixed inputs.
         # One entry costs 16*Q*F bytes; min_periods is applied by each consumer.
         temporal_mean_cache = {}
+        profile_cache = {}
         turnover = None
         portfolio_pnl = None
 
@@ -566,6 +580,13 @@ class GPUExecutor:
                 temporal_mean_cache[key] = finite_mean_axis0(
                     daily_returns, workspace_bytes=mean_workspace)
             return temporal_mean_cache[key]
+
+        def quantile_profile(key, daily_returns, minimum_days):
+            profile_key = (key, minimum_days)
+            if profile_key not in profile_cache:
+                mean, days = temporal_quantile_mean(key, daily_returns)
+                profile_cache[profile_key] = cp.where(days >= minimum_days, mean, cp.nan)
+            return profile_cache[profile_key]
 
         exposure_cache = {}
         for m in metrics:
@@ -677,9 +698,11 @@ class GPUExecutor:
                     constant = cp.nanmax(finite_ic, axis=0) == cp.nanmin(finite_ic, axis=0)
                     scalar["pearson_ic_ir"] = _to_cpu(cp.where((count >= min_periods) & ~constant, mu / sd, cp.nan))
             elif m in ("quantile_returns_full", "quantile_returns_daily", "quantile_spread", "quantile_monotonicity",
-                       "daily_quantile_monotonicity_series", "daily_quantile_monotonicity_rate"):
-                n_quantiles = parameters.get("n_quantiles", 5)
-                quantile_key = (n_quantiles, parameters.get("min_assets", 10))
+                       "daily_quantile_monotonicity_series", "daily_quantile_monotonicity_rate") or m in GPU_LINEAR_QUANTILE_METRICS:
+                builder = (self.quantile_builder_parameters if m in GPU_PROFILE_QUANTILE_METRICS
+                           else parameters)
+                n_quantiles = builder.get("n_quantiles", 5)
+                quantile_key = (n_quantiles, builder.get("min_assets", 10))
                 if quantile_key not in quantile_cache:
                     from quant_evaluator.kernels.gpu.quantile import batched_quantile_returns
                     quantile_cache[quantile_key] = batched_quantile_returns(factors, labels,
@@ -705,14 +728,22 @@ class GPUExecutor:
                     scalar[m] = _to_cpu(cp.where(count >= min_periods, mean, cp.nan))
                     counts[m] = _to_cpu(count)
                 elif m == "quantile_monotonicity":
-                    profile, days = temporal_quantile_mean(quantile_key, quantile_ret)
-                    profile = cp.where(days >= min_periods, profile, cp.nan)
+                    profile = quantile_profile(quantile_key, quantile_ret, min_periods)
                     valid_pairs = cp.isfinite(profile[:-1]) & cp.isfinite(profile[1:])
                     count = valid_pairs.sum(axis=0)
                     from quant_evaluator.kernels.gpu.quantile_shape import quantile_monotonicity
                     monotonicity = quantile_monotonicity(profile, return_device=True)
                     scalar[m] = _to_cpu(monotonicity)
                     counts[m] = _to_cpu(count)
+                    self.shape_kernel_dispatches += 1
+                elif m in GPU_LINEAR_QUANTILE_METRICS:
+                    profile = quantile_profile(quantile_key, quantile_ret, min_periods)
+                    shape_workspace = self.session.workspace_budget(output_bytes=int(F * 16))
+                    score = compute_linear_quantile_shape_device(
+                        m, profile, workspace_bytes=shape_workspace)
+                    # Retain this tiny vector for one packed transfer after
+                    # all shape kernels; counts keep the finite-scalar unit.
+                    shape_device_results[m] = score
                     self.shape_kernel_dispatches += 1
                 elif m in ("daily_quantile_monotonicity_series", "daily_quantile_monotonicity_rate"):
                     from quant_evaluator.kernels.gpu.quantile_shape import daily_quantile_monotonicity
@@ -810,6 +841,17 @@ class GPUExecutor:
                 self.exposure_kernel_dispatches += 1
             else:
                 raise RuntimeError(f"GPUExecutor: unsupported metric '{m}'")
+
+        if shape_device_results:
+            # Conservative transient scratch admission for stack, finite mask,
+            # float counts and concatenation; not a total allocator/RSS cap.
+            self.session.workspace_budget(
+                output_bytes=int(40 * F * len(shape_device_results)))
+            shape_values, shape_counts = materialize_linear_quantile_shape_results(
+                shape_device_results, to_host=_to_cpu)
+            scalar.update(shape_values)
+            counts.update(shape_counts)
+            shape_device_results.clear()
 
         return BatchEvaluationBundle(
             factor_ids=tuple(factor_ids),

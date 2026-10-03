@@ -1985,6 +1985,14 @@ def evaluate(
                     gpu_policy=gpu_policy, static_backend=backend_name,
                     static_reason=auto_route_reason,
                 )
+    gpu_builder_parameters = {}
+    if backend_name in {"cuda", "cuda_strict", "gpu"}:
+        from quant_evaluator.runtime.gpu_quantile_builder_contract import (
+            normalize_gpu_quantile_builder_parameters,
+        )
+        gpu_builder_parameters = normalize_gpu_quantile_builder_parameters(
+            quantile_builder_parameters, canonical_metrics,
+        )
     if _prepare_only:
         return ((backend_name, auto_route_reason) if _include_auto_route_reason
                 else backend_name)
@@ -2013,11 +2021,10 @@ def evaluate(
             raise InvalidContractError("CUDA labels must match the factor time/asset panel")
         if context is not None:
             raise UnsupportedMetricError("CUDA evaluation context is not implemented")
-        if quantile_builder_parameters:
-            raise UnsupportedMetricError("CUDA shape-window builder is not implemented")
         policy = gpu_policy or GPUExecutionPolicy()
         with DeviceEvaluationSession(policy) as session:
             executor = GPUExecutor(session)
+            executor.quantile_builder_parameters = dict(gpu_builder_parameters)
             if exposure_panel is not None:
                 executor.exposure_panel_values = np.where(
                     exposure_panel.validity, exposure_panel.values, np.nan

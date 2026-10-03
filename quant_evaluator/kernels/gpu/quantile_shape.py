@@ -29,12 +29,12 @@ def _as_matrix(qr):
     return cp.ascontiguousarray(m)
 
 
-def _repair_linear(values, result, metric, workspace_bytes):
+def _repair_linear(values, result, metric, workspace_bytes, *, return_device=False):
     from quant_evaluator.kernels.gpu.shape_linear_numeric import repair_shape_linear_gpu
     repaired = repair_shape_linear_gpu(
         values, result, metric, workspace_bytes=workspace_bytes,
     )
-    return repaired.get()
+    return repaired if return_device else repaired.get()
 
 
 def _finite_columns(m):
@@ -71,59 +71,59 @@ def daily_quantile_monotonicity(daily_qr, *, return_device=False):
     return out if return_device else out.get()
 
 
-def quantile_curvature(qr, *, workspace_bytes: int = 1 << 30):
+def quantile_curvature(qr, *, workspace_bytes: int = 1 << 30, return_device=False):
     workspace_bytes = _validate_workspace_bytes(workspace_bytes)
     cp = _import_cp()
     m = _as_matrix(qr)
     nq, F = m.shape
     out = cp.full(F, cp.nan)
     if nq < 3:
-        return out.get()
+        return out if return_device else out.get()
     finite = cp.isfinite(m)
     interior = finite[1:-1, :] & finite[:-2, :] & finite[2:, :]
     d2 = m[2:, :] - 2.0 * m[1:-1, :] + m[:-2, :]
     cnt = cp.sum(interior, axis=0).astype(cp.float64)
     s = cp.sum(cp.where(interior, d2, 0.0), axis=0)
     out = cp.where(cnt >= 1, s / cnt, cp.nan)
-    return _repair_linear(m, out, "curvature", workspace_bytes)
+    return _repair_linear(m, out, "curvature", workspace_bytes, return_device=return_device)
 
-def quantile_tail_asymmetry(qr, *, workspace_bytes: int = 1 << 30):
+def quantile_tail_asymmetry(qr, *, workspace_bytes: int = 1 << 30, return_device=False):
     workspace_bytes = _validate_workspace_bytes(workspace_bytes)
     cp = _import_cp()
     m = _as_matrix(qr)
     nq, F = m.shape
     out = cp.full(F, cp.nan)
     if nq < 3:
-        return out.get()
+        return out if return_device else out.get()
     mid = nq // 2
     ok = cp.isfinite(m[0, :]) & cp.isfinite(m[-1, :]) & cp.isfinite(m[mid, :])
     val = (m[-1, :] - m[mid, :]) - (m[mid, :] - m[0, :])
     out = cp.where(ok, val, cp.nan)
-    return _repair_linear(m, out, "tail_asymmetry", workspace_bytes)
+    return _repair_linear(m, out, "tail_asymmetry", workspace_bytes, return_device=return_device)
 
-def quantile_adjacent_spread(qr, *, workspace_bytes: int = 1 << 30):
+def quantile_adjacent_spread(qr, *, workspace_bytes: int = 1 << 30, return_device=False):
     workspace_bytes = _validate_workspace_bytes(workspace_bytes)
     cp = _import_cp()
     m = _as_matrix(qr)
     nq, F = m.shape
     out = cp.full(F, cp.nan)
     if nq < 2:
-        return out.get()
+        return out if return_device else out.get()
     finite = cp.isfinite(m)
     pairs = finite[:-1, :] & finite[1:, :]
     n = cp.sum(pairs, axis=0).astype(cp.float64)
     s = cp.sum(cp.where(pairs, cp.abs(m[1:, :] - m[:-1, :]), 0.0), axis=0)
     out = cp.where(n >= 1, s / n, cp.nan)
-    return _repair_linear(m, out, "spread", workspace_bytes)
+    return _repair_linear(m, out, "spread", workspace_bytes, return_device=return_device)
 
-def quantile_extreme_cliff(qr, *, workspace_bytes: int = 1 << 30):
+def quantile_extreme_cliff(qr, *, workspace_bytes: int = 1 << 30, return_device=False):
     workspace_bytes = _validate_workspace_bytes(workspace_bytes)
     cp = _import_cp()
     m = _as_matrix(qr)
     nq, F = m.shape
     out = cp.full(F, cp.nan)
     if nq < 2:
-        return out.get()
+        return out if return_device else out.get()
     ok = (
         cp.isfinite(m[0, :]) & cp.isfinite(m[1, :])
         & cp.isfinite(m[-1, :]) & cp.isfinite(m[-2, :])
@@ -132,33 +132,33 @@ def quantile_extreme_cliff(qr, *, workspace_bytes: int = 1 << 30):
     cliff_bottom = m[1, :] - m[0, :]
     val = (cliff_top + cliff_bottom) / 2.0
     out = cp.where(ok, val, cp.nan)
-    return _repair_linear(m, out, "extreme_cliff", workspace_bytes)
+    return _repair_linear(m, out, "extreme_cliff", workspace_bytes, return_device=return_device)
 
-def top_quantile_cliff(qr, *, workspace_bytes: int = 1 << 30):
+def top_quantile_cliff(qr, *, workspace_bytes: int = 1 << 30, return_device=False):
     workspace_bytes = _validate_workspace_bytes(workspace_bytes)
     cp = _import_cp()
     m = _as_matrix(qr)
     nq, F = m.shape
     out = cp.full(F, cp.nan)
     if nq < 2:
-        return out.get()
+        return out if return_device else out.get()
     ok = cp.isfinite(m[-1, :]) & cp.isfinite(m[-2, :])
     val = m[-1, :] - m[-2, :]
     out = cp.where(ok, val, cp.nan)
-    return _repair_linear(m, out, "top_cliff", workspace_bytes)
+    return _repair_linear(m, out, "top_cliff", workspace_bytes, return_device=return_device)
 
-def bottom_quantile_cliff(qr, *, workspace_bytes: int = 1 << 30):
+def bottom_quantile_cliff(qr, *, workspace_bytes: int = 1 << 30, return_device=False):
     workspace_bytes = _validate_workspace_bytes(workspace_bytes)
     cp = _import_cp()
     m = _as_matrix(qr)
     nq, F = m.shape
     out = cp.full(F, cp.nan)
     if nq < 2:
-        return out.get()
+        return out if return_device else out.get()
     ok = cp.isfinite(m[1, :]) & cp.isfinite(m[0, :])
     val = m[1, :] - m[0, :]
     out = cp.where(ok, val, cp.nan)
-    return _repair_linear(m, out, "bottom_cliff", workspace_bytes)
+    return _repair_linear(m, out, "bottom_cliff", workspace_bytes, return_device=return_device)
 
 
 def _validate_workspace_bytes(workspace_bytes):

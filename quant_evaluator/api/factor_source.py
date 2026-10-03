@@ -32,7 +32,11 @@ from quant_evaluator.runtime.source_qualified_router import (
 )
 
 
-_SOURCE_METRICS = SOURCE_AUTO_METRICS
+from quant_evaluator.runtime.source_metric_catalog import SOURCE_IMPLEMENTED_METRICS
+
+# Implementation support is not a measured auto envelope.  New metrics keep
+# the conservative CPU route until current-context performance evidence exists.
+_SOURCE_METRICS = SOURCE_IMPLEMENTED_METRICS
 
 
 def _source_request_fingerprint(metadata, label_bundle, metrics):
