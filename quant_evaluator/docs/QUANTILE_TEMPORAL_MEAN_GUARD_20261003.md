@@ -86,6 +86,37 @@ routing. Q20 guard overhead remains open. Repeated full-width bucket scans
 are a candidate hotspot, not a measured root cause until risk distribution
 is inspected. This report is neither full-QE/COS timing nor a CPU/GPU backend
 winner qualification; it cannot populate the default-auto winner registry.
-It does not prove every metric globally fastest or bug-free. Other bootstrap
-profile reductions and broader multi-year/full-market route qualification
-remain within the continuing audit scope.
+It does not prove every metric globally fastest or bug-free. Broader
+multi-year/full-market route qualification and the remaining metric-family
+audit remain within the continuing scope.
+
+## Risk distribution follow-up (2026-10-04)
+
+[Risk-count report](benchmarks/gpu_quantile_guard_risk_profile_20261004.json)
+uses the same input and metric-source hashes as the preceding ABBA cohort.
+Both Q5 and Q20 executed seven guard calls, returned zero final-risk buckets,
+and launched the exact fixed-mean kernel zero times. Thus exact-repair work
+does not explain this cohort's guard overhead. Risk classification/refinement,
+repeated scans and synchronization remain candidates; this probe does not
+measure timing or identify their individual shares.
+
+The probe reduces risk metadata on GPU and copies only Q-length count vectors
+to host. Its RawKernel wrapper is restored in a finally block. Seven mock
+tests cover wrapper behavior and accurate Linux MemAvailable admission before
+allocation. An additional 34-test shape suite uses independent Decimal Pearson
+and Fisher-z oracles for encoded huge profiles, plus binary-exact affine
+profiles; decimal increments near 1e308 must not be presumed exactly affine
+after binary64 quantization. The combined shape/probe run reported 41 passed.
+
+## Bootstrap profile repair (2026-10-04)
+
+The confidence and rank-agreement bootstrap metrics also used unsafe sample
+profile means. Four identical, strictly increasing, ULP-exact huge profiles
+returned NaN instead of rank agreement 1. Both sample reductions now reuse
+the guarded finite mean; confidence retains vectorized resample reduction,
+rank agreement retains its bounded per-sample memory behavior, and the shared
+random draw schedule is unchanged. Exactly three common finite quantiles still
+qualify, while two remain missing evidence. The two regressions were red before
+the repair and green afterward. Final combined 16-file numerical, public GPU,
+mask/cache, shape, bootstrap, benchmark-probe, and equivalence validation:
+**287 passed, 2 skipped** (both require a second CUDA device), no warnings.

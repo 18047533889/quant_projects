@@ -32,6 +32,8 @@ Run from the repo root:
 
 from __future__ import annotations
 
+from decimal import Decimal, localcontext
+import math
 import numpy as np
 import pytest
 
@@ -383,3 +385,71 @@ def test_pre_existing_shape_ids_untouched():
         "bottom_quantile_cliff",
     ):
         assert metric_id in registered
+
+def _huge_affine_shape_windows():
+    quantiles = np.arange(5, dtype=np.float64)
+    return np.stack([
+        (1e308 + (scale * quantiles * 1e293))[:, None]
+        for scale in (1.0, 2.0, 3.0)
+    ])
+
+
+def test_shape_stability_handles_huge_affine_profiles():
+    """Overflowing covariance math must retain affine correlation evidence."""
+    got = compute_shape_stability(_huge_affine_shape_windows())
+    assert np.isfinite(got[0])
+    assert got[0] == pytest.approx(
+        _decimal_window_correlation(_huge_affine_shape_windows(), leave_one_out=True),
+        abs=2e-13, rel=0.0,
+    )
+
+
+def test_shape_regime_stability_handles_huge_affine_profiles():
+    """Regime correlation is scale-safe for representable large profiles."""
+    got = compute_shape_regime_stability(_huge_affine_shape_windows())
+    assert np.isfinite(got[0])
+    assert got[0] == pytest.approx(
+        _decimal_window_correlation(_huge_affine_shape_windows(), leave_one_out=False),
+        abs=2e-13, rel=0.0,
+    )
+
+
+def _decimal_window_correlation(windows, *, leave_one_out):
+    """Independent Pearson/Fisher oracle for the actual binary64 inputs.
+
+    Near 1e308, decimal increments of 1e293 quantize to different ulp counts:
+    the encoded profiles and rounded leave-one-out means are not exactly
+    affine. Unit correlation must not be assumed for those encoded samples.
+    """
+    correlations = []
+    with localcontext() as context:
+        context.prec = 2000
+        for index in range(len(windows) if leave_one_out else len(windows) - 1):
+            x = [Decimal.from_float(float(v)) for v in windows[index, :, 0]]
+            if leave_one_out:
+                others = [w for w in range(len(windows)) if w != index]
+                y = [Decimal.from_float(float(sum(
+                    (Decimal.from_float(float(windows[w, q, 0])) for w in others),
+                    Decimal(0),
+                ) / Decimal(len(others)))) for q in range(windows.shape[1])]
+            else:
+                y = [Decimal.from_float(float(v)) for v in windows[index + 1, :, 0]]
+            xm, ym = sum(x) / len(x), sum(y) / len(y)
+            dx, dy = [v - xm for v in x], [v - ym for v in y]
+            covariance = sum((a * b for a, b in zip(dx, dy)), Decimal(0))
+            denominator = (sum((a * a for a in dx), Decimal(0))
+                           * sum((b * b for b in dy), Decimal(0))).sqrt()
+            correlations.append(float(covariance / denominator))
+    zs = [math.atanh(min(1 - 1e-9, max(-1 + 1e-9, value)))
+          for value in correlations]
+    return math.tanh(math.fsum(zs) / len(zs))
+
+
+@pytest.mark.parametrize("fn", [compute_shape_stability, compute_shape_regime_stability])
+def test_binary_exact_huge_affine_profiles_retain_unit_correlation(fn):
+    q = np.arange(5, dtype=np.float64)
+    step = 8 * np.spacing(1e308)
+    windows = np.stack([(1e308 + scale * q * step)[:, None]
+                        for scale in (1.0, 2.0, 3.0)])
+    # All profiles and all leave-one-out means have integer ulp offsets.
+    assert fn(windows)[0] == pytest.approx(1 - 1e-9, abs=2e-15, rel=0.0)

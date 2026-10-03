@@ -738,7 +738,7 @@ def compute_shape_bootstrap_confidence(qr: np.ndarray, block_length: int = 2,
     mean_profile = _per_window_profile(windows)
     # Optimization D: the moving-block indices are identical for every factor, so
     # fancy-index ``windows`` ONCE per factor (instead of once per resample) and
-    # average the block with a vectorized nanmean over all resamples.  The
+    # average the block with a guarded finite mean over all resamples. The
     # per-resample Spearman agreement (rankdata + corrcoef) is kept because the
     # finite mask can differ per resample, but the dominant indexing cost is gone.
     for f in range(F):
@@ -746,7 +746,7 @@ def compute_shape_bootstrap_confidence(qr: np.ndarray, block_length: int = 2,
         if np.sum(np.isfinite(mp)) < 3:
             continue
         block = windows[bootstrap_indices, :, f]      # (resamples, nw, nq)
-        sp_all = np.nanmean(block, axis=1)            # (resamples, nq)
+        sp_all = finite_mean_axis0(block.swapaxes(0, 1))[0]  # (resamples, nq)
         agreed = 0
         drawn = 0
         for r in range(resamples):
@@ -978,8 +978,7 @@ def _compute_shape_bootstrap_confidence_reference(qr: np.ndarray, block_length: 
         drawn = 0
         for idx in bootstrap_indices:
             sample = windows[idx, :, f]
-            with np.errstate(invalid="ignore"):
-                sp = np.nanmean(sample, axis=0)
+            sp = finite_mean_axis0(sample)[0]
             finite = np.isfinite(sp) & np.isfinite(mp)
             if np.sum(finite) < 3:
                 continue
