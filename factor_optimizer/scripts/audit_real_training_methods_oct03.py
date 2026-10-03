@@ -80,16 +80,27 @@ def available_memory_bytes():
         return None
 
 
-def check_resource_headroom(*, memory_bytes=None, cache_root=CACHE_ROOT):
+def check_resource_headroom(*, memory_bytes=None, cache_root=CACHE_ROOT,
+                            minimum_memory_bytes=MIN_AVAILABLE_MEMORY_BYTES,
+                            minimum_disk_bytes=MIN_DISK_HEADROOM_BYTES):
     """Admission check before COS reads; leave room for the bounded conversion."""
+    if (type(minimum_memory_bytes) is not int
+            or minimum_memory_bytes < MIN_AVAILABLE_MEMORY_BYTES
+            or type(minimum_disk_bytes) is not int
+            or minimum_disk_bytes < MIN_DISK_HEADROOM_BYTES):
+        raise ValueError("resource thresholds must be integer limits at least the default floors")
     available = available_memory_bytes() if memory_bytes is None else memory_bytes
-    if available is None or available < MIN_AVAILABLE_MEMORY_BYTES:
-        raise RuntimeError("at least 4 GiB available RAM is required before COS reads")
+    if available is None:
+        raise RuntimeError("available RAM could not be determined before COS reads")
+    if type(available) is not int or available < 0:
+        raise ValueError("available memory must be a nonnegative built-in integer byte count")
+    if available < minimum_memory_bytes:
+        raise RuntimeError(f"at least {minimum_memory_bytes // 1024**3} GiB available RAM is required before COS reads")
     cache_root = Path(cache_root)
     if not cache_root.is_dir():
         raise RuntimeError("configured DataAccess COS cache root is not an existing directory")
-    if shutil.disk_usage(cache_root).free < MIN_DISK_HEADROOM_BYTES:
-        raise RuntimeError("less than 256 MiB free in the DataAccess COS cache filesystem")
+    if shutil.disk_usage(cache_root).free < minimum_disk_bytes:
+        raise RuntimeError(f"less than {minimum_disk_bytes // 1024**2} MiB free in the DataAccess COS cache filesystem")
 
 
 def load_real_source():
@@ -106,8 +117,13 @@ def _is_int(value):
     return type(value) is int
 
 
-def validate_source(batch, labels, provenance):
+def validate_source(batch, labels, provenance, *, max_factor_bytes=MAX_FACTOR_BYTES,
+                    max_batch_factor_bytes=MAX_BATCH_BYTES):
     """Reject source metadata, dimensions, or payloads beyond the admitted envelope."""
+    if (type(max_factor_bytes) is not int or not 0 < max_factor_bytes <= 128*1024**2
+            or type(max_batch_factor_bytes) is not int
+            or not 0 < max_batch_factor_bytes <= 2*1024**3):
+        raise ValueError("source budgets must be positive integer limits within DataAccess caps")
     if not isinstance(provenance, dict):
         raise ValueError("source provenance must be a mapping")
     manifest_uri = provenance.get("manifest_uri")
@@ -128,8 +144,10 @@ def validate_source(batch, labels, provenance):
     if (not isinstance(sha, str) or _HEX64.fullmatch(sha) is None
             or uri != f"{FACTOR_POOL}/{sha}/{batch.factor_ids[0]}.parquet"):
         raise ValueError("factor source URI and content SHA256 do not bind to the authorized pool")
-    if not _is_int(size) or not 0 < size <= MAX_FACTOR_BYTES:
-        raise ValueError("downloaded factor size exceeds the 8 MiB object cap")
+    if not _is_int(size) or not 0 < size <= max_factor_bytes:
+        raise ValueError(f"downloaded factor size exceeds the {max_factor_bytes // 1024**2} MiB object cap")
+    if size > max_batch_factor_bytes:
+        raise ValueError("downloaded factor size exceeds the batch-object cap")
     if source.get("bytes", size) != size:
         raise ValueError("downloaded factor byte count differs from the manifest")
     if source.get("manifest_sha256") is None or _HEX64.fullmatch(str(source["manifest_sha256"])) is None:
@@ -173,10 +191,10 @@ def validate_source(batch, labels, provenance):
         raise ValueError("asset selection split identity differs from the automatic purged TRAIN split")
     if provenance.get("asset_selection_train_days") != len(split.train_indices):
         raise ValueError("asset selection TRAIN-day count differs from the automatic purged TRAIN split")
-    if provenance.get("max_factor_bytes") != MAX_FACTOR_BYTES:
-        raise ValueError("loader factor-object cap differs from the expected 8 MiB bound")
-    if provenance.get("max_batch_factor_bytes") != MAX_BATCH_BYTES:
-        raise ValueError("loader batch-object cap differs from the expected 128 MiB bound")
+    if provenance.get("max_factor_bytes") != max_factor_bytes:
+        raise ValueError("loader factor-object cap differs from the requested bound")
+    if provenance.get("max_batch_factor_bytes") != max_batch_factor_bytes:
+        raise ValueError("loader batch-object cap differs from the requested bound")
 
 
 def _hash_array(hasher, name, value):

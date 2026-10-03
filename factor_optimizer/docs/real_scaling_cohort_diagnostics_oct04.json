@@ -1,0 +1,4245 @@
+{
+  "audit": "real-scaling-cohort-oct03-v1",
+  "cohort_source": {
+    "sources": [
+      {
+        "factor": "drawdown_vol_adj_stress",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/e917ff88fabf76f6ccfaa04e28d50054e1d6e4fd7acba277e6c1d3880f911703/drawdown_vol_adj_stress.parquet",
+        "etag": "dfd9af24c81c0cb186d4467dda7f9875-4",
+        "sha256": "e917ff88fabf76f6ccfaa04e28d50054e1d6e4fd7acba277e6c1d3880f911703",
+        "downloaded_bytes": 103353222,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "neg(ts_sum(divide(subtract(divide(close, ts_max(close, 20)), 1), ts_mean(maximum(subtract(high, low), maximum(abs(subtract(high, pre_close)), abs(subtract(low, pre_close)))), 20)), 5))"
+      },
+      {
+        "factor": "ema_trend_simple",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/e5a66ba059f958369c6fea1ee133dd4ee8adb4931e9149cbcff1c0c4b9cf4538/ema_trend_simple.parquet",
+        "etag": "ef29a92bcb441da47a54584fd234d878-4",
+        "sha256": "e5a66ba059f958369c6fea1ee133dd4ee8adb4931e9149cbcff1c0c4b9cf4538",
+        "downloaded_bytes": 106675106,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "neg(divide(subtract(ts_ema(close, 20), ts_ema(close, 40)), ts_ema(close, 40)))"
+      },
+      {
+        "factor": "ewma_smoothness_volume",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/07cadb611240bd70b3e9997bfd5133008d5c157873d90a37963ea0e89cfa3511/ewma_smoothness_volume.parquet",
+        "etag": "fb08c179c53f9f1c09d4ebea3a58abb3-4",
+        "sha256": "07cadb611240bd70b3e9997bfd5133008d5c157873d90a37963ea0e89cfa3511",
+        "downloaded_bytes": 105577563,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "multiply(neg(ts_ema(abs(subtract(ts_pct(close, 1), ts_delay(ts_pct(close, 1), 1))), 10)), clip(divide(volume, ts_mean(volume, 20)), 0.5, 1.5))"
+      },
+      {
+        "factor": "price_impact_stable_5d",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/f17e62f7a1a6ef76b9c8a5b11d460ad79395be7aaa5a0a43e2d5ff892d61cdad/price_impact_stable_5d.parquet",
+        "etag": "6cd3cf97847f9e77a412adf37aa95dff-4",
+        "sha256": "f17e62f7a1a6ef76b9c8a5b11d460ad79395be7aaa5a0a43e2d5ff892d61cdad",
+        "downloaded_bytes": 104977913,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "divide(ts_median(abs(ts_pct(close, 1)), 5), ts_mean(log(add(volume, 1)), 5))"
+      },
+      {
+        "factor": "weekly_0476ab492f00a3ef",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/8332ecf83dfd93a2ef971ddead884fb390fc1313fac324bf2f6c6f5a105fd149/weekly_0476ab492f00a3ef.parquet",
+        "etag": "97a4b3cb3590bdd005921165a28190eb-2",
+        "sha256": "8332ecf83dfd93a2ef971ddead884fb390fc1313fac324bf2f6c6f5a105fd149",
+        "downloaded_bytes": 35820755,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "ts_quantile(subtract(safe_div_null(close, pre_close), 1), 20, 0.1)"
+      },
+      {
+        "factor": "weekly_050d0693faa7bfe1",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/39b1950cb0fd33bfca19e8c96d09a83e0a9deb3fd5332da1511caae6a7f75535/weekly_050d0693faa7bfe1.parquet",
+        "etag": "0d78532fc48c1a16c79b6d0ddae9843f-4",
+        "sha256": "39b1950cb0fd33bfca19e8c96d09a83e0a9deb3fd5332da1511caae6a7f75535",
+        "downloaded_bytes": 104666718,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "subtract(add(rank(rank(ts_max_drawdown(AdjClose, 20))), rank(relative_volume(col('Volume'), 20))), rank(high_low_spread_proxy(AdjHigh, AdjLow, 20)))"
+      },
+      {
+        "factor": "weekly_051dcc55b3919c26",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/de10a155defd79769ea9eb7b28f90fedb6a15d5af3bd7eceb76a2120fea1c44e/weekly_051dcc55b3919c26.parquet",
+        "etag": "f9bfef626738bd81047bfd58db1ff1f1-3",
+        "sha256": "de10a155defd79769ea9eb7b28f90fedb6a15d5af3bd7eceb76a2120fea1c44e",
+        "downloaded_bytes": 89592678,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "safe_div(1.0, col('valuation.pcf_ratio'))"
+      },
+      {
+        "factor": "weekly_072f91d9a08abe49",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/092ed86d0080ebcd1eaf69e912f210c8e6f2dddc27d2da1c8862a6caf76b2094/weekly_072f91d9a08abe49.parquet",
+        "etag": "b6e3d76ca8035f642c074604db0ff89d-3",
+        "sha256": "092ed86d0080ebcd1eaf69e912f210c8e6f2dddc27d2da1c8862a6caf76b2094",
+        "downloaded_bytes": 79722967,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "rank(col('valuation.free_cap'))"
+      },
+      {
+        "factor": "weekly_1710780361e7a559",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/1db64a4e610ed21c6678bd146c33154097e9d62e7e56d7de105ac4dee83d96eb/weekly_1710780361e7a559.parquet",
+        "etag": "29611b6ad1856ffcb12226596d5a057c-4",
+        "sha256": "1db64a4e610ed21c6678bd146c33154097e9d62e7e56d7de105ac4dee83d96eb",
+        "downloaded_bytes": 104067096,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "subtract(add(rank(ts_time_slope(log(AdjClose), 20)), rank(volume_momentum(col('Volume'), 20))), rank(corwin_schultz_spread(AdjHigh, AdjLow, 20)))"
+      },
+      {
+        "factor": "weekly_1ae1795d748f4dc8",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/977362badf5b08ff2d2d8547d6ad90ccba37bd2a91a84f0e38007f198bb8a603/weekly_1ae1795d748f4dc8.parquet",
+        "etag": "5d3fd42b57b4bb4a7974a166917c82b7-4",
+        "sha256": "977362badf5b08ff2d2d8547d6ad90ccba37bd2a91a84f0e38007f198bb8a603",
+        "downloaded_bytes": 105227272,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "ts_sharpe(subtract(safe_div_null(close, pre_close), 1), 20, 252)"
+      },
+      {
+        "factor": "weekly_23629be243c54739",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/c6ca9fef28f28fc85219d8c918e5c4829300058752c7977e7634b0a0d00651b1/weekly_23629be243c54739.parquet",
+        "etag": "6625f9fe75281cb284c981ae543909c0",
+        "sha256": "c6ca9fef28f28fc85219d8c918e5c4829300058752c7977e7634b0a0d00651b1",
+        "downloaded_bytes": 11865566,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "ts_mean(candle_direction(open, close), 20)"
+      },
+      {
+        "factor": "weekly_258e369f65415fec",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/4cb1421e7956a9452a5db1ca1ad659548bd9a0b70dd22cf4830fa770a401e3d4/weekly_258e369f65415fec.parquet",
+        "etag": "740ce4641cfd62b85715427208bb04cc-4",
+        "sha256": "4cb1421e7956a9452a5db1ca1ad659548bd9a0b70dd22cf4830fa770a401e3d4",
+        "downloaded_bytes": 104679867,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "ts_kurt(subtract(safe_div_null(close, pre_close), 1), 20)"
+      },
+      {
+        "factor": "weekly_2d672bb3f5f3fbd7",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/3c8db18c7b13596a84a41b58adb1c9cf454018e8f5e61598173d572538a0d737/weekly_2d672bb3f5f3fbd7.parquet",
+        "etag": "24bc1872ec52895bc0aa2abaae4c8c28-4",
+        "sha256": "3c8db18c7b13596a84a41b58adb1c9cf454018e8f5e61598173d572538a0d737",
+        "downloaded_bytes": 105683685,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "ts_decay_linear(subtract(safe_div_null(close, pre_close), 1), 20)"
+      },
+      {
+        "factor": "weekly_39dfc2717803fb78",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/53c8c6f53edbd29c29321c1959b2563ef1e61a698ab937a9466c2bdc46b6c7fe/weekly_39dfc2717803fb78.parquet",
+        "etag": "4cf3bf9824e86e509e99d682da44afe6-4",
+        "sha256": "53c8c6f53edbd29c29321c1959b2563ef1e61a698ab937a9466c2bdc46b6c7fe",
+        "downloaded_bytes": 105365086,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "safe_div_null(ts_sum(abs(subtract(close, open)), 20), add(ts_sum(subtract(high, low), 20), 1e-08))"
+      },
+      {
+        "factor": "weekly_3b228c7aa6d8f44f",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/f35e5c11d15db7bafda910bc52d22cb6d90737a283c24dba76f8a6856df0130e/weekly_3b228c7aa6d8f44f.parquet",
+        "etag": "288bb3689bab6d41b4781bce8665f75d-3",
+        "sha256": "f35e5c11d15db7bafda910bc52d22cb6d90737a283c24dba76f8a6856df0130e",
+        "downloaded_bytes": 72193110,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "rank(col('valuation.a_cap'))"
+      },
+      {
+        "factor": "weekly_3b94de18d97efb6b",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/daa508f324b6015628622860dea90a919cc08afc4ab8c43972f04948a6d0809b/weekly_3b94de18d97efb6b.parquet",
+        "etag": "7c7c48d1e8096f94935f02aa84599ac2-4",
+        "sha256": "daa508f324b6015628622860dea90a919cc08afc4ab8c43972f04948a6d0809b",
+        "downloaded_bytes": 103359672,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "multiply(turnover_acceleration(col('valuation.turnover_ratio'), 5, 20), negate(ts_return(AdjClose, 5)))"
+      }
+    ],
+    "days": 500,
+    "assets": 256,
+    "coverage_policy": "strict",
+    "retained_factor_ids": [
+      "drawdown_vol_adj_stress",
+      "ema_trend_simple",
+      "ewma_smoothness_volume",
+      "price_impact_stable_5d",
+      "weekly_0476ab492f00a3ef",
+      "weekly_050d0693faa7bfe1",
+      "weekly_051dcc55b3919c26",
+      "weekly_072f91d9a08abe49",
+      "weekly_1710780361e7a559",
+      "weekly_1ae1795d748f4dc8",
+      "weekly_23629be243c54739",
+      "weekly_258e369f65415fec",
+      "weekly_2d672bb3f5f3fbd7",
+      "weekly_39dfc2717803fb78",
+      "weekly_3b228c7aa6d8f44f",
+      "weekly_3b94de18d97efb6b"
+    ],
+    "quarantined_factors": [],
+    "train_eligible_assets": {
+      "drawdown_vol_adj_stress": 5079,
+      "ema_trend_simple": 5081,
+      "ewma_smoothness_volume": 5078,
+      "price_impact_stable_5d": 5072,
+      "weekly_0476ab492f00a3ef": 5081,
+      "weekly_050d0693faa7bfe1": 5069,
+      "weekly_051dcc55b3919c26": 5081,
+      "weekly_072f91d9a08abe49": 5081,
+      "weekly_1710780361e7a559": 5061,
+      "weekly_1ae1795d748f4dc8": 5075,
+      "weekly_23629be243c54739": 5081,
+      "weekly_258e369f65415fec": 5071,
+      "weekly_2d672bb3f5f3fbd7": 5081,
+      "weekly_39dfc2717803fb78": 5081,
+      "weekly_3b228c7aa6d8f44f": 5081,
+      "weekly_3b94de18d97efb6b": 5071
+    },
+    "manifest_uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/metadata/00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66/landing_manifest.json",
+    "max_factor_bytes": 134217728,
+    "max_batch_factor_bytes": 2147483648,
+    "asset_selection_split": "3e268f1bac7b452f741f0b934f2a0edcf88a677aa982bf2391340da25c0da9e9",
+    "asset_selection_train_days": 267,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "selection": "first eligible bound manifest factor IDs; assets selected on TRAIN coverage only",
+    "limitations": "source-declared lineage; no upstream PIT or investability certification"
+  },
+  "cohort_source_fingerprint": "048edc6bf7f2f2f653128b6f219c3d2855b654f1b53228f1dde4187f0cf5954f",
+  "cohort_factor_ids": [
+    "drawdown_vol_adj_stress",
+    "ema_trend_simple",
+    "ewma_smoothness_volume",
+    "price_impact_stable_5d",
+    "weekly_0476ab492f00a3ef",
+    "weekly_050d0693faa7bfe1",
+    "weekly_051dcc55b3919c26",
+    "weekly_072f91d9a08abe49",
+    "weekly_1710780361e7a559",
+    "weekly_1ae1795d748f4dc8",
+    "weekly_23629be243c54739",
+    "weekly_258e369f65415fec",
+    "weekly_2d672bb3f5f3fbd7",
+    "weekly_39dfc2717803fb78",
+    "weekly_3b228c7aa6d8f44f",
+    "weekly_3b94de18d97efb6b"
+  ],
+  "prefixes": {
+    "F1": {
+      "factor_ids": [
+        "drawdown_vol_adj_stress"
+      ],
+      "batch_shape": [
+        500,
+        256,
+        1
+      ],
+      "source_fingerprint_before": "50c2d2e163931d7c715e73f749037d9ba8e2137838d95af79b179512563a633d",
+      "source_fingerprint_after": "50c2d2e163931d7c715e73f749037d9ba8e2137838d95af79b179512563a633d",
+      "elapsed_seconds": 43.64744111598702,
+      "process_cumulative_peak_rss_bytes": 4270637056,
+      "selection": {
+        "drawdown_vol_adj_stress": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "2603caa9cb17f70f78bde20d6c13f589f5649b0a2df1a37f3c687f4106a7721c",
+          "train_gain": 0.014047316647178676,
+          "validation_lower_bound": -0.0002047286971480709,
+          "validation_candidate_identity": "232a58517c8135fcb4dc3317ac59d1f25aebe40f85d34e5fc86f4ab35bcf6a04",
+          "validation_coverage": 1.0,
+          "candidate_count": 118,
+          "candidate_status_counts": {
+            "ineligible": 98,
+            "train_evaluated": 20
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 52,
+            "DECAY_REFINEMENT": 6,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 2,
+            "ValueError: joint raw-relative degradation floor failed": 89
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 50,
+              "train_evaluated": 2
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 5,
+              "train_evaluated": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "ineligible": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 50
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 5
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIGN_ORIENTATION": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "EQUIVALENT",
+            "validation_raw": {
+              "rank_ic": 0.00882092711968014,
+              "rank_icir": 0.06996302554840567,
+              "sharpe": -0.1453223909142543,
+              "max_drawdown": 0.05468384054027855,
+              "turnover": 0.18806926233610244,
+              "worst_block_sharpe": -5.147644167294095
+            },
+            "validation_candidate": {
+              "rank_ic": 0.008813880733677731,
+              "rank_icir": 0.06990400802414487,
+              "sharpe": -0.1453223909142543,
+              "max_drawdown": 0.05468384054027855,
+              "turnover": 0.18806926233610244,
+              "worst_block_sharpe": -5.147644167294095
+            }
+          },
+          "candidate_ledger_sha256": "e24e05796d8abe2cd12a5065b4eabe7a09574d7efb1bf193f359bf5aa40ff526"
+        }
+      }
+    },
+    "F4": {
+      "factor_ids": [
+        "drawdown_vol_adj_stress",
+        "ema_trend_simple",
+        "ewma_smoothness_volume",
+        "price_impact_stable_5d"
+      ],
+      "batch_shape": [
+        500,
+        256,
+        4
+      ],
+      "source_fingerprint_before": "5e3ee97b001130ad27df9f0937b0c86dc69bfdc55825850b9bdc0f575512b19f",
+      "source_fingerprint_after": "5e3ee97b001130ad27df9f0937b0c86dc69bfdc55825850b9bdc0f575512b19f",
+      "elapsed_seconds": 50.663526249001734,
+      "process_cumulative_peak_rss_bytes": 4270637056,
+      "selection": {
+        "drawdown_vol_adj_stress": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "2603caa9cb17f70f78bde20d6c13f589f5649b0a2df1a37f3c687f4106a7721c",
+          "train_gain": 0.014047316647178676,
+          "validation_lower_bound": -0.0002047286971480709,
+          "validation_candidate_identity": "232a58517c8135fcb4dc3317ac59d1f25aebe40f85d34e5fc86f4ab35bcf6a04",
+          "validation_coverage": 1.0,
+          "candidate_count": 118,
+          "candidate_status_counts": {
+            "ineligible": 98,
+            "train_evaluated": 20
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 52,
+            "DECAY_REFINEMENT": 6,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 2,
+            "ValueError: joint raw-relative degradation floor failed": 89
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 50,
+              "train_evaluated": 2
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 5,
+              "train_evaluated": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "ineligible": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 50
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 5
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIGN_ORIENTATION": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "EQUIVALENT",
+            "validation_raw": {
+              "rank_ic": 0.00882092711968014,
+              "rank_icir": 0.06996302554840567,
+              "sharpe": -0.1453223909142543,
+              "max_drawdown": 0.05468384054027855,
+              "turnover": 0.18806926233610244,
+              "worst_block_sharpe": -5.147644167294095
+            },
+            "validation_candidate": {
+              "rank_ic": 0.008813880733677731,
+              "rank_icir": 0.06990400802414487,
+              "sharpe": -0.1453223909142543,
+              "max_drawdown": 0.05468384054027855,
+              "turnover": 0.18806926233610244,
+              "worst_block_sharpe": -5.147644167294095
+            }
+          },
+          "candidate_ledger_sha256": "e24e05796d8abe2cd12a5065b4eabe7a09574d7efb1bf193f359bf5aa40ff526"
+        },
+        "ema_trend_simple": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "67e6307e1816b81bcaaadc52d90f723a9973c9f9d6ad2dc105a4f259bf541f72",
+          "train_gain": 0.06702573451825045,
+          "validation_lower_bound": null,
+          "validation_candidate_identity": "f22b4770657c05ffcfa1e8f9c8b28da52ae2e39a1071f6e1e2484dc683bf33a2",
+          "validation_coverage": 1.0,
+          "candidate_count": 120,
+          "candidate_status_counts": {
+            "ineligible": 102,
+            "train_evaluated": 18
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 55,
+            "DECAY_REFINEMENT": 5,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios": 1,
+            "ValueError: insufficient common coverage or training IC": 1,
+            "ValueError: joint raw-relative degradation floor failed": 93
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 55
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 4,
+              "train_evaluated": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "ineligible": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 55
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 4
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIGN_ORIENTATION": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "DEGRADATION_FLOOR_FAILED",
+            "validation_raw": {
+              "rank_ic": 0.01514741246217872,
+              "rank_icir": 0.09452030834499031,
+              "sharpe": -1.2125904953844,
+              "max_drawdown": 0.05829333496309124,
+              "turnover": 0.0937844059653688,
+              "worst_block_sharpe": -1.7340788958060946
+            },
+            "validation_candidate": {
+              "rank_ic": 0.02050199411066939,
+              "rank_icir": 0.1293490042078311,
+              "sharpe": -0.0607550294917519,
+              "max_drawdown": 0.06151540158747317,
+              "turnover": 0.1032845861813871,
+              "worst_block_sharpe": -2.421971816815917
+            }
+          },
+          "candidate_ledger_sha256": "67fb39a5451597f66766fa364d944c37316b796807a75fb487e41e720ff5f7d5"
+        },
+        "ewma_smoothness_volume": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "3576e68e1a9e73b10d18001cbea1a3246446f7f0aaf9e0d27f49948f6a604c3b",
+          "train_gain": 0.39437824615245504,
+          "validation_lower_bound": 0.005117099978440225,
+          "validation_candidate_identity": "de578b194d6e5d4fc868cacbd3fa9dc3683473dc75476df121d97218b639150a",
+          "validation_coverage": 1.0,
+          "candidate_count": 122,
+          "candidate_status_counts": {
+            "ineligible": 95,
+            "train_evaluated": 27
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 50,
+            "DECAY_REFINEMENT": 10,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 14,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 2,
+            "ValueError: joint raw-relative degradation floor failed": 86
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 44,
+              "train_evaluated": 6
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 8,
+              "train_evaluated": 2
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 12,
+              "train_evaluated": 2
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "ineligible": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 44
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 8
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIGN_ORIENTATION": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "INCONCLUSIVE",
+            "validation_raw": {
+              "rank_ic": 0.03736000900345449,
+              "rank_icir": 0.25363123897806555,
+              "sharpe": -1.568773997326082,
+              "max_drawdown": 0.056448411464724124,
+              "turnover": 0.5379841857671903,
+              "worst_block_sharpe": -2.7134218129825025
+            },
+            "validation_candidate": {
+              "rank_ic": 0.04930356766487042,
+              "rank_icir": 0.2932277946200826,
+              "sharpe": -0.15598811337327464,
+              "max_drawdown": 0.03886123398176373,
+              "turnover": 0.13422079871884693,
+              "worst_block_sharpe": -0.81614839974038
+            }
+          },
+          "candidate_ledger_sha256": "fa9e3ed3cbde8f5cd04cd2c835805f3bf2f1b8890eda3b4db95ccc3227c6d146"
+        },
+        "price_impact_stable_5d": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "861bd169696e391f1cb87d33cda344ee42b74794a926f7cb2c67a255806f1329",
+          "train_gain": 1.161908581823398,
+          "validation_lower_bound": null,
+          "validation_candidate_identity": "e027571dd326cb4306af452a84ab85565345fbe2ac6d5a604cdf1cb38655c6cb",
+          "validation_coverage": 0.9990329989121238,
+          "candidate_count": 120,
+          "candidate_status_counts": {
+            "ineligible": 34,
+            "train_evaluated": 86
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 52,
+            "DECAY_REFINEMENT": 6,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 14,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 2,
+            "ValueError: joint raw-relative degradation floor failed": 25
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "train_evaluated": 52
+            },
+            "DECAY_REFINEMENT": {
+              "train_evaluated": 6
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 6,
+              "train_evaluated": 8
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 4,
+              "train_evaluated": 4
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "train_evaluated": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 4
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "DEGRADATION_FLOOR_FAILED",
+            "validation_raw": {
+              "rank_ic": -0.022126732411819852,
+              "rank_icir": -0.16983984764515392,
+              "sharpe": -0.6863746210087854,
+              "max_drawdown": 0.041915343563339,
+              "turnover": 0.5368262809077189,
+              "worst_block_sharpe": -1.0104595429137646
+            },
+            "validation_candidate": {
+              "rank_ic": 0.03460780565053523,
+              "rank_icir": 0.22986651194482877,
+              "sharpe": -1.3016807468324978,
+              "max_drawdown": 0.044646467965572256,
+              "turnover": 0.19672018542178146,
+              "worst_block_sharpe": -3.187661734222555
+            }
+          },
+          "candidate_ledger_sha256": "b38661b827601c9f7cd1b8729d0fe10ec42d77ca6dfc07b25152f8e57bdd7f10"
+        }
+      }
+    },
+    "F16": {
+      "factor_ids": [
+        "drawdown_vol_adj_stress",
+        "ema_trend_simple",
+        "ewma_smoothness_volume",
+        "price_impact_stable_5d",
+        "weekly_0476ab492f00a3ef",
+        "weekly_050d0693faa7bfe1",
+        "weekly_051dcc55b3919c26",
+        "weekly_072f91d9a08abe49",
+        "weekly_1710780361e7a559",
+        "weekly_1ae1795d748f4dc8",
+        "weekly_23629be243c54739",
+        "weekly_258e369f65415fec",
+        "weekly_2d672bb3f5f3fbd7",
+        "weekly_39dfc2717803fb78",
+        "weekly_3b228c7aa6d8f44f",
+        "weekly_3b94de18d97efb6b"
+      ],
+      "batch_shape": [
+        500,
+        256,
+        16
+      ],
+      "source_fingerprint_before": "048edc6bf7f2f2f653128b6f219c3d2855b654f1b53228f1dde4187f0cf5954f",
+      "source_fingerprint_after": "048edc6bf7f2f2f653128b6f219c3d2855b654f1b53228f1dde4187f0cf5954f",
+      "elapsed_seconds": 185.3184174830094,
+      "process_cumulative_peak_rss_bytes": 4270637056,
+      "selection": {
+        "drawdown_vol_adj_stress": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "2603caa9cb17f70f78bde20d6c13f589f5649b0a2df1a37f3c687f4106a7721c",
+          "train_gain": 0.014047316647178676,
+          "validation_lower_bound": -0.0002047286971480709,
+          "validation_candidate_identity": "232a58517c8135fcb4dc3317ac59d1f25aebe40f85d34e5fc86f4ab35bcf6a04",
+          "validation_coverage": 1.0,
+          "candidate_count": 118,
+          "candidate_status_counts": {
+            "ineligible": 98,
+            "train_evaluated": 20
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 52,
+            "DECAY_REFINEMENT": 6,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 2,
+            "ValueError: joint raw-relative degradation floor failed": 89
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 50,
+              "train_evaluated": 2
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 5,
+              "train_evaluated": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "ineligible": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 50
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 5
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIGN_ORIENTATION": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "EQUIVALENT",
+            "validation_raw": {
+              "rank_ic": 0.00882092711968014,
+              "rank_icir": 0.06996302554840567,
+              "sharpe": -0.1453223909142543,
+              "max_drawdown": 0.05468384054027855,
+              "turnover": 0.18806926233610244,
+              "worst_block_sharpe": -5.147644167294095
+            },
+            "validation_candidate": {
+              "rank_ic": 0.008813880733677731,
+              "rank_icir": 0.06990400802414487,
+              "sharpe": -0.1453223909142543,
+              "max_drawdown": 0.05468384054027855,
+              "turnover": 0.18806926233610244,
+              "worst_block_sharpe": -5.147644167294095
+            }
+          },
+          "candidate_ledger_sha256": "e24e05796d8abe2cd12a5065b4eabe7a09574d7efb1bf193f359bf5aa40ff526"
+        },
+        "ema_trend_simple": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "67e6307e1816b81bcaaadc52d90f723a9973c9f9d6ad2dc105a4f259bf541f72",
+          "train_gain": 0.06702573451825045,
+          "validation_lower_bound": null,
+          "validation_candidate_identity": "f22b4770657c05ffcfa1e8f9c8b28da52ae2e39a1071f6e1e2484dc683bf33a2",
+          "validation_coverage": 1.0,
+          "candidate_count": 120,
+          "candidate_status_counts": {
+            "ineligible": 102,
+            "train_evaluated": 18
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 55,
+            "DECAY_REFINEMENT": 5,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios": 1,
+            "ValueError: insufficient common coverage or training IC": 1,
+            "ValueError: joint raw-relative degradation floor failed": 93
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 55
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 4,
+              "train_evaluated": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "ineligible": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 55
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 4
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIGN_ORIENTATION": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "DEGRADATION_FLOOR_FAILED",
+            "validation_raw": {
+              "rank_ic": 0.01514741246217872,
+              "rank_icir": 0.09452030834499031,
+              "sharpe": -1.2125904953844,
+              "max_drawdown": 0.05829333496309124,
+              "turnover": 0.0937844059653688,
+              "worst_block_sharpe": -1.7340788958060946
+            },
+            "validation_candidate": {
+              "rank_ic": 0.02050199411066939,
+              "rank_icir": 0.1293490042078311,
+              "sharpe": -0.0607550294917519,
+              "max_drawdown": 0.06151540158747317,
+              "turnover": 0.1032845861813871,
+              "worst_block_sharpe": -2.421971816815917
+            }
+          },
+          "candidate_ledger_sha256": "67fb39a5451597f66766fa364d944c37316b796807a75fb487e41e720ff5f7d5"
+        },
+        "ewma_smoothness_volume": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "3576e68e1a9e73b10d18001cbea1a3246446f7f0aaf9e0d27f49948f6a604c3b",
+          "train_gain": 0.39437824615245504,
+          "validation_lower_bound": 0.005117099978440225,
+          "validation_candidate_identity": "de578b194d6e5d4fc868cacbd3fa9dc3683473dc75476df121d97218b639150a",
+          "validation_coverage": 1.0,
+          "candidate_count": 122,
+          "candidate_status_counts": {
+            "ineligible": 95,
+            "train_evaluated": 27
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 50,
+            "DECAY_REFINEMENT": 10,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 14,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 2,
+            "ValueError: joint raw-relative degradation floor failed": 86
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 44,
+              "train_evaluated": 6
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 8,
+              "train_evaluated": 2
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 12,
+              "train_evaluated": 2
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "ineligible": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 44
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 8
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIGN_ORIENTATION": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "INCONCLUSIVE",
+            "validation_raw": {
+              "rank_ic": 0.03736000900345449,
+              "rank_icir": 0.25363123897806555,
+              "sharpe": -1.568773997326082,
+              "max_drawdown": 0.056448411464724124,
+              "turnover": 0.5379841857671903,
+              "worst_block_sharpe": -2.7134218129825025
+            },
+            "validation_candidate": {
+              "rank_ic": 0.04930356766487042,
+              "rank_icir": 0.2932277946200826,
+              "sharpe": -0.15598811337327464,
+              "max_drawdown": 0.03886123398176373,
+              "turnover": 0.13422079871884693,
+              "worst_block_sharpe": -0.81614839974038
+            }
+          },
+          "candidate_ledger_sha256": "fa9e3ed3cbde8f5cd04cd2c835805f3bf2f1b8890eda3b4db95ccc3227c6d146"
+        },
+        "price_impact_stable_5d": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "861bd169696e391f1cb87d33cda344ee42b74794a926f7cb2c67a255806f1329",
+          "train_gain": 1.161908581823398,
+          "validation_lower_bound": null,
+          "validation_candidate_identity": "e027571dd326cb4306af452a84ab85565345fbe2ac6d5a604cdf1cb38655c6cb",
+          "validation_coverage": 0.9990329989121238,
+          "candidate_count": 120,
+          "candidate_status_counts": {
+            "ineligible": 34,
+            "train_evaluated": 86
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 52,
+            "DECAY_REFINEMENT": 6,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 14,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 2,
+            "ValueError: joint raw-relative degradation floor failed": 25
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "train_evaluated": 52
+            },
+            "DECAY_REFINEMENT": {
+              "train_evaluated": 6
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 6,
+              "train_evaluated": 8
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 4,
+              "train_evaluated": 4
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "train_evaluated": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 4
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "DEGRADATION_FLOOR_FAILED",
+            "validation_raw": {
+              "rank_ic": -0.022126732411819852,
+              "rank_icir": -0.16983984764515392,
+              "sharpe": -0.6863746210087854,
+              "max_drawdown": 0.041915343563339,
+              "turnover": 0.5368262809077189,
+              "worst_block_sharpe": -1.0104595429137646
+            },
+            "validation_candidate": {
+              "rank_ic": 0.03460780565053523,
+              "rank_icir": 0.22986651194482877,
+              "sharpe": -1.3016807468324978,
+              "max_drawdown": 0.044646467965572256,
+              "turnover": 0.19672018542178146,
+              "worst_block_sharpe": -3.187661734222555
+            }
+          },
+          "candidate_ledger_sha256": "b38661b827601c9f7cd1b8729d0fe10ec42d77ca6dfc07b25152f8e57bdd7f10"
+        },
+        "weekly_0476ab492f00a3ef": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "232aa3ebff4b4a2fca262e18c0dd9e754c140deac8296d6314a8777b724aba26",
+          "train_gain": 0.3286091761750224,
+          "validation_lower_bound": null,
+          "validation_candidate_identity": "7e6ce05086b8a53d0a16844d5f5ce668aa4fb43bbdf5e1d1011d4bba2152ec83",
+          "validation_coverage": 1.0,
+          "candidate_count": 120,
+          "candidate_status_counts": {
+            "ineligible": 75,
+            "train_evaluated": 45
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 52,
+            "DECAY_REFINEMENT": 6,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 14,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 3,
+            "ValueError: joint raw-relative degradation floor failed": 65
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 33,
+              "train_evaluated": 19
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 5,
+              "train_evaluated": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 6,
+              "train_evaluated": 8
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "ineligible": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 33
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 5
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: insufficient common coverage or training IC": 1,
+              "ValueError: joint raw-relative degradation floor failed": 2
+            },
+            "SIGN_ORIENTATION": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "DEGRADATION_FLOOR_FAILED",
+            "validation_raw": {
+              "rank_ic": 0.04389891981994437,
+              "rank_icir": 0.26430360658807445,
+              "sharpe": -0.865708907672135,
+              "max_drawdown": 0.06379739331684232,
+              "turnover": 0.19227304574116702,
+              "worst_block_sharpe": -2.91355311223715
+            },
+            "validation_candidate": {
+              "rank_ic": 0.000529990381313488,
+              "rank_icir": 0.005903800921071617,
+              "sharpe": -2.7158670002701197,
+              "max_drawdown": 0.0564230282747209,
+              "turnover": 0.33030119264200525,
+              "worst_block_sharpe": -4.135481566600124
+            }
+          },
+          "candidate_ledger_sha256": "c7a4e05bbab35d6f77c3c5a8723b36597c983921a1e96c24d5ac19f837269c8b"
+        },
+        "weekly_050d0693faa7bfe1": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "5914c09c72613cd187755f36fb34e5141dd0e422c0a65febd7b0ca97cceef6c1",
+          "train_gain": 0.8425436531347466,
+          "validation_lower_bound": null,
+          "validation_candidate_identity": "bb347df5c433b9ddbe2dd0b060636b8d614f38ee5a8b9a5289d062082a88ba20",
+          "validation_coverage": 1.0,
+          "candidate_count": 116,
+          "candidate_status_counts": {
+            "ineligible": 70,
+            "train_evaluated": 46
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 52,
+            "DECAY_REFINEMENT": 6,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 6,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 1,
+            "ValueError: joint raw-relative degradation floor failed": 62
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 26,
+              "train_evaluated": 26
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 3,
+              "train_evaluated": 3
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 4,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "ineligible": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 26
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 4
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIGN_ORIENTATION": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "DEGRADATION_FLOOR_FAILED",
+            "validation_raw": {
+              "rank_ic": 0.03238983066217326,
+              "rank_icir": 0.19578524691286248,
+              "sharpe": -2.300214338024157,
+              "max_drawdown": 0.07393613270957475,
+              "turnover": 0.4152737463717345,
+              "worst_block_sharpe": -2.5084755116493946
+            },
+            "validation_candidate": {
+              "rank_ic": 0.015591779761818246,
+              "rank_icir": 0.1168944309716549,
+              "sharpe": -0.2507500520383329,
+              "max_drawdown": 0.0687952542921655,
+              "turnover": 0.1430000209474273,
+              "worst_block_sharpe": -2.489498631293827
+            }
+          },
+          "candidate_ledger_sha256": "5b56291efe66c280782a14fef70f6f2b18fe815a990acc2f0dc1715d493455a9"
+        },
+        "weekly_051dcc55b3919c26": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "d7ef3329acdb5464624938e8cbea7b34cea59823f80de74dc9e30a1f747c1174",
+          "train_gain": 0.3852990271120908,
+          "validation_lower_bound": null,
+          "validation_candidate_identity": "08f8d740baca9e67e9dfcbd410f6f7b82eac40da680200fd354d382e54cddaaf",
+          "validation_coverage": 1.0,
+          "candidate_count": 118,
+          "candidate_status_counts": {
+            "ineligible": 64,
+            "train_evaluated": 54
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 52,
+            "DECAY_REFINEMENT": 6,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios": 1,
+            "ValueError: insufficient common coverage or training IC": 1,
+            "ValueError: joint raw-relative degradation floor failed": 55
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 29,
+              "train_evaluated": 23
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 4,
+              "train_evaluated": 2
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "ineligible": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "train_evaluated": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 29
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 4
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIGN_ORIENTATION": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios": 1
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "DEGRADATION_FLOOR_FAILED",
+            "validation_raw": {
+              "rank_ic": 0.014047104490446095,
+              "rank_icir": 0.2037670266136536,
+              "sharpe": 3.1246596150273622,
+              "max_drawdown": 0.008847674184879556,
+              "turnover": 0.021519367430687615,
+              "worst_block_sharpe": 1.8875249167070685
+            },
+            "validation_candidate": {
+              "rank_ic": 0.003683388616964642,
+              "rank_icir": 0.03858365830131848,
+              "sharpe": -2.2252985103718483,
+              "max_drawdown": 0.04207171352181673,
+              "turnover": 0.038734861375237704,
+              "worst_block_sharpe": -3.7177843604828325
+            }
+          },
+          "candidate_ledger_sha256": "1b610e0ef302451deb0a5f4069f3c7301efd8b392b960af891630d20968c9f8f"
+        },
+        "weekly_072f91d9a08abe49": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "57232ff04e8fd343611d96c5f053ea0835aa9f3f19c05f7522bb2d927a54c01a",
+          "train_gain": 0.5109818284406674,
+          "validation_lower_bound": null,
+          "validation_candidate_identity": "1c7c9f08e9205b67cbb03d5974533c06e14db663ff7f6cee0db7943644b2894b",
+          "validation_coverage": 1.0,
+          "candidate_count": 120,
+          "candidate_status_counts": {
+            "ineligible": 18,
+            "train_evaluated": 102
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 55,
+            "DECAY_REFINEMENT": 7,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 6,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 2,
+            "ValueError: joint raw-relative degradation floor failed": 9
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "train_evaluated": 55
+            },
+            "DECAY_REFINEMENT": {
+              "train_evaluated": 7
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "train_evaluated": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "train_evaluated": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "train_evaluated": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "DEGRADATION_FLOOR_FAILED",
+            "validation_raw": {
+              "rank_ic": 0.00552592916300779,
+              "rank_icir": 0.039996822923930093,
+              "sharpe": 1.2610780862155369,
+              "max_drawdown": 0.026585841290841957,
+              "turnover": 0.011310179161245118,
+              "worst_block_sharpe": -1.5963749544596821
+            },
+            "validation_candidate": {
+              "rank_ic": -0.005224936352610253,
+              "rank_icir": -0.05637876738131207,
+              "sharpe": -1.8904874465537158,
+              "max_drawdown": 0.04633856435957883,
+              "turnover": 0.011910719647682911,
+              "worst_block_sharpe": -2.6023036958359276
+            }
+          },
+          "candidate_ledger_sha256": "0ca8cdc4dd7a1a0f3360bbaadf767b303c10ee5620a92c53202d6d0877d6a449"
+        },
+        "weekly_1710780361e7a559": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "8197f4b62372272938d620f2c223116875aeb1af3aca1733ed8e230675004b0f",
+          "train_gain": 1.162458513528621,
+          "validation_lower_bound": null,
+          "validation_candidate_identity": "efb8e2a57d36a930077b44314d7f9265aab0aeaaca86d84913e44792cf64047e",
+          "validation_coverage": 1.0,
+          "candidate_count": 116,
+          "candidate_status_counts": {
+            "ineligible": 39,
+            "train_evaluated": 77
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 54,
+            "DECAY_REFINEMENT": 4,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 6,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 1,
+            "ValueError: joint raw-relative degradation floor failed": 31
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "train_evaluated": 54
+            },
+            "DECAY_REFINEMENT": {
+              "train_evaluated": 4
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 4,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "train_evaluated": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "train_evaluated": 2
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 4
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "DEGRADATION_FLOOR_FAILED",
+            "validation_raw": {
+              "rank_ic": 0.006086393402581121,
+              "rank_icir": 0.0457371016786886,
+              "sharpe": -1.7255791026178218,
+              "max_drawdown": 0.05376128954319894,
+              "turnover": 0.49276505717891195,
+              "worst_block_sharpe": -2.6780570914854755
+            },
+            "validation_candidate": {
+              "rank_ic": -0.016410554714732226,
+              "rank_icir": -0.12396850833663738,
+              "sharpe": -1.4726013680103538,
+              "max_drawdown": 0.049166597804849346,
+              "turnover": 0.1369526691669561,
+              "worst_block_sharpe": -2.6208600689250776
+            }
+          },
+          "candidate_ledger_sha256": "4c1dc272004a10c08b1151b5606dab26935234ab16cb4e84795901e72b5ae1be"
+        },
+        "weekly_1ae1795d748f4dc8": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "0b450116b9f6814800f756f50f6d00ad74adc040e8fe86b489bfdabd8668ed5e",
+          "train_gain": 1.3496243103528296,
+          "validation_lower_bound": null,
+          "validation_candidate_identity": "7047ffe1d90b75fcfbc6b739a163f8c3aab7945dc7a8403c644246ba30bef739",
+          "validation_coverage": 1.0,
+          "candidate_count": 126,
+          "candidate_status_counts": {
+            "ineligible": 41,
+            "train_evaluated": 85
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 55,
+            "DECAY_REFINEMENT": 9,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 14,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 1,
+            "ValueError: joint raw-relative degradation floor failed": 33
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "train_evaluated": 55
+            },
+            "DECAY_REFINEMENT": {
+              "train_evaluated": 9
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 12,
+              "train_evaluated": 2
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "train_evaluated": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "train_evaluated": 2
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "DEGRADATION_FLOOR_FAILED",
+            "validation_raw": {
+              "rank_ic": 0.000577544047822817,
+              "rank_icir": 0.0037323311250971455,
+              "sharpe": 0.8107434256332382,
+              "max_drawdown": 0.043855139467618716,
+              "turnover": 0.37543789410469414,
+              "worst_block_sharpe": -0.5471754433934184
+            },
+            "validation_candidate": {
+              "rank_ic": -0.000577544047822817,
+              "rank_icir": -0.0037323311250971455,
+              "sharpe": -3.005222012994478,
+              "max_drawdown": 0.10072000915589396,
+              "turnover": 0.37523771394254823,
+              "worst_block_sharpe": -5.486016122844979
+            }
+          },
+          "candidate_ledger_sha256": "ecc5c9208120c083d5cfb97c5278ace271b7560378d92602384869e9890592c6"
+        },
+        "weekly_23629be243c54739": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "f74099d344503d1ebcabedffb1782792a676c109d6943923f1ca3464ecf60258",
+          "train_gain": 0.8955549236108965,
+          "validation_lower_bound": -1.0057560149801774,
+          "validation_candidate_identity": "28ef04e932b34af3d767d38123828d6ea8c1304e990c7f1fbf303bc9ab72f4ce",
+          "validation_coverage": 1.0,
+          "candidate_count": 118,
+          "candidate_status_counts": {
+            "ineligible": 51,
+            "train_evaluated": 67
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 53,
+            "DECAY_REFINEMENT": 5,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 1,
+            "ValueError: joint raw-relative degradation floor failed": 43
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 9,
+              "train_evaluated": 44
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 2,
+              "train_evaluated": 3
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 5,
+              "train_evaluated": 3
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "train_evaluated": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "train_evaluated": 2
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 9
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 2
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 5
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "TRADE_OFF",
+            "validation_raw": {
+              "rank_ic": -0.005364684304382399,
+              "rank_icir": -0.04412389172605422,
+              "sharpe": -1.992943576366588,
+              "max_drawdown": 0.06104365643080675,
+              "turnover": 0.45240398841387425,
+              "worst_block_sharpe": -5.067642455231311
+            },
+            "validation_candidate": {
+              "rank_ic": 0.005364684304382399,
+              "rank_icir": 0.04412389172605422,
+              "sharpe": -1.7158652070769254,
+              "max_drawdown": 0.06344953501079993,
+              "turnover": 0.46254709660992877,
+              "worst_block_sharpe": -2.580564103459868
+            }
+          },
+          "candidate_ledger_sha256": "e87ffd3940c2cc907a653c17001810bf6d9bf73bc4987c67b0e8e99d958d319d"
+        },
+        "weekly_258e369f65415fec": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "a74c7e2c24e5f6f4735522b6bbd9695c8ca20208e66220e7c24c9605c32dc6fd",
+          "train_gain": 0.6412306177485194,
+          "validation_lower_bound": -0.3758940662899175,
+          "validation_candidate_identity": "d198fa3bc1bb9f909d27a8d350139cd61bee499ce9b5285f30cd168aaaa47344",
+          "validation_coverage": 1.0,
+          "candidate_count": 120,
+          "candidate_status_counts": {
+            "ineligible": 72,
+            "train_evaluated": 48
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 52,
+            "DECAY_REFINEMENT": 6,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 14,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 1,
+            "ValueError: joint raw-relative degradation floor failed": 64
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 25,
+              "train_evaluated": 27
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 4,
+              "train_evaluated": 2
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 14
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 2,
+              "train_evaluated": 2
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "ineligible": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "train_evaluated": 2
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 25
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 4
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 14
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 2
+            },
+            "SIGN_ORIENTATION": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "TRADE_OFF",
+            "validation_raw": {
+              "rank_ic": -0.023441262353306035,
+              "rank_icir": -0.27436960533669086,
+              "sharpe": -2.5179019049201172,
+              "max_drawdown": 0.06450960317965228,
+              "turnover": 0.3368031228105293,
+              "worst_block_sharpe": -5.192697391862063
+            },
+            "validation_candidate": {
+              "rank_ic": -0.010864790622042495,
+              "rank_icir": -0.13243782443621588,
+              "sharpe": 0.04167834616844374,
+              "max_drawdown": 0.05479407300943099,
+              "turnover": 0.22113383528050493,
+              "worst_block_sharpe": -1.404884368591815
+            }
+          },
+          "candidate_ledger_sha256": "ff8dbfee1909a0d15640797347c893b048bab8322245b61706cddee8b47d5236"
+        },
+        "weekly_2d672bb3f5f3fbd7": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "d9d69a180a52f5afd38d70f0df8dc7227741c33e6348f14627eb556051180825",
+          "train_gain": 1.4553092651632284,
+          "validation_lower_bound": -0.8802393254435813,
+          "validation_candidate_identity": "41598d4ab6f35dc08ece6cc65f5d808c9a376b29a0361cdc98c914f125d84c66",
+          "validation_coverage": 1.0,
+          "candidate_count": 124,
+          "candidate_status_counts": {
+            "ineligible": 37,
+            "train_evaluated": 87
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 58,
+            "DECAY_REFINEMENT": 6,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 1,
+            "ValueError: joint raw-relative degradation floor failed": 29
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 1,
+              "train_evaluated": 57
+            },
+            "DECAY_REFINEMENT": {
+              "train_evaluated": 6
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 10,
+              "train_evaluated": 2
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 2,
+              "train_evaluated": 2
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "train_evaluated": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "train_evaluated": 2
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 10,
+              "train_evaluated": 2
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 10
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 2
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 10
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "TRADE_OFF",
+            "validation_raw": {
+              "rank_ic": -0.01696114368064297,
+              "rank_icir": -0.10731960138795883,
+              "sharpe": -1.291026096815816,
+              "max_drawdown": 0.08741324127352755,
+              "turnover": 0.3854469022119907,
+              "worst_block_sharpe": -1.7763846394509126
+            },
+            "validation_candidate": {
+              "rank_ic": 0.01682920735566896,
+              "rank_icir": 0.11343769067175552,
+              "sharpe": -1.1429659897642674,
+              "max_drawdown": 0.045780149669873316,
+              "turnover": 0.18146331698528673,
+              "worst_block_sharpe": -1.758675404653824
+            }
+          },
+          "candidate_ledger_sha256": "77d2171c8b298e611e91d032e512403a1fb2cc0131f976e04b8ffdcdf2a678a2"
+        },
+        "weekly_39dfc2717803fb78": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "55e86904311df9ae70a0e59c6e24798b6d41bd11e23ff679f04004f04e608529",
+          "train_gain": 1.0690123006284449,
+          "validation_lower_bound": -0.1941068173308987,
+          "validation_candidate_identity": "8eb70de5df699c3ee6ed3349247260e44e91a746701925b43446bf7257e428c4",
+          "validation_coverage": 1.0,
+          "candidate_count": 118,
+          "candidate_status_counts": {
+            "ineligible": 39,
+            "train_evaluated": 79
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 52,
+            "DECAY_REFINEMENT": 6,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "ValueError: insufficient common coverage or training IC": 2,
+            "ValueError: joint raw-relative degradation floor failed": 30
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "train_evaluated": 52
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 1,
+              "train_evaluated": 5
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 10,
+              "train_evaluated": 2
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 4,
+              "train_evaluated": 4
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "train_evaluated": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 10
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 4
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "TRADE_OFF",
+            "validation_raw": {
+              "rank_ic": -0.024075595424024675,
+              "rank_icir": -0.26809253406945505,
+              "sharpe": -3.3379161584650916,
+              "max_drawdown": 0.06931194592874974,
+              "turnover": 0.3762386147532779,
+              "worst_block_sharpe": -4.906304148950833
+            },
+            "validation_candidate": {
+              "rank_ic": 0.029059905202129095,
+              "rank_icir": 0.22563679700691425,
+              "sharpe": 3.1965715884876205,
+              "max_drawdown": 0.04407071573213336,
+              "turnover": 0.07276548894004602,
+              "worst_block_sharpe": 0.2102816890893274
+            }
+          },
+          "candidate_ledger_sha256": "0ac961a61f3c4e9512580b13021f7d41d8db0113034611732b1b7ffe66f85ed1"
+        },
+        "weekly_3b228c7aa6d8f44f": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "8150c17fb5c11d6bef062220045b2a3208ee0e5af04475db683bea0e77a9b4f6",
+          "train_gain": 0.4587310465536193,
+          "validation_lower_bound": null,
+          "validation_candidate_identity": "54efc89437ea69c7e150696c677ac917ec50e3506629edb45bee18e67303f917",
+          "validation_coverage": 1.0,
+          "candidate_count": 118,
+          "candidate_status_counts": {
+            "ineligible": 20,
+            "train_evaluated": 98
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 51,
+            "DECAY_REFINEMENT": 7,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 6,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 14,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "JointMetricsUnavailable: missing or nonfinite joint metrics cannot be imputed": 4,
+            "ValueError: insufficient common coverage or training IC": 3,
+            "ValueError: joint raw-relative degradation floor failed": 6
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "train_evaluated": 51
+            },
+            "DECAY_REFINEMENT": {
+              "train_evaluated": 7
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "train_evaluated": 12
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "train_evaluated": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 2,
+              "train_evaluated": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "JointMetricsUnavailable: missing or nonfinite joint metrics cannot be imputed": 4,
+              "ValueError: joint raw-relative degradation floor failed": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: insufficient common coverage or training IC": 1,
+              "ValueError: joint raw-relative degradation floor failed": 2
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 2
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "DEGRADATION_FLOOR_FAILED",
+            "validation_raw": {
+              "rank_ic": 0.010369932861559027,
+              "rank_icir": 0.06953387247319594,
+              "sharpe": 0.3729165373443312,
+              "max_drawdown": 0.021649204652829754,
+              "turnover": 0.010509458512661394,
+              "worst_block_sharpe": -1.0126356456552614
+            },
+            "validation_candidate": {
+              "rank_ic": -0.013099801803835912,
+              "rank_icir": -0.08960011104535875,
+              "sharpe": -0.6065206402420746,
+              "max_drawdown": 0.03908214461052073,
+              "turnover": 0.010509458512661394,
+              "worst_block_sharpe": -2.4195098730354108
+            }
+          },
+          "candidate_ledger_sha256": "b5fe44b3fd6391ea9c946c6d38c6b15ddeb662e71a7320e6f6e12a5d2d4b9b73"
+        },
+        "weekly_3b94de18d97efb6b": {
+          "status": "raw_retained",
+          "selected_family": "NO_OP_RAW",
+          "reason": "TRAIN winner not confirmed on VALIDATION; retained RAW without retry",
+          "plan_identity": "36a6edc2bfa414f78cdbc8834c8ab555e6854bba75653ece51da9a555656e664",
+          "train_gain": 0.8623150786183107,
+          "validation_lower_bound": -0.5548170171488711,
+          "validation_candidate_identity": "9f1c31a4af894799072a940d80e68246206bfa2e95bdc5e4e9919c7b626df350",
+          "validation_coverage": 1.0,
+          "candidate_count": 118,
+          "candidate_status_counts": {
+            "ineligible": 68,
+            "train_evaluated": 50
+          },
+          "candidate_family_counts": {
+            "ABANDON": 1,
+            "CAUSAL_SMOOTHING": 52,
+            "DECAY_REFINEMENT": 6,
+            "INDUSTRY_NEUTRALIZATION": 1,
+            "INVERTED_U_REPAIR": 12,
+            "LOW_DOF_INTERACTION": 1,
+            "MISSINGNESS_FRESHNESS": 4,
+            "OPERATOR_SWAP": 1,
+            "REPRESENTATION_RANK": 8,
+            "REPRESENTATION_ZSCORE": 4,
+            "ROBUST_OUTLIER": 1,
+            "ROBUST_SCALE": 6,
+            "SIGN_ORIENTATION": 1,
+            "SIZE_NEUTRALIZATION": 1,
+            "STYLE_NEUTRALIZATION": 1,
+            "TAIL_HINGE": 2,
+            "TAIL_SATURATION": 3,
+            "U_SHAPE_REPAIR": 12,
+            "WINDOW_REFINEMENT": 1
+          },
+          "ineligible_reason_counts": {
+            "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1,
+            "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1,
+            "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1,
+            "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1,
+            "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios": 1,
+            "ValueError: insufficient common coverage or training IC": 1,
+            "ValueError: joint raw-relative degradation floor failed": 59
+          },
+          "candidate_family_status_counts": {
+            "ABANDON": {
+              "ineligible": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ineligible": 25,
+              "train_evaluated": 27
+            },
+            "DECAY_REFINEMENT": {
+              "ineligible": 4,
+              "train_evaluated": 2
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ineligible": 8,
+              "train_evaluated": 4
+            },
+            "LOW_DOF_INTERACTION": {
+              "ineligible": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ineligible": 1,
+              "train_evaluated": 3
+            },
+            "OPERATOR_SWAP": {
+              "ineligible": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ineligible": 6,
+              "train_evaluated": 2
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ineligible": 3,
+              "train_evaluated": 1
+            },
+            "ROBUST_OUTLIER": {
+              "train_evaluated": 1
+            },
+            "ROBUST_SCALE": {
+              "train_evaluated": 6
+            },
+            "SIGN_ORIENTATION": {
+              "ineligible": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "ineligible": 1
+            },
+            "TAIL_HINGE": {
+              "ineligible": 1,
+              "train_evaluated": 1
+            },
+            "TAIL_SATURATION": {
+              "train_evaluated": 3
+            },
+            "U_SHAPE_REPAIR": {
+              "ineligible": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "ineligible": 1
+            }
+          },
+          "ineligible_family_reason_counts": {
+            "ABANDON": {
+              "IneligibleValueRepair: ABANDON has no executable value-level mapping": 1
+            },
+            "CAUSAL_SMOOTHING": {
+              "ValueError: joint raw-relative degradation floor failed": 25
+            },
+            "DECAY_REFINEMENT": {
+              "ValueError: joint raw-relative degradation floor failed": 4
+            },
+            "INDUSTRY_NEUTRALIZATION": {
+              "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "INVERTED_U_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 8
+            },
+            "LOW_DOF_INTERACTION": {
+              "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation": 1
+            },
+            "MISSINGNESS_FRESHNESS": {
+              "ValueError: insufficient common coverage or training IC": 1
+            },
+            "OPERATOR_SWAP": {
+              "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation": 1
+            },
+            "REPRESENTATION_RANK": {
+              "ValueError: joint raw-relative degradation floor failed": 6
+            },
+            "REPRESENTATION_ZSCORE": {
+              "ValueError: joint raw-relative degradation floor failed": 3
+            },
+            "SIGN_ORIENTATION": {
+              "ValueError: joint raw-relative degradation floor failed": 1
+            },
+            "SIZE_NEUTRALIZATION": {
+              "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "STYLE_NEUTRALIZATION": {
+              "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel": 1
+            },
+            "TAIL_HINGE": {
+              "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios": 1
+            },
+            "U_SHAPE_REPAIR": {
+              "ValueError: joint raw-relative degradation floor failed": 12
+            },
+            "WINDOW_REFINEMENT": {
+              "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation": 1
+            }
+          },
+          "joint_validation": {
+            "objective": "joint",
+            "policy": "joint.v1",
+            "comparison_status": "TRADE_OFF",
+            "validation_raw": {
+              "rank_ic": 0.025219594199090114,
+              "rank_icir": 0.25553775016324526,
+              "sharpe": 0.32994506015055575,
+              "max_drawdown": 0.05267472042717891,
+              "turnover": 0.7437693924532077,
+              "worst_block_sharpe": -3.296522467474649
+            },
+            "validation_candidate": {
+              "rank_ic": 0.038712177986058846,
+              "rank_icir": 0.3105633959526583,
+              "sharpe": 1.3010617705708114,
+              "max_drawdown": 0.026565334757846004,
+              "turnover": 0.13662296066459811,
+              "worst_block_sharpe": 0.5046769803429667
+            }
+          },
+          "candidate_ledger_sha256": "bcf88d057c7ffa3076fe6daff975264afd1e06c6bddf170545f80c512dde4436"
+        }
+      }
+    }
+  },
+  "selection_consistency": {
+    "all_matched": true,
+    "compared_factor_count": 4,
+    "comparison_count": 5,
+    "factors": {
+      "drawdown_vol_adj_stress": {
+        "compared_prefixes": [
+          "F1",
+          "F4",
+          "F16"
+        ],
+        "comparison_count": 2,
+        "matched": true,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "ema_trend_simple": {
+        "compared_prefixes": [
+          "F4",
+          "F16"
+        ],
+        "comparison_count": 1,
+        "matched": true,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "ewma_smoothness_volume": {
+        "compared_prefixes": [
+          "F4",
+          "F16"
+        ],
+        "comparison_count": 1,
+        "matched": true,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "price_impact_stable_5d": {
+        "compared_prefixes": [
+          "F4",
+          "F16"
+        ],
+        "comparison_count": 1,
+        "matched": true,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "weekly_0476ab492f00a3ef": {
+        "compared_prefixes": [
+          "F16"
+        ],
+        "comparison_count": 0,
+        "matched": null,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "weekly_050d0693faa7bfe1": {
+        "compared_prefixes": [
+          "F16"
+        ],
+        "comparison_count": 0,
+        "matched": null,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "weekly_051dcc55b3919c26": {
+        "compared_prefixes": [
+          "F16"
+        ],
+        "comparison_count": 0,
+        "matched": null,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "weekly_072f91d9a08abe49": {
+        "compared_prefixes": [
+          "F16"
+        ],
+        "comparison_count": 0,
+        "matched": null,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "weekly_1710780361e7a559": {
+        "compared_prefixes": [
+          "F16"
+        ],
+        "comparison_count": 0,
+        "matched": null,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "weekly_1ae1795d748f4dc8": {
+        "compared_prefixes": [
+          "F16"
+        ],
+        "comparison_count": 0,
+        "matched": null,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "weekly_23629be243c54739": {
+        "compared_prefixes": [
+          "F16"
+        ],
+        "comparison_count": 0,
+        "matched": null,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "weekly_258e369f65415fec": {
+        "compared_prefixes": [
+          "F16"
+        ],
+        "comparison_count": 0,
+        "matched": null,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "weekly_2d672bb3f5f3fbd7": {
+        "compared_prefixes": [
+          "F16"
+        ],
+        "comparison_count": 0,
+        "matched": null,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "weekly_39dfc2717803fb78": {
+        "compared_prefixes": [
+          "F16"
+        ],
+        "comparison_count": 0,
+        "matched": null,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "weekly_3b228c7aa6d8f44f": {
+        "compared_prefixes": [
+          "F16"
+        ],
+        "comparison_count": 0,
+        "matched": null,
+        "differing_fields": [],
+        "differences": {}
+      },
+      "weekly_3b94de18d97efb6b": {
+        "compared_prefixes": [
+          "F16"
+        ],
+        "comparison_count": 0,
+        "matched": null,
+        "differing_fields": [],
+        "differences": {}
+      }
+    }
+  },
+  "split": {
+    "identity": "3e268f1bac7b452f741f0b934f2a0edcf88a677aa982bf2391340da25c0da9e9",
+    "train_days": 267,
+    "validation_days_reserved": 97,
+    "test_days_reserved": 100
+  },
+  "test_evaluated": false,
+  "comparison_semantics": "F1/F4/F16 nested prefixes of one strict F16 cohort; same axes, dates, assets, labels, split, and per-factor lineage",
+  "limits": {
+    "loaded_cohort_bytes": 1442828276,
+    "factor_count": 16,
+    "asset_count": 256,
+    "date_count": 500,
+    "max_factor_object_bytes": 134217728,
+    "max_batch_factor_bytes": 2147483648,
+    "declared_panel_array_budget_bytes": 536870912,
+    "minimum_available_memory_admission_bytes": 17179869184,
+    "minimum_disk_headroom_bytes": 2147483648,
+    "report_limit_bytes": 1048576
+  }
+}

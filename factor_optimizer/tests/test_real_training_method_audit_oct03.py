@@ -56,6 +56,12 @@ def test_server_c_environment_guard_is_fail_closed():
 
 
 def test_resource_gate_rejects_low_memory_or_disk(monkeypatch, tmp_path):
+    with pytest.raises(ValueError):
+        AUDIT.check_resource_headroom(memory_bytes=16*1024**3, cache_root=tmp_path,
+                                      minimum_memory_bytes=True)
+    with pytest.raises(ValueError):
+        AUDIT.check_resource_headroom(memory_bytes=16*1024**3, cache_root=tmp_path,
+                                      minimum_disk_bytes=0)
     with pytest.raises(RuntimeError, match="RAM"):
         AUDIT.check_resource_headroom(memory_bytes=AUDIT.MIN_AVAILABLE_MEMORY_BYTES - 1,
                                       cache_root=tmp_path)
@@ -65,7 +71,39 @@ def test_resource_gate_rejects_low_memory_or_disk(monkeypatch, tmp_path):
                                       cache_root=tmp_path)
 
 
+@pytest.mark.parametrize("memory_bytes", [
+    float("nan"), float("inf"), float(AUDIT.MIN_AVAILABLE_MEMORY_BYTES + 1),
+    True, "4GiB", -1,
+])
+def test_resource_memory_override_rejects_noninteger_or_invalid_values(
+        memory_bytes, tmp_path):
+    with pytest.raises(ValueError):
+        AUDIT.check_resource_headroom(memory_bytes=memory_bytes, cache_root=tmp_path)
+
+
+def test_resource_memory_override_accepts_exact_default_floor(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        AUDIT.shutil, "disk_usage",
+        lambda _: SimpleNamespace(free=AUDIT.MIN_DISK_HEADROOM_BYTES),
+    )
+    assert AUDIT.check_resource_headroom(
+        memory_bytes=AUDIT.MIN_AVAILABLE_MEMORY_BYTES, cache_root=tmp_path,
+    ) is None
+
+
+def test_resource_gate_rejects_missing_live_memory_read(monkeypatch, tmp_path):
+    monkeypatch.setattr(AUDIT, "available_memory_bytes", lambda: None)
+    with pytest.raises(RuntimeError, match="RAM"):
+        AUDIT.check_resource_headroom(memory_bytes=None, cache_root=tmp_path)
+
+
 def test_source_validation_rejects_bad_hash_size_and_shape():
+    batch, labels, provenance = sample()
+    small_batch_cap = 100
+    provenance["max_batch_factor_bytes"] = small_batch_cap
+    with pytest.raises(ValueError, match="batch"):
+        AUDIT.validate_source(batch, labels, provenance,
+                              max_batch_factor_bytes=small_batch_cap)
     batch, labels, provenance = sample()
     AUDIT.validate_source(batch, labels, provenance)
     bad = dict(provenance)

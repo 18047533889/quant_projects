@@ -183,7 +183,7 @@ def test_manifest_selection_rejects_out_of_pool_before_io(monkeypatch, uri):
         example.load_cos_sample(manifest_uri=uri)
 
 
-@pytest.mark.parametrize("cap", [True, 0, -1, 65*1024**2, 1.5])
+@pytest.mark.parametrize("cap", [True, 0, -1, 129*1024**2, 1.5])
 def test_factor_budget_cannot_exceed_existing_dataaccess_cap(cap):
     with pytest.raises(ValueError, match="max_factor_bytes"):
         example.select_manifest_records([{"factors": {}}], 1, max_factor_bytes=cap)

@@ -27,16 +27,20 @@ MANIFEST = ("cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/metadata/"
             "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66")
 
 
-def _validate_sample_limits(n_factors, max_factor_bytes):
+def _validate_sample_limits(n_factors, max_factor_bytes, max_batch_factor_bytes):
     if type(n_factors) is not int or not 1 <= n_factors <= 16:
         raise ValueError("n_factors must be a positive integer <= 16")
-    if type(max_factor_bytes) is not int or not 0 < max_factor_bytes <= 64*1024**2:
-        raise ValueError("max_factor_bytes must be an integer in 1..64 MiB")
+    if type(max_factor_bytes) is not int or not 0 < max_factor_bytes <= 128*1024**2:
+        raise ValueError("max_factor_bytes must be an integer in 1..128 MiB")
+    if (type(max_batch_factor_bytes) is not int
+            or not 0 < max_batch_factor_bytes <= 2*1024**3):
+        raise ValueError("max_batch_factor_bytes must be an integer in 1..2 GiB")
 
 
-def select_manifest_records(rows, n_factors, *, max_factor_bytes=8*1024**2):
+def select_manifest_records(rows, n_factors, *, max_factor_bytes=8*1024**2,
+                            max_batch_factor_bytes=128*1024**2):
     """Deterministic sample; quality and 128 MiB batch cap precede downloads."""
-    _validate_sample_limits(n_factors, max_factor_bytes)
+    _validate_sample_limits(n_factors, max_factor_bytes, max_batch_factor_bytes)
     if len(rows) != 1 or not isinstance(rows[0].get("factors"), dict):
         raise ValueError("one manifest with a factors mapping is required")
     eligible = []
@@ -57,8 +61,8 @@ def select_manifest_records(rows, n_factors, *, max_factor_bytes=8*1024**2):
     if len(eligible) < n_factors:
         raise ValueError(f"requested {n_factors} factors but only {len(eligible)} eligible bounded records")
     selected = eligible[:n_factors]
-    if sum(record["bytes"] for _, record in selected) > 128*1024**2:
-        raise ValueError("selected factor batch exceeds 128 MiB; request fewer factors")
+    if sum(record["bytes"] for _, record in selected) > max_batch_factor_bytes:
+        raise ValueError("selected factor batch exceeds max_batch_factor_bytes; request fewer factors")
     return selected
 
 
@@ -78,8 +82,9 @@ def choose_assets(panels, train_dates, n_assets=512):
 
 def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
                     manifest_uri=None, max_factor_bytes=8*1024**2,
+                    max_batch_factor_bytes=128*1024**2,
                     coverage_policy="isolate"):
-    _validate_sample_limits(n_factors, max_factor_bytes)
+    _validate_sample_limits(n_factors, max_factor_bytes, max_batch_factor_bytes)
     if coverage_policy not in {"isolate", "strict"}:
         raise ValueError("coverage_policy must be isolate or strict")
     if type(n_assets) is not int or n_assets < 1:
@@ -103,13 +108,15 @@ def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
         store = DataAccessStore(DatasetRegistry({manifest_ds.name: manifest_ds}), engine)
         manifest = read_declared_cos_object(store, manifest_ds.name, allow_research=True)
         selected = select_manifest_records(manifest.table.to_pylist(), n_factors,
-                                           max_factor_bytes=max_factor_bytes)
+            max_factor_bytes=max_factor_bytes,
+            max_batch_factor_bytes=max_batch_factor_bytes)
         factor_ids = tuple(name for name, _ in selected)
         for factor_id, record in selected:
             ds = dataset("factor_panel", record["uri"].rsplit("/", 1)[0],
                          factor_id+".parquet", "parquet")
             store = DataAccessStore(DatasetRegistry({manifest_ds.name: manifest_ds, ds.name: ds}), engine)
-            bound = read_bound_factor(store, manifest_ds.name, ds.name, factor_id, allow_research=True)
+            bound = read_bound_factor(store, manifest_ds.name, ds.name, factor_id,
+                allow_research=True, max_object_mib=(max_factor_bytes + 1024**2 - 1) // (1024**2))
             result = bound.factor
             lineages[factor_id] = bound.treatment_signature
             table = result.table.to_pandas()
@@ -187,7 +194,7 @@ def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
         "train_eligible_assets": factor_coverage,
         "manifest_uri": manifest_uri,
         "max_factor_bytes": max_factor_bytes,
-        "max_batch_factor_bytes": 128*1024**2,
+        "max_batch_factor_bytes": max_batch_factor_bytes,
         "asset_selection_split": selection_split.identity,
         "asset_selection_train_days": len(selection_split.train_indices),
         "date_span": [str(dates.min().date()), str(dates.max().date())],
@@ -207,8 +214,10 @@ def main():
     parser.add_argument("--assets", type=int, default=256, help="TRAIN-covered asset count")
     parser.add_argument("--coverage-policy", choices=("isolate", "strict"), default="isolate",
                         help="isolate individually low-coverage factors or reject the whole sample")
-    parser.add_argument("--max-factor-mib", type=int, choices=range(1, 65), default=8,
-                        help="per-factor admission cap; total factor objects capped at 128 MiB")
+    parser.add_argument("--max-factor-mib", type=int, choices=range(1, 129), default=8,
+                        help="per-factor admission cap in MiB (maximum 128 MiB)")
+    parser.add_argument("--max-batch-mib", type=int, choices=range(1, 2049), default=128,
+                        help="total factor-object admission cap in MiB (maximum 2048 MiB)")
     parser.add_argument("--output-json", type=Path, default=None,
                         help="write the bounded JSON report to this new path instead of stdout")
     args = parser.parse_args()
@@ -218,6 +227,7 @@ def main():
     batch, labels, provenance, lineages = load_cos_sample(
         n_factors=args.factors, n_assets=args.assets, include_lineages=True,
         manifest_uri=args.manifest, max_factor_bytes=args.max_factor_mib*1024**2,
+        max_batch_factor_bytes=args.max_batch_mib*1024**2,
         coverage_policy=args.coverage_policy)
     report = {"inputs": provenance, "test_evaluated": False,
               "diagnostics": diagnose_training_batch(batch, labels, config=config)}
