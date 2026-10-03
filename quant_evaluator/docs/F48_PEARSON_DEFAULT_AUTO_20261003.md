@@ -74,6 +74,27 @@ GPUExecutionPolicy.max_factor_tile_size 是 GPU 专用限制；低于认证宽�
 当前修改后的源码已重新通过真实 COS 或 CPU/GPU 最快资格认证。
 新真实运行应输出独立文件，并重新记录当前源码与运行配置。
 
+### 最新源码的真实 COS 重验
+
+新增独立报告
+[当前源码与实际 API 回执](benchmarks/real_cos_f48_pearson_chain_default_auto_current_receipt_20261003.json)，
+不改写上述历史报告。它在运行配置校准保护提交 `38560f18d` 后运行，
+四项 Pearson 指标的 route、coverage、reference comparison、source provenance
+verification 全部通过。实际 `auto` 使用 CUDA，声明 cap 16、准入 cap 5、
+有效宽度 4，12 块覆盖全部 48 因子；API 耗时 58.761788916 秒，
+OOM 重试 0，峰值显存 1,186,262,528 字节。124,272 个结果位置、
+缺失掩码和观测数量摘要与两个历史 strict 参考一致。
+
+报告保存了实际 API `execution_receipt`，按其原内容重新验证 receipt hash；
+证据版本为 `source_routes_20261003_v8`。当前声明范围共 170 个 Python 文件，
+运行前后摘要均为
+`804aeb378aaacb83033909dc0cfdeb79477da912ad996f666ec897db51996323`。
+初始和标签物化后均通过至少 32 GiB 可用 RAM / 5 GiB 缓存磁盘余量门槛。
+调用没有人为调整线程环境。该报告证明当前源码在这一精确请求下的路由及结果；
+其 CPU/CUDA 对照仍引用历史报告，**不是当前源码重新进行的性能 A/B**，
+不证明所有指标、其他因子数量/分布或线程配置的全局最快。报告中的来源摘要
+也不覆盖外部 DataAccess、已导入代码和原生库的完整运行依赖闭包。
+
 本轮 source-read 等待 59.29295 秒，约为 API 耗时的 97.7%。
 并发任务的 bound_factor_read 累计时间不能直接加到总 wall time。
 应进一步分解 HEAD、下载、内容摘要校验、Arrow 读取与队列等待；
