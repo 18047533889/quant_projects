@@ -43,56 +43,36 @@ def _fe_rank_execution_binding():
     This adapter calls FE's canonical ``rank`` through its ``pandas_numpy``
     registration. It does not select the Polars registration.
     """
-    import hashlib
-    import inspect
     import numpy as np
     import pandas as pd
-    from factor_engine.cleaned_operators.registry import (
-        OperatorRegistry, _contract_hash, _impl_source_hash,
-    )
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_optimizer.adapters.fe_execution_identity import build_fe_operator_identity
     from factor_optimizer.adapters.repair_execution import _execute_fe_cs_rank
 
     canonical = OperatorRegistry.resolve_canonical_strict("rank")
     operator = OperatorRegistry.get(canonical, backend="pandas_numpy", mode="any")
     if operator is None:
         raise RuntimeError("FactorEngine canonical 'rank' has no pandas_numpy backend")
-    try:
-        adapter_source = inspect.getsource(_execute_fe_cs_rank)
-    except (OSError, TypeError) as exc:
-        raise RuntimeError("cannot certify the FactorEngine rank adapter implementation") from exc
     entry = OperatorRegistry.catalog_entry(canonical)
     return {
         "route": "factor_engine.operator_registry",
-        "binding": {
-            "canonical": canonical,
-            "backend": "pandas_numpy",
-            "mode": "any",
-            "semantic_version": entry.get("semantic_version"),
-            "operator_type": {
-                "module": type(operator).__module__,
-                "qualname": type(operator).__qualname__,
-            },
-            "operator_implementation_hash": _impl_source_hash(operator),
-            "operator_contract_hash": _contract_hash(operator),
-            "adapter_implementation_hash": hashlib.sha256(
-                adapter_source.encode("utf-8")).hexdigest(),
-            "input_contract": "pandas.DataFrame[asset_id,date,value]->float64",
-            "numpy_version": np.__version__,
-            "pandas_version": pd.__version__,
-        },
+        "binding": build_fe_operator_identity(
+            canonical=canonical, backend="pandas_numpy", mode="any",
+            operator=operator, adapter=_execute_fe_cs_rank,
+            input_contract="pandas.DataFrame[asset_id,date,value]->float64",
+            semantic_version=entry.get("semantic_version"),
+            versions={"numpy_version": np.__version__,
+                      "pandas_version": pd.__version__}),
     }
 
 
 def _fe_neg_execution_binding():
     """Bind the FE neg backend selected by the SIGN adapter at runtime."""
-    import hashlib
     import importlib.metadata
-    import inspect
     import numpy as np
     import pandas as pd
-    from factor_engine.cleaned_operators.registry import (
-        OperatorRegistry, _contract_hash, _impl_source_hash,
-    )
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_optimizer.adapters.fe_execution_identity import build_fe_operator_identity
     from factor_optimizer.adapters.repair_execution import _execute_fe_neg
 
     canonical = OperatorRegistry.resolve_canonical_strict("neg")
@@ -121,35 +101,46 @@ def _fe_neg_execution_binding():
         except importlib.metadata.PackageNotFoundError:
             polars_version = "not-installed"
 
-    try:
-        adapter_source = inspect.getsource(_execute_fe_neg)
-        implementation_hash = _impl_source_hash(operator)
-        contract_hash = _contract_hash(operator)
-    except (OSError, TypeError, ValueError) as exc:
-        raise RuntimeError("cannot certify the selected FactorEngine neg implementation") from exc
-    if not isinstance(implementation_hash, str) or not implementation_hash:
-        raise RuntimeError("FactorEngine neg implementation identity is empty")
     entry = OperatorRegistry.catalog_entry(canonical)
     return {
         "route": "factor_engine.operator_registry",
-        "binding": {
-            "canonical": canonical,
-            "backend": backend,
-            "mode": "any",
-            "semantic_version": entry.get("semantic_version"),
-            "operator_type": {
-                "module": type(operator).__module__,
-                "qualname": type(operator).__qualname__,
-            },
-            "operator_implementation_hash": implementation_hash,
-            "operator_contract_hash": contract_hash,
-            "adapter_implementation_hash": hashlib.sha256(
-                adapter_source.encode("utf-8")).hexdigest(),
-            "input_contract": "pandas.Series->float64; FE single-column x",
-            "numpy_version": np.__version__,
-            "pandas_version": pd.__version__,
-            "polars_version": polars_version,
-        },
+        "binding": build_fe_operator_identity(
+            canonical=canonical, backend=backend, mode="any", operator=operator,
+            adapter=_execute_fe_neg,
+            input_contract="pandas.Series->float64; FE single-column x",
+            semantic_version=entry.get("semantic_version"),
+            versions={"numpy_version": np.__version__,
+                      "pandas_version": pd.__version__,
+                      "polars_version": polars_version}),
+    }
+
+
+def _fe_tail_saturation_execution_binding():
+    """Bind the exact FE winsorize implementation used by the adapter."""
+    import platform
+    import numpy as np
+    import pandas as pd
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_optimizer.adapters.fe_execution_identity import build_fe_operator_identity
+    from factor_optimizer.adapters.fe_tail_saturation import execute_fe_tail_saturation
+
+    canonical = OperatorRegistry.resolve_canonical_strict("winsorize")
+    operator = OperatorRegistry.get(
+        "winsorize", backend="pandas_numpy", mode="any")
+    if operator is None:
+        raise RuntimeError(
+            "FactorEngine canonical 'winsorize' has no pandas_numpy backend")
+    entry = OperatorRegistry.catalog_entry(canonical)
+    return {
+        "route": "factor_engine.operator_registry",
+        "binding": build_fe_operator_identity(
+            canonical=canonical, backend="pandas_numpy", mode="any",
+            operator=operator, adapter=execute_fe_tail_saturation,
+            input_contract="pandas.DataFrame[date,value]->float64; row-wise by date",
+            semantic_version=entry.get("semantic_version"),
+            versions={"python_version": platform.python_version(),
+                      "numpy_version": np.__version__,
+                      "pandas_version": pd.__version__}),
     }
 
 
@@ -185,6 +176,8 @@ def _execution_binding(plan):
                 "method", "average") == "average" else
                 {"route": "factor_preprocess.transforms.repair_shapes.cross_sectional_rank",
                  "mapping_version": plan.mapping_version})
+        if plan.transform == "tail_saturation":
+            return _fe_tail_saturation_execution_binding()
         if route is not None:
             return {"route": route, "mapping_version": plan.mapping_version}
     from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
