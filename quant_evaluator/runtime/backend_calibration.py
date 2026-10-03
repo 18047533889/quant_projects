@@ -191,13 +191,44 @@ def _source_fingerprint() -> str:
 
 def _runtime_fingerprint(device_info: dict | None) -> dict:
     packages = {}
-    for name in ("numpy", "scipy", "cupy-cuda12x", "cupy-cuda11x"):
+    for name in ("numpy", "scipy", "cupy-cuda12x", "cupy-cuda11x",
+                 "numba", "llvmlite", "threadpoolctl"):
         try:
             packages[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:
             pass
+    if "numba" in packages:
+        import numba
+        numba_threads = int(numba.get_num_threads())
+        numba_threading_layer = str(numba.threading_layer())
+    else:
+        numba_threads = None
+        numba_threading_layer = None
+    thread_environment = {name: os.environ.get(name) for name in (
+        "BLIS_NUM_THREADS", "MKL_DYNAMIC", "MKL_NUM_THREADS", "NUMBA_NUM_THREADS",
+        "NUMBA_THREADING_LAYER", "NUMEXPR_NUM_THREADS", "OMP_NUM_THREADS",
+        "OMP_THREAD_LIMIT", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")}
+    threadpoolctl_available = "threadpoolctl" in packages
+    if threadpoolctl_available:
+        import threadpoolctl
+        stable_fields = ("prefix", "internal_api", "user_api", "version",
+                         "architecture", "threading_layer", "num_threads")
+        blas_threadpools = [
+            {name: record.get(name) for name in stable_fields}
+            for record in threadpoolctl.threadpool_info()
+        ]
+        blas_threadpools.sort(key=lambda item: json.dumps(
+            item, sort_keys=True, separators=(",", ":"), default=str))
+    else:
+        blas_threadpools = []
     return {"python": platform.python_version(), "platform": platform.platform(),
-            "packages": packages, "device": device_info}
+            "packages": packages, "device": device_info,
+            "numba_threads": numba_threads,
+            "numba_threading_layer": numba_threading_layer,
+            "thread_environment": thread_environment,
+            "threadpoolctl_available": threadpoolctl_available,
+            "blas_threadpools": blas_threadpools,
+    }
 
 
 def calibration_identity(batch: FactorBatch, label_bundle: LabelBundle, *, metrics,
@@ -529,15 +560,22 @@ def evaluate_calibrated_batch(
     last_results = {}
     calls = 0
     parity_mismatch = None
+    runtime_drifted = False
     cpu_result = None
     for iteration in range(calibration_policy.warmups + calibration_policy.repetitions):
         routes = ("cpu", "cuda_strict") if iteration % 2 == 0 else ("cuda_strict", "cpu")
         for route in routes:
             if time.monotonic() - started >= calibration_policy.max_wall_time_seconds:
                 raise TimeoutError("calibration soft time budget exhausted between backend calls")
+            # Query outside the stopwatch. A timing record is admitted only
+            # under the runtime captured in its cache key, not mixed threads.
+            if _runtime_fingerprint(identity["device_info"]) != identity["runtime"]:
+                runtime_drifted = True
             call_started = time.monotonic()
             result = _call_evaluate(evaluate_fn, batch, label_bundle, metrics, route, gpu_policy)
             elapsed = time.monotonic() - call_started
+            if _runtime_fingerprint(identity["device_info"]) != identity["runtime"]:
+                runtime_drifted = True
             last_results[route] = result
             first_call_seconds.setdefault(route, elapsed)
             if route == "cpu":
@@ -551,6 +589,8 @@ def evaluate_calibrated_batch(
                                          calibration_policy)
         if pair_mismatch is not None:
             parity_mismatch = pair_mismatch
+            break
+        if runtime_drifted:
             break
 
     mismatch = parity_mismatch
@@ -566,19 +606,24 @@ def evaluate_calibrated_batch(
               "selection_basis": "steady_state_median",
               "parity": "pass" if mismatch is None else "fail",
               "parity_mismatch": mismatch, "repetitions": calibration_policy.repetitions,
-              "warmups": calibration_policy.warmups}
-    if mismatch is not None:
+              "warmups": calibration_policy.warmups,
+              "runtime_stable": not runtime_drifted}
+    qualified = mismatch is None and not runtime_drifted
+    if not qualified:
         # The measured timing winner is diagnostic only when parity fails;
-        # the effective route is the CPU fallback. Successful cached records
-        # retain their existing shape and winner semantics.
+        # observed runtime drift also invalidates a speed comparison even
+        # when numerical results agree. Never cache an unqualified record.
         record["timing_winner"] = fastest
         record["winner"] = "cpu"
-    if mismatch is None and not injected_evaluator and not _PROCESS_SOURCE_DRIFTED:
+    if qualified and not injected_evaluator and not _PROCESS_SOURCE_DRIFTED:
         cache.put(key, record)
-    winner = fastest if mismatch is None else "cpu"
-    selected = last_results[winner] if mismatch is None else cpu_result
+    winner = fastest if qualified else "cpu"
+    selected = last_results[winner] if qualified else cpu_result
+    status = ("calibrated" if qualified else
+              ("parity_failed_cpu_fallback" if mismatch is not None else
+               "runtime_changed_cpu_fallback"))
     return CalibratedEvaluation(selected, {
-        "status": "calibrated" if mismatch is None else "parity_failed_cpu_fallback",
+        "status": status,
         "source_check": source_metadata,
         "cache_key": key, "winner": winner, "request_digest": request_digest,
         "input_fingerprint_seconds": hash_seconds,
