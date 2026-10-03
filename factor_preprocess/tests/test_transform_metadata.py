@@ -39,6 +39,7 @@ _FE_ROUTED = {
     "cs_demean": "cs_demean",
     "cs_winsor": "winsorize",
     "forward_fill": "ffill_limit",
+    "missing_indicator": "is_null",
 }
 
 

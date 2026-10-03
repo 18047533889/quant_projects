@@ -350,6 +350,7 @@ def test_fe_backed_transforms_carry_origin_metadata():
         "cs_demean": "cs_demean",
         "cs_winsor": "winsorize",
         "forward_fill": "ffill_limit",
+        "missing_indicator": "is_null",
     }
     for name, fe_id in expected.items():
         meta = registry.get(name)
@@ -384,7 +385,7 @@ def test_fitted_and_unmapped_transforms_are_fp_native():
     # Freshness / smoothing / decomposition / cs_zscore are FP-native.
     for name in ("freshness_score", "days_since_update", "kama",
                  "kalman_local_level",
-                 "hp_filter", "volatility_scale", "missing_indicator",
+                 "hp_filter", "volatility_scale",
                  "cs_zscore"):
         meta = registry.get(name)
         assert meta is not None

@@ -1574,6 +1574,7 @@ def create_default_registry() -> TransformRegistry:
     # docs/FE_OPERATOR_REUSE_MATRIX.md as partial:normal).
     # Missingness exact duplicate:
     #   forward_fill <- FE ffill_limit (bounded ffill == pandas ffill(limit))
+    #   missing_indicator <- FE is_null (pandas_numpy: isna -> float 1/0)
     # OLS is an FE-owned long-panel composite with FP effective-rank residual
     # degrees of freedom. Generic FE cs_neutralize remains strict and unchanged.
     #
@@ -1587,6 +1588,7 @@ def create_default_registry() -> TransformRegistry:
         "cs_demean": ("cs_demean", "stateless"),
         "cs_winsor": ("winsorize", "stateless"),
         "forward_fill": ("ffill_limit", "stateless"),
+        "missing_indicator": ("is_null", "stateless"),
     }
     for _name, (_fe_id, _fit_kind) in _FE_ROUTED.items():
         registry.enrich(

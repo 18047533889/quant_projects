@@ -4226,7 +4226,7 @@ Create registry with all built-in transforms.
 
 ### get_default_registry
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1678)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1680)。
 
 Get or create the default global registry.
 
@@ -5450,7 +5450,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/regime/switching.py` | `a6114ab07de853206d2d705d79946a162efb5d8cb04a8c7352e87ca5e5c8c43a` |
 | `factor_preprocess/registry/__init__.py` | `f7d6d9c9d84116aa51d6c7d38695d2b439f63c69cb01d54327a998d970936329` |
 | `factor_preprocess/registry/policies.py` | `6f0c776875e25205ce2e8f072dfdb70ae15caacdb6f9dc516a6151cace7fd202` |
-| `factor_preprocess/registry/transforms.py` | `c02b28a69a5394c3e7c48855f178cb7f2b4968a304675aae208a2fadb822c276` |
+| `factor_preprocess/registry/transforms.py` | `b006e756ad6e8712227e41bc3112354c5675975397b69c47f2de719b36c08c4a` |
 | `factor_preprocess/representation/__init__.py` | `5b62691fd8b68400db3bcc025ec528ed68240d3dd127d5e036fe3e08fb58942d` |
 | `factor_preprocess/representation/linear_ready.py` | `c0f394448c6be34cc02bf83000e182da18d4f022fe83c82cd524b5582f20c81e` |
 | `factor_preprocess/representation/multichannel.py` | `f9edaba509c7bf1c12a1534eb9ca758e523f7efc62f955e09b8609bc6c346dfe` |

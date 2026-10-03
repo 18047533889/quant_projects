@@ -1,6 +1,6 @@
 # 默认变换目录与策略预设
 
-本目录来自当前环境的 `create_default_registry()` / `create_default_policies()`。当前注册 43 项：4 项 `FE_OPERATOR`、11 项 `FE_COMPOSITE`、28 项 `FP_NATIVE`。基础注册表含 40 项；源码按可选 PyWavelets 依赖条件注册三个 wavelet 函数，本次环境已注册这三项。所有默认项均 `requires_fit=False`、`fit_kind=stateless`；“历史”仅表示本次调用读取按资产隔离的过去输入。DataFrame 时间变换要求每资产日期单调，不会静默排序。公共列名默认 `asset_id/date/value`（收益列 `return`）。
+本目录来自当前环境的 `create_default_registry()` / `create_default_policies()`。当前注册 43 项：5 项 `FE_OPERATOR`、12 项 `FE_COMPOSITE`、26 项 `FP_NATIVE`。基础注册表含 40 项；源码按可选 PyWavelets 依赖条件注册三个 wavelet 函数，本次环境已注册这三项。所有默认项均 `requires_fit=False`、`fit_kind=stateless`；“历史”仅表示本次调用读取按资产隔离的过去输入。DataFrame 时间变换要求每资产日期单调，不会静默排序。公共列名默认 `asset_id/date/value`（收益列 `return`）。
 
 ## 全目录
 
@@ -26,7 +26,7 @@
 | `volatility_scale_returns` | 同上，`target_vol=.01` | 时间/历史；生产；FP | 同式，输入契约为 returns。 |
 | `realized_volatility` | `window, min_periods=None, ddof=1, annualization_factor=1` | 时间/历史；生产；FP | $`z_t=annualization\_factor\,\mathrm{std}(x_{t-w:t-1})`$。 |
 | `forward_fill` | `max_lag=None` | 时间/历史；生产；FE `ffill_limit` | 最近有限值前填；None 无界，整数最多填连续 max_lag 个空位。 |
-| `missing_indicator` | 无 | 当前行/否；生产；FP | $`z_t=\mathbf1[x_t\ \mathrm{missing}]`$。 |
+| `missing_indicator` | 无 | 当前行/否；生产；FE `is_null`（pandas_numpy；FP adapter 不走 Polars） | $`z_t=\mathbf1[x_t\ \mathrm{missing}]`$。 |
 | `missing_run_length` | 无 | 时间/历史；生产；FP | 当前连续缺失段累计长度；有限值归零。 |
 | `missing_rate` | `window, min_periods=1` | 时间/严格滞后；生产；FP | $`z_t=\mathrm{mean}_{j=t-w}^{t-1}\mathbf1[x_j\ \mathrm{missing}]`$。 |
 | `impute_with_fallback` | `fallback_strategy="forward_fill", max_lag=None` | 时间/全样本；RESEARCH_ONLY；FP | None 表示无界前填，正整数表示有界前填，0 跳过前填；随后可选 `forward_fill/zero/median/mean`，其中 median/mean 是每资产全样本统计，非因果。 |
@@ -50,7 +50,7 @@
 | `wavelet_smooth` | `wavelet="db4", level=1` | 时间/全 lagged 样本；条件注册、OFFLINE_ONLY；FP | 调用 `wavelet_decompose` 并返回 approximation 通道 $`a_{level}`$；若指定键不存在则取首个 approximation，否则全 NaN。 |
 | `wavelet_denoise` | `wavelet="db4", level=None, threshold_mode="soft", threshold_scale=1` | 时间/全 lagged 样本；条件注册、OFFLINE_ONLY；FP | 对 lagged 有限序列分解，以最细 detail 的 MAD 估计 $`\sigma=\mathrm{median}(\lvert d-\mathrm{median}(d)\rvert)/0.6745`$，阈值 $`\lambda=threshold\_scale\,\sigma\sqrt{2\ln n}`$；保留 approximation，对 details 做 soft/hard threshold 后全序列重构。少于 4 点或失败为 NaN。 |
 
-FE_OPERATOR 共 4 项：`cs_rank`、`cs_demean`、`cs_winsor`、`forward_fill`。FE_COMPOSITE 共 11 项：`trailing_sma`、`rolling_mean`、`trailing_median`、`rolling_std`、`rolling_zscore`、`ewma`、`one_sided_iir_lowpass`、`ols_neutralize` 及三个 neutral 别名；基础 40 项中的其余 25 项为 FP_NATIVE。三个 wavelet 项也始终在本目录列明，但仅在可选 PyWavelets 依赖可用时才作为 FP_NATIVE/OFFLINE_ONLY 注册，因此运行时总数为 40 或 43；本次环境已注册，合计 28 项 FP_NATIVE。
+FE_OPERATOR 共 5 项：`cs_rank`、`cs_demean`、`cs_winsor`、`forward_fill`、`missing_indicator`。FE_COMPOSITE 共 12 项：`trailing_sma`、`rolling_mean`、`trailing_median`、`rolling_std`、`rolling_zscore`、`ewma`、`robust_ewma`、`one_sided_iir_lowpass`、`ols_neutralize` 及三个 neutral 别名；基础 40 项中的其余 23 项为 FP_NATIVE。三个 wavelet 项也始终在本目录列明，但仅在可选 PyWavelets 依赖可用时才作为 FP_NATIVE/OFFLINE_ONLY 注册，因此运行时总数为 40 或 43；本次环境已注册，合计 26 项 FP_NATIVE。FP 的 FE_OPERATOR adapter 固定选择 `pandas_numpy`；FE 的 `is_null` 另有 Polars 实现，但 FP 路由和身份不覆盖该后端。
 
 ### OLS 有效秩口径
 

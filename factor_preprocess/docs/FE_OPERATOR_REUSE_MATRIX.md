@@ -33,9 +33,16 @@ Columns:
   or `FP_NATIVE`. FE-backed routes fail closed when FE is unavailable;
   FP-kernel fallback requires explicit research opt-in.
 
-Parity evidence: `tests/test_fe_operator_parity.py` (per-FE-backed-transform
-parity test; tolerance contract explicit — cross-sectional and ffill exact
-`atol=0.0`, OLS `atol=1e-9`/`rtol=1e-7`).  Registry routing tests:
+Parity evidence: `tests/test_fe_operator_parity.py` and
+`tests/test_missing_indicator_fe.py` (per-FE-backed-transform parity tests;
+tolerance contract explicit — cross-sectional, ffill, and missing indicator
+exact `atol=0.0`, OLS `atol=1e-9`/`rtol=1e-7`). FP FeOperatorExecutor
+currently selects FE `pandas_numpy` only. FE also has an `is_null` Polars
+binding with NULL-or-NaN semantics, but FP does not execute it through Polars;
+that binding is not part of this FP parity or identity claim. FE_OPERATOR registry
+identity records the canonical operator id and route metadata, but does not bind
+the selected FE implementation body/physical identity. That identity gap remains open.
+Registry routing tests:
 `tests/test_transform_metadata.py`.
 
 The `cs_winsor` parity probe covers non-finite inputs: FP converts +/-Inf to
@@ -56,7 +63,7 @@ missing before quantile estimation, matching FE `winsorize`.
 | transform | semantic id | math semantics | FE equivalent operator | FE semantic metadata | confidence | fitted? | causal? | FP-native reason | implementation_origin |
 |---|---|---|---|---|---|---|---|---|---|
 | `forward_fill` | `FILL:forward` | bounded forward fill (`max_lag` consecutive NaNs) == pandas `ffill(limit)` | `ffill_limit` | data_cleaning, `max_periods` param; unannotated in semantic bridge | **exact** (maxabs 0.0 over random gap panels; FE `ffill_limit` == pandas `ffill(limit=)` == FP `ffill(limit=max_lag)`) | no | yes | — | **FE_OPERATOR** (`fe_operator_id=ffill_limit`) |
-| `missing_indicator` | `MISSING_INDICATOR:binary` | binary 1/0 missingness | `is_null` | elementwise, unannotated tags/stage | none | no | yes | FE `is_null` is an elementwise *mask* operator (unannotated, no pandas_numpy production binding parity), while FP returns float 1.0/0.0 per the missingness contract — FP-native indicator carries its own output-channel semantics | **FP_NATIVE** |
+| `missing_indicator` | `MISSING_INDICATOR:binary` | binary 1/0 missingness | `is_null` | elementwise; pandas_numpy `x.isna().astype(float)` | **exact** for None/pd.NA/NaN and ±Inf (FP pandas adapter route) | no | yes | — | **FE_OPERATOR** (`fe_operator_id=is_null`; pandas_numpy only) |
 | `missing_rate` | `MISSING_RATE:rolling` | rolling lagged missing fraction | — | — | none | no | yes | no FE rolling-missing-rate operator; FP lagged-rolling semantics | **FP_NATIVE** |
 | `missing_run_length` | — | consecutive-missing run length | — | — | none | no | yes | no FE equivalent | **FP_NATIVE** |
 | `impute_with_fallback` | — | ffill + fallback (zero/median/mean) | `fillna(method=…)` / `fillna_const` | elementwise, unannotated | none | no | **no** (RESEARCH_ONLY, non-causal full-sample median/mean) | research-only; full-sample median/mean fallback not production-causal; FE fillna has no per-asset median groupby parity | **FP_NATIVE** |
@@ -117,12 +124,12 @@ with `requires_fit=False`.
 
 ## Routing summary (R61-FI-041)
 
-- **FE_OPERATOR (4):** `cs_rank`, `cs_demean`, `cs_winsor`, `forward_fill`.
+- **FE_OPERATOR (5):** `cs_rank`, `cs_demean`, `cs_winsor`, `forward_fill`, `missing_indicator`.
 - **FE_COMPOSITE (12):** `trailing_sma`, `rolling_mean`, `trailing_median`,
   `rolling_std`, `rolling_zscore`, `ewma`, `one_sided_iir_lowpass`,
   `robust_ewma`, `ols_neutralize`, `industry_neutral`, `size_neutral`,
   `dual_neutral`.
-- **FP_NATIVE (27):** everything else. FE-backed transforms retain their
+- **FP_NATIVE (26):** everything else. FE-backed transforms retain their
   FP-native kernel for explicit research fallback (plan §26 F3). Production
   execution requires FE and fails closed when FE is unavailable; FE remains
   an optional dependency of FP.
