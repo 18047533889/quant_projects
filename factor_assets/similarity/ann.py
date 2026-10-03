@@ -19,6 +19,11 @@ def _validate_embedding_dim(embedding_dim: int) -> None:
         raise ValueError("embedding_dim must be a positive integer")
 
 
+def _validate_positive_n_trees(n_trees: int) -> None:
+    if not isinstance(n_trees, int) or isinstance(n_trees, bool) or n_trees <= 0:
+        raise ValueError("n_trees must be a positive integer")
+
+
 def _validate_build_inputs(factor_ids: List[str], embeddings: "np.ndarray", embedding_dim: int) -> None:
     _validate_embedding_dim(embedding_dim)
     if not isinstance(embeddings, np.ndarray) or embeddings.ndim != 2:
@@ -360,6 +365,8 @@ class AnnoyANNIndex:
         Raises:
             ImportError: If annoy is not available
         """
+        _validate_embedding_dim(embedding_dim)
+        _validate_positive_n_trees(n_trees)
         if not ANNOY_AVAILABLE:
             raise ImportError(
                 "annoy is required for AnnoyANNIndex. "
@@ -389,7 +396,8 @@ class AnnoyANNIndex:
         for idx, embedding in enumerate(staged_embeddings):
             staged_index.add_item(idx, embedding.tolist())
 
-        staged_index.build(self.n_trees)
+        if staged_index.build(self.n_trees) is False:
+            raise RuntimeError("Annoy index build failed")
         self._index = staged_index
         self._factor_ids = list(factor_ids)
         self._id_to_idx = {fid: idx for idx, fid in enumerate(factor_ids)}
@@ -479,7 +487,7 @@ class AnnoyANNIndex:
             if fid == factor_id:
                 continue
 
-            similarity = 1.0 - (dist ** 2 / 2.0)
+            similarity = _canonical_cosine(1.0 - (float(dist) ** 2 / 2.0))
 
             if min_similarity is not None and similarity < min_similarity:
                 continue
