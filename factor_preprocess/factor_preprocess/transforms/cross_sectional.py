@@ -7,6 +7,9 @@ All transforms handle NaN explicitly and use average-tie ranking.
 import numpy as np
 from typing import Optional, Literal
 
+from factor_preprocess.transforms.zscore_numeric import (
+    FINITE_ANCHOR_CENTERED_V2, finite_anchor_centered_zscore,
+)
 
 def cs_rank(
     values: np.ndarray,
@@ -81,6 +84,7 @@ def cs_zscore(
     axis: int = -1,
     ddof: int = 1,
     constant_value: float = 0.0,
+    numeric_policy: Literal["legacy_numpy_v1", "finite_anchor_centered_v2"] = FINITE_ANCHOR_CENTERED_V2,
 ) -> np.ndarray:
     """
     Cross-sectional z-score normalization.
@@ -95,6 +99,9 @@ def cs_zscore(
         Delta degrees of freedom for std calculation
     constant_value : float
         Value to return for constant slices (zero std)
+    numeric_policy : str
+        Defaults to finite-anchor-centered v2. Pass ``legacy_numpy_v1`` to
+        replay historical NumPy mean/std arithmetic.
 
     Returns
     -------
@@ -105,8 +112,15 @@ def cs_zscore(
     -----
     (x - mean) / std with explicit handling of zero std.
     """
+    if numeric_policy not in {"legacy_numpy_v1", FINITE_ANCHOR_CENTERED_V2}:
+        raise ValueError(f"unknown z-score numeric policy: {numeric_policy!r}")
     if values.size == 0:
         return values.copy()
+
+    if numeric_policy == FINITE_ANCHOR_CENTERED_V2:
+        return finite_anchor_centered_zscore(
+            values, axis=axis, ddof=ddof, constant_value=constant_value
+        )
 
     # Use nanmean and nanstd to handle NaN
     mean = np.nanmean(values, axis=axis, keepdims=True)

@@ -1,5 +1,9 @@
 # FE Operator Reuse Matrix (R61-FI-040)
 
+2026-10-03 更新：`cs_zscore` 默认数值合同为稳定 Float64 v2；旧 FE mean/std
+不得再按“正常面板近乎等价”推导 v2 等价身份。独立公式与反例见
+[稳定 z-score 数值政策](STABLE_ZSCORE_NUMERIC_POLICY_20261003.md)。
+缺失指示器的 dtype 分派与测速范围见 [原生 FE 路由](MISSING_INDICATOR_NATIVE_FE_20261003.md)。
 宽表到长表的对齐语义与性能核验见
 [FE 结果回填性能](FE_PANEL_ALIGNMENT_PERFORMANCE.md)。
 
@@ -37,13 +41,11 @@ Parity evidence: `tests/test_fe_operator_parity.py` and
 `tests/test_missing_indicator_fe.py` (per-FE-backed-transform parity tests;
 tolerance contract explicit — cross-sectional, ffill, and missing indicator
 exact `atol=0.0`, OLS `atol=1e-9`/`rtol=1e-7`). FP FeOperatorExecutor
-selects FE `pandas_numpy` only and converts pandas long input to a wide panel,
-then stacks the FE result back to a pandas Series. FE also has an `is_null`
-Polars binding with NULL-or-NaN semantics, but FP does not execute it through
-Polars; that binding is outside this FP route and its identity. FE_OPERATOR
+For missing_indicator, numeric values use native Polars and unsupported dtypes use FE pandas_numpy; other FE_OPERATOR transforms use FE pandas_numpy. The pandas route converts long input to a wide panel and stacks the FE result back to a Series. FE also has an `is_null`
+Polars binding with NULL-or-NaN semantics. FP routes integer/floating values through the native Polars adapter and unsupported dtypes through FE pandas_numpy; selected-route identity distinguishes candidate, actual Polars execution, and the current selected pandas binding. FE_OPERATOR
 execution identities bind the selected canonical/backend, catalog source and
 semantic version, FE implementation and logical-contract hashes, adapter
-implementation/call contract, and NumPy/Pandas versions. The coverage marker
+implementation/call contract, and NumPy/Pandas/Polars versions. The coverage marker
 excludes the full transitive runtime, native libraries, and data dependencies;
 this is a scoped implementation identity, not a full runtime attestation.
 Registry routing tests:
@@ -72,7 +74,7 @@ fail-closed behavior when FE provenance is incomplete.
 | transform | semantic id | math semantics | FE equivalent operator | FE semantic metadata | confidence | fitted? | causal? | FP-native reason | implementation_origin |
 |---|---|---|---|---|---|---|---|---|---|
 | `forward_fill` | `FILL:forward` | bounded forward fill (`max_lag` consecutive NaNs) == pandas `ffill(limit)` | `ffill_limit` | data_cleaning, `max_periods` param; unannotated in semantic bridge | **exact** (maxabs 0.0 over random gap panels; FE `ffill_limit` == pandas `ffill(limit=)` == FP `ffill(limit=max_lag)`) | no | yes | — | **FE_OPERATOR** (`fe_operator_id=ffill_limit`) |
-| `missing_indicator` | `MISSING_INDICATOR:binary` | binary 1/0 missingness | `is_null` | elementwise; pandas_numpy `x.isna().astype(float)` | **exact** for None/pd.NA/NaN and ±Inf (FP pandas adapter route) | no | yes | — | **FE_OPERATOR** (`fe_operator_id=is_null`; pandas_numpy only) |
+| `missing_indicator` | `MISSING_INDICATOR:binary` | binary 1/0 missingness | `is_null` | elementwise; native Polars for numeric values, FE pandas_numpy for unsupported dtypes | **exact** for None/pd.NA/NaN and ±Inf across native numeric and pandas fallback routes | no | yes | — | **FE_OPERATOR** (`fe_operator_id=is_null`; numeric Polars; unsupported dtype pandas_numpy) |
 | `missing_rate` | `MISSING_RATE:rolling` | rolling lagged missing fraction | — | — | none | no | yes | no FE rolling-missing-rate operator; FP lagged-rolling semantics | **FP_NATIVE** |
 | `missing_run_length` | — | consecutive-missing run length | — | — | none | no | yes | no FE equivalent | **FP_NATIVE** |
 | `impute_with_fallback` | — | ffill + fallback (zero/median/mean) | `fillna(method=…)` / `fillna_const` | elementwise, unannotated | none | no | **no** (RESEARCH_ONLY, non-causal full-sample median/mean) | research-only; full-sample median/mean fallback not production-causal; FE fillna has no per-asset median groupby parity | **FP_NATIVE** |

@@ -833,6 +833,31 @@ class TransformRegistry:
             raise ValueError(f"Transform '{name}' is not registered")
         metadata = self._transforms[name]
         if metadata.implementation_origin == "FE_OPERATOR":
+            if name == "missing_indicator":
+                try:
+                    from factor_preprocess.adapters.fe_native_elementwise import (
+                        get_fe_native_elementwise_executor,
+                    )
+                    executor = get_fe_native_elementwise_executor(
+                        metadata.fe_operator_id, fallback=metadata.func,
+                        allow_research_fallback=allow_research,
+                    )
+                except (ImportError, ModuleNotFoundError):
+                    executor = None
+                if executor is not None:
+                    identity = dict(executor.execution_identity)
+                    identity.pop("digest", None)
+                    call_contract = dict(identity.get("adapter_call_contract") or {})
+                    call_contract["identity_scope"] = "default_numeric_route_candidate"
+                    call_contract["input_dtype_contract"] = (
+                        "integer and <=64-bit floating values use native Polars; unsupported "
+                        "dtypes use the FE pandas_numpy implementation"
+                    )
+                    identity["adapter_call_contract"] = call_contract
+                    import json
+                    raw = json.dumps(identity, sort_keys=True, separators=(",", ":"), allow_nan=False)
+                    identity["digest"] = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+                    return identity
             try:
                 from factor_preprocess.adapters.fe_operator import (
                     get_fe_executor,
@@ -937,12 +962,28 @@ class TransformRegistry:
             )
 
         if self.resolve_origin(name) == "FE_OPERATOR":
+            meta = self._transforms[name]
+            if name == "missing_indicator":
+                try:
+                    from factor_preprocess.adapters.fe_native_elementwise import (
+                        get_fe_native_elementwise_executor,
+                    )
+                    executor = get_fe_native_elementwise_executor(
+                        meta.fe_operator_id, fallback=meta.func,
+                        allow_research_fallback=allow_research,
+                    )
+                except (ImportError, ModuleNotFoundError):
+                    executor = None
+                if executor is not None:
+                    return _ValidatedExecutor(
+                        meta, executor,
+                        execution_identity_provider=lambda: executor.execution_identity,
+                    )
             try:
                 from factor_preprocess.adapters.fe_operator import get_fe_executor
             except (ImportError, ModuleNotFoundError):
                 get_fe_executor = None
             if get_fe_executor is not None:
-                meta = self._transforms[name]
                 executor = get_fe_executor(
                     meta.fe_operator_id, fallback=meta.func,
                     allow_research_fallback=allow_research,
@@ -1148,8 +1189,8 @@ def create_default_registry() -> TransformRegistry:
     )
     register_builtin(
         "cs_zscore", cs_zscore, TransformCategory.CROSS_SECTIONAL,
-        version="1.0.0",
-        description="Cross-sectional z-score normalization",
+        version="2.0.0",
+        description="Stable Float64 cross-sectional z-score; explicit legacy policy available",
         tags={"zscore", "normalization", "cs"},
         causal_safe=True,
     )
@@ -1182,10 +1223,13 @@ def create_default_registry() -> TransformRegistry:
                     requires_fit=False, parameter_domain={"pct": (True, True)},
                     numeric_policy="nan_skip_cs", fe_equivalent_semantics="cs_rank",
                     output_channels=("transformed",))
+    # Preserve the semantic family for lineage guards; version/numeric-policy
+    # identity distinguish v2. FE's legacy mean/std and singleton contract are
+    # not equivalent: admit a matching v2 composite before declaring reuse.
     registry.enrich("cs_zscore", semantic_id="CROSS_SECTIONAL_ZSCORE:cs", stage="representation",
                     family_tags=set(ALL_FAMILY_TAGS), causality_class="cross_sectional_causal",
                     requires_fit=False, parameter_domain={"ddof": (0.0, 1.0)},
-                    numeric_policy="nan_skip_cs", fe_equivalent_semantics="cs_zscore",
+                    numeric_policy="finite_anchor_centered_v2", fe_equivalent_semantics=None,
                     output_channels=("transformed",))
     registry.enrich("cs_demean", semantic_id="CROSS_SECTIONAL_DEMEAN:cs", stage="representation",
                     family_tags=set(ALL_FAMILY_TAGS), causality_class="cross_sectional_causal",

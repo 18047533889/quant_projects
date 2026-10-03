@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pandas as pd
+import numpy as np
 import pytest
 
 import factor_preprocess.adapters.fe_operator as fe_adapter
@@ -130,10 +131,70 @@ def test_registered_fe_operator_routes_have_live_selected_backend_identities():
         assert identity["transform_name"] == transform_name
         assert identity["fe_operator_id"] == canonical
         assert identity["fe_canonical_id"] == canonical
-        assert identity["backend"] == "pandas_numpy"
+        expected_backend = "polars" if transform_name == "missing_indicator" else "pandas_numpy"
+        if transform_name == "missing_indicator":
+            assert identity["binding_state"] == "planned_native_candidate"
+        assert identity["backend"] == expected_backend
+        if expected_backend == "polars":
+            assert identity["runtime_versions"]["polars"]
+            assert identity["adapter_call_contract"]["identity_scope"] == "default_numeric_route_candidate"
+            assert "unsupported dtypes" in identity["adapter_call_contract"]["input_dtype_contract"]
         assert identity["backend_source"]
         assert identity["semantic_version"]
         assert identity["fe_implementation_hash"]
         assert identity["fe_contract_hash"]
         assert identity["adapter_implementation_hash"]
         assert identity["digest"]
+
+
+def test_missing_indicator_identity_tracks_each_dtype_on_same_executor():
+    from factor_preprocess.registry.transforms import get_default_registry
+
+    executor = get_default_registry().get_execution("missing_indicator")
+    assert executor.execution_identity["binding_state"] == "planned_native_candidate"
+    index = [8, 3, 5]
+    common = {
+        "date": pd.date_range("2024-01-01", periods=3),
+        "asset_id": ["A", "B", "C"],
+    }
+    numeric = pd.DataFrame({**common, "value": [np.nan, np.inf, 2.0]}, index=index)
+    actual = executor(numeric)
+    assert actual.tolist() == [1.0, 0.0, 0.0]
+    assert executor.execution_identity["backend"] == "polars"
+    assert executor.execution_identity["binding_state"] == "last_execution"
+
+    strings = pd.DataFrame({**common, "value": pd.Series(["x", None, "y"], dtype=object, index=index)}, index=index)
+    actual = executor(strings)
+    assert actual.tolist() == [0.0, 1.0, 0.0]
+    assert executor.execution_identity["backend"] == "pandas_numpy"
+    assert executor.execution_identity["binding_state"] == "current_selected_binding"
+
+    dates = pd.DataFrame({
+        **common,
+        "value": pd.Series(pd.to_datetime(["2024-01-01", None, "2024-01-03"]), index=index),
+    }, index=index)
+    actual = executor(dates)
+    assert actual.tolist() == [0.0, 1.0, 0.0]
+    assert executor.execution_identity["backend"] == "pandas_numpy"
+    assert executor.execution_identity["binding_state"] == "current_selected_binding"
+
+    actual = executor(numeric)
+    assert actual.tolist() == [1.0, 0.0, 0.0]
+    assert executor.execution_identity["backend"] == "polars"
+    assert executor.execution_identity["binding_state"] == "last_execution"
+
+
+def test_missing_indicator_cold_string_numeric_binding_transitions():
+    from factor_preprocess.registry.transforms import get_default_registry
+
+    executor = get_default_registry().get_execution("missing_indicator")
+    assert executor.execution_identity["binding_state"] == "planned_native_candidate"
+    index = [3, 8]
+    common = {
+        "date": pd.date_range("2024-01-01", periods=2),
+        "asset_id": ["A", "B"],
+    }
+    strings = pd.DataFrame({**common, "value": ["x", None]}, index=index)
+    numeric = pd.DataFrame({**common, "value": [np.nan, np.inf]}, index=index)
+
+    assert executor(strings).tolist() == [0.0, 1.0]

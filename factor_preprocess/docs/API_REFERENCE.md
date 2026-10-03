@@ -1,7 +1,7 @@
 # factor_preprocess 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**80 个 Python 模块、451 个公开函数/类/方法定义**。
+扫描实际包目录：**83 个 Python 模块、458 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -17,6 +17,7 @@
 | [factor_preprocess/adapters/ewma_full_replay.py](../factor_preprocess/adapters/ewma_full_replay.py) | 3 | Exact, bounded restart replay for the public lagged FP EWMA. |
 | [factor_preprocess/adapters/factor_assets.py](../factor_preprocess/adapters/factor_assets.py) | 12 | Factor Assets adapter - optional integration with factor_assets package. |
 | [factor_preprocess/adapters/fe_composite.py](../factor_preprocess/adapters/fe_composite.py) | 2 | Central resolver for explicit FactorEngine composite identities. |
+| [factor_preprocess/adapters/fe_native_elementwise.py](../factor_preprocess/adapters/fe_native_elementwise.py) | 5 | FE native Polars elementwise adapter for small stateless predicates. |
 | [factor_preprocess/adapters/fe_neutralization.py](../factor_preprocess/adapters/fe_neutralization.py) | 4 | Lazy adapter for FE-owned OLS neutralization composites. |
 | [factor_preprocess/adapters/fe_operator.py](../factor_preprocess/adapters/fe_operator.py) | 9 | FE operator adapter (R61-FI-041, plan §26 F2/F3). |
 | [factor_preprocess/adapters/fe_robust_ewma_identity.py](../factor_preprocess/adapters/fe_robust_ewma_identity.py) | 1 | FP boundary for FactorEngine's scoped robust EWMA identity. |
@@ -26,6 +27,7 @@
 | [factor_preprocess/backends/polars_backend.py](../factor_preprocess/backends/polars_backend.py) | 6 | Polars backend for high-performance cross-sectional transforms. |
 | [factor_preprocess/backends/registry.py](../factor_preprocess/backends/registry.py) | 10 | Backend registry for managing computational kernels across backends. |
 | [factor_preprocess/backends/selector.py](../factor_preprocess/backends/selector.py) | 11 | Backend selector for automatic backend selection based on data size and capabilities. |
+| [factor_preprocess/backends/zscore_polars.py](../factor_preprocess/backends/zscore_polars.py) | 1 | Native Polars kernel for the standalone v2 cross-sectional z-score. |
 | [factor_preprocess/contracts/__init__.py](../factor_preprocess/contracts/__init__.py) | 0 | Contracts package. |
 | [factor_preprocess/contracts/_deep_freeze.py](../factor_preprocess/contracts/_deep_freeze.py) | 2 | Deep immutability helper (package-local; not a shared common/utils). |
 | [factor_preprocess/contracts/factor_profile.py](../factor_preprocess/contracts/factor_profile.py) | 2 | Factor profile artifact contract for the auto-treatment optimizer. |
@@ -90,6 +92,7 @@
 | [factor_preprocess/transforms/temporal_representation.py](../factor_preprocess/transforms/temporal_representation.py) | 2 | Current observations represented against strictly preceding asset history. |
 | [factor_preprocess/transforms/treatment_variants.py](../factor_preprocess/transforms/treatment_variants.py) | 1 | Treatment variant transforms that the eligibility engine may propose. |
 | [factor_preprocess/transforms/volatility.py](../factor_preprocess/transforms/volatility.py) | 5 | Volatility scaling transforms with explicit causality. |
+| [factor_preprocess/transforms/zscore_numeric.py](../factor_preprocess/transforms/zscore_numeric.py) | 1 | Versioned numeric kernels for standalone factor-preprocess z-scores. |
 
 ## factor_preprocess/__init__.py
 
@@ -508,6 +511,54 @@ Resolve only FE composites with a specifically scoped provider.
 
 返回类型：`dict`。
 
+## factor_preprocess/adapters/fe_native_elementwise.py
+
+FE native Polars elementwise adapter for small stateless predicates.
+
+显式导出（含重导出）：`FeNativeElementwiseExecutor`、`get_fe_native_elementwise_executor`。
+
+### FeNativeElementwiseExecutor
+
+[实际实现](../factor_preprocess/adapters/fe_native_elementwise.py#L71)。
+
+Run an FE Polars predicate over a long input's value vector.
+
+### FeNativeElementwiseExecutor.__init__
+
+[实际实现](../factor_preprocess/adapters/fe_native_elementwise.py#L74)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self, canonical: str='is_null', *, fallback: Any=None, allow_research_fallback: bool=False)`。
+
+### FeNativeElementwiseExecutor.__call__
+
+[实际实现](../factor_preprocess/adapters/fe_native_elementwise.py#L174)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self, values: pd.DataFrame, *, value_col: str='value', time_col: str='date', asset_col: str='asset_id')`。
+
+返回类型：`pd.Series`。
+
+### FeNativeElementwiseExecutor.execution_identity
+
+[实际实现](../factor_preprocess/adapters/fe_native_elementwise.py#L192)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self)`。
+
+返回类型：`dict`。
+
+### get_fe_native_elementwise_executor
+
+[实际实现](../factor_preprocess/adapters/fe_native_elementwise.py#L262)。
+
+Return the lazy FE native elementwise executor.
+
+参数：`(canonical: str='is_null', *, fallback=None, allow_research_fallback: bool=False)`。
+
 ## factor_preprocess/adapters/fe_neutralization.py
 
 Lazy adapter for FE-owned OLS neutralization composites.
@@ -774,7 +825,7 @@ Polars backend for high-performance cross-sectional transforms.
 
 ### cs_rank_polars
 
-[实际实现](../factor_preprocess/backends/polars_backend.py#L30)。
+[实际实现](../factor_preprocess/backends/polars_backend.py#L53)。
 
 Cross-sectional rank using polars for high performance.
 
@@ -784,17 +835,17 @@ Cross-sectional rank using polars for high performance.
 
 ### cs_zscore_polars
 
-[实际实现](../factor_preprocess/backends/polars_backend.py#L112)。
+[实际实现](../factor_preprocess/backends/polars_backend.py#L132)。
 
 Cross-sectional z-score using polars for high performance.
 
-参数：`(df: Union[pd.DataFrame, pl.DataFrame], value_col: str, group_col: str='date', ddof: int=1, constant_value: float=0.0)`。
+参数：`(df: Union[pd.DataFrame, pl.DataFrame], value_col: str, group_col: str='date', ddof: int=1, constant_value: float=0.0, numeric_policy: Literal['legacy_polars_v1', 'finite_anchor_centered_v2']=FINITE_ANCHOR_CENTERED_V2)`。
 
 返回类型：`Union[pd.Series, pl.Series]`。
 
 ### cs_demean_polars
 
-[实际实现](../factor_preprocess/backends/polars_backend.py#L170)。
+[实际实现](../factor_preprocess/backends/polars_backend.py#L229)。
 
 Cross-sectional demean using polars for high performance.
 
@@ -804,7 +855,7 @@ Cross-sectional demean using polars for high performance.
 
 ### cs_winsor_polars
 
-[实际实现](../factor_preprocess/backends/polars_backend.py#L215)。
+[实际实现](../factor_preprocess/backends/polars_backend.py#L274)。
 
 Cross-sectional winsorization using polars for high performance.
 
@@ -814,7 +865,7 @@ Cross-sectional winsorization using polars for high performance.
 
 ### cs_scale_polars
 
-[实际实现](../factor_preprocess/backends/polars_backend.py#L272)。
+[实际实现](../factor_preprocess/backends/polars_backend.py#L331)。
 
 Cross-sectional scaling to target std using polars for high performance.
 
@@ -824,7 +875,7 @@ Cross-sectional scaling to target std using polars for high performance.
 
 ### ols_neutralize_polars
 
-[实际实现](../factor_preprocess/backends/polars_backend.py#L328)。
+[实际实现](../factor_preprocess/backends/polars_backend.py#L387)。
 
 Cross-sectional OLS neutralization using polars for high performance.
 
@@ -1046,6 +1097,18 @@ Benchmark available backends for a specific operation.
 参数：`(operation: str='rolling', T: int=500, N: int=1000, window: int=20, n_runs: int=3)`。
 
 返回类型：`Dict[str, Dict[str, Any]]`。
+
+## factor_preprocess/backends/zscore_polars.py
+
+Native Polars kernel for the standalone v2 cross-sectional z-score.
+
+### finite_anchor_centered_zscore_polars
+
+[实际实现](../factor_preprocess/backends/zscore_polars.py#L7)。
+
+Compute grouped stable z-scores using native Polars expressions only.
+
+参数：`(frame: Any, *, value_col: str, group_col: str, ddof: float, constant_value: float)`。
 
 ## factor_preprocess/contracts/__init__.py
 
@@ -4110,7 +4173,7 @@ Identify the resolver-selected route without changing legacy hashes.
 
 ### TransformRegistry.get_execution
 
-[实际实现](../factor_preprocess/registry/transforms.py#L883)。
+[实际实现](../factor_preprocess/registry/transforms.py#L908)。
 
 Return the callable to execute for a transform.
 
@@ -4118,7 +4181,7 @@ Return the callable to execute for a transform.
 
 ### TransformRegistry.get_function
 
-[实际实现](../factor_preprocess/registry/transforms.py#L974)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1015)。
 
 Reject the retired unvalidated native-kernel execution bypass.
 
@@ -4128,7 +4191,7 @@ Reject the retired unvalidated native-kernel execution bypass.
 
 ### TransformRegistry.get_research_reference_function
 
-[实际实现](../factor_preprocess/registry/transforms.py#L990)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1031)。
 
 Return a retained native parity kernel only with explicit consent.
 
@@ -4138,7 +4201,7 @@ Return a retained native parity kernel only with explicit consent.
 
 ### TransformRegistry.get_recipe_execution
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1004)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1045)。
 
 Compile an FE recipe with explicit execution authority.
 
@@ -4146,7 +4209,7 @@ Compile an FE recipe with explicit execution authority.
 
 ### TransformRegistry.list_by_category
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1030)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1071)。
 
 List isolated deep-frozen transform metadata snapshots in a category.
 
@@ -4156,7 +4219,7 @@ List isolated deep-frozen transform metadata snapshots in a category.
 
 ### TransformRegistry.list_by_tag
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1035)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1076)。
 
 List isolated deep-frozen snapshots with a given tag.
 
@@ -4166,7 +4229,7 @@ List isolated deep-frozen snapshots with a given tag.
 
 ### TransformRegistry.list_causal_safe
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1040)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1081)。
 
 List isolated deep-frozen snapshots of all causal-safe transforms.
 
@@ -4176,7 +4239,7 @@ List isolated deep-frozen snapshots of all causal-safe transforms.
 
 ### TransformRegistry.all_transforms
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1047)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1088)。
 
 Get isolated deep-frozen snapshots of all registered transforms.
 
@@ -4186,7 +4249,7 @@ Get isolated deep-frozen snapshots of all registered transforms.
 
 ### TransformRegistry.get_signature_hash
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1051)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1092)。
 
 Get signature hash for reproducibility tracking.
 
@@ -4196,7 +4259,7 @@ Get signature hash for reproducibility tracking.
 
 ### TransformRegistry.seal
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1056)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1097)。
 
 Freeze the registry into an immutable snapshot identity (FP-P1-05).
 
@@ -4206,7 +4269,7 @@ Freeze the registry into an immutable snapshot identity (FP-P1-05).
 
 ### TransformRegistry.diagnostic_events
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1078)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1119)。
 
 Stable ordered audit trail of registry lifecycle events.
 
@@ -4216,7 +4279,7 @@ Stable ordered audit trail of registry lifecycle events.
 
 ### TransformRegistry.snapshot_identity
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1090)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1131)。
 
 Content-derived identity of the sealed snapshot (None if not sealed).
 
@@ -4226,7 +4289,7 @@ Content-derived identity of the sealed snapshot (None if not sealed).
 
 ### TransformRegistry.is_sealed
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1095)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1136)。
 
 Whether the registry has been frozen.
 
@@ -4236,7 +4299,7 @@ Whether the registry has been frozen.
 
 ### create_default_registry
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1100)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1141)。
 
 Create registry with all built-in transforms.
 
@@ -4246,7 +4309,7 @@ Create registry with all built-in transforms.
 
 ### get_default_registry
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1719)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1763)。
 
 Get or create the default global registry.
 
@@ -4764,7 +4827,7 @@ Cross-sectional transforms: rank, zscore, demean, winsor.
 
 ### cs_rank
 
-[实际实现](../factor_preprocess/transforms/cross_sectional.py#L11)。
+[实际实现](../factor_preprocess/transforms/cross_sectional.py#L14)。
 
 Cross-sectional rank with explicit tie handling.
 
@@ -4774,17 +4837,17 @@ Cross-sectional rank with explicit tie handling.
 
 ### cs_zscore
 
-[实际实现](../factor_preprocess/transforms/cross_sectional.py#L79)。
+[实际实现](../factor_preprocess/transforms/cross_sectional.py#L82)。
 
 Cross-sectional z-score normalization.
 
-参数：`(values: np.ndarray, axis: int=-1, ddof: int=1, constant_value: float=0.0)`。
+参数：`(values: np.ndarray, axis: int=-1, ddof: int=1, constant_value: float=0.0, numeric_policy: Literal['legacy_numpy_v1', 'finite_anchor_centered_v2']=FINITE_ANCHOR_CENTERED_V2)`。
 
 返回类型：`np.ndarray`。
 
 ### cs_demean
 
-[实际实现](../factor_preprocess/transforms/cross_sectional.py#L128)。
+[实际实现](../factor_preprocess/transforms/cross_sectional.py#L142)。
 
 Cross-sectional demean.
 
@@ -4794,7 +4857,7 @@ Cross-sectional demean.
 
 ### cs_winsor
 
-[实际实现](../factor_preprocess/transforms/cross_sectional.py#L154)。
+[实际实现](../factor_preprocess/transforms/cross_sectional.py#L168)。
 
 Cross-sectional winsorization by quantiles.
 
@@ -4804,7 +4867,7 @@ Cross-sectional winsorization by quantiles.
 
 ### cs_scale
 
-[实际实现](../factor_preprocess/transforms/cross_sectional.py#L206)。
+[实际实现](../factor_preprocess/transforms/cross_sectional.py#L220)。
 
 Cross-sectional scaling to target standard deviation.
 
@@ -5408,6 +5471,20 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 
 返回类型：`pd.Series`。
 
+## factor_preprocess/transforms/zscore_numeric.py
+
+Versioned numeric kernels for standalone factor-preprocess z-scores.
+
+### finite_anchor_centered_zscore
+
+[实际实现](../factor_preprocess/transforms/zscore_numeric.py#L15)。
+
+Stable Float64 z-score for finite members, preserving FP v1 edge policy.
+
+参数：`(values: np.ndarray, *, axis: Any=-1, ddof: float=1, constant_value: float=0.0)`。
+
+返回类型：`np.ndarray`。
+
 ## 源码一致性
 
 <details>
@@ -5422,15 +5499,17 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/adapters/ewma_full_replay.py` | `f5d653976ab97b8581d299dddbd49494e65639cba164ee4cea722f30a74d5fb5` |
 | `factor_preprocess/adapters/factor_assets.py` | `75478a4f2c9cc80b7c30aacf729fe33ab722cfc2be7dfb63f11e3f562b92e878` |
 | `factor_preprocess/adapters/fe_composite.py` | `dc8bf40c80c0cf97b59d9076d4a0f0f33660cb500a8bea1a36249b502aab3d83` |
+| `factor_preprocess/adapters/fe_native_elementwise.py` | `5505c6795f2fae3a249fff35d909f80b47849d70d158e44340cea3ad67f421b9` |
 | `factor_preprocess/adapters/fe_neutralization.py` | `f9f9a62bd357b2f1b85ae3c78e884a5c952fdae45b7677895af67e40d0dfe93a` |
 | `factor_preprocess/adapters/fe_operator.py` | `af25dbcca4a39954bba384d1bb9d52907fffd01f01d54540ba3d3710d18ac528` |
 | `factor_preprocess/adapters/fe_robust_ewma_identity.py` | `2d4074ff7790a1694e92de906ed0b6f79f0f34b693efcb2f1f2e20185620a531` |
 | `factor_preprocess/adapters/fe_smoothing.py` | `e68f7d78dd132f57b3728d52644fc902ebc6c31f72038ffd733f088c60875534` |
 | `factor_preprocess/adapters/fitted_recipe.py` | `f6e770d3b0ad1090b52ce527169005b4ca7f06b58b06462c35db06e9c2c42e2e` |
 | `factor_preprocess/backends/__init__.py` | `764cb2de6fa732845a8040a4910996e1c0c19c210e659b9d9688100589ced7cc` |
-| `factor_preprocess/backends/polars_backend.py` | `e96429361fbae7b5f0d69b23e7e2bfeb7b77e77078a0f8c84f80cd993d8de22a` |
+| `factor_preprocess/backends/polars_backend.py` | `72ec1e668bf9e07f58b1cdbe1d4e6061cce65be3b78b6e60cb176da46c0c56b9` |
 | `factor_preprocess/backends/registry.py` | `08418aca69b9d69bac44ca9397c105baf6e07f5c113236186cdb6f7d7d1cdf32` |
 | `factor_preprocess/backends/selector.py` | `4ceaaf71031a1974730629aed885e87fadade578e6334a677d30fda0adb12fc5` |
+| `factor_preprocess/backends/zscore_polars.py` | `27d08eeedd1c80096960c4f39b5bd36a6ebdc377314d2bf5dff349af49f8b929` |
 | `factor_preprocess/contracts/__init__.py` | `f52df967671f0845fc2bda361f01cb2cfdb242d7d8f2453a717014b2722b22ac` |
 | `factor_preprocess/contracts/_deep_freeze.py` | `9c4aaca5894bbca82e1a6904f447cd24367ca779e131970043a0d33777179b40` |
 | `factor_preprocess/contracts/factor_profile.py` | `13fdd015e2aa2dfbc0985711e67fc8f360713902af3bd14c13ef32028591bb3a` |
@@ -5470,7 +5549,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/regime/switching.py` | `a6114ab07de853206d2d705d79946a162efb5d8cb04a8c7352e87ca5e5c8c43a` |
 | `factor_preprocess/registry/__init__.py` | `f7d6d9c9d84116aa51d6c7d38695d2b439f63c69cb01d54327a998d970936329` |
 | `factor_preprocess/registry/policies.py` | `6f0c776875e25205ce2e8f072dfdb70ae15caacdb6f9dc516a6151cace7fd202` |
-| `factor_preprocess/registry/transforms.py` | `06adef02f10730435016464e14f303acad51bcd58f9a41109719914cc30ef0c2` |
+| `factor_preprocess/registry/transforms.py` | `918a00f39f3c8239485d5ffa555cb4b41773244d38dbcdc1dfedce0afff9cafb` |
 | `factor_preprocess/representation/__init__.py` | `5b62691fd8b68400db3bcc025ec528ed68240d3dd127d5e036fe3e08fb58942d` |
 | `factor_preprocess/representation/linear_ready.py` | `c0f394448c6be34cc02bf83000e182da18d4f022fe83c82cd524b5582f20c81e` |
 | `factor_preprocess/representation/multichannel.py` | `f9edaba509c7bf1c12a1534eb9ca758e523f7efc62f955e09b8609bc6c346dfe` |
@@ -5478,7 +5557,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/representation/policy.py` | `fdb0967671f949a93a8a7e59853530b35d2b5917213c53c256dba6dbc23de386` |
 | `factor_preprocess/representation/tree_ready.py` | `6362ac24a6a3916733652199bfcb3b47096e2b80aa53ffd2b1633ae4ec80c659` |
 | `factor_preprocess/transforms/__init__.py` | `6b7f63f73848b60b67fff56a3b414a62c7c8019def1c110cf9029dd4d34dddec` |
-| `factor_preprocess/transforms/cross_sectional.py` | `7f2d2a0daa5cc698eed8ce289e769cdad0e749627b1ab9213c2a24083d6985c1` |
+| `factor_preprocess/transforms/cross_sectional.py` | `d68797899fec83de1427adbc6a02e478db7b58a181b680947b0f65229a4dbc16` |
 | `factor_preprocess/transforms/decomposition/__init__.py` | `089d5af717071ab530734b69b74a98ccfec25ad6557b58cd1b4b7e5abdcb1f11` |
 | `factor_preprocess/transforms/decomposition/cycle.py` | `0a0c3c5493af64c178ab556776dfd1d0ae36625cfc445c0fba012ee618a0482e` |
 | `factor_preprocess/transforms/decomposition/seasonal.py` | `a7ed56c6b957f742d000e195f58ac031053562a3cdbfaa568a8aa598d8744874` |
@@ -5495,6 +5574,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/transforms/temporal_representation.py` | `bde5f0f504b38e4b8721786a217bf395dd31ac10cf8b31434a94807ce16c72c5` |
 | `factor_preprocess/transforms/treatment_variants.py` | `5d3a3dd9c7c0e014be750edcf9e37c628113acd17d8ec3dc09076e13aa3b2b4b` |
 | `factor_preprocess/transforms/volatility.py` | `5361592b9fc419a82fb6201b9bf0ce68ff81c48adc4f34762af411bd6e4b5d12` |
+| `factor_preprocess/transforms/zscore_numeric.py` | `3069eac36fbe62a8adb59cc3e2a086a8dd94cea8981f9b767e429e15f5bc014b` |
 
 </details>
 

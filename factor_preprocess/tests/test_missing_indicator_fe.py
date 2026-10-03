@@ -77,3 +77,32 @@ def test_missing_indicator_rejects_ambiguous_long_panel_identity(bad_identity):
         values.loc[1, "asset_id"] = "A"
     with pytest.raises(ValueError, match="null|duplicate"):
         get_default_registry().get_execution("missing_indicator")(values)
+
+
+def test_missing_indicator_research_fallback_identity_is_not_fe(monkeypatch):
+    import builtins
+
+    registry = get_default_registry()
+    original_import = builtins.__import__
+
+    def blocked_factor_engine(name, *args, **kwargs):
+        if name.startswith("factor_engine"):
+            raise ModuleNotFoundError("simulated FP-only environment")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", blocked_factor_engine)
+    identity = registry.execution_identity("missing_indicator", allow_research=True)
+    executor = registry.get_execution("missing_indicator", allow_research=True)
+    values = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2024-01-01", "2024-01-02"]),
+            "asset_id": ["A", "A"],
+            "value": [np.nan, 2.0],
+        }
+    )
+
+    result = executor(values)
+
+    assert result.tolist() == [1.0, 0.0]
+    assert identity["identity_kind"] == "FP_RESEARCH_FALLBACK"
+    assert identity["execution_origin"] == "FP_RESEARCH_FALLBACK"

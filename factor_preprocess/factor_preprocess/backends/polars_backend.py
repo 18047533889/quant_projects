@@ -11,6 +11,9 @@ import pandas as pd
 from typing import Optional, Literal, Union
 from datetime import datetime
 
+from factor_preprocess.backends.zscore_polars import finite_anchor_centered_zscore_polars
+from factor_preprocess.transforms.zscore_numeric import FINITE_ANCHOR_CENTERED_V2
+
 try:
     import polars as pl
     POLARS_AVAILABLE = True
@@ -132,6 +135,7 @@ def cs_zscore_polars(
     group_col: str = "date",
     ddof: int = 1,
     constant_value: float = 0.0,
+    numeric_policy: Literal["legacy_polars_v1", "finite_anchor_centered_v2"] = FINITE_ANCHOR_CENTERED_V2,
 ) -> Union[pd.Series, pl.Series]:
     """
     Cross-sectional z-score using polars for high performance.
@@ -148,6 +152,9 @@ def cs_zscore_polars(
         Delta degrees of freedom for std
     constant_value : float
         Value for constant groups (zero std)
+    numeric_policy : str
+        Defaults to finite-anchor-centered v2. Pass ``legacy_polars_v1`` to
+        replay historical Polars mean/std arithmetic.
 
     Returns
     -------
@@ -162,6 +169,21 @@ def cs_zscore_polars(
         raise ValueError(f"value column {value_col!r} is missing")
     if not _numeric_dtype(dtype):
         raise TypeError(f"z-score values must have a numeric dtype, got {dtype}")
+    if numeric_policy not in {"legacy_polars_v1", FINITE_ANCHOR_CENTERED_V2}:
+        raise ValueError(f"unknown z-score numeric policy: {numeric_policy!r}")
+
+    if numeric_policy == FINITE_ANCHOR_CENTERED_V2:
+        output = finite_anchor_centered_zscore_polars(
+            pl_df,
+            value_col=value_col,
+            group_col=group_col,
+            ddof=ddof,
+            constant_value=constant_value,
+        )
+        if return_pandas:
+            output = output.to_pandas()
+            output.index = df.index
+        return output
 
     value = pl.col(value_col)
     if dtype == pl.Null:

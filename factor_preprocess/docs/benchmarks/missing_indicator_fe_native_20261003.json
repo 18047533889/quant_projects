@@ -1,0 +1,259 @@
+{
+  "available_ram_bytes": {
+    "after_measurement": 49250721792,
+    "before_input": 50414538752
+  },
+  "binding_after_measurement": {
+    "legacy_pandas_numpy": {
+      "adapter_implementation_hash": "9de6cf70e24da35d27493acc866a0cb2a0fd5707908b591503e76e33340f41e8",
+      "backend": "pandas_numpy",
+      "backend_source": "factor_dsl_np",
+      "binding_state": "current_selected_binding",
+      "digest": "1fbda220db315e5008b0d3149fae5d42a9699693c97626983c98d398960a3f77",
+      "execution_origin": "FE_OPERATOR",
+      "fe_contract_hash": "b0af21dd1fcd1c98",
+      "fe_implementation_hash": "fe03472dde7df9a5",
+      "identity_kind": "FE_OPERATOR_SELECTED_BACKEND",
+      "semantic_version": "2.0",
+      "status": "bound"
+    },
+    "registry_native": {
+      "adapter_implementation_hash": "19e0e2855dfaf9a8f51016a0f80eb6017624ede2da32e3cc672c6a767a72893d",
+      "backend": "polars",
+      "backend_source": "factor_dsl_polars",
+      "binding_state": "last_execution",
+      "digest": "ff32620ab68c44a02fde1cffcfc4bc9430b905d1264bcb765759c6d4d2b8bc6b",
+      "execution_origin": "FE_OPERATOR",
+      "fe_contract_hash": "b0af21dd1fcd1c98",
+      "fe_implementation_hash": "fbf2564699a82b7f",
+      "identity_kind": "FE_OPERATOR_SELECTED_BACKEND",
+      "semantic_version": "2.0",
+      "status": "bound"
+    }
+  },
+  "binding_before_warmups": {
+    "registry_native": {
+      "adapter_implementation_hash": "19e0e2855dfaf9a8f51016a0f80eb6017624ede2da32e3cc672c6a767a72893d",
+      "backend": "polars",
+      "backend_source": "factor_dsl_polars",
+      "binding_state": "planned_native_candidate",
+      "digest": "a3fe25eff087a93b12542833b68cf4bab236d581e229d9a5ed6637aca7d58a7b",
+      "execution_origin": "FE_OPERATOR",
+      "fe_contract_hash": "b0af21dd1fcd1c98",
+      "fe_implementation_hash": "fbf2564699a82b7f",
+      "identity_kind": "FE_OPERATOR_SELECTED_BACKEND",
+      "semantic_version": "2.0",
+      "status": "bound"
+    }
+  },
+  "cpu": {
+    "load_average_1_5_15_after": [
+      17.43603515625,
+      14.326171875,
+      13.7197265625
+    ],
+    "load_average_1_5_15_before": [
+      13.5126953125,
+      12.98486328125,
+      13.2646484375
+    ],
+    "logical_cpu_count": 32
+  },
+  "elapsed_seconds": 42.11695109301945,
+  "ended_at_utc": "2026-10-03T10:08:00.895+00:00",
+  "host": "qs-compute-gpu-hk-01",
+  "input": {
+    "assets": 500,
+    "dates": 600,
+    "duplicate_index_label_count": 170486,
+    "identity_key": [
+      "date",
+      "asset_id"
+    ],
+    "index": "seeded duplicate labels",
+    "nan_count": 24000,
+    "nan_fraction": 0.08,
+    "positive_inf_count": 3000,
+    "positive_inf_fraction_target": 0.01,
+    "row_order": "seeded shuffle",
+    "rows": 300000,
+    "seed": 20261003,
+    "unique_identity_key_verified": true
+  },
+  "median_seconds": {
+    "legacy_pandas_numpy": 0.36091704899445176,
+    "registry_native": 0.047852938005235046
+  },
+  "median_speedup_legacy_over_registry": 7.542212955763927,
+  "numpy": "2.2.6",
+  "oracle": "pd.isna(value).astype(float64); exact Series index/name/dtype/value check each warmup and trial",
+  "pandas": "2.3.3",
+  "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
+  "polars": "1.42.1",
+  "python": "3.12.3",
+  "raw_durations_seconds": {
+    "legacy_pandas_numpy": [
+      0.35867927595973015,
+      0.36098220699932426,
+      0.3878995919949375,
+      0.36091704899445176,
+      0.3869655999587849,
+      0.35250752099091187,
+      0.3583256769925356
+    ],
+    "registry_native": [
+      0.04676954000024125,
+      0.050201387028209865,
+      0.047852938005235046,
+      0.04837966203922406,
+      0.047778170031961054,
+      0.049242606037296355,
+      0.04752467799698934
+    ]
+  },
+  "routes": {
+    "legacy_pandas_numpy": "get_fe_executor('is_null', fallback=metadata.func)",
+    "registry_native": "get_default_registry().get_execution('missing_indicator')"
+  },
+  "schema": "missing-indicator-registry-ab/v1",
+  "started_at_utc": "2026-10-03T10:07:18.778+00:00",
+  "status": "complete",
+  "thread_environment": {
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1"
+  },
+  "trial_order": [
+    [
+      "registry_native",
+      "legacy_pandas_numpy"
+    ],
+    [
+      "legacy_pandas_numpy",
+      "registry_native"
+    ],
+    [
+      "registry_native",
+      "legacy_pandas_numpy"
+    ],
+    [
+      "legacy_pandas_numpy",
+      "registry_native"
+    ],
+    [
+      "registry_native",
+      "legacy_pandas_numpy"
+    ],
+    [
+      "legacy_pandas_numpy",
+      "registry_native"
+    ],
+    [
+      "registry_native",
+      "legacy_pandas_numpy"
+    ]
+  ],
+  "trials": [
+    {
+      "order": [
+        "registry_native",
+        "legacy_pandas_numpy"
+      ],
+      "round": 1,
+      "seconds": {
+        "legacy_pandas_numpy": 0.35867927595973015,
+        "registry_native": 0.04676954000024125
+      }
+    },
+    {
+      "order": [
+        "legacy_pandas_numpy",
+        "registry_native"
+      ],
+      "round": 2,
+      "seconds": {
+        "legacy_pandas_numpy": 0.36098220699932426,
+        "registry_native": 0.050201387028209865
+      }
+    },
+    {
+      "order": [
+        "registry_native",
+        "legacy_pandas_numpy"
+      ],
+      "round": 3,
+      "seconds": {
+        "legacy_pandas_numpy": 0.3878995919949375,
+        "registry_native": 0.047852938005235046
+      }
+    },
+    {
+      "order": [
+        "legacy_pandas_numpy",
+        "registry_native"
+      ],
+      "round": 4,
+      "seconds": {
+        "legacy_pandas_numpy": 0.36091704899445176,
+        "registry_native": 0.04837966203922406
+      }
+    },
+    {
+      "order": [
+        "registry_native",
+        "legacy_pandas_numpy"
+      ],
+      "round": 5,
+      "seconds": {
+        "legacy_pandas_numpy": 0.3869655999587849,
+        "registry_native": 0.047778170031961054
+      }
+    },
+    {
+      "order": [
+        "legacy_pandas_numpy",
+        "registry_native"
+      ],
+      "round": 6,
+      "seconds": {
+        "legacy_pandas_numpy": 0.35250752099091187,
+        "registry_native": 0.049242606037296355
+      }
+    },
+    {
+      "order": [
+        "registry_native",
+        "legacy_pandas_numpy"
+      ],
+      "round": 7,
+      "seconds": {
+        "legacy_pandas_numpy": 0.3583256769925356,
+        "registry_native": 0.04752467799698934
+      }
+    }
+  ],
+  "warmups": [
+    {
+      "order": [
+        "registry_native",
+        "legacy_pandas_numpy"
+      ],
+      "seconds": {
+        "legacy_pandas_numpy": 0.3787460449966602,
+        "registry_native": 0.05324010702315718
+      }
+    },
+    {
+      "order": [
+        "legacy_pandas_numpy",
+        "registry_native"
+      ],
+      "seconds": {
+        "legacy_pandas_numpy": 0.3637382239685394,
+        "registry_native": 0.0511105700279586
+      }
+    }
+  ]
+}
