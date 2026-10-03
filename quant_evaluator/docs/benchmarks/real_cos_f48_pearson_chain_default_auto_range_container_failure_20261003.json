@@ -1,0 +1,374 @@
+{
+  "kind": "real_cos_f48_pearson_chain_default_auto_qualification.v1",
+  "status": "verification_failed",
+  "benchmark_only": false,
+  "registered_route_verification": true,
+  "evidence_id": "real_cos_f48_pearson_chain_cap16_tile4",
+  "requested_tile_cap": 16,
+  "effective_tile_width": 4,
+  "api_default_tile_size": true,
+  "shape": [
+    2586,
+    5461,
+    48
+  ],
+  "metric_ids": [
+    "pearson_ic",
+    "pearson_ic_series",
+    "pearson_ic_std",
+    "pearson_ic_ir"
+  ],
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "reference_reports": [
+    "quant_evaluator/docs/benchmarks/real_cos_f48_pearson_chain_width4_cpu_first_20261003.json",
+    "quant_evaluator/docs/benchmarks/real_cos_f48_pearson_chain_width4_cuda_first_20261003.json"
+  ],
+  "reference_artifacts": [
+    "quant_evaluator/docs/benchmarks/real_cos_f48_pearson_chain_width4_cpu_first_20261003.json",
+    "quant_evaluator/docs/benchmarks/real_cos_f48_pearson_chain_width4_cuda_first_20261003.json"
+  ],
+  "historical_reference_provenance_sha256": "b13bb54505d6da85b29726dd4736e4da71369a4f2074774282f9e0388a97046f",
+  "preflight_initial": {
+    "pass": true,
+    "available_ram_bytes": 47224799232,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 365640695808,
+    "required_disk_bytes": 5368709120
+  },
+  "preflight_before_evaluation": {
+    "pass": true,
+    "available_ram_bytes": 48216875008,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 365632696320,
+    "required_disk_bytes": 5368709120
+  },
+  "run": {
+    "source_adapter": "cos",
+    "backend_requested": "auto",
+    "backend_used": "cuda",
+    "source_request_fingerprint": "8ab3e727799b8056a202f2fe9a9556d570ff98b0bedad6a10e0e0bed76b5a2a0",
+    "effective_max_tile_size": 4,
+    "api_default_tile_size": true,
+    "declared_source_tile_size": 16,
+    "admitted_source_tile_size": 5,
+    "peak_vram_bytes": 1186262528,
+    "pool_reserved_peak_bytes": 1186262528,
+    "vram_budget_bytes": 30067458048.0,
+    "h2d_bytes": 6213744240,
+    "d2h_bytes": 995712,
+    "oom_retries": 0,
+    "seconds": 57.93078750395216,
+    "total_wall_seconds": 57.93078750395216,
+    "factor_tiles_processed": 12,
+    "tile_ranges": [
+      [
+        0,
+        4
+      ],
+      [
+        4,
+        8
+      ],
+      [
+        8,
+        12
+      ],
+      [
+        12,
+        16
+      ],
+      [
+        16,
+        20
+      ],
+      [
+        20,
+        24
+      ],
+      [
+        24,
+        28
+      ],
+      [
+        28,
+        32
+      ],
+      [
+        32,
+        36
+      ],
+      [
+        36,
+        40
+      ],
+      [
+        40,
+        44
+      ],
+      [
+        44,
+        48
+      ]
+    ],
+    "factor_ids_sha256": "690ea504f2c93f59fa4639f08927ec67a8863c80a1f7dc1c207ca4d06085857d",
+    "source_request_identity_sha256": "63a922d6284c02633f4843f07c30a8bd1a273817d2f4e3f347ee2b0591f76b7a",
+    "source_snapshot_id": "89f7a80dcd8cfbe56875467f5c80a6d92f22a5253fddb029950425187f094928",
+    "source_manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+    "prefetch_objects": true,
+    "prefetch_mode": "auto",
+    "cos_prefetch": "auto",
+    "prefetch_window": 2,
+    "estimated_peak_source_bytes": 3135345776,
+    "max_source_memory_bytes": 4294967296,
+    "tile_read_timings": [
+      {
+        "tile_range": [
+          0,
+          4
+        ],
+        "wall_seconds": 6.090255776012782,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          4,
+          8
+        ],
+        "wall_seconds": 3.0620469579589553,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          8,
+          12
+        ],
+        "wall_seconds": 3.9723064150311984,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          12,
+          16
+        ],
+        "wall_seconds": 5.2772485699970275,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          16,
+          20
+        ],
+        "wall_seconds": 4.3020670029800385,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          20,
+          24
+        ],
+        "wall_seconds": 4.49180677899858,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          24,
+          28
+        ],
+        "wall_seconds": 4.712742561008781,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          28,
+          32
+        ],
+        "wall_seconds": 4.468480077048298,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          32,
+          36
+        ],
+        "wall_seconds": 5.075656738947146,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          36,
+          40
+        ],
+        "wall_seconds": 4.372245994978584,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          40,
+          44
+        ],
+        "wall_seconds": 4.528697215020657,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      },
+      {
+        "tile_range": [
+          44,
+          48
+        ],
+        "wall_seconds": 5.894712914014235,
+        "prefetch_mode": "auto",
+        "prefetch_window": 2
+      }
+    ],
+    "source_stage_timings": {
+      "aggregation": "summed_stage_durations_seconds",
+      "scope": "source lifecycle; includes setup before and final verify after evaluator timing",
+      "phases": {
+        "context_setup": {
+          "count": 49,
+          "total_seconds": 0.9213880300521851
+        },
+        "bound_factor_read": {
+          "count": 48,
+          "total_seconds": 101.06077900715172
+        },
+        "arrow_to_pandas_axis": {
+          "count": 96,
+          "total_seconds": 6.142516556894407
+        },
+        "reindex_write": {
+          "count": 48,
+          "total_seconds": 6.69839295418933
+        },
+        "manifest_verify": {
+          "count": 2,
+          "total_seconds": 1.1778887149994262
+        }
+      }
+    },
+    "source_read_wall_seconds": 56.24826700199628,
+    "observation_counts_sha256": {
+      "pearson_ic": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+      "pearson_ic_series": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+      "pearson_ic_std": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+      "pearson_ic_ir": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f"
+    },
+    "peak_process_rss_kib": 5088204
+  },
+  "route_pass": true,
+  "coverage_pass": false,
+  "reference_comparison": {
+    "pass": true,
+    "compared_value_count": 124272,
+    "metrics": {
+      "pearson_ic": {
+        "pass": true,
+        "artifact_kind": "scalar",
+        "shape": [
+          48
+        ],
+        "finite_value_count": 48,
+        "observation_counts_shape_valid": true,
+        "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "values_sha256": "94dcb4782063c8e042bf92b025d625e564322e6fde5c584843bc43356c14b7de"
+      },
+      "pearson_ic_series": {
+        "pass": true,
+        "artifact_kind": "series",
+        "shape": [
+          2586,
+          48
+        ],
+        "finite_value_count": 123529,
+        "observation_counts_shape_valid": true,
+        "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "values_sha256": "8430f77a64c44a3b837937a044bf5813a66cbeaafad0f33ed9e38042452fb092"
+      },
+      "pearson_ic_std": {
+        "pass": true,
+        "artifact_kind": "scalar",
+        "shape": [
+          48
+        ],
+        "finite_value_count": 48,
+        "observation_counts_shape_valid": true,
+        "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "values_sha256": "a46018fb518337c8e5c3b8cb3b6b32d4f14d3bd0fbdb707a8254fe47c21b7c59"
+      },
+      "pearson_ic_ir": {
+        "pass": true,
+        "artifact_kind": "scalar",
+        "shape": [
+          48
+        ],
+        "finite_value_count": 48,
+        "observation_counts_shape_valid": true,
+        "observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "values_sha256": "8e510f82059f9d7cec11cbb0884166d9adf9ef7aea1ba11a4427d08d61793e9d"
+      }
+    }
+  },
+  "limitations": [
+    "The historical references certify exact cap-4 source A/B, not a strict cap-16 A/B.",
+    "Cap-16 to effective-width-4 is supported by this ordinary default-auto qualification.",
+    "Historical source provenance hash is not a claim of current source-tree or transitive-runtime equivalence.",
+    "This research route does not certify PIT or production suitability."
+  ],
+  "source_provenance": {
+    "algorithm": "sha256_path_length_prefixed_v1",
+    "aggregate_sha256": "67fbbffaf25da5fcd77abbf1bc5ecf851d32037649f436961cf46dbdd462da12",
+    "file_count": 169,
+    "scope": {
+      "directories": [
+        "quant_evaluator/api",
+        "quant_evaluator/adapters",
+        "quant_evaluator/contracts",
+        "quant_evaluator/kernels",
+        "quant_evaluator/metrics",
+        "quant_evaluator/runtime"
+      ],
+      "files": [
+        "quant_evaluator/scripts/benchmark_real_cos_source_batch.py",
+        "quant_evaluator/scripts/benchmark_real_cos_factor_tiles.py",
+        "quant_evaluator/scripts/source_width_preparation.py",
+        "quant_evaluator/scripts/f48_auto_references.py",
+        "quant_evaluator/scripts/f48_benchmark_candidate.py",
+        "quant_evaluator/scripts/source_tree_provenance.py",
+        "quant_evaluator/scripts/f48_pearson_auto_references.py",
+        "quant_evaluator/scripts/benchmark_f48_pearson_default_auto.py"
+      ]
+    },
+    "versions": {
+      "python": "3.12.3",
+      "numpy": "2.2.6",
+      "pandas": "2.3.3",
+      "cupy": null
+    },
+    "limitations": [
+      "This receipt hashes only the declared current Python source-file scope.",
+      "External DataAccess and Factor Optimizer dependencies are not attested.",
+      "Already-imported in-memory code is not attested; this is not a transitive runtime closure."
+    ]
+  },
+  "source_provenance_verification": {
+    "pass": true,
+    "status": "unchanged",
+    "after_aggregate_sha256": "67fbbffaf25da5fcd77abbf1bc5ecf851d32037649f436961cf46dbdd462da12",
+    "after_versions": {
+      "python": "3.12.3",
+      "numpy": "2.2.6",
+      "pandas": "2.3.3",
+      "cupy": "14.2.0"
+    }
+  }
+}

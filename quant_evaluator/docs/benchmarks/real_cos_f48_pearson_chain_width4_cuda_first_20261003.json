@@ -1,0 +1,658 @@
+{
+  "status": "complete",
+  "kind": "real_cos_whole_source_batch_ab.v1",
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "shape": [
+    2586,
+    5461,
+    48
+  ],
+  "factor_dtype": "float64",
+  "tile_size": 4,
+  "source_adapter": "cos",
+  "cos_prefetch": "auto",
+  "prefetch_objects": true,
+  "prefetch_mode": "auto",
+  "prefetch_window": 2,
+  "caller_settings": {
+    "cos_prefetch_workers": 2,
+    "max_prefetch_memory_mib": 512,
+    "max_object_mib": 128,
+    "max_total_mib": 4096
+  },
+  "run_order": [
+    "cuda_strict",
+    "cpu"
+  ],
+  "metric_ids": [
+    "pearson_ic",
+    "pearson_ic_series",
+    "pearson_ic_std",
+    "pearson_ic_ir"
+  ],
+  "preflight_before_cpu": {
+    "pass": true,
+    "available_ram_bytes": 43259695104,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 369134563328,
+    "required_disk_bytes": 5368709120
+  },
+  "preflight_before_cuda": {
+    "pass": true,
+    "available_ram_bytes": 46832439296,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 369194393600,
+    "required_disk_bytes": 5368709120
+  },
+  "runs": [
+    {
+      "source_adapter": "cos",
+      "backend_requested": "cpu",
+      "backend_used": "cpu",
+      "source_request_fingerprint": "8ab3e727799b8056a202f2fe9a9556d570ff98b0bedad6a10e0e0bed76b5a2a0",
+      "effective_max_tile_size": 4,
+      "api_default_tile_size": false,
+      "declared_source_tile_size": 4,
+      "admitted_source_tile_size": 4,
+      "peak_vram_bytes": null,
+      "pool_reserved_peak_bytes": null,
+      "vram_budget_bytes": null,
+      "h2d_bytes": null,
+      "d2h_bytes": null,
+      "oom_retries": null,
+      "seconds": 87.7572728759842,
+      "total_wall_seconds": 87.7572728759842,
+      "factor_tiles_processed": 12,
+      "tile_ranges": [
+        [
+          0,
+          4
+        ],
+        [
+          4,
+          8
+        ],
+        [
+          8,
+          12
+        ],
+        [
+          12,
+          16
+        ],
+        [
+          16,
+          20
+        ],
+        [
+          20,
+          24
+        ],
+        [
+          24,
+          28
+        ],
+        [
+          28,
+          32
+        ],
+        [
+          32,
+          36
+        ],
+        [
+          36,
+          40
+        ],
+        [
+          40,
+          44
+        ],
+        [
+          44,
+          48
+        ]
+      ],
+      "factor_ids_sha256": "690ea504f2c93f59fa4639f08927ec67a8863c80a1f7dc1c207ca4d06085857d",
+      "source_request_identity_sha256": "63a922d6284c02633f4843f07c30a8bd1a273817d2f4e3f347ee2b0591f76b7a",
+      "source_snapshot_id": "89f7a80dcd8cfbe56875467f5c80a6d92f22a5253fddb029950425187f094928",
+      "source_manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+      "prefetch_objects": true,
+      "prefetch_mode": "auto",
+      "cos_prefetch": "auto",
+      "prefetch_window": 2,
+      "estimated_peak_source_bytes": 3135345776,
+      "max_source_memory_bytes": 4294967296,
+      "tile_read_timings": [
+        {
+          "tile_range": [
+            0,
+            4
+          ],
+          "wall_seconds": 5.594591656001285,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            4,
+            8
+          ],
+          "wall_seconds": 3.1592131280340254,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            8,
+            12
+          ],
+          "wall_seconds": 3.218489970022347,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            12,
+            16
+          ],
+          "wall_seconds": 3.4853042869945057,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            16,
+            20
+          ],
+          "wall_seconds": 4.387772090034559,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            20,
+            24
+          ],
+          "wall_seconds": 3.8141772350063547,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            24,
+            28
+          ],
+          "wall_seconds": 4.102536706021056,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            28,
+            32
+          ],
+          "wall_seconds": 3.6818472659797408,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            32,
+            36
+          ],
+          "wall_seconds": 4.320773109968286,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            36,
+            40
+          ],
+          "wall_seconds": 4.153080513991881,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            40,
+            44
+          ],
+          "wall_seconds": 3.629410973051563,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            44,
+            48
+          ],
+          "wall_seconds": 3.910096428997349,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        }
+      ],
+      "source_stage_timings": {
+        "aggregation": "summed_stage_durations_seconds",
+        "scope": "source lifecycle; includes setup before and final verify after evaluator timing",
+        "phases": {
+          "context_setup": {
+            "count": 49,
+            "total_seconds": 2.233460418879986
+          },
+          "bound_factor_read": {
+            "count": 48,
+            "total_seconds": 102.7585415149806
+          },
+          "arrow_to_pandas_axis": {
+            "count": 96,
+            "total_seconds": 7.791383112897165
+          },
+          "reindex_write": {
+            "count": 48,
+            "total_seconds": 7.719520665821619
+          },
+          "manifest_verify": {
+            "count": 2,
+            "total_seconds": 1.0473978369846009
+          }
+        }
+      },
+      "source_read_wall_seconds": 47.45729336410295,
+      "observation_counts_sha256": {
+        "pearson_ic": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "pearson_ic_series": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "pearson_ic_std": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "pearson_ic_ir": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f"
+      },
+      "peak_process_rss_kib": 5440544,
+      "preflight": {
+        "pass": true,
+        "available_ram_bytes": 43259695104,
+        "minimum_available_ram_bytes": 34359738368,
+        "cos_cache_disk_free_bytes": 369134563328,
+        "required_disk_bytes": 5368709120
+      }
+    },
+    {
+      "source_adapter": "cos",
+      "backend_requested": "cuda_strict",
+      "backend_used": "cuda",
+      "source_request_fingerprint": "8ab3e727799b8056a202f2fe9a9556d570ff98b0bedad6a10e0e0bed76b5a2a0",
+      "effective_max_tile_size": 4,
+      "api_default_tile_size": false,
+      "declared_source_tile_size": 4,
+      "admitted_source_tile_size": 4,
+      "peak_vram_bytes": 1186262528,
+      "pool_reserved_peak_bytes": 1186262528,
+      "vram_budget_bytes": 30091051008.0,
+      "h2d_bytes": 6213744240,
+      "d2h_bytes": 995712,
+      "oom_retries": 0,
+      "seconds": 58.623459588969126,
+      "total_wall_seconds": 58.623459588969126,
+      "factor_tiles_processed": 12,
+      "tile_ranges": [
+        [
+          0,
+          4
+        ],
+        [
+          4,
+          8
+        ],
+        [
+          8,
+          12
+        ],
+        [
+          12,
+          16
+        ],
+        [
+          16,
+          20
+        ],
+        [
+          20,
+          24
+        ],
+        [
+          24,
+          28
+        ],
+        [
+          28,
+          32
+        ],
+        [
+          32,
+          36
+        ],
+        [
+          36,
+          40
+        ],
+        [
+          40,
+          44
+        ],
+        [
+          44,
+          48
+        ]
+      ],
+      "factor_ids_sha256": "690ea504f2c93f59fa4639f08927ec67a8863c80a1f7dc1c207ca4d06085857d",
+      "source_request_identity_sha256": "63a922d6284c02633f4843f07c30a8bd1a273817d2f4e3f347ee2b0591f76b7a",
+      "source_snapshot_id": "89f7a80dcd8cfbe56875467f5c80a6d92f22a5253fddb029950425187f094928",
+      "source_manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+      "prefetch_objects": true,
+      "prefetch_mode": "auto",
+      "cos_prefetch": "auto",
+      "prefetch_window": 2,
+      "estimated_peak_source_bytes": 3135345776,
+      "max_source_memory_bytes": 4294967296,
+      "tile_read_timings": [
+        {
+          "tile_range": [
+            0,
+            4
+          ],
+          "wall_seconds": 5.916467112023383,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            4,
+            8
+          ],
+          "wall_seconds": 3.4834174449788406,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            8,
+            12
+          ],
+          "wall_seconds": 4.665973037015647,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            12,
+            16
+          ],
+          "wall_seconds": 4.163954894000199,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            16,
+            20
+          ],
+          "wall_seconds": 5.216730827989522,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            20,
+            24
+          ],
+          "wall_seconds": 4.3608468179591,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            24,
+            28
+          ],
+          "wall_seconds": 5.169628961011767,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            28,
+            32
+          ],
+          "wall_seconds": 4.463620005990379,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            32,
+            36
+          ],
+          "wall_seconds": 5.241679269995075,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            36,
+            40
+          ],
+          "wall_seconds": 4.198551136010792,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            40,
+            44
+          ],
+          "wall_seconds": 5.722445580991916,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        },
+        {
+          "tile_range": [
+            44,
+            48
+          ],
+          "wall_seconds": 4.762668936979026,
+          "prefetch_mode": "auto",
+          "prefetch_window": 2
+        }
+      ],
+      "source_stage_timings": {
+        "aggregation": "summed_stage_durations_seconds",
+        "scope": "source lifecycle; includes setup before and final verify after evaluator timing",
+        "phases": {
+          "context_setup": {
+            "count": 49,
+            "total_seconds": 1.287392906844616
+          },
+          "bound_factor_read": {
+            "count": 48,
+            "total_seconds": 102.45192959683482
+          },
+          "arrow_to_pandas_axis": {
+            "count": 96,
+            "total_seconds": 7.17666981567163
+          },
+          "reindex_write": {
+            "count": 48,
+            "total_seconds": 7.069199193792883
+          },
+          "manifest_verify": {
+            "count": 2,
+            "total_seconds": 1.1302522610058077
+          }
+        }
+      },
+      "source_read_wall_seconds": 57.36598402494565,
+      "observation_counts_sha256": {
+        "pearson_ic": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "pearson_ic_series": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "pearson_ic_std": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "pearson_ic_ir": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f"
+      },
+      "peak_process_rss_kib": 4925184,
+      "preflight": {
+        "pass": true,
+        "available_ram_bytes": 46832439296,
+        "minimum_available_ram_bytes": 34359738368,
+        "cos_cache_disk_free_bytes": 369194393600,
+        "required_disk_bytes": 5368709120
+      }
+    }
+  ],
+  "comparison": {
+    "pass": true,
+    "compared_factor_count": 48,
+    "compared_metric_count": 124272,
+    "metrics": {
+      "pearson_ic": {
+        "pass": true,
+        "artifact_kind": "scalar",
+        "cpu_shape": [
+          48
+        ],
+        "cuda_shape": [
+          48
+        ],
+        "shape_valid": true,
+        "factor_count": 48,
+        "compared_value_count": 48,
+        "finite_value_count": 48,
+        "finite_mask_equal": true,
+        "max_abs_error": 1.1796119636642288e-16,
+        "observation_counts_equal": true,
+        "observation_counts_shape_valid": true,
+        "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "cpu_values_sha256": "161c498aa5b1b8ba893fc6df9dc97c6d8d80dfb24f36f7c1df606037c1c934de",
+        "cuda_values_sha256": "94dcb4782063c8e042bf92b025d625e564322e6fde5c584843bc43356c14b7de"
+      },
+      "pearson_ic_series": {
+        "pass": true,
+        "artifact_kind": "series",
+        "cpu_shape": [
+          2586,
+          48
+        ],
+        "cuda_shape": [
+          2586,
+          48
+        ],
+        "shape_valid": true,
+        "factor_count": 48,
+        "compared_value_count": 124128,
+        "finite_value_count": 123529,
+        "finite_mask_equal": true,
+        "max_abs_error": 8.881784197001252e-16,
+        "observation_counts_equal": true,
+        "observation_counts_shape_valid": true,
+        "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "cpu_values_sha256": "180bf4aab8b6f3ed1c49104b83849a5094e2c8acdd058036bb5b5baa4ec0771a",
+        "cuda_values_sha256": "8430f77a64c44a3b837937a044bf5813a66cbeaafad0f33ed9e38042452fb092"
+      },
+      "pearson_ic_std": {
+        "pass": true,
+        "artifact_kind": "scalar",
+        "cpu_shape": [
+          48
+        ],
+        "cuda_shape": [
+          48
+        ],
+        "shape_valid": true,
+        "factor_count": 48,
+        "compared_value_count": 48,
+        "finite_value_count": 48,
+        "finite_mask_equal": true,
+        "max_abs_error": 1.5265566588595902e-16,
+        "observation_counts_equal": true,
+        "observation_counts_shape_valid": true,
+        "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "cpu_values_sha256": "b53cc7abdadd28e24a9c75b97fa07181c59455865a358782612bfd535cc7321c",
+        "cuda_values_sha256": "a46018fb518337c8e5c3b8cb3b6b32d4f14d3bd0fbdb707a8254fe47c21b7c59"
+      },
+      "pearson_ic_ir": {
+        "pass": true,
+        "artifact_kind": "scalar",
+        "cpu_shape": [
+          48
+        ],
+        "cuda_shape": [
+          48
+        ],
+        "shape_valid": true,
+        "factor_count": 48,
+        "compared_value_count": 48,
+        "finite_value_count": 48,
+        "finite_mask_equal": true,
+        "max_abs_error": 1.3877787807814457e-16,
+        "observation_counts_equal": true,
+        "observation_counts_shape_valid": true,
+        "cpu_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "cuda_observation_counts_sha256": "126003bc179f1988caf819d986a7d3d7ed7e07c5b2397052805cb0f339db624f",
+        "cpu_values_sha256": "d4e98b3397dacfe889e9595e75fd2f2e7fcb447832a9a9912e101217c7e43f75",
+        "cuda_values_sha256": "8e510f82059f9d7cec11cbb0884166d9adf9ef7aea1ba11a4427d08d61793e9d"
+      }
+    }
+  },
+  "auto_run": null,
+  "auto_comparison": null,
+  "source_api": "columnar_factor_source_v1",
+  "limitations": [
+    "Research-source metrics only; no PIT or production certification.",
+    "This A/B alone does not establish automatic backend routing."
+  ],
+  "source_provenance": {
+    "algorithm": "sha256_path_length_prefixed_v1",
+    "aggregate_sha256": "b13bb54505d6da85b29726dd4736e4da71369a4f2074774282f9e0388a97046f",
+    "file_count": 166,
+    "scope": {
+      "directories": [
+        "quant_evaluator/api",
+        "quant_evaluator/adapters",
+        "quant_evaluator/contracts",
+        "quant_evaluator/kernels",
+        "quant_evaluator/metrics",
+        "quant_evaluator/runtime"
+      ],
+      "files": [
+        "quant_evaluator/scripts/benchmark_real_cos_source_batch.py",
+        "quant_evaluator/scripts/benchmark_real_cos_factor_tiles.py",
+        "quant_evaluator/scripts/source_width_preparation.py",
+        "quant_evaluator/scripts/f48_auto_references.py",
+        "quant_evaluator/scripts/f48_benchmark_candidate.py",
+        "quant_evaluator/scripts/source_tree_provenance.py"
+      ]
+    },
+    "versions": {
+      "python": "3.12.3",
+      "numpy": "2.2.6",
+      "pandas": "2.3.3",
+      "cupy": null
+    },
+    "limitations": [
+      "This receipt hashes only the declared current Python source-file scope.",
+      "External DataAccess and Factor Optimizer dependencies are not attested.",
+      "Already-imported in-memory code is not attested; this is not a transitive runtime closure."
+    ]
+  },
+  "source_provenance_verification": {
+    "pass": true,
+    "status": "unchanged",
+    "after_aggregate_sha256": "b13bb54505d6da85b29726dd4736e4da71369a4f2074774282f9e0388a97046f",
+    "after_versions": {
+      "python": "3.12.3",
+      "numpy": "2.2.6",
+      "pandas": "2.3.3",
+      "cupy": "14.2.0"
+    }
+  }
+}
