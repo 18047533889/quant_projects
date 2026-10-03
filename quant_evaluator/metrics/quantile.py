@@ -1,15 +1,14 @@
 """
 Quantile-based metrics and summary statistics.
 
-Optimized implementations:
-- Standard: Pure numpy with bincount aggregation
-- Numba JIT: 2-5x faster using JIT compilation (optional, requires numba)
+CPU implementations:
+- Standard: NumPy quantile assignment with bincount aggregation.
+- Numba: optional JIT assignment and parallel aggregation.
 
-Performance:
-- For 252 days × 3000 assets × 200 factors:
-  - Standard: ~26s
-  - Numba: ~18s (1.5x speedup)
-- Speedup increases with more factors due to better parallelization
+The legacy CPU dispatcher selects Numba by availability, not by measured
+qualification. Installation alone does not establish the fastest backend:
+cold compilation, thread settings, shape and memory pressure matter. Public
+CPU/CUDA auto qualification is a separate runtime decision.
 
 QE-Q-P0-001: Quantile tie policy enforcement
 QE-Q-P0-002: NumPy-Numba boundary parity validation
@@ -48,10 +47,12 @@ def compute_quantile_returns_fast(
     use_numba: bool = True,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Compute quantile returns with automatic selection of fastest implementation.
+    Compute quantile returns using the legacy CPU implementation selector.
 
-    Automatically uses Numba JIT if available (2-5x faster), otherwise falls back
-    to optimized numpy implementation.
+    ``use_numba=True`` requests Numba when installed, with a NumPy fallback
+    when absent. ``False`` explicitly selects NumPy. This is not a measured
+    fastest-backend guarantee, nor the public evaluator's CPU/CUDA ``auto``
+    selector. Both implementations must preserve the same quantile contract.
 
     Args:
         factor_batch: Factor values (T, N, F)
@@ -638,7 +639,8 @@ def compute_quantile_returns_optimized(
     Highly optimized quantile return computation.
 
     Uses fast quantile assignment and np.bincount for aggregation.
-    Target: 5-10x faster than original nested loop implementation.
+    Unlike the standard per-factor path, assignment materializes a full
+    (T, N, F) membership panel; account for that allocation in batch budgets.
 
     Args:
         factor_batch: Factor values (T, N, F)

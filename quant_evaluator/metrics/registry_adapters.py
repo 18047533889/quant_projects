@@ -28,6 +28,43 @@ from quant_evaluator.metrics.turnover import compute_turnover_series
 from quant_evaluator.contracts.artifact_types import DailyQuantileReturnArtifact
 
 
+def _daily_quantile_input_binding(factor_batch, label_bundle):
+    """Process-local binding for exact immutable request input objects."""
+    return (id(factor_batch), id(factor_batch.values), id(factor_batch.validity),
+            id(factor_batch.time_axis), id(factor_batch.asset_axis),
+            tuple(factor_batch.factor_ids), factor_batch.values.shape,
+            id(label_bundle), id(label_bundle.values), id(label_bundle.validity),
+            id(label_bundle.asset_axis), label_bundle.content_hash,
+            tuple(label_bundle.decision_time), tuple(label_bundle.observation_time))
+
+
+def validate_daily_quantile_return_artifact(artifact, factor_batch, label_bundle, n_quantiles, min_assets):
+    from quant_evaluator.metrics.quantile import _validate_min_assets, _validate_quantile_count
+    _validate_quantile_count(n_quantiles)
+    _validate_min_assets(min_assets)
+    if not isinstance(artifact, DailyQuantileReturnArtifact):
+        raise ValueError("daily quantile reuse requires DailyQuantileReturnArtifact")
+    times = tuple(label_bundle.observation_time or label_bundle.decision_time)
+    shape = (len(times), int(n_quantiles), factor_batch.num_factors)
+    if any(a.shape != shape for a in (artifact.values, artifact.counts, artifact.valid_mask)):
+        raise ValueError("daily quantile artifact shape does not match request")
+    if (tuple(artifact.time_axis) != times or tuple(artifact.quantile_axis) != tuple(range(int(n_quantiles)))
+            or tuple(artifact.factor_axis) != tuple(factor_batch.factor_ids)):
+        raise ValueError("daily quantile artifact axes do not match request")
+    prov = artifact.provenance
+    if (artifact.producer_version != "1.0.0"
+            or prov.get("n_quantiles") != int(n_quantiles) or prov.get("min_assets") != int(min_assets)
+            or prov.get("label_content_hash") != label_bundle.content_hash
+            or prov.get("factor_value_hash") != factor_batch.value_hash
+            or prov.get("tie_method") != "max"
+            or prov.get("input_binding") != _daily_quantile_input_binding(factor_batch, label_bundle)):
+        raise ValueError("daily quantile artifact provenance does not match request inputs")
+    expected_valid = np.isfinite(artifact.values) & (artifact.counts >= int(min_assets))
+    if not np.array_equal(artifact.valid_mask, expected_valid):
+        raise ValueError("daily quantile artifact valid_mask does not match its values/counts")
+    return artifact
+
+
 def build_daily_quantile_return_artifact(
     factor_batch: FactorBatch,
     label_bundle: LabelBundle,
@@ -41,14 +78,18 @@ def build_daily_quantile_return_artifact(
     producer_version: str = "1.0.0",
     split_ref: str | None = None,
     config_hash: str | None = None,
+    daily_quantile_artifact: DailyQuantileReturnArtifact | None = None,
+    _bind_request_inputs: bool = False,
 ) -> DailyQuantileReturnArtifact:
     """Build the non-aggregated daily TQF quantile evidence artifact."""
     if min_periods < 1:
         raise ValueError("min_periods must be positive")
-    returns, counts = compute_quantile_returns_fast(
-        factor_batch, label_bundle, n_quantiles=n_quantiles,
-        min_assets=min_assets,
-    )
+    if daily_quantile_artifact is None:
+        returns, counts = compute_quantile_returns_fast(
+            factor_batch, label_bundle, n_quantiles=n_quantiles, min_assets=min_assets)
+    else:
+        validate_daily_quantile_return_artifact(daily_quantile_artifact, factor_batch, label_bundle, n_quantiles, min_assets)
+        returns, counts = daily_quantile_artifact.values, daily_quantile_artifact.counts
     counts = np.asarray(counts)
     valid = np.isfinite(returns) & (counts >= min_assets)
     time_axis = tuple(label_bundle.observation_time or label_bundle.decision_time)
@@ -73,6 +114,8 @@ def build_daily_quantile_return_artifact(
             "split_ref": split_ref,
             "config_hash": config_hash,
             "valid_period_counts_qf": np.sum(valid, axis=0),
+            "tie_method": "max",
+            **({"input_binding": _daily_quantile_input_binding(factor_batch, label_bundle)} if _bind_request_inputs else {}),
         },
     )
 
@@ -186,11 +229,13 @@ def compute_quantile_spread_value(
     label_bundle: LabelBundle,
     min_periods: int = 20,
     n_quantiles: int = 5,
-) -> np.ndarray:
+    daily_quantile_artifact: DailyQuantileReturnArtifact | None = None) -> np.ndarray:
     """Return time-averaged top-minus-bottom quantile return spread per factor."""
-    quantile_returns, _ = compute_quantile_returns_fast(
-        factor_batch, label_bundle, n_quantiles=n_quantiles
-    )
+    if daily_quantile_artifact is None:
+        quantile_returns, _ = compute_quantile_returns_fast(factor_batch, label_bundle, n_quantiles=n_quantiles)
+    else:
+        validate_daily_quantile_return_artifact(daily_quantile_artifact, factor_batch, label_bundle, n_quantiles, 10)
+        quantile_returns = daily_quantile_artifact.values
     # (T, n_quantiles, F) -> mean over time of Q_top - Q_bottom per factor.
     with np.errstate(invalid="ignore"):
         spread_series = quantile_returns[:, -1, :] - quantile_returns[:, 0, :]
@@ -228,11 +273,13 @@ def compute_quantile_returns_full_value(
     label_bundle: LabelBundle,
     min_periods: int = 20,
     n_quantiles: int = 5,
-) -> np.ndarray:
+    daily_quantile_artifact: DailyQuantileReturnArtifact | None = None) -> np.ndarray:
     """Return per-quantile time-averaged returns, shape (n_quantiles, F)."""
-    quantile_returns, _ = compute_quantile_returns_fast(
-        factor_batch, label_bundle, n_quantiles=n_quantiles
-    )
+    if daily_quantile_artifact is None:
+        quantile_returns, _ = compute_quantile_returns_fast(factor_batch, label_bundle, n_quantiles=n_quantiles)
+    else:
+        validate_daily_quantile_return_artifact(daily_quantile_artifact, factor_batch, label_bundle, n_quantiles, 10)
+        quantile_returns = daily_quantile_artifact.values
     with warnings.catch_warnings():
         # Entirely empty quantile/factor buckets are valid missing observations.
         warnings.filterwarnings("ignore", message="Mean of empty slice", category=RuntimeWarning)
@@ -247,15 +294,18 @@ def compute_daily_quantile_monotonicity_series_value(
     label_bundle: LabelBundle,
     n_quantiles: int = 5,
     min_assets: int = 10,
-) -> np.ndarray:
+    daily_quantile_artifact: DailyQuantileReturnArtifact | None = None) -> np.ndarray:
     """Per-date increasing-adjacent-pair fraction, shape ``(T,F)``.
 
     This is deliberately distinct from ``quantile_monotonicity``, which is
     computed once on the long-run mean profile. Non-finite adjacent pairs do
     not enter a date's denominator; a date with no valid pair is NaN.
     """
-    daily, _ = compute_quantile_returns_fast(
-        factor_batch, label_bundle, n_quantiles=n_quantiles, min_assets=min_assets)
+    if daily_quantile_artifact is None:
+        daily, _ = compute_quantile_returns_fast(factor_batch, label_bundle, n_quantiles=n_quantiles, min_assets=min_assets)
+    else:
+        validate_daily_quantile_return_artifact(daily_quantile_artifact, factor_batch, label_bundle, n_quantiles, min_assets)
+        daily = daily_quantile_artifact.values
     pairs = np.isfinite(daily[:, :-1, :]) & np.isfinite(daily[:, 1:, :])
     denominator = pairs.sum(axis=1)
     increasing = ((daily[:, 1:, :] > daily[:, :-1, :]) & pairs).sum(axis=1)
@@ -270,10 +320,11 @@ def compute_daily_quantile_monotonicity_rate_value(
     n_quantiles: int = 5,
     min_assets: int = 10,
     min_periods: int = 20,
-) -> np.ndarray:
+    daily_quantile_artifact: DailyQuantileReturnArtifact | None = None) -> np.ndarray:
     """Mean valid daily-profile monotonicity fraction per factor."""
     series = compute_daily_quantile_monotonicity_series_value(
-        factor_batch, label_bundle, n_quantiles=n_quantiles, min_assets=min_assets)
+        factor_batch, label_bundle, n_quantiles=n_quantiles, min_assets=min_assets,
+        daily_quantile_artifact=daily_quantile_artifact)
     counts = np.isfinite(series).sum(axis=0)
     means = np.nansum(series, axis=0) / np.maximum(counts, 1)
     return np.where(counts >= min_periods, means, np.nan)

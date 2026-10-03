@@ -1404,6 +1404,7 @@ def _per_factor_observation_counts(
     values: np.ndarray,
     parameters: Optional[Dict[str, Any]] = None,
     ic_cache=None,
+    quantile_cache=None,
 ) -> np.ndarray:
     """Best-effort per-factor observation counts for facade MetricValues.
 
@@ -1455,6 +1456,11 @@ def _per_factor_observation_counts(
         from quant_evaluator.metrics.registry_adapters import compute_daily_quantile_monotonicity_series_value
         signature = inspect.signature(compute_daily_quantile_monotonicity_series_value)
         kwargs = {key: value for key, value in parameters.items() if key in signature.parameters}
+        if quantile_cache is not None:
+            q = (parameters or {}).get("n_quantiles", 5)
+            minimum = (parameters or {}).get("min_assets", 10)
+            artifact = quantile_cache.get_or_build(factor_batch, label_bundle, q, minimum)
+            kwargs["daily_quantile_artifact"] = artifact
         series = compute_daily_quantile_monotonicity_series_value(
             factor_batch, label_bundle, **kwargs)
         return np.sum(np.isfinite(series), axis=0)
@@ -2182,7 +2188,8 @@ def evaluate(
         facade_panel_wrappers: Dict[str, Callable] = {}
         facade_exposure_wrappers: Dict[str, Callable] = {}
         facade_pvalue_wrappers: Dict[str, Callable] = {}
-        quantile_daily_cache = {}
+        from quant_evaluator.runtime.daily_quantile_cache import RequestDailyQuantilePanelCache
+        quantile_daily_cache = RequestDailyQuantilePanelCache(factor_batch, label_bundle)
         quantile_profile_cache = {}
         exposure_loading_cache = {}
 
@@ -2227,7 +2234,8 @@ def evaluate(
             if parameters:
                 signature = inspect.signature(spec.compute_fn)
                 forbidden = {"factor_batch", "label_bundle", "computed_metrics", "metadata",
-                             "factor_values", "forward_returns", "returns", "validity_mask"}
+                             "factor_values", "forward_returns", "returns", "validity_mask",
+                             "daily_quantile_artifact", "_bind_request_inputs"}
                 unknown = set(parameters) - set(signature.parameters)
                 if "ICSeriesArtifact" in (spec.requires or []):
                     unknown.discard("min_assets")
@@ -2239,18 +2247,28 @@ def evaluate(
                 from quant_evaluator.contracts._hashutil import stable_content_hex
                 metric_specs[-1]["metadata"]["exposure_panel_hash"]=stable_content_hex(
                     tag="SecurityExposurePanel.v2",fields=exposure_panel.to_dict())
-            if "QuantileReturnArtifact" in (spec.requires or []):
+            canonical_metric_id = _resolve_alias(metric_id)
+            if canonical_metric_id in {"quantile_returns_daily", "quantile_spread", "quantile_returns_full",
+                                       "daily_quantile_monotonicity_series", "daily_quantile_monotonicity_rate"}:
+                def _make_daily_quantile_metric_wrapper(cfn, _params):
+                    def _wrapper(factor_batch=None, label_bundle=None, **kwargs):
+                        q = kwargs.get("n_quantiles", _params.get("n_quantiles", 5))
+                        minimum = kwargs.get("min_assets", _params.get("min_assets", 10))
+                        artifact = quantile_daily_cache.get_or_build(factor_batch, label_bundle, q, minimum)
+                        accepted = inspect.signature(cfn).parameters
+                        return cfn(factor_batch=factor_batch, label_bundle=label_bundle,
+                                   daily_quantile_artifact=artifact,
+                                   **{k:v for k,v in kwargs.items() if k in accepted})
+                    return _wrapper
+                runtime.register_metric(metric_id, _make_daily_quantile_metric_wrapper(spec.compute_fn, parameters))
+            elif "QuantileReturnArtifact" in (spec.requires or []):
                 def make_quantile_wrapper(cfn, min_periods, windowed):
                     def wrapper(factor_batch=None, label_bundle=None, **kwargs):
-                        from quant_evaluator.metrics.quantile import compute_quantile_returns_fast
                         q = quantile_builder_parameters.get("n_quantiles",5)
                         n = quantile_builder_parameters.get("min_assets",10)
                         window = quantile_builder_parameters.get("window_size",20)
-                        daily_key = (q, n)
-                        if daily_key not in quantile_daily_cache:
-                            quantile_daily_cache[daily_key], _ = compute_quantile_returns_fast(
-                                factor_batch, label_bundle, n_quantiles=q, min_assets=n)
-                        daily = quantile_daily_cache[daily_key]
+                        daily_key = (q, n, quantile_daily_cache._key(factor_batch, label_bundle, q, n))
+                        daily = quantile_daily_cache.get_or_build(factor_batch, label_bundle, q, n).values
                         key = (daily_key, min_periods, window if windowed else None)
                         if key not in quantile_profile_cache:
                             if windowed:
@@ -2895,15 +2913,11 @@ def evaluate(
             elif _resolve_alias(metric_id) in _RETURNS_PANEL_METRIC_IDS and portfolio_returns is not None:
                 counts = np.isfinite(portfolio_returns.values).sum(axis=0)
             elif canonical in {"quantile_spread", "quantile_monotonicity", "quantile_rank_monotonicity"}:
-                from quant_evaluator.metrics.quantile import compute_quantile_returns_fast
                 q = (quantile_builder_parameters.get("n_quantiles",5) if canonical in {"quantile_monotonicity", "quantile_rank_monotonicity"}
                      else metric_parameters.get(metric_id,{}).get("n_quantiles",5))
-                minimum = quantile_builder_parameters.get("min_assets",10) if canonical in {"quantile_monotonicity", "quantile_rank_monotonicity"} else 10
-                daily_key=(q,minimum)
-                if daily_key not in quantile_daily_cache:
-                    quantile_daily_cache[daily_key],_=compute_quantile_returns_fast(
-                        factor_batch,label_bundle,n_quantiles=q,min_assets=minimum)
-                daily=quantile_daily_cache[daily_key]
+                minimum = (quantile_builder_parameters.get("min_assets",10) if canonical in {"quantile_monotonicity", "quantile_rank_monotonicity"}
+                           else metric_parameters.get(metric_id,{}).get("min_assets",10))
+                daily=quantile_daily_cache.get_or_build(factor_batch,label_bundle,q,minimum).values
                 if canonical=="quantile_spread":
                     counts=np.isfinite(daily[:,-1,:]-daily[:,0,:]).sum(axis=0)
                 else:
@@ -2914,7 +2928,8 @@ def evaluate(
                         counts = np.isfinite(profile).sum(axis=0)
             else:
                 counts = _per_factor_observation_counts(metric_id, factor_batch, label_bundle, values,
-                                                        metric_parameters.get(metric_id), ic_series_cache)
+                                                        metric_parameters.get(metric_id), ic_series_cache,
+                                                        quantile_daily_cache)
             canonical = _resolve_alias(metric_id)
             sample_unit = "finite_metric_value"
             if supplied_artifact is not None and "sample_unit" in supplied_artifact.provenance:
