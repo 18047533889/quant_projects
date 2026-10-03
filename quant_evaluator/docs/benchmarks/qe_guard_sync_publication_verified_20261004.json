@@ -1,0 +1,11 @@
+{
+  "kind": "qe_guard_sync_publication_verified.v1",
+  "date": "2026-10-04",
+  "personal_main": "b5131a890e14a6279969e3bfd49ecd6f49500ab0",
+  "scoped_source_commit": "b5131a890e14a6279969e3bfd49ecd6f49500ab0",
+  "hkust_qe_main": "ef9a8ee88a00428dbcf311d38b3561f568200b38",
+  "qe_tree": "80605ac5712ec964e3fba9d02ff46a7ce27fdcda",
+  "trees_equal": true,
+  "personal_contains_scoped_commit": true,
+  "verification": "independent authenticated main ref readback and existing sync mirror tree comparison; no clone/fetch/copies; remote credentials captured privately"
+}

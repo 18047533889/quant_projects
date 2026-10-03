@@ -1,6 +1,27 @@
 # 公开运行能力与输入/输出契约
 
-> 最后更新：2026-10-03（Asia/Hong_Kong）。文档维护规则：代码行为变更必须同一轮同步本文档并更新此时间戳。
+> 最后更新：2026-10-04（Asia/Hong_Kong）。文档维护规则：代码行为变更必须同一轮同步本文档并更新此时间戳。
+
+## 2026-10-04 验证范围与历史性能证据
+
+本轮在 server-c 正式工作树的项目虚拟环境运行：
+
+```bash
+.venv/bin/python -m pytest -q quant_evaluator/tests/contracts quant_evaluator/tests/metrics
+```
+
+结果为 1468 passed、24 skipped、2 warnings，耗时 166.04 秒。24 个跳过项
+是通用 all-metrics A/B fixture 缺少暴露、训练验证、日历或组合的专门 typed
+输入；不是这些指标已验证，也不是所有算法未实现。两条警告分别来自已有
+fork 用例与全 NaN cutoff 用例。必须继续用正确输入验证相应路径，不能把此
+回归结果解释为全指标无 bug 或全量真实数据性能证明。
+
+同轮 source 输出契约、资格/缓存、严格报告、GPU 六形态数值与 CLI 的联合
+回归为 193 passed、1 skipped（单 GPU 无法测试异设备），对应已发布修复
+`b5131a890`。以下较早 A/B 报告保留为历史证据；源码改变后不能继续冒充
+当前实时性能资格。静态形状路由仍可能选择 CUDA，但并不具有实时资格的
+完整源码/设备/请求绑定。当前默认 provider 的接线、适用范围与回退边界见
+[默认 source auto](SOURCE_DEFAULT_PROFILE_PROVIDER_20261004.md)。
 
 本页补充 `METRIC_REFERENCE.md` 的调用层说明。指标是否可请求以当前注册表为准；
 `METRIC_REGISTRY_COVERAGE.csv` 是迁移追踪表，不能把其中历史遗留的 `NOT_IMPLEMENTED` 当作当前运行结论。

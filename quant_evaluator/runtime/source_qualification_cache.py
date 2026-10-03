@@ -27,6 +27,13 @@ if hasattr(os, "register_at_fork"):
     os.register_at_fork(after_in_child=_reset_after_fork)
 
 
+def has_validated_records() -> bool:
+    """Return whether a validated pair is live without changing cache state."""
+    now = time.monotonic()
+    with _lock:
+        return any(expires_at > now for expires_at, _records in _entries.values())
+
+
 def get_validated_records(key: str) -> tuple[_Record, ...] | None:
     """Return an unexpired immutable pair, pruning expired cache entries."""
     if type(key) is not str or not key:
@@ -79,6 +86,6 @@ def clear_validated_records() -> None:
 
 
 __all__ = (
-    "clear_validated_records", "discard_validated_records",
+    "clear_validated_records", "discard_validated_records", "has_validated_records",
     "get_validated_records", "remember_validated_records",
 )
