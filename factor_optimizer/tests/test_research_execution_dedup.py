@@ -255,6 +255,50 @@ def test_unknown_plan_subclasses_are_not_deduplicated():
     assert len(result) == 2
 
 
+def test_fe_rank_binding_uses_canonical_pandas_backend_and_tracks_implementation(monkeypatch):
+    from factor_engine.cleaned_operators.registry import OperatorRegistry
+    from factor_optimizer.search.execution_dedup import _execution_binding, _execution_signature
+
+    plan = compile_value_repair(
+        "REPRESENTATION_RANK",
+        {"rank_axis": "cross_sectional", "tie_method": "average"},
+        natural_time_scale=10, training_context_ref="train-A")
+    assert plan.transform == "cs_rank"
+    binding = _execution_binding(plan)
+    assert binding["route"] == "factor_engine.operator_registry"
+    assert binding["binding"]["canonical"] == "rank"
+    assert binding["binding"]["backend"] == "pandas_numpy"
+    assert binding["binding"]["mode"] == "any"
+    assert binding["binding"]["operator_implementation_hash"]
+    assert binding["binding"]["operator_contract_hash"]
+    assert binding["binding"]["adapter_implementation_hash"]
+    assert binding["binding"]["input_contract"] == (
+        "pandas.DataFrame[asset_id,date,value]->float64")
+    original_signature = _execution_signature(plan, 1, None)
+
+    original_get = OperatorRegistry.get
+    actual = original_get("rank", backend="pandas_numpy", mode="any")
+
+    class ReplacementRank:
+        metadata = actual.metadata
+
+        def _calculate_series(self, values, **kwargs):
+            return values
+
+    def replacement_get(name, backend="pandas_numpy", *, mode="production"):
+        canonical = OperatorRegistry.resolve_canonical(name)
+        if canonical == "rank" and backend == "pandas_numpy":
+            return ReplacementRank()
+        return original_get(name, backend=backend, mode=mode)
+
+    monkeypatch.setattr(OperatorRegistry, "get", replacement_get)
+    changed = _execution_binding(plan)
+    assert changed["binding"]["canonical"] == "rank"
+    assert changed["binding"]["operator_implementation_hash"] != (
+        binding["binding"]["operator_implementation_hash"])
+    assert _execution_signature(plan, 1, None) != original_signature
+
+
 def test_layered_decay_plans_with_same_lives_deduplicate():
     from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
 

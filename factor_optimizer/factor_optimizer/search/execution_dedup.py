@@ -37,6 +37,52 @@ def _json_value(value):
     raise TypeError(f"unsupported execution binding value: {type(value).__qualname__}")
 
 
+def _fe_rank_execution_binding():
+    """Bind the adapter's actual FE rank implementation, not a route label.
+
+    This adapter calls FE's canonical ``rank`` through its ``pandas_numpy``
+    registration. It does not select the Polars registration.
+    """
+    import hashlib
+    import inspect
+    import numpy as np
+    import pandas as pd
+    from factor_engine.cleaned_operators.registry import (
+        OperatorRegistry, _contract_hash, _impl_source_hash,
+    )
+    from factor_optimizer.adapters.repair_execution import _execute_fe_cs_rank
+
+    canonical = OperatorRegistry.resolve_canonical_strict("rank")
+    operator = OperatorRegistry.get(canonical, backend="pandas_numpy", mode="any")
+    if operator is None:
+        raise RuntimeError("FactorEngine canonical 'rank' has no pandas_numpy backend")
+    try:
+        adapter_source = inspect.getsource(_execute_fe_cs_rank)
+    except (OSError, TypeError) as exc:
+        raise RuntimeError("cannot certify the FactorEngine rank adapter implementation") from exc
+    entry = OperatorRegistry.catalog_entry(canonical)
+    return {
+        "route": "factor_engine.operator_registry",
+        "binding": {
+            "canonical": canonical,
+            "backend": "pandas_numpy",
+            "mode": "any",
+            "semantic_version": entry.get("semantic_version"),
+            "operator_type": {
+                "module": type(operator).__module__,
+                "qualname": type(operator).__qualname__,
+            },
+            "operator_implementation_hash": _impl_source_hash(operator),
+            "operator_contract_hash": _contract_hash(operator),
+            "adapter_implementation_hash": hashlib.sha256(
+                adapter_source.encode("utf-8")).hexdigest(),
+            "input_contract": "pandas.DataFrame[asset_id,date,value]->float64",
+            "numpy_version": np.__version__,
+            "pandas_version": pd.__version__,
+        },
+    }
+
+
 def _execution_binding(plan):
     """Describe only execution paths whose semantic authority is known."""
     from factor_optimizer.adapters.repair_execution import ValueRepairPlan
@@ -47,7 +93,6 @@ def _execution_binding(plan):
             "raw": "identity.v1",
             "sign": "factor_optimizer.adapters.repair_execution._execute_fe_neg",
             "rank_shape": "factor_preprocess.transforms.repair_shapes.rank_shape",
-            "cs_rank": "factor_engine.adapters.cs_rank",
             "fp_cs_rank_min": "factor_preprocess.transforms.repair_shapes.cross_sectional_rank.min",
             "ts_rank_history": "factor_preprocess.transforms.temporal_representation.time_series_rank",
             "ts_zscore_history": "factor_preprocess.transforms.temporal_representation.capped_time_series_zscore",
@@ -62,9 +107,10 @@ def _execution_binding(plan):
             route = ("pandas.multiply.v1" if dict(plan.parameters).get("multiplier") == 1.0
                      else direct_routes["sign"])
         elif plan.transform == "cs_rank":
-            route = ("factor_engine.adapters.cs_rank" if dict(plan.parameters).get(
+            return (_fe_rank_execution_binding() if dict(plan.parameters).get(
                 "method", "average") == "average" else
-                "factor_preprocess.transforms.repair_shapes.cross_sectional_rank")
+                {"route": "factor_preprocess.transforms.repair_shapes.cross_sectional_rank",
+                 "mapping_version": plan.mapping_version})
         if route is not None:
             return {"route": route, "mapping_version": plan.mapping_version}
     from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
