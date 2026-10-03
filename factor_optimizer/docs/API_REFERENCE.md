@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**87 个 Python 模块、962 个公开函数/类/方法定义**。
+扫描实际包目录：**88 个 Python 模块、963 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -24,6 +24,7 @@
 | [factor_optimizer/adapters/preprocessing.py](../factor_optimizer/adapters/preprocessing.py) | 6 | Versioned research bridge from smoothing proposals to real FP kernels. |
 | [factor_optimizer/adapters/quant_evaluator.py](../factor_optimizer/adapters/quant_evaluator.py) | 14 | QuantEvaluatorAdapter: protocol for QE integration (optional dependency). |
 | [factor_optimizer/adapters/repair_execution.py](../factor_optimizer/adapters/repair_execution.py) | 5 | Versioned, research-only execution plans for value-level repair families. |
+| [factor_optimizer/adapters/repair_execution_identity.py](../factor_optimizer/adapters/repair_execution_identity.py) | 1 | Scoped identity for direct Factor Preprocess repair kernels. |
 | [factor_optimizer/candidate_catalog.py](../factor_optimizer/candidate_catalog.py) | 1 | Shared, deterministic static candidate catalog for batch research. |
 | [factor_optimizer/capabilities.py](../factor_optimizer/capabilities.py) | 5 | Truthful runtime capability metadata for factor_optimizer. |
 | [factor_optimizer/complexity/__init__.py](../factor_optimizer/complexity/__init__.py) | 0 | Complexity estimation and budget tracking. |
@@ -762,6 +763,22 @@ A valid registry candidate has no exact executable value primitive.
 参数：`(family: str, parameters: Mapping[str, object], *, natural_time_scale: float, training_context_ref: str)`。
 
 返回类型：`ValueRepairPlan`。
+
+## factor_optimizer/adapters/repair_execution_identity.py
+
+Scoped identity for direct Factor Preprocess repair kernels.
+
+显式导出（含重导出）：`build_direct_fp_execution_identity`。
+
+### build_direct_fp_execution_identity
+
+[实际实现](../factor_optimizer/adapters/repair_execution_identity.py#L77)。
+
+Return a fail-closed, scoped identity for a directly selected FP kernel.
+
+参数：`(plan)`。
+
+返回类型：`dict`。
 
 ## factor_optimizer/candidate_catalog.py
 
@@ -7800,7 +7817,7 @@ TRAIN-context-bound deduplication of executable repair proposals.
 
 ### deduplicate_proposals
 
-[实际实现](../factor_optimizer/search/execution_dedup.py#L241)。
+[实际实现](../factor_optimizer/search/execution_dedup.py#L258)。
 
 Group only plans with the same resolved execution and TRAIN context.
 
@@ -10900,6 +10917,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
 | `factor_optimizer/adapters/repair_execution.py` | `d64200649a33819d3013de96f89e18a02bb032ed3e20d6ce2c34d4490c7d3727` |
+| `factor_optimizer/adapters/repair_execution_identity.py` | `7a040606e3c67cb15a14564073afc43cc8887476ed2aa52a218b4a39125b95d2` |
 | `factor_optimizer/candidate_catalog.py` | `5414e62ee8c6d535a14e8ed823f387c09b8a423a3cab91870c66edda6d864926` |
 | `factor_optimizer/capabilities.py` | `efb1fbf1b54b1b14f128ffe63c74f54f7a22f99a409a0761aac67fc1b6e3ed28` |
 | `factor_optimizer/complexity/__init__.py` | `79c8daf01ef8071b77eb7cbb8df4ae45fc9e2d4a4349f35d402a12f79936e696` |
@@ -10956,7 +10974,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/search/desirability_registry.py` | `f2e2c47cdb4dc24cf4621e9b6d2d78331272b650ff0fbf374214f83bc3dcc6b0` |
 | `factor_optimizer/search/diagnosis_routing.py` | `997ca9033fddbdb6248d3c06620edb528357b116c879c84c6a3e4d31f20ed229` |
 | `factor_optimizer/search/dimensions.py` | `d96278aa024bf275edc88072a5abfe0b749f023047971b94bccc99ae67964d90` |
-| `factor_optimizer/search/execution_dedup.py` | `a19c102f49cb4215152e6105a12baa4fd54ac9ce02fb1c5c5e65941322ec5ec7` |
+| `factor_optimizer/search/execution_dedup.py` | `050da527a085a5ac2527a0879b27079c9cdfdb4f0af8e200eed9731ab9fcc3a3` |
 | `factor_optimizer/search/lineage.py` | `979031c4c987a40cbb1987b360704ffd8fe0749792a21db0352c41497657b25b` |
 | `factor_optimizer/search/multifidelity.py` | `6967520ca3f3f78f5648cfccaa397f759514091f2dbb2bc3977506990f1747df` |
 | `factor_optimizer/search/paired_comparison.py` | `9bfdabf2b4e3c26b41697553fcdcbbcf49f49aa9ef20222546c69f57dfbce3be` |

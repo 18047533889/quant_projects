@@ -172,15 +172,32 @@ def _execution_binding(plan):
                 return _fe_neg_execution_binding()
             route = "pandas.multiply.v1"
         elif plan.transform == "cs_rank":
-            return (_fe_rank_execution_binding() if dict(plan.parameters).get(
-                "method", "average") == "average" else
-                {"route": "factor_preprocess.transforms.repair_shapes.cross_sectional_rank",
-                 "mapping_version": plan.mapping_version})
+            if dict(plan.parameters).get("method", "average") == "average":
+                return _fe_rank_execution_binding()
+            from factor_optimizer.adapters.repair_execution_identity import (
+                build_direct_fp_execution_identity,
+            )
+            return {
+                "route": "factor_preprocess.transforms.repair_shapes.cross_sectional_rank",
+                "mapping_version": plan.mapping_version,
+                "binding": build_direct_fp_execution_identity(plan),
+            }
         if plan.transform == "tail_saturation":
             return _fe_tail_saturation_execution_binding()
         if plan.transform == "trailing_sma":
             return _fe_smoothing_execution_binding()
         if route is not None:
+            if plan.transform in {
+                "rank_shape", "fp_cs_rank_min", "ts_rank_history",
+                "ts_zscore_history", "capped_zscore", "tail_hinge", "robust_scale",
+            }:
+                from factor_optimizer.adapters.repair_execution_identity import (
+                    build_direct_fp_execution_identity,
+                )
+                return {
+                    "route": route, "mapping_version": plan.mapping_version,
+                    "binding": build_direct_fp_execution_identity(plan),
+                }
             return {"route": route, "mapping_version": plan.mapping_version}
     from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
     if type(plan) is LayeredDecayPlan:
