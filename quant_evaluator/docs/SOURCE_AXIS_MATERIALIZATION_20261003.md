@@ -117,3 +117,31 @@ reference check passed. The four additional contiguous/noncontiguous alignment
 checks passed in a separate run after the full suite began collection.
 FE extreme EWM correctness remains an independent unresolved task; this
 QE release makes no claim that that smoothing implementation is fixed.
+
+## Storage-manager compatibility follow-up
+
+The first release inspected `frame._mgr.blocks` during overlap detection.
+A bounded probe with pandas 2.3 ArrayManager raised `AttributeError` before
+writing. The follow-up uses existing `frame._mgr.arrays` buffers for both
+managers and retains extension-array buffer inspection. Three regressions
+cover ArrayManager alignment in both modes and bounded overlap rejection.
+Pandas versions that remove the optional manager skip those manager-specific
+tests; the ordinary alignment tests still run.
+
+The [refreshed in-memory receipt](benchmarks/source_axis_materializer_managers_ab_20261003.json)
+binds this follow-up source and preserves value/mask/hash equality.
+The host had concurrent test work during this measurement; its timings
+should not define a new speedup claim or replace the earlier matched values.
+
+The [refreshed real COS receipt](benchmarks/f48_cap16_axis_managers_ordinary_20261003.json)
+passes the same route, coverage, identity, reference and direct-comparison
+gates. Default auto took 55.506 seconds and strict CUDA took 55.541 seconds.
+Both processed 24 width-2 tiles, reported 2,586,991,616 peak VRAM bytes and
+zero OOM retries. The declared source hash stayed unchanged:
+`26eaac4572dc7c98b6b9403e92e4ec133a128d48578972e45c27b99d85c0b899`.
+
+The follow-up full suite passed 5,027 tests with 26 skips and 53 warnings
+in 201.37 seconds; metric/formula reference validation passed.
+This rerun verifies the compatibility fix with the source path. Its
+single-run timings do not prove an end-to-end improvement over the first
+release or extend the certified auto envelope.

@@ -9,10 +9,9 @@ AXIS_REINDEX_CHUNK_BYTES = 8 * 1024**2
 
 
 def _output_shares_frame_storage(output, frame) -> bool:
-    # Inspect existing pandas block buffers instead of converting an entire
+    # Inspect existing pandas manager buffers instead of converting an entire
     # bounded frame just to check whether the destination aliases its input.
-    for block in frame._mgr.blocks:
-        values = block.values
+    for values in frame._mgr.arrays:
         candidates = [values]
         for name in ("_ndarray", "_data", "_mask"):
             candidate = getattr(values, name, None)
