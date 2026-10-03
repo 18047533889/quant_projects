@@ -552,8 +552,20 @@ class GPUExecutor:
         rank_count_cache = {}
         pearson_count_cache = {}
         quantile_cache = {}
+        # Raw means/counts are un-gated and scoped to this run's fixed inputs.
+        # One entry costs 16*Q*F bytes; min_periods is applied by each consumer.
+        temporal_mean_cache = {}
         turnover = None
         portfolio_pnl = None
+
+        def temporal_quantile_mean(key, daily_returns):
+            if key not in temporal_mean_cache:
+                from quant_evaluator.kernels.gpu.finite_mean import finite_mean_axis0
+                columns = int(daily_returns.shape[1] * daily_returns.shape[2])
+                mean_workspace = self.session.workspace_budget(output_bytes=columns * 16)
+                temporal_mean_cache[key] = finite_mean_axis0(
+                    daily_returns, workspace_bytes=mean_workspace)
+            return temporal_mean_cache[key]
 
         exposure_cache = {}
         for m in metrics:
@@ -679,12 +691,7 @@ class GPUExecutor:
                     vector[m] = _to_cpu(quantile_ret)
                     counts[m] = _to_cpu(quantile_count)
                 elif m == "quantile_returns_full":
-                    from quant_evaluator.kernels.gpu.finite_mean import finite_mean_axis0
-                    columns = int(quantile_ret.shape[1] * quantile_ret.shape[2])
-                    reserved = int(columns * 16)
-                    mean_workspace = self.session.workspace_budget(output_bytes=reserved)
-                    mean, valid = finite_mean_axis0(
-                        quantile_ret, workspace_bytes=mean_workspace)
+                    mean, valid = temporal_quantile_mean(quantile_key, quantile_ret)
                     vector[m] = _to_cpu(cp.where(valid >= min_periods, mean, cp.nan))
                 elif m == "quantile_spread":
                     # Qtop - Qbottom mean over time -> (F,)
@@ -698,12 +705,7 @@ class GPUExecutor:
                     scalar[m] = _to_cpu(cp.where(count >= min_periods, mean, cp.nan))
                     counts[m] = _to_cpu(count)
                 elif m == "quantile_monotonicity":
-                    from quant_evaluator.kernels.gpu.finite_mean import finite_mean_axis0
-                    columns = int(quantile_ret.shape[1] * quantile_ret.shape[2])
-                    reserved = int(columns * 16)
-                    mean_workspace = self.session.workspace_budget(output_bytes=reserved)
-                    profile, days = finite_mean_axis0(
-                        quantile_ret, workspace_bytes=mean_workspace)
+                    profile, days = temporal_quantile_mean(quantile_key, quantile_ret)
                     profile = cp.where(days >= min_periods, profile, cp.nan)
                     valid_pairs = cp.isfinite(profile[:-1]) & cp.isfinite(profile[1:])
                     count = valid_pairs.sum(axis=0)

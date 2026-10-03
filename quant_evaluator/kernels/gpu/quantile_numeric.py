@@ -6,6 +6,7 @@ It imports CuPy lazily and never copies data arrays to the host.
 """
 from __future__ import annotations
 
+from numbers import Integral
 from typing import Any
 
 _LIMBS = 68
@@ -191,6 +192,8 @@ def _local_size_bytes(kernel: Any) -> int:
     value = attrs.get("local_size_bytes", attrs.get("localSizeBytes"))
     if value is None:
         raise RuntimeError("CuPy did not report RawKernel local_size_bytes")
+    if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
+        raise RuntimeError("CuPy reported invalid RawKernel local_size_bytes")
     return int(value)
 
 

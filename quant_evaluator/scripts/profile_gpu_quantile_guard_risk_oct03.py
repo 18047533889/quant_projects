@@ -70,7 +70,7 @@ class KernelLaunchRecorder:
 
             def __call__(self, grid, block, args):
                 result = self._kernel(grid, block, args)
-                if self._name == "risk_guard":
+                if self._name in ("risk_guard", "finance_risk_guard"):
                     cp.cuda.Stream.null.synchronize()
                     risk = args[4]
                     rows, nq = int(args[6]), int(args[8])
@@ -91,7 +91,7 @@ class KernelLaunchRecorder:
 
         def wrapped_factory(source, name, *args, **kwargs):
             kernel = original_factory(source, name, *args, **kwargs)
-            if name in ("risk_guard", "fixed_mean"):
+            if name in ("risk_guard", "finance_risk_guard", "fixed_mean"):
                 return KernelProxy(kernel, name)
             return kernel
 

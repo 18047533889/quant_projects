@@ -15,7 +15,7 @@ class _FakeKernel:
     def __init__(self, name): self.name = name
     def compile(self): pass
     def __call__(self, grid, block, args):
-        if self.name == "risk_guard": args[4][:] = [1, 0, 1, 1, 0, 0]
+        if self.name in ("risk_guard", "finance_risk_guard"): args[4][:] = [1, 0, 1, 1, 0, 0]
 class _FakeCupy:
     def __init__(self):
         self.sync_calls = 0
@@ -27,10 +27,11 @@ class _FakeCupy:
     def asnumpy(value): return np.asarray(value)
     @staticmethod
     def sum(value, axis=None): return np.sum(value, axis=axis)
-def test_recorder_counts_risk_per_quantile_and_fixed_mean_ids():
+@pytest.mark.parametrize("guard_name", ["risk_guard", "finance_risk_guard"])
+def test_recorder_counts_risk_per_quantile_and_fixed_mean_ids(guard_name):
     cp = _FakeCupy(); original = cp.RawKernel; recorder = profile.KernelLaunchRecorder(cp)
     with recorder.installed():
-        risk_kernel = cp.RawKernel("source", "risk_guard"); risk_kernel.compile()
+        risk_kernel = cp.RawKernel("source", guard_name); risk_kernel.compile()
         risk = np.zeros(6, dtype=np.uint8)
         risk_kernel((1,), (1,), (None, None, None, None, risk, None, 2, 3, 3))
         cp.RawKernel("source", "fixed_mean")((1,), (32,), (None, None, None, None, None, None, 17))

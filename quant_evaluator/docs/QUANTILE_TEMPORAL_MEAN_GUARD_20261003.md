@@ -120,3 +120,47 @@ qualify, while two remain missing evidence. The two regressions were red before
 the repair and green afterward. Final combined 16-file numerical, public GPU,
 mask/cache, shape, bootstrap, benchmark-probe, and equivalence validation:
 **287 passed, 2 skipped** (both require a second CUDA device), no warnings.
+
+## Compiled local-memory metadata admission (2026-10-04)
+
+Both the established numeric guard and the bounded-Q candidate must reject
+missing, negative, boolean, fractional, string or nonfinite local-memory
+metadata. Only a non-negative integral byte count is admitted. In particular,
+a negative count must not reduce the workspace estimate. Actual scratch adds
+the compiled per-thread byte count multiplied by the rounded launch size:
+`ceil(rows / block_size) * block_size`. Global scratch and retained outputs
+are additional reservations, not included in this local-memory term.
+
+The CPU-only metadata regression reports **26 passed**, including valid alias
+attributes, NumPy integral values, zero rows and block-rounding boundaries.
+This validates admission semantics, not speed or GPU numerical accuracy.
+The new finance guard remains a candidate pending guarded-versus-guarded A/B;
+these checks alone do not qualify it for default dispatch.
+
+## Run-local temporal profile reuse
+
+`GPUExecutor.run()` shares the un-gated temporal profile and finite day counts
+between `quantile_returns_full` and `quantile_monotonicity`. For each quantile
+and factor, the profile is the finite daily return sum divided by the finite
+day count, computed by the guarded finite mean. Each consumer independently
+sets its result to NaN when the count is below that consumer's `min_periods`.
+The key is `(n_quantiles, min_assets)`; cache lifetime is one run with fixed
+staged inputs. It cannot leak between changed factor or label masks. Spread
+still reduces its own top-minus-bottom series. Each retained pair reserves
+`16 * Q * F` bytes, and one helper owns the cache-miss admission/reduction.
+Six CPU executor mocks cover parameter/mask isolation, both metric orders,
+independent gates and workspace reservations. The combined executor/parity
+run reports **37 passed**. This avoids one duplicate reduction structurally;
+no end-to-end speedup has yet been measured for the reuse change.
+
+## Guarded-versus-guarded candidate timing
+
+[The bounded A/B receipt](benchmarks/gpu_finance_guard_ab_20261004.json) compares
+two implementations with exact repair enabled on T128/N5461/F48. Q5 existing
+median is 0.093974 s versus candidate 0.115057 s (candidate 22.4% slower);
+Q20 is 0.376684 s versus 0.147832 s (candidate 60.8% lower latency).
+Each Q checks 18 calls total across both modes, including two cold calls,
+one ABBA warmup and three measured ABBA rounds (six samples per mode).
+Input/source/runtime identities remain stable. The candidate is **not**
+enabled in production; Q5 regression forbids blanket replacement. Broader
+shape qualification and full source/COS routing evidence remain required.
