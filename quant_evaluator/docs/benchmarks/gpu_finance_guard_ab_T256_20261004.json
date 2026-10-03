@@ -1,0 +1,449 @@
+{
+  "cold_order": [
+    "existing_guarded",
+    "finance_prototype_guarded"
+  ],
+  "device_input_sha256_after": {
+    "factor_values_TFN": "c282a5c956637f1a8bc9a5abc3c339d4276fca1485e9be9839b186c469b36299",
+    "labels_TN": "0af67f450dbbd6a330170e048f9fd8c42561cb7a82c33068fb81276eed8c8528"
+  },
+  "device_input_sha256_before": {
+    "factor_values_TFN": "c282a5c956637f1a8bc9a5abc3c339d4276fca1485e9be9839b186c469b36299",
+    "labels_TN": "0af67f450dbbd6a330170e048f9fd8c42561cb7a82c33068fb81276eed8c8528"
+  },
+  "device_memory_available_before_allocation": {
+    "free_bytes_before_allocation": 39838285824,
+    "total_bytes": 47665709056
+  },
+  "device_memory_estimate": {
+    "factor_input_bytes": 536838144,
+    "label_input_bytes": 11184128,
+    "output_bytes": 3932160,
+    "safety_allowance_bytes": 268435456,
+    "total_estimated_bytes": 1894131712,
+    "workspace_bytes": 1073741824
+  },
+  "gpu_factor_shape_TFN": [
+    256,
+    48,
+    5461
+  ],
+  "guard_policy": {
+    "existing_guarded": "existing risk guard and exact repair enabled",
+    "finance_prototype_guarded": "finance risk guard and exact repair enabled; no bypass"
+  },
+  "host_memory_estimate_bytes": 3221061632,
+  "host_memory_guard_bytes": 3221225472,
+  "host_memory_preflight": {
+    "available_bytes_before_allocation": 48960344064,
+    "base_guard_bytes": 3221225472,
+    "estimated_peak_bytes": 3221061632,
+    "minimum_available_bytes": 34359738368
+  },
+  "input_sha256_after": {
+    "combined": "84152d8788e898bb724e6267960ca3e6f43767d6ac8722064ed5f8b4f3bc5e7a",
+    "factor_validity_TNF": "e933d843ff13c10aa8c3277b30b52605e2f2bcfe3f1d0f4f14747cbaffd07b62",
+    "factor_values_TNF": "6a2445f2be6039ea88cb71b37751f77b1e2f34de340ee41b5e5a12a400d809bf",
+    "gpu_layout_factor_values_TFN": "c282a5c956637f1a8bc9a5abc3c339d4276fca1485e9be9839b186c469b36299",
+    "label_validity_TN": "335741f0bd6205b8b0cfb8501aa60b26c8e48f29d75ff55e6fb69305d40df99a",
+    "labels_TN": "0af67f450dbbd6a330170e048f9fd8c42561cb7a82c33068fb81276eed8c8528"
+  },
+  "input_sha256_before": {
+    "combined": "84152d8788e898bb724e6267960ca3e6f43767d6ac8722064ed5f8b4f3bc5e7a",
+    "factor_validity_TNF": "e933d843ff13c10aa8c3277b30b52605e2f2bcfe3f1d0f4f14747cbaffd07b62",
+    "factor_values_TNF": "6a2445f2be6039ea88cb71b37751f77b1e2f34de340ee41b5e5a12a400d809bf",
+    "gpu_layout_factor_values_TFN": "c282a5c956637f1a8bc9a5abc3c339d4276fca1485e9be9839b186c469b36299",
+    "label_validity_TN": "335741f0bd6205b8b0cfb8501aa60b26c8e48f29d75ff55e6fb69305d40df99a",
+    "labels_TN": "0af67f450dbbd6a330170e048f9fd8c42561cb7a82c33068fb81276eed8c8528"
+  },
+  "label_scale": 0.02,
+  "min_assets": 10,
+  "modes": {
+    "existing_guarded": "existing risk_guard and exact repair remain enabled",
+    "finance_prototype_guarded": "temporarily map only RawKernel(name=risk_guard) to finance_risk_guard with matching ABI; all other kernels and exact repair remain enabled; mapping restored in try/finally"
+  },
+  "parity_calls_checked_per_quantile": {
+    "20": 18,
+    "5": 18
+  },
+  "parity_policy": "each existing/prototype cold, warmup and timed output compared to independent NumPy CPU reference; counts exact and returns allclose(rtol=1e-9, atol=1e-12, equal_nan=True)",
+  "prototype_admission": {
+    "benchmark_cohort": "Q=5,20; T=256,N=5461,F=48",
+    "source_hash_includes": [
+      "quant_evaluator/kernels/gpu/quantile_finance_guard.py",
+      "quant_evaluator/scripts/benchmark_gpu_finance_guard_ab_oct04.py"
+    ]
+  },
+  "quantile_counts": [
+    5,
+    20
+  ],
+  "runtime_identity_after": {
+    "cpu": {
+      "logical_cpu_count": 32,
+      "machine": "x86_64",
+      "processor": "x86_64",
+      "python_implementation": "CPython",
+      "python_version": "3.12.3"
+    },
+    "cuda_driver_version": 13000,
+    "cuda_runtime_version": 13020,
+    "source_runtime_identity": {
+      "complete": true,
+      "cuda": {
+        "context_initialized": true,
+        "device": {
+          "compute_capability": [
+            8,
+            9
+          ],
+          "host_identity_sha256": "808a75797521b17ec2ade79a86c22a96ecac81032e0ed1040f427c504e426796",
+          "id": 0,
+          "identity_scope": "host_pci_bus_v1",
+          "name": "NVIDIA L20",
+          "pci_bus_id": "0000:23:00.0",
+          "total_memory_bytes": 47665709056,
+          "uuid": null,
+          "uuid_status": "unavailable_truncated_or_missing"
+        },
+        "status": "captured"
+      },
+      "identity_digest": "c53e8221805c5c31738f8d7f12c7f3dae002ab890b9880d9d8cf1e702c93206d",
+      "incomplete_reasons": [],
+      "numba": {
+        "loaded": true,
+        "threading_layer": "omp",
+        "threads": 32
+      },
+      "packages": {
+        "cupy": {
+          "loaded": true,
+          "version": "14.2.0"
+        },
+        "llvmlite": {
+          "loaded": true,
+          "version": "0.49.0"
+        },
+        "numba": {
+          "loaded": true,
+          "version": "0.67.0"
+        },
+        "numpy": {
+          "loaded": true,
+          "version": "2.2.6"
+        },
+        "pandas": {
+          "loaded": false,
+          "version": null
+        },
+        "scipy": {
+          "loaded": true,
+          "version": "1.15.3"
+        },
+        "threadpoolctl": {
+          "loaded": true,
+          "version": "3.6.0"
+        }
+      },
+      "python": "3.12.3",
+      "schema": "source-runtime-identity-v2",
+      "thread_environment": {
+        "BLIS_NUM_THREADS": null,
+        "MKL_DYNAMIC": null,
+        "MKL_NUM_THREADS": null,
+        "NUMBA_NUM_THREADS": null,
+        "NUMBA_THREADING_LAYER": null,
+        "NUMEXPR_NUM_THREADS": null,
+        "OMP_NUM_THREADS": null,
+        "OMP_THREAD_LIMIT": null,
+        "OPENBLAS_NUM_THREADS": null,
+        "VECLIB_MAXIMUM_THREADS": null
+      },
+      "threadpools": {
+        "pools": [
+          {
+            "architecture": "SkylakeX",
+            "internal_api": "openblas",
+            "num_threads": 32,
+            "prefix": "libscipy_openblas",
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.28"
+          },
+          {
+            "architecture": "SkylakeX",
+            "internal_api": "openblas",
+            "num_threads": 32,
+            "prefix": "libscipy_openblas",
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.29"
+          },
+          {
+            "architecture": null,
+            "internal_api": "openmp",
+            "num_threads": 32,
+            "prefix": "libgomp",
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "status": "captured"
+      }
+    }
+  },
+  "runtime_identity_before": {
+    "cpu": {
+      "logical_cpu_count": 32,
+      "machine": "x86_64",
+      "processor": "x86_64",
+      "python_implementation": "CPython",
+      "python_version": "3.12.3"
+    },
+    "cuda_driver_version": 13000,
+    "cuda_runtime_version": 13020,
+    "source_runtime_identity": {
+      "complete": true,
+      "cuda": {
+        "context_initialized": true,
+        "device": {
+          "compute_capability": [
+            8,
+            9
+          ],
+          "host_identity_sha256": "808a75797521b17ec2ade79a86c22a96ecac81032e0ed1040f427c504e426796",
+          "id": 0,
+          "identity_scope": "host_pci_bus_v1",
+          "name": "NVIDIA L20",
+          "pci_bus_id": "0000:23:00.0",
+          "total_memory_bytes": 47665709056,
+          "uuid": null,
+          "uuid_status": "unavailable_truncated_or_missing"
+        },
+        "status": "captured"
+      },
+      "identity_digest": "c53e8221805c5c31738f8d7f12c7f3dae002ab890b9880d9d8cf1e702c93206d",
+      "incomplete_reasons": [],
+      "numba": {
+        "loaded": true,
+        "threading_layer": "omp",
+        "threads": 32
+      },
+      "packages": {
+        "cupy": {
+          "loaded": true,
+          "version": "14.2.0"
+        },
+        "llvmlite": {
+          "loaded": true,
+          "version": "0.49.0"
+        },
+        "numba": {
+          "loaded": true,
+          "version": "0.67.0"
+        },
+        "numpy": {
+          "loaded": true,
+          "version": "2.2.6"
+        },
+        "pandas": {
+          "loaded": false,
+          "version": null
+        },
+        "scipy": {
+          "loaded": true,
+          "version": "1.15.3"
+        },
+        "threadpoolctl": {
+          "loaded": true,
+          "version": "3.6.0"
+        }
+      },
+      "python": "3.12.3",
+      "schema": "source-runtime-identity-v2",
+      "thread_environment": {
+        "BLIS_NUM_THREADS": null,
+        "MKL_DYNAMIC": null,
+        "MKL_NUM_THREADS": null,
+        "NUMBA_NUM_THREADS": null,
+        "NUMBA_THREADING_LAYER": null,
+        "NUMEXPR_NUM_THREADS": null,
+        "OMP_NUM_THREADS": null,
+        "OMP_THREAD_LIMIT": null,
+        "OPENBLAS_NUM_THREADS": null,
+        "VECLIB_MAXIMUM_THREADS": null
+      },
+      "threadpools": {
+        "pools": [
+          {
+            "architecture": "SkylakeX",
+            "internal_api": "openblas",
+            "num_threads": 32,
+            "prefix": "libscipy_openblas",
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.28"
+          },
+          {
+            "architecture": "SkylakeX",
+            "internal_api": "openblas",
+            "num_threads": 32,
+            "prefix": "libscipy_openblas",
+            "threading_layer": "pthreads",
+            "user_api": "blas",
+            "version": "0.3.29"
+          },
+          {
+            "architecture": null,
+            "internal_api": "openmp",
+            "num_threads": 32,
+            "prefix": "libgomp",
+            "threading_layer": null,
+            "user_api": "openmp",
+            "version": null
+          }
+        ],
+        "status": "captured"
+      }
+    }
+  },
+  "scenario": "CPU guard-driver rounded Gaussian factor ties and finance-scale Gaussian labels with deterministic NaN/Inf masks",
+  "scope": "synthetic GPU quantile means; existing guarded repair versus finance prototype guarded repair; no bypass; not full QE/COS",
+  "seed": 81033,
+  "shape_TNF": [
+    256,
+    5461,
+    48
+  ],
+  "source_files": [
+    "quant_evaluator/kernels/gpu/quantile.py",
+    "quant_evaluator/kernels/gpu/rank.py",
+    "quant_evaluator/kernels/gpu/quantile_numeric.py",
+    "quant_evaluator/metrics/quantile.py",
+    "quant_evaluator/metrics/quantile_numeric.py",
+    "quant_evaluator/scripts/benchmark_quantile_numeric_guard_oct03.py",
+    "quant_evaluator/kernels/gpu/quantile_finance_guard.py",
+    "quant_evaluator/scripts/benchmark_gpu_finance_guard_ab_oct04.py"
+  ],
+  "source_sha256_after": {
+    "quant_evaluator/kernels/gpu/quantile.py": "d1f7db29da576325531aea2cc54956623023617a4c044185d018c11b3f47c359",
+    "quant_evaluator/kernels/gpu/quantile_finance_guard.py": "a321fa6238bcb9e9c930996b81616925d94fe6deab1a476bf329c4d7411f8cc6",
+    "quant_evaluator/kernels/gpu/quantile_numeric.py": "2f4a51108a0edbe1e22560d524e3a2b10e329a40a80e13fb7eac1f904b5aa1bb",
+    "quant_evaluator/kernels/gpu/rank.py": "e3a67854126e5e63ffadb79c4605c18d8ac1e623bc3ce2764b2d99148133b141",
+    "quant_evaluator/metrics/quantile.py": "1e3fc5841f38792a81cf9b849f5eb585c4cff1b81076081f9770739a5612770e",
+    "quant_evaluator/metrics/quantile_numeric.py": "a3b138da1c6d0cf89df24aa7b02a07911c7051ba19e416d51da8f53f77951f60",
+    "quant_evaluator/scripts/benchmark_gpu_finance_guard_ab_oct04.py": "c09e972b1f345b6393adae97f6f44d322db3c2b66b529897fb8b4b430f514870",
+    "quant_evaluator/scripts/benchmark_quantile_numeric_guard_oct03.py": "b61723231d400188055dec70dbc47c3efa1c0ab1d0c6e56521d311567f8d5bf7"
+  },
+  "source_sha256_before": {
+    "quant_evaluator/kernels/gpu/quantile.py": "d1f7db29da576325531aea2cc54956623023617a4c044185d018c11b3f47c359",
+    "quant_evaluator/kernels/gpu/quantile_finance_guard.py": "a321fa6238bcb9e9c930996b81616925d94fe6deab1a476bf329c4d7411f8cc6",
+    "quant_evaluator/kernels/gpu/quantile_numeric.py": "2f4a51108a0edbe1e22560d524e3a2b10e329a40a80e13fb7eac1f904b5aa1bb",
+    "quant_evaluator/kernels/gpu/rank.py": "e3a67854126e5e63ffadb79c4605c18d8ac1e623bc3ce2764b2d99148133b141",
+    "quant_evaluator/metrics/quantile.py": "1e3fc5841f38792a81cf9b849f5eb585c4cff1b81076081f9770739a5612770e",
+    "quant_evaluator/metrics/quantile_numeric.py": "a3b138da1c6d0cf89df24aa7b02a07911c7051ba19e416d51da8f53f77951f60",
+    "quant_evaluator/scripts/benchmark_gpu_finance_guard_ab_oct04.py": "c09e972b1f345b6393adae97f6f44d322db3c2b66b529897fb8b4b430f514870",
+    "quant_evaluator/scripts/benchmark_quantile_numeric_guard_oct03.py": "b61723231d400188055dec70dbc47c3efa1c0ab1d0c6e56521d311567f8d5bf7"
+  },
+  "sync_policy": "CUDA null stream synchronized immediately before and after each measured GPU callable; input transfer and output copies excluded from call timings",
+  "timing_seconds": {
+    "CPU_reference_untimed": {
+      "20": 7.670320550969336,
+      "5": 5.164372447005007
+    },
+    "cold_calls": {
+      "20": {
+        "existing_guarded": 0.7597348759882152,
+        "finance_prototype_guarded": 0.2983040980179794
+      },
+      "5": {
+        "existing_guarded": 0.37433154397876933,
+        "finance_prototype_guarded": 0.22661901102401316
+      }
+    },
+    "host_layout": 0.12261192296864465,
+    "input_transfer_HtoD": 0.14764663303503767,
+    "warm_medians": {
+      "20": {
+        "existing_guarded": 0.7603756609896664,
+        "finance_prototype_guarded": 0.2983836045023054
+      },
+      "5": {
+        "existing_guarded": 0.17957731400383636,
+        "finance_prototype_guarded": 0.22510729148052633
+      }
+    },
+    "warm_samples_ABBA": {
+      "20": {
+        "existing_guarded": [
+          0.7614176649949513,
+          0.7593336569843814,
+          0.7586788469925523,
+          0.7663099879864603,
+          0.778047587024048,
+          0.7567153259878978
+        ],
+        "finance_prototype_guarded": [
+          0.3007077550282702,
+          0.3033320169779472,
+          0.2945066309766844,
+          0.3135287910117768,
+          0.2924734919797629,
+          0.2960594539763406
+        ]
+      },
+      "5": {
+        "existing_guarded": [
+          0.18030835699755698,
+          0.17813879199093208,
+          0.17848776100436226,
+          0.17884627101011574,
+          0.18150957103352994,
+          0.18957586999749765
+        ],
+        "finance_prototype_guarded": [
+          0.2259614709764719,
+          0.224170294997748,
+          0.22425311198458076,
+          0.22351561399409547,
+          0.2265168449957855,
+          0.22758096299367025
+        ]
+      }
+    },
+    "warmup_ABBA_not_summarized": {
+      "20": [
+        {
+          "existing_guarded": [
+            0.7959407920134254,
+            0.759284988977015
+          ],
+          "finance_prototype_guarded": [
+            0.297519211017061,
+            0.2985455809975974
+          ]
+        }
+      ],
+      "5": [
+        {
+          "existing_guarded": [
+            0.17979925096733496,
+            0.17965554603142664
+          ],
+          "finance_prototype_guarded": [
+            0.2255149150150828,
+            0.2251429550233297
+          ]
+        }
+      ]
+    }
+  },
+  "warm_order_per_round": "ABBA",
+  "warm_rounds": 3,
+  "warmup_cycles": 1,
+  "warmup_order_per_cycle": "ABBA",
+  "workspace_bytes_per_GPU_call": 1073741824,
+  "wrapper_sha256_after": "c09e972b1f345b6393adae97f6f44d322db3c2b66b529897fb8b4b430f514870",
+  "wrapper_sha256_before": "c09e972b1f345b6393adae97f6f44d322db3c2b66b529897fb8b4b430f514870"
+}

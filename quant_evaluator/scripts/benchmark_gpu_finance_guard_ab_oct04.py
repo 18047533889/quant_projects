@@ -25,6 +25,8 @@ PROTOTYPE = "finance_prototype_guarded"
 ABBA = (CURRENT, PROTOTYPE, PROTOTYPE, CURRENT)
 FINANCE_SOURCE = "quant_evaluator/kernels/gpu/quantile_finance_guard.py"
 OWN_SOURCE = "quant_evaluator/scripts/benchmark_gpu_finance_guard_ab_oct04.py"
+MIN_HOST_AVAILABLE_BYTES = 32 * 1024**3
+COHORT_DAYS = (128, 256)
 
 
 class _RawKernelProxy:
@@ -58,6 +60,17 @@ def _guard_mode(mode):
     finally:
         quantile_numeric._cupy = original
 
+def _mem_available_bytes():
+    try:
+        lines = Path("/proc/meminfo").read_text(encoding="ascii").splitlines()
+        for line in lines:
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError) as exc:
+        raise base.BenchmarkError("could not read MemAvailable before host allocation") from exc
+    raise base.BenchmarkError("MemAvailable is absent from /proc/meminfo")
+
+
 
 def run_benchmark(**kwargs):
     """Run established parity/timing flow under two guarded implementations."""
@@ -79,11 +92,24 @@ def run_benchmark(**kwargs):
         base._wrapper_hash = wrapper_hash
         shape = kwargs.get("shape", base.DEFAULT_SHAPE)
         rounds = kwargs.get("rounds", 3)
-        if shape != base.DEFAULT_SHAPE:
-            raise base.BenchmarkError("only T=128,N=5461,F=48 is admitted")
+        if (not isinstance(shape, tuple) or len(shape) != 3
+                or shape[0] not in COHORT_DAYS or shape[1:] != (5461, 48)):
+            raise base.BenchmarkError("only T=128 or 256, N=5461, F=48 is admitted")
         if type(rounds) is not int or rounds < 3:
             raise base.BenchmarkError("at least three synchronized ABBA rounds are required")
+        host_estimate = base._check_shape(shape)
+        available = _mem_available_bytes()
+        if available < MIN_HOST_AVAILABLE_BYTES:
+            raise base.BenchmarkError(
+                f"host admission requires 32 GiB MemAvailable; observed {available} bytes"
+            )
         result = base.run_benchmark(root=ROOT, **kwargs)
+        result["host_memory_preflight"] = {
+            "available_bytes_before_allocation": available,
+            "minimum_available_bytes": MIN_HOST_AVAILABLE_BYTES,
+            "estimated_peak_bytes": host_estimate,
+            "base_guard_bytes": base.MAX_ESTIMATED_BYTES,
+        }
         result["source_files"] = list(base.SOURCE_FILES) + [FINANCE_SOURCE, OWN_SOURCE]
         result["scope"] = (
             "synthetic GPU quantile means; existing guarded repair versus "
@@ -98,7 +124,7 @@ def run_benchmark(**kwargs):
             ),
         }
         result["prototype_admission"] = {
-            "benchmark_cohort": "Q=5,20; T=128,N=5461,F=48",
+            "benchmark_cohort": f"Q=5,20; T={shape[0]},N=5461,F=48",
             "source_hash_includes": [FINANCE_SOURCE, OWN_SOURCE],
         }
         result["guard_policy"] = {
@@ -121,11 +147,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run", action="store_true",
                         help="run only in an explicitly approved GPU timing slot")
+    parser.add_argument("--days", type=int, choices=COHORT_DAYS, default=128,
+                        help="historical cohort days (128 or 256); Q5/Q20")
     args = parser.parse_args(argv)
     if not args.run:
         parser.error("timing is opt-in; pass --run only after GPU-slot approval")
     try:
-        result = run_benchmark()
+        result = run_benchmark(shape=(args.days, 5461, 48))
     except base.BenchmarkError as exc:
         print(f"GPU finance guard benchmark failed: {exc}", file=sys.stderr)
         return 2

@@ -11,7 +11,9 @@ from typing import Any
 
 _LIMBS = 68
 _THREADS = 32
-_FIXED_MEAN = r"""
+from .dyadic_accumulator_cuda import DYADIC_DEVICE_SOURCE
+
+_FIXED_MEAN = DYADIC_DEVICE_SOURCE + r"""
 extern "C" __global__ void fixed_mean(
     const int* __restrict__ bucket, const double* __restrict__ data,
     double* __restrict__ means, const long long* __restrict__ counts,
@@ -23,80 +25,18 @@ extern "C" __global__ void fixed_mean(
   long long id=ids[k], row=id/nq, q=id-row*nq;
   long long expected=counts[id];
   if(expected<min_assets || expected<=0 || expected>2147483647LL) return;
-  unsigned long long pos[68]={0}, neg[68]={0};
+  DyadicAccumulator accumulator;
+  dyadic_init(&accumulator);
   long long seen=0;
   for(long long j=0;j<ncols;j++) {
     if(bucket[row*ncols+j]!=q) continue;
     double v=data[row*ncols+j];
     if(!isfinite(v)) continue;
-    seen++;
-    unsigned long long bits=__double_as_longlong(v);
-    unsigned long long mant=bits & 0x000fffffffffffffULL;
-    int e=(int)((bits>>52)&0x7ffULL);
-    if(e) mant |= 0x0010000000000000ULL;
-    if(mant==0) continue;
-    int shift=e ? e-1 : 0;
-    int limb=shift>>5, off=shift&31;
-    unsigned long long lo=mant & 0xffffffffULL;
-    unsigned long long hi=mant>>32;
-    unsigned long long w0=(lo<<off)&0xffffffffULL;
-    unsigned long long c0=off ? (lo>>(32-off)) : 0ULL;
-    unsigned long long w1=((hi<<off)|c0)&0xffffffffULL;
-    unsigned long long c1=off ? (hi>>(32-off)) : 0ULL;
-    unsigned long long* a=(bits>>63) ? neg : pos;
-    a[limb]+=w0; if(limb+1<68) a[limb+1]+=w1;
-    if(c1 && limb+2<68) a[limb+2]+=c1;
+    ++seen;
+    dyadic_add(&accumulator,v,1);
   }
   if(seen!=expected) { atomicExch(error_flag,1); return; }
-  for(int i=0;i<67;i++) {
-    unsigned long long c=pos[i]>>32; pos[i]&=0xffffffffULL; pos[i+1]+=c;
-    c=neg[i]>>32; neg[i]&=0xffffffffULL; neg[i+1]+=c;
-  }
-  int cmp=0;
-  for(int i=67;i>=0;i--) { if(pos[i]>neg[i]){cmp=1;break;} if(pos[i]<neg[i]){cmp=-1;break;} }
-  if(cmp==0) { means[id]=0.0; return; }
-  unsigned long long mag[68]; unsigned long long borrow=0;
-  for(int i=0;i<68;i++) {
-    unsigned long long a=cmp>0?pos[i]:neg[i], b=cmp>0?neg[i]:pos[i];
-    unsigned long long sub=b+borrow;
-    unsigned long long next=(a<sub);
-    mag[i]=(a-sub)&0xffffffffULL; borrow=next;
-  }
-  unsigned long long rem=0;
-  for(int i=67;i>=0;i--) {
-    unsigned long long cur=(rem<<32)|mag[i];
-    mag[i]=cur/(unsigned long long)expected; rem=cur%(unsigned long long)expected;
-  }
-  int h=-1;
-  for(int i=67;i>=0 && h<0;i--) if(mag[i]) {
-    unsigned long long z=mag[i]; int b=0; while(z>>1){z>>=1;b++;} h=i*32+b;
-  }
-  unsigned long long outbits=0;
-  if(h<52) {
-    unsigned long long sig=0;
-    for(int b=0;b<52;b++) if((mag[b>>5]>>(b&31))&1ULL) sig|=1ULL<<b;
-    unsigned long long twice=rem*2ULL;
-    if(twice>(unsigned long long)expected || (twice==(unsigned long long)expected && (sig&1ULL))) sig++;
-    if(sig>=(1ULL<<52)) outbits=1ULL<<52; else outbits=sig;
-  } else {
-    int drop=h-52; unsigned long long sig=0;
-    for(int b=0;b<53;b++) { int src=drop+b; if((mag[src>>5]>>(src&31))&1ULL) sig|=1ULL<<b; }
-    int guard=0, sticky=(rem!=0);
-    if(drop==0) {
-      unsigned long long twice=rem*2ULL;
-      if(twice>(unsigned long long)expected || (twice==(unsigned long long)expected && (sig&1ULL))) sig++;
-    } else {
-      int gb=drop-1; guard=(int)((mag[gb>>5]>>(gb&31))&1ULL);
-      for(int b=0;b<gb;b++) if((mag[b>>5]>>(b&31))&1ULL) {sticky=1;break;}
-      if(guard && (sticky || (sig&1ULL))) sig++;
-    }
-    if(sig==(1ULL<<53)){sig>>=1;h++;}
-    int e=h-51;
-    if(e>=2047) outbits=0x7ff0000000000000ULL;
-    else outbits=((unsigned long long)e<<52)|(sig&0x000fffffffffffffULL);
-  }
-  if(cmp<0) outbits|=0x8000000000000000ULL;
-  means[id]=__longlong_as_double((long long)outbits);
+  means[id]=dyadic_quotient_rne(&accumulator,(unsigned long long)expected);
 }
 """
 

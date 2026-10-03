@@ -10,8 +10,12 @@ from __future__ import annotations
 from numbers import Integral
 
 MAX_FINANCE_QUANTILES = 32
+_FINANCE_Q_CAPACITIES = (1, 2, 4, 8, 16, 32)
 
 FINANCE_RISK_GUARD_SOURCE = r"""
+#ifndef FINANCE_Q_CAPACITY
+#define FINANCE_Q_CAPACITY 32
+#endif
 extern "C" __global__ void finance_risk_guard(
     const int* __restrict__ bucket, const double* __restrict__ data,
     const long long* __restrict__ counts, const double* __restrict__ means,
@@ -19,7 +23,7 @@ extern "C" __global__ void finance_risk_guard(
     long long nrows, long long ncols, long long nq, long long min_assets) {
   long long row=(long long)blockIdx.x*blockDim.x+threadIdx.x;
   if(row>=nrows) return;
-  if(nq<1 || nq>32 || ncols<1 || ncols>2147483647LL || min_assets<1) {
+  if(nq<1 || nq>FINANCE_Q_CAPACITY || ncols<1 || ncols>2147483647LL || min_assets<1) {
     atomicExch(error_flag,1);
     return;
   }
@@ -27,11 +31,11 @@ extern "C" __global__ void finance_risk_guard(
   const double eps=2.2204460492503130808472633361816e-16;
   const double tiny=2.2250738585072013830902327173324e-308;
   const double max_double=1.797693134862315708145274237317e308;
-  double bucket_max[32];
-  double bucket_scaled_sum[32];
-  long long bucket_finite_count[32];
-  int bucket_has_subnormal[32];
-  for(int q=0;q<32;q++) {
+  double bucket_max[FINANCE_Q_CAPACITY];
+  double bucket_scaled_sum[FINANCE_Q_CAPACITY];
+  long long bucket_finite_count[FINANCE_Q_CAPACITY];
+  int bucket_has_subnormal[FINANCE_Q_CAPACITY];
+  for(int q=0;q<FINANCE_Q_CAPACITY;q++) {
     bucket_max[q]=0.0;
     bucket_scaled_sum[q]=0.0;
     bucket_finite_count[q]=0;
@@ -151,18 +155,27 @@ def validate_quantile_count(n_quantiles: int) -> int:
     if isinstance(n_quantiles, bool) or not isinstance(n_quantiles, int):
         raise ValueError("n_quantiles must be a builtin integer")
     if not 1 <= n_quantiles <= MAX_FINANCE_QUANTILES:
+
         raise ValueError("finance risk guard supports quantile counts in [1, 32]")
     return n_quantiles
 
+def _capacity_for_quantile_count(n_quantiles: int) -> int:
+    validate_quantile_count(n_quantiles)
+    return next(capacity for capacity in _FINANCE_Q_CAPACITIES
+                if capacity >= n_quantiles)
 
-def compile_finance_risk_guard(cp):
-    """Compile the prototype RawKernel; CuPy is an explicit required argument."""
+def compile_finance_risk_guard(cp, *, n_quantiles: int | None = None):
+    """Compile the prototype, optionally selecting a closed Q-capacity tier."""
     if not callable(getattr(cp, "RawKernel", None)):
         raise TypeError("a CuPy-compatible RawKernel factory is required")
+    capacity = 32 if n_quantiles is None else _capacity_for_quantile_count(n_quantiles)
+    options = ("--std=c++11",) if n_quantiles is None else (
+        "--std=c++11", f"-DFINANCE_Q_CAPACITY={capacity}",
+    )
     kernel = cp.RawKernel(
         FINANCE_RISK_GUARD_SOURCE,
         "finance_risk_guard",
-        options=("--std=c++11",),
+        options=options,
     )
     kernel.compile()
     return kernel

@@ -11,6 +11,7 @@ CuPy is imported lazily so the module loads on a CPU-only environment.
 from __future__ import annotations
 
 import numpy as np
+from numbers import Integral
 
 
 def _import_cp():
@@ -20,10 +21,20 @@ def _import_cp():
 
 def _as_matrix(qr):
     cp = _import_cp()
+    if isinstance(qr, cp.ndarray) and qr.device.id != cp.cuda.Device().id:
+        raise ValueError("quantile profile must be on the current CUDA device")
     m = cp.asarray(qr, dtype=cp.float64)
     if m.ndim == 1:
         m = m[:, None]
-    return m
+    return cp.ascontiguousarray(m)
+
+
+def _repair_linear(values, result, metric, workspace_bytes):
+    from quant_evaluator.kernels.gpu.shape_linear_numeric import repair_shape_linear_gpu
+    repaired = repair_shape_linear_gpu(
+        values, result, metric, workspace_bytes=workspace_bytes,
+    )
+    return repaired.get()
 
 
 def _finite_columns(m):
@@ -60,7 +71,8 @@ def daily_quantile_monotonicity(daily_qr, *, return_device=False):
     return out if return_device else out.get()
 
 
-def quantile_curvature(qr):
+def quantile_curvature(qr, *, workspace_bytes: int = 1 << 30):
+    workspace_bytes = _validate_workspace_bytes(workspace_bytes)
     cp = _import_cp()
     m = _as_matrix(qr)
     nq, F = m.shape
@@ -73,10 +85,10 @@ def quantile_curvature(qr):
     cnt = cp.sum(interior, axis=0).astype(cp.float64)
     s = cp.sum(cp.where(interior, d2, 0.0), axis=0)
     out = cp.where(cnt >= 1, s / cnt, cp.nan)
-    return out.get()
+    return _repair_linear(m, out, "curvature", workspace_bytes)
 
-
-def quantile_tail_asymmetry(qr):
+def quantile_tail_asymmetry(qr, *, workspace_bytes: int = 1 << 30):
+    workspace_bytes = _validate_workspace_bytes(workspace_bytes)
     cp = _import_cp()
     m = _as_matrix(qr)
     nq, F = m.shape
@@ -87,10 +99,10 @@ def quantile_tail_asymmetry(qr):
     ok = cp.isfinite(m[0, :]) & cp.isfinite(m[-1, :]) & cp.isfinite(m[mid, :])
     val = (m[-1, :] - m[mid, :]) - (m[mid, :] - m[0, :])
     out = cp.where(ok, val, cp.nan)
-    return out.get()
+    return _repair_linear(m, out, "tail_asymmetry", workspace_bytes)
 
-
-def quantile_adjacent_spread(qr):
+def quantile_adjacent_spread(qr, *, workspace_bytes: int = 1 << 30):
+    workspace_bytes = _validate_workspace_bytes(workspace_bytes)
     cp = _import_cp()
     m = _as_matrix(qr)
     nq, F = m.shape
@@ -102,10 +114,10 @@ def quantile_adjacent_spread(qr):
     n = cp.sum(pairs, axis=0).astype(cp.float64)
     s = cp.sum(cp.where(pairs, cp.abs(m[1:, :] - m[:-1, :]), 0.0), axis=0)
     out = cp.where(n >= 1, s / n, cp.nan)
-    return out.get()
+    return _repair_linear(m, out, "spread", workspace_bytes)
 
-
-def quantile_extreme_cliff(qr):
+def quantile_extreme_cliff(qr, *, workspace_bytes: int = 1 << 30):
+    workspace_bytes = _validate_workspace_bytes(workspace_bytes)
     cp = _import_cp()
     m = _as_matrix(qr)
     nq, F = m.shape
@@ -120,10 +132,10 @@ def quantile_extreme_cliff(qr):
     cliff_bottom = m[1, :] - m[0, :]
     val = (cliff_top + cliff_bottom) / 2.0
     out = cp.where(ok, val, cp.nan)
-    return out.get()
+    return _repair_linear(m, out, "extreme_cliff", workspace_bytes)
 
-
-def top_quantile_cliff(qr):
+def top_quantile_cliff(qr, *, workspace_bytes: int = 1 << 30):
+    workspace_bytes = _validate_workspace_bytes(workspace_bytes)
     cp = _import_cp()
     m = _as_matrix(qr)
     nq, F = m.shape
@@ -133,10 +145,10 @@ def top_quantile_cliff(qr):
     ok = cp.isfinite(m[-1, :]) & cp.isfinite(m[-2, :])
     val = m[-1, :] - m[-2, :]
     out = cp.where(ok, val, cp.nan)
-    return out.get()
+    return _repair_linear(m, out, "top_cliff", workspace_bytes)
 
-
-def bottom_quantile_cliff(qr):
+def bottom_quantile_cliff(qr, *, workspace_bytes: int = 1 << 30):
+    workspace_bytes = _validate_workspace_bytes(workspace_bytes)
     cp = _import_cp()
     m = _as_matrix(qr)
     nq, F = m.shape
@@ -146,4 +158,10 @@ def bottom_quantile_cliff(qr):
     ok = cp.isfinite(m[1, :]) & cp.isfinite(m[0, :])
     val = m[1, :] - m[0, :]
     out = cp.where(ok, val, cp.nan)
-    return out.get()
+    return _repair_linear(m, out, "bottom_cliff", workspace_bytes)
+
+
+def _validate_workspace_bytes(workspace_bytes):
+    if isinstance(workspace_bytes, bool) or not isinstance(workspace_bytes, Integral) or workspace_bytes <= 0:
+        raise ValueError("workspace_bytes must be a positive integer")
+    return int(workspace_bytes)

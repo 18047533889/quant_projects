@@ -1,0 +1,1028 @@
+{
+  "baseline": {
+    "module": "quant_evaluator/metrics/quantile_shape.py",
+    "revision": "HEAD",
+    "source_sha256": "c47f3a1c326305ebf4c63fbc28d8d27fcbc031b545d21a032bcc30e9a5ee5fb1"
+  },
+  "benchmark": "quantile_shape linear guard CPU ABBA",
+  "candidate_source_sha256_after": {
+    "quant_evaluator/metrics/quantile_shape.py": "daa182ad71373dc05bd6e6c4d1a858927eedf4fd90e459214753cd50badee311",
+    "quant_evaluator/metrics/shape_linear_numeric.py": "4fda218b25f8ad8133d3d1ed5d3ac035e448a3e4f616692d9de5fd89fabf7d30"
+  },
+  "candidate_source_sha256_before": {
+    "quant_evaluator/metrics/quantile_shape.py": "daa182ad71373dc05bd6e6c4d1a858927eedf4fd90e459214753cd50badee311",
+    "quant_evaluator/metrics/shape_linear_numeric.py": "4fda218b25f8ad8133d3d1ed5d3ac035e448a3e4f616692d9de5fd89fabf7d30"
+  },
+  "normal_distribution": "normal(0.02, 0.004), float64",
+  "numpy": "2.2.6",
+  "python": "3.12.3",
+  "results": {
+    "masked_q20_f48": {
+      "dtype": "<f8",
+      "input_sha256": "a8e99e807a54ee69e5a735accaa4250ae4a197ca4d0b9481243292fab330341c",
+      "metrics": {
+        "compute_bottom_quantile_cliff": {
+          "bitwise_parity_each_call": true,
+          "candidate_mean_seconds_per_call": 6.72315e-05,
+          "candidate_over_head": 0.4528414612023056,
+          "candidate_samples": [
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 6.95349e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 6.65202e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 6.9409e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 6.49869e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 6.7524e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 6.541400000000001e-05
+            }
+          ],
+          "head_mean_seconds_per_call": 0.00014846586666666665,
+          "head_samples": [
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0001473915
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0001462546
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.00015150439999999998
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.00015125240000000002
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0001466496
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0001477427
+            }
+          ]
+        },
+        "compute_quantile_adjacent_spread": {
+          "bitwise_parity_each_call": true,
+          "candidate_mean_seconds_per_call": 0.0005214645666666666,
+          "candidate_over_head": 0.6634802606193531,
+          "candidate_samples": [
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0005273302
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0005210204
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0005262214
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0005155765
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0005251161000000001
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0005135228
+            }
+          ],
+          "head_mean_seconds_per_call": 0.0007859534,
+          "head_samples": [
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0007863352
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0007860334
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0007857665999999999
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0007869843
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0007879415000000001
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0007826594000000001
+            }
+          ]
+        },
+        "compute_quantile_curvature": {
+          "bitwise_parity_each_call": true,
+          "candidate_mean_seconds_per_call": 0.0006031737833333333,
+          "candidate_over_head": 0.650992491009835,
+          "candidate_samples": [
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0006078758
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0005988349
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0006081136000000001
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0005977951000000001
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0006089049
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0005975183999999999
+            }
+          ],
+          "head_mean_seconds_per_call": 0.0009265449166666667,
+          "head_samples": [
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0009255603
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0009265261
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0009226013999999999
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0009259314999999999
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0009293771000000001
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0009292731
+            }
+          ]
+        },
+        "compute_quantile_extreme_cliff": {
+          "bitwise_parity_each_call": true,
+          "candidate_mean_seconds_per_call": 8.173333333333333e-05,
+          "candidate_over_head": 0.2885422145967999,
+          "candidate_samples": [
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 8.30515e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 7.95437e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 8.566139999999999e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 7.842649999999999e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 8.688839999999999e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 7.682850000000001e-05
+            }
+          ],
+          "head_mean_seconds_per_call": 0.000283263,
+          "head_samples": [
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0002827964
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0002836927
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.00028590250000000005
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0002835005
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0002819134000000001
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0002817725
+            }
+          ]
+        },
+        "compute_quantile_tail_asymmetry": {
+          "bitwise_parity_each_call": true,
+          "candidate_mean_seconds_per_call": 7.774981666666666e-05,
+          "candidate_over_head": 0.3497730556096232,
+          "candidate_samples": [
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 7.880360000000001e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 7.60296e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 7.973759999999999e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 7.64697e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 8.170160000000001e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 7.375679999999999e-05
+            }
+          ],
+          "head_mean_seconds_per_call": 0.0002222864666666667,
+          "head_samples": [
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0002239501
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.00022576630000000004
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.00021804560000000003
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.00021947119999999996
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.00022588909999999999
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0002205965
+            }
+          ]
+        },
+        "compute_top_quantile_cliff": {
+          "bitwise_parity_each_call": true,
+          "candidate_mean_seconds_per_call": 7.031126666666667e-05,
+          "candidate_over_head": 0.4649521081284588,
+          "candidate_samples": [
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 6.639010000000001e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 6.656609999999999e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 6.840390000000001e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 6.73371e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 8.643330000000001e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 6.67371e-05
+            }
+          ],
+          "head_mean_seconds_per_call": 0.0001512226,
+          "head_samples": [
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.00015109630000000003
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.00015205849999999998
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0001537453
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0001535844
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0001492195
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0001476316
+            }
+          ]
+        }
+      },
+      "shape": [
+        20,
+        48
+      ]
+    },
+    "normal_q20_f48": {
+      "dtype": "<f8",
+      "input_sha256": "913ec277f6d75f752ba835081705554ed21ff3cf97b9740baddea8088030a2e4",
+      "metrics": {
+        "compute_bottom_quantile_cliff": {
+          "bitwise_parity_each_call": true,
+          "candidate_mean_seconds_per_call": 4.883756666666667e-05,
+          "candidate_over_head": 0.3263544820178675,
+          "candidate_samples": [
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 4.95997e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 4.8489600000000004e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 4.99224e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 4.68086e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 5.13265e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 4.68786e-05
+            }
+          ],
+          "head_mean_seconds_per_call": 0.00014964576666666668,
+          "head_samples": [
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.00015176869999999998
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0001487326
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0001501314
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0001495878
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.00014802639999999997
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.00014962770000000002
+            }
+          ]
+        },
+        "compute_quantile_adjacent_spread": {
+          "bitwise_parity_each_call": true,
+          "candidate_mean_seconds_per_call": 8.76422e-05,
+          "candidate_over_head": 0.11179250349140839,
+          "candidate_samples": [
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 9.39973e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 8.38435e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 9.150010000000001e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 8.29245e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 9.108119999999999e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 8.25066e-05
+            }
+          ],
+          "head_mean_seconds_per_call": 0.0007839720666666668,
+          "head_samples": [
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0007806626
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0007869096000000001
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0007815107
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0007820684000000002
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0007857916999999999
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0007868894000000002
+            }
+          ]
+        },
+        "compute_quantile_curvature": {
+          "bitwise_parity_each_call": true,
+          "candidate_mean_seconds_per_call": 8.548198333333333e-05,
+          "candidate_over_head": 0.09247578683686182,
+          "candidate_samples": [
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 9.367420000000001e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 8.047769999999999e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 9.054930000000001e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 7.96405e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 8.78575e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 8.069269999999999e-05
+            }
+          ],
+          "head_mean_seconds_per_call": 0.0009243715166666667,
+          "head_samples": [
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0009276632
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0009184924000000001
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0009233135
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0009244702
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0009249093999999999
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0009273804
+            }
+          ]
+        },
+        "compute_quantile_extreme_cliff": {
+          "bitwise_parity_each_call": true,
+          "candidate_mean_seconds_per_call": 6.385351666666666e-05,
+          "candidate_over_head": 0.2254690421748072,
+          "candidate_samples": [
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 6.52826e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 6.310090000000001e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 6.60999e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 5.9198e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 6.894569999999999e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 6.0494e-05
+            }
+          ],
+          "head_mean_seconds_per_call": 0.0002832030333333333,
+          "head_samples": [
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.00029282310000000003
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0002873683
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0002847847000000001
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0002810776
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.00027471069999999997
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0002784538
+            }
+          ]
+        },
+        "compute_quantile_tail_asymmetry": {
+          "bitwise_parity_each_call": true,
+          "candidate_mean_seconds_per_call": 5.916016666666666e-05,
+          "candidate_over_head": 0.26872528307451865,
+          "candidate_samples": [
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 6.246489999999999e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 5.6517299999999995e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 6.35249e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 5.563849999999999e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 6.22121e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 5.46033e-05
+            }
+          ],
+          "head_mean_seconds_per_call": 0.00022015109999999998,
+          "head_samples": [
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.0002196312
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.00021948949999999997
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.00021880859999999996
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0002193136
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.00021932839999999997
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0002243353
+            }
+          ]
+        },
+        "compute_top_quantile_cliff": {
+          "bitwise_parity_each_call": true,
+          "candidate_mean_seconds_per_call": 4.882916666666667e-05,
+          "candidate_over_head": 0.32351476109598487,
+          "candidate_samples": [
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 5.07085e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 4.73665e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 4.87945e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 4.72266e-05
+            },
+            {
+              "block": 2,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 5.15454e-05
+            },
+            {
+              "block": 3,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 4.7333500000000003e-05
+            }
+          ],
+          "head_mean_seconds_per_call": 0.00015093335,
+          "head_samples": [
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.00015261130000000003
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 1,
+              "seconds_per_call": 0.00015136660000000004
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.0001507866
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 2,
+              "seconds_per_call": 0.00015084539999999998
+            },
+            {
+              "block": 1,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.00014953569999999998
+            },
+            {
+              "block": 4,
+              "calls": 10,
+              "round": 3,
+              "seconds_per_call": 0.0001504545
+            }
+          ]
+        }
+      },
+      "shape": [
+        20,
+        48
+      ]
+    }
+  },
+  "schedule": "3 ABBA rounds; 10 calls per block; 6 samples per mode and metric",
+  "scope": "two deterministic Q20/F48 CPU profiles; no GPU or full-QE performance claim",
+  "seed": 20261004
+}

@@ -34,6 +34,7 @@ GPU_SOURCE_FILES = (
     "quant_evaluator/kernels/gpu/quantile.py",
     "quant_evaluator/kernels/gpu/rank.py",
     "quant_evaluator/kernels/gpu/quantile_numeric.py",
+    "quant_evaluator/kernels/gpu/dyadic_accumulator_cuda.py",
 )
 SOURCE_FILES = GPU_SOURCE_FILES + (
     "quant_evaluator/metrics/quantile.py",

@@ -14,6 +14,12 @@ from __future__ import annotations
 
 import numpy as np
 
+from quant_evaluator.metrics.shape_linear_numeric import (
+    exact_mean_abs_pair_differences,
+    exact_weighted_mean,
+    linear_risk_columns,
+)
+
 __all__ = [
     "compute_quantile_monotonicity",
     "compute_quantile_rank_monotonicity",
@@ -97,15 +103,30 @@ def compute_quantile_curvature(qr: np.ndarray) -> np.ndarray:
     out = np.full(F, np.nan)
     if nq < 3:
         return out
-    for f in range(F):
-        col = m[:, f]
-        finite = np.isfinite(col)
-        # interior positions with all three neighbours finite
-        interior = finite[1:-1] & finite[:-2] & finite[2:]
-        if not np.any(interior):
-            continue
-        d2 = col[2:][interior] - 2.0 * col[1:-1][interior] + col[:-2][interior]
-        out[f] = float(np.mean(d2))
+    risk_columns = linear_risk_columns(m, 4 * max(nq - 2, 1))
+    fast_columns = np.all(np.isfinite(m), axis=0) & ~risk_columns
+    if np.any(fast_columns):
+        profiles = np.ascontiguousarray(m[:, fast_columns].T)
+        d2 = profiles[:, 2:] - 2.0 * profiles[:, 1:-1] + profiles[:, :-2]
+        out[fast_columns] = np.mean(d2, axis=1)
+    with np.errstate(over="ignore", invalid="ignore"):
+        for f in np.flatnonzero(~fast_columns):
+            col = m[:, f]
+            finite = np.isfinite(col)
+            # interior positions with all three neighbours finite
+            interior = finite[1:-1] & finite[:-2] & finite[2:]
+            if not np.any(interior):
+                continue
+            if risk_columns[f]:
+                stencil_count = int(np.count_nonzero(interior))
+                stencil_values = np.column_stack((col[2:][interior], col[1:-1][interior],
+                                                  col[:-2][interior]))
+                out[f] = exact_weighted_mean(
+                    stencil_values.ravel(), np.tile((1, -2, 1), stencil_count), stencil_count,
+                )
+            else:
+                d2 = col[2:][interior] - 2.0 * col[1:-1][interior] + col[:-2][interior]
+                out[f] = float(np.mean(d2))
     return out
 
 
@@ -121,12 +142,14 @@ def compute_quantile_tail_asymmetry(qr: np.ndarray) -> np.ndarray:
     out = np.full(F, np.nan)
     if nq < 3:
         return out
+    risk_columns = linear_risk_columns(m, 4)
     mid = nq // 2
-    for f in range(F):
-        col = m[:, f]
-        if not (np.isfinite(col[0]) and np.isfinite(col[-1]) and np.isfinite(col[mid])):
-            continue
-        out[f] = (col[-1] - col[mid]) - (col[mid] - col[0])
+    valid = np.isfinite(m[0]) & np.isfinite(m[-1]) & np.isfinite(m[mid])
+    with np.errstate(over="ignore", invalid="ignore"):
+        out[valid] = (m[-1, valid] - m[mid, valid]) - (m[mid, valid] - m[0, valid])
+    for f in np.flatnonzero(risk_columns & valid):
+        selected = np.array([m[-1, f], m[mid, f], m[0, f]])
+        out[f] = exact_weighted_mean(selected, (1, -2, 1), 1)
     return out
 
 
@@ -142,13 +165,23 @@ def compute_quantile_adjacent_spread(qr: np.ndarray) -> np.ndarray:
     ok = _finite_columns(m)
     if nq < 2:
         return out
-    for f in np.where(ok)[0]:
-        col = m[:, f]
-        finite = np.isfinite(col)
-        pairs = finite[:-1] & finite[1:]
-        if not np.any(pairs):
-            continue
-        out[f] = float(np.mean(np.abs(col[1:][pairs] - col[:-1][pairs])))
+    risk_columns = linear_risk_columns(m, 2 * (nq - 1))
+    fast_columns = np.all(np.isfinite(m), axis=0) & ~risk_columns
+    if np.any(fast_columns):
+        profiles = np.ascontiguousarray(m[:, fast_columns].T)
+        differences = np.abs(profiles[:, 1:] - profiles[:, :-1])
+        out[fast_columns] = np.mean(differences, axis=1)
+    with np.errstate(over="ignore", invalid="ignore"):
+        for f in np.flatnonzero(ok & ~fast_columns):
+            col = m[:, f]
+            finite = np.isfinite(col)
+            pairs = finite[:-1] & finite[1:]
+            if not np.any(pairs):
+                continue
+            if risk_columns[f]:
+                out[f] = exact_mean_abs_pair_differences(col[:-1][pairs], col[1:][pairs])
+            else:
+                out[f] = float(np.mean(np.abs(col[1:][pairs] - col[:-1][pairs])))
     return out
 
 
@@ -165,14 +198,16 @@ def compute_quantile_extreme_cliff(qr: np.ndarray) -> np.ndarray:
     out = np.full(F, np.nan)
     if nq < 2:
         return out
-    for f in range(F):
-        col = m[:, f]
-        if not (np.isfinite(col[0]) and np.isfinite(col[1])
-                and np.isfinite(col[-1]) and np.isfinite(col[-2])):
-            continue
-        cliff_top = col[-1] - col[-2]
-        cliff_bottom = col[1] - col[0]
-        out[f] = (cliff_top + cliff_bottom) / 2.0
+    risk_columns = linear_risk_columns(m, 4)
+    valid = (np.isfinite(m[0]) & np.isfinite(m[1])
+             & np.isfinite(m[-1]) & np.isfinite(m[-2]))
+    with np.errstate(over="ignore", invalid="ignore"):
+        cliff_top = m[-1, valid] - m[-2, valid]
+        cliff_bottom = m[1, valid] - m[0, valid]
+        out[valid] = (cliff_top + cliff_bottom) / 2.0
+    for f in np.flatnonzero(risk_columns & valid):
+        selected = np.array([m[-1, f], m[-2, f], m[1, f], m[0, f]])
+        out[f] = exact_weighted_mean(selected, (1, -1, 1, -1), 2)
     return out
 
 
@@ -183,10 +218,13 @@ def compute_top_quantile_cliff(qr: np.ndarray) -> np.ndarray:
     out = np.full(F, np.nan)
     if nq < 2:
         return out
-    for f in range(F):
-        col = m[:, f]
-        if np.isfinite(col[-1]) and np.isfinite(col[-2]):
-            out[f] = col[-1] - col[-2]
+    risk_columns = linear_risk_columns(m, 2)
+    valid = np.isfinite(m[-1]) & np.isfinite(m[-2])
+    with np.errstate(over="ignore", invalid="ignore"):
+        out[valid] = m[-1, valid] - m[-2, valid]
+    for f in np.flatnonzero(risk_columns & valid):
+        selected = np.array([m[-1, f], m[-2, f]])
+        out[f] = exact_weighted_mean(selected, (1, -1), 1)
     return out
 
 
@@ -197,8 +235,11 @@ def compute_bottom_quantile_cliff(qr: np.ndarray) -> np.ndarray:
     out = np.full(F, np.nan)
     if nq < 2:
         return out
-    for f in range(F):
-        col = m[:, f]
-        if np.isfinite(col[1]) and np.isfinite(col[0]):
-            out[f] = col[1] - col[0]
+    risk_columns = linear_risk_columns(m, 2)
+    valid = np.isfinite(m[1]) & np.isfinite(m[0])
+    with np.errstate(over="ignore", invalid="ignore"):
+        out[valid] = m[1, valid] - m[0, valid]
+    for f in np.flatnonzero(risk_columns & valid):
+        selected = np.array([m[1, f], m[0, f]])
+        out[f] = exact_weighted_mean(selected, (1, -1), 1)
     return out

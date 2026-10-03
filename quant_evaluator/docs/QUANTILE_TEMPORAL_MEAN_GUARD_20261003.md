@@ -1,5 +1,39 @@
 # Quantile temporal mean guard (2026-10-03)
 
+## Linear-shape arithmetic and bounded follow-up (2026-10-04)
+
+Six CPU/GPU shape metrics now selectively repair overflow/cancellation and
+subnormal arithmetic with exact binary-rational sums followed by division and
+one float64 rounding. Constant huge curvature is zero, not negative infinity;
+a finite 1e308 mean adjacent spread/extreme cliff stays finite. True result
+overflow remains signed infinity. The formulas, finite stencil/pair sets and
+risk threshold are in [metric conventions](METRIC_CONVENTIONS.md#41-六项线性形状指标的公式与数值边界2026-10-04).
+The GPU finite-mean and shape kernels share a dyadic accumulator module;
+workspace admission still uses actual compiled local-memory metadata. An
+actual CUDA focused combined run reported 82 passed / 3 skipped; the skips
+require a second device. This is not a proof of every metric/backend.
+The final guard uses an inclusive error threshold, matching CPU at equality.
+New tests check the previous/equal/next binary64 values at that threshold
+and cancellation near the GPU underflow threshold against Fraction.
+A separate CPU/mock regression run passed 62 tests with warnings as errors.
+
+[CPU ABBA receipt](benchmarks/shape_linear_guard_ab_20261004.json) compares six
+shape functions against frozen HEAD implementations at Q20/F48, including
+normal and missing-value profiles. Every measured call retains ordinary-input
+bitwise parity. New/old latency ratios for curvature/adjacent spread are
+0.0925/0.1118 (normal) and 0.651/0.664 (masked); the four endpoint metrics also
+improve. These are profile-kernel measurements, not full evaluation latency.
+
+[T256 guarded ABBA](benchmarks/gpu_finance_guard_ab_T256_20261004.json) at
+N5461/F48 gives Q20 0.760376 s generic versus 0.298384 s candidate, but Q5
+0.179577 s versus 0.225107 s. [Q5 capacity-8 follow-up](benchmarks/gpu_finance_guard_specialized_Q5_T256_20261004.json)
+still regresses: 0.192184 s versus 0.239586 s (24.7% slower), despite lower
+compiled local memory (224 bytes/thread). All 18 calls per Q compare against
+the CPU reference. Sources/input/runtime identities remain stable per receipt.
+No blanket/default finance-guard replacement is justified. Cold-call timing
+includes compile/setup variance. Whole-source COS auto qualification remains
+a separate requirement, including memory, source drift and batch-size gates.
+
 ## Mean contract
 
 For each quantile/factor column, the temporal mean is

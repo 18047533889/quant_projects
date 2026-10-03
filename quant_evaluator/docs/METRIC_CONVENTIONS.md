@@ -1,6 +1,6 @@
 # QuantEvaluator 指标计算口径与 CogAlpha 差异决策
 
-> 最后更新：2026-09-24（Asia/Hong_Kong）。文档维护规则：代码行为变更必须同一轮同步本文档并更新此时间戳。
+> 最后更新：2026-10-04（Asia/Hong_Kong）。文档维护规则：代码行为变更必须同一轮同步本文档并更新此时间戳。
 
 RankIC 系数路径的等值提速说明见
 [性能核验](RANK_IC_COEFFICIENT_PERFORMANCE.md)；指标公式和显著性准入不变。
@@ -85,6 +85,58 @@ QuantileReturnArtifact派生形状默认Q=5、每桶有效样本至少10、每�
 - quantile_spread=g_top-g_bottom 是统计差，不是默认100%总敞口组合收益。
 
 日单调性比例、跨窗口形状稳定性、bootstrap rank agreement又是不同对象。
+
+### 4.1 六项线性形状指标的公式与数值边界（2026-10-04）
+
+对单个因子，设桶均值为 $`g_0,\ldots,g_{Q-1}`$。只认可有限值；
+不删除缺失桶再把原本不相邻的桶拼成相邻桶。定义：
+
+```math
+P=\{q:0\le q<Q-1,\ g_q,g_{q+1}\text{ 均有限}\},\qquad
+I=\{q:1\le q<Q-1,\ g_{q-1},g_q,g_{q+1}\text{ 均有限}\}.
+```
+
+曲率与相邻幅度分别为：
+
+```math
+\mathrm{curvature}=\frac{\sum_{q\in I}(g_{q+1}-2g_q+g_{q-1})}{|I|},\qquad
+\mathrm{adjacent\ spread}=\frac{\sum_{q\in P}|g_{q+1}-g_q|}{|P|}.
+```
+
+曲率要求 $`Q\ge3,\ |I|>0`$；相邻幅度要求 $`Q\ge2,\ |P|>0`$。
+否则返回 NaN。分母是有效连续三桶/相邻对数量，不是股票数，也不是所有有限桶数量。
+其余四项（中桶索引 $`m=\lfloor Q/2\rfloor`$，偶数桶不插值）为：
+
+```math
+\mathrm{tail\ asymmetry}=g_{Q-1}-2g_m+g_0,\qquad
+\mathrm{top\ cliff}=g_{Q-1}-g_{Q-2},\qquad
+\mathrm{bottom\ cliff}=g_1-g_0,\qquad
+\mathrm{extreme\ cliff}=\frac{(g_{Q-1}-g_{Q-2})+(g_1-g_0)}{2}.
+```
+
+尾部不对称要求至少三桶，其余 cliff 要求至少两桶；每项所用的桶必须全部有限。
+cliff 保留符号，不取绝对值。两桶时 extreme cliff 与两项边缘 cliff 相同。
+
+CPU/GPU 对普通量级保留既有 float64 算术路径。CPU 对含非零次正规数，或有限桶最大
+绝对值达到 $`\min(10^{-12}/[2\epsilon(L+2)],\ M/[2L])`$ 的因子列进行修复。
+GPU 的门禁略有区别：非零绝对值小于 $`\mathrm{tiny}(L+2)`$，或有限最大绝对值
+达到 $`10^{-12}/[2\epsilon(L+2)]`$，或严格大于 $`M/L`$ 时修复。
+$`\mathrm{tiny}`$ 是最小正规 float64；GPU 包含靠近下溢的正规数。
+两端门禁不要求逐位相同，但数学公式、缺失值分母与精确修复舍入口径相同。风险列均
+使用精确二进制有理数求和、除以实际分母，最后一次舍入到 float64。
+其中 $`\epsilon`$ 是 float64 machine epsilon，$`M`$ 是最大有限 float64；
+保守系数上界 $`L`$ 对曲率、相邻幅度、尾部不对称/extreme cliff、top/bottom cliff
+分别为 $`4(Q-2),2(Q-1),4,2`$。此门禁不是对所有指标的全局误差保证。
+缺失/无限桶不进入有限最大值统计，也不参与公式。数学结果真正超出 float64 范围时
+仍返回有符号 infinity，不截断成有限值；只有中间表达式溢出而结果有限时才予以修复。
+GPU 精确修复在设备端执行，不把输入值搬回 CPU 代算；六项低层 GPU 函数提供
+`workspace_bytes`（默认 1 GiB），准入包含实际编译的逐线程 local memory 和取整后的
+launch threads。预算不足明确拒绝，不静默绕过精确修复。
+该预算是数值 workspace 的准入估算，不是 CuPy 分配器的全进程硬上限；
+编译缓存与归约/扫描内部 scratch 的版本相关峰值尚需独立实测，不能宣称严格覆盖。
+无需精确修复的零风险列不会启动精确累加 kernel。
+独立 Fraction/Decimal 边界回归与受限 A/B 证据见
+[数值与性能核验](QUANTILE_TEMPORAL_MEAN_GUARD_20261003.md)。
 应联合看组收益曲线、Top-Bottom、有效桶/相邻对数、桶内人数和各桶有效日；不要用单一分数遮蔽尾组暴跌。
 
 ## 5. 组合时钟、资本与成本
