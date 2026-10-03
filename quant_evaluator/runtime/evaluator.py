@@ -27,6 +27,7 @@ from quant_evaluator.api.requests import EvaluationRequest
 from quant_evaluator.runtime.evaluation_identity import (
     build_evaluation_config_hash_fields,
 )
+from quant_evaluator.metrics.finite_mean import finite_mean_axis0
 
 from quant_evaluator.planner.batch_plan import BatchPlan, ChunkDescriptor, create_batch_plan
 from quant_evaluator.planner.dependency_plan import (
@@ -2273,12 +2274,12 @@ def evaluate(
                         if key not in quantile_profile_cache:
                             if windowed:
                                 panels = daily[:len(daily)//window*window].reshape(-1,window,q,factor_batch.num_factors)
-                                counts = np.isfinite(panels).sum(axis=1)
-                                means = np.nansum(panels,axis=1)/np.maximum(counts,1)
+                                means, counts = finite_mean_axis0(
+                                    panels.swapaxes(0, 1), min_periods=window,
+                                )
                                 quantile_profile_cache[key] = np.where(counts == window, means, np.nan)
                             else:
-                                days = np.isfinite(daily).sum(axis=0)
-                                means = np.nansum(daily,axis=0)/np.maximum(days,1)
+                                means, days = finite_mean_axis0(daily)
                                 quantile_profile_cache[key] = np.where(days >= min_periods, means, np.nan)
                         accepted = inspect.signature(cfn).parameters
                         # 2026-09-24 missing-kernel round: kernels declared
@@ -2922,7 +2923,7 @@ def evaluate(
                     counts=np.isfinite(daily[:,-1,:]-daily[:,0,:]).sum(axis=0)
                 else:
                     days=np.isfinite(daily).sum(axis=0)
-                    profile=np.where(days >= (spec.min_periods or 20),np.nansum(daily,axis=0)/np.maximum(days,1),np.nan)
+                    profile=np.where(days >= (spec.min_periods or 20),finite_mean_axis0(daily)[0],np.nan)
                     counts=(np.isfinite(profile[:-1]) & np.isfinite(profile[1:])).sum(axis=0)
                     if canonical == "quantile_rank_monotonicity":
                         counts = np.isfinite(profile).sum(axis=0)

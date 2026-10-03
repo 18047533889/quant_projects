@@ -679,17 +679,32 @@ class GPUExecutor:
                     vector[m] = _to_cpu(quantile_ret)
                     counts[m] = _to_cpu(quantile_count)
                 elif m == "quantile_returns_full":
-                    valid = cp.sum(cp.isfinite(quantile_ret), axis=0)
-                    vector[m] = _to_cpu(cp.where(valid >= min_periods, cp.nanmean(quantile_ret, axis=0), cp.nan))
+                    from quant_evaluator.kernels.gpu.finite_mean import finite_mean_axis0
+                    columns = int(quantile_ret.shape[1] * quantile_ret.shape[2])
+                    reserved = int(columns * 16)
+                    mean_workspace = self.session.workspace_budget(output_bytes=reserved)
+                    mean, valid = finite_mean_axis0(
+                        quantile_ret, workspace_bytes=mean_workspace)
+                    vector[m] = _to_cpu(cp.where(valid >= min_periods, mean, cp.nan))
                 elif m == "quantile_spread":
                     # Qtop - Qbottom mean over time -> (F,)
                     spread = quantile_ret[:, -1, :] - quantile_ret[:, 0, :]
-                    count = cp.sum(cp.isfinite(spread), axis=0)
-                    scalar[m] = _to_cpu(cp.where(count >= min_periods, cp.nanmean(spread, axis=0), cp.nan))
+                    from quant_evaluator.kernels.gpu.finite_mean import finite_mean_axis0
+                    columns = int(spread.shape[1])
+                    reserved = int(columns * 16)
+                    mean_workspace = self.session.workspace_budget(output_bytes=reserved)
+                    mean, count = finite_mean_axis0(
+                        spread, workspace_bytes=mean_workspace)
+                    scalar[m] = _to_cpu(cp.where(count >= min_periods, mean, cp.nan))
                     counts[m] = _to_cpu(count)
                 elif m == "quantile_monotonicity":
-                    days = cp.isfinite(quantile_ret).sum(axis=0)
-                    profile = cp.where(days >= min_periods, cp.nanmean(quantile_ret, axis=0), cp.nan)
+                    from quant_evaluator.kernels.gpu.finite_mean import finite_mean_axis0
+                    columns = int(quantile_ret.shape[1] * quantile_ret.shape[2])
+                    reserved = int(columns * 16)
+                    mean_workspace = self.session.workspace_budget(output_bytes=reserved)
+                    profile, days = finite_mean_axis0(
+                        quantile_ret, workspace_bytes=mean_workspace)
+                    profile = cp.where(days >= min_periods, profile, cp.nan)
                     valid_pairs = cp.isfinite(profile[:-1]) & cp.isfinite(profile[1:])
                     count = valid_pairs.sum(axis=0)
                     from quant_evaluator.kernels.gpu.quantile_shape import quantile_monotonicity

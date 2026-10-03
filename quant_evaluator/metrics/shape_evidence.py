@@ -45,6 +45,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from quant_evaluator.metrics.finite_mean import finite_mean_axis0
+from quant_evaluator.metrics.ic import _corrcoef_pair_1d
+
 __all__ = [
     "compute_u_shape_score",
     "compute_inverted_u_score",
@@ -613,8 +616,7 @@ def _per_window_profile(
     windows: np.ndarray,
 ) -> np.ndarray:
     """Mean quantile-return across the window axis, (n_quantiles, F)."""
-    with np.errstate(invalid="ignore"):
-        return np.nanmean(windows, axis=0)
+    return finite_mean_axis0(windows)[0]
 
 
 def compute_shape_stability(qr: np.ndarray) -> np.ndarray:
@@ -645,7 +647,10 @@ def compute_shape_stability(qr: np.ndarray) -> np.ndarray:
                 continue
             if np.ptp(wp[finite]) == 0.0 or np.ptp(mp[finite]) == 0.0:
                 continue
-            r = np.corrcoef(wp[finite], mp[finite])[0, 1]
+            # Preserve the ordinary Pearson operation order and reuse its
+            # scale-safe fallback for extreme offsets and finite magnitudes.
+            with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                r = _corrcoef_pair_1d(wp[finite], mp[finite], int(np.sum(finite)))
             if np.isfinite(r):
                 corrs.append(r)
         if corrs:
@@ -688,7 +693,8 @@ def compute_shape_regime_stability(qr: np.ndarray) -> np.ndarray:
                 continue
             if np.ptp(a[finite]) == 0.0 or np.ptp(b[finite]) == 0.0:
                 continue
-            r = np.corrcoef(a[finite], b[finite])[0, 1]
+            with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+                r = _corrcoef_pair_1d(a[finite], b[finite], int(np.sum(finite)))
             if np.isfinite(r):
                 corrs.append(r)
         if corrs:

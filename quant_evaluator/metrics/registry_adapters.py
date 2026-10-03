@@ -12,6 +12,7 @@ from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.metrics.ic import compute_daily_ic, compute_mean_ic
 from quant_evaluator.metrics.ic_summary import compute_icir
 from quant_evaluator.metrics.quality import compute_coverage_per_factor
+from quant_evaluator.metrics.finite_mean import finite_mean_axis0
 from quant_evaluator.metrics.quantile import compute_quantile_returns_fast
 from quant_evaluator.metrics.robustness import (
     compute_block_bootstrap_ci,
@@ -237,16 +238,9 @@ def compute_quantile_spread_value(
         validate_daily_quantile_return_artifact(daily_quantile_artifact, factor_batch, label_bundle, n_quantiles, 10)
         quantile_returns = daily_quantile_artifact.values
     # (T, n_quantiles, F) -> mean over time of Q_top - Q_bottom per factor.
-    with np.errstate(invalid="ignore"):
+    with np.errstate(invalid="ignore", over="ignore"):
         spread_series = quantile_returns[:, -1, :] - quantile_returns[:, 0, :]
-    finite = np.isfinite(spread_series)
-    valid_counts = np.sum(finite, axis=0)
-    totals = np.sum(np.where(finite, spread_series, 0.0), axis=0)
-    means = np.divide(
-        totals, valid_counts,
-        out=np.full(valid_counts.shape, np.nan, dtype=np.float64),
-        where=valid_counts > 0,
-    )
+    means, valid_counts = finite_mean_axis0(spread_series, min_periods=min_periods)
     return np.where(valid_counts >= min_periods, means, np.nan)
 
 
@@ -280,12 +274,7 @@ def compute_quantile_returns_full_value(
     else:
         validate_daily_quantile_return_artifact(daily_quantile_artifact, factor_batch, label_bundle, n_quantiles, 10)
         quantile_returns = daily_quantile_artifact.values
-    with warnings.catch_warnings():
-        # Entirely empty quantile/factor buckets are valid missing observations.
-        warnings.filterwarnings("ignore", message="Mean of empty slice", category=RuntimeWarning)
-        with np.errstate(invalid="ignore"):
-            means = np.nanmean(quantile_returns, axis=0)  # (n_quantiles, F)
-    valid_counts = np.sum(np.isfinite(quantile_returns), axis=0)  # (n_quantiles, F)
+    means, valid_counts = finite_mean_axis0(quantile_returns, min_periods=min_periods)
     return np.where(valid_counts >= min_periods, means, np.nan)
 
 
