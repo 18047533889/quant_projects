@@ -62,13 +62,18 @@ def test_missing_fe_fails_closed_unless_research_fallback_is_explicit(monkeypatc
     assert executor.execution_identity == identity
 
 
-def test_smoothing_composite_has_explicit_unbound_identity():
+def test_smoothing_identity_binds_registered_route_and_keeps_other_recipes_unbound():
     registry = create_default_registry()
 
-    with pytest.raises(GovernanceError, match="No scoped FE composite identity provider"):
-        registry.execution_identity("rolling_zscore")
-    with pytest.raises(GovernanceError, match="No scoped FE composite identity provider"):
-        registry.execution_identity("ewma")
+    for name in ("rolling_zscore", "trailing_median"):
+        with pytest.raises(GovernanceError, match="No scoped FE composite identity provider"):
+            registry.execution_identity(name)
+    identity = registry.execution_identity("ewma")
+    assert identity["status"] == "bound"
+    assert identity["execution_origin"] == "FE_COMPOSITE"
+    assert identity["identity_kind"] == "FE_COMPOSITE_SCOPED"
+    assert identity["recipe_identity"] == "FE_COMPOSITE:long_smoothing.lagged_ewma:v1"
+    assert "lagged_ewma" in identity["coverage_marker"]
 
 
 def test_research_opt_in_still_uses_fe_when_composite_executor_is_available(monkeypatch):
