@@ -33,8 +33,8 @@ def _ds(name, uri, filename, fmt):
 
 def _iter_factors(count, max_mib, manifest_sha256, max_total_mib):
     if (type(count) is not int or type(max_mib) is not int
-            or not 1 <= count <= 32 or not 1 <= max_mib <= 128):
-        raise ValueError("factor count 1..32, object limit 1..128 MiB")
+            or not 1 <= count <= 48 or not 1 <= max_mib <= 128):
+        raise ValueError("factor count 1..48, object limit 1..128 MiB")
     if type(max_total_mib) is not int or not 1 <= max_total_mib <= 2048:
         raise ValueError("total verified object limit must be 1..2048 MiB")
     if len(manifest_sha256) != 64 or any(c not in "0123456789abcdef" for c in manifest_sha256):

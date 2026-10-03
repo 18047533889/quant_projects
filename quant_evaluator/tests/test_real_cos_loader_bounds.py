@@ -12,7 +12,7 @@ from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 
 @pytest.mark.parametrize("count,max_mib,total_mib", [
     (0, 64, 256),
-    (33, 64, 256),
+    (49, 64, 256),
     (True, 64, 256),
     (2, 0, 256),
     (2, 129, 256),

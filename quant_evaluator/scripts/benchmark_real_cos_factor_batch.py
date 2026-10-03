@@ -482,8 +482,8 @@ def main():
     if args.factor_count_profile == "64":
         print(json.dumps({
             "status": "unavailable", "factor_count": 64,
-            "loader_max_factor_count": 32,
-            "reason": "the bound DataAccess loader supports at most 32 factors",
+            "loader_max_factor_count": 48,
+            "reason": "the bound DataAccess loader supports at most 48 factors",
         }, ensure_ascii=False), flush=True)
         return
     if args.factor_count_profile == "32":

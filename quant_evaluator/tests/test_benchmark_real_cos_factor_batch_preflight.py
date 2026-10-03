@@ -49,7 +49,7 @@ def test_f64_count_profile_reports_unavailable_without_loading(monkeypatch, caps
     result = json.loads(capsys.readouterr().out)
     assert result["status"] == "unavailable"
     assert result["factor_count"] == 64
-    assert result["loader_max_factor_count"] == 32
+    assert result["loader_max_factor_count"] == 48
 
 
 def test_preflight_requires_14_gib_effective_vram_at_conservative_40_percent():
