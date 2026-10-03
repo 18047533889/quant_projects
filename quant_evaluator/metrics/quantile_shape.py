@@ -78,16 +78,8 @@ def compute_quantile_rank_monotonicity(qr: np.ndarray) -> np.ndarray:
     [-1, 1]. Unlike adjacent increase fraction this retains direction and
     refuses to score a partially observed quantile profile.
     """
-    from scipy.stats import spearmanr
-    m = _as_matrix(qr)
-    out = np.full(m.shape[1], np.nan)
-    if m.shape[0] < 3:
-        return out
-    for f in range(m.shape[1]):
-        col = m[:, f]
-        if np.isfinite(col).all() and np.any(col != col[0]):
-            out[f] = spearmanr(np.arange(len(col)), col).statistic
-    return out
+    from quant_evaluator.metrics.quantile_rank_numeric import rank_monotonicity
+    return rank_monotonicity(_as_matrix(qr))
 
 
 def compute_quantile_curvature(qr: np.ndarray) -> np.ndarray:
