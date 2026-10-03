@@ -21,6 +21,10 @@ from quant_evaluator.runtime.source_auto_evidence import (
     SOURCE_AUTO_EVIDENCE_VERSION, SOURCE_AUTO_METRICS, select_source_auto_route,
 )
 from quant_evaluator.contracts.factor_tile_source import admitted_source_tile_limit
+from quant_evaluator.runtime.source_qualified_router import (
+    SourceQualificationError, cuda_route_rejection, discard_source_route_cache,
+    qualify_source_route,
+)
 
 
 _SOURCE_METRICS = SOURCE_AUTO_METRICS
@@ -113,12 +117,17 @@ def _cpu_source_batch(source, metadata, label, metrics, policy, max_tile_size):
 
 def evaluate_factor_source_batch(
     source, label_bundle, *, metrics=("rank_ic", "rank_ic_series"),
-    backend="auto", max_tile_size=None, gpu_policy=None,
+    backend="auto", max_tile_size=None, gpu_policy=None, source_qualification=None,
 ) -> BatchEvaluationBundle:
     """Evaluate every source factor once in bounded tiles.
 
     Supported options: backend is auto/cpu/cuda_strict; max_tile_size caps
     source reads; gpu_policy.max_factor_tile_size caps GPU factor tiles.
+    source_qualification accepts a counterbalanced CPU/CUDA receipt pair for
+    current-context routing; only auto mode consumes it. A valid supplied pair
+    can be cached for later exact-request auto calls. Cache misses, stale
+    source/runtime identities and malformed receipts retain the legacy auto
+    envelope fallback with an explicit qualification status in the receipt.
     The caller owns source.close(). The result is columnar and omits
     the richer EvaluationBundle diagnostics/probe artifacts.
     """
@@ -163,7 +172,58 @@ def evaluate_factor_source_batch(
     evidence_id = None
     evidence_artifacts = ()
     evidence_status = None
+    qualification_status = ("not_used_explicit_backend" if backend != "auto"
+                            else "not_checked")
+    qualification_reason = None
+    qualification_winner = None
+    qualification_scope = None
+    qualification_source_scope = None
+    qualification_sha256 = None
+    qualification_cache_status = None
+    qualification_applied = False
+    qualification_decision_used = False
     if backend == "auto":
+        maximum_qualified_width = min(
+            requested_tile_width, memory_tile_limit,
+            policy.max_factor_tile_size or requested_tile_width)
+        try:
+            decision = qualify_source_route(
+                source=source, metadata=metadata, metrics=selected,
+                request_fingerprint=request_fingerprint,
+                requested_tile_size=requested_tile_width,
+                maximum_effective_tile_size=maximum_qualified_width,
+                policy=policy, records=source_qualification)
+        except SourceQualificationError as exc:
+            qualification_status = ("not_available_legacy_fallback"
+                                    if exc.reason == "qualified_cache_miss"
+                                    else "rejected_legacy_fallback")
+            qualification_reason = exc.reason
+        except Exception:
+            qualification_status = "guard_error_legacy_fallback"
+            qualification_reason = "qualified_guard_error"
+        else:
+            qualification_decision_used = True
+            qualification_winner = decision.qualification.winning_backend
+            qualification_scope = decision.scope
+            qualification_source_scope = decision.source_content_scope
+            qualification_sha256 = decision.evidence_sha256
+            qualification_cache_status = decision.cache_status
+            qualification_status = "qualified_current_source"
+            tile_width = decision.effective_tile_size
+            effective_tile_size = tile_width
+            if qualification_winner == "cpu":
+                route, reason = "cpu", "qualified_source_cpu_winner"
+                qualification_applied = True
+            else:
+                rejection = cuda_route_rejection(policy)
+                if rejection is None:
+                    route, reason = "cuda_strict", "qualified_source_cuda_winner"
+                    qualification_applied = True
+                else:
+                    route, reason = "cpu", "qualified_cuda_resource_gate_" + rejection
+                    qualification_status = "qualified_cuda_ineligible"
+                    qualification_reason = rejection
+    if backend == "auto" and not qualification_decision_used:
         shape = (metadata.time_axis.size, metadata.asset_axis.size, len(metadata.factor_ids))
         evidence = select_source_auto_route(
             shape=shape, metrics=selected, source_dtype=metadata.dtype,
@@ -211,6 +271,24 @@ def evaluate_factor_source_batch(
                 source_metadata=metadata)
     else:
         out = _cpu_source_batch(source, metadata, label_bundle, selected, policy, effective_tile_size)
+    if (qualification_applied and qualification_winner == "cuda"
+            and route == "cuda_strict"):
+        actual_width = out.metadata.get("factor_tile_size")
+        oom_retries = out.metadata.get("oom_retries")
+        if (type(actual_width) is not int or type(oom_retries) is not int
+                or actual_width != effective_tile_size or oom_retries != 0):
+            qualification_applied = False
+            qualification_status = "execution_configuration_deviated"
+            qualification_reason = "qualified_cuda_execution_width_or_oom_deviated"
+            discard_source_route_cache(
+                source=source, metadata=metadata, metrics=selected,
+                request_fingerprint=request_fingerprint,
+                requested_tile_size=requested_tile_width,
+                maximum_effective_tile_size=min(
+                    requested_tile_width, memory_tile_limit,
+                    policy.max_factor_tile_size or requested_tile_width),
+                policy=policy,
+            )
     backend_used = "cuda" if route == "cuda_strict" else "cpu"
     metric_backends = {metric: backend_used for metric in selected}
     receipt = {
@@ -218,6 +296,14 @@ def evaluate_factor_source_batch(
         "backend_requested": backend,
         "backend_used": backend_used,
         "auto_backend_reason": reason if backend == "auto" else None,
+        "source_qualification_status": qualification_status,
+        "source_qualification_reason": qualification_reason,
+        "source_qualification_winner": qualification_winner,
+        "source_qualification_applied": qualification_applied,
+        "source_qualification_scope": qualification_scope,
+        "source_qualification_content_scope": qualification_source_scope,
+        "source_qualification_sha256": qualification_sha256,
+        "source_qualification_cache_status": qualification_cache_status,
         "auto_backend_evidence_id": evidence_id,
         "auto_backend_evidence_version": SOURCE_AUTO_EVIDENCE_VERSION if evidence_id else None,
         "metric_backends": metric_backends,
@@ -247,6 +333,14 @@ def evaluate_factor_source_batch(
         "backend_requested": backend,
         "backend_used": backend_used,
         "auto_backend_reason": receipt["auto_backend_reason"],
+        "source_qualification_status": receipt["source_qualification_status"],
+        "source_qualification_reason": receipt["source_qualification_reason"],
+        "source_qualification_winner": receipt["source_qualification_winner"],
+        "source_qualification_applied": receipt["source_qualification_applied"],
+        "source_qualification_scope": receipt["source_qualification_scope"],
+        "source_qualification_content_scope": receipt["source_qualification_content_scope"],
+        "source_qualification_sha256": receipt["source_qualification_sha256"],
+        "source_qualification_cache_status": receipt["source_qualification_cache_status"],
         "auto_backend_evidence_id": receipt["auto_backend_evidence_id"],
         "auto_backend_evidence_version": receipt["auto_backend_evidence_version"],
         "metric_backends": metric_backends,
@@ -257,6 +351,8 @@ def evaluate_factor_source_batch(
         "effective_max_tile_size": effective_tile_size,
         "source_snapshot_id": metadata.snapshot_id,
         "source_api": "columnar_factor_source_v1",
-        "source_identity_trust": "caller_supplied_snapshot_id",
+        "source_identity_trust": (
+            "bound_cos_manifest_and_selected_content_receipts"
+            if qualification_winner is not None else "caller_supplied_snapshot_id"),
     })
     return out
