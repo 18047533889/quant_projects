@@ -7,8 +7,11 @@ The source must preserve the declared snapshot, factor order, complete axes and 
 COS sources are sequential: never read a pilot tile and restart the same source at zero.
 
 Backend choices are `auto`, `cpu`, and `cuda_strict`.
-`auto` deterministically matches the measured request envelopes, then checks precision,
-device capabilities and available VRAM. An unknown request falls back to CPU.
+`auto` deterministically matches historical measured request envelopes, then checks
+precision, device capabilities and available VRAM. Matching a historical shape and
+metric set does not validate current code, source contents or actual thread settings.
+Without current context-bound qualification, treat this route as a heuristic, not
+a current fastest-backend certificate. An unknown request falls back to CPU.
 This is not a guarantee of the fastest backend for every possible input.
 `cuda_strict` explicitly requests CUDA; it does not silently promise numerical support
 for unsupported metrics. `max_tile_size` is a cap, not a guarantee of actual read width.

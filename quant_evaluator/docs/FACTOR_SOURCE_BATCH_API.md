@@ -46,8 +46,16 @@ replace, or configure `source`, and it does not implicitly enable COS reads or
 prefetch. The caller chooses and owns the source adapter, including its read
 policy.
 
-Auto routing is deterministic and fail-closed. The current certified CUDA
-profiles require float64 factors and labels, the default-compatible precision
+Auto routing is deterministic. The historical route envelopes below do not
+by themselves prove that the current implementation is the fastest for the
+current source contents, package versions, active threads, or device state.
+Shape/metric matching is a routing heuristic unless a current, context-bound
+qualification receipt is independently validated. Resource and unsupported
+input checks remain fail-closed; that is separate from performance evidence.
+The F48 default-route report bound to source digest `804aeb378aaacb83033909dc0cfdeb79477da912ad996f666ec897db51996323`
+is a historical snapshot, not certification of later code changes.
+
+The historical CUDA envelopes require float64 factors and labels, the default-compatible precision
 policy, one NVIDIA L20 device with no extra capability requirements, and at
 least 14 GiB effective free VRAM. They are:
 
