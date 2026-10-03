@@ -65,3 +65,53 @@ $$z_i=\frac{c_i}{\sqrt{\sum_j c_j^2/(n-\mathrm{ddof})}}.$$
 已有定向测试覆盖独立 Decimal 参考、轴恢复、极端值、小数自由度、缺失/Inf、
 实际 FE 调用检查及禁止 FP fallback。定向通过不等于多年全量股票性能最优；
 默认切换前仍需测量长表搬运、峰值内存和完整请求 A/B，而非只计核心公式时间。
+
+## 显式通过 TreatmentRecipe 编译执行
+
+可选的 `compile_fe_native_zscore_recipe` 接口把已有 recipe 验证与 FE 执行连接起来。
+它先调用原来的 `recipe.compile(registry)`，保留 semantic、stage、参数域和 fit 校验；
+随后为支持的步骤生成单独的候选执行计划。它不会修改 registry 的默认路由或
+把 `cs_zscore` 的 `FP_NATIVE` 标记改写为已生产准入的 `FE_OPERATOR`。
+
+```python
+from factor_preprocess.registry.transforms import get_default_registry
+from factor_preprocess.contracts.treatment_recipe import RecipeStep, TreatmentRecipe
+from factor_preprocess.adapters.fe_zscore_recipe import compile_fe_native_zscore_recipe
+
+registry = get_default_registry()
+metadata = registry.get("cs_zscore")
+recipe = TreatmentRecipe(
+    recipe_id="example-fe-zscore",
+    source_factor_definition_ref="your-factor-definition-ref",
+    source_factor_value_ref="your-factor-value-ref",
+    ordered_steps=(RecipeStep(
+        step_id="normalize", semantic_transform_id=metadata.semantic_id,
+        implementation_ref="cs_zscore", stage=metadata.stage,
+        parameters={"axis": -1, "ddof": 0.5,
+                    "numeric_policy": "finite_anchor_centered_v2"},
+    ),),
+)
+plan = compile_fe_native_zscore_recipe(recipe, registry,
+    max_chunk_cells=1_000_000, max_result_bytes=256 * 1024**2)
+result = plan.run(values)  # values 是运行时输入，不放进 recipe.parameters。
+assert plan.spec_identity == recipe.spec_identity
+print(plan.execution_identity)
+```
+
+当前候选只支持一个无 fitted state 的 `cs_zscore` 步骤，EXPANDING fit boundary，
+且不接受额外 neutralization spec 或 existing treatment signature；不支持的配置
+明确拒绝，不会忽略。这里只是无拟合统计的显式执行候选，不是完整多步骤 recipe
+的 FE 准入方案，也不自动发布结果或替代 materialization identity。
+
+recipe 的 `spec_identity` 描述处理规范；候选 `execution_identity` 则另行记录
+完整绑定的默认/显式参数、资源上限、适配器/FE helper/recipe 绑定模块的磁盘源码摘要
+及运行版本。身份摘要不是已加载代码的证明，也不覆盖传递依赖闭包。
+在更新实现或运行环境后应重新编译计划，不应把旧编译身份当成当前运行证明。
+已有 recipe 回归使用独立 Decimal 计算对照，多轴、小数自由度、NaN/Inf、常数组、
+只读输入、预算拒绝及禁止 FP 数值 fallback 均在验证范围内。
+
+此 ndarray 候选只验证数值轴，不知道哪一维是时间；“无需拟合”不等于任何轴选择
+都因果安全。日期 × 股票输入应按股票轴归约；不能把跨未来日期或跨 TRAIN/TEST 的
+全样本归约作为线上预处理。`FitBoundary.EXPANDING` 在这里是 recipe 的配置约束，
+不是对没有时间坐标的 ndarray 自动施加的分割器。生产准入前仍需要带时间/样本边界
+的完整 pipeline 验证。
