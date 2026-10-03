@@ -1,5 +1,7 @@
 import json
 from dataclasses import asdict
+import multiprocessing
+import os
 
 import numpy as np
 import pytest
@@ -235,3 +237,39 @@ def test_v2_report_rejects_bad_sixth_default_auto_receipt(mutation):
         verification["oracle_report"]["run_index"] = 4
     with pytest.raises(ValueError):
         parse_source_profile_report(_json(payload))
+
+
+def _load_report_child(queue, path):
+    try:
+        load_source_profile_report(path)
+    except Exception as exc:
+        queue.put((type(exc).__name__, str(exc)))
+    else:
+        queue.put(("loaded", ""))
+
+
+def test_loader_rejects_fifo_without_blocking_or_leaking_path(tmp_path):
+    if not hasattr(os, "mkfifo") or "fork" not in multiprocessing.get_all_start_methods():
+        pytest.skip("FIFO/fork are unavailable")
+    path = tmp_path / "report.fifo"
+    os.mkfifo(path)
+    context = multiprocessing.get_context("fork")
+    output = context.Queue()
+    process = context.Process(target=_load_report_child, args=(output, str(path)))
+    process.start()
+    process.join(timeout=2)
+    if process.is_alive():
+        process.terminate()
+        process.join(timeout=2)
+        pytest.fail("FIFO report open blocked")
+    assert process.exitcode == 0
+    error_type, message = output.get(timeout=1)
+    assert error_type == "ValueError"
+    assert "regular file" in message
+    assert str(path) not in message
+
+
+def test_loader_rejects_directory_without_leaking_path(tmp_path):
+    with pytest.raises(ValueError, match="regular file") as error:
+        load_source_profile_report(tmp_path)
+    assert str(tmp_path) not in str(error.value)

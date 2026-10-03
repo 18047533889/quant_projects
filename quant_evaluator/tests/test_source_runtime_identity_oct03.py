@@ -15,7 +15,10 @@ from quant_evaluator.runtime.source_runtime_identity import (
 )
 
 
-_OPTIONAL = ("numpy", "pandas", "scipy", "numba", "llvmlite", "cupy", "threadpoolctl")
+_OPTIONAL = (
+    "numpy", "pandas", "scipy", "numba", "llvmlite", "cupy", "threadpoolctl",
+    "duckdb", "pyarrow", "polars",
+)
 
 
 def _cold_modules(monkeypatch):
@@ -300,7 +303,7 @@ def test_cupy_lazy_load_invalidates_qualified_identity(monkeypatch):
 
 def test_digest_is_deterministic_bounded_and_fail_closed():
     snapshot = {
-        "schema": "source-runtime-identity-v2",
+        "schema": "source-runtime-identity-v3",
         "complete": True,
         "incomplete_reasons": [],
         "sample": {"b": 2, "a": 1},
@@ -311,7 +314,7 @@ def test_digest_is_deterministic_bounded_and_fail_closed():
             "sample": {"a": 1, "b": 2},
             "incomplete_reasons": [],
             "complete": True,
-            "schema": "source-runtime-identity-v2",
+            "schema": "source-runtime-identity-v3",
         }
     )
     assert first == second
@@ -324,5 +327,22 @@ def test_digest_is_deterministic_bounded_and_fail_closed():
         source_runtime_identity_digest({"schema": "wrong"})
     with pytest.raises(ValueError):
         source_runtime_identity_digest(
-            {"schema": "source-runtime-identity-v2", "huge": "x" * 70000}
+            {"schema": "source-runtime-identity-v3", "huge": "x" * 70000}
         )
+
+
+@pytest.mark.parametrize("package", ["duckdb", "pyarrow", "polars"])
+def test_reader_package_version_drift_changes_runtime_identity(monkeypatch, package):
+    _cold_modules(monkeypatch)
+    monkeypatch.setitem(sys.modules, package, types.SimpleNamespace(__version__="1.0"))
+    first = capture_source_runtime_identity()
+    monkeypatch.setitem(sys.modules, package, types.SimpleNamespace(__version__="1.1"))
+    second = capture_source_runtime_identity()
+    assert first["packages"][package] == {"loaded": True, "version": "1.0"}
+    assert second["packages"][package] == {"loaded": True, "version": "1.1"}
+    assert first["identity_digest"] != second["identity_digest"]
+
+
+def test_old_runtime_schema_cannot_be_reused_as_current_identity():
+    with pytest.raises(ValueError, match="unsupported runtime identity schema"):
+        source_runtime_identity_digest({"schema": "source-runtime-identity-v2"})

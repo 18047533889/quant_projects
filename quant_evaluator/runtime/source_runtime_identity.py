@@ -18,11 +18,14 @@ from collections.abc import Mapping
 from typing import Any
 
 
-_SCHEMA = "source-runtime-identity-v2"
+_SCHEMA = "source-runtime-identity-v3"
 _MAX_TEXT = 160
 _MAX_JSON_BYTES = 64 * 1024
 _MAX_POOLS = 128
-_VERSIONED_MODULES = ("numpy", "pandas", "scipy", "numba", "llvmlite", "cupy", "threadpoolctl")
+_VERSIONED_MODULES = (
+    "numpy", "pandas", "scipy", "numba", "llvmlite", "cupy", "threadpoolctl",
+    "duckdb", "pyarrow", "polars",
+)
 _THREAD_ENVIRONMENT = (
     "BLIS_NUM_THREADS",
     "MKL_DYNAMIC",

@@ -58,11 +58,11 @@ def live(monkeypatch):
         factor_ids, time_axis, asset_axis, "float64", source.snapshot_id, 2)
 
     runtime = {
-        "schema": "source-runtime-identity-v2", "complete": True,
+        "schema": "source-runtime-identity-v3", "complete": True,
         "incomplete_reasons": [], "python": "3.12.3",
         "packages": {name: {"loaded": True, "version": "1.0"}
                      for name in ("numpy", "pandas", "numba", "cupy", "threadpoolctl",
-                                  "scipy", "llvmlite")},
+                                  "scipy", "llvmlite", "duckdb", "pyarrow", "polars")},
         "numba": {"loaded": True, "threads": 2, "threading_layer": "omp"},
         "threadpools": {"status": "captured", "pools": []},
         "thread_environment": {"OMP_NUM_THREADS": "2"},
@@ -89,6 +89,9 @@ def live(monkeypatch):
                 strategy="strict_full_content", drifted=False)
 
     monkeypatch.setattr(router, "ProcessSourceIdentity", _Identity)
+    monkeypatch.setattr(router, "capture_source_dependency_identity", lambda: SimpleNamespace(
+        schema=router.DEPENDENCY_IDENTITY_SCHEMA, digest=_h("3"),
+    ))
     return source, metadata, GPUExecutionPolicy()
 
 
@@ -126,6 +129,32 @@ def _matching_records(live):
     return _records(state.context)
 
 
+def test_dependency_digest_drift_rejects_cached_evidence(live, monkeypatch):
+    records = _matching_records(live)
+    router.qualify_source_route(**_route_args(live, records=records))
+    monkeypatch.setattr(router, "capture_source_dependency_identity", lambda: SimpleNamespace(
+        schema=router.DEPENDENCY_IDENTITY_SCHEMA, digest=_h("4"),
+    ))
+    with pytest.raises(router.SourceQualificationError, match="qualified_receipt_mismatch"):
+        router.qualify_source_route(**_route_args(live, records=None))
+    with pytest.raises(router.SourceQualificationError, match="qualified_cache_miss"):
+        router.qualify_source_route(**_route_args(live, records=None))
+
+
+def test_dependency_scan_failure_rejects_and_evicts_cached_evidence(live, monkeypatch):
+    records = _matching_records(live)
+    router.qualify_source_route(**_route_args(live, records=records))
+    def fail():
+        raise RuntimeError("private source location must not become a reason code")
+    monkeypatch.setattr(router, "capture_source_dependency_identity", fail)
+    with pytest.raises(router.SourceQualificationError,
+                       match="current_dependency_source_identity_unavailable") as error:
+        router.qualify_source_route(**_route_args(live, records=None))
+    assert "private source location" not in str(error.value)
+    with pytest.raises(router.SourceQualificationError, match="qualified_cache_miss"):
+        router.qualify_source_route(**_route_args(live, records=None))
+
+
 def test_public_context_builder_counts_all_scalar_and_series_outputs(live):
     source, metadata, policy = live
     context = router.capture_source_route_context(
@@ -146,7 +175,7 @@ def test_accepts_exact_live_counterbalanced_pair(live, winner):
     assert result.qualification.winning_backend == winner
     assert result.effective_tile_size == 2
     assert result.scope == "exact_request_bound_cos_runtime_policy_v1"
-    assert result.source_content_scope == "quant_evaluator_python_content_v1"
+    assert result.source_content_scope == "qe_da_fo_fp_python_dependency_content_v1"
     assert len(result.evidence_sha256) == 64
 
 
@@ -312,7 +341,7 @@ def test_api_applies_qualified_cpu_width_and_records_exact_scope(monkeypatch):
     assert result.metadata["backend_used"] == "cpu"
     assert result.metadata["source_qualification_winner"] == "cpu"
     assert result.metadata["source_qualification_applied"] is True
-    assert result.metadata["source_qualification_content_scope"] == "quant_evaluator_python_content_v1"
+    assert result.metadata["source_qualification_content_scope"] == "qe_da_fo_fp_python_dependency_content_v1"
 
 
 def test_cuda_winner_resource_rejection_routes_cpu_without_claiming_applied(monkeypatch):

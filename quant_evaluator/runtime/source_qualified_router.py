@@ -23,6 +23,10 @@ from quant_evaluator.adapters.cos_factor_tile_source import (
 from quant_evaluator.contracts._hashutil import stable_content_hex
 from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
 from quant_evaluator.runtime.source_identity import ProcessSourceIdentity
+from quant_evaluator.runtime.source_dependency_identity import (
+    SCHEMA_VERSION as DEPENDENCY_IDENTITY_SCHEMA,
+    capture_source_dependency_identity,
+)
 from quant_evaluator.runtime.source_route_qualification import (
     CounterbalancedABRecord, SourceRouteContext, SourceRouteQualification,
     validate_source_route_qualification,
@@ -38,7 +42,7 @@ from quant_evaluator.runtime.source_qualification_cache import (
 
 
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z")
-SOURCE_CONTENT_SCOPE = "quant_evaluator_python_content_v1"
+SOURCE_CONTENT_SCOPE = "qe_da_fo_fp_python_dependency_content_v1"
 QUALIFICATION_SCOPE = "exact_request_bound_cos_runtime_policy_v1"
 _MIN_EFFECTIVE_VRAM_BYTES = 14 * 1024 ** 3
 
@@ -195,6 +199,19 @@ def _capture_live_context_state(
         raise SourceQualificationError("current_qe_source_identity_incomplete")
 
     try:
+        dependency_receipt = capture_source_dependency_identity()
+    except Exception as exc:
+        raise SourceQualificationError("current_dependency_source_identity_unavailable") from exc
+    if (dependency_receipt.schema != DEPENDENCY_IDENTITY_SCHEMA
+            or type(dependency_receipt.digest) is not str
+            or _SHA256.fullmatch(dependency_receipt.digest) is None):
+        raise SourceQualificationError("current_dependency_source_identity_incomplete")
+    executable_sha = stable_content_hex(
+        tag="SourceRouteExecutableClosure.v1",
+        fields={"qe": source_receipt.digest, "dependency_closure": dependency_receipt.digest},
+    )
+
+    try:
         runtime = capture_source_runtime_identity()
         if not is_qualified_source_runtime_identity(runtime):
             raise SourceQualificationError("current_runtime_identity_incomplete")
@@ -253,7 +270,7 @@ def _capture_live_context_state(
         request_content_sha256=request_sha,
         source_identity_sha256=source_identity_sha,
         source_content_sha256=source_content_sha,
-        executable_source_sha256=source_receipt.digest,
+        executable_source_sha256=executable_sha,
         runtime_fingerprint_sha256=runtime_sha,
         package_fingerprint_sha256=packages_sha,
         thread_fingerprint_sha256=thread_sha,

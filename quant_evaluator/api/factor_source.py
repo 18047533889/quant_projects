@@ -188,6 +188,10 @@ def evaluate_factor_source_batch(
     qualification_source_scope = None
     qualification_sha256 = None
     qualification_cache_status = None
+    qualification_origin = ("explicit_receipts" if source_qualification is not None else "none")
+    qualification_provider_status = (
+        "not_checked" if backend == "auto" else "not_used_explicit_backend")
+    qualification_candidate_id = None
     qualification_applied = False
     qualification_decision_used = False
     profile_decision = None
@@ -199,6 +203,21 @@ def evaluate_factor_source_batch(
                 source=source, metadata=metadata, metrics=selected,
                 request_fingerprint=request_fingerprint,
                 requested_tile_size=requested_tile_width, policy=policy)
+            if profile_records is not None:
+                qualification_origin = "process_cache"
+            else:
+                try:
+                    from quant_evaluator.runtime.source_qualification_provider import (
+                        lookup_source_qualification_candidate,
+                    )
+                    lookup = lookup_source_qualification_candidate(request_fingerprint)
+                    qualification_provider_status = lookup.reason_code
+                    if lookup.candidate is not None:
+                        profile_records = lookup.candidate.records
+                        qualification_origin = "report_candidate"
+                        qualification_candidate_id = lookup.candidate.candidate_id
+                except Exception:
+                    qualification_provider_status = "provider_error"
         if is_source_route_profile_pair(profile_records):
             profile_attempted = True
             try:
@@ -206,17 +225,23 @@ def evaluate_factor_source_batch(
                     source=source, metadata=metadata, metrics=selected,
                     request_fingerprint=request_fingerprint,
                     requested_tile_size=requested_tile_width,
-                    policy=policy, records=(None if source_qualification is None
+                    policy=policy, records=(None if qualification_origin == "process_cache"
                                             else profile_records))
             except SourceProfileQualificationError as exc:
+                if qualification_origin == "report_candidate":
+                    qualification_provider_status = "candidate_rejected"
                 qualification_status = ("not_available_legacy_fallback"
                                         if exc.reason == "qualified_profile_cache_miss"
                                         else "rejected_legacy_fallback")
                 qualification_reason = exc.reason
             except Exception:
+                if qualification_origin == "report_candidate":
+                    qualification_provider_status = "candidate_guard_error"
                 qualification_status = "guard_error_legacy_fallback"
                 qualification_reason = "qualified_profile_guard_error"
             else:
+                if qualification_origin == "report_candidate":
+                    qualification_provider_status = "candidate_validated"
                 qualification_decision_used = True
                 qualification_winner = profile_decision.winning_backend
                 qualification_scope = profile_decision.scope
@@ -340,6 +365,8 @@ def evaluate_factor_source_batch(
             requested_tile_size=requested_tile_width, policy=policy,
             backend="cuda" if route == "cuda_strict" else "cpu")
         if execution_mismatch is not None:
+            if qualification_origin == "report_candidate":
+                qualification_provider_status = "candidate_execution_deviated"
             qualification_applied = False
             qualification_status = "execution_configuration_deviated"
             qualification_reason = execution_mismatch
@@ -382,6 +409,9 @@ def evaluate_factor_source_batch(
         "source_qualification_content_scope": qualification_source_scope,
         "source_qualification_sha256": qualification_sha256,
         "source_qualification_cache_status": qualification_cache_status,
+        "source_qualification_origin": qualification_origin,
+        "source_qualification_provider_status": qualification_provider_status,
+        "source_qualification_candidate_id": qualification_candidate_id,
         "auto_backend_evidence_id": evidence_id,
         "auto_backend_evidence_version": SOURCE_AUTO_EVIDENCE_VERSION if evidence_id else None,
         "metric_backends": metric_backends,
@@ -419,6 +449,9 @@ def evaluate_factor_source_batch(
         "source_qualification_content_scope": receipt["source_qualification_content_scope"],
         "source_qualification_sha256": receipt["source_qualification_sha256"],
         "source_qualification_cache_status": receipt["source_qualification_cache_status"],
+        "source_qualification_origin": receipt["source_qualification_origin"],
+        "source_qualification_provider_status": receipt["source_qualification_provider_status"],
+        "source_qualification_candidate_id": receipt["source_qualification_candidate_id"],
         "auto_backend_evidence_id": receipt["auto_backend_evidence_id"],
         "auto_backend_evidence_version": receipt["auto_backend_evidence_version"],
         "metric_backends": metric_backends,

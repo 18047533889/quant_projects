@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from dataclasses import dataclass, fields
 from pathlib import Path
+import stat
 
 from quant_evaluator.runtime.source_route_profiles import (
     BackendRouteProfileMeasurement, CounterbalancedRouteProfileRecord,
@@ -370,9 +372,33 @@ def parse_source_profile_report(payload: str | bytes) -> SourceProfileReport:
 
 
 def load_source_profile_report(path: str | Path) -> SourceProfileReport:
-    """Read at most 1 MiB plus one sentinel byte before parsing a report file."""
-    with Path(path).open("rb") as stream:
-        payload = stream.read(MAX_REPORT_BYTES + 1)
+    """Read a bounded regular file without blocking on special files."""
+    nonblocking = getattr(os, "O_NONBLOCK", None)
+    if nonblocking is None:
+        raise ValueError("nonblocking report open is unavailable")
+    try:
+        file_path = os.fspath(Path(path))
+        fd = os.open(file_path, os.O_RDONLY | nonblocking
+                     | getattr(os, "O_CLOEXEC", 0))
+    except (OSError, TypeError, ValueError):
+        raise ValueError("report file could not be opened") from None
+
+    try:
+        try:
+            mode = os.fstat(fd).st_mode
+        except OSError:
+            raise ValueError("report file could not be inspected") from None
+        if not stat.S_ISREG(mode):
+            raise ValueError("report source must be a regular file")
+        try:
+            with os.fdopen(fd, "rb", closefd=True) as stream:
+                fd = -1
+                payload = stream.read(MAX_REPORT_BYTES + 1)
+        except OSError:
+            raise ValueError("report file could not be read") from None
+    finally:
+        if fd >= 0:
+            os.close(fd)
     return parse_source_profile_report(payload)
 
 
