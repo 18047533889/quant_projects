@@ -462,6 +462,34 @@ def _select_exact_from_unit_matrix(
     out.sort(key=lambda candidate: candidate.similarity, reverse=True)
     return out
 
+
+def _best_exact_from_unit_matrix(
+    unit_query: np.ndarray,
+    present: Sequence[str],
+    unit_matrix: np.ndarray,
+    cluster_id: str,
+    floor: float,
+) -> Optional[IncrementalCandidate]:
+    """Materialize only the public cluster winner, preserving first-member ties.
+
+    The full member-list recall API remains unchanged. All scores are checked
+    before argmax, so invalid nonwinning rows cannot be hidden by reduction.
+    """
+    if unit_query.ndim != 1 or unit_matrix.ndim != 2:
+        raise ValueError("exact unit recall requires a vector and a row matrix")
+    if unit_matrix.shape[0] != len(present):
+        raise ValueError("exact unit recall member ids and rows must match")
+    if not present:
+        return None
+    scores = unit_cosine_scores(unit_query, unit_matrix)
+    position = int(np.argmax(scores))
+    similarity = float(scores[position])
+    status = (PairwiseEvidenceStatus.MEASURED_LOW if similarity < floor
+              else PairwiseEvidenceStatus.APPROXIMATE)
+    return IncrementalCandidate(
+        factor_id=present[position], similarity=similarity,
+        cluster_id=cluster_id, evidence_status=status)
+
 def _fingerprint_domain(fp: SimilarityFingerprintArtifact) -> tuple[str, ...]:
     """Semantic measurement domain in which embedding geometry is comparable."""
     return (
@@ -952,11 +980,11 @@ def incremental_assign(
                 continue
             if unit_query is None:
                 unit_query = _normalize_rows(query.reshape(1, -1))[0]
-            cands = _select_exact_from_unit_matrix(
+            candidate = _best_exact_from_unit_matrix(
                 unit_query, present, unit_matrix, cid, policy.min_measure_floor)
-            if cands:
+            if candidate is not None:
                 any_measured = True
-                best.append(cands[0])
+                best.append(candidate)
         if certified_pairwise is not None:
             # ANN/cosine candidates are recall hints only.  Formal assignment
             # is based solely on comparable QE evidence and never upgrades an

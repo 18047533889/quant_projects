@@ -1,5 +1,35 @@
 # Incremental batch recall: numeric correctness and bounded reuse
 
+## Best-only selection follow-up
+
+The public incremental assignment path consumes only the best member of each
+exact-recall cluster. It now validates every cosine score, then selects the
+first maximum directly and constructs one candidate per query/cluster instead
+of constructing and sorting every member candidate. The legacy full-candidate
+selector remains available and unchanged. Invalid nonwinning scores still fail
+closed; ties retain original member order; floor/status semantics are unchanged.
+
+For Q queries, C clusters and M total members, candidate construction falls
+from O(Q M) to O(Q C). Cosine arithmetic still visits all present members;
+this is not approximate search or a claim that mathematical work disappeared.
+The retained cache budget is unchanged and is not a whole-process RSS limit.
+
+The latest independent joint run passed 36 tests in 0.75 seconds (24 best-only
+and 12 optimizer identity checks), including the adjacent-Float64-score
+regression. This is a focused correctness run, not a full-library regression.
+Full FactorAssets regression subsequently passed **1746 tests, 97 warnings,
+78.50 seconds**. With 2048 members, 128 queries, 64 dimensions, 16 clusters and
+three one-thread ABBA rounds, the final driver run measured baseline median
+**0.8752228 seconds**, current **0.0770238 seconds**, ratio **11.363015x**.
+Every public artifact matched exactly and the independent longdouble oracle
+passed. Baseline `09f8cd51ed9d62040df5f3ece3fc077e5f4f0428` isolates best-only
+selection from earlier cache/domain work. Evidence:
+`benchmarks/incremental_best_only_verified_ab_20261003.json`; the preceding
+run is retained in `benchmarks/incremental_best_only_ab_20261003.json`.
+These remain synthetic embedding measurements on a shared host, not real COS
+scoring or global fastest-backend certification. Timing windows were coordinated
+with evaluator calibration; future runs must likewise avoid overlapping jobs.
+
 ## Reproduced defect
 
 The former exact recall normalization used `np.linalg.norm` directly. Finite

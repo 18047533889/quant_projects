@@ -23,6 +23,7 @@ from factor_assets.contracts.cluster_governance import ClusterScale, ClusterVers
 from factor_assets.contracts.fingerprint import SimilarityFingerprintArtifact
 
 BASELINE = "0925681e59259fb54ac2f635cc283580ce583cac"
+CACHE_BASELINE = "09f8cd51ed9d62040df5f3ece3fc077e5f4f0428"
 
 
 def _source_hashes():
@@ -47,13 +48,13 @@ def _fingerprint(identifier, vector):
         profile_ref=f"synthetic-profile:{identifier}")
 
 
-def _load_baseline():
+def _load_baseline(revision=BASELINE):
     source = subprocess.check_output(
-        ["git", "show", f"{BASELINE}:factor_assets/clustering/incremental.py"],
+        ["git", "show", f"{revision}:factor_assets/clustering/incremental.py"],
         cwd=ROOT, text=True)
     module = types.ModuleType("_incremental_batch_before_cache")
     sys.modules[module.__name__] = module
-    exec(compile(source, f"{BASELINE}:incremental.py", "exec"), module.__dict__)
+    exec(compile(source, f"{revision}:incremental.py", "exec"), module.__dict__)
     # Normalize identically: isolate batch reuse/domain-check costs, rather
     # than conflating corrected arithmetic with a cache-performance claim.
     module._normalize_rows = current._normalize_rows
@@ -100,6 +101,8 @@ def main():
     parser.add_argument("--clusters", type=int, default=16)
     parser.add_argument("--rounds", type=int, default=3)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--baseline-revision", choices=(BASELINE, CACHE_BASELINE),
+                        default=BASELINE)
     args = parser.parse_args()
     if not (128 <= args.members <= 4096 and 16 <= args.queries <= 256
             and 4 <= args.dimensions <= 128 and 1 <= args.clusters <= 32
@@ -133,7 +136,7 @@ def main():
             logical_cluster_id=name, cluster_set_version_ref="synthetic-batch-ab",
             member_factor_ids=identifiers, representative_factor_id=identifiers[0],
             scale=ClusterScale.MICRO_CLUSTER)
-    baseline, baseline_hash = _load_baseline()
+    baseline, baseline_hash = _load_baseline(args.baseline_revision)
     def call(module):
         return module.incremental_assign(queries, clusters, mapping, batch_id="synthetic-fixed-ab")
     expected = _payload(call(baseline))
@@ -161,13 +164,15 @@ def main():
         "members": args.members, "queries": args.queries, "dimensions": args.dimensions,
         "clusters": args.clusters, "abba_rounds": args.rounds, "samples_seconds": samples,
         "medians_seconds": medians, "speedup": medians["baseline"] / medians["current"],
-        "baseline_revision": BASELINE, "baseline_source_sha256": baseline_hash,
+        "baseline_revision": args.baseline_revision, "baseline_source_sha256": baseline_hash,
         "source_hashes": source_hashes_after, "public_artifact_exact_parity": True,
         "independent_longdouble_oracle": True, "unix_started": started,
         "unix_finished": time.time(), "host_load_before": load_before,
         "host_load_after": os.getloadavg(), "python": platform.python_version(),
         "numpy": np.__version__, "limitations": ["Synthetic embeddings, not real factor-value scoring.",
-        "Baseline uses current stable normalization; timing isolates batch reuse and validation.",
+        ("Baseline uses current stable normalization; timing isolates best-only candidate selection."
+         if args.baseline_revision == CACHE_BASELINE else
+         "Baseline uses current stable normalization; timing includes batch reuse, validation and candidate selection."),
         "Source digests cover declared recall files only, not transitive or in-memory closure.",
         "Shared business host load is not fully controlled; does not certify all sizes/backends."]}
     payload = json.dumps(report, indent=2, allow_nan=False)
