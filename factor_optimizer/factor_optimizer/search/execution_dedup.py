@@ -178,6 +178,8 @@ def _execution_binding(plan):
                  "mapping_version": plan.mapping_version})
         if plan.transform == "tail_saturation":
             return _fe_tail_saturation_execution_binding()
+        if plan.transform == "trailing_sma":
+            return _fe_smoothing_execution_binding()
         if route is not None:
             return {"route": route, "mapping_version": plan.mapping_version}
     from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
@@ -204,6 +206,18 @@ def _execution_binding(plan):
     binding["executor"] = {"module": getattr(target, "__module__", None),
                            "qualname": getattr(target, "__qualname__", None)}
     return {"route": "fp_registry", "binding": _json_value(binding)}
+
+
+def _fe_smoothing_execution_binding():
+    """Bind the selected direct FE lagged-SMA function and adapter."""
+    from factor_optimizer.adapters.fe_smoothing_identity import (
+        build_fe_smoothing_identity,
+    )
+
+    return {
+        "route": "factor_engine.backend.long_smoothing.lagged_mean",
+        "binding": _json_value(build_fe_smoothing_identity()),
+    }
 
 
 def _execution_signature(plan, orientation, baseline_context):

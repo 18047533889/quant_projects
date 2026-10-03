@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**86 个 Python 模块、961 个公开函数/类/方法定义**。
+扫描实际包目录：**87 个 Python 模块、962 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -16,6 +16,7 @@
 | [factor_optimizer/adapters/factor_engine.py](../factor_optimizer/adapters/factor_engine.py) | 7 | FactorEngineAdapter: protocol for FE integration (optional dependency). |
 | [factor_optimizer/adapters/fe_execution_identity.py](../factor_optimizer/adapters/fe_execution_identity.py) | 1 | Shared construction of execution identities for resolved FE operators. |
 | [factor_optimizer/adapters/fe_smoothing.py](../factor_optimizer/adapters/fe_smoothing.py) | 1 | FactorEngine-native, lagged smoothing on sparse long panels. |
+| [factor_optimizer/adapters/fe_smoothing_identity.py](../factor_optimizer/adapters/fe_smoothing_identity.py) | 1 | Execution identity for the FactorEngine-backed lagged-SMA adapter. |
 | [factor_optimizer/adapters/fe_tail_saturation.py](../factor_optimizer/adapters/fe_tail_saturation.py) | 1 | Date-local tail saturation through FactorEngine's canonical winsorize. |
 | [factor_optimizer/adapters/fitness.py](../factor_optimizer/adapters/fitness.py) | 2 | Fitness adapter: dimension/desirability mapping for generalized treatment decisions. |
 | [factor_optimizer/adapters/layered_decay.py](../factor_optimizer/adapters/layered_decay.py) | 4 | TRAIN-frozen research plan for observation-origin twenty-layer decay. |
@@ -394,6 +395,22 @@ Run the complete-window FE lagged-SMA recipe on a sparse long panel.
 参数：`(frame: pd.DataFrame, *, window: int)`。
 
 返回类型：`pd.Series`。
+
+## factor_optimizer/adapters/fe_smoothing_identity.py
+
+Execution identity for the FactorEngine-backed lagged-SMA adapter.
+
+显式导出（含重导出）：`build_fe_smoothing_identity`。
+
+### build_fe_smoothing_identity
+
+[实际实现](../factor_optimizer/adapters/fe_smoothing_identity.py#L34)。
+
+Bind the exact direct FE function dynamically called by the SMA adapter.
+
+参数：`()`。
+
+返回类型：`dict`。
 
 ## factor_optimizer/adapters/fe_tail_saturation.py
 
@@ -7783,7 +7800,7 @@ TRAIN-context-bound deduplication of executable repair proposals.
 
 ### deduplicate_proposals
 
-[实际实现](../factor_optimizer/search/execution_dedup.py#L227)。
+[实际实现](../factor_optimizer/search/execution_dedup.py#L241)。
 
 Group only plans with the same resolved execution and TRAIN context.
 
@@ -10875,6 +10892,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/adapters/factor_engine.py` | `de24ad77fc2408851497d93836c40d744d37907151bb8d96fd03a767c279e2e5` |
 | `factor_optimizer/adapters/fe_execution_identity.py` | `c30938d6386fc089f76500b32543e30556c6f2f4533341e9734edf619d7f8eb6` |
 | `factor_optimizer/adapters/fe_smoothing.py` | `54929a09f6c907d0f8242de384a50c59568003d4091d3c97d7a9a1ebbb433770` |
+| `factor_optimizer/adapters/fe_smoothing_identity.py` | `f848c2aff7c1da2d2c7eef3fd8ab1d785d5df07cfd30f33be267f01fe1ea23f6` |
 | `factor_optimizer/adapters/fe_tail_saturation.py` | `b458a1726f9fda82dddab6c48d8140860a3d661d927f88c609f166bcaa9c10fc` |
 | `factor_optimizer/adapters/fitness.py` | `4486884657f730c65064fe6e1aebc7555a515fbc3cba41c71c1bf8c9e4c48ce5` |
 | `factor_optimizer/adapters/layered_decay.py` | `a26a0571b8885686be5e151ab279d9be9826a21f3a9982be094a3c7671196fdc` |
@@ -10938,7 +10956,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/search/desirability_registry.py` | `f2e2c47cdb4dc24cf4621e9b6d2d78331272b650ff0fbf374214f83bc3dcc6b0` |
 | `factor_optimizer/search/diagnosis_routing.py` | `997ca9033fddbdb6248d3c06620edb528357b116c879c84c6a3e4d31f20ed229` |
 | `factor_optimizer/search/dimensions.py` | `d96278aa024bf275edc88072a5abfe0b749f023047971b94bccc99ae67964d90` |
-| `factor_optimizer/search/execution_dedup.py` | `4c95a16b6edcc1589df3f126a7e167ff9195a56d82fedf884e32daacd085cfa9` |
+| `factor_optimizer/search/execution_dedup.py` | `a19c102f49cb4215152e6105a12baa4fd54ac9ce02fb1c5c5e65941322ec5ec7` |
 | `factor_optimizer/search/lineage.py` | `979031c4c987a40cbb1987b360704ffd8fe0749792a21db0352c41497657b25b` |
 | `factor_optimizer/search/multifidelity.py` | `6967520ca3f3f78f5648cfccaa397f759514091f2dbb2bc3977506990f1747df` |
 | `factor_optimizer/search/paired_comparison.py` | `9bfdabf2b4e3c26b41697553fcdcbbcf49f49aa9ef20222546c69f57dfbce3be` |
