@@ -1,0 +1,22 @@
+{
+  "kind": "shape_route_tooling_publication_independent_readback.v1",
+  "verification_date": "2026-10-04",
+  "scoped_source_commit": "5e505307b1faec36336725ad6538fd5d3ce0afb1",
+  "scoped_source_path": "quant_evaluator",
+  "observed_personal_main": "5e505307b1faec36336725ad6538fd5d3ce0afb1",
+  "personal_remote_read_exit": 0,
+  "personal_ancestry_check_exit": 0,
+  "personal_contains_source_commit": true,
+  "observed_hkust_main": "39b07501c4abd2fde69d9f985cdb9e44a76871d2",
+  "hkust_remote_read_exit": 0,
+  "source_tree": "cdb9ff19dc2f67df3af71ffda2952190e1e74abc",
+  "remote_commit_tree_from_existing_mirror_cache": "cdb9ff19dc2f67df3af71ffda2952190e1e74abc",
+  "source_equals_remote_commit_tree": true,
+  "new_clone_fetch_or_copy_performed": false,
+  "credentials_or_remote_urls_included": false,
+  "evidence_scope": "22-file live output binding, shape report reader, independent oracle and profiling tooling publication",
+  "method": "authenticated live main refs; existing mirror objects; committed subtree comparison; personal ancestry check",
+  "performance_qualification_claimed": false,
+  "verification_exec_session": 44210,
+  "verification_exec_exit": 0
+}

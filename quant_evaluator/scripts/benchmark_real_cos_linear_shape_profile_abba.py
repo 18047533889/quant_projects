@@ -27,6 +27,7 @@ from quant_evaluator.scripts.benchmark_real_cos_profile_abba import (
     _checked_run_backend, _runtime_ready,
 )
 from quant_evaluator.scripts.profile_progress_writer import ExclusiveProgressWriter
+from quant_evaluator.scripts.research_cos_cli_preflight import preflight_research_cos_cli
 from quant_evaluator.scripts.source_profile_abba import (
     _oracle_report, live_source_profile_context_observer,
     produce_source_route_profile_abba,
@@ -40,6 +41,9 @@ MIN_EFFECTIVE_VRAM_BYTES = source_batch.MIN_EFFECTIVE_VRAM_BYTES
 
 
 def preflight():
+    cli = preflight_research_cos_cli()
+    if cli.get("configured_cli_resolvable") is not True:
+        raise SystemExit("research COS CLI is unavailable or not executable")
     return source_batch.preflight(128, 4096, 4096)
 
 

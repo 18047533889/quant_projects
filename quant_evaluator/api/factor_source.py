@@ -114,6 +114,11 @@ def _cpu_source_batch(source, metadata, label, metrics, policy, max_tile_size):
                     group_metrics = bundle.grouped_metrics or {}
                     observations = group_metrics[factor_id][metric].observation_count
                 out.observation_counts[metric][start + index] = observations
+        # Assignment evaluates the next read before replacing the old tile.
+        # Release both inputs and tile-local outputs before that allocation;
+        # all published values/counts have already been copied into ``out``.
+        del tile, bundle, artifact, values
+        group_metrics = None
         count += 1
     out.metadata = {
         # CPU tiles do not retry allocation failures: MemoryError propagates.

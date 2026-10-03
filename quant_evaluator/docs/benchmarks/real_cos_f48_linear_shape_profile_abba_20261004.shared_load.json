@@ -1,0 +1,68 @@
+{
+  "kind": "qe_shared_load_benchmark_monitor.v1",
+  "benchmark_output_name": "real_cos_f48_linear_shape_profile_abba_20261004.json",
+  "source_commit": "5e505307b1faec36336725ad6538fd5d3ce0afb1",
+  "scope": "shared-host warm-source complete API; not idle or universally fastest",
+  "sample_period_seconds": 30,
+  "sample_limit": 240,
+  "source_context_binds_external_load": false,
+  "credentials_or_full_process_arguments_included": false,
+  "benchmark_pid": 1139631,
+  "benchmark_exit_code": 1,
+  "total_resource_samples": 2,
+  "status": "failed",
+  "run_started": true,
+  "validated_runs": [
+    {
+      "utc": "2026-10-03T22:00:06Z",
+      "load_average": [
+        11.81201171875,
+        16.232421875,
+        17.244140625
+      ],
+      "disk_free_bytes": 174291124224,
+      "memory": {
+        "exit": 0,
+        "observations": "total        used        free      shared  buff/cache   available\nMem:     99119280128 39837356032  1110679552    64327680 58898063360 59281924096\nSwap:     2084564992  2084380672      184320"
+      },
+      "background_processes": {
+        "exit": 0,
+        "observations": "753610  753609       26:07 python           174 6777688\n2000549 2000548  4-06:40:24 python           100 8035764\n2687519 2000549  1-19:50:12 python          99.1 4875000"
+      },
+      "gpu": {
+        "exit": 0,
+        "observations": "0, 46068 MiB, 7294 MiB, 0 %"
+      },
+      "gpu_processes": {
+        "exit": 0,
+        "observations": "2000549, 4826 MiB\n2687519, 2454 MiB"
+      }
+    },
+    {
+      "utc": "2026-10-03T22:00:11Z",
+      "load_average": [
+        11.74658203125,
+        16.1455078125,
+        17.21044921875
+      ],
+      "disk_free_bytes": 174291066880,
+      "memory": {
+        "exit": 0,
+        "observations": "total        used        free      shared  buff/cache   available\nMem:     99119280128 39526371328  1587036160    64458752 58600443904 59592908800\nSwap:     2084564992  2084380672      184320"
+      },
+      "background_processes": {
+        "exit": 0,
+        "observations": "753610  753609       26:12 python           174 6777632\n2000549 2000548  4-06:40:28 python           100 8050132\n2687519 2000549  1-19:50:16 python          99.1 4610572"
+      },
+      "gpu": {
+        "exit": 0,
+        "observations": "0, 46068 MiB, 7294 MiB, 0 %"
+      },
+      "gpu_processes": {
+        "exit": 0,
+        "observations": "2000549, 4826 MiB\n2687519, 2454 MiB"
+      }
+    }
+  ],
+  "qualification_available": false
+}

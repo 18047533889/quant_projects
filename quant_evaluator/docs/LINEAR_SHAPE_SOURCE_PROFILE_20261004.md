@@ -25,20 +25,32 @@ Pearson 大批量验证共用。48 个因子不是只测试两个因子。此计
 冷缓存而删除正式缓存或复制数据。冷来源性能需要另外设计并明确标记
 场景，不能把这份资格泛化为任意 I/O 状态或所有指标的最快后端。
 
-默认调用仅检查资源，不读取 COS、不创建 source、不做 GPU warmup：
+默认调用仅检查资源和已配置 CLI 是否可执行；不执行 CLI、不读取 COS、
+不创建 source、不做 GPU warmup：
 
 ```bash
 cd /home/sunhaiwei/quant_projects
+ASHARE_PARQUET_ROOT=/home/sunhaiwei/cos_data \
+DATA_ACCESS_COS_CLI=/usr/local/bin/admin-cos \
+DATA_ACCESS_COS_CACHE_ROOT=/home/sunhaiwei/.cache/quant-dataaccess/research \
 .venv/bin/python -m quant_evaluator.scripts.benchmark_real_cos_linear_shape_profile_abba
 ```
+
+这些是 server-c 已有且此前 F48 已使用的 research 配置，不是新增权限。
+不得猜凭据、改 COS 目标、自动替换为底层 `coscli` 或绕过研究数据授权。
+其他环境必须使用各自已经配置并授权的入口，不能照抄管理员身份或新增
+权限。此测试不支持 strict/production，也不发布生产因子。
 
 只有发布和资源协调完毕、其他性能任务结束后，才启动显式实测：
 
 ```bash
+ASHARE_PARQUET_ROOT=/home/sunhaiwei/cos_data \
+DATA_ACCESS_COS_CLI=/usr/local/bin/admin-cos \
+DATA_ACCESS_COS_CACHE_ROOT=/home/sunhaiwei/.cache/quant-dataaccess/research \
 .venv/bin/python -m quant_evaluator.scripts.benchmark_real_cos_linear_shape_profile_abba \
   --run \
   --axis-index quant_evaluator/docs/benchmarks/real_cos_f48_axis_index_20261004.json \
-  --output quant_evaluator/docs/benchmarks/real_cos_f48_linear_shape_profile_abba_20261004.json
+  --output quant_evaluator/docs/benchmarks/real_cos_f48_linear_shape_profile_abba_shared_20261004_r2.json
 ```
 
 输出和对应 `.progress.json` 路径都必须是新路径。不要覆盖他人的证据，
@@ -110,3 +122,18 @@ live guards 实跑 73 passed / 1.11 秒（session 14637，退出码 0）。包�
 随后新增 Ctrl-C 反例：旧实现中断后进度仍为 `running`（session 47478，
 退出码 1）；修复后保留 `KeyboardInterrupt` 抛出，同时记录失败类型并
 关闭句柄。最新同范围联合实跑 74 passed / 1.13 秒（session 79426，退出码 0）。
+
+## 首次真实启动的诊断与研究入口预检
+
+首次真实启动已实际终止失败（session 57673，PID 1139631，退出码 1），
+尚未进入 ABBA。默认 `clean-cos-ro` 不在当前 SSH PATH；DataAccess 原本
+把缺少命令归为未知对象元数据并拒绝读取。这里不放宽拒绝语义，而用
+`scripts/research_cos_cli_preflight.py` 在任何 COS 调用前检查现有配置入口。
+缺少或不可执行时给出不含路径/凭据的明确错误，不猜替代 CLI；成功后
+仍返回原有资源 preflight 字段，严格报告 schema 不变。入口存在不等于
+授权通过，后续完整授权、ETag、内容摘要和预算检查继续由 DataAccess 执行。
+
+安全诊断见 `benchmarks/linear_shape_cli_gateway_diagnostic_20261004.json`；
+已有授权入口的 metadata 探测及有界 manifest/轴索引验证已通过，未构建
+因子 cube、未开始计时。新 gate 与原有范围联合实跑 79 passed / 0.99 秒
+（session 9508，退出码 0）。失败资源侧车保留，不能作为性能资格。

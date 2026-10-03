@@ -403,3 +403,27 @@ def test_keyboard_interrupt_marks_progress_failed_and_is_reraised(fake_live, mon
     assert report["error_type"] == "KeyboardInterrupt"
     assert report["qualification_available"] is False
     assert not state.output.exists()
+
+
+def test_missing_configured_cli_fails_before_resources_or_network(monkeypatch, tmp_path, capsys):
+    from data_access.cos import mirror
+    missing = tmp_path / "private-configured-cli"
+    monkeypatch.setattr(mirror, "_cli_binary", lambda: str(missing))
+    monkeypatch.setattr(cli.source_batch, "preflight", lambda *a: pytest.fail("resource checks before missing CLI rejection"))
+    monkeypatch.setattr(cli.tiles, "read_manifest", lambda *a: pytest.fail("COS access despite missing CLI"))
+    with pytest.raises(SystemExit, match="research COS CLI is unavailable") as error:
+        cli.main([])
+    assert str(missing) not in str(error.value)
+    assert "private-configured-cli" not in capsys.readouterr().out
+
+
+def test_resolved_cli_preserves_closed_resource_preflight_fields(monkeypatch):
+    from data_access.cos import mirror
+    from test_source_linear_shape_report_reader_oct04 import _payload
+    resource_gate = _payload()["preflight"]
+    monkeypatch.setattr(mirror, "_cli_binary", lambda: sys.executable)
+    monkeypatch.setattr(cli.source_batch, "preflight", lambda *a: dict(resource_gate))
+    result = cli.preflight()
+    assert result == resource_gate
+    assert set(result) == set(resource_gate)
+    assert not any(name.startswith("configured_cli") for name in result)
