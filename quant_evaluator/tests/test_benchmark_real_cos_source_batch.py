@@ -132,6 +132,8 @@ def test_run_backend_forwards_object_cap_and_validates_receipt(monkeypatch):
         return SimpleNamespace(metadata={
             "factor_tiles_processed": len(source.reads),
             "backend_used": "cuda" if backend == "cuda_strict" else "cpu",
+            "factor_tile_size": max_tile_size,
+            "oom_retries": 0,
         })
 
     monkeypatch.setattr(harness, "evaluate_factor_source_batch", fake_evaluate)
@@ -170,6 +172,7 @@ def test_run_backend_all_backends_validate_effective_not_requested_tile_width(
             "factor_tiles_processed": 3,
             "backend_used": "cuda" if backend in ("cuda_strict", "auto") else "cpu",
             "effective_max_tile_size": 2, "admitted_source_tile_size": 3,
+            "factor_tile_size": 2, "oom_retries": 0,
         })
 
     monkeypatch.setattr(harness, "evaluate_factor_source_batch", fake_evaluate)

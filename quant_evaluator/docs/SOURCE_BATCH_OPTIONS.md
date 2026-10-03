@@ -104,3 +104,18 @@ the harness rejects nondefault worker/budget settings on the legacy adapter.
 The options also propagate into isolated CUDA benchmark workers.
 A larger allowed worker count does not guarantee an IO speedup; measure the
 complete request and keep resource headroom before changing defaults.
+
+## Actual execution receipts in the COS benchmark
+
+The benchmark validates actual ordered source reads, not only the admitted cap.
+`effective_max_tile_size` remains the API/source limit;
+`actual_source_tile_size` and `actual_gpu_factor_tile_size` describe the actual
+zero-OOM execution. A CUDA width smaller than the cap is valid when complete
+read coverage and execution counts agree. Malformed widths/counts, skipped or
+overlapping ranges and nonzero OOM are rejected for these qualification receipts.
+`execution_schedule_sha256` binds backend, widths and source/compute ranges.
+The current zero-OOM executor has identical source and compute ranges within
+each backend; CPU and CUDA may use different schedules.
+`timing_scope="evaluate_factor_source_batch_wall_v1"` includes API validation,
+panel reads, computation and transfers. Source factory and `close()` are outside
+this timer; do not mix it with full-lifecycle timing when comparing route winners.

@@ -42,6 +42,9 @@ from quant_evaluator.scripts.f48_benchmark_candidate import (
 )
 from quant_evaluator.scripts import source_width_preparation
 from quant_evaluator.scripts import benchmark_real_cos_factor_tiles as tiles
+from quant_evaluator.scripts.source_execution_receipt import (
+    validate_source_execution_receipt,
+)
 from quant_evaluator.scripts.source_tree_provenance import (
     capture_source_tree, finalize_source_tree,
 )
@@ -393,18 +396,14 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         )
         elapsed = time.perf_counter() - started
         effective_tile_size = result.metadata.get("effective_max_tile_size", tile_size)
-        if not isinstance(effective_tile_size, int) or not 1 <= effective_tile_size <= tile_size:
+        if type(effective_tile_size) is not int or not 1 <= effective_tile_size <= tile_size:
             raise ValueError("source API reported an invalid effective tile width")
-        expected_reads = [
-            (start, min(start + effective_tile_size, len(records)))
-            for start in range(0, len(records), effective_tile_size)
-        ]
         if tuple(source.factor_ids) != tuple(row[0] for row in records):
             raise ValueError("source factor identity order differs from the selected request")
-        if source.reads != expected_reads:
-            raise ValueError("source API did not read exact ordered tile coverage")
-        if result.metadata.get("factor_tiles_processed") != len(expected_reads):
-            raise ValueError("source API tile receipt does not cover the whole request")
+        execution_schedule = validate_source_execution_receipt(
+            reads=source.reads, factor_count=len(records),
+            admitted_cap=effective_tile_size, metadata=result.metadata,
+        )
         if result.metadata.get("backend_used") != (
                 "cuda" if backend == "cuda_strict" or (backend == "auto" and expected_auto_cuda)
                 else "cpu"):
@@ -417,6 +416,7 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         [list(row) for row in records], separators=(",", ":"), default=str).encode()
     return result, {
         "source_adapter": source_adapter,
+        **execution_schedule,
         "backend_requested": backend,
         "backend_used": result.metadata["backend_used"],
         "source_request_fingerprint": result.metadata.get("source_request_fingerprint"),
@@ -432,6 +432,7 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         "oom_retries": result.metadata.get("oom_retries"),
         "seconds": elapsed,
         "total_wall_seconds": elapsed,
+        "timing_scope": "evaluate_factor_source_batch_wall_v1",
         "factor_tiles_processed": len(source.reads),
         "tile_ranges": source.reads,
         "factor_ids_sha256": hashlib.sha256(
