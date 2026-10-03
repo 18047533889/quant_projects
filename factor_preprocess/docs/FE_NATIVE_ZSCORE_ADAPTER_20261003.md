@@ -115,3 +115,13 @@ recipe 的 `spec_identity` 描述处理规范；候选 `execution_identity` 则�
 全样本归约作为线上预处理。`FitBoundary.EXPANDING` 在这里是 recipe 的配置约束，
 不是对没有时间坐标的 ndarray 自动施加的分割器。生产准入前仍需要带时间/样本边界
 的完整 pipeline 验证。
+
+## 通用配方参数与运行时输入隔离
+
+`TreatmentRecipe.compile` 会在原有参数域校验之前检查函数签名，拒绝把第一个
+固定位置参数（运行时因子输入）写入 `RecipeStep.parameters`。例如
+`func(values, data=None)` 只禁止配置 `values`，允许合法的 `data` 配置；
+`func(x, axis=-1)` 禁止配置 `x`，仍允许 `axis`。此保护也覆盖位置专用输入参数。
+没有固定位置参数的可变关键字函数保留 `values`、`x`、`data` 为输入别名；
+无法确定输入边界的签名明确拒绝。保护不改变原来的 semantic、stage、fit、
+参数域或执行协议，也不替代处理步骤的因果性检查。

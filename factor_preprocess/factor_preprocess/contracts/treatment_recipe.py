@@ -45,6 +45,7 @@ import hashlib
 
 from factor_preprocess.errors import InvalidContractError, TreatmentMaterializationError
 from factor_preprocess.contracts._deep_freeze import deep_freeze
+from factor_preprocess.contracts.recipe_parameters import validate_recipe_runtime_input_binding
 
 
 class FitBoundary(str, Enum):
@@ -404,6 +405,9 @@ class TreatmentRecipe:
                     f"recipe step {step.step_id!r} fit requirement disagrees "
                     "with the registered implementation"
                 )
+            validate_recipe_runtime_input_binding(
+                metadata.func, dict(step.parameters), transform_name=metadata.name
+            )
             metadata.bind_parameters(dict(step.parameters))
             if step.requires_fit:
                 if not step.state_ref or step.state_ref not in available_states:

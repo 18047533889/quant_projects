@@ -226,7 +226,7 @@ def test_invalid_numeric_axis_bounds_and_reduction_group_fail_closed():
 
     recipe, registry = _recipe()
     data_argument, data_argument_registry = _recipe(parameters={"values": True})
-    with pytest.raises(InvalidContractError, match="unsupported cs_zscore recipe parameters.*values"):
+    with pytest.raises(InvalidContractError, match="cannot configure its runtime input parameter 'values'"):
         compile_fe_native_zscore_recipe(data_argument, data_argument_registry)
 
     invalid_ddof, invalid_ddof_registry = _recipe(parameters={"ddof": 1.5})
