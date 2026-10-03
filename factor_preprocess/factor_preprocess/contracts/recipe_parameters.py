@@ -45,6 +45,28 @@ def validate_recipe_runtime_input_binding(
     )
     if first_positional is not None:
         input_name = first_positional.name
+    elif any(parameter.kind is Parameter.VAR_POSITIONAL for parameter in declared):
+        # Runtime data arrives through args[0], which cannot be populated by a
+        # recipe keyword. Explicit keyword-only aliases here are options, not
+        # the runtime input. With **kwargs, reserve only undeclared aliases:
+        # they could otherwise shadow a keyword-carried runtime input.
+        if any(parameter.kind is Parameter.VAR_KEYWORD for parameter in declared):
+            explicit_aliases = {
+                parameter.name
+                for parameter in declared
+                if parameter.kind is not Parameter.VAR_KEYWORD
+                and parameter.name in _RUNTIME_INPUT_ALIASES
+            }
+            shadowed_aliases = (
+                _RUNTIME_INPUT_ALIASES.intersection(parameters) - explicit_aliases
+            )
+            if shadowed_aliases:
+                names = ", ".join(sorted(shadowed_aliases))
+                raise InvalidContractError(
+                    f"recipe parameters for transform {transform_name!r} bind reserved "
+                    f"runtime input alias(es): {names}"
+                )
+        return
     else:
         named_alias = next(
             (parameter for parameter in declared if parameter.name in _RUNTIME_INPUT_ALIASES),

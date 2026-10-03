@@ -6,6 +6,7 @@ import pytest
 
 from factor_preprocess.contracts.treatment_recipe import RecipeStep, TreatmentRecipe
 from factor_preprocess.errors import InvalidContractError
+from factor_preprocess.contracts.recipe_parameters import validate_recipe_runtime_input_binding
 from factor_preprocess.registry.transforms import (
     TransformCategory,
     TransformRegistry,
@@ -35,6 +36,31 @@ def _input_varargs_kwargs(*args, **kwargs):
 
 def _input_kwargs_only(**kwargs):
     return kwargs.get("values")
+
+
+def _input_varargs_axis(*args, axis=-1):
+    return args[0], axis
+
+
+def _input_varargs_data(*args, data=None):
+    return args[0], data
+
+
+def _input_varargs_only(*args):
+    return args[0]
+
+
+def _input_varargs_data_kwargs(*args, data=None, **kwargs):
+    return args[0], data
+
+
+class _UninspectableCallable:
+    @property
+    def __signature__(self):
+        raise ValueError("opaque callable signature")
+
+    def __call__(self, *args, **kwargs):
+        return args[0] if args else None
 
 
 def _registered_recipe(registry, *, name, func, parameters, suffix="one"):
@@ -153,6 +179,85 @@ def test_variadic_keyword_signatures_reserve_only_known_input_aliases():
     positional_values.setflags(write=False)
     np.testing.assert_array_equal(compiled[0](positional_values, lag=2), positional_values)
     assert not positional_values.flags.writeable
+
+    kwargs_only_registry = create_default_registry()
+    kwargs_only = _registered_recipe(
+        kwargs_only_registry, name="runtime_kwargs_keyword_input",
+        func=_input_kwargs_only, parameters={},
+    )
+    kwargs_executor = kwargs_only.compile(kwargs_only_registry)[0]
+    keyword_values = np.array([8.0, 9.0])
+    keyword_values.setflags(write=False)
+    np.testing.assert_array_equal(kwargs_executor(values=keyword_values), keyword_values)
+    assert not keyword_values.flags.writeable
+
+
+@pytest.mark.parametrize(
+    "name,func,parameter,value",
+    [("runtime_varargs_axis_option", _input_varargs_axis, "axis", 0),
+     ("runtime_varargs_data_option", _input_varargs_data, "data", "legitimate-option")],
+ )
+def test_varargs_runtime_input_is_separate_from_keyword_configuration(name, func, parameter, value):
+    registry = create_default_registry()
+    recipe = _registered_recipe(
+        registry, name=name, func=func, parameters={parameter: value}
+    )
+    executor = recipe.compile(registry)[0]
+    values = np.array([10.0, 11.0])
+    values.setflags(write=False)
+    result, configured = executor(values, **{parameter: value})
+    np.testing.assert_array_equal(result, values)
+    assert configured == value
+    assert not values.flags.writeable
+
+
+def test_varargs_kwargs_allows_explicit_data_option_and_rejects_undeclared_alias():
+    registry = create_default_registry()
+    recipe = _registered_recipe(
+        registry,
+        name="runtime_varargs_data_option_with_kwargs",
+        func=_input_varargs_data_kwargs,
+        parameters={"data": "legitimate-option"},
+    )
+    executor = recipe.compile(registry)[0]
+    values = np.array([12.0, 13.0])
+    values.setflags(write=False)
+    result, configured = executor(values, data="legitimate-option")
+    np.testing.assert_array_equal(result, values)
+    assert configured == "legitimate-option"
+    assert not values.flags.writeable
+
+    bad_registry = create_default_registry()
+    bad = _registered_recipe(
+        bad_registry,
+        name="runtime_varargs_kwargs_values_reserved",
+        func=_input_varargs_data_kwargs,
+        parameters={"values": "not-data"},
+    )
+    with pytest.raises(InvalidContractError, match="reserved runtime input alias"):
+        bad.compile(bad_registry)
+
+
+def test_varargs_only_configuration_is_rejected_by_signature_binder():
+    registry = create_default_registry()
+    recipe = _registered_recipe(
+        registry,
+        name="runtime_varargs_only_invalid_keyword",
+        func=_input_varargs_only,
+        parameters={"lag": 2},
+    )
+    # The runtime-input guard accepts variadic positional signatures, but the
+    # registered signature binder still rejects keywords that the transform
+    # itself cannot receive.
+    with pytest.raises(ValueError, match="invalid parameters"):
+        recipe.compile(registry)
+
+
+def test_uninspectable_runtime_input_signature_fails_closed():
+    with pytest.raises(InvalidContractError, match="no inspectable runtime input signature"):
+        validate_recipe_runtime_input_binding(
+            _UninspectableCallable(), {}, transform_name="opaque_transform"
+        )
 
 
 def test_legal_axis_lag_and_parameter_domain_checks_remain_active():
