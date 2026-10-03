@@ -52,6 +52,11 @@ from factor_assets.contracts.fingerprint import (
     ANNIndexCapability,
     SimilarityFingerprintArtifact,
 )
+from factor_assets.similarity.unit_vectors import _unit_rows
+from factor_assets.clustering.incremental_recall import (
+    RequestLocalMemberMatrixCache, unit_cosine_scores,
+)
+
 from factor_assets.contracts._canonical import canonical_digest
 
 try:
@@ -92,6 +97,7 @@ __all__ = [
 #: pair at all is measurable the assignment is PENDING_GLOBAL_REFRESH (unknown
 #: is preserved, never zero).
 UNKNOWN_AFFINITY_FLOOR = 0.25
+_EXACT_MEMBER_CACHE_BYTES = 32 * 1024**2
 
 DEFAULT_MAX_CANDIDATES = 32
 
@@ -394,20 +400,16 @@ def _to_embedding(fingerprint: SimilarityFingerprintArtifact) -> np.ndarray:
 
 
 def _normalize_rows(matrix: np.ndarray) -> np.ndarray:
-    norms = np.linalg.norm(matrix, axis=1)
-    if not np.isfinite(norms).all() or np.any(norms <= 0.0):
-        raise ValueError(
-            "zero / non-finite embeddings are not admissible for cosine "
-            "similarity assignment — FAIL CLOSED"
-        )
-    return matrix / norms[:, np.newaxis]
+    # Scale-safe normalization prevents valid finite embeddings from
+    # overflowing or underflowing while computing their Euclidean norm.
+    return _unit_rows(matrix)
 
 
 def _cosine_scores(query: np.ndarray, matrix: np.ndarray) -> np.ndarray:
     """Row-wise cosine similarity of a (d,) query against an (n, d) matrix."""
     qn = _normalize_rows(query.reshape(1, -1))[0]
     mn = _normalize_rows(matrix)
-    return qn @ mn.T
+    return unit_cosine_scores(qn, mn)
 
 
 def _collect_member_embeddings(
@@ -433,6 +435,33 @@ def _collect_member_embeddings(
     return rows, np.vstack(vectors)
 
 
+
+def _prepare_unit_members(fingerprint_map, member_ids):
+    present, matrix = _collect_member_embeddings(fingerprint_map, member_ids)
+    return present, None if matrix is None else _normalize_rows(matrix)
+
+
+def _select_exact_from_unit_matrix(
+    unit_query: np.ndarray,
+    present: Sequence[str],
+    unit_matrix: np.ndarray,
+    cluster_id: str,
+    floor: float,
+) -> list[IncrementalCandidate]:
+    """Score a cached unit matrix without renormalizing immutable members."""
+    scores = unit_cosine_scores(unit_query, unit_matrix)
+    out: list[IncrementalCandidate] = []
+    for fid, sim in zip(present, scores):
+        s = float(sim)
+        status = (PairwiseEvidenceStatus.MEASURED_LOW if s < floor
+                  else PairwiseEvidenceStatus.APPROXIMATE)
+        out.append(IncrementalCandidate(
+            factor_id=fid, similarity=s, cluster_id=cluster_id,
+            evidence_status=status,
+        ))
+    out.sort(key=lambda candidate: candidate.similarity, reverse=True)
+    return out
+
 def _fingerprint_domain(fp: SimilarityFingerprintArtifact) -> tuple[str, ...]:
     """Semantic measurement domain in which embedding geometry is comparable."""
     return (
@@ -456,20 +485,20 @@ def _validate_fingerprint_domains(
     for key, fp in fingerprints_by_id.items():
         if key != fp.factor_id:
             raise ValueError("fingerprint mapping key must match fingerprint.factor_id")
+    member_domains = {
+        _fingerprint_domain(fingerprints_by_id[member_id])
+        for member_id in member_ids if member_id in fingerprints_by_id
+    }
     for query in queries:
         bound = fingerprints_by_id.get(query.factor_id)
         if bound is None or bound.content_hash != query.content_hash:
             raise ValueError("query fingerprint must be content-bound in fingerprints_by_id")
         query_domain = _fingerprint_domain(query)
-        for member_id in member_ids:
-            member = fingerprints_by_id.get(member_id)
-            if member is None:
-                continue
-            if _fingerprint_domain(member) != query_domain:
-                raise ValueError(
-                    "incompatible fingerprint semantic domains: embedding spec, "
-                    "snapshot, universe, window, and preprocessing identity must match"
-                )
+        if member_domains and member_domains != {query_domain}:
+            raise ValueError(
+                "incompatible fingerprint semantic domains: embedding spec, "
+                "snapshot, universe, window, and preprocessing identity must match"
+            )
 
 
 def _validate_ann_index(ann_index: ANNIndexArtifact, dim: int) -> None:
@@ -858,6 +887,8 @@ def incremental_assign(
     assignments: list[IncrementalClusterAssignment] = []
     candidates_out: list[IncrementalCandidate] = []
 
+    exact_member_cache = RequestLocalMemberMatrixCache(
+        max_bytes=_EXACT_MEMBER_CACHE_BYTES)
     # Build one ANN index for the immutable cluster-set membership and reuse it
     # for every query in this batch.  The previous factor x cluster loop built
     # an Annoy index repeatedly, making index cost scale with query count.
@@ -888,13 +919,19 @@ def incremental_assign(
         query = _to_embedding(fp)
         best: list[IncrementalCandidate] = []
         any_measured = False
+        ann_query_failed = False
         if batch_ann is not None:
             grouped: dict[str, list[IncrementalCandidate]] = {}
-            results = batch_ann.search(
-                np.ascontiguousarray(query, dtype=np.float32),
-                k=min(policy.max_candidates, len(member_to_cluster)),
-                min_similarity=policy.min_measure_floor,
-            )
+            try:
+                results = batch_ann.search(
+                    np.ascontiguousarray(query, dtype=np.float32),
+                    k=min(policy.max_candidates, len(member_to_cluster)),
+                    min_similarity=policy.min_measure_floor,
+                )
+            except Exception:
+                # A query-time ANN failure falls back exactly for this query.
+                ann_query_failed = True
+                results = ()
             for result in results:
                 if result.similarity_score is None:
                     continue
@@ -904,28 +941,19 @@ def incremental_assign(
                 )
             best = [max(candidates, key=lambda item: item.similarity) for candidates in grouped.values()]
             any_measured = bool(best)
-        for cid, cv in (() if batch_ann is not None else cluster_versions.items()):
+        exact_clusters = cluster_versions.items() if batch_ann is None or ann_query_failed else ()
+        unit_query = None
+        for cid, cv in exact_clusters:
             if not cv.member_factor_ids:
                 continue
-            if ann_index is not None:
-                # Batch ANN construction failed or was unavailable: exact
-                # fallback preserves semantics without rebuilding an index in
-                # the factor x cluster loop.
-                cands = _select_exact(
-                    query,
-                    fingerprints_by_id,
-                    cv.member_factor_ids,
-                    cid,
-                    policy.min_measure_floor,
-                )
-            else:
-                cands = _select_exact(
-                    query,
-                    fingerprints_by_id,
-                    cv.member_factor_ids,
-                    cid,
-                    policy.min_measure_floor,
-                )
+            present, unit_matrix = exact_member_cache.get(cid, lambda cv=cv:
+                _prepare_unit_members(fingerprints_by_id, cv.member_factor_ids))
+            if not present or unit_matrix is None:
+                continue
+            if unit_query is None:
+                unit_query = _normalize_rows(query.reshape(1, -1))[0]
+            cands = _select_exact_from_unit_matrix(
+                unit_query, present, unit_matrix, cid, policy.min_measure_floor)
             if cands:
                 any_measured = True
                 best.append(cands[0])

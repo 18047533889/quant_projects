@@ -1,0 +1,62 @@
+{
+  "kind": "incremental_batch_recall_ab.v1",
+  "status": "complete",
+  "members": 2048,
+  "queries": 128,
+  "dimensions": 64,
+  "clusters": 16,
+  "abba_rounds": 3,
+  "samples_seconds": {
+    "baseline": [
+      1.884774584963452,
+      2.048202003003098,
+      2.144096003030427,
+      2.1350011660251766,
+      2.193844125024043,
+      1.936545015021693
+    ],
+    "current": [
+      0.9333503780071624,
+      0.8957778920303099,
+      0.9792625140398741,
+      1.0676858480437659,
+      0.9683753099525347,
+      1.0066398039925843
+    ]
+  },
+  "medians_seconds": {
+    "baseline": 2.0916015845141374,
+    "current": 0.9738189119962044
+  },
+  "speedup": 2.1478342212790067,
+  "baseline_revision": "0925681e59259fb54ac2f635cc283580ce583cac",
+  "baseline_source_sha256": "d60438316589843f20b7178622a99800551a83b69400295931428b29b083418f",
+  "source_hashes": {
+    "factor_assets/clustering/incremental.py": "69d3cb0de8b18ec2b858d4ab1c1f35feb9c06b683405975bb2e9d32acd7d7bc4",
+    "factor_assets/scripts/benchmark_incremental_batch_recall_oct03.py": "96db075cfd1d89ac66f00d8ac5f9504dadc98b53ffa2147e7b5d346272ae337d",
+    "factor_assets/similarity/unit_vectors.py": "4e5234254e812dcd5b557ae2280a9427c790457eab5c96b93b4454839f1158af",
+    "factor_assets/clustering/incremental_recall.py": "556decfbed9bd52c7db3c0292ab47d5dcc346ae15d8ae52804845304945d267f"
+  },
+  "public_artifact_exact_parity": true,
+  "independent_longdouble_oracle": true,
+  "unix_started": 1791029539.6634693,
+  "unix_finished": 1791029557.8940902,
+  "host_load_before": [
+    17.31884765625,
+    17.07275390625,
+    16.52734375
+  ],
+  "host_load_after": [
+    18.10400390625,
+    17.25048828125,
+    16.59619140625
+  ],
+  "python": "3.12.3",
+  "numpy": "2.2.6",
+  "limitations": [
+    "Synthetic embeddings, not real factor-value scoring.",
+    "Baseline uses current stable normalization; timing isolates batch reuse and validation.",
+    "Source digests cover declared recall files only, not transitive or in-memory closure.",
+    "Shared business host load is not fully controlled; does not certify all sizes/backends."
+  ]
+}
