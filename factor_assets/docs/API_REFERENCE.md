@@ -9,6 +9,10 @@ Exact-flat 批量检索入口与上限说明见
 [多查询检索](ANN_EXACT_FLAT_BATCH_20261003.md)。`FaissANNIndex.search_batch`
 新增 keyword-only `max_result_rows=100_000`，可显式提高至 2,000,000。
 
+`clustering.incremental.incremental_assign` 的超大成员簇精确召回会自动采用有界分块，
+公开调用参数不变。内存估算、固定逐行归约、并列排序及数值限制见
+[分块精确增量召回](CHUNKED_EXACT_RECALL_20261004.md)。内部扫描辅助函数不作为新的稳定公开 API。
+
 ## Table of Contents
 
 1. [Contracts](#contracts)

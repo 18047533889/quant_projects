@@ -54,7 +54,7 @@ from factor_assets.contracts.fingerprint import (
 )
 from factor_assets.similarity.unit_vectors import _unit_rows
 from factor_assets.clustering.incremental_recall import (
-    RequestLocalMemberMatrixCache, unit_cosine_scores,
+    RequestLocalMemberMatrixCache, unit_cosine_scores, scan_exact_member_winner,
 )
 
 from factor_assets.contracts._canonical import canonical_digest
@@ -489,6 +489,23 @@ def _best_exact_from_unit_matrix(
     return IncrementalCandidate(
         factor_id=present[position], similarity=similarity,
         cluster_id=cluster_id, evidence_status=status)
+
+
+def _best_exact_in_chunks(unit_query, fingerprint_map, member_ids, cluster_id, floor):
+    """Bound oversized recall preparation, retaining only the cluster winner."""
+    winner = scan_exact_member_winner(
+        fingerprint_map, member_ids, unit_query,
+        to_embedding=_to_embedding, normalize_rows=_normalize_rows,
+    )
+    if winner is None:
+        return None
+    factor_id, similarity = winner
+    status = (PairwiseEvidenceStatus.MEASURED_LOW if similarity < floor
+              else PairwiseEvidenceStatus.APPROXIMATE)
+    return IncrementalCandidate(
+        factor_id=factor_id, similarity=similarity,
+        cluster_id=cluster_id, evidence_status=status,
+    )
 
 def _fingerprint_domain(fp: SimilarityFingerprintArtifact) -> tuple[str, ...]:
     """Semantic measurement domain in which embedding geometry is comparable."""
@@ -974,14 +991,26 @@ def incremental_assign(
         for cid, cv in exact_clusters:
             if not cv.member_factor_ids:
                 continue
-            present, unit_matrix = exact_member_cache.get(cid, lambda cv=cv:
-                _prepare_unit_members(fingerprints_by_id, cv.member_factor_ids))
-            if not present or unit_matrix is None:
-                continue
-            if unit_query is None:
-                unit_query = _normalize_rows(query.reshape(1, -1))[0]
-            candidate = _best_exact_from_unit_matrix(
-                unit_query, present, unit_matrix, cid, policy.min_measure_floor)
+            estimated_bytes = len(cv.member_factor_ids) * (query.size * 8 + 64) + 256
+            if estimated_bytes > _EXACT_MEMBER_CACHE_BYTES:
+                if not any(fingerprints_by_id.get(fid) is not None
+                           for fid in cv.member_factor_ids):
+                    continue
+                if unit_query is None:
+                    unit_query = _normalize_rows(query.reshape(1, -1))[0]
+                candidate = _best_exact_in_chunks(
+                    unit_query, fingerprints_by_id, cv.member_factor_ids,
+                    cid, policy.min_measure_floor,
+                )
+            else:
+                present, unit_matrix = exact_member_cache.get(cid, lambda cv=cv:
+                    _prepare_unit_members(fingerprints_by_id, cv.member_factor_ids))
+                if not present or unit_matrix is None:
+                    continue
+                if unit_query is None:
+                    unit_query = _normalize_rows(query.reshape(1, -1))[0]
+                candidate = _best_exact_from_unit_matrix(
+                    unit_query, present, unit_matrix, cid, policy.min_measure_floor)
             if candidate is not None:
                 any_measured = True
                 best.append(candidate)
