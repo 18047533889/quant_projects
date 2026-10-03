@@ -365,7 +365,7 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
                 source_adapter="legacy", cos_prefetch="auto",
                 max_source_memory_mib=4096, cos_prefetch_workers=2,
                 max_prefetch_memory_mib=512, use_default_tile_size=False,
-                context_observer=None):
+                context_observer=None, source_qualification=None):
     """Measure only the API call; optionally observe live context outside it.
 
     The observer is caller-trusted instrumentation, not an oracle or attestation.
@@ -405,11 +405,13 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
             policy=policy)
         if context_observer is not None:
             context_before = context_observer(phase="before", **observer_kwargs)
+        qualification_kwargs = ({"source_qualification": source_qualification}
+                                if source_qualification is not None else {})
         started = time.perf_counter()
         result = evaluate_factor_source_batch(
             source, labels, metrics=selected_metrics, backend=backend,
             max_tile_size=None if use_default_tile_size else tile_size,
-            gpu_policy=policy,
+            gpu_policy=policy, **qualification_kwargs,
         )
         elapsed = time.perf_counter() - started
         if context_observer is not None:

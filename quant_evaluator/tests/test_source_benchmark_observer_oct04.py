@@ -67,3 +67,23 @@ def test_observer_order_timer_and_close(monkeypatch, fail_phase):
     assert events[-1] == "close"
     if fail_phase == "before":
         assert events == ["before", "close"]
+
+
+def test_auto_verification_forwards_exact_supplied_qualification(monkeypatch):
+    dates, assets, _, labels, records, rows = _fixtures()
+    token = (object(), object())
+    observed = []
+
+    def evaluate(source, *args, **kwargs):
+        observed.append(kwargs)
+        source.reads.append((0, 2))
+        return SimpleNamespace(metadata={"backend_used": "cpu",
+            "effective_max_tile_size": 16, "factor_tiles_processed": 1})
+
+    monkeypatch.setattr(harness, "evaluate_factor_source_batch", evaluate)
+    _, receipt = harness.run_backend("auto", records, rows, dates, assets.values,
+        labels, "a" * 64, 16, 16, GPUExecutionPolicy(), ("pearson_ic",),
+        source_qualification=token)
+    assert observed[0]["source_qualification"] is token
+    assert observed[0]["backend"] == "auto"
+    assert receipt["backend_used"] == "cpu"

@@ -115,3 +115,13 @@ def test_row_contract_fails_closed(mutation):
         x = x.astype(np.longdouble)
     with pytest.raises((TypeError, ValueError)):
         reference_row_pearson(x, y)
+
+
+@pytest.mark.parametrize("field,value", [("name", "wrong"), ("dtype", "float64")])
+def test_source_label_axis_schema_mismatch_rejected_before_reads(field, value):
+    Source, labels = _fixture()
+    labels = replace(labels, asset_axis=replace(labels.asset_axis, **{field: value}))
+    source = Source()
+    with pytest.raises(ValueError, match="asset coordinates"):
+        reference_source_pearson_chain(source, labels)
+    assert source.reads == []

@@ -93,8 +93,11 @@ def reference_source_pearson_chain(source, labels, *, max_tile_size=1,
         raise ValueError("label shape does not match source")
     if not np.array_equal(np.asarray(labels.decision_time), meta.time_axis.values):
         raise ValueError("label time coordinates do not match source")
-    if labels.asset_axis is None or not np.array_equal(
-            labels.asset_axis.values, meta.asset_axis.values):
+    if (labels.asset_axis is None or labels.asset_axis.values is None
+            or labels.asset_axis.name != meta.asset_axis.name
+            or labels.asset_axis.dtype != meta.asset_axis.dtype
+            or not np.array_equal(
+                labels.asset_axis.values, meta.asset_axis.values)):
         raise ValueError("label asset coordinates do not match source")
     # Output only, never a full factor cube. Scalar + count reserves included.
     # This is a returned-array budget, not a peak RSS or SciPy scratch bound.
