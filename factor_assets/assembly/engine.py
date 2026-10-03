@@ -1290,6 +1290,12 @@ def _constrained_mmr_select(
     remaining = {factor_id for factor_id in by_id if factor_id in qualities}
     selected: list[FactorAsset] = []
     max_redundancy = {factor_id: 0.0 for factor_id in remaining}
+    selected_family_counts: dict[Optional[str], int] = {}
+    selected_micro_counts: dict[str, int] = {}
+    selected_macro_counts: dict[str, int] = {}
+    family_counter_compatible = True
+    micro_counter_compatible = True
+    macro_counter_compatible = True
     steps: list[GreedySelectionStep] = []
     pair_cache: dict[tuple[str, str], float] = {}
     pair_refs: set[str] = set()
@@ -1304,13 +1310,23 @@ def _constrained_mmr_select(
         )
 
     def infeasible(asset: FactorAsset) -> Optional[str]:
-        selected_ids = [item.factor_id for item in selected]
-        if family_limit is not None and sum(item.family == asset.family for item in selected) >= family_limit:
-            return "FAMILY_LIMIT"
+        if family_limit is not None:
+            family = asset.family
+            if family_counter_compatible and (family is None or type(family) is str):
+                if selected_family_counts.get(family, 0) >= family_limit:
+                    return "FAMILY_LIMIT"
+            elif sum(item.family == family for item in selected) >= family_limit:
+                return "FAMILY_LIMIT"
         micro, macro = groups(asset.factor_id)
-        if sum(groups(fid)[0] == micro for fid in selected_ids) >= policy.max_per_microcluster:
+        if micro_counter_compatible and type(micro) is str:
+            if selected_micro_counts.get(micro, 0) >= policy.max_per_microcluster:
+                return "MICROCLUSTER_LIMIT"
+        elif sum(groups(item.factor_id)[0] == micro for item in selected) >= policy.max_per_microcluster:
             return "MICROCLUSTER_LIMIT"
-        if sum(groups(fid)[1] == macro for fid in selected_ids) >= policy.max_per_macrocluster:
+        if macro_counter_compatible and type(macro) is str:
+            if selected_macro_counts.get(macro, 0) >= policy.max_per_macrocluster:
+                return "MACROCLUSTER_LIMIT"
+        elif sum(groups(item.factor_id)[1] == macro for item in selected) >= policy.max_per_macrocluster:
             return "MACROCLUSTER_LIMIT"
         typed = assembly_evidence.get(asset.factor_id)
         if policy.health_floor is not None:
@@ -1321,6 +1337,8 @@ def _constrained_mmr_select(
         if policy.turnover_budget is not None:
             if typed is None or typed.turnover_score is None:
                 return "MISSING_TURNOVER_EVIDENCE"
+            # Python 3.12 sum uses compensated float accumulation; keep it to
+            # preserve exact turnover-budget boundary decisions.
             used = sum(
                 assembly_evidence[item.factor_id].turnover_score or 0.0
                 for item in selected
@@ -1387,6 +1405,21 @@ def _constrained_mmr_select(
         chosen = by_id[best_id]
         selected.append(chosen)
         remaining.remove(best_id)
+        if family_limit is not None:
+            family = chosen.family
+            if family_counter_compatible and (family is None or type(family) is str):
+                selected_family_counts[family] = selected_family_counts.get(family, 0) + 1
+            else:
+                family_counter_compatible = False
+        micro, macro = groups(best_id)
+        if micro_counter_compatible and type(micro) is str:
+            selected_micro_counts[micro] = selected_micro_counts.get(micro, 0) + 1
+        else:
+            micro_counter_compatible = False
+        if macro_counter_compatible and type(macro) is str:
+            selected_macro_counts[macro] = selected_macro_counts.get(macro, 0) + 1
+        else:
+            macro_counter_compatible = False
         steps.append(GreedySelectionStep(
             len(selected) - 1, best_id, qualities[best_id], max_redundancy[best_id], best_score,
             {

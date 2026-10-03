@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 from heapq import nsmallest
 from operator import index
 from enum import Enum
+from numbers import Integral
 from typing import Protocol, Optional
 
 
@@ -156,8 +157,12 @@ class SimilarityResult:
                 raise ValueError("similarity_score must be in [-1, 1] for computed evidence")
         elif self.similarity_score is not None and not -1.0 <= self.similarity_score <= 1.0:
             raise ValueError("similarity_score must be None or in [-1, 1]")
+        if isinstance(self.sample_size, bool) or not isinstance(self.sample_size, Integral):
+            raise TypeError("sample_size must be a non-boolean integer")
         if self.sample_size < 0:
             raise ValueError("sample_size must be non-negative")
+        if type(self.sample_size) is not int:
+            object.__setattr__(self, "sample_size", int(self.sample_size))
         if not isinstance(self.measurement_status, SimilarityMeasurementStatus):
             raise TypeError("measurement_status must be a SimilarityMeasurementStatus")
 
