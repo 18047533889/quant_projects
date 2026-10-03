@@ -7,12 +7,14 @@ import threading
 import time
 
 from quant_evaluator.runtime.source_route_qualification import CounterbalancedABRecord
+from quant_evaluator.runtime.source_route_profiles import CounterbalancedRouteProfileRecord
 
 
 _MAX_ENTRIES = 32
 _TTL_SECONDS = 60 * 60
 _lock = threading.RLock()
-_entries: OrderedDict[str, tuple[float, tuple[CounterbalancedABRecord, ...]]] = OrderedDict()
+_Record = CounterbalancedABRecord | CounterbalancedRouteProfileRecord
+_entries: OrderedDict[str, tuple[float, tuple[_Record, ...]]] = OrderedDict()
 
 
 def _reset_after_fork() -> None:
@@ -25,7 +27,7 @@ if hasattr(os, "register_at_fork"):
     os.register_at_fork(after_in_child=_reset_after_fork)
 
 
-def get_validated_records(key: str) -> tuple[CounterbalancedABRecord, ...] | None:
+def get_validated_records(key: str) -> tuple[_Record, ...] | None:
     """Return an unexpired immutable pair, pruning expired cache entries."""
     if type(key) is not str or not key:
         return None
@@ -46,12 +48,15 @@ def get_validated_records(key: str) -> tuple[CounterbalancedABRecord, ...] | Non
 
 
 def remember_validated_records(
-    key: str, records: tuple[CounterbalancedABRecord, CounterbalancedABRecord],
+    key: str, records: tuple[_Record, _Record],
 ) -> None:
     """Store only exact immutable record pairs after successful live validation."""
     if (type(key) is not str or not key or type(records) is not tuple
             or len(records) != 2
-            or any(type(item) is not CounterbalancedABRecord for item in records)):
+            or any(type(item) not in (CounterbalancedABRecord,
+                                      CounterbalancedRouteProfileRecord)
+                   for item in records)
+            or type(records[0]) is not type(records[1])):
         raise ValueError("cache accepts only a keyed pair of immutable qualification records")
     with _lock:
         _entries[key] = (time.monotonic() + _TTL_SECONDS, records)

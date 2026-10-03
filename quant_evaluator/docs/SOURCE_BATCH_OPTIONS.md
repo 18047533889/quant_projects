@@ -63,7 +63,8 @@ for unsupported metrics. `max_tile_size` is a cap, not a guarantee of actual rea
 GPU policy controls device selection, VRAM fraction, host-result budget and OOM retiling.
 `GPUExecutionPolicy.max_factor_tile_size` is an optional positive integer cap on each
 GPU factor tile. It is a GPU execution limit; CPU source execution is unchanged. The
-session selects a fitting power-of-two tile below the cap and may reduce it further
+session selects from fitting power-of-two candidates; the source executor may clip
+that candidate to the factor count or source cap, and may reduce it further
 after OOM. Static batch auto uses the default tile policy, so custom caps route
 materialized requests to CPU. Source auto retains a certified width when the cap is at
 least that width and falls back to CPU when the cap would reduce it. Measured auto can
@@ -119,3 +120,53 @@ each backend; CPU and CUDA may use different schedules.
 `timing_scope="evaluate_factor_source_batch_wall_v1"` includes API validation,
 panel reads, computation and transfers. Source factory and `close()` are outside
 this timer; do not mix it with full-lifecycle timing when comparing route winners.
+
+## Current-context profiles with different CPU/GPU widths
+
+`source_qualification` also accepts a pair of typed
+`CounterbalancedRouteProfileRecord` records from
+`quant_evaluator.runtime.source_route_profiles`. Each record describes a complete
+CPU/CUDA pair, and the two records must use opposite execution orders. This is
+trusted producer evidence, not a signed COS attestation or an independent oracle.
+Never construct a record by inventing timings or replacing its context hashes.
+
+For backend B, the comparison uses whole-request wall time:
+
+$$\bar t_B=(t_{B,\mathrm{CPU-first}}+t_{B,\mathrm{CUDA-first}})/2.$$
+
+A route qualifies only when both orders have the same strict timing winner,
+with complete values, finite masks, observation counts and exact per-metric
+coverage bound to the comparisons. A tie or inconsistent winner is not qualified.
+Each backend must repeat its own execution schedule across both orders; CPU and
+GPU do not need to share a width. For example, requested cap 16 with source
+admission 5 can describe CPU width 5 and GPU width 4 (or GPU policy cap 2).
+The API keeps the requested cap unchanged and executes the winning measured width.
+GPU widths must be reachable under the actual candidate/source clipping policy.
+
+```python
+# trusted_abba_records is an actual measured, oracle-validated typed pair.
+result = evaluate_factor_source_batch(
+    source, label_bundle, metrics=metrics, backend="auto", max_tile_size=16,
+    gpu_policy=policy, source_qualification=trusted_abba_records)
+receipt = result.metadata["execution_receipt"]
+print(receipt["source_qualification_status"])
+print(receipt["source_qualification_applied"])
+```
+
+A successful live validation enters a bounded process-local cache (32 entries,
+one-hour TTL, cleared after fork). Later identical auto calls may omit the pair;
+cache hits still revalidate current COS content, QE source, runtime, threads,
+device and policy. Misses do not run a pilot or calibration. Explicit `cpu` and
+`cuda_strict` ignore optional qualification records.
+If CUDA is resource-ineligible, execution uses the measured CPU width. After
+execution, unexpected reads, tile counts, CUDA width/OOM or live-context drift
+clear the applied qualification and evict its cache entry; valid output is kept.
+Always inspect status and applied together. A legacy-envelope fallback is not a
+current-source fastest certificate, nor is this mechanism a global speed guarantee.
+
+The opt-in actual-device regression can be run on a CUDA-equipped host:
+`QE_RUN_SOURCE_PROFILE_CUDA=1 python -m pytest -q quant_evaluator/tests/test_source_profile_actual_cuda_oct04.py`.
+It exercises real GPU width-2 execution and the post-run schedule checker, with
+SciPy references and the default minimum-20-assets IC gate. Qualification/live
+context is stubbed in this synthetic test; it is not COS performance evidence.
+Without the environment opt-in, these two actual-device cases are skipped.

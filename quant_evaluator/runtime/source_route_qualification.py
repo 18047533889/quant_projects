@@ -14,7 +14,7 @@ Example (trusted producer receipts; this alone does not change API defaults)::
         runtime_fingerprint_sha256=digest, package_fingerprint_sha256=digest,
         thread_fingerprint_sha256=digest, device_fingerprint_sha256=digest,
         config_fingerprint_sha256=digest, request_shape=(10, 20, 2),
-        metric_ids=("rank_ic",), expected_coverage_count=20,
+        metric_ids=("rank_ic",), expected_coverage_count=2,
         requested_tile_size=2, effective_tile_size=1)
     # Construct cpu_first and cuda_first from the trusted benchmark producer.
     result = validate_source_route_qualification(
@@ -23,7 +23,9 @@ Example (trusted producer receipts; this alone does not change API defaults)::
     # Pass explicit_backend to the existing evaluation API; no default is changed.
 
 Historical receipts without actual thread/runtime identity are insufficient;
-this validator is not wired into public routing. Keep backend selection explicit.
+the public source API can consume these receipts through ``source_qualification``
+when backend is ``auto``. Its live router revalidates the request, COS manifest,
+source code, runtime, threads, device and policy before applying a route.
 """
 from __future__ import annotations
 

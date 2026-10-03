@@ -21,6 +21,11 @@ from quant_evaluator.runtime.source_auto_evidence import (
     SOURCE_AUTO_EVIDENCE_VERSION, SOURCE_AUTO_METRICS, select_source_auto_route,
 )
 from quant_evaluator.contracts.factor_tile_source import admitted_source_tile_limit
+from quant_evaluator.runtime.source_profile_router import (
+    SourceProfileQualificationError, discard_source_route_profile_cache,
+    get_cached_source_route_profile_records, is_source_route_profile_pair,
+    qualify_source_route_profiles, validate_source_route_profile_execution,
+)
 from quant_evaluator.runtime.source_qualified_router import (
     SourceQualificationError, cuda_route_rejection, discard_source_route_cache,
     qualify_source_route,
@@ -182,7 +187,57 @@ def evaluate_factor_source_batch(
     qualification_cache_status = None
     qualification_applied = False
     qualification_decision_used = False
+    profile_decision = None
+    profile_attempted = False
+    profile_records = source_qualification
     if backend == "auto":
+        if profile_records is None:
+            profile_records = get_cached_source_route_profile_records(
+                source=source, metadata=metadata, metrics=selected,
+                request_fingerprint=request_fingerprint,
+                requested_tile_size=requested_tile_width, policy=policy)
+        if is_source_route_profile_pair(profile_records):
+            profile_attempted = True
+            try:
+                profile_decision = qualify_source_route_profiles(
+                    source=source, metadata=metadata, metrics=selected,
+                    request_fingerprint=request_fingerprint,
+                    requested_tile_size=requested_tile_width,
+                    policy=policy, records=(None if source_qualification is None
+                                            else profile_records))
+            except SourceProfileQualificationError as exc:
+                qualification_status = ("not_available_legacy_fallback"
+                                        if exc.reason == "qualified_profile_cache_miss"
+                                        else "rejected_legacy_fallback")
+                qualification_reason = exc.reason
+            except Exception:
+                qualification_status = "guard_error_legacy_fallback"
+                qualification_reason = "qualified_profile_guard_error"
+            else:
+                qualification_decision_used = True
+                qualification_winner = profile_decision.winning_backend
+                qualification_scope = profile_decision.scope
+                qualification_source_scope = profile_decision.source_content_scope
+                qualification_sha256 = profile_decision.evidence_sha256
+                qualification_cache_status = profile_decision.cache_status
+                qualification_status = "qualified_current_source"
+                if qualification_winner == "cpu":
+                    effective_tile_size = profile_decision.cpu_profile.source_tile_size
+                    route, reason = "cpu", "qualified_source_cpu_winner"
+                    qualification_applied = True
+                else:
+                    rejection = cuda_route_rejection(policy)
+                    if rejection is None:
+                        tile_width = profile_decision.cuda_profile.source_tile_size
+                        effective_tile_size = profile_decision.cuda_profile.source_tile_size
+                        route, reason = "cuda_strict", "qualified_source_cuda_winner"
+                        qualification_applied = True
+                    else:
+                        effective_tile_size = profile_decision.cpu_profile.source_tile_size
+                        route, reason = "cpu", "qualified_cuda_resource_gate_" + rejection
+                        qualification_status = "qualified_cuda_ineligible"
+                        qualification_reason = rejection
+    if backend == "auto" and not profile_attempted:
         maximum_qualified_width = min(
             requested_tile_width, memory_tile_limit,
             policy.max_factor_tile_size or requested_tile_width)
@@ -271,7 +326,26 @@ def evaluate_factor_source_batch(
                 source_metadata=metadata)
     else:
         out = _cpu_source_batch(source, metadata, label_bundle, selected, policy, effective_tile_size)
-    if (qualification_applied and qualification_winner == "cuda"
+    if profile_decision is not None and qualification_status in {
+            "qualified_current_source", "qualified_cuda_ineligible"}:
+        chosen_profile = (profile_decision.cuda_profile if route == "cuda_strict"
+                          else profile_decision.cpu_profile)
+        execution_mismatch = validate_source_route_profile_execution(
+            source=source, output=out, profile=chosen_profile,
+            expected_context=profile_decision.context, metadata=metadata,
+            metrics=selected, request_fingerprint=request_fingerprint,
+            requested_tile_size=requested_tile_width, policy=policy,
+            backend="cuda" if route == "cuda_strict" else "cpu")
+        if execution_mismatch is not None:
+            qualification_applied = False
+            qualification_status = "execution_configuration_deviated"
+            qualification_reason = execution_mismatch
+            discard_source_route_profile_cache(
+                source=source, metadata=metadata, metrics=selected,
+                request_fingerprint=request_fingerprint,
+                requested_tile_size=requested_tile_width, policy=policy)
+    if (profile_decision is None and qualification_applied
+            and qualification_winner == "cuda"
             and route == "cuda_strict"):
         actual_width = out.metadata.get("factor_tile_size")
         oom_retries = out.metadata.get("oom_retries")

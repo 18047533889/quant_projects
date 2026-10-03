@@ -1,6 +1,7 @@
 """Validate actual whole-source schedules for zero-OOM benchmark receipts.
 
 Request/API caps are admission limits, not the device's chosen working width.
+The actual source width also cannot exceed the number of requested factors.
 This verifies coverage and execution shape, not metric correctness or timing.
 """
 from __future__ import annotations
@@ -28,11 +29,15 @@ def validate_source_execution_receipt(
         if type(oom) is not int or oom != 0:
             raise ValueError("CUDA qualification requires an integer zero-OOM receipt")
     else:
-        width = admitted_cap
+        # A final partial tile is not a larger actual working width. In
+        # particular, a five-factor request admitted at cap 16 runs one
+        # five-factor tile, not a sixteen-factor tile.
+        width = min(admitted_cap, factor_count)
         oom = metadata.get("oom_retries", 0)
         if type(oom) is not int or oom != 0:
             raise ValueError("CPU qualification requires a zero-OOM receipt")
-    if type(width) is not int or not 1 <= width <= admitted_cap:
+    if (type(width) is not int or not 1 <= width <= admitted_cap
+            or width > factor_count):
         raise ValueError("actual execution width is outside source admission")
     expected = tuple((start, min(start + width, factor_count))
                      for start in range(0, factor_count, width))
