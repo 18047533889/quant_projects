@@ -159,3 +159,9 @@ selected CUDA. Metric values and observation counts matched the first CPU run.
 Run the script without flags for a RAM/L20 preflight, or pass `--run-full`
 to repeat the bounded benchmark. Do not interpret the synthetic report as
 COS I/O performance or full `EvaluationBundle` parity.
+
+## Source-axis assembly measurements
+
+Read [bounded source-axis assembly](SOURCE_AXIS_MATERIALIZATION_20261003.md)
+for contiguous/exact-axis paths, overlap behavior, matched local A/B results,
+and the 48-factor real COS default-auto verification.

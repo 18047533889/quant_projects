@@ -1,0 +1,167 @@
+{
+  "candidate": "bounded helper with contiguous slice selection where positions form unit-stride runs",
+  "chunk_bytes": 8388608,
+  "comparison_includes_axis_indexers": true,
+  "factor_output_slice_strides": "T x N x width backing; each output is a noncontiguous [:,:,i] slice",
+  "factor_widths": [
+    2,
+    4
+  ],
+  "kind": "source_axis_materializer_bounded_abba.v1",
+  "peak_rss_note": "each measurement is a fresh process; inputs and outputs are allocated and touched before baseline; ru_maxrss is a high-water mark that earlier pandas/NumPy allocations may dominate, so this is only a limited incremental-peak indicator, not total process RSS",
+  "reference": "original bounded fancy date and fancy column iloc chunk algorithm",
+  "repeats_per_method_width": 2,
+  "runs": {
+    "2": {
+      "all_values_and_nan_masks_match": true,
+      "median_seconds": {
+        "A": 0.12553809100063518,
+        "B": 0.06263527701958083
+      },
+      "order": [
+        "A",
+        "B",
+        "B",
+        "A"
+      ],
+      "output_sha256": {
+        "A": [
+          [
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6"
+          ],
+          [
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6"
+          ]
+        ],
+        "B": [
+          [
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6"
+          ],
+          [
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6"
+          ]
+        ]
+      },
+      "output_slice_strides_bytes": [
+        87376,
+        16
+      ],
+      "peak_rss_delta_kib": {
+        "A": [
+          5888,
+          5632
+        ],
+        "B": [
+          1792,
+          1792
+        ]
+      },
+      "seconds": {
+        "A": [
+          0.1447406469960697,
+          0.10633553500520065
+        ],
+        "B": [
+          0.0665682140388526,
+          0.05870234000030905
+        ]
+      },
+      "shape": [
+        2586,
+        5461,
+        2
+      ]
+    },
+    "4": {
+      "all_values_and_nan_masks_match": true,
+      "median_seconds": {
+        "A": 0.2536205065262038,
+        "B": 0.15384431797428988
+      },
+      "order": [
+        "A",
+        "B",
+        "B",
+        "A"
+      ],
+      "output_sha256": {
+        "A": [
+          [
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6"
+          ],
+          [
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6"
+          ]
+        ],
+        "B": [
+          [
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6"
+          ],
+          [
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6",
+            "db70e138c9872d5167146b9dc4229fc3e859bc52539e7817269c303cbef6faf6"
+          ]
+        ]
+      },
+      "output_slice_strides_bytes": [
+        174752,
+        32
+      ],
+      "peak_rss_delta_kib": {
+        "A": [
+          5760,
+          5852
+        ],
+        "B": [
+          2048,
+          2048
+        ]
+      },
+      "seconds": {
+        "A": [
+          0.24352916103089228,
+          0.26371185202151537
+        ],
+        "B": [
+          0.1567707249778323,
+          0.15091791097074747
+        ]
+      },
+      "shape": [
+        2586,
+        5461,
+        4
+      ]
+    }
+  },
+  "scope": "synthetic in-memory materialization only; no COS, Arrow, FactorBatch, or GPU work",
+  "seed": 20261003,
+  "source_sha256": {
+    "/home/sunhaiwei/quant_projects/quant_evaluator/scripts/benchmark_source_axis_materializer.py": "ac125a312f34b8d737886c2d112c3a7def2ca0b150930d545fa1f4c2e00b5656",
+    "quant_evaluator/adapters/source_axis_materializer.py": "0ae63d6145279a13c308545fe398f99d281f7243d9ebfdd41cd95654520cf259"
+  },
+  "source_shape": [
+    2588,
+    5461
+  ],
+  "status": "complete",
+  "target_shape": [
+    2586,
+    5461
+  ]
+}
