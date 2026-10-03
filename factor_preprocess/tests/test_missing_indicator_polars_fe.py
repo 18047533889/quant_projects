@@ -167,6 +167,22 @@ def test_extended_float_public_registry_uses_fe_without_narrowing():
     assert executor.execution_identity["backend"] == "pandas_numpy"
 
 
+@pytest.mark.parametrize("dtype", [np.complex128, np.clongdouble])
+def test_complex_public_registry_uses_fe_missing_component_semantics(dtype):
+    from factor_preprocess.registry.transforms import get_default_registry
+
+    values = np.array([complex(np.nan, 0), complex(0, np.nan),
+                       complex(2, 3), complex(np.inf, 1)], dtype=dtype)
+    frame = _values(values, index=[7, 7, 2, 1])
+    before = frame.copy(deep=True)
+    executor = get_default_registry().get_execution("missing_indicator")
+    actual = executor(frame)
+    expected = pd.Series([1., 1., 0., 0.], index=frame.index, name="value")
+    pd.testing.assert_series_equal(actual, expected)
+    pd.testing.assert_frame_equal(frame, before)
+    assert executor.execution_identity["backend"] == "pandas_numpy"
+
+
 @pytest.mark.parametrize("dtype", ["uint64", "UInt64"])
 def test_uint64_max_stays_native(dtype):
     values = [0, np.iinfo(np.uint64).max, 2]

@@ -20,6 +20,10 @@
 FE pandas 兼容路径前仅将扩展标量 boxing 为 object，解决 pandas pivot
 没有 float128 kernel 的错误。没有转成 float64，不改变有限性/缺失性，
 也不修改调用者 DataFrame；正常 UInt64 最大值继续走原生路径。
+后续 dtype 逐类审查又发现 complex128/complex256 的 pandas pivot 也没有
+对应 kernel，因此复数同样 boxing 后仍调用 FE 算子，不转 float64。
+实部或虚部任一为 NaN 都是缺失；无穷复数不是缺失。
+新增两个复数回归后的全套：914 passed、1 xfailed、95 warnings，104.94s。
 
 ## 验证与速度证据
 

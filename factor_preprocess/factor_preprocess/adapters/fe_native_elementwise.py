@@ -157,12 +157,14 @@ class FeNativeElementwiseExecutor:
             if executor is None:
                 raise GovernanceError("FE pandas_numpy is unavailable for is_null fallback")
             self._pandas_executor = executor
-        # pandas pivot/unstack has no float128 kernel. Boxing preserves the
-        # original extended scalars (including infinities and tiny finite
+        # pandas pivot/unstack has no extended-float or complex kernel.
+        # Boxing preserves original scalars (including infinities and tiny finite
         # values); narrowing to float64 would change missingness semantics.
         source_dtype = getattr(values[value_col].dtype, "numpy_dtype", values[value_col].dtype)
         prepared = values
-        if pd.api.types.is_float_dtype(source_dtype) and np.dtype(source_dtype).itemsize > 8:
+        if (pd.api.types.is_complex_dtype(source_dtype)
+                or (pd.api.types.is_float_dtype(source_dtype)
+                    and np.dtype(source_dtype).itemsize > 8)):
             prepared = values.copy(deep=False)
             prepared[value_col] = values[value_col].astype(object)
         result = self._pandas_executor(prepared, time_col=time_col,

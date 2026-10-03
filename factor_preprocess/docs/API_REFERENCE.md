@@ -533,7 +533,7 @@ Run an FE Polars predicate over a long input's value vector.
 
 ### FeNativeElementwiseExecutor.__call__
 
-[实际实现](../factor_preprocess/adapters/fe_native_elementwise.py#L174)。
+[实际实现](../factor_preprocess/adapters/fe_native_elementwise.py#L176)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -543,7 +543,7 @@ Run an FE Polars predicate over a long input's value vector.
 
 ### FeNativeElementwiseExecutor.execution_identity
 
-[实际实现](../factor_preprocess/adapters/fe_native_elementwise.py#L192)。
+[实际实现](../factor_preprocess/adapters/fe_native_elementwise.py#L194)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -553,7 +553,7 @@ Run an FE Polars predicate over a long input's value vector.
 
 ### get_fe_native_elementwise_executor
 
-[实际实现](../factor_preprocess/adapters/fe_native_elementwise.py#L262)。
+[实际实现](../factor_preprocess/adapters/fe_native_elementwise.py#L264)。
 
 Return the lazy FE native elementwise executor.
 
@@ -5499,7 +5499,7 @@ Stable Float64 z-score for finite members, preserving FP v1 edge policy.
 | `factor_preprocess/adapters/ewma_full_replay.py` | `f5d653976ab97b8581d299dddbd49494e65639cba164ee4cea722f30a74d5fb5` |
 | `factor_preprocess/adapters/factor_assets.py` | `75478a4f2c9cc80b7c30aacf729fe33ab722cfc2be7dfb63f11e3f562b92e878` |
 | `factor_preprocess/adapters/fe_composite.py` | `dc8bf40c80c0cf97b59d9076d4a0f0f33660cb500a8bea1a36249b502aab3d83` |
-| `factor_preprocess/adapters/fe_native_elementwise.py` | `5505c6795f2fae3a249fff35d909f80b47849d70d158e44340cea3ad67f421b9` |
+| `factor_preprocess/adapters/fe_native_elementwise.py` | `4e16d7221ce7aacc3ef1084f6570882ac748e15bb796d08a2564be48cc476da2` |
 | `factor_preprocess/adapters/fe_neutralization.py` | `f9f9a62bd357b2f1b85ae3c78e884a5c952fdae45b7677895af67e40d0dfe93a` |
 | `factor_preprocess/adapters/fe_operator.py` | `af25dbcca4a39954bba384d1bb9d52907fffd01f01d54540ba3d3710d18ac528` |
 | `factor_preprocess/adapters/fe_robust_ewma_identity.py` | `2d4074ff7790a1694e92de906ed0b6f79f0f34b693efcb2f1f2e20185620a531` |
