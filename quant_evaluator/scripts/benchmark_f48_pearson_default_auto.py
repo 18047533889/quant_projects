@@ -9,7 +9,9 @@ import argparse
 from pathlib import Path
 
 from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
+from quant_evaluator.contracts._hashutil import stable_content_hex
 from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
+from quant_evaluator.runtime.source_auto_evidence import SOURCE_AUTO_EVIDENCE_VERSION
 from quant_evaluator.scripts import benchmark_real_cos_factor_tiles as tiles
 from quant_evaluator.scripts import benchmark_real_cos_source_batch as harness
 from quant_evaluator.scripts.f48_pearson_auto_references import (
@@ -23,6 +25,39 @@ ROUTE_ID = "real_cos_f48_pearson_chain_cap16_tile4"
 ROUTE_REASON = "bounded_f48_pearson_chain_gpu_cap16_tile4"
 MIN_RAM_BYTES = 32 * 1024**3
 MIN_DISK_BYTES = 5 * 1024**3
+
+
+def _valid_api_execution_receipt(
+        receipt, *, request_fingerprint, admitted_source_tile_size):
+    if type(receipt) is not dict:
+        return False
+    if not (
+        receipt.get("backend_requested") == "auto"
+        and receipt.get("backend_used") == "cuda"
+        and receipt.get("auto_backend_reason") == ROUTE_REASON
+        and receipt.get("auto_backend_evidence_id") == ROUTE_ID
+        and isinstance(receipt.get("auto_backend_evidence_version"), str)
+        and receipt["auto_backend_evidence_version"] == SOURCE_AUTO_EVIDENCE_VERSION
+        and isinstance(receipt.get("auto_backend_evidence_artifacts"), (list, tuple))
+        and bool(receipt["auto_backend_evidence_artifacts"])
+        and all(isinstance(path, str) and path
+                for path in receipt["auto_backend_evidence_artifacts"])
+        and receipt.get("auto_backend_evidence_status") == "measured_source_ab"
+        and receipt.get("source_request_fingerprint") == request_fingerprint
+        and receipt.get("effective_max_tile_size") == 4
+        and receipt.get("admitted_source_tile_size") == admitted_source_tile_size
+        and receipt.get("metric_backends") == {metric: "cuda" for metric in METRICS}
+        and isinstance(receipt.get("receipt_hash"), str)
+        and bool(receipt["receipt_hash"])
+    ):
+        return False
+    fields = {key: value for key, value in receipt.items() if key != "receipt_hash"}
+    try:
+        expected_hash = stable_content_hex(
+            tag="FactorSourceBatchExecutionReceipt.v1", fields=fields)
+    except (TypeError, ValueError):
+        return False
+    return receipt["receipt_hash"] == expected_hash
 
 
 def _preflight_ok(gate):
@@ -90,6 +125,8 @@ def run(args):
         max_source_memory_mib=args.max_source_memory_mib,
         cos_prefetch_workers=2, max_prefetch_memory_mib=512,
         use_default_tile_size=True, expected_auto_cuda=True)
+    api_receipt = auto.metadata.get("execution_receipt")
+    receipt["api_execution_receipt"] = api_receipt
     expected_ranges = tuple((start, start + 4) for start in range(0, 48, 4))
     try:
         actual_ranges = tuple(tuple(row) for row in receipt.get("tile_ranges", ()))
@@ -104,7 +141,11 @@ def run(args):
         and auto.metadata.get("auto_backend_evidence_id") == ROUTE_ID
         and auto.metadata.get("auto_backend_reason") == ROUTE_REASON
         and auto.metadata.get("source_request_fingerprint")
-            == reference["verified_source_request_fingerprint"])
+            == reference["verified_source_request_fingerprint"]
+        and _valid_api_execution_receipt(
+            api_receipt,
+            request_fingerprint=reference["verified_source_request_fingerprint"],
+            admitted_source_tile_size=receipt["admitted_source_tile_size"]))
     coverage_pass = (actual_ranges == expected_ranges
                      and receipt["factor_tiles_processed"] == 12
                      and receipt["oom_retries"] == 0

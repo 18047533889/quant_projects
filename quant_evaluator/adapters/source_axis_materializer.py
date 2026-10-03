@@ -8,6 +8,19 @@ import pandas as pd
 AXIS_REINDEX_CHUNK_BYTES = 8 * 1024**2
 
 
+def _indexes_match_for_position_reuse(left, right) -> bool:
+    """Match pandas labels while keeping bool distinct from numeric labels."""
+    left_index = pd.Index(left)
+    right_index = pd.Index(right)
+    if not left_index.equals(right_index):
+        return False
+    return all(
+        isinstance(left_label, (bool, np.bool_))
+        == isinstance(right_label, (bool, np.bool_))
+        for left_label, right_label in zip(left_index, right_index)
+    )
+
+
 def _output_shares_frame_storage(output, frame) -> bool:
     # Inspect existing pandas manager buffers instead of converting an entire
     # bounded frame just to check whether the destination aliases its input.
@@ -68,8 +81,8 @@ def write_axis_aligned_float64(frame, dates, assets, output, *,
     target_date_index = pd.Index(dates)
     target_asset_index = pd.Index(assets)
     exact_axes = (frame.index.is_unique and frame.columns.is_unique
-                  and frame.index.equals(target_date_index)
-                  and frame.columns.equals(target_asset_index))
+                  and _indexes_match_for_position_reuse(frame.index, target_date_index)
+                  and _indexes_match_for_position_reuse(frame.columns, target_asset_index))
     # In unbounded mode, use reindex's snapshot semantics for aliases.
     if output_aliases_frame and not memory_bounded:
         exact_axes = False
@@ -79,10 +92,19 @@ def write_axis_aligned_float64(frame, dates, assets, output, *,
         date_slice = slice(0, len(dates))
         asset_slice = slice(0, len(assets))
     else:
-        date_positions = frame.index.get_indexer(dates)
-        asset_positions = frame.columns.get_indexer(assets)
-        if np.any(date_positions < 0) or np.any(asset_positions < 0):
-            raise ValueError("factor final axes changed between passes")
+        if (memory_bounded and required_dates is not None
+                and _indexes_match_for_position_reuse(required_dates, dates)
+                and _indexes_match_for_position_reuse(tuple(required_assets), assets)):
+            # Shared-axis membership already produced these exact target indexers.
+            # Reuse them only for the bounded materializer; unbounded reindex keeps
+            # its snapshot semantics, and strict subsets still need their own lookup.
+            date_positions = required_date_positions
+            asset_positions = required_asset_positions
+        else:
+            date_positions = frame.index.get_indexer(dates)
+            asset_positions = frame.columns.get_indexer(assets)
+            if np.any(date_positions < 0) or np.any(asset_positions < 0):
+                raise ValueError("factor final axes changed between passes")
 
         def contiguous_slice(positions):
             if not len(positions):

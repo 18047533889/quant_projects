@@ -137,8 +137,37 @@ def _install_driver_cpu_stubs(monkeypatch, *, fault=None, second_gate_ok=True, i
     metadata = {"auto_backend_evidence_id": driver.ROUTE_ID,
                 "auto_backend_reason": driver.ROUTE_REASON,
                 "source_request_fingerprint": "f" * 64}
+    api_receipt = {
+        "backend_requested": "auto", "backend_used": "cuda",
+        "auto_backend_reason": driver.ROUTE_REASON,
+        "auto_backend_evidence_id": driver.ROUTE_ID,
+        "auto_backend_evidence_version": driver.SOURCE_AUTO_EVIDENCE_VERSION,
+        "auto_backend_evidence_artifacts": ("measured_cpu_first.json",
+                                            "measured_cuda_first.json"),
+        "auto_backend_evidence_status": "measured_source_ab",
+        "source_request_fingerprint": "f" * 64,
+        "effective_max_tile_size": 4, "admitted_source_tile_size": 4,
+        "metric_backends": {metric: "cuda" for metric in driver.METRICS},
+    }
+    api_receipt["receipt_hash"] = driver.stable_content_hex(
+        tag="FactorSourceBatchExecutionReceipt.v1", fields=api_receipt)
+    metadata["execution_receipt"] = api_receipt
     if fault == "route":
         metadata["auto_backend_evidence_id"] = "wrong"
+    if fault == "api_receipt_missing_receipt":
+        metadata.pop("execution_receipt")
+    if fault and fault.startswith("api_receipt_missing_"):
+        api_receipt.pop(fault.removeprefix("api_receipt_missing_"), None)
+    if fault and fault.startswith("api_receipt_wrong_"):
+        api_receipt[fault.removeprefix("api_receipt_wrong_")] = "wrong"
+    if fault and fault.startswith("api_receipt_empty_"):
+        api_receipt[fault.removeprefix("api_receipt_empty_")] = ""
+    if fault and fault != "api_receipt_empty_receipt_hash":
+        api_receipt.pop("receipt_hash", None)
+        api_receipt["receipt_hash"] = driver.stable_content_hex(
+            tag="FactorSourceBatchExecutionReceipt.v1", fields=api_receipt)
+    if fault == "api_receipt_tampered_receipt_hash":
+        api_receipt["receipt_hash"] = "0" * 64
     auto = SimpleNamespace(metadata=metadata)
     receipt = {"api_default_tile_size": True, "declared_source_tile_size": 16,
                "admitted_source_tile_size": 4, "effective_max_tile_size": 4,
@@ -165,10 +194,43 @@ def test_default_auto_driver_mock_positive_control(monkeypatch):
     report = emitted[-1]
     assert report["status"] == "complete"
     assert report["route_pass"] and report["coverage_pass"]
+    api_receipt = report["run"]["api_execution_receipt"]
+    assert api_receipt["auto_backend_evidence_id"] == driver.ROUTE_ID
+    assert api_receipt["auto_backend_evidence_version"] == driver.SOURCE_AUTO_EVIDENCE_VERSION
+    assert api_receipt["auto_backend_evidence_artifacts"] == (
+        "measured_cpu_first.json", "measured_cuda_first.json")
+    assert driver._valid_api_execution_receipt(
+        json.loads(json.dumps(api_receipt)), request_fingerprint="f" * 64,
+        admitted_source_tile_size=4)
     assert report["preflight_initial"]["pass"]
     assert report["preflight_before_evaluation"]["pass"]
     assert report["source_provenance_verification"]["pass"]
 
+
+@pytest.mark.parametrize("fault", [
+    "api_receipt_missing_receipt",
+    "api_receipt_missing_auto_backend_evidence_version",
+    "api_receipt_empty_auto_backend_evidence_version",
+    "api_receipt_empty_auto_backend_evidence_artifacts",
+    "api_receipt_empty_receipt_hash",
+    "api_receipt_wrong_auto_backend_evidence_id",
+    "api_receipt_wrong_auto_backend_reason",
+    "api_receipt_wrong_auto_backend_evidence_version",
+    "api_receipt_wrong_source_request_fingerprint",
+    "api_receipt_wrong_effective_max_tile_size",
+    "api_receipt_wrong_admitted_source_tile_size",
+    "api_receipt_wrong_metric_backends",
+    "api_receipt_tampered_receipt_hash",
+])
+def test_default_auto_driver_mock_rejects_incomplete_api_receipt(monkeypatch, fault):
+    driver, args, emitted, _receipt = _install_driver_cpu_stubs(monkeypatch, fault=fault)
+    with pytest.raises(SystemExit) as exc:
+        driver.run(args)
+    assert exc.value.code == 1
+    report = emitted[-1]
+    assert report["status"] == "verification_failed"
+    assert report["route_pass"] is False
+    assert "api_execution_receipt" in report["run"]
 
 @pytest.mark.parametrize("fault,failed_field", [
     ("route", "route_pass"), ("coverage", "coverage_pass"),
