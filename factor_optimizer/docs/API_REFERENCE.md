@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**89 个 Python 模块、964 个公开函数/类/方法定义**。
+扫描实际包目录：**94 个 Python 模块、978 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -27,6 +27,7 @@
 | [factor_optimizer/adapters/repair_execution_identity.py](../factor_optimizer/adapters/repair_execution_identity.py) | 1 | Scoped identity for direct Factor Preprocess repair kernels. |
 | [factor_optimizer/candidate_catalog.py](../factor_optimizer/candidate_catalog.py) | 1 | Shared, deterministic static candidate catalog for batch research. |
 | [factor_optimizer/capabilities.py](../factor_optimizer/capabilities.py) | 5 | Truthful runtime capability metadata for factor_optimizer. |
+| [factor_optimizer/cohort_materialization.py](../factor_optimizer/cohort_materialization.py) | 7 | Bounded, ordered staging of decoded COS panels into a FactorBatch array. |
 | [factor_optimizer/complexity/__init__.py](../factor_optimizer/complexity/__init__.py) | 0 | Complexity estimation and budget tracking. |
 | [factor_optimizer/complexity/budget.py](../factor_optimizer/complexity/budget.py) | 9 | Complexity budget tracking and enforcement. |
 | [factor_optimizer/complexity/profile.py](../factor_optimizer/complexity/profile.py) | 8 | ComplexityProfile: adapter projection of FE complexity analysis. |
@@ -75,6 +76,10 @@
 | [factor_optimizer/research_ic_antithetic.py](../factor_optimizer/research_ic_antithetic.py) | 1 | Exact sign-antithetic RankIC cache support for adjacent TRAIN proposals. |
 | [factor_optimizer/research_manifest.py](../factor_optimizer/research_manifest.py) | 6 | Bind declared COS factor values to their exact research landing record. |
 | [factor_optimizer/research_numeric.py](../factor_optimizer/research_numeric.py) | 1 | Numerically guarded reductions for research diagnostics. |
+| [factor_optimizer/research_price_labels.py](../factor_optimizer/research_price_labels.py) | 1 | Pure price-to-return labels for research inputs. |
+| [factor_optimizer/research_price_reader.py](../factor_optimizer/research_price_reader.py) | 1 | Session-preserving bounded reads of registered adjusted VWAP prices. |
+| [factor_optimizer/research_session_window.py](../factor_optimizer/research_session_window.py) | 2 | Select decision dates with exact real-session label endpoints. |
+| [factor_optimizer/research_summary_cache.py](../factor_optimizer/research_summary_cache.py) | 3 | Bounded exact-content memoization for successful RAW metric summaries. |
 | [factor_optimizer/search/__init__.py](../factor_optimizer/search/__init__.py) | 0 | Search orchestration for factor mutation optimization. |
 | [factor_optimizer/search/categorical_strategy.py](../factor_optimizer/search/categorical_strategy.py) | 10 | Categorical search strategy (TPE-style) for treatment auto-optimization. |
 | [factor_optimizer/search/conditional_search.py](../factor_optimizer/search/conditional_search.py) | 24 | Hierarchical conditional search over (repair-family, parameters) (R61-FI-035). |
@@ -863,6 +868,66 @@ Fail closed until all upstream production contracts are implemented.
 参数：`()`。
 
 返回类型：`None`。
+
+## factor_optimizer/cohort_materialization.py
+
+Bounded, ordered staging of decoded COS panels into a FactorBatch array.
+
+### validate_cohort_dimensions
+
+[实际实现](../factor_optimizer/cohort_materialization.py#L21)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(rows, assets, factors)`。
+
+### estimate_factor_batch_materialization
+
+[实际实现](../factor_optimizer/cohort_materialization.py#L31)。
+
+Conservative sum of identifiable simultaneous buffers; no RSS promise.
+
+参数：`(rows, assets, factors, *, source_columns, calendar_rows, resident_pandas_bytes, resident_arrow_bytes)`。
+
+### admit_factor_batch_materialization
+
+[实际实现](../factor_optimizer/cohort_materialization.py#L65)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(estimate, memory_budget_bytes)`。
+
+### arrow_table_buffer_bytes
+
+[实际实现](../factor_optimizer/cohort_materialization.py#L77)。
+
+Require a measurable Arrow table; missing evidence never means zero.
+
+参数：`(table)`。
+
+### estimate_pandas_conversion_bytes
+
+[实际实现](../factor_optimizer/cohort_materialization.py#L88)。
+
+Numeric-frame conversion allowance; excludes arbitrary object expansion.
+
+参数：`(arrow_bytes)`。
+
+### admit_decoded_source
+
+[实际实现](../factor_optimizer/cohort_materialization.py#L93)。
+
+Admit identifiable source buffers while one Arrow table is decoded.
+
+参数：`(retained_pandas_bytes, current_arrow_bytes, memory_budget_bytes)`。
+
+### assemble_factor_values
+
+[实际实现](../factor_optimizer/cohort_materialization.py#L109)。
+
+Match the former reindex/column-select/stack semantics one factor at a time.
+
+参数：`(panels, dates, assets, *, calendar_rows, resident_pandas_bytes, resident_arrow_bytes, memory_budget_bytes=DEFAULT_MATERIALIZATION_BUDGET_BYTES)`。
 
 ## factor_optimizer/complexity/__init__.py
 
@@ -7037,6 +7102,85 @@ Use NumPy's ordinary mean, repairing only overflow of finite slices.
 
 参数：`(values, axis=None, keepdims=False)`。
 
+## factor_optimizer/research_price_labels.py
+
+Pure price-to-return labels for research inputs.
+
+### price_to_return_labels
+
+[实际实现](../factor_optimizer/research_price_labels.py#L7)。
+
+Return simple end/start - 1 labels and a mask of usable observations.
+
+参数：`(start_prices, end_prices)`。
+
+## factor_optimizer/research_price_reader.py
+
+Session-preserving bounded reads of registered adjusted VWAP prices.
+
+### read_session_vwap
+
+[实际实现](../factor_optimizer/research_price_reader.py#L16)。
+
+Return float64 prices on the exact supplied session and asset axes.
+
+参数：`(store, sessions, assets)`。
+
+## factor_optimizer/research_session_window.py
+
+Select decision dates with exact real-session label endpoints.
+
+### ResearchSessionWindow
+
+[实际实现](../factor_optimizer/research_session_window.py#L10)。
+
+A bounded decision window and its exact +1/+2 session endpoints.
+
+本类声明字段（继承字段见基类；实际限制仍需合同校验）：
+
+| 字段 | 类型 | 默认值/值 |
+|---|---|---|
+| `decision_dates` | `pd.DatetimeIndex` | `必填/未声明默认` |
+| `execution_dates` | `pd.DatetimeIndex` | `必填/未声明默认` |
+| `label_end_dates` | `pd.DatetimeIndex` | `必填/未声明默认` |
+| `decision_positions` | `tuple[int, ...]` | `必填/未声明默认` |
+| `execution_positions` | `tuple[int, ...]` | `必填/未声明默认` |
+| `label_end_positions` | `tuple[int, ...]` | `必填/未声明默认` |
+
+### select_research_session_window
+
+[实际实现](../factor_optimizer/research_session_window.py#L38)。
+
+Return the latest exact number of shared panel dates with +1/+2 sessions.
+
+参数：`(panel_indexes, trading_dates, requested_rows)`。
+
+## factor_optimizer/research_summary_cache.py
+
+Bounded exact-content memoization for successful RAW metric summaries.
+
+### RawMetricSummaryCache
+
+[实际实现](../factor_optimizer/research_summary_cache.py#L9)。
+
+One entry with at most 128 KiB panel-key bytes; not a process RSS cap.
+
+### RawMetricSummaryCache.__init__
+
+[实际实现](../factor_optimizer/research_summary_cache.py#L12)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`(self)`。
+
+### RawMetricSummaryCache.summarize
+
+[实际实现](../factor_optimizer/research_summary_cache.py#L36)。
+
+Return a fresh metric mapping, caching only successful summaries.
+
+参数：`(self, series, *, periods_per_year=252)`。
+
 ## factor_optimizer/search/__init__.py
 
 Search orchestration for factor mutation optimization.
@@ -10933,6 +11077,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/adapters/repair_execution_identity.py` | `7a040606e3c67cb15a14564073afc43cc8887476ed2aa52a218b4a39125b95d2` |
 | `factor_optimizer/candidate_catalog.py` | `0280e26add401da06be47cb4580abcb60f408238ddd13817abdcd299fb282987` |
 | `factor_optimizer/capabilities.py` | `efb1fbf1b54b1b14f128ffe63c74f54f7a22f99a409a0761aac67fc1b6e3ed28` |
+| `factor_optimizer/cohort_materialization.py` | `bf663447783af203e3ecedb1367f36e26b58c2a6d079c1006d3caddb8760a7cd` |
 | `factor_optimizer/complexity/__init__.py` | `79c8daf01ef8071b77eb7cbb8df4ae45fc9e2d4a4349f35d402a12f79936e696` |
 | `factor_optimizer/complexity/budget.py` | `d797ada6f52d0ccab3820450fb12e8f84f3f3dbb4e9f1e53f64eb5bb21a3469d` |
 | `factor_optimizer/complexity/profile.py` | `f3063dc26e486c33ad3aaefb3c8b5330c9e1f28eacb84bec4518cba793ada23a` |
@@ -10972,7 +11117,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
-| `factor_optimizer/research_batch.py` | `ca07831e8c717f555096575a8074eeea1908b7f893e4e8f89fc475ee688a8add` |
+| `factor_optimizer/research_batch.py` | `b78ceee015de3dca93670b7a958503202f7d6923b6c4ba1696d25ec6615fa323` |
 | `factor_optimizer/research_batch_diagnostics.py` | `0ec5186c413814db6457342e97236b582e95a460033c11a6804b815c64d24b89` |
 | `factor_optimizer/research_decay.py` | `4dc4801f9197a9016df0dc36e5525e63d9120b9bc3f663d7f5bcde8e685ecfcb` |
 | `factor_optimizer/research_diagnostics.py` | `054ee2ad344395812656f1a7991983c58cade69e8c0b524d98981258cd6947ad` |
@@ -10981,6 +11126,10 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/research_ic_antithetic.py` | `b6b5241e9925bb7d4145c7005be6aa9cf56d8e3c8d7a4babbae1ae205b6ce704` |
 | `factor_optimizer/research_manifest.py` | `4ed34125751aea2cdedc7e75fecc96e3f2f09f5e9fae70afc42ff60486c1c90f` |
 | `factor_optimizer/research_numeric.py` | `ab737c023c195826ac3fee4942e550fb346be22928ea76cba89b6c0bf9c33a64` |
+| `factor_optimizer/research_price_labels.py` | `448469f4129afd28efe5cd19489e3adcb9e9f242cf5bfc316e2303e16c98c382` |
+| `factor_optimizer/research_price_reader.py` | `c1bdde566da4157351a79075cfcec206239725c0c0e367ab746f2280e65d2ed1` |
+| `factor_optimizer/research_session_window.py` | `7a61698f0d31fa38781b8bfc19ea38ddba8132bf76fa83b435a583a14ceb6b62` |
+| `factor_optimizer/research_summary_cache.py` | `882a8bae78e885b88218e593b30ebb1d22c32a51df07f05f2f4130a9a1ed9d2b` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |
 | `factor_optimizer/search/conditional_search.py` | `4b6dfeceacd797ad16f2406d0cd8c5cc1a4146c59c65c611f875356ce7251731` |

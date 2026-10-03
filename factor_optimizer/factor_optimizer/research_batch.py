@@ -511,6 +511,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
         paired_series, summarize, joint_utility, passes_floors, compare_joint, RawSeriesCache,
         JointMetricsUnavailable,
     )
+    from factor_optimizer.research_summary_cache import RawMetricSummaryCache
     from factor_optimizer.adapters.repair_execution import compile_value_repair
     from factor_optimizer.adapters.preprocessing import compile_admissible_smoothing_grid
     from factor_optimizer.shape_rank_reuse import (
@@ -530,6 +531,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     # Duplicate factor columns can reuse TRAIN evidence, while no cache crosses
     # a batch/split boundary.
     train_raw_cache = RawSeriesCache()
+    train_raw_summary_cache = RawMetricSummaryCache()
     train_ic_cache = PairICCache()
     train_candidate_ic_cache = PairICCache()
     # With no declared treatment lineage every baseline plan is a no-op, so
@@ -752,7 +754,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                                 empty_leg_policy=config.research_empty_leg_policy,
                                 candidate_ic_cache=train_candidate_ic_cache,
                                 raw_cache=train_raw_cache)
-                            mr, mc = summarize(ar), summarize(ac)
+                            mr = train_raw_summary_cache.summarize(ar)
+                            mc = summarize(ac)
                             baseline_gain = joint_utility(mc)-joint_utility(mr)
                             best = ((baseline_gain, frozen_baseline.identity, frozen_baseline, baseline_values)
                                     if passes_floors(mr, mc) else None)
@@ -853,7 +856,8 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
                                 empty_leg_policy=config.research_empty_leg_policy,
                                 candidate_ic_cache=train_candidate_ic_cache,
                                 raw_cache=train_raw_cache)
-                            mr, mc = summarize(ar), summarize(ac)
+                            mr = train_raw_summary_cache.summarize(ar)
+                            mc = summarize(ac)
                             record.update(train_raw_metrics=mr, train_candidate_metrics=mc,
                                           raw_rank_ic_fold_gain=gain)
                             if not passes_floors(mr, mc):
