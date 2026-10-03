@@ -1,9 +1,11 @@
 """
 Polars backend for high-performance cross-sectional transforms.
 
-Targets 3-5x speedup over pandas/numpy reference for large panels.
-Uses polars expressions for vectorized cross-sectional operations.
+Uses Polars expressions for vectorized cross-sectional operations. Performance
+depends on the workload and should be established by measurement.
 """
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 from typing import Optional, Literal, Union
@@ -25,6 +27,24 @@ def _require_polars():
             package="polars",
             feature="polars_backend",
         )
+
+
+_RANK_METHODS = frozenset({"average", "min", "max", "dense", "ordinal"})
+
+
+def _polars_frame_and_return_mode(df):
+    """Convert only the input container; all numerical work stays in Polars."""
+    _require_polars()
+    if isinstance(df, pd.DataFrame):
+        return pl.from_pandas(df), True
+    if isinstance(df, pl.DataFrame):
+        return df, False
+    raise TypeError("df must be a pandas or Polars DataFrame")
+
+
+def _numeric_dtype(dtype) -> bool:
+    """Return whether a Polars dtype is integer or floating point."""
+    return dtype == pl.Null or dtype.is_integer() or dtype.is_float()
 
 
 def cs_rank_polars(
@@ -58,53 +78,50 @@ def cs_rank_polars(
     Notes
     -----
     Operates per group (typically per date) for cross-sectional ranking.
-    Uses polars for 3-5x speedup on large panels.
+    Uses native Polars expressions; performance is workload dependent.
     """
     _require_polars()
 
-    # Convert to polars if needed
-    if isinstance(df, pd.DataFrame):
-        pl_df = pl.from_pandas(df)
-        return_pandas = True
-    else:
-        pl_df = df
-        return_pandas = False
+    if method not in _RANK_METHODS:
+        raise ValueError(f"unknown rank method: {method!r}")
 
-    # Map method to polars rank method
-    method_map = {
-        "average": "average",
-        "min": "min",
-        "max": "max",
-        "dense": "dense",
-        "ordinal": "ordinal",
-    }
-    pl_method = method_map.get(method, "average")
+    pl_df, return_pandas = _polars_frame_and_return_mode(df)
+    dtype = pl_df.schema.get(value_col)
+    if dtype is None:
+        raise ValueError(f"value column {value_col!r} is missing")
+    if not _numeric_dtype(dtype):
+        raise TypeError(f"rank values must have a numeric dtype, got {dtype}")
 
-    # Rank within each group
-    result = (
-        pl_df
-        .with_columns([
-            pl.col(value_col)
-            .rank(method=pl_method)
-            .over(group_col)
-            .alias("_rank")
-        ])
-    )
+    value = pl.col(value_col)
+    if dtype == pl.Null:
+        value = value.cast(pl.Float64)
+        dtype = pl.Float64
+    # FP cs_rank uses np.isfinite. Keep integer values in their original dtype
+    # so adjacent int64 values above 2**53 do not collapse into artificial ties.
+    valid = value.is_finite() if dtype.is_float() else value.is_not_null()
+    rank_input = pl.when(valid).then(value).otherwise(None)
+    ranks = rank_input.rank(method=method).over(group_col)
+    valid_count = valid.cast(pl.UInt64).sum().over(group_col)
 
     if pct:
-        # Convert to percentile: (rank - 1) / (n - 1)
-        result = result.with_columns([
-            pl.when(pl.col("_rank").is_not_null())
+        # Test validity outside the singleton case: invalid members remain NaN.
+        ranks = (
+            pl.when(valid)
             .then(
-                (pl.col("_rank") - 1.0) /
-                (pl.col(value_col).count().over(group_col) - 1.0)
+                pl.when(valid_count == 1)
+                .then(pl.lit(0.5))
+                .otherwise((ranks - 1.0) / (valid_count - 1).cast(pl.Float64))
             )
-            .otherwise(None)
-            .alias("_rank")
-        ])
+            .otherwise(pl.lit(float("nan")))
+        )
+    else:
+        ranks = pl.when(valid).then(ranks).otherwise(pl.lit(float("nan")))
+    result = pl_df.with_columns(ranks.alias("_rank"))
 
     if return_pandas:
-        return result.select("_rank").to_pandas()["_rank"]
+        output = result.select("_rank").to_pandas()["_rank"]
+        output.index = df.index
+        return output
     else:
         return result.select("_rank").to_series()
 
@@ -139,30 +156,50 @@ def cs_zscore_polars(
     """
     _require_polars()
 
-    if isinstance(df, pd.DataFrame):
-        pl_df = pl.from_pandas(df)
-        return_pandas = True
-    else:
-        pl_df = df
-        return_pandas = False
+    pl_df, return_pandas = _polars_frame_and_return_mode(df)
+    dtype = pl_df.schema.get(value_col)
+    if dtype is None:
+        raise ValueError(f"value column {value_col!r} is missing")
+    if not _numeric_dtype(dtype):
+        raise TypeError(f"z-score values must have a numeric dtype, got {dtype}")
 
-    # Compute mean and std per group
-    result = (
-        pl_df
-        .with_columns([
-            pl.col(value_col).mean().over(group_col).alias("_mean"),
-            pl.col(value_col).std(ddof=ddof).over(group_col).alias("_std"),
-        ])
-        .with_columns([
-            pl.when(pl.col("_std") > 0)
-            .then((pl.col(value_col) - pl.col("_mean")) / pl.col("_std"))
-            .otherwise(constant_value)
-            .alias("_zscore")
-        ])
+    value = pl.col(value_col)
+    if dtype == pl.Null:
+        value = value.cast(pl.Float64)
+        dtype = pl.Float64
+    # np.nanmean/nanstd omit NaN (and null after pandas conversion), but retain
+    # +/-Inf. Replace NaN with null only in the aggregation expressions.
+    clean = (
+        pl.when(value.is_nan()).then(None).otherwise(value)
+        if dtype.is_float()
+        else value
+    )
+    mean = clean.mean().over(group_col)
+    std = clean.std(ddof=ddof).over(group_col)
+    # NumPy NaN > 0 is False. Guard NaN explicitly; do not filter Inf, since an
+    # infinite std still satisfies NumPy's std > 0 condition.
+    positive_std = (std > 0) & ~std.is_nan()
+    normalized = (
+        pl.when(positive_std)
+        .then((value - mean) / std)
+        .otherwise(pl.lit(constant_value))
+    )
+    missing = (
+        value.is_null() | value.is_nan()
+        if dtype.is_float()
+        else value.is_null()
+    )
+    result = pl_df.with_columns(
+        pl.when(missing)
+        .then(pl.lit(float("nan")))
+        .otherwise(normalized)
+        .alias("_zscore")
     )
 
     if return_pandas:
-        return result.select("_zscore").to_pandas()["_zscore"]
+        output = result.select("_zscore").to_pandas()["_zscore"]
+        output.index = df.index
+        return output
     else:
         return result.select("_zscore").to_series()
 
