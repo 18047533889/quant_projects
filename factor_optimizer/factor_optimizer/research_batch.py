@@ -523,7 +523,7 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
     from quant_evaluator.contracts.factor_batch import FactorBatch
     import pandas as pd
 
-    outputs, results = [], {}
+    results = {}
     train_pair_ic_split = _prepare_pair_ic_split(
         batch, labels, split.train_indices)
     # These exact-content caches are bounded and local to this invocation.
@@ -543,6 +543,10 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
             diagnose_training_batch=diagnose_training_batch,
             max_chunk_bytes=128 * 1024 * 1024,
         )
+    # Factor-major writes touch only the current factor's pages. The final
+    # transpose is a view; FactorBatch still makes its immutable ownership copy.
+    factor_outputs = np.empty(
+        (len(batch.factor_ids), *batch.values.shape[:2]), dtype=np.float64)
     for k, factor_id in enumerate(batch.factor_ids):
         raw = np.array(batch.values[:, :, k], dtype=float, copy=True)
         if batch.validity is not None:
@@ -941,12 +945,12 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
             reason = f"{type(exc).__name__}: {exc}"
         diagnosis['candidate_budget']['evaluated'] = sum(
             record['status'] == 'train_evaluated' for record in records)
-        outputs.append(out)
+        factor_outputs[k] = out
         results[factor_id] = FactorOptimizationResult(
             factor_id, status, chosen.family, chosen.identity, chosen, train_gain, lower,
             tuple(records), reason, validation_identity, validation_coverage, MappingProxyType(diagnosis),
             MappingProxyType(baseline_record), MappingProxyType(joint_record), materialization_error)
-    values = np.stack(outputs, axis=-1)
+    values = factor_outputs.transpose(1, 2, 0)
     optimized = FactorBatch(batch.factor_ids, batch.time_axis, batch.asset_axis,
                             values, validity=np.isfinite(values),
                             context_refs={"optimization_mode": "research_only", "split": split.identity})

@@ -75,6 +75,18 @@ def test_overbudget_four_factor_output_preserves_raw_values_and_ownership(monkey
         selection_objective="rank_ic",
     )
 
+    full_output_stacks = []
+    original_stack = np.stack
+
+    def observe_stack(arrays, *args, **kwargs):
+        if (isinstance(arrays, (list, tuple))
+                and len(arrays) == len(batch.factor_ids)
+                and all(isinstance(array, np.ndarray)
+                        and array.shape == expected.shape[:2] for array in arrays)):
+            full_output_stacks.append(len(arrays))
+        return original_stack(arrays, *args, **kwargs)
+
+    monkeypatch.setattr(np, "stack", observe_stack)
     result = optimize_factor_batch(batch, labels, config=config, allow_research=True)
 
     output = result.optimized
@@ -96,3 +108,4 @@ def test_overbudget_four_factor_output_preserves_raw_values_and_ownership(monkey
     with pytest.raises(ValueError):
         output.values.flags.writeable = True
     np.testing.assert_array_equal(output.values, expected)
+    assert full_output_stacks == []
