@@ -57,6 +57,9 @@ from factor_assets.clustering.incremental_recall import (
     RequestLocalMemberMatrixCache, unit_cosine_scores, scan_exact_member_winner,
 )
 
+from factor_assets.clustering.incremental_batch_recall import (
+    prepare_oversized_batch_winners,
+)
 from factor_assets.contracts._canonical import canonical_digest
 
 try:
@@ -960,8 +963,17 @@ def incremental_assign(
             except Exception:
                 batch_ann = None
 
-    for fp in fingerprints:
-        query = _to_embedding(fp)
+    batch_unit_queries = []
+    batch_exact_winners = (prepare_oversized_batch_winners(
+        fingerprints, cluster_versions, fingerprints_by_id,
+        cache_bytes=_EXACT_MEMBER_CACHE_BYTES,
+        to_embedding=_to_embedding, normalize_rows=_normalize_rows,
+        unit_queries_out=batch_unit_queries,
+    ) if batch_ann is None else {})
+
+    for query_index, fp in enumerate(fingerprints):
+        query = (batch_unit_queries[0][query_index] if batch_unit_queries
+                 else _to_embedding(fp))
         best: list[IncrementalCandidate] = []
         any_measured = False
         ann_query_failed = False
@@ -987,7 +999,7 @@ def incremental_assign(
             best = [max(candidates, key=lambda item: item.similarity) for candidates in grouped.values()]
             any_measured = bool(best)
         exact_clusters = cluster_versions.items() if batch_ann is None or ann_query_failed else ()
-        unit_query = None
+        unit_query = query if batch_unit_queries else None
         for cid, cv in exact_clusters:
             if not cv.member_factor_ids:
                 continue
@@ -998,10 +1010,22 @@ def incremental_assign(
                     continue
                 if unit_query is None:
                     unit_query = _normalize_rows(query.reshape(1, -1))[0]
-                candidate = _best_exact_in_chunks(
-                    unit_query, fingerprints_by_id, cv.member_factor_ids,
-                    cid, policy.min_measure_floor,
-                )
+                if cid in batch_exact_winners:
+                    winner = batch_exact_winners[cid][query_index]
+                    candidate = None
+                    if winner is not None:
+                        member_id, similarity = winner
+                        status = (PairwiseEvidenceStatus.MEASURED_LOW
+                                  if similarity < policy.min_measure_floor
+                                  else PairwiseEvidenceStatus.APPROXIMATE)
+                        candidate = IncrementalCandidate(
+                            factor_id=member_id, similarity=similarity,
+                            cluster_id=cid, evidence_status=status)
+                else:
+                    candidate = _best_exact_in_chunks(
+                        unit_query, fingerprints_by_id, cv.member_factor_ids,
+                        cid, policy.min_measure_floor,
+                    )
             else:
                 present, unit_matrix = exact_member_cache.get(cid, lambda cv=cv:
                     _prepare_unit_members(fingerprints_by_id, cv.member_factor_ids))

@@ -149,3 +149,100 @@ def scan_exact_member_winner(
     if winner_id is None:
         return None
     return winner_id, winner_score
+
+DEFAULT_MEMBER_SCAN_MAX_BATCH_QUERIES = 256
+
+
+def scan_exact_member_winners(
+    fingerprints_by_id,
+    member_ids: Sequence[str],
+    unit_queries: np.ndarray,
+    *,
+    to_embedding: Callable[[object], np.ndarray],
+    normalize_rows: Callable[[np.ndarray], np.ndarray],
+    max_chunk_rows: int = DEFAULT_MEMBER_SCAN_CHUNK_ROWS,
+    max_chunk_bytes: int = DEFAULT_MEMBER_SCAN_CHUNK_BYTES,
+    max_batch_queries: int = DEFAULT_MEMBER_SCAN_MAX_BATCH_QUERIES,
+) -> list[Optional[tuple[str, float]]]:
+    """Return exact member winners for a bounded query batch.
+
+    Each member embedding is converted once and each member chunk is normalized
+    once for the whole query batch. Queries are then scored one at a time with
+    the same fixed rowwise Float64 reduction as :func:`scan_exact_member_winner`;
+    no query-by-member score matrix is formed.
+
+    Output order matches the query rows. Missing members are skipped, and each
+    query keeps the first member attaining the maximum score. Every member
+    chunk is scored and validated for every query, including chunks after a
+    provisional winner. The query array is bounded by ``max_batch_queries``; member
+    scratch follows the same row and byte caps as the single-query helper.
+    These limits cover helper-owned workspace, not input arrays or total RSS.
+    """
+    if not isinstance(unit_queries, np.ndarray) or unit_queries.ndim != 2:
+        raise ValueError("exact unit recall queries must be a two-dimensional matrix")
+    if unit_queries.dtype.kind not in "fiu" or not np.isfinite(unit_queries).all():
+        raise ValueError("exact unit recall queries must be finite real numeric values")
+    if unit_queries.shape[1] <= 0:
+        raise ValueError("exact unit recall query width must be positive")
+    if (isinstance(max_batch_queries, bool) or not isinstance(max_batch_queries, int)
+            or max_batch_queries <= 0):
+        raise ValueError("max_batch_queries must be a positive integer")
+    if unit_queries.shape[0] > max_batch_queries:
+        raise ValueError(
+            f"exact unit recall query batch exceeds {max_batch_queries} rows"
+        )
+    if isinstance(max_chunk_rows, bool) or not isinstance(max_chunk_rows, int) or max_chunk_rows <= 0:
+        raise ValueError("max_chunk_rows must be a positive integer")
+    if isinstance(max_chunk_bytes, bool) or not isinstance(max_chunk_bytes, int) or max_chunk_bytes <= 0:
+        raise ValueError("max_chunk_bytes must be a positive integer")
+
+    query_count, width = unit_queries.shape
+    if query_count == 0:
+        return []
+    row_bytes = width * np.dtype(np.float64).itemsize
+    rows_by_bytes = max(
+        1,
+        max_chunk_bytes // max(1, row_bytes * _MEMBER_SCAN_SCRATCH_ARRAYS),
+    )
+    chunk_capacity = min(max_chunk_rows, rows_by_bytes)
+
+    winner_ids: list[Optional[str]] = [None] * query_count
+    winner_scores = np.full(query_count, -np.inf, dtype=np.float64)
+    chunk_ids: list[str] = []
+    chunk_rows = np.empty((chunk_capacity, width), dtype=np.float64)
+    used_rows = 0
+
+    def score_chunk(count: int) -> None:
+        unit_matrix = normalize_rows(chunk_rows[:count])
+        for query_index in range(query_count):
+            scores = _rowwise_unit_cosine_scores(
+                unit_queries[query_index], unit_matrix
+            )
+            position = int(np.argmax(scores))
+            score = float(scores[position])
+            # Strict comparison preserves the first member on exact ties.
+            if winner_ids[query_index] is None or score > winner_scores[query_index]:
+                winner_ids[query_index] = chunk_ids[position]
+                winner_scores[query_index] = score
+
+    for fid in member_ids:
+        fingerprint = fingerprints_by_id.get(fid)
+        if fingerprint is None:
+            continue
+        if fingerprint.factor_id != fid:
+            raise ValueError("fingerprint mapping key must match fingerprint.factor_id")
+        embedding = np.asarray(to_embedding(fingerprint), dtype=np.float64)
+        if embedding.ndim != 1 or embedding.shape != (width,):
+            raise ValueError("member embedding must be a vector matching the query width")
+        chunk_rows[used_rows] = embedding
+        chunk_ids.append(fid)
+        used_rows += 1
+        if used_rows == chunk_capacity:
+            score_chunk(used_rows)
+            used_rows = 0
+            chunk_ids.clear()
+
+    if used_rows:
+        score_chunk(used_rows)
+    return [None if fid is None else (fid, float(winner_scores[i]))
+            for i, fid in enumerate(winner_ids)]

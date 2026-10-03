@@ -45,5 +45,8 @@ def test_oversized_public_recall_matches_full_reference_without_full_preparation
     actual = incremental.incremental_assign(queries, clusters, mapping)
     assert actual.assignments == reference.assignments
     assert actual.candidates == reference.candidates
-    assert len(observed) >= 8  # two query normalizations + three chunks per query
+    # Queries retain single-row normalization; the shared member chunks are
+    # prepared once for both queries, without a full 600-row allocation.
+    assert observed[:len(queries)] == [1] * len(queries)
+    assert observed[len(queries):] == [256, 256, 88]
     assert max(observed) == 256
