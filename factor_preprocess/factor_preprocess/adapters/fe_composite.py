@@ -30,6 +30,11 @@ def get_fe_composite_identity(name: str, recipe_identity: str | None) -> dict:
             get_robust_ewma_identity,
         )
         return get_robust_ewma_identity(name, recipe_identity)
+    if name == "event_decay":
+        from factor_preprocess.adapters.fe_smoothing_identity import (
+            get_smoothing_identity,
+        )
+        return get_smoothing_identity(name, recipe_identity)
     if name in {"ewma", "one_sided_iir_lowpass"}:
         from factor_preprocess.adapters.fe_smoothing_identity import get_smoothing_identity
         return get_smoothing_identity(name, recipe_identity)

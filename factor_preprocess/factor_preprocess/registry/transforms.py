@@ -1695,6 +1695,12 @@ def create_default_registry() -> TransformRegistry:
     )
 
     registry.enrich(
+        "event_decay", implementation_origin="FE_COMPOSITE", fe_operator_id=None,
+        fit_kind="stateless",
+        fe_equivalent_semantics="FE_COMPOSITE:long_ewm.event_decay_native:v1",
+    )
+
+    registry.enrich(
         "one_sided_iir_lowpass", implementation_origin="FE_COMPOSITE",
         fe_operator_id=None, fit_kind="stateless",
         fe_equivalent_semantics="FE_COMPOSITE:long_ewm.lagged_iir_lowpass:v1",

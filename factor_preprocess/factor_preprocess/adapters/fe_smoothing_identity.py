@@ -11,6 +11,7 @@ _SCHEMA = "factor-preprocess-execution-identity/v1"
 _RECIPES = {
     "ewma": "FE_COMPOSITE:long_smoothing.lagged_ewma:v1",
     "one_sided_iir_lowpass": "FE_COMPOSITE:long_ewm.lagged_iir_lowpass:v1",
+    "event_decay": "FE_COMPOSITE:long_ewm.event_decay_native:v1",
 }
 
 
@@ -54,6 +55,16 @@ def get_smoothing_identity(name: str, recipe_identity: str | None) -> dict:
                  native_long_ewm.collect_lagged_ewma),
             )
             adapter = fe_smoothing.execute_ewma
+        elif name == "event_decay":
+            from factor_engine.backend import native_event_decay
+            entrypoint = long_ewm.event_decay_native
+            callables = (
+                ("factor_engine.backend.long_ewm.event_decay_native",
+                 long_ewm.event_decay_native),
+                ("factor_engine.backend.native_event_decay.collect_event_decay",
+                 native_event_decay.collect_event_decay),
+            )
+            adapter = fe_smoothing.execute_event_decay
         else:
             entrypoint = long_ewm.lagged_iir_lowpass
             callables = (
@@ -99,6 +110,8 @@ def get_smoothing_identity(name: str, recipe_identity: str | None) -> dict:
         "adapter": (
             "factor_preprocess.adapters.fe_smoothing.execute_ewma"
             if name == "ewma" else
+            "factor_preprocess.adapters.fe_smoothing.execute_event_decay"
+            if name == "event_decay" else
             "factor_preprocess.adapters.fe_smoothing.execute_iir_lowpass"
         ),
         "fp_adapter_digest": fp_adapter_digest,
@@ -111,6 +124,13 @@ def get_smoothing_identity(name: str, recipe_identity: str | None) -> dict:
             "not a full transitive runtime closure"
         ),
     }
+    if name == "event_decay":
+        payload["policy_parameters"] = {
+            "alpha": "min(log(2)/halflife, 1)",
+            "min_periods": "positive integer finite lagged samples; state updates during warmup",
+            "gaps": "non-finite lagged values reset state and contiguous warmup",
+            "lag": "strict shift(1)",
+        }
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return {
         **payload,

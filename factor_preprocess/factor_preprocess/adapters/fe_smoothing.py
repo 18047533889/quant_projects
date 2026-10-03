@@ -10,6 +10,7 @@ ROLLING_STD_RECIPE = "FE_COMPOSITE:long_smoothing.lagged_std:v1"
 ROLLING_ZSCORE_RECIPE = "FE_COMPOSITE:long_smoothing.lagged_zscore:v1"
 EWMA_RECIPE = "FE_COMPOSITE:long_smoothing.lagged_ewma:v1"
 IIR_RECIPE = "FE_COMPOSITE:long_ewm.lagged_iir_lowpass:v1"
+EVENT_DECAY_RECIPE = "FE_COMPOSITE:long_ewm.event_decay_native:v1"
 ROBUST_EWMA_RECIPE = "FE_COMPOSITE:long_robust_ewm.lagged_robust_ewma:v1"
 
 
@@ -23,6 +24,7 @@ def get_fe_composite_executor(name: str, recipe_identity: str | None):
         "rolling_zscore": ROLLING_ZSCORE_RECIPE,
         "ewma": EWMA_RECIPE,
         "one_sided_iir_lowpass": IIR_RECIPE,
+        "event_decay": EVENT_DECAY_RECIPE,
         "robust_ewma": ROBUST_EWMA_RECIPE,
     }
     if name not in recipes or recipe_identity != recipes[name]:
@@ -43,6 +45,14 @@ def get_fe_composite_executor(name: str, recipe_identity: str | None):
         except (ImportError, ModuleNotFoundError):
             return None
         return execute_iir_lowpass
+    if name == "event_decay":
+        try:
+            import polars  # noqa: F401
+            from factor_engine.backend.long_ewm import event_decay_native  # noqa: F401
+            from factor_engine.backend.native_event_decay import collect_event_decay  # noqa: F401
+        except (ImportError, ModuleNotFoundError):
+            return None
+        return execute_event_decay
     if name == "robust_ewma":
         try:
             import polars  # noqa: F401
@@ -135,4 +145,15 @@ def execute_robust_ewma(values: pd.DataFrame, halflife: float,
         values, halflife=halflife, winsor_std=winsor_std,
         min_periods=min_periods, asset_col=asset_col,
         time_col=time_col, value_col=value_col,
+    ).rename(None)
+
+
+def execute_event_decay(values: pd.DataFrame, halflife: float,
+                        min_periods: int = 1, asset_col: str = "asset_id",
+                        time_col: str = "date", value_col: str = "value") -> pd.Series:
+    """Delegate FP-compatible event decay to FE's Polars numeric collector."""
+    from factor_engine.backend.long_ewm import event_decay_native
+    return event_decay_native(
+        values, halflife=halflife, min_periods=min_periods,
+        asset_col=asset_col, time_col=time_col, value_col=value_col,
     ).rename(None)

@@ -100,7 +100,7 @@ fail-closed behavior when FE provenance is incomplete.
 | `kama` | `SMOOTH:kama` | Kaufman adaptive MA (recursive, ER lookback) | `KAMA` | technical | none/partial | no | yes | FE `KAMA` is the technical TA-Lib family with different period semantics; FP KAMA is recursive forward-only with explicit ER window and shift(1) causality — not numerically interchangeable | **FP_NATIVE** |
 | `one_sided_iir_lowpass` | `SMOOTH:one_sided_iir_lowpass` | one-pole IIR `y_t=(1-α)y_{t-1}+αx_{t-1}`; non-finite lag resets state | native long-panel recipe `long_ewm.lagged_iir_lowpass` | `FE_COMPOSITE:long_ewm.lagged_iir_lowpass:v1`; exact alpha, prior-row timing, and gap reset | exact; stable per-asset order restores interleaved rows | no | yes | Production search domain is alpha ∈ [0.05, 0.5]; direct transform accepts (0, 1]. This recipe covers native long-panel execution, not FE DSL or export support. | **FE_COMPOSITE** |
 | `kalman_local_level` | `SMOOTH:kalman_local_level` | scalar Kalman local-level filter (lagged); non-finite lag resets state | — | — | none | no | yes | no FE equivalent (stateful filter); FP fitted/state recursion | **FP_NATIVE** |
-| `event_decay` | `EVENT_DECAY:short_halflife` | causal short-halflife event persistence | FE `event_*` decay family exists (e.g. `erd_recency_decay`, `ts_decay_exp_window`) | — | none | no | yes | FE event-decay operators are separate authoring surfaces with different halflife/event-response semantics; FP `event_decay` (DLIB-FP-014) is the eligibility-engine executable | **FP_NATIVE** |
+| `event_decay` | `EVENT_DECAY:short_halflife` | prior-row numeric EMA; alpha=min(log(2)/halflife, 1); non-finite lag resets state and warmup | native long-panel recipe `long_ewm.event_decay_native` | `FE_COMPOSITE:long_ewm.event_decay_native:v1`; identity binds adapter, entrypoint, Polars collector, runtime and policy | small scalar-oracle, reset, warmup, extreme-value and prefix tests | no | yes | registry production route uses FE and keeps halflife domain [1,5]; direct FP function remains the scalar reference; direct FE adapter accepts coercible finite-positive half-life. No FE DSL/export binding. FE `EventDecayAsOf` is semantically distinct. | **FE_COMPOSITE** |
 
 ## Volatility
 
@@ -136,11 +136,11 @@ with `requires_fit=False`.
 ## Routing summary (R61-FI-041)
 
 - **FE_OPERATOR (5):** `cs_rank`, `cs_demean`, `cs_winsor`, `forward_fill`, `missing_indicator`.
-- **FE_COMPOSITE (12):** `trailing_sma`, `rolling_mean`, `trailing_median`,
+- **FE_COMPOSITE (13):** `trailing_sma`, `rolling_mean`, `trailing_median`,
   `rolling_std`, `rolling_zscore`, `ewma`, `one_sided_iir_lowpass`,
-  `robust_ewma`, `ols_neutralize`, `industry_neutral`, `size_neutral`,
+  `robust_ewma`, `event_decay`, `ols_neutralize`, `industry_neutral`, `size_neutral`,
   `dual_neutral`.
-- **FP_NATIVE (26):** everything else. FE-backed transforms retain their
+- **FP_NATIVE (25):** everything else. FE-backed transforms retain their
   FP-native kernel for explicit research fallback (plan §26 F3). Production
   execution requires FE and fails closed when FE is unavailable; FE remains
   an optional dependency of FP.
