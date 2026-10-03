@@ -83,6 +83,76 @@ def _fe_rank_execution_binding():
     }
 
 
+def _fe_neg_execution_binding():
+    """Bind the FE neg backend selected by the SIGN adapter at runtime."""
+    import hashlib
+    import importlib.metadata
+    import inspect
+    import numpy as np
+    import pandas as pd
+    from factor_engine.cleaned_operators.registry import (
+        OperatorRegistry, _contract_hash, _impl_source_hash,
+    )
+    from factor_optimizer.adapters.repair_execution import _execute_fe_neg
+
+    canonical = OperatorRegistry.resolve_canonical_strict("neg")
+    # Keep lookup order and mode identical to _execute_fe_neg: Polars first,
+    # then pandas_numpy only when the Polars registration is absent.
+    operator = OperatorRegistry.get("neg", backend="polars", mode="any")
+    if operator is not None:
+        try:
+            import polars as pl
+        except ImportError as exc:
+            raise RuntimeError(
+                "FactorEngine neg selected Polars but Polars cannot be imported"
+            ) from exc
+        backend = "polars"
+        polars_version = getattr(pl, "__version__", None)
+        if not isinstance(polars_version, str) or not polars_version:
+            raise RuntimeError("cannot certify the selected Polars version")
+    else:
+        operator = OperatorRegistry.get(
+            "neg", backend="pandas_numpy", mode="any")
+        if operator is None:
+            raise RuntimeError("FactorEngine canonical 'neg' has no executable backend")
+        backend = "pandas_numpy"
+        try:
+            polars_version = importlib.metadata.version("polars")
+        except importlib.metadata.PackageNotFoundError:
+            polars_version = "not-installed"
+
+    try:
+        adapter_source = inspect.getsource(_execute_fe_neg)
+        implementation_hash = _impl_source_hash(operator)
+        contract_hash = _contract_hash(operator)
+    except (OSError, TypeError, ValueError) as exc:
+        raise RuntimeError("cannot certify the selected FactorEngine neg implementation") from exc
+    if not isinstance(implementation_hash, str) or not implementation_hash:
+        raise RuntimeError("FactorEngine neg implementation identity is empty")
+    entry = OperatorRegistry.catalog_entry(canonical)
+    return {
+        "route": "factor_engine.operator_registry",
+        "binding": {
+            "canonical": canonical,
+            "backend": backend,
+            "mode": "any",
+            "semantic_version": entry.get("semantic_version"),
+            "operator_type": {
+                "module": type(operator).__module__,
+                "qualname": type(operator).__qualname__,
+            },
+            "operator_implementation_hash": implementation_hash,
+            "operator_contract_hash": contract_hash,
+            "adapter_implementation_hash": hashlib.sha256(
+                adapter_source.encode("utf-8")).hexdigest(),
+            "input_contract": "pandas.Series->float64; FE single-column x",
+            "numpy_version": np.__version__,
+            "pandas_version": pd.__version__,
+            "polars_version": polars_version,
+        },
+    }
+
+
 def _execution_binding(plan):
     """Describe only execution paths whose semantic authority is known."""
     from factor_optimizer.adapters.repair_execution import ValueRepairPlan
@@ -104,8 +174,12 @@ def _execution_binding(plan):
         }
         route = direct_routes.get(plan.transform)
         if plan.transform == "sign":
-            route = ("pandas.multiply.v1" if dict(plan.parameters).get("multiplier") == 1.0
-                     else direct_routes["sign"])
+            multiplier = dict(plan.parameters).get("multiplier")
+            if type(multiplier) is not float or multiplier not in {-1.0, 1.0}:
+                raise ValueError("uncertified SIGN_ORIENTATION multiplier")
+            if multiplier == -1.0:
+                return _fe_neg_execution_binding()
+            route = "pandas.multiply.v1"
         elif plan.transform == "cs_rank":
             return (_fe_rank_execution_binding() if dict(plan.parameters).get(
                 "method", "average") == "average" else
