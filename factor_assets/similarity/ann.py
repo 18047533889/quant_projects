@@ -76,6 +76,25 @@ def _validate_query(query_embedding: "np.ndarray", embedding_dim: int, k: int) -
         raise ValueError("zero query vectors are not valid embeddings")
     return np.ascontiguousarray(_unit_rows(query_embedding.reshape(1, -1))[0], dtype=np.float32)
 
+def _validate_query_batch(query_embeddings: "np.ndarray", embedding_dim: int, k: int) -> "np.ndarray":
+    """Validate and normalize a complete query matrix before backend access."""
+    _validate_positive_k(k)
+    if not isinstance(query_embeddings, np.ndarray) or query_embeddings.ndim != 2:
+        raise ValueError("query_embeddings must be a 2D numpy array")
+    if query_embeddings.shape[1] != embedding_dim:
+        raise ValueError(
+            f"Expected embedding_dim={embedding_dim}, got {query_embeddings.shape[1]}"
+        )
+    if query_embeddings.dtype.kind not in "fiu":
+        raise ValueError("query_embeddings must contain real numeric values")
+    if not np.isfinite(query_embeddings).all():
+        raise ValueError("query_embeddings must contain only finite values")
+    if query_embeddings.shape[0] == 0:
+        return np.empty((0, embedding_dim), dtype=np.float32)
+    if np.any(~np.any(query_embeddings != 0, axis=1)):
+        raise ValueError("zero query vectors are not valid embeddings")
+    return np.ascontiguousarray(_unit_rows(query_embeddings), dtype=np.float32)
+
 try:
     import numpy as np
 except ImportError:
@@ -188,6 +207,19 @@ class ANNIndex(Protocol):
         Returns:
             List of ANNSearchResult ordered by distance (ascending)
         """
+        ...
+
+
+class BatchANNIndex(Protocol):
+    """Optional matrix-query capability; legacy ANNIndex is unchanged."""
+
+    def search_batch(
+        self,
+        query_embeddings: "np.ndarray",
+        k: int = 10,
+        min_similarity: Optional[float] = None,
+    ) -> List[List[ANNSearchResult]]:
+        """Return one ordered neighbor list per query row."""
         ...
 
 
@@ -306,6 +338,54 @@ class FaissANNIndex:
             ))
 
         return results
+
+    def search_batch(
+        self,
+        query_embeddings: "np.ndarray",
+        k: int = 10,
+        min_similarity: Optional[float] = None,
+    ) -> List[List[ANNSearchResult]]:
+        """Search many queries in one exact FAISS call.
+
+        The outer result position corresponds to the same input query row;
+        each inner list follows scalar search semantics. Equal-score neighbors
+        have no stable factor-ID ordering guarantee.
+
+        The whole query matrix is validated before FAISS is called, so an
+        invalid row rejects the batch without partially running a search.
+        An empty matrix returns [] after validating its shape and options.
+        """
+        _validate_min_similarity(min_similarity)
+        queries = _validate_query_batch(query_embeddings, self.embedding_dim, k)
+        if len(queries) == 0:
+            return []
+        if len(self._factor_ids) == 0:
+            return [[] for _ in queries]
+
+        if self.normalize:
+            faiss.normalize_L2(queries)
+        k_actual = min(k, len(self._factor_ids))
+        distances, indices = self._index.search(queries, k_actual)
+
+        batch_results: List[List[ANNSearchResult]] = []
+        for query_distances, query_indices in zip(distances, indices):
+            results: List[ANNSearchResult] = []
+            for dist, idx in zip(query_distances, query_indices):
+                if idx == -1:
+                    continue
+                similarity = _canonical_cosine(dist) if self.normalize else None
+                backend_distance = 1.0 - similarity if self.normalize else abs(float(dist))
+                if min_similarity is not None and (
+                    similarity is None or similarity < min_similarity
+                ):
+                    continue
+                results.append(ANNSearchResult(
+                    factor_id=self._factor_ids[idx],
+                    distance=backend_distance,
+                    similarity_score=similarity,
+                ))
+            batch_results.append(results)
+        return batch_results
 
     def search_by_id(
         self,
@@ -540,6 +620,7 @@ __all__ = [
     "ANNBackend",
     "ANNSearchResult",
     "ANNIndex",
+    "BatchANNIndex",
     "FaissANNIndex",
     "AnnoyANNIndex",
     "create_ann_index",

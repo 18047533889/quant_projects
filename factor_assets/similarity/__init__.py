@@ -18,6 +18,7 @@ try:
         ANNBackend,
         ANNSearchResult,
         ANNIndex,
+        BatchANNIndex,
         FaissANNIndex,
         AnnoyANNIndex,
         create_ann_index,
@@ -29,6 +30,7 @@ except ImportError:
     ANNBackend = None
     ANNSearchResult = None
     ANNIndex = None
+    BatchANNIndex = None
     FaissANNIndex = None
     AnnoyANNIndex = None
     create_ann_index = None
@@ -44,6 +46,7 @@ __all__ = [
     "ANNBackend",
     "ANNSearchResult",
     "ANNIndex",
+    "BatchANNIndex",
     "FaissANNIndex",
     "AnnoyANNIndex",
     "create_ann_index",
