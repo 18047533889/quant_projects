@@ -212,8 +212,16 @@ def diagnose_layer_decay(batch, labels, split, config, factor_index, *,
                   assignment_cache_status="bounded_unique_sources")
     if good.sum() < config.minimum_train_days or good.mean() < config.minimum_coverage:
         return record
-    excess = cube - cube.mean(axis=1, keepdims=True)
-    profile = excess[good].mean(axis=0)
+    from factor_optimizer.research_numeric import guarded_finite_mean
+    with np.errstate(over="ignore", invalid="ignore"):
+        excess = cube - guarded_finite_mean(cube, axis=1, keepdims=True)
+    if not np.isfinite(excess[good]).all():
+        record["reason"] = "centered quantile returns are not representable as finite Float64"
+        return record
+    profile = guarded_finite_mean(excess[good], axis=0)
+    if not np.isfinite(profile).all():
+        record["reason"] = "decay profile is not representable as finite Float64"
+        return record
     fold_positions = np.array_split(np.arange(len(idx)), 3)
     enough_folds = all(good[p].sum() >= 10 for p in fold_positions)
     layers = []
@@ -221,7 +229,8 @@ def diagnose_layer_decay(batch, labels, split, config, factor_index, *,
         curve = profile[layer]
         direction = np.sign(curve[0])
         stable = enough_folds and direction != 0 and all(
-            direction*excess[p[good[p]], layer, 0].mean() > 0 for p in fold_positions)
+            direction*guarded_finite_mean(excess[p[good[p]], layer, 0], axis=0) > 0
+            for p in fold_positions)
         crossings = [lag for lag, value in zip(lags[1:], curve[1:])
                      if direction*value <= .5*abs(curve[0])]
         half = crossings[0] if stable and crossings else None

@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**88 个 Python 模块、963 个公开函数/类/方法定义**。
+扫描实际包目录：**89 个 Python 模块、964 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -74,6 +74,7 @@
 | [factor_optimizer/research_fitness.py](../factor_optimizer/research_fitness.py) | 12 | QE-owned research portfolio metrics and joint paired selection policy. |
 | [factor_optimizer/research_ic_antithetic.py](../factor_optimizer/research_ic_antithetic.py) | 1 | Exact sign-antithetic RankIC cache support for adjacent TRAIN proposals. |
 | [factor_optimizer/research_manifest.py](../factor_optimizer/research_manifest.py) | 6 | Bind declared COS factor values to their exact research landing record. |
+| [factor_optimizer/research_numeric.py](../factor_optimizer/research_numeric.py) | 1 | Numerically guarded reductions for research diagnostics. |
 | [factor_optimizer/search/__init__.py](../factor_optimizer/search/__init__.py) | 0 | Search orchestration for factor mutation optimization. |
 | [factor_optimizer/search/categorical_strategy.py](../factor_optimizer/search/categorical_strategy.py) | 10 | Categorical search strategy (TPE-style) for treatment auto-optimization. |
 | [factor_optimizer/search/conditional_search.py](../factor_optimizer/search/conditional_search.py) | 24 | Hierarchical conditional search over (repair-family, parameters) (R61-FI-035). |
@@ -7024,6 +7025,18 @@ Read declared datasets through DataAccess; enforce URI, bytes and SHA256.
 
 参数：`(store, manifest_dataset, factor_dataset, factor_id, *, manifest_params=None, factor_params=None, allow_research=False, max_object_mib=64, manifest_snapshot=None)`。
 
+## factor_optimizer/research_numeric.py
+
+Numerically guarded reductions for research diagnostics.
+
+### guarded_finite_mean
+
+[实际实现](../factor_optimizer/research_numeric.py#L9)。
+
+Use NumPy's ordinary mean, repairing only overflow of finite slices.
+
+参数：`(values, axis=None, keepdims=False)`。
+
 ## factor_optimizer/search/__init__.py
 
 Search orchestration for factor mutation optimization.
@@ -10918,7 +10931,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
 | `factor_optimizer/adapters/repair_execution.py` | `d64200649a33819d3013de96f89e18a02bb032ed3e20d6ce2c34d4490c7d3727` |
 | `factor_optimizer/adapters/repair_execution_identity.py` | `7a040606e3c67cb15a14564073afc43cc8887476ed2aa52a218b4a39125b95d2` |
-| `factor_optimizer/candidate_catalog.py` | `5414e62ee8c6d535a14e8ed823f387c09b8a423a3cab91870c66edda6d864926` |
+| `factor_optimizer/candidate_catalog.py` | `0280e26add401da06be47cb4580abcb60f408238ddd13817abdcd299fb282987` |
 | `factor_optimizer/capabilities.py` | `efb1fbf1b54b1b14f128ffe63c74f54f7a22f99a409a0761aac67fc1b6e3ed28` |
 | `factor_optimizer/complexity/__init__.py` | `79c8daf01ef8071b77eb7cbb8df4ae45fc9e2d4a4349f35d402a12f79936e696` |
 | `factor_optimizer/complexity/budget.py` | `d797ada6f52d0ccab3820450fb12e8f84f3f3dbb4e9f1e53f64eb5bb21a3469d` |
@@ -10961,12 +10974,13 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
 | `factor_optimizer/research_batch.py` | `e8fd2504701d6ed83f7a9c4276600cb3d9512b5b408dfe1ed7f9074a9b70c491` |
 | `factor_optimizer/research_batch_diagnostics.py` | `0ec5186c413814db6457342e97236b582e95a460033c11a6804b815c64d24b89` |
-| `factor_optimizer/research_decay.py` | `e997aa82d59dde6a6b934c3801584a84ebfa9e215b57c1f43414deaa3ba5911c` |
+| `factor_optimizer/research_decay.py` | `4dc4801f9197a9016df0dc36e5525e63d9120b9bc3f663d7f5bcde8e685ecfcb` |
 | `factor_optimizer/research_diagnostics.py` | `054ee2ad344395812656f1a7991983c58cade69e8c0b524d98981258cd6947ad` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |
 | `factor_optimizer/research_fitness.py` | `c7021a482a74b691f68ae6b706355b7f7c9544e8658d5aa81a921cceef4e6494` |
 | `factor_optimizer/research_ic_antithetic.py` | `b6b5241e9925bb7d4145c7005be6aa9cf56d8e3c8d7a4babbae1ae205b6ce704` |
 | `factor_optimizer/research_manifest.py` | `4ed34125751aea2cdedc7e75fecc96e3f2f09f5e9fae70afc42ff60486c1c90f` |
+| `factor_optimizer/research_numeric.py` | `ab737c023c195826ac3fee4942e550fb346be22928ea76cba89b6c0bf9c33a64` |
 | `factor_optimizer/search/__init__.py` | `bc5887aefa3239ffab88396650aa76b1b060b0e94d916e19923f8fa4e4a53419` |
 | `factor_optimizer/search/categorical_strategy.py` | `8dc0559f952cd904f436ec90c49e7fa2ec5e175593881d36128cdcead46506ac` |
 | `factor_optimizer/search/conditional_search.py` | `4b6dfeceacd797ad16f2406d0cd8c5cc1a4146c59c65c611f875356ce7251731` |
