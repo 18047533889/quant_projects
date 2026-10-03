@@ -429,6 +429,14 @@ class WindowedDataSource(DataSource):
         self._end = self._coerce_bound(end_date)
         self._column_cache: dict[str, Any] = {}
 
+    def estimate_scan_cost(self, *, fields, time_range=None, instruments=None, dataset=None):
+        """Retain the inner metadata estimate under the actual read window."""
+        from .window_scan_cost import estimate_window_scan_cost
+        return estimate_window_scan_cost(
+            self._inner, start=self._start, end=self._end, fields=fields,
+            time_range=time_range, instruments=instruments, dataset=dataset,
+        )
+
     def scan_polars_long(self, columns: list[str]):
         """Preserve lazy scans while enforcing the same inclusive time bounds."""
         import polars as pl
