@@ -26,6 +26,7 @@ from quant_evaluator.contracts.quantile_policy import (
     QuantileTiePolicy,
     validate_tie_policy,
 )
+from quant_evaluator.contracts.quantile_assignments import QuantileAssignmentBatch
 
 # Import Numba-optimized version if available
 try:
@@ -422,6 +423,8 @@ def assign_quantiles_batch(
 
     T, N, F = values.shape
     quantiles = np.full((T, N, F), -1, dtype=np.int32)
+    if T == 0 or N == 0 or F == 0:
+        return quantiles[:, :, 0] if original_ndim == 2 else quantiles
 
     # Optimization C: a SINGLE vectorized sort of the whole panel (axis=1) plus a
     # SINGLE vectorized boundary pass over every (t, f) -- instead of a per-(t,f)
@@ -507,6 +510,7 @@ def compute_quantile_returns(
         quantile_returns: shape (T, n_quantiles, F)
         quantile_counts: shape (T, n_quantiles, F)
     """
+    _validate_quantile_count(n_quantiles)
     _validate_min_assets(min_assets)
     values = factor_batch.values  # (T, N, F)
     if factor_batch.validity is not None:
@@ -521,37 +525,107 @@ def compute_quantile_returns(
     quantile_returns = np.full((T, n_quantiles, F), np.nan, dtype=np.float64)
     quantile_counts = np.zeros((T, n_quantiles, F), dtype=np.int32)
 
-    # Process each factor independently
+    # Process each factor independently, preserving the legacy f-then-t order.
     for f in range(F):
-        # Assign quantiles for this factor across all time periods
-        q_assignments_f = assign_quantiles_batch(values[:, :, f], n_quantiles=n_quantiles)  # (T, N)
+        q_assignments_f = assign_quantiles_batch(
+            values[:, :, f], n_quantiles=n_quantiles
+        )
+        _aggregate_quantile_assignments(
+            q_assignments_f, labels, n_quantiles=n_quantiles,
+            min_assets=min_assets,
+            out=(quantile_returns[:, :, f:f + 1],
+                 quantile_counts[:, :, f:f + 1]),
+        )
 
-        # Aggregate per time period
+    return quantile_returns, quantile_counts
+
+
+def _aggregate_quantile_assignments(
+    assignments: np.ndarray,
+    labels: np.ndarray,
+    *,
+    n_quantiles: int,
+    min_assets: int,
+    out: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Aggregate normalized labels using precomputed QE quantile IDs.
+
+    ``out`` may provide writable float64/int32 arrays (or views) of exact
+    shape ``(T, n_quantiles, F)`` to avoid allocating result panels.
+    """
+    q_ids = np.asarray(assignments)
+    if q_ids.ndim == 2:
+        q_ids = q_ids[:, :, None]
+    if q_ids.ndim != 3:
+        raise ValueError("assignments must have shape (T,N) or (T,N,F)")
+    T, N, F = q_ids.shape
+    if labels.shape != (T, N):
+        raise ValueError("normalized labels must match assignment time and asset axes")
+    expected_shape = (T, n_quantiles, F)
+    if out is None:
+        returns = np.full(expected_shape, np.nan, dtype=np.float64)
+        counts_out = np.zeros(expected_shape, dtype=np.int32)
+    else:
+        if not isinstance(out, tuple) or len(out) != 2:
+            raise TypeError("out must be a (returns, counts) tuple")
+        returns, counts_out = out
+        if not isinstance(returns, np.ndarray) or not isinstance(counts_out, np.ndarray):
+            raise TypeError("out buffers must be numpy arrays")
+        if returns.shape != expected_shape or counts_out.shape != expected_shape:
+            raise ValueError(f"out buffers must both have shape {expected_shape}")
+        if returns.dtype != np.dtype(np.float64) or counts_out.dtype != np.dtype(np.int32):
+            raise TypeError("out buffers must have float64 returns and int32 counts")
+        if not returns.flags.writeable or not counts_out.flags.writeable:
+            raise ValueError("out buffers must be writable")
+        returns.fill(np.nan)
+        counts_out.fill(0)
+    for f in range(F):
+        q_factor = q_ids[:, :, f]
         for t in range(T):
             label_t = labels[t, :]
             valid_labels = np.isfinite(label_t)
-            q_t_f = q_assignments_f[t, :]  # (N,)
-
-            # Combined mask: valid quantile assignment AND valid label
-            valid_mask = (q_t_f >= 0) & valid_labels
-
+            q_t = q_factor[t, :]
+            valid_mask = (q_t >= 0) & valid_labels
             if not np.any(valid_mask):
                 continue
-
-            q_valid = q_t_f[valid_mask]
+            q_valid = q_t[valid_mask]
             label_valid = label_t[valid_mask]
-
-            # Use bincount for fast aggregation - much faster than loop over quantiles
-            # bincount sums, so we sum labels and divide by counts
             counts = np.bincount(q_valid, minlength=n_quantiles)
             sums = np.bincount(q_valid, weights=label_valid, minlength=n_quantiles)
-
-            # Apply min_assets filter and compute means
             sufficient_mask = counts >= min_assets
-            quantile_counts[t, :, f] = counts
-            quantile_returns[t, sufficient_mask, f] = sums[sufficient_mask] / counts[sufficient_mask]
+            counts_out[t, :, f] = counts
+            returns[t, sufficient_mask, f] = sums[sufficient_mask] / counts[sufficient_mask]
+    return returns, counts_out
 
-    return quantile_returns, quantile_counts
+
+def compute_quantile_returns_from_assignments(
+    assignment_batch: QuantileAssignmentBatch,
+    label_bundle: LabelBundle,
+    min_assets: int = 10,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Aggregate immutable memberships against labels without re-binning."""
+    _validate_min_assets(min_assets)
+    if not isinstance(assignment_batch, QuantileAssignmentBatch):
+        raise TypeError("assignment_batch must be QuantileAssignmentBatch")
+    if not isinstance(label_bundle, LabelBundle):
+        raise TypeError("label_bundle must be LabelBundle")
+    time_axis = assignment_batch.time_axis
+    asset_axis = assignment_batch.asset_axis
+    if label_bundle.asset_axis is None or label_bundle.asset_axis.values is None:
+        raise ValueError("label_bundle requires explicit asset-axis coordinates")
+    if not np.array_equal(time_axis.values, np.asarray(label_bundle.decision_time)):
+        raise ValueError("assignment scoring time axis must equal label decision_time")
+    if not np.array_equal(asset_axis.values, label_bundle.asset_axis.values):
+        raise ValueError("assignment asset axis must equal label asset_axis")
+    labels, validity = normalize_label_panel(label_bundle, asset_axis.size)
+    if labels.shape != assignment_batch.assignments.shape[:2]:
+        raise ValueError("label time/asset shape must match assignments")
+    if validity is not None:
+        labels = np.where(validity, labels, np.nan)
+    return _aggregate_quantile_assignments(
+        assignment_batch.assignments, labels,
+        n_quantiles=assignment_batch.n_quantiles, min_assets=min_assets,
+    )
 
 
 def compute_quantile_returns_optimized(

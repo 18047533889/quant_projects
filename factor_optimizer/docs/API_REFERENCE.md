@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**85 个 Python 模块、960 个公开函数/类/方法定义**。
+扫描实际包目录：**86 个 Python 模块、961 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -14,6 +14,7 @@
 | [factor_optimizer/adapters/__init__.py](../factor_optimizer/adapters/__init__.py) | 0 | Adapter protocols for FE and QE integration. |
 | [factor_optimizer/adapters/factor_assets.py](../factor_optimizer/adapters/factor_assets.py) | 18 | FA factor-intelligence provider adapters (R61-FI-014 / plan §20 E6, matrix E6). |
 | [factor_optimizer/adapters/factor_engine.py](../factor_optimizer/adapters/factor_engine.py) | 7 | FactorEngineAdapter: protocol for FE integration (optional dependency). |
+| [factor_optimizer/adapters/fe_execution_identity.py](../factor_optimizer/adapters/fe_execution_identity.py) | 1 | Shared construction of execution identities for resolved FE operators. |
 | [factor_optimizer/adapters/fe_smoothing.py](../factor_optimizer/adapters/fe_smoothing.py) | 1 | FactorEngine-native, lagged smoothing on sparse long panels. |
 | [factor_optimizer/adapters/fe_tail_saturation.py](../factor_optimizer/adapters/fe_tail_saturation.py) | 1 | Date-local tail saturation through FactorEngine's canonical winsorize. |
 | [factor_optimizer/adapters/fitness.py](../factor_optimizer/adapters/fitness.py) | 2 | Fitness adapter: dimension/desirability mapping for generalized treatment decisions. |
@@ -363,6 +364,22 @@ Create FE adapter if factor-engine is installed.
 参数：`()`。
 
 返回类型：`FactorEngineAdapter`。
+
+## factor_optimizer/adapters/fe_execution_identity.py
+
+Shared construction of execution identities for resolved FE operators.
+
+显式导出（含重导出）：`build_fe_operator_identity`。
+
+### build_fe_operator_identity
+
+[实际实现](../factor_optimizer/adapters/fe_execution_identity.py#L9)。
+
+Build a binding after the caller has selected the exact runtime operator.
+
+参数：`(*, canonical: str, backend: str, mode: str, operator, adapter, input_contract: str, semantic_version, versions: Mapping[str, str])`。
+
+返回类型：`dict`。
 
 ## factor_optimizer/adapters/fe_smoothing.py
 
@@ -6736,11 +6753,11 @@ TRAIN-only twenty-layer stale-signal decay, not holding-period PnL.
 
 ### diagnose_layer_decay
 
-[实际实现](../factor_optimizer/research_decay.py#L7)。
+[实际实现](../factor_optimizer/research_decay.py#L161)。
 
 Compare x[t-lag] with the same y[t] and common TRAIN dates at each lag.
 
-参数：`(batch, labels, split, config, factor_index, *, minimum_assets_per_quantile=10)`。
+参数：`(batch, labels, split, config, factor_index, *, minimum_assets_per_quantile=10, assignment_cache_budget_bytes=_DECAY_ASSIGNMENT_CACHE_BUDGET)`。
 
 ## factor_optimizer/research_diagnostics.py
 
@@ -7766,7 +7783,7 @@ TRAIN-context-bound deduplication of executable repair proposals.
 
 ### deduplicate_proposals
 
-[实际实现](../factor_optimizer/search/execution_dedup.py#L114)。
+[实际实现](../factor_optimizer/search/execution_dedup.py#L227)。
 
 Group only plans with the same resolved execution and TRAIN context.
 
@@ -10856,6 +10873,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/adapters/__init__.py` | `d2cd050fc93d62119ef592d8d663e985e5218554c6cb289d839e384a49b40a23` |
 | `factor_optimizer/adapters/factor_assets.py` | `6a2ad44b43710199fd6eed901de2974fb8a66314f525be016c2f4796bf8af6d4` |
 | `factor_optimizer/adapters/factor_engine.py` | `de24ad77fc2408851497d93836c40d744d37907151bb8d96fd03a767c279e2e5` |
+| `factor_optimizer/adapters/fe_execution_identity.py` | `c30938d6386fc089f76500b32543e30556c6f2f4533341e9734edf619d7f8eb6` |
 | `factor_optimizer/adapters/fe_smoothing.py` | `54929a09f6c907d0f8242de384a50c59568003d4091d3c97d7a9a1ebbb433770` |
 | `factor_optimizer/adapters/fe_tail_saturation.py` | `b458a1726f9fda82dddab6c48d8140860a3d661d927f88c609f166bcaa9c10fc` |
 | `factor_optimizer/adapters/fitness.py` | `4486884657f730c65064fe6e1aebc7555a515fbc3cba41c71c1bf8c9e4c48ce5` |
@@ -10907,7 +10925,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
 | `factor_optimizer/research_batch.py` | `e8fd2504701d6ed83f7a9c4276600cb3d9512b5b408dfe1ed7f9074a9b70c491` |
 | `factor_optimizer/research_batch_diagnostics.py` | `0ec5186c413814db6457342e97236b582e95a460033c11a6804b815c64d24b89` |
-| `factor_optimizer/research_decay.py` | `6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9` |
+| `factor_optimizer/research_decay.py` | `e997aa82d59dde6a6b934c3801584a84ebfa9e215b57c1f43414deaa3ba5911c` |
 | `factor_optimizer/research_diagnostics.py` | `054ee2ad344395812656f1a7991983c58cade69e8c0b524d98981258cd6947ad` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |
 | `factor_optimizer/research_fitness.py` | `c7021a482a74b691f68ae6b706355b7f7c9544e8658d5aa81a921cceef4e6494` |
@@ -10920,7 +10938,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/search/desirability_registry.py` | `f2e2c47cdb4dc24cf4621e9b6d2d78331272b650ff0fbf374214f83bc3dcc6b0` |
 | `factor_optimizer/search/diagnosis_routing.py` | `997ca9033fddbdb6248d3c06620edb528357b116c879c84c6a3e4d31f20ed229` |
 | `factor_optimizer/search/dimensions.py` | `d96278aa024bf275edc88072a5abfe0b749f023047971b94bccc99ae67964d90` |
-| `factor_optimizer/search/execution_dedup.py` | `5678d4ad22953715c7028ec10335fbe13024b07d7c9eabc0be8a84afabe3bf55` |
+| `factor_optimizer/search/execution_dedup.py` | `4c95a16b6edcc1589df3f126a7e167ff9195a56d82fedf884e32daacd085cfa9` |
 | `factor_optimizer/search/lineage.py` | `979031c4c987a40cbb1987b360704ffd8fe0749792a21db0352c41497657b25b` |
 | `factor_optimizer/search/multifidelity.py` | `6967520ca3f3f78f5648cfccaa397f759514091f2dbb2bc3977506990f1747df` |
 | `factor_optimizer/search/paired_comparison.py` | `9bfdabf2b4e3c26b41697553fcdcbbcf49f49aa9ef20222546c69f57dfbce3be` |

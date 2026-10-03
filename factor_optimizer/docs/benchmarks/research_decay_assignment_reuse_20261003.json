@@ -1,0 +1,125 @@
+{
+  "kind": "train_layer_decay_assignment_reuse_cpu_ab",
+  "date": "2026-10-03",
+  "workload": "seeded synthetic factor panels, not COS data or GPU",
+  "protocol": {
+    "warmups_per_timed_arm": 1,
+    "rounds": 3,
+    "order": "ABBA",
+    "samples_per_arm": 6
+  },
+  "new_sources": {
+    "quantile": "b92641b747a81965f87fd001b2d94d895bb7fda6c1455f649fa41484dbb682ad",
+    "assignments": "038b9edfdc51daed9ecbada9911a397de571a5ba1176d5fbc638ae1d2867ed80",
+    "decay": "e997aa82d59dde6a6b934c3801584a84ebfa9e215b57c1f43414deaa3ba5911c"
+  },
+  "tests": {
+    "optimizer_full": {
+      "passed": 1697,
+      "warnings": 66,
+      "seconds": 125.71
+    },
+    "qe_metrics_and_quantile_public_paths": {
+      "passed": 1502,
+      "skipped": 24,
+      "warnings": 9,
+      "seconds": 155.97
+    },
+    "new_independent_oracles": {
+      "passed": 18,
+      "seconds": 0.49
+    }
+  },
+  "cases": [
+    {
+      "T": 300,
+      "N": 200,
+      "seed": 81030,
+      "old_baseline_commit": "000eadc70",
+      "old_quantile_source_sha256": "c21c6203423f8992e1148770a1c3abf2af1ad214cc91d80df6d2b1bf85188ad5",
+      "old_decay_source_sha256": "6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9",
+      "oracle": "scalar percentile + bincount; correctness only",
+      "correctness": "pass for scalar oracle, pinned baseline, and every cached sample",
+      "old_seconds_samples": [
+        0.1215789970010519,
+        0.11867011402500793,
+        0.12004576303297654,
+        0.12425991799682379,
+        0.12209299299865961,
+        0.1233880240470171
+      ],
+      "cached_seconds_samples": [
+        0.06787355395499617,
+        0.06561222102027386,
+        0.06722374202217907,
+        0.06939714902546257,
+        0.06851329404162243,
+        0.06558652099920437
+      ],
+      "old_seconds_median": 0.12183599499985576,
+      "cached_seconds_median": 0.06754864798858762,
+      "speedup_median": 1.8036777733943692,
+      "record_status": "available"
+    },
+    {
+      "T": 500,
+      "N": 1000,
+      "seed": 81031,
+      "old_baseline_commit": "000eadc70",
+      "old_quantile_source_sha256": "c21c6203423f8992e1148770a1c3abf2af1ad214cc91d80df6d2b1bf85188ad5",
+      "old_decay_source_sha256": "6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9",
+      "oracle": "scalar percentile + bincount; correctness only",
+      "correctness": "pass for scalar oracle, pinned baseline, and every cached sample",
+      "old_seconds_samples": [
+        0.5769740070099942,
+        0.5766863449825905,
+        0.5580424300278537,
+        0.5617341309553012,
+        0.6154680239851587,
+        0.5678490189602599
+      ],
+      "cached_seconds_samples": [
+        0.21905295201577246,
+        0.22664956602966413,
+        0.21631735301343724,
+        0.21309060900239274,
+        0.23825431102886796,
+        0.2130285410094075
+      ],
+      "old_seconds_median": 0.5722676819714252,
+      "cached_seconds_median": 0.21768515251460485,
+      "speedup_median": 2.628877878719959,
+      "record_status": "available"
+    },
+    {
+      "T": 1200,
+      "N": 5461,
+      "seed": 81032,
+      "old_baseline_commit": "000eadc70",
+      "old_quantile_source_sha256": "c21c6203423f8992e1148770a1c3abf2af1ad214cc91d80df6d2b1bf85188ad5",
+      "old_decay_source_sha256": "6b19286ca0bd44827ee15befe5755de9b755b1268bd4199c0e9e4f57f3ee48c9",
+      "oracle": "scalar percentile + bincount; correctness only",
+      "correctness": "pass for scalar oracle, pinned baseline, and every cached sample",
+      "old_seconds_samples": [
+        7.480075568018947,
+        7.399648347985931,
+        7.359056493034586,
+        7.347587173979264,
+        7.314415330009069,
+        7.336273479973897
+      ],
+      "cached_seconds_samples": [
+        2.0971333109773695,
+        2.075939032016322,
+        2.0268519790261053,
+        2.057728321989998,
+        2.020566746010445,
+        2.0310160759836435
+      ],
+      "old_seconds_median": 7.353321833506925,
+      "cached_seconds_median": 2.044372198986821,
+      "speedup_median": 3.5968606094091817,
+      "record_status": "available"
+    }
+  ]
+}
