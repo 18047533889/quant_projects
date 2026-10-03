@@ -1,0 +1,307 @@
+{
+  "baseline_commit_resolved": "1c5629e6bd5ac8d03051b97b9debe5561f1ac061",
+  "baseline_ref_requested": "1c5629e6bd5ac8d03051b97b9debe5561f1ac061",
+  "benchmark": "GPUExecutor IC count-cache matched microbenchmark",
+  "cupy": "14.2.0",
+  "date_local": "2026-10-03 14:26:12 CST",
+  "gpu": {
+    "free_bytes_before": 40152858624,
+    "name": "NVIDIA L20",
+    "total_bytes": 47665709056
+  },
+  "memory": {
+    "max_pool_growth_bytes_including_inputs": 4294967296,
+    "pool_total_before": 0
+  },
+  "python": "3.12.3",
+  "results": [
+    {
+      "abba_blocks": 3,
+      "all_outputs_equal": true,
+      "baseline_commit": "1c5629e6bd5ac8d03051b97b9debe5561f1ac061",
+      "count_values_equal": true,
+      "cupy_pool_growth_bytes_including_inputs": 112501760,
+      "free_gpu_bytes_before_case": 40152858624,
+      "input_gpu_bytes": 8650752,
+      "median_new_over_old": 0.9644840543585601,
+      "median_seconds": {
+        "new": 0.007931721513159573,
+        "old": 0.008223797456594184
+      },
+      "metrics": [
+        "rank_ic_series",
+        "rank_ic",
+        "ic_std",
+        "ic_ir",
+        "pearson_ic_series",
+        "pearson_ic",
+        "pearson_ic_std",
+        "pearson_ic_ir"
+      ],
+      "min_assets_by_metric": {
+        "ic_ir": {
+          "min_assets": 10
+        },
+        "ic_std": {
+          "min_assets": 10
+        },
+        "pearson_ic": {
+          "min_assets": 20
+        },
+        "pearson_ic_ir": {
+          "min_assets": 10
+        },
+        "pearson_ic_series": {
+          "min_assets": 20
+        },
+        "pearson_ic_std": {
+          "min_assets": 10
+        },
+        "rank_ic": {
+          "min_assets": 20
+        },
+        "rank_ic_series": {
+          "min_assets": 20
+        }
+      },
+      "pool_growth_guard_bytes": 4294967296,
+      "shape_t_f_n": [
+        128,
+        32,
+        256
+      ],
+      "source_sha256": {
+        "baseline_gpu_executor_sha256": "1b4002b63e50e9aa98d62c70d3b67d3ffcbb46d464f7bdf702dd66db9722d718",
+        "working_gpu_executor_sha256": "ea09735d64267a501d338c5b5247d526338d1f483e76000aef9ac38dc3192c80"
+      },
+      "timing_seconds": {
+        "new": [
+          0.008870113000739366,
+          0.007710058009251952,
+          0.008153385017067194,
+          0.00823216198477894,
+          0.006616121041588485,
+          0.0068165650009177625
+        ],
+        "old": [
+          0.009334089001640677,
+          0.006995128991547972,
+          0.008319829998072237,
+          0.008256721950601786,
+          0.007734316983260214,
+          0.008190872962586582
+        ]
+      },
+      "untimed_validation_counters": {
+        "new": {
+          "all_d2h_bytes": 68096,
+          "all_d2h_calls": 12,
+          "count_d2h_bytes": 1024,
+          "count_d2h_calls": 4,
+          "count_reductions": 4
+        },
+        "old": {
+          "all_d2h_bytes": 69120,
+          "all_d2h_calls": 16,
+          "count_d2h_bytes": 2048,
+          "count_d2h_calls": 8,
+          "count_reductions": 8
+        }
+      },
+      "warmup_calls_per_variant": 2
+    },
+    {
+      "abba_blocks": 3,
+      "all_outputs_equal": true,
+      "baseline_commit": "1c5629e6bd5ac8d03051b97b9debe5561f1ac061",
+      "count_values_equal": true,
+      "cupy_pool_growth_bytes_including_inputs": 113259520,
+      "free_gpu_bytes_before_case": 40033320960,
+      "input_gpu_bytes": 12845056,
+      "median_new_over_old": 1.0008714586740532,
+      "median_seconds": {
+        "new": 0.007695518987020478,
+        "old": 0.007688818499445915
+      },
+      "metrics": [
+        "rank_ic_series",
+        "rank_ic",
+        "ic_std",
+        "ic_ir",
+        "pearson_ic_series",
+        "pearson_ic",
+        "pearson_ic_std",
+        "pearson_ic_ir"
+      ],
+      "min_assets_by_metric": {
+        "ic_ir": {
+          "min_assets": 10
+        },
+        "ic_std": {
+          "min_assets": 10
+        },
+        "pearson_ic": {
+          "min_assets": 20
+        },
+        "pearson_ic_ir": {
+          "min_assets": 10
+        },
+        "pearson_ic_series": {
+          "min_assets": 20
+        },
+        "pearson_ic_std": {
+          "min_assets": 10
+        },
+        "rank_ic": {
+          "min_assets": 20
+        },
+        "rank_ic_series": {
+          "min_assets": 20
+        }
+      },
+      "pool_growth_guard_bytes": 4294967296,
+      "shape_t_f_n": [
+        128,
+        48,
+        256
+      ],
+      "source_sha256": {
+        "baseline_gpu_executor_sha256": "1b4002b63e50e9aa98d62c70d3b67d3ffcbb46d464f7bdf702dd66db9722d718",
+        "working_gpu_executor_sha256": "ea09735d64267a501d338c5b5247d526338d1f483e76000aef9ac38dc3192c80"
+      },
+      "timing_seconds": {
+        "new": [
+          0.007602571975439787,
+          0.0072410720167681575,
+          0.007824185013305396,
+          0.007485594949685037,
+          0.007788465998601168,
+          0.009998998953960836
+        ],
+        "old": [
+          0.007525962952058762,
+          0.008402477018535137,
+          0.007814634998794645,
+          0.007511574018280953,
+          0.007563002000097185,
+          0.010601761983707547
+        ]
+      },
+      "untimed_validation_counters": {
+        "new": {
+          "all_d2h_bytes": 102144,
+          "all_d2h_calls": 12,
+          "count_d2h_bytes": 1536,
+          "count_d2h_calls": 4,
+          "count_reductions": 4
+        },
+        "old": {
+          "all_d2h_bytes": 103680,
+          "all_d2h_calls": 16,
+          "count_d2h_bytes": 3072,
+          "count_d2h_calls": 8,
+          "count_reductions": 8
+        }
+      },
+      "warmup_calls_per_variant": 2
+    },
+    {
+      "abba_blocks": 3,
+      "all_outputs_equal": true,
+      "baseline_commit": "1c5629e6bd5ac8d03051b97b9debe5561f1ac061",
+      "count_values_equal": true,
+      "cupy_pool_growth_bytes_including_inputs": 2020269056,
+      "free_gpu_bytes_before_case": 39915880448,
+      "input_gpu_bytes": 200704000,
+      "median_new_over_old": 0.9965536597757256,
+      "median_seconds": {
+        "new": 0.1685812305076979,
+        "old": 0.16916422799113207
+      },
+      "metrics": [
+        "rank_ic_series",
+        "rank_ic",
+        "ic_std",
+        "ic_ir",
+        "pearson_ic_series",
+        "pearson_ic",
+        "pearson_ic_std",
+        "pearson_ic_ir"
+      ],
+      "min_assets_by_metric": {
+        "ic_ir": {
+          "min_assets": 10
+        },
+        "ic_std": {
+          "min_assets": 10
+        },
+        "pearson_ic": {
+          "min_assets": 20
+        },
+        "pearson_ic_ir": {
+          "min_assets": 10
+        },
+        "pearson_ic_series": {
+          "min_assets": 20
+        },
+        "pearson_ic_std": {
+          "min_assets": 10
+        },
+        "rank_ic": {
+          "min_assets": 20
+        },
+        "rank_ic_series": {
+          "min_assets": 20
+        }
+      },
+      "pool_growth_guard_bytes": 4294967296,
+      "shape_t_f_n": [
+        512,
+        48,
+        1000
+      ],
+      "source_sha256": {
+        "baseline_gpu_executor_sha256": "1b4002b63e50e9aa98d62c70d3b67d3ffcbb46d464f7bdf702dd66db9722d718",
+        "working_gpu_executor_sha256": "ea09735d64267a501d338c5b5247d526338d1f483e76000aef9ac38dc3192c80"
+      },
+      "timing_seconds": {
+        "new": [
+          0.16872802597936243,
+          0.16840492602204904,
+          0.16831992904189974,
+          0.1695260219858028,
+          0.1783248180290684,
+          0.1684344350360334
+        ],
+        "old": [
+          0.16937064699595794,
+          0.1687067270395346,
+          0.16883969301125035,
+          0.1701591340242885,
+          0.16960219998145476,
+          0.1689578089863062
+        ]
+      },
+      "untimed_validation_counters": {
+        "new": {
+          "all_d2h_bytes": 397056,
+          "all_d2h_calls": 12,
+          "count_d2h_bytes": 1536,
+          "count_d2h_calls": 4,
+          "count_reductions": 4
+        },
+        "old": {
+          "all_d2h_bytes": 398592,
+          "all_d2h_calls": 16,
+          "count_d2h_bytes": 3072,
+          "count_d2h_calls": 8,
+          "count_reductions": 8
+        }
+      },
+      "warmup_calls_per_variant": 2
+    }
+  ],
+  "scope_limit": "resident-array GPUExecutor.run only; excludes public routing, source load/staging, output assembly, and all other full-pipeline costs",
+  "timing_method": "perf_counter around executor.run, current-stream synchronized immediately before and after; instrumentation is untimed",
+  "transfer_interpretation": "int64 count cp.asnumpy calls and bytes; each blocking D2H is a host-visible sync point; direct CUDA sync-call count is not intercepted"
+}

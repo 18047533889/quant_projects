@@ -544,6 +544,10 @@ class GPUExecutor:
         # shared intermediates (spec §9)
         rank_cache = {}
         pearson_cache = {}
+        # Cache device reductions and a single host transfer per IC threshold.
+        # Public metrics receive independent host copies below.
+        rank_count_cache = {}
+        pearson_count_cache = {}
         quantile_cache = {}
         turnover = None
         portfolio_pnl = None
@@ -612,8 +616,11 @@ class GPUExecutor:
                     from quant_evaluator.kernels.gpu.correlation import batched_spearman_ic
                     rank_cache[min_assets], _ = batched_spearman_ic(factors, labels, min_obs=min_assets)
                 rank_ic = rank_cache[min_assets]
-                count = cp.sum(cp.isfinite(rank_ic), axis=0)
-                counts[m] = _to_cpu(count)
+                if min_assets not in rank_count_cache:
+                    rank_count = cp.sum(cp.isfinite(rank_ic), axis=0)
+                    rank_count_cache[min_assets] = (rank_count, _to_cpu(rank_count))
+                count, host_count = rank_count_cache[min_assets]
+                counts[m] = host_count.copy()
                 if m == "rank_ic_series":
                     series["rank_ic_series"] = _to_cpu(rank_ic)
                 elif m == "rank_ic":
@@ -637,8 +644,11 @@ class GPUExecutor:
                     from quant_evaluator.kernels.gpu.correlation import batched_pearson_ic
                     pearson_cache[min_assets], _ = batched_pearson_ic(factors, labels, min_obs=min_assets)
                 pearson_ic = pearson_cache[min_assets]
-                count = cp.sum(cp.isfinite(pearson_ic), axis=0)
-                counts[m] = _to_cpu(count)
+                if min_assets not in pearson_count_cache:
+                    pearson_count = cp.sum(cp.isfinite(pearson_ic), axis=0)
+                    pearson_count_cache[min_assets] = (pearson_count, _to_cpu(pearson_count))
+                count, host_count = pearson_count_cache[min_assets]
+                counts[m] = host_count.copy()
                 if m == "pearson_ic_series":
                     series["pearson_ic_series"] = _to_cpu(pearson_ic)
                 elif m == "pearson_ic":
