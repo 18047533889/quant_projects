@@ -1,11 +1,11 @@
 """
 Short-halflife event-decay persistence (causal, one-sided).
 
-Output at time ``t`` is an exponentially weighted persistence of the last
-non-zero event magnitude, over the strictly-past observation ``x[t-1]``.
-The first finite lagged observation seeds the output (``y = x``), then the
-recurrence ``y = (1 - alpha)*y + alpha*x`` applies with
-``alpha = ln(2)/halflife`` clipped to ``(0, 1]``.
+Output at time ``t`` uses the strictly-past input ``x[t-1]``. The first finite
+lagged value seeds the EMA; each later finite lagged value updates the
+recurrence ``y = (1 - alpha)*y + alpha*x`` with
+``alpha = ln(2)/halflife`` clipped to ``(0, 1]``. Warmup hides outputs but
+does not pause the state updates.
 
 Causality: each output uses only observations ``<= t-1`` (current excluded via
 ``shift(1)``), so the transform is prefix-invariant and production-causal —
@@ -14,6 +14,7 @@ the natural treatment for EVENT factors.
 import numpy as np
 import pandas as pd
 from typing import Optional
+from numbers import Integral
 
 
 def _check_sort(values, asset_col, time_col):
@@ -58,14 +59,22 @@ def event_decay(
 
     Notes
     -----
-    A NaN in the lagged input resets the decay memory to NaN (no event
-    signal). A finite lagged observation after a NaN re-seeds the output from
+    A non-finite lagged input resets the decay memory to NaN (no event
+    signal). A finite lagged observation after a non-finite value re-seeds the output from
     that value.
     """
-    if halflife <= 0:
-        raise ValueError(f"halflife must be > 0, got {halflife}")
-    if min_periods < 1:
-        raise ValueError(f"min_periods must be >= 1, got {min_periods}")
+    if isinstance(halflife, (bool, np.bool_)):
+        raise ValueError("halflife must be finite and > 0")
+    try:
+        halflife = float(halflife)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("halflife must be finite and > 0") from exc
+    if not np.isfinite(halflife) or halflife <= 0:
+        raise ValueError(f"halflife must be finite and > 0, got {halflife}")
+    if (isinstance(min_periods, (bool, np.bool_))
+            or not isinstance(min_periods, Integral) or min_periods < 1):
+        raise ValueError(f"min_periods must be a positive integer, got {min_periods}")
+    min_periods = int(min_periods)
 
     _check_sort(values, asset_col, time_col)
     alpha = np.log(2.0) / halflife
@@ -80,21 +89,17 @@ def event_decay(
         finite_count = 0
         for i in range(n):
             x = lagged[i]
-            if np.isnan(x):
+            if not np.isfinite(x):
                 out[i] = np.nan
                 y = np.nan
                 finite_count = 0
                 continue
             finite_count += 1
-            if not np.isfinite(y):
-                if finite_count < min_periods:
-                    # Warmup: no output yet, but keep the first finite value
-                    # as the recursion seed.
-                    if finite_count == 1:
-                        y = x
-                    continue
-                y = x if not np.isfinite(y) else y
-            y = (1 - alpha) * (y if np.isfinite(y) else 0.0) + alpha * x
-            out[i] = y
+            if finite_count == 1:
+                y = x
+            else:
+                y = (1 - alpha) * y + alpha * x
+            if finite_count >= min_periods:
+                out[i] = y
         result.iloc[positions] = out
     return result

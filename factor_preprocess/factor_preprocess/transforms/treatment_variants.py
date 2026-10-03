@@ -6,14 +6,12 @@ eligibility engine advertises resolves to an actual implementation in the
 canonical :class:`TransformRegistry` (DLIB-FP-014). They live in this focused
 module rather than a shared ``common/utils`` package.
 
-Causality
----------
-All transforms in this module are strictly one-sided: each output depends only
-on observations ``<= t - 1`` (the current observation is excluded via
-``shift(1)``), so they are prefix-invariant and production-causal.
+Freshness-aware fill is current-inclusive: a finite value at ``t`` is emitted
+at ``t`` and resets the age; missing rows carry the latest finite value.
 """
 import numpy as np
 import pandas as pd
+from numbers import Integral
 from typing import Optional
 
 
@@ -40,13 +38,24 @@ def freshness_aware_fill(
     = unbounded). This is the recommended missingness treatment for
     FUNDAMENTAL / SPARSE_UPDATE factors.
 
-    Causality: each output uses only the most recent past valid observation
-    and the elapsed age; the current observation is not consumed.
+    Timing: finite observations are emitted immediately at their timestamp.
+    Missing or non-finite rows carry the last finite value with exponential
+    age decay. With integer ``max_lag=L``, at most L consecutive missing rows
+    are carried.
     """
-    if decay_halflife <= 0:
-        raise ValueError(f"decay_halflife must be > 0, got {decay_halflife}")
-    if max_lag is not None and max_lag < 1:
-        raise ValueError(f"max_lag must be >= 1, got {max_lag}")
+    if isinstance(decay_halflife, (bool, np.bool_)):
+        raise ValueError("decay_halflife must be finite and > 0")
+    try:
+        decay_halflife = float(decay_halflife)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("decay_halflife must be finite and > 0") from exc
+    if not np.isfinite(decay_halflife) or decay_halflife <= 0:
+        raise ValueError(f"decay_halflife must be finite and > 0, got {decay_halflife}")
+    if max_lag is not None and (isinstance(max_lag, (bool, np.bool_))
+                                or not isinstance(max_lag, Integral) or max_lag < 1):
+        raise ValueError(f"max_lag must be a positive integer or None, got {max_lag}")
+    if max_lag is not None:
+        max_lag = int(max_lag)
 
     _check_sort(values, asset_col, time_col)
     decay = np.log(2.0) / decay_halflife
