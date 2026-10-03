@@ -50,7 +50,7 @@
 | `wavelet_smooth` | `wavelet="db4", level=1` | 时间/全 lagged 样本；条件注册、OFFLINE_ONLY；FP | 调用 `wavelet_decompose` 并返回 approximation 通道 $`a_{level}`$；若指定键不存在则取首个 approximation，否则全 NaN。 |
 | `wavelet_denoise` | `wavelet="db4", level=None, threshold_mode="soft", threshold_scale=1` | 时间/全 lagged 样本；条件注册、OFFLINE_ONLY；FP | 对 lagged 有限序列分解，以最细 detail 的 MAD 估计 $`\sigma=\mathrm{median}(\lvert d-\mathrm{median}(d)\rvert)/0.6745`$，阈值 $`\lambda=threshold\_scale\,\sigma\sqrt{2\ln n}`$；保留 approximation，对 details 做 soft/hard threshold 后全序列重构。少于 4 点或失败为 NaN。 |
 
-FE_OPERATOR 共 5 项：`cs_rank`、`cs_demean`、`cs_winsor`、`forward_fill`、`missing_indicator`。FE_COMPOSITE 共 12 项：`trailing_sma`、`rolling_mean`、`trailing_median`、`rolling_std`、`rolling_zscore`、`ewma`、`robust_ewma`、`one_sided_iir_lowpass`、`ols_neutralize` 及三个 neutral 别名；基础 40 项中的其余 23 项为 FP_NATIVE。三个 wavelet 项也始终在本目录列明，但仅在可选 PyWavelets 依赖可用时才作为 FP_NATIVE/OFFLINE_ONLY 注册，因此运行时总数为 40 或 43；本次环境已注册，合计 26 项 FP_NATIVE。FP 的 FE_OPERATOR adapter 固定选择 `pandas_numpy`；FE 的 `is_null` 另有 Polars 实现，但 FP 路由和身份不覆盖该后端。
+FE_OPERATOR 共 5 项：`cs_rank`、`cs_demean`、`cs_winsor`、`forward_fill`、`missing_indicator`。FE_COMPOSITE 共 12 项：`trailing_sma`、`rolling_mean`、`trailing_median`、`rolling_std`、`rolling_zscore`、`ewma`、`robust_ewma`、`one_sided_iir_lowpass`、`ols_neutralize` 及三个 neutral 别名；基础 40 项中的其余 23 项为 FP_NATIVE。三个 wavelet 项也始终在本目录列明，但仅在可选 PyWavelets 依赖可用时才作为 FP_NATIVE/OFFLINE_ONLY 注册，因此运行时总数为 40 或 43；本次环境已注册，合计 26 项 FP_NATIVE。FP 的 FE_OPERATOR adapter 固定选择 `pandas_numpy`，并将身份绑定到该后端的算子实现、逻辑契约、适配器代码与调用契约及 NumPy/Pandas 版本；覆盖范围不含完整传递运行时。FE 的 `is_null` 另有 Polars 实现，但 FP 路由和身份均不覆盖该后端。
 
 ### OLS 有效秩口径
 

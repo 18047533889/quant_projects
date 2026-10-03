@@ -832,6 +832,30 @@ class TransformRegistry:
         elif name not in self._transforms:
             raise ValueError(f"Transform '{name}' is not registered")
         metadata = self._transforms[name]
+        if metadata.implementation_origin == "FE_OPERATOR":
+            try:
+                from factor_preprocess.adapters.fe_operator import (
+                    get_fe_executor,
+                    get_fe_operator_identity,
+                )
+                executor = get_fe_executor(
+                    metadata.fe_operator_id,
+                    fallback=metadata.func,
+                    allow_research_fallback=allow_research,
+                )
+            except (ImportError, ModuleNotFoundError):
+                executor = None
+            if executor is not None:
+                return get_fe_operator_identity(executor, name)
+            if allow_research:
+                from factor_preprocess.adapters.fe_neutralization import (
+                    fp_research_fallback_identity,
+                )
+                return fp_research_fallback_identity(name, metadata)
+            raise GovernanceError(
+                f"FE operator authority unavailable for {name!r}; "
+                "execution identity is unbound"
+            )
         if metadata.implementation_origin != "FE_COMPOSITE":
             raise GovernanceError(
                 f"Scoped execution identity is not bound for {name!r} "
@@ -924,9 +948,24 @@ class TransformRegistry:
                     allow_research_fallback=allow_research,
                 )
                 if executor is not None:
-                    return _ValidatedExecutor(self._transforms[name], executor)
+                    from factor_preprocess.adapters.fe_operator import (
+                        get_fe_operator_identity,
+                    )
+                    return _ValidatedExecutor(
+                        self._transforms[name], executor,
+                        execution_identity_provider=lambda: get_fe_operator_identity(
+                            executor, name
+                        ),
+                    )
             if allow_research:
-                return _ValidatedExecutor(self._transforms[name], self._transforms[name].func)
+                from factor_preprocess.adapters.fe_neutralization import (
+                    fp_research_fallback_identity,
+                )
+                metadata = self._transforms[name]
+                return _ValidatedExecutor(
+                    metadata, metadata.func,
+                    fp_research_fallback_identity(name, metadata),
+                )
             raise GovernanceError(
                 f"FE operator authority unavailable for {name!r}; no implicit FP-native fallback"
             )

@@ -1,7 +1,7 @@
 # factor_preprocess 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**80 个 Python 模块、449 个公开函数/类/方法定义**。
+扫描实际包目录：**80 个 Python 模块、451 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -18,7 +18,7 @@
 | [factor_preprocess/adapters/factor_assets.py](../factor_preprocess/adapters/factor_assets.py) | 12 | Factor Assets adapter - optional integration with factor_assets package. |
 | [factor_preprocess/adapters/fe_composite.py](../factor_preprocess/adapters/fe_composite.py) | 2 | Central resolver for explicit FactorEngine composite identities. |
 | [factor_preprocess/adapters/fe_neutralization.py](../factor_preprocess/adapters/fe_neutralization.py) | 4 | Lazy adapter for FE-owned OLS neutralization composites. |
-| [factor_preprocess/adapters/fe_operator.py](../factor_preprocess/adapters/fe_operator.py) | 7 | FE operator adapter (R61-FI-041, plan §26 F2/F3). |
+| [factor_preprocess/adapters/fe_operator.py](../factor_preprocess/adapters/fe_operator.py) | 9 | FE operator adapter (R61-FI-041, plan §26 F2/F3). |
 | [factor_preprocess/adapters/fe_robust_ewma_identity.py](../factor_preprocess/adapters/fe_robust_ewma_identity.py) | 1 | FP boundary for FactorEngine's scoped robust EWMA identity. |
 | [factor_preprocess/adapters/fe_smoothing.py](../factor_preprocess/adapters/fe_smoothing.py) | 8 | FactorEngine-backed long-panel smoothing adapter (lazy FE dependency). |
 | [factor_preprocess/adapters/fitted_recipe.py](../factor_preprocess/adapters/fitted_recipe.py) | 2 | Apply-only execution of narrowly supported frozen FP fitted state. |
@@ -554,11 +554,11 @@ Delegate without duplicating FE's numerical implementation.
 
 FE operator adapter (R61-FI-041, plan §26 F2/F3).
 
-显式导出（含重导出）：`FeOperatorExecutor`、`FeRecipeExecutor`、`get_fe_executor`。
+显式导出（含重导出）：`FeOperatorExecutor`、`FeRecipeExecutor`、`get_fe_executor`、`get_fe_operator_identity`。
 
 ### FeOperatorExecutor
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L134)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L168)。
 
 Callable executor for one FE canonical operator.
 
@@ -570,15 +570,25 @@ Callable executor for one FE canonical operator.
 
 ### FeOperatorExecutor.__init__
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L144)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L178)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
 参数：`(self, canonical: str, fallback: Optional[Callable]=None, *, allow_research_fallback: bool=False)`。
 
+### FeOperatorExecutor.execution_identity
+
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L200)。
+
+Return a live identity for the exact backend binding this adapter uses.
+
+参数：`(self)`。
+
+返回类型：`dict`。
+
 ### FeOperatorExecutor.__call__
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L162)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L264)。
 
 Route a long-format FP call through the FE operator.
 
@@ -586,13 +596,13 @@ Route a long-format FP call through the FE operator.
 
 ### FeRecipeExecutor
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L255)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L357)。
 
 Execute an all-FE stateless TreatmentRecipe with one panel boundary.
 
 ### FeRecipeExecutor.__init__
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L258)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L360)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -600,7 +610,7 @@ Execute an all-FE stateless TreatmentRecipe with one panel boundary.
 
 ### FeRecipeExecutor.__call__
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L266)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L368)。
 
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
@@ -608,13 +618,23 @@ Execute an all-FE stateless TreatmentRecipe with one panel boundary.
 
 ### get_fe_executor
 
-[实际实现](../factor_preprocess/adapters/fe_operator.py#L294)。
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L396)。
 
 Return a lazily-FE-backed executor for ``canonical``.
 
 参数：`(canonical: str, fallback: Optional[Callable]=None, *, allow_research_fallback: bool=False)`。
 
 返回类型：`Optional[FeOperatorExecutor]`。
+
+### get_fe_operator_identity
+
+[实际实现](../factor_preprocess/adapters/fe_operator.py#L411)。
+
+Bind an FP transform name to its executor's live FE identity.
+
+参数：`(executor, transform_name: str)`。
+
+返回类型：`dict`。
 
 ## factor_preprocess/adapters/fe_robust_ewma_identity.py
 
@@ -4090,7 +4110,7 @@ Identify the resolver-selected route without changing legacy hashes.
 
 ### TransformRegistry.get_execution
 
-[实际实现](../factor_preprocess/registry/transforms.py#L859)。
+[实际实现](../factor_preprocess/registry/transforms.py#L883)。
 
 Return the callable to execute for a transform.
 
@@ -4098,7 +4118,7 @@ Return the callable to execute for a transform.
 
 ### TransformRegistry.get_function
 
-[实际实现](../factor_preprocess/registry/transforms.py#L935)。
+[实际实现](../factor_preprocess/registry/transforms.py#L974)。
 
 Reject the retired unvalidated native-kernel execution bypass.
 
@@ -4108,7 +4128,7 @@ Reject the retired unvalidated native-kernel execution bypass.
 
 ### TransformRegistry.get_research_reference_function
 
-[实际实现](../factor_preprocess/registry/transforms.py#L951)。
+[实际实现](../factor_preprocess/registry/transforms.py#L990)。
 
 Return a retained native parity kernel only with explicit consent.
 
@@ -4118,7 +4138,7 @@ Return a retained native parity kernel only with explicit consent.
 
 ### TransformRegistry.get_recipe_execution
 
-[实际实现](../factor_preprocess/registry/transforms.py#L965)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1004)。
 
 Compile an FE recipe with explicit execution authority.
 
@@ -4126,7 +4146,7 @@ Compile an FE recipe with explicit execution authority.
 
 ### TransformRegistry.list_by_category
 
-[实际实现](../factor_preprocess/registry/transforms.py#L991)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1030)。
 
 List isolated deep-frozen transform metadata snapshots in a category.
 
@@ -4136,7 +4156,7 @@ List isolated deep-frozen transform metadata snapshots in a category.
 
 ### TransformRegistry.list_by_tag
 
-[实际实现](../factor_preprocess/registry/transforms.py#L996)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1035)。
 
 List isolated deep-frozen snapshots with a given tag.
 
@@ -4146,7 +4166,7 @@ List isolated deep-frozen snapshots with a given tag.
 
 ### TransformRegistry.list_causal_safe
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1001)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1040)。
 
 List isolated deep-frozen snapshots of all causal-safe transforms.
 
@@ -4156,7 +4176,7 @@ List isolated deep-frozen snapshots of all causal-safe transforms.
 
 ### TransformRegistry.all_transforms
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1008)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1047)。
 
 Get isolated deep-frozen snapshots of all registered transforms.
 
@@ -4166,7 +4186,7 @@ Get isolated deep-frozen snapshots of all registered transforms.
 
 ### TransformRegistry.get_signature_hash
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1012)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1051)。
 
 Get signature hash for reproducibility tracking.
 
@@ -4176,7 +4196,7 @@ Get signature hash for reproducibility tracking.
 
 ### TransformRegistry.seal
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1017)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1056)。
 
 Freeze the registry into an immutable snapshot identity (FP-P1-05).
 
@@ -4186,7 +4206,7 @@ Freeze the registry into an immutable snapshot identity (FP-P1-05).
 
 ### TransformRegistry.diagnostic_events
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1039)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1078)。
 
 Stable ordered audit trail of registry lifecycle events.
 
@@ -4196,7 +4216,7 @@ Stable ordered audit trail of registry lifecycle events.
 
 ### TransformRegistry.snapshot_identity
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1051)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1090)。
 
 Content-derived identity of the sealed snapshot (None if not sealed).
 
@@ -4206,7 +4226,7 @@ Content-derived identity of the sealed snapshot (None if not sealed).
 
 ### TransformRegistry.is_sealed
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1056)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1095)。
 
 Whether the registry has been frozen.
 
@@ -4216,7 +4236,7 @@ Whether the registry has been frozen.
 
 ### create_default_registry
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1061)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1100)。
 
 Create registry with all built-in transforms.
 
@@ -4226,7 +4246,7 @@ Create registry with all built-in transforms.
 
 ### get_default_registry
 
-[实际实现](../factor_preprocess/registry/transforms.py#L1680)。
+[实际实现](../factor_preprocess/registry/transforms.py#L1719)。
 
 Get or create the default global registry.
 
@@ -5403,7 +5423,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/adapters/factor_assets.py` | `75478a4f2c9cc80b7c30aacf729fe33ab722cfc2be7dfb63f11e3f562b92e878` |
 | `factor_preprocess/adapters/fe_composite.py` | `dc8bf40c80c0cf97b59d9076d4a0f0f33660cb500a8bea1a36249b502aab3d83` |
 | `factor_preprocess/adapters/fe_neutralization.py` | `f9f9a62bd357b2f1b85ae3c78e884a5c952fdae45b7677895af67e40d0dfe93a` |
-| `factor_preprocess/adapters/fe_operator.py` | `9ec69415707feac974eed219f15910f22cde9650aac57b00873df1c3bbf977b2` |
+| `factor_preprocess/adapters/fe_operator.py` | `af25dbcca4a39954bba384d1bb9d52907fffd01f01d54540ba3d3710d18ac528` |
 | `factor_preprocess/adapters/fe_robust_ewma_identity.py` | `2d4074ff7790a1694e92de906ed0b6f79f0f34b693efcb2f1f2e20185620a531` |
 | `factor_preprocess/adapters/fe_smoothing.py` | `e68f7d78dd132f57b3728d52644fc902ebc6c31f72038ffd733f088c60875534` |
 | `factor_preprocess/adapters/fitted_recipe.py` | `f6e770d3b0ad1090b52ce527169005b4ca7f06b58b06462c35db06e9c2c42e2e` |
@@ -5450,7 +5470,7 @@ Compute GARCH-inspired rolling volatility with short-term and long-term componen
 | `factor_preprocess/regime/switching.py` | `a6114ab07de853206d2d705d79946a162efb5d8cb04a8c7352e87ca5e5c8c43a` |
 | `factor_preprocess/registry/__init__.py` | `f7d6d9c9d84116aa51d6c7d38695d2b439f63c69cb01d54327a998d970936329` |
 | `factor_preprocess/registry/policies.py` | `6f0c776875e25205ce2e8f072dfdb70ae15caacdb6f9dc516a6151cace7fd202` |
-| `factor_preprocess/registry/transforms.py` | `b006e756ad6e8712227e41bc3112354c5675975397b69c47f2de719b36c08c4a` |
+| `factor_preprocess/registry/transforms.py` | `06adef02f10730435016464e14f303acad51bcd58f9a41109719914cc30ef0c2` |
 | `factor_preprocess/representation/__init__.py` | `5b62691fd8b68400db3bcc025ec528ed68240d3dd127d5e036fe3e08fb58942d` |
 | `factor_preprocess/representation/linear_ready.py` | `c0f394448c6be34cc02bf83000e182da18d4f022fe83c82cd524b5582f20c81e` |
 | `factor_preprocess/representation/multichannel.py` | `f9edaba509c7bf1c12a1534eb9ca758e523f7efc62f955e09b8609bc6c346dfe` |

@@ -40,9 +40,43 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
 import inspect
+from collections.abc import Mapping
+import hashlib
+import json
 
 import numpy as np
 import pandas as pd
+
+from factor_preprocess.errors import GovernanceError
+
+_EXECUTION_IDENTITY_SCHEMA = "factor-preprocess-execution-identity/v1"
+_BACKEND = "pandas_numpy"
+_IDENTITY_COVERAGE = (
+    "Selected FE pandas_numpy operator implementation and declared operator "
+    "contract, plus the FP long/panel adapter code and call mapping; does not "
+    "cover the full transitive runtime, native libraries, or data dependencies."
+)
+_ADAPTER_ONLY_PARAMS = frozenset({
+    "values", "time_col", "asset_col", "value_col", "exposures", "exposure_cols",
+})
+
+
+def _adapter_implementation_hash() -> str:
+    """Hash only the adapter code participating in FE_OPERATOR execution."""
+    from factor_engine.backend.evidence_provenance import compute_implementation_hash
+
+    sources = (
+        inspect.getsource(_long_to_wide),
+        inspect.getsource(_stack_back),
+        inspect.getsource(FeOperatorExecutor._ensure),
+        inspect.getsource(FeOperatorExecutor.__call__),
+    )
+    return compute_implementation_hash("\n\0".join(sources))
+
+
+def _identity_digest(payload: dict) -> str:
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 #: Non-panel (scalar/flag) parameters that must NOT be interpreted as value
 #: columns when mapping a long frame onto an FE operator call.
@@ -146,18 +180,86 @@ class FeOperatorExecutor:
         self.fallback = fallback
         self._registry = None
         self._op = None
+        self._resolved_canonical = None
         self.allow_research_fallback = allow_research_fallback
         self.effective_parameters: Dict[str, Any] = {}
 
     def _ensure(self):
         if self._registry is None:
             self._registry = _fe_operator_registry()
-        if self._op is None:
-            self._op = self._registry.get(self.canonical, backend="pandas_numpy")
-            if self._op is None:
-                raise KeyError(
-                    f"FE operator {self.canonical!r} unavailable on pandas_numpy"
+        canonical = self._registry.resolve_canonical(self.canonical)
+        op = self._registry.get(canonical, backend=_BACKEND)
+        if op is None:
+            raise KeyError(f"FE operator {canonical!r} unavailable on {_BACKEND}")
+        # Refresh on every execution/identity lookup. A cached operator must
+        # never be paired with metadata from a replacement registry binding.
+        self._resolved_canonical = canonical
+        self._op = op
+
+    @property
+    def execution_identity(self) -> dict:
+        """Return a live identity for the exact backend binding this adapter uses."""
+        try:
+            self._ensure()
+            from factor_engine.cleaned_operators.registry import (
+                _contract_hash,
+                _impl_source_hash,
+            )
+
+            _, _, catalog = self._registry._read_state()
+            canonical = self._resolved_canonical
+            entry = catalog.get(canonical)
+            if not isinstance(entry, Mapping):
+                raise GovernanceError(f"FE catalog entry missing for {canonical!r}")
+            backend_meta = (entry.get("backend_meta") or {}).get(_BACKEND) or {}
+            source = str(backend_meta.get("source") or "").strip()
+            semantic_version = str(entry.get("semantic_version") or "").strip()
+            if not source or not semantic_version:
+                raise GovernanceError(
+                    f"FE identity metadata is incomplete for {canonical!r}/{_BACKEND}"
                 )
+            implementation_hash = _impl_source_hash(self._op)
+            contract_hash = _contract_hash(self._op)
+            adapter_hash = _adapter_implementation_hash()
+            if not all((implementation_hash, contract_hash, adapter_hash)):
+                raise GovernanceError(
+                    f"FE operator identity is not certifiable for {canonical!r}"
+                )
+        except GovernanceError:
+            raise
+        except Exception as exc:
+            raise GovernanceError(
+                f"FE operator identity is unavailable for {self.canonical!r}"
+            ) from exc
+
+        payload = {
+            "schema": _EXECUTION_IDENTITY_SCHEMA,
+            "status": "bound",
+            "execution_origin": "FE_OPERATOR",
+            "identity_kind": "FE_OPERATOR_SELECTED_BACKEND",
+            "fe_canonical_id": canonical,
+            "backend": _BACKEND,
+            "backend_source": source,
+            "semantic_version": semantic_version,
+            "fe_implementation_hash": implementation_hash,
+            "fe_contract_hash": contract_hash,
+            "adapter_implementation_hash": adapter_hash,
+            "adapter_call_contract": {
+                "input_layout": "pandas long frame -> pandas wide panel -> FE -> aligned pandas Series",
+                "identity_columns": ["time_col", "asset_col"],
+                "value_column": "value_col",
+                "parameter_aliases": dict(sorted(self._PARAM_ALIASES.items())),
+                "adapter_only_parameters": sorted(_ADAPTER_ONLY_PARAMS),
+                "runtime_arguments": "caller-provided parameters are alias-normalized and validated against the FE contract",
+                "fe_parameter_contract_hash": contract_hash,
+            },
+            "runtime_versions": {
+                "numpy": str(np.__version__),
+                "pandas": str(pd.__version__),
+            },
+            "coverage_marker": _IDENTITY_COVERAGE,
+        }
+        return {**payload, "digest": _identity_digest(payload)}
 
     def __call__(self, *args, **kwargs):
         """Route a long-format FP call through the FE operator."""
@@ -194,7 +296,7 @@ class FeOperatorExecutor:
         asset_col = call_args.get("asset_col", "asset_id")
 
         # Extract scalar params to forward (winzoring bounds / OLS flags / etc).
-        adapter_only = {"values", "time_col", "asset_col", "value_col", "exposures", "exposure_cols"}
+        adapter_only = _ADAPTER_ONLY_PARAMS
         scalar_kw = {}
         for key, value in call_args.items():
             if key in adapter_only:
@@ -306,8 +408,23 @@ def get_fe_executor(canonical: str, fallback: Optional[Callable] = None, *, allo
     return FeOperatorExecutor(canonical, fallback=fallback, allow_research_fallback=allow_research_fallback)
 
 
+def get_fe_operator_identity(executor, transform_name: str) -> dict:
+    """Bind an FP transform name to its executor's live FE identity."""
+    identity = getattr(executor, "execution_identity", None)
+    if not isinstance(identity, dict) or identity.get("status") != "bound":
+        raise GovernanceError(
+            f"FE operator execution identity is unavailable for {transform_name!r}"
+        )
+    payload = dict(identity)
+    payload["transform_name"] = transform_name
+    payload["fe_operator_id"] = payload.get("fe_canonical_id")
+    payload.pop("digest", None)
+    return {**payload, "digest": _identity_digest(payload)}
+
+
 __all__ = [
     "FeOperatorExecutor",
     "FeRecipeExecutor",
     "get_fe_executor",
+    "get_fe_operator_identity",
 ]

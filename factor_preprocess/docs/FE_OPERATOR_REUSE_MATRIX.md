@@ -37,16 +37,25 @@ Parity evidence: `tests/test_fe_operator_parity.py` and
 `tests/test_missing_indicator_fe.py` (per-FE-backed-transform parity tests;
 tolerance contract explicit — cross-sectional, ffill, and missing indicator
 exact `atol=0.0`, OLS `atol=1e-9`/`rtol=1e-7`). FP FeOperatorExecutor
-currently selects FE `pandas_numpy` only. FE also has an `is_null` Polars
-binding with NULL-or-NaN semantics, but FP does not execute it through Polars;
-that binding is not part of this FP parity or identity claim. FE_OPERATOR registry
-identity records the canonical operator id and route metadata, but does not bind
-the selected FE implementation body/physical identity. That identity gap remains open.
+selects FE `pandas_numpy` only and converts pandas long input to a wide panel,
+then stacks the FE result back to a pandas Series. FE also has an `is_null`
+Polars binding with NULL-or-NaN semantics, but FP does not execute it through
+Polars; that binding is outside this FP route and its identity. FE_OPERATOR
+execution identities bind the selected canonical/backend, catalog source and
+semantic version, FE implementation and logical-contract hashes, adapter
+implementation/call contract, and NumPy/Pandas versions. The coverage marker
+excludes the full transitive runtime, native libraries, and data dependencies;
+this is a scoped implementation identity, not a full runtime attestation.
 Registry routing tests:
 `tests/test_transform_metadata.py`.
 
 The `cs_winsor` parity probe covers non-finite inputs: FP converts +/-Inf to
 missing before quantile estimation, matching FE `winsorize`.
+
+Identity regression tests: `tests/test_fe_operator_execution_identity.py`
+checks all five FE_OPERATOR routes, live identity refresh after a FE backend
+replacement, binding of the selected operator to actual execution, and
+fail-closed behavior when FE provenance is incomplete.
 
 ## Cross-sectional
 
