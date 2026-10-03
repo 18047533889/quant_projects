@@ -1,7 +1,8 @@
 """Opt-in real CUDA route glue; live qualification is tested separately.
 
 Synthetic data and stubbed qualification do not establish COS throughput or
-a fastest backend. The actual source reader, GPU executor and post-execution
+a fastest backend. Stubbed receipts have no actual-output identity and must
+not retain qualification. The source reader, GPU executor and post-execution
 schedule checker remain real; SciPy supplies the numerical reference.
 """
 import os
@@ -57,4 +58,6 @@ def test_actual_cuda_profile_width_and_independent_rank_reference(monkeypatch, a
     assert result.metadata["backend_used"] == "cuda"
     assert result.metadata["factor_tile_size"] == 2
     assert result.metadata["oom_retries"] == 0
-    assert result.metadata["source_qualification_applied"] is True
+    assert result.metadata["source_qualification_applied"] is False
+    assert result.metadata["source_qualification_reason"] == (
+        "qualified_profile_output_identity_deviated")

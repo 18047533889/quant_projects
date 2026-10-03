@@ -1,5 +1,6 @@
 from dataclasses import replace
 from types import SimpleNamespace
+import numpy as np
 
 import pytest
 
@@ -11,10 +12,33 @@ from quant_evaluator.runtime.source_route_profiles import (
     MetricComparisonReceipt, MetricOutputReceipt, SourceRouteProfileContext,
     route_profile_execution_config_sha256,
 )
+from quant_evaluator.runtime.source_profile_output_identity import (
+    metric_output_identity,
+)
 
 
 def _h(char):
     return char * 64
+
+
+def _valid_output(context, metadata):
+    factor_count = context.request_shape[-1]
+    return SimpleNamespace(
+        factor_ids=tuple(f"f{i}" for i in range(factor_count)),
+        metadata=metadata,
+        scalar_metrics={"rank_ic": np.arange(factor_count, dtype=np.float64)},
+        series_metrics={}, vector_metrics={},
+        observation_counts={"rank_ic": np.ones(factor_count, dtype=np.int64)},
+    )
+
+
+def _matching_profile(profile, output):
+    identity = metric_output_identity(output.scalar_metrics["rank_ic"],
+                                      output.observation_counts["rank_ic"])
+    receipt = MetricOutputReceipt("rank_ic", identity.values_sha256,
+        identity.finite_mask_sha256, identity.observation_counts_sha256,
+        len(output.factor_ids), len(output.factor_ids))
+    return replace(profile, outputs=(receipt,))
 
 
 class _Source:
@@ -198,8 +222,9 @@ def test_cuda_execution_guard_accepts_exact_width_count_and_zero_oom(monkeypatch
     profile = _profile(context, "cuda", 4, 4.0, "4")
     source = _Source(5)
     source.reads = [(0, 4), (4, 5)]
-    output = SimpleNamespace(metadata={
-        "factor_tiles_processed": 2, "factor_tile_size": 4, "oom_retries": 0})
+    output = _valid_output(context, {"factor_tiles_processed": 2,
+        "factor_tile_size": 4, "oom_retries": 0})
+    profile = _matching_profile(profile, output)
     monkeypatch.setattr(router, "capture_source_route_profile_context",
                         lambda **kwargs: context)
     assert router.validate_source_route_profile_execution(
@@ -246,3 +271,44 @@ def test_execution_guard_rejects_bool_start_even_when_equal_to_zero(monkeypatch)
         metrics=("rank_ic",), request_fingerprint=_h("a"),
         requested_tile_size=16, policy=policy, backend="cpu")
     assert result == "qualified_profile_execution_receipt_deviated"
+
+
+def test_execution_guard_rejects_factor_id_axis_drift(monkeypatch):
+    policy = GPUExecutionPolicy()
+    context = _context(2, 2, policy)
+    source = _Source(2)
+    source.reads = [(0, 2)]
+    output = _valid_output(context, {"factor_tiles_processed": 1})
+    profile = _matching_profile(_profile(context, "cpu", 2, 4.0, "4"), output)
+    output.factor_ids = output.factor_ids[::-1]
+    monkeypatch.setattr(router, "capture_source_route_profile_context",
+                        lambda **kwargs: context)
+    result = router.validate_source_route_profile_execution(
+        source=source, output=output, profile=profile,
+        expected_context=context, metadata=_Metadata(2, 2),
+        metrics=("rank_ic",), request_fingerprint=_h("a"),
+        requested_tile_size=16, policy=policy, backend="cpu")
+    assert result == "qualified_profile_output_identity_deviated"
+
+
+def test_execution_guard_rejects_live_output_identity_drift(monkeypatch):
+    policy = GPUExecutionPolicy()
+    context = _context(1, 1, policy)
+    profile = _profile(context, "cpu", 1, 4.0, "4")
+    source = _Source(1)
+    source.reads = [(0, 1)]
+    output = SimpleNamespace(
+        factor_ids=("f0",),
+        metadata={"factor_tiles_processed": 1},
+        scalar_metrics={"rank_ic": np.array([123.0])},
+        series_metrics={}, vector_metrics={},
+        observation_counts={"rank_ic": np.array([7], dtype=np.int64)},
+    )
+    monkeypatch.setattr(router, "capture_source_route_profile_context",
+                        lambda **kwargs: context)
+    result = router.validate_source_route_profile_execution(
+        source=source, output=output, profile=profile,
+        expected_context=context, metadata=_Metadata(1, 1),
+        metrics=("rank_ic",), request_fingerprint=_h("a"),
+        requested_tile_size=16, policy=policy, backend="cpu")
+    assert result == "qualified_profile_output_identity_deviated"

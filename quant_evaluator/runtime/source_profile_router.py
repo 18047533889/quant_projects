@@ -16,6 +16,9 @@ from quant_evaluator.contracts._hashutil import stable_content_hex
 from quant_evaluator.contracts.backend_policy import GPUExecutionPolicy
 from quant_evaluator.contracts.factor_tile_source import admitted_source_tile_limit
 from quant_evaluator.runtime import source_qualification_cache as profile_cache
+from quant_evaluator.runtime.source_profile_output_identity import (
+    matches_profile_output_identity,
+)
 from quant_evaluator.runtime.source_qualified_router import (
     QUALIFICATION_SCOPE, SOURCE_CONTENT_SCOPE, SourceQualificationError,
     _capture_live_context_state, _policy_fields, _preliminary_cache_key,
@@ -370,4 +373,8 @@ def validate_source_route_profile_execution(
         return "qualified_profile_post_context_unavailable"
     if post_context != expected_context:
         return "qualified_profile_live_context_changed"
+    if not matches_profile_output_identity(
+            output, profile, expected_context, metrics=metrics,
+            expected_factor_ids=metadata.factor_ids):
+        return "qualified_profile_output_identity_deviated"
     return None

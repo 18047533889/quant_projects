@@ -11,6 +11,7 @@ from test_source_profile_default_cache_oct04 import (
 )
 from test_source_profile_live_guards_oct04 import _records
 from test_source_route_profiles_api_oct03 import _Source, _labels
+from source_profile_fixture_identity_oct04 import rebind_pair_to_cpu_outputs
 
 
 @pytest.fixture(autouse=True)
@@ -34,8 +35,13 @@ def _typed_pair(monkeypatch):
         source=source, metadata=metadata, metrics=("rank_ic",),
         request_fingerprint=request_fingerprint, requested_tile_size=16,
         policy=policy)
-    return source, labels, policy, request_fingerprint, _records(
-        context, cpu_width=5, gpu_width=2)
+    records = _records(context, cpu_width=5, gpu_width=2)
+    actual_cpu = api.evaluate_factor_source_batch(
+        source, labels, metrics=("rank_ic",), backend="cpu",
+        max_tile_size=16, gpu_policy=policy)
+    source.reads.clear()
+    return source, labels, policy, request_fingerprint, rebind_pair_to_cpu_outputs(
+        records, actual_cpu)
 
 
 def _install_candidate_lookup(monkeypatch, request_fingerprint, records):

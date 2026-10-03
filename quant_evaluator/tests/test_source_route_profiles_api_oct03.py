@@ -155,12 +155,17 @@ def test_v2_cuda_winner_dispatches_measured_width_and_checks_real_receipt(monkey
         MetricComparisonReceipt, MetricOutputReceipt, SourceRouteProfileContext,
         route_profile_execution_config_sha256,
     )
+    from source_profile_fixture_identity_oct04 import rebind_pair_to_cpu_outputs
 
     source = _Source()
+    labels = _labels(source)
     policy = GPUExecutionPolicy(max_factor_tile_size=2)
     h = lambda char: char * 64
+    metadata = api.capture_factor_tile_source(source)
+    request_fingerprint = api._source_request_fingerprint(
+        metadata, labels, ("rank_ic",))
     context = SourceRouteProfileContext(
-        request_content_sha256=h("a"), source_identity_sha256=h("b"),
+        request_content_sha256=request_fingerprint, source_identity_sha256=h("b"),
         source_content_sha256=h("c"), executable_source_sha256=h("d"),
         runtime_fingerprint_sha256=h("e"), package_fingerprint_sha256=h("f"),
         thread_fingerprint_sha256=h("1"), device_fingerprint_sha256=h("2"),
@@ -202,6 +207,11 @@ def test_v2_cuda_winner_dispatches_measured_width_and_checks_real_receipt(monkey
         CounterbalancedRouteProfileRecord(context, ("cpu", "cuda"), cpu, cuda, comparison),
         CounterbalancedRouteProfileRecord(context, ("cuda", "cpu"), cpu2, cuda2, comparison),
     )
+    actual_cpu = api.evaluate_factor_source_batch(
+        source, labels, metrics=("rank_ic",), backend="cpu",
+        max_tile_size=16, gpu_policy=policy)
+    source.reads.clear()
+    records = rebind_pair_to_cpu_outputs(records, actual_cpu)
     router.profile_cache.clear_validated_records()
     monkeypatch.setattr(router, "capture_source_route_profile_context",
                         lambda **kwargs: context)
@@ -230,7 +240,7 @@ def test_v2_cuda_winner_dispatches_measured_width_and_checks_real_receipt(monkey
     monkeypatch.setattr(gpu_executor, "GPUExecutor", _Executor)
 
     result = api.evaluate_factor_source_batch(
-        source, _labels(source), metrics=("rank_ic",), backend="auto",
+        source, labels, metrics=("rank_ic",), backend="auto",
         max_tile_size=16, gpu_policy=policy, source_qualification=records)
 
     assert source.reads == [(0, 2), (2, 4), (4, 5)]
@@ -280,4 +290,3 @@ def test_v2_post_execution_mismatch_revokes_result_and_discards_cache(monkeypatc
     assert result.metadata["source_qualification_status"] == "execution_configuration_deviated"
     assert result.metadata["source_qualification_reason"] == "qualified_profile_live_context_changed"
     assert len(discards) == 1
-

@@ -22,14 +22,13 @@ from quant_evaluator.runtime.source_route_profiles import (
     SourceRouteProfileQualification,
     validate_source_route_profile_qualification,
 )
+from quant_evaluator.runtime.source_profile_report_schema import (
+    REPORT_KIND, REPORT_KIND_V2, REPORT_RUN_BACKENDS, REPORT_RUN_ORDER,
+    REPORT_SCHEMAS, REPORT_SHAPE, REPORT_STATUS, PEARSON_METRICS,
+)
 
 MAX_REPORT_BYTES = 1024 * 1024
-REPORT_KIND = "real_cos_profile_abba_f48_pearson.v1"
-REPORT_KIND_V2 = "real_cos_profile_abba_f48_pearson.v2"
-REPORT_STATUS = "complete"
-REPORT_SHAPE = (2586, 5461, 48)
-REPORT_METRICS = ("pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir")
-REPORT_RUN_ORDER = ("cpu", "cuda_strict", "cuda_strict", "cpu")
+REPORT_METRICS = PEARSON_METRICS
 _HASH = re.compile(r"[0-9a-f]{64}\Z")
 _TOP_FIELDS = frozenset({
     "kind", "status", "run_started", "shape", "metric_ids", "manifest_sha256",
@@ -231,10 +230,10 @@ def _check_oracle_report(raw, context, expected_backend, expected_index, name):
             or _str(item["backend"], f"{name}.backend") != expected_backend
             or _int(item["run_index"], f"{name}.run_index") != expected_index):
         raise ValueError(f"{name} did not pass or is misbound")
-    metric_map = _mapping(item["metrics"], frozenset(REPORT_METRICS), f"{name}.metrics")
+    metric_map = _mapping(item["metrics"], frozenset(context.metric_ids), f"{name}.metrics")
     coverage = dict(context.metric_coverage)
     tolerances = dict(context.metric_error_tolerances)
-    for metric in REPORT_METRICS:
+    for metric in context.metric_ids:
         output = _mapping(metric_map[metric], _METRIC_ORACLE_FIELDS,
                           f"{name}.metrics.{metric}")
         for key in _METRIC_ORACLE_FIELDS - {
@@ -250,7 +249,8 @@ def _check_oracle_report(raw, context, expected_backend, expected_index, name):
             raise ValueError(f"{name} tolerance failed for {metric}")
 
 
-def _check_auto_receipt(raw, context, winner, run_index, name, *, default_auto=False):
+def _check_auto_receipt(raw, context, winner, run_index, name, *, default_auto=False,
+                        expected_value_hashes=None):
     expected_fields = _DEFAULT_AUTO_FIELDS if default_auto else _AUTO_FIELDS
     auto = _mapping(raw, expected_fields, name)
     if (_str(auto["backend_used"], f"{name}.backend_used") != winner
@@ -265,24 +265,25 @@ def _check_auto_receipt(raw, context, winner, run_index, name, *, default_auto=F
         raise ValueError("sixth default-auto receipt must report cache_status=cache_hit")
     _check_oracle_report(auto["oracle_report"], context, winner, run_index,
                          f"{name}.oracle_report")
-    value_hashes = _mapping(auto["values_sha256"], frozenset(REPORT_METRICS),
+    value_hashes = _mapping(auto["values_sha256"], frozenset(context.metric_ids),
                             f"{name}.values_sha256")
     for metric, digest in value_hashes.items():
         _hash(digest, f"{name}.values_sha256.{metric}")
+        if expected_value_hashes is not None and digest != expected_value_hashes.get(metric):
+            raise ValueError(f"{name}.values_sha256.{metric} does not match "
+                             "the selected backend profile")
 
 
 def _check_report(payload):
     if type(payload) is not dict:
         raise ValueError("report must be a JSON object")
     kind = _str(payload.get("kind"), "kind")
-    if kind == REPORT_KIND:
-        expected_fields = _TOP_FIELDS
-        is_v2 = False
-    elif kind == REPORT_KIND_V2:
-        expected_fields = _TOP_FIELDS | {"default_auto_verification"}
-        is_v2 = True
-    else:
+    schema = REPORT_SCHEMAS.get(kind)
+    if schema is None:
         raise ValueError("report kind is unsupported")
+    expected_fields = (_TOP_FIELDS | {"default_auto_verification"}
+                       if schema.default_auto_required else _TOP_FIELDS)
+    is_v2 = schema.default_auto_required
     body = _mapping(payload, expected_fields, "report")
     if body["status"] != REPORT_STATUS:
         raise ValueError("report status is not complete")
@@ -291,14 +292,14 @@ def _check_report(payload):
     shape = _tuple(body["shape"], "shape", lambda x, n: _int(x, n, minimum=1))
     request_shape = _tuple(body["request_shape"], "request_shape",
                            lambda x, n: _int(x, n, minimum=1))
-    if shape != REPORT_SHAPE or request_shape != REPORT_SHAPE:
-        raise ValueError("report does not describe the fixed F48 full-history request")
+    if shape != schema.shape or request_shape != schema.shape:
+        raise ValueError("report does not describe the fixed source-profile request")
     metrics = _tuple(body["metric_ids"], "metric_ids", _str)
-    if metrics != REPORT_METRICS:
-        raise ValueError("report metric set differs from the fixed Pearson chain")
+    if metrics != schema.metric_ids:
+        raise ValueError("report metric order differs from its fixed schema")
     manifest = _hash(body["manifest_sha256"], "manifest_sha256")
-    if _int(body["requested_tile_cap"], "requested_tile_cap") != 16:
-        raise ValueError("report tile cap differs from the fixed CLI profile")
+    if _int(body["requested_tile_cap"], "requested_tile_cap") != schema.requested_tile_cap:
+        raise ValueError("report tile cap differs from its fixed schema")
     preflight = _mapping(body["preflight"], _PREFLIGHT_FIELDS, "preflight")
     if _bool(preflight["pass"], "preflight.pass") is not True:
         raise ValueError("report preflight did not pass")
@@ -307,8 +308,8 @@ def _check_report(payload):
     if (preflight["available_ram_bytes"] < preflight["minimum_available_ram_bytes"]
             or preflight["cos_cache_disk_free_bytes"] < preflight["required_disk_bytes"]):
         raise ValueError("preflight pass flag conflicts with its resource measurements")
-    if body["oracle"] != "independent scipy/decimal Pearson chain":
-        raise ValueError("report does not name the supported independent oracle")
+    if body["oracle"] != schema.oracle:
+        raise ValueError("report does not name its fixed independent oracle")
     if _tuple(body["run_order"], "run_order", _str) != REPORT_RUN_ORDER:
         raise ValueError("report ABBA run order is invalid")
 
@@ -318,8 +319,8 @@ def _check_report(payload):
     records = tuple(_record(item, f"profile_records[{index}]")
                     for index, item in enumerate(raw_records))
     context = records[0].context
-    if context.request_shape != REPORT_SHAPE or context.metric_ids != REPORT_METRICS:
-        raise ValueError("profile context differs from the fixed CLI request")
+    if context.request_shape != schema.shape or context.metric_ids != schema.metric_ids:
+        raise ValueError("profile context differs from its fixed report schema")
     if (context.requested_tile_size != 16
             or records[0].execution_order != ("cpu", "cuda")
             or records[1].execution_order != ("cuda", "cpu")):
@@ -331,19 +332,25 @@ def _check_report(payload):
     if len(reports) != 4:
         raise ValueError("report must contain four per-run oracle receipts")
     for index, raw in enumerate(reports):
-        backend = ("cpu", "cuda", "cuda", "cpu")[index]
+        backend = REPORT_RUN_BACKENDS[index]
         _check_oracle_report(raw, context, backend, index, f"oracle_reports[{index}]")
 
     winner = _str(body["qualification_winner"], "qualification_winner")
     if winner not in ("cpu", "cuda"):
         raise ValueError("qualification winner must be cpu or cuda")
-    _check_auto_receipt(body["auto_verification"], context, winner, 4, "auto_verification")
-    if is_v2:
-        _check_auto_receipt(body["default_auto_verification"], context, winner, 5,
-                            "default_auto_verification", default_auto=True)
-
     qualification = validate_source_route_profile_qualification(
         records, expected_context=context)
+    expected_value_hashes = None
+    if schema.auto_values_must_match_profile:
+        profile = records[0].cuda if winner == "cuda" else records[0].cpu
+        expected_value_hashes = {item.metric_id: item.values_sha256 for item in profile.outputs}
+    _check_auto_receipt(body["auto_verification"], context, winner, 4, "auto_verification",
+                        expected_value_hashes=expected_value_hashes)
+    if is_v2:
+        _check_auto_receipt(body["default_auto_verification"], context, winner, 5,
+                            "default_auto_verification", default_auto=True,
+                            expected_value_hashes=expected_value_hashes)
+
     if qualification.winning_backend != winner:
         raise ValueError("report winner differs from its validated profile records")
     return SourceProfileReport(kind, REPORT_STATUS, manifest, records, qualification)

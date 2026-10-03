@@ -1,0 +1,19 @@
+{
+  "kind": "linear_shape_publication_independent_readback.v1",
+  "verification_date": "2026-10-04",
+  "scoped_source_commit": "efd7c21a2d67b469b8e6f6c95dd6af956172067e",
+  "scoped_source_path": "quant_evaluator",
+  "observed_personal_main": "682de0da9a08fbe73555c563c43de291ca8cfc9f",
+  "personal_contains_source_commit": true,
+  "personal_ancestry_check_exit": 0,
+  "observed_hkust_main": "7b443a65b0904d5b99807e0ea0182a4985b1fa5e",
+  "hkust_remote_read_exit": 0,
+  "source_tree": "907bcfa136357da6da8ca5ad5df03cdfb00b79b9",
+  "remote_commit_tree_from_existing_mirror_cache": "907bcfa136357da6da8ca5ad5df03cdfb00b79b9",
+  "source_equals_remote_commit_tree": true,
+  "method": "authenticated remote refs/heads/main read; existing mirror object read; committed subtree comparison; personal ancestor check",
+  "new_clone_fetch_or_copy_performed": false,
+  "credentials_or_remote_urls_included": false,
+  "evidence_scope": "published public CUDA six-shape source/API tranche only",
+  "performance_qualification_claimed": false
+}

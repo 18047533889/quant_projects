@@ -23,6 +23,9 @@ from quant_evaluator.runtime.source_route_profiles import (
     MetricComparisonReceipt, MetricOutputReceipt, SourceRouteProfileContext,
     route_profile_execution_config_sha256,
 )
+from quant_evaluator.runtime.source_profile_output_identity import (
+    hash_array_bytes, hash_finite_mask, normalize_counts_array,
+)
 
 _TIMING_SCOPE = "evaluate_factor_source_batch_wall_v1"
 _SCHEDULE_SCOPE = "zero_oom_source_equals_compute_v1"
@@ -38,21 +41,11 @@ def _mapping(value: object, name: str) -> Mapping:
 
 def _hash_array_bytes(values: np.ndarray) -> str:
     """SHA-256 of canonical C-order array bytes, using bounded buffers."""
-    digest = hashlib.sha256()
-    iterator = np.nditer(values, flags=["external_loop", "buffered", "zerosize_ok"],
-                         op_flags=["readonly"], order="C", buffersize=_HASH_CHUNK)
-    for chunk in iterator:
-        digest.update(np.asarray(chunk).tobytes(order="C"))
-    return digest.hexdigest()
+    return hash_array_bytes(values)
 
 
 def _finite_mask_hash(values: np.ndarray) -> str:
-    digest = hashlib.sha256()
-    iterator = np.nditer(values, flags=["external_loop", "buffered", "zerosize_ok"],
-                         op_flags=["readonly"], order="C", buffersize=_HASH_CHUNK)
-    for chunk in iterator:
-        digest.update(np.isfinite(chunk).astype(np.uint8, copy=False).tobytes())
-    return digest.hexdigest()
+    return hash_finite_mask(values)
 
 
 def _counts_array(bundle: BatchEvaluationBundle, metric: str, factor_count: int) -> np.ndarray:
@@ -67,7 +60,7 @@ def _counts_array(bundle: BatchEvaluationBundle, metric: str, factor_count: int)
     if counts.dtype.kind == "u" and np.any(counts > np.iinfo(np.int64).max):
         raise ValueError(f"observation counts for {metric!r} exceed int64 encoding")
     # Same int64 byte encoding used by benchmark_real_cos_source_batch.compare.
-    return np.asarray(counts, dtype="<i8", order="C")
+    return normalize_counts_array(counts)
 
 
 def _metric_array(bundle: BatchEvaluationBundle, metric: str,
