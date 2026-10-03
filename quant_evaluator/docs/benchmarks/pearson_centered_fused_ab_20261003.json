@@ -1,0 +1,121 @@
+{
+  "baseline": {
+    "commit": "249113d554f2a88c03879e0a776042af26db002e",
+    "correlation_sha256": "d619887681fca98fd5a06d7c2d225f89a11565a5ded4c5fa68bb964b60d11cf2"
+  },
+  "current_sources": {
+    "correlation_sha256": "18fb6ad8f2600aa28401cb01d7203397e2b236a7d4d64f13f94974d56d176ee0",
+    "fused_module_sha256": "0644a6fa9b9e57b542cfdc18e40cee9ee2225387cda8c94b7213908a145e9514",
+    "repair_module_sha256": "53cddadd56acffd8c4f9cd123453ce53b9635c34bc9394632eba2426a2cbe8e5"
+  },
+  "receipt_revision": 2,
+  "superseded_previous_run": {
+    "status": "superseded; do not use its performance figures",
+    "fused_module_sha256": "a0635a59cda4dc8ff94acc59ba7d2138c24b50c4a01b78d3d18835b0126dc482",
+    "reason": "Finalized long-long count handling and CUDA grid row guard changed the fused module; the AB was rerun against the final source."
+  },
+  "environment": {
+    "gpu": "NVIDIA L20",
+    "device_total_bytes": 47665709056,
+    "cupy": "14.2.0",
+    "cuda_runtime_version": 13020,
+    "cuda_driver_version": 13000
+  },
+  "method": {
+    "function": "quant_evaluator.kernels.gpu.correlation._pairwise_finite_sums",
+    "dtype": "float64",
+    "input_layout": "x=(T,F,N), y=(T,N), pairwise finite mask",
+    "input_generator": "NumPy default_rng(seed), standard normal; x cells independently set NaN with p=0.015 and y cells set +Inf with p=0.012",
+    "min_obs": 20,
+    "warmup_runs_each": 2,
+    "timed_order": "ABBA x 3; synchronous GPU timing around each call",
+    "memory_budget_bytes": 4294967296,
+    "minimum_free_memory_preflight_bytes": 5368709120,
+    "cuPy_pool_limit_checked_after_warmups": true,
+    "cuPy_pool_limit_note": "Per-process CuPy pool accounting; not a physical device-memory guarantee",
+    "instrumentation_in_timed_region": false
+  },
+  "cases": [
+    {
+      "shape": [512, 32, 1000],
+      "seed": 610062,
+      "count_equal": true,
+      "nan_mask_equal": true,
+      "max_absolute_ic_error": 5.551115123125783e-17,
+      "allclose": {"rtol": 1e-8, "atol": 1e-10, "passed": true},
+      "old_seconds": [
+        0.004773925989866257,
+        0.00476840598275885,
+        0.00478881603339687,
+        0.004774736997205764,
+        0.004781775991432369,
+        0.004771236970555037
+      ],
+      "fused_seconds": [
+        0.0008717239834368229,
+        0.000864403962623328,
+        0.0008812840096652508,
+        0.0008640650194138288,
+        0.0008801330113783479,
+        0.0008637239807285368
+      ],
+      "median_old_seconds": 0.00477433149353601,
+      "median_fused_seconds": 0.0008680639730300754,
+      "speedup_old_over_fused": 5.4999765476623415,
+      "conservative_working_set_estimate_bytes": 1464369152,
+      "cupy_pool_bytes_before_warmup": 561664000,
+      "cupy_pool_bytes_after_warmup": 692736000,
+      "free_memory_before_input_bytes": 40152858624,
+      "free_memory_after_cleanup_bytes": 40133984256
+    },
+    {
+      "shape": [512, 48, 1000],
+      "seed": 610078,
+      "count_equal": true,
+      "nan_mask_equal": true,
+      "max_absolute_ic_error": 5.551115123125783e-17,
+      "allclose": {"rtol": 1e-8, "atol": 1e-10, "passed": true},
+      "old_seconds": [
+        0.007409278012346476,
+        0.007426307012792677,
+        0.007402316958177835,
+        0.0074186670244671404,
+        0.007424296985846013,
+        0.00742505700327456
+      ],
+      "fused_seconds": [
+        0.0012742510298267007,
+        0.0012630720157176256,
+        0.0012755219941027462,
+        0.0012670219875872135,
+        0.0012756019714288414,
+        0.0012623819638974965
+      ],
+      "median_old_seconds": 0.007421482005156577,
+      "median_fused_seconds": 0.001270636508706957,
+      "speedup_old_over_fused": 5.840759300005419,
+      "conservative_working_set_estimate_bytes": 2194505728,
+      "cupy_pool_bytes_before_warmup": 851968000,
+      "cupy_pool_bytes_after_warmup": 851968000,
+      "free_memory_before_input_bytes": 40133984256,
+      "free_memory_after_cleanup_bytes": 40133984256
+    }
+  ],
+  "public_chain_correctness": {
+    "test": "quant_evaluator/tests/test_pearson_centered_fused.py::test_public_pearson_chain_cpu_cuda_parity_with_missing_and_min_obs",
+    "shape_per_case": [8, 64, "F"],
+    "factor_counts": [32, 48],
+    "metrics": ["pearson_ic_series", "pearson_ic", "pearson_ic_std", "pearson_ic_ir"],
+    "dtype": "float64",
+    "missing_values_and_validity_masks": true,
+    "min_assets": 20,
+    "threshold_pair_counts": [19, 20],
+    "threshold_pair_semantics": "19 observations rejected, 20 observations retained",
+    "tolerance": {"rtol": 1e-8, "atol": 1e-10},
+    "maximum_absolute_error_by_factor_count": {
+      "32": 1.1102230246251565e-15,
+      "48": 5.5511151231257827e-16
+    },
+    "result": "2 passed"
+  }
+}

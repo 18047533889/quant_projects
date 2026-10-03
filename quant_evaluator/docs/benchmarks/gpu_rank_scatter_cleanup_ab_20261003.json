@@ -1,0 +1,58 @@
+{
+  "date": "2026-10-03",
+  "baseline_commit": "249113d554f2a88c03879e0a776042af26db002e",
+  "baseline_rank_sha256": "5ca3807ec1e56a61830dd70eeb036dee43e9d42fcd822f7ed668edc5a1a08ae8",
+  "current_rank_sha256": "e3a67854126e5e63ffadb79c4605c18d8ac1e623bc3ce2764b2d99148133b141",
+  "sorted_rank_runs_sha256": "77736a528d0da660b34b42b9baa8b25cb699c70a680fc17cfb5eb673e5bdc1be",
+  "shape": [512, 48, 1000],
+  "dtype": "float32",
+  "exact_rank_and_distinct_parity": true,
+  "gpu": {
+    "name": "NVIDIA L20",
+    "driver": "580.126.20",
+    "cuda_runtime_version": 13020,
+    "cupy": "14.2.0",
+    "numpy": "2.2.6",
+    "free_vram_preflight_bytes": 40152858624,
+    "total_vram_bytes": 47665709056
+  },
+  "workspace": {
+    "conservative_working_set_estimate_bytes": 1368653824,
+    "hard_limit_bytes": 4294967296,
+    "cupy_pool_growth_bytes_separate_pass": 660609536,
+    "memory_measurement_scope": "CuPy pool growth only; not process-wide peak VRAM"
+  },
+  "timing": {
+    "method": "CUDA events; warm stream execution, stop event synchronized per sample; excludes CPU wall time",
+    "warmups_per_implementation_and_mode": 3,
+    "abba_cycles_per_mode": 3,
+    "modes": {
+      "rank_only": {
+        "baseline_median_ms": 33.22563171386719,
+        "current_median_ms": 32.588287353515625,
+        "delta_ms": -0.6373443603515625,
+        "relative_change_percent": -1.9179,
+        "baseline_samples_ms": [33.23068618774414, 33.220577239990234, 33.21036911010742, 33.209312438964844, 33.30134582519531, 33.238014221191406],
+        "current_samples_ms": [32.65843200683594, 32.58367919921875, 32.509952545166016, 32.49766540527344, 32.5928955078125, 32.60115051269531]
+      },
+      "return_distinct": {
+        "baseline_median_ms": 33.44332695007324,
+        "current_median_ms": 33.18678283691406,
+        "delta_ms": -0.2565441131591797,
+        "relative_change_percent": -0.7672,
+        "baseline_samples_ms": [33.461246490478516, 33.42540740966797, 33.42438507080078, 33.532894134521484, 33.4202880859375, 33.49599838256836],
+        "current_samples_ms": [33.128448486328125, 33.187774658203125, 33.22470474243164, 33.06892776489258, 33.185791015625, 33.199073791503906]
+      }
+    }
+  },
+  "correctness_tests": {
+    "command": ".venv/bin/python -m pytest -q quant_evaluator/tests/test_gpu_rank_optimization_20261003.py quant_evaluator/tests/test_gpu_rank_run_scans.py quant_evaluator/tests/test_rank_distinct_reuse_20260928.py quant_evaluator/tests/test_v3_pairwise_rank_public.py",
+    "passed": 17,
+    "duration_seconds": 0.59
+  },
+  "notes": [
+    "This isolates batched_rank and does not measure full Spearman IC or executor overhead.",
+    "CuPy pool growth was identical for baseline and current in this pass; no pool-reservation reduction was demonstrated.",
+    "The timing deltas are modest and should not be interpreted as a broad end-to-end speedup."
+  ]
+}

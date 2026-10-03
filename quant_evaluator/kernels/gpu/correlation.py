@@ -17,6 +17,7 @@ import numpy as np
 
 from quant_evaluator.kernels.gpu.rank import batched_rank
 from quant_evaluator.kernels.gpu.pearson_repair import repair_unsafe_pearson_rows
+from quant_evaluator.kernels.gpu.pearson_centered_fused import fused_centered_sums
 
 
 def _import_cp():
@@ -52,20 +53,28 @@ def _pairwise_finite_sums(x, y, min_obs: int, *, bounded: bool = False):
             cp.zeros(x.shape[:2], dtype=cp.int32),
         )
     finite = cp.isfinite(x) & cp.isfinite(yb)
-    n = cp.sum(finite, axis=2, dtype=cp.float64)  # (T, F)
-
-    # Fast centered path for ordinary magnitudes. Keep the original reduction
-    # order for the common case; only rows whose variance/norm is out of the
-    # safe float64 range use scale normalization below.
-    sx = cp.sum(cp.where(finite, x, 0.0), axis=2, dtype=cp.float64)
-    sy = cp.sum(cp.where(finite, yb, 0.0), axis=2, dtype=cp.float64)
-    mx = sx / cp.maximum(n, 1.0)
-    my = sy / cp.maximum(n, 1.0)
-    dx = cp.where(finite, x - mx[:, :, None], 0.0)
-    dy = cp.where(finite, yb - my[:, :, None], 0.0)
-    vx = cp.sum(dx * dx, axis=2, dtype=cp.float64)
-    vy = cp.sum(dy * dy, axis=2, dtype=cp.float64)
-    cov = cp.sum(dx * dy, axis=2, dtype=cp.float64)
+    supported_dtype = (
+        x.dtype in (cp.dtype(cp.float32), cp.dtype(cp.float64))
+        and yb.dtype in (cp.dtype(cp.float32), cp.dtype(cp.float64))
+    )
+    if not bounded and supported_dtype:
+        # Fused two-pass row reduction avoids materializing dx, dy, dx*dx,
+        # dy*dy and dx*dy. bounded=True is Spearman's rank path and deliberately
+        # keeps the legacy reduction order below.
+        n_count, sx, sy, mx, my, vx, vy, cov = fused_centered_sums(x, yb, finite)
+        n = n_count.astype(cp.float64)
+    else:
+        n = cp.sum(finite, axis=2, dtype=cp.float64)  # (T, F)
+        # Keep the legacy arithmetic for Spearman and unsupported dtypes.
+        sx = cp.sum(cp.where(finite, x, 0.0), axis=2, dtype=cp.float64)
+        sy = cp.sum(cp.where(finite, yb, 0.0), axis=2, dtype=cp.float64)
+        mx = sx / cp.maximum(n, 1.0)
+        my = sy / cp.maximum(n, 1.0)
+        dx = cp.where(finite, x - mx[:, :, None], 0.0)
+        dy = cp.where(finite, yb - my[:, :, None], 0.0)
+        vx = cp.sum(dx * dx, axis=2, dtype=cp.float64)
+        vy = cp.sum(dy * dy, axis=2, dtype=cp.float64)
+        cov = cp.sum(dx * dy, axis=2, dtype=cp.float64)
     denom = cp.sqrt(vx * vy)
     ic = cov / denom
 

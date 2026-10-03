@@ -68,14 +68,16 @@ def _rank_chunk(flat, nan_mask, cp, *, return_distinct=False):
     x_safe = cp.where(nan_mask, cp.inf, flat)
     order = cp.argsort(x_safe, axis=1, kind="stable")  # (R, N), actual backend index dtype
     sv = cp.take_along_axis(x_safe, order, axis=1)     # (R, N) input dtype
-    fin_sorted = sv != cp.inf                          # (R, N) bool
 
-    # Equal-value run boundaries in sorted order.
-    starts = cp.zeros_like(sv, dtype=cp.bool_)
-    starts[:, 0] = True
-    starts[:, 1:] = sv[:, 1:] != sv[:, :-1]
-    distinct = (cp.sum(starts & fin_sorted, axis=1, dtype=cp.int32)
-                if return_distinct else None)
+    distinct = None
+    if return_distinct:
+        # These arrays are only needed by consumers that request distinct
+        # levels (Spearman's constant-signal check is one such consumer).
+        fin_sorted = sv != cp.inf                    # (R, N) bool
+        starts = cp.zeros_like(sv, dtype=cp.bool_)
+        starts[:, 0] = True
+        starts[:, 1:] = sv[:, 1:] != sv[:, :-1]
+        distinct = cp.sum(starts & fin_sorted, axis=1, dtype=cp.int32)
 
     from quant_evaluator.kernels.gpu.sorted_rank_runs import sorted_average_ranks
     mean_rank_flat = sorted_average_ranks(sv, cp)
@@ -83,7 +85,9 @@ def _rank_chunk(flat, nan_mask, cp, *, return_distinct=False):
     # scatter back to original (unsorted) positions
     ranks = cp.empty_like(mean_rank_flat)
     ranks[cp.arange(R)[:, None], order] = mean_rank_flat
-    ranks = cp.where(nan_mask, cp.nan, ranks)
+    # Invalid values were replaced by +Inf before sorting; sorted_average_ranks
+    # writes NaN for those sentinels, and the permutation scatter restores each
+    # NaN to its original position. A second full-size mask/copy is redundant.
     return (ranks, distinct) if return_distinct else ranks
 
 
