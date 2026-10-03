@@ -2,6 +2,7 @@
 """Read a small, deterministic COS factor sample via DataAccess and diagnose TRAIN."""
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -10,6 +11,8 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 
+from data_access import get_store
+from data_access.read.session_calendar import get_market_calendar
 from data_access.core.engine import DuckDBEngine
 from data_access.core.storage import StorageSpec
 from data_access.registry.loader import DatasetRegistry, StaticDataset
@@ -19,6 +22,16 @@ from data_access.cos.research import read_declared_cos_object
 from factor_optimizer.research_diagnostics import diagnose_training_batch
 from factor_optimizer.research_manifest import read_bound_factor
 from factor_optimizer.research_batch import BatchOptimizationConfig, automatic_time_split
+from factor_optimizer.cohort_materialization import (
+    DEFAULT_MATERIALIZATION_BUDGET_BYTES, assemble_factor_values,
+    estimate_factor_batch_materialization, admit_factor_batch_materialization,
+    admit_decoded_source, arrow_table_buffer_bytes,
+    estimate_pandas_conversion_bytes,
+    validate_cohort_dimensions,
+)
+from factor_optimizer.research_session_window import select_research_session_window
+from factor_optimizer.research_price_reader import read_session_vwap
+from factor_optimizer.research_price_labels import price_to_return_labels
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 
@@ -73,8 +86,10 @@ def choose_assets(panels, train_dates, n_assets=512):
     coverage = np.vstack([
         np.isfinite(p.reindex(train_dates)[common].to_numpy()).mean(axis=0)
         for p in panels])
-    eligible = [i for i in range(len(common)) if coverage[:, i].min() >= .90]
-    ranked = sorted(eligible, key=lambda i: (-coverage[:, i].min(), -coverage[:, i].mean(), common[i]))
+    minimum_coverage = coverage.min(axis=0)
+    mean_coverage = coverage.mean(axis=0)
+    eligible = [i for i in range(len(common)) if minimum_coverage[i] >= .90]
+    ranked = sorted(eligible, key=lambda i: (-minimum_coverage[i], -mean_coverage[i], common[i]))
     if len(ranked) < n_assets:
         raise ValueError("insufficient TRAIN-covered assets for a real 20-bin audit")
     return sorted(common[i] for i in ranked[:n_assets])
@@ -83,8 +98,14 @@ def choose_assets(panels, train_dates, n_assets=512):
 def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
                     manifest_uri=None, max_factor_bytes=8*1024**2,
                     max_batch_factor_bytes=128*1024**2,
-                    coverage_policy="isolate"):
+                    coverage_policy="isolate",
+                    materialization_budget_bytes=DEFAULT_MATERIALIZATION_BUDGET_BYTES,
+                    n_days=500):
     _validate_sample_limits(n_factors, max_factor_bytes, max_batch_factor_bytes)
+    # Reject invalid bounds before constructing an engine or reading COS.
+    validate_cohort_dimensions(n_days, n_assets, n_factors)
+    admit_factor_batch_materialization(
+        {"total_bytes": 0}, materialization_budget_bytes)
     if coverage_policy not in {"isolate", "strict"}:
         raise ValueError("coverage_policy must be isolate or strict")
     if type(n_assets) is not int or n_assets < 1:
@@ -94,7 +115,6 @@ def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
     if (not isinstance(manifest_uri, str) or not re.fullmatch(
             re.escape(prefix) + r"[0-9a-f]{64}/landing_manifest\.json", manifest_uri)):
         raise ValueError("manifest must be an exact content-addressed landing manifest in the authorized pool")
-    from real_batch_audit import _load_vwap, DAILY_ADJ
     root = Path("/home/sunhaiwei/quant_projects/workspace_data/research_factor_panel")
     def dataset(name, uri, filename, fmt):
         return StaticDataset(name=name, access_mode="published", layout="plain",
@@ -104,6 +124,7 @@ def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
     manifest_ds = dataset("source_manifest", manifest_uri.rsplit("/", 1)[0], "landing_manifest.json", "json")
     engine = DuckDBEngine(threads=2)
     panels, sources, lineages = [], [], {}
+    source_admissions = []
     try:
         store = DataAccessStore(DatasetRegistry({manifest_ds.name: manifest_ds}), engine)
         manifest = read_declared_cos_object(store, manifest_ds.name, allow_research=True)
@@ -119,7 +140,20 @@ def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
                 allow_research=True, max_object_mib=(max_factor_bytes + 1024**2 - 1) // (1024**2))
             result = bound.factor
             lineages[factor_id] = bound.treatment_signature
+            arrow_bytes = arrow_table_buffer_bytes(result.table)
+            retained_bytes = sum(int(p.memory_usage(index=True, deep=True).sum()) for p in panels)
+            projected_pandas_bytes = estimate_pandas_conversion_bytes(arrow_bytes)
+            # Numeric conversion allowance while retaining existing pandas and current Arrow.
+            admit_decoded_source(retained_bytes, arrow_bytes + projected_pandas_bytes,
+                                 materialization_budget_bytes)
             table = result.table.to_pandas()
+            converted_bytes = int(table.memory_usage(index=True, deep=True).sum())
+            admit_decoded_source(retained_bytes + converted_bytes, arrow_bytes,
+                                 materialization_budget_bytes)
+            # Allow overlapping numeric frames during index/filter/sort work.
+            transformation_bytes = converted_bytes * 3
+            admit_decoded_source(retained_bytes + transformation_bytes, arrow_bytes,
+                                 materialization_budget_bytes)
             if "timestamp" in table.columns:
                 table = table.set_index("timestamp")
             if table.index.name != "timestamp":
@@ -128,25 +162,35 @@ def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
             if table.index.has_duplicates:
                 raise ValueError("duplicate factor dates")
             table = table.loc[:, [c for c in table if c.endswith((".SZ", ".SH"))]].sort_index()
+            panel_bytes = int(table.memory_usage(index=True, deep=True).sum())
+            admit_decoded_source(retained_bytes + panel_bytes, arrow_bytes,
+                                 materialization_budget_bytes)
+            source_admissions.append({"factor": factor_id, "retained_pandas_bytes": retained_bytes,
+                "current_arrow_bytes": arrow_bytes, "projected_pandas_bytes": projected_pandas_bytes,
+                "actual_raw_pandas_bytes": converted_bytes,
+                "actual_pandas_bytes": panel_bytes,
+                "transformation_allowance_bytes": transformation_bytes,
+                "admitted_conversion_bytes": retained_bytes + arrow_bytes + max(projected_pandas_bytes, transformation_bytes, panel_bytes)})
             panels.append(table)
             sources.append({"factor": factor_id, "uri": result.source_uri,
                             "etag": result.source_etag, "sha256": result.content_sha256,
                             "downloaded_bytes": result.downloaded_bytes,
                             "manifest_sha256": bound.manifest_sha256,
                             "source_status": bound.source_status, "expression": bound.expression})
+            del table, result, bound, store, ds
     finally:
         engine.close()
-    dates = panels[0].index
-    for p in panels[1:]:
-        dates = dates.intersection(p.index)
-    candidate_dates = dates[-510:]
-    calendar = pd.DatetimeIndex([pd.Timestamp(p.stem) for p in sorted(DAILY_ADJ.glob("*.parquet"))
-                                if candidate_dates.min() <= pd.Timestamp(p.stem) <= dates.max()])
-    dates = dates[dates.isin(calendar)]
-    positions = calendar.get_indexer(dates)
-    dates = dates[positions + 2 < len(calendar)][-500:]
-    if len(dates) != 500:
-        raise ValueError("need 500 aligned trading dates with full label endpoints")
+    price_store = get_store()
+    official_calendar = get_market_calendar("ashare", store=price_store)
+    if official_calendar.source != "registry" or not official_calendar.has_data:
+        raise ValueError("research labels require registered authoritative ashare_calendar")
+    full_calendar = pd.DatetimeIndex(official_calendar.trading_days)
+    window = select_research_session_window(
+        [panel.index for panel in panels], full_calendar, n_days)
+    dates = window.decision_dates
+    calendar = full_calendar[(full_calendar >= dates[0]) &
+                             (full_calendar <= window.label_end_dates[-1])]
+    calendar_sha256 = hashlib.sha256(full_calendar.asi8.tobytes()).hexdigest()
     pos = calendar.get_indexer(dates)
     # Split metadata only: no return values or TEST scores are read for selection.
     selection_split = automatic_time_split(SimpleNamespace(
@@ -154,7 +198,14 @@ def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
         label_end_time=tuple(calendar[pos+2].to_numpy(dtype="datetime64[ns]"))))
     train_dates = dates[list(selection_split.train_indices)]
     quarantined, retained, factor_coverage = [], [], {}
+    # Bound identifiable reindex/finite-mask coverage workspace before TRAIN selection.
+    source_pandas_bytes = sum(int(p.memory_usage(index=True, deep=True).sum()) for p in panels)
+    coverage_workspace_bytes = sum(len(train_dates) * len(p.columns) * 17 for p in panels)
+    coverage_workspace_bytes += len(panels) * max(len(p.columns) for p in panels) * 16
+    admit_decoded_source(source_pandas_bytes, coverage_workspace_bytes,
+                         materialization_budget_bytes)
     for factor_id, panel in zip(factor_ids, panels):
+
         coverage = np.isfinite(panel.reindex(train_dates).to_numpy()).mean(axis=0)
         eligible_count = int((coverage >= .90).sum())
         factor_coverage[factor_id] = eligible_count
@@ -169,14 +220,32 @@ def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
                          + json.dumps(quarantined, sort_keys=True))
     factor_ids = tuple(name for name, _ in retained)
     panels = [panel for _, panel in retained]
+    del retained, panel
     lineages = {name: lineages[name] for name in factor_ids}
     assets = choose_assets(panels, train_dates, n_assets)
-    prices = _load_vwap(calendar.min(), calendar.max(), assets).reindex(calendar)
+    resident_pandas_bytes = sum(int(p.memory_usage(index=True, deep=True).sum()) for p in panels)
+    # Source Arrow tables were released after each checked pandas conversion.
+    resident_arrow_bytes = 0
+    materialization_estimate = estimate_factor_batch_materialization(
+        len(dates), len(assets), len(panels),
+        source_columns=tuple(len(p.columns) for p in panels), calendar_rows=len(calendar),
+        resident_pandas_bytes=resident_pandas_bytes, resident_arrow_bytes=resident_arrow_bytes,
+    )
+    # Arrow decoding/full pandas frames already exist: this only admits the
+    # following price, label and tensor materialization, not their prior reads.
+    admit_factor_batch_materialization(materialization_estimate, materialization_budget_bytes)
+    prices = read_session_vwap(price_store, calendar, assets)
     pos = calendar.get_indexer(dates)
     vwap = prices.to_numpy()
-    with np.errstate(divide="ignore", invalid="ignore"):
-        y = vwap[pos+2] / vwap[pos+1] - 1
-    values = np.stack([p.reindex(dates)[assets].to_numpy(dtype=float) for p in panels], axis=-1)
+    y, label_validity = price_to_return_labels(vwap[pos+1], vwap[pos+2])
+    if not label_validity.any():
+        raise ValueError("research cohort has no valid positive-price return labels")
+    values = assemble_factor_values(
+        panels, dates, assets, calendar_rows=len(calendar),
+        resident_pandas_bytes=resident_pandas_bytes,
+        resident_arrow_bytes=resident_arrow_bytes,
+        memory_budget_bytes=materialization_budget_bytes,
+    )
     times = dates.to_numpy(dtype="datetime64[ns]")
     ta = AxisRef("time", "datetime64[ns]", len(times), times)
     aa = AxisRef("asset", "str", len(assets), np.asarray(assets, dtype=str))
@@ -185,16 +254,24 @@ def load_cos_sample(n_factors=2, n_assets=256, *, include_lineages=False,
         execution_delay=1, decision_time=tuple(times), observation_time=tuple(times),
         signal_available_time=tuple(times), execution_time=tuple(calendar[pos+1].to_numpy()),
         label_start_time=tuple(calendar[pos+1].to_numpy()), label_end_time=tuple(calendar[pos+2].to_numpy()),
-        validity=np.isfinite(y), asset_axis=aa, source_ref="data_access:ashare_stock_daily_adj:AdjVwap",
-        calendar_ref=str(DAILY_ADJ))
+        validity=label_validity, asset_axis=aa, source_ref="data_access:ashare_stock_daily_adj:AdjVwap",
+        calendar_ref="data_access:ashare_calendar:" + calendar_sha256)
     provenance = {"sources": sources, "days": len(times), "assets": len(assets),
         "coverage_policy": coverage_policy,
+        "calendar_source": official_calendar.source,
+        "calendar_sha256": calendar_sha256,
+        "price_read_receipts": prices.attrs["data_access_price_reads"],
         "retained_factor_ids": list(factor_ids),
         "quarantined_factors": quarantined,
         "train_eligible_assets": factor_coverage,
         "manifest_uri": manifest_uri,
         "max_factor_bytes": max_factor_bytes,
         "max_batch_factor_bytes": max_batch_factor_bytes,
+        "materialization_budget_bytes": materialization_budget_bytes,
+        "materialization_estimate": materialization_estimate,
+        "source_admissions": source_admissions,
+        "coverage_workspace_estimate_bytes": coverage_workspace_bytes,
+        "materialization_accounting_scope": "identified resident panels and current Arrow; 2x Arrow numeric-conversion and 3x measured raw-frame transformation allowances; TRAIN reindex/selection/mask/reduction workspace; downstream staging/freeze/price/label estimates; not total RSS, prior Arrow decoding, string expansion or arbitrary pandas temporaries",
         "asset_selection_split": selection_split.identity,
         "asset_selection_train_days": len(selection_split.train_indices),
         "date_span": [str(dates.min().date()), str(dates.max().date())],
@@ -212,6 +289,9 @@ def main():
     parser.add_argument("--manifest", default=None, help="exact in-pool landing_manifest.json COS URI")
     parser.add_argument("--factors", type=int, default=2, help="deterministic factor sample, 1..16")
     parser.add_argument("--assets", type=int, default=256, help="TRAIN-covered asset count")
+    parser.add_argument("--days", type=int, default=500, help="decision session count, 1..1260")
+    parser.add_argument("--materialization-mib", type=int, default=8192,
+                        help="identified downstream buffer budget in MiB, 1..16384; not total RSS")
     parser.add_argument("--coverage-policy", choices=("isolate", "strict"), default="isolate",
                         help="isolate individually low-coverage factors or reject the whole sample")
     parser.add_argument("--max-factor-mib", type=int, choices=range(1, 129), default=8,
@@ -225,10 +305,11 @@ def main():
     if args.output_json is not None and args.output_json.exists():
         raise FileExistsError(f"refusing to overwrite existing report: {args.output_json}")
     batch, labels, provenance, lineages = load_cos_sample(
-        n_factors=args.factors, n_assets=args.assets, include_lineages=True,
+        n_factors=args.factors, n_assets=args.assets, n_days=args.days, include_lineages=True,
         manifest_uri=args.manifest, max_factor_bytes=args.max_factor_mib*1024**2,
         max_batch_factor_bytes=args.max_batch_mib*1024**2,
-        coverage_policy=args.coverage_policy)
+        coverage_policy=args.coverage_policy,
+        materialization_budget_bytes=args.materialization_mib*1024**2)
     report = {"inputs": provenance, "test_evaluated": False,
               "diagnostics": diagnose_training_batch(batch, labels, config=config)}
     if args.audit_methods:

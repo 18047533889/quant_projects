@@ -86,6 +86,12 @@ def test_loaded_cos_universe_uses_purged_training_not_warmup(monkeypatch, covera
         SimpleNamespace(glob=lambda _: [Path(str(d.date()) + ".parquet") for d in calendar]))
     monkeypatch.setattr(real_batch_audit, "_load_vwap",
         lambda start, end, assets: pd.DataFrame(100., index=calendar, columns=assets))
+    monkeypatch.setattr(example, "get_market_calendar", lambda *a, **kw: SimpleNamespace(source="registry", has_data=True, trading_days=calendar))
+    def registered_prices(store, sessions, assets):
+        prices = pd.DataFrame(100., index=sessions, columns=assets)
+        prices.attrs["data_access_price_reads"] = []
+        return prices
+    monkeypatch.setattr(example, "read_session_vwap", registered_prices)
     if coverage_case == "all_missing":
         with pytest.raises(ValueError, match="all requested factors"):
             example.load_cos_sample(n_factors=len(records), n_assets=1)

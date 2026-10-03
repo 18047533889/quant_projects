@@ -21,13 +21,16 @@ def _run_cli(monkeypatch, capsys, argv):
 
     def loader(n_factors=2, n_assets=256, *, include_lineages=False,
                manifest_uri=None, max_factor_bytes=8*MIB,
-               max_batch_factor_bytes=128*MIB, coverage_policy="isolate"):
+               max_batch_factor_bytes=128*MIB, coverage_policy="isolate",
+               materialization_budget_bytes=8192*MIB, n_days=500):
         calls.append({
             "n_factors": n_factors, "n_assets": n_assets,
             "include_lineages": include_lineages, "manifest_uri": manifest_uri,
             "max_factor_bytes": max_factor_bytes,
             "max_batch_factor_bytes": max_batch_factor_bytes,
             "coverage_policy": coverage_policy,
+            "materialization_budget_bytes": materialization_budget_bytes,
+            "n_days": n_days,
         })
         return object(), object(), {}, {}
 
@@ -52,6 +55,18 @@ def test_cli_budgets_reach_loader_and_keep_defaults(
     assert len(calls) == 1
     assert calls[0]["max_factor_bytes"] == expected_factor
     assert calls[0]["max_batch_factor_bytes"] == expected_batch
+
+@pytest.mark.parametrize("argv,days,budget", [
+    ([], 500, 8192*MIB),
+    (["--days", "1260", "--materialization-mib", "512"], 1260, 512*MIB),
+])
+def test_cli_session_and_materialization_bounds_reach_loader(
+        monkeypatch, capsys, argv, days, budget):
+    calls = _run_cli(monkeypatch, capsys, argv)
+    assert len(calls) == 1
+    assert calls[0]["n_days"] == days
+    assert calls[0]["materialization_budget_bytes"] == budget
+
 
 
 @pytest.mark.parametrize(
