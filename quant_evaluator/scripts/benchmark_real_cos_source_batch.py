@@ -364,7 +364,16 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
                 *, expected_auto_cuda=False, prefetch_objects=False,
                 source_adapter="legacy", cos_prefetch="auto",
                 max_source_memory_mib=4096, cos_prefetch_workers=2,
-                max_prefetch_memory_mib=512, use_default_tile_size=False):
+                max_prefetch_memory_mib=512, use_default_tile_size=False,
+                context_observer=None):
+    """Measure only the API call; optionally observe live context outside it.
+
+    The observer is caller-trusted instrumentation, not an oracle or attestation.
+    It must not read tiles, mutate the source, or perform backend calibration.
+    Captures occur before closing the source; capture errors also close it.
+    """
+    if context_observer is not None and not callable(context_observer):
+        raise TypeError("context_observer must be callable or None")
     if not isinstance(use_default_tile_size, bool):
         raise TypeError("use_default_tile_size must be bool")
     if source_adapter == "legacy":
@@ -387,14 +396,24 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         prefetch_mode = source.prefetch_mode
     else:
         raise ValueError("source_adapter must be 'legacy' or 'cos'")
-    started = time.perf_counter()
+    context_before = context_after = None
     try:
+        # Preserve the caller's API cap, not the source's admitted compute cap.
+        observer_kwargs = dict(source=source, labels=labels,
+            metrics=selected_metrics, requested_tile_size=source.max_tile_size
+            if use_default_tile_size else min(source.max_tile_size, tile_size),
+            policy=policy)
+        if context_observer is not None:
+            context_before = context_observer(phase="before", **observer_kwargs)
+        started = time.perf_counter()
         result = evaluate_factor_source_batch(
             source, labels, metrics=selected_metrics, backend=backend,
             max_tile_size=None if use_default_tile_size else tile_size,
             gpu_policy=policy,
         )
         elapsed = time.perf_counter() - started
+        if context_observer is not None:
+            context_after = context_observer(phase="after", **observer_kwargs)
         effective_tile_size = result.metadata.get("effective_max_tile_size", tile_size)
         if type(effective_tile_size) is not int or not 1 <= effective_tile_size <= tile_size:
             raise ValueError("source API reported an invalid effective tile width")
@@ -416,6 +435,8 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         [list(row) for row in records], separators=(",", ":"), default=str).encode()
     return result, {
         "source_adapter": source_adapter,
+        **({"context_before": context_before, "context_after": context_after}
+           if context_observer is not None else {}),
         **execution_schedule,
         "backend_requested": backend,
         "backend_used": result.metadata["backend_used"],

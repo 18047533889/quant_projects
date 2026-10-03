@@ -343,7 +343,8 @@ def evaluate_factor_source_batch(
             discard_source_route_profile_cache(
                 source=source, metadata=metadata, metrics=selected,
                 request_fingerprint=request_fingerprint,
-                requested_tile_size=requested_tile_width, policy=policy)
+                requested_tile_size=requested_tile_width, policy=policy,
+                cache_key=getattr(profile_decision, "cache_key", None))
     if (profile_decision is None and qualification_applied
             and qualification_winner == "cuda"
             and route == "cuda_strict"):

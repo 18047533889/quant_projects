@@ -58,6 +58,7 @@ class QualifiedSourceProfileRoute:
     cache_status: str
     scope: str = PROFILE_QUALIFICATION_SCOPE
     source_content_scope: str = SOURCE_CONTENT_SCOPE
+    cache_key: str | None = None
 
 
 def _live_tile_limits(*, source, metadata, requested_tile_size: int,
@@ -215,7 +216,11 @@ def get_cached_source_route_profile_records(
 def discard_source_route_profile_cache(
     *, source, metadata, metrics, request_fingerprint: str,
     requested_tile_size: int, policy: GPUExecutionPolicy,
+    cache_key: str | None = None,
 ) -> None:
+    if type(cache_key) is str and cache_key:
+        profile_cache.discard_validated_records(cache_key)
+        return
     try:
         key = _profile_cache_key(
             source=source, metadata=metadata, metrics=metrics,
@@ -306,6 +311,7 @@ def qualify_source_route_profiles(
         cpu_profile=records[0].cpu, cuda_profile=records[0].cuda,
         winning_backend=qualification.winning_backend,
         winner_profile=winner_profile, evidence_sha256=evidence_sha,
+        cache_key=key,
         cache_status=cache_status,
     )
 
