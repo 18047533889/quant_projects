@@ -18,7 +18,10 @@ def optimizer_candidate_specs(config):
         if family == "NO_OP_RAW":
             continue
         if family in {"U_SHAPE_REPAIR", "INVERTED_U_REPAIR"}:
-            choices = [dict(prior, center=c, power=p, asymmetry=False)
+            # Keep the existing symmetric grid first, then add the executable
+            # asymmetric branches exercised by method_audit.
+            choices = [dict(prior, center=c, power=p, asymmetry=asymmetry)
+                       for asymmetry in (False, True)
                        for c in (.35, .5, .65) for p in (1., 2.)]
         elif family == "CAUSAL_SMOOTHING":
             # Compiled per factor with its TRAIN evidence reference below.
@@ -36,8 +39,21 @@ def optimizer_candidate_specs(config):
         elif family == "REPRESENTATION_RANK":
             choices = [prior] + [dict(prior, rank_axis="ts", tie_method=tie, window=window)
                                 for tie in ("average", "min") for window in (5, 10, 20)]
+            # FE's CS rank is average-tie only; the FP min-tie route is an
+            # executable, distinct research candidate and stays appended.
+            choices.append(dict(prior, rank_axis="cross_sectional", tie_method="min"))
         elif family == "REPRESENTATION_ZSCORE":
             choices = [prior] + [dict(prior, zscore_axis="ts", window=window) for window in (5, 10, 20)]
+        elif family == "ROBUST_SCALE":
+            scale_centers = [("mad", "median")]
+            scale_centers.extend(
+                (scale, center)
+                for scale in ("mad", "iqr", "std")
+                for center in ("median", "mean")
+                if (scale, center) != ("mad", "median")
+            )
+            choices = [dict(prior, scale=scale, center=center)
+                       for scale, center in scale_centers]
         else:
             choices = [prior]
         specs.extend((family, p) for p in choices)

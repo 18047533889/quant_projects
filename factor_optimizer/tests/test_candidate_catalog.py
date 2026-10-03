@@ -36,6 +36,12 @@ def test_static_catalog_exact_order_and_parameter_values():
         ("INVERTED_U_REPAIR", {"asymmetry": False, "center": .5, "power": 2.}),
         ("INVERTED_U_REPAIR", {"asymmetry": False, "center": .65, "power": 1.}),
         ("INVERTED_U_REPAIR", {"asymmetry": False, "center": .65, "power": 2.}),
+        ("INVERTED_U_REPAIR", {"asymmetry": True, "center": .35, "power": 1.}),
+        ("INVERTED_U_REPAIR", {"asymmetry": True, "center": .35, "power": 2.}),
+        ("INVERTED_U_REPAIR", {"asymmetry": True, "center": .5, "power": 1.}),
+        ("INVERTED_U_REPAIR", {"asymmetry": True, "center": .5, "power": 2.}),
+        ("INVERTED_U_REPAIR", {"asymmetry": True, "center": .65, "power": 1.}),
+        ("INVERTED_U_REPAIR", {"asymmetry": True, "center": .65, "power": 2.}),
         ("MISSINGNESS_FRESHNESS", {"freshness_window": 5, "mode": "flag"}),
         ("MISSINGNESS_FRESHNESS", {"freshness_window": 1, "mode": "fill"}),
         ("MISSINGNESS_FRESHNESS", {"freshness_window": 3, "mode": "fill"}),
@@ -47,6 +53,7 @@ def test_static_catalog_exact_order_and_parameter_values():
         ("REPRESENTATION_RANK", {"rank_axis": "ts", "tie_method": "min", "window": 5}),
         ("REPRESENTATION_RANK", {"rank_axis": "ts", "tie_method": "min", "window": 10}),
         ("REPRESENTATION_RANK", {"rank_axis": "ts", "tie_method": "min", "window": 20}),
+        ("REPRESENTATION_RANK", {"rank_axis": "cross_sectional", "tie_method": "min", "window": 20}),
         ("REPRESENTATION_ZSCORE", {"cap": 3.0, "window": 20, "zscore_axis": "cross_sectional"}),
         ("REPRESENTATION_ZSCORE", {"cap": 3.0, "window": 5, "zscore_axis": "ts"}),
         ("REPRESENTATION_ZSCORE", {"cap": 3.0, "window": 10, "zscore_axis": "ts"}),
@@ -57,6 +64,12 @@ def test_static_catalog_exact_order_and_parameter_values():
         ("U_SHAPE_REPAIR", {"asymmetry": False, "center": .5, "power": 2.}),
         ("U_SHAPE_REPAIR", {"asymmetry": False, "center": .65, "power": 1.}),
         ("U_SHAPE_REPAIR", {"asymmetry": False, "center": .65, "power": 2.}),
+        ("U_SHAPE_REPAIR", {"asymmetry": True, "center": .35, "power": 1.}),
+        ("U_SHAPE_REPAIR", {"asymmetry": True, "center": .35, "power": 2.}),
+        ("U_SHAPE_REPAIR", {"asymmetry": True, "center": .5, "power": 1.}),
+        ("U_SHAPE_REPAIR", {"asymmetry": True, "center": .5, "power": 2.}),
+        ("U_SHAPE_REPAIR", {"asymmetry": True, "center": .65, "power": 1.}),
+        ("U_SHAPE_REPAIR", {"asymmetry": True, "center": .65, "power": 2.}),
     ]
     assert optimizer_candidate_specs(config) == expected
     assert _specs(config) == expected

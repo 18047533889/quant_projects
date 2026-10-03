@@ -37,7 +37,7 @@ def test_dynamic_budget_overflow_isolates_factor_without_truncating(monkeypatch,
     batch = replace(batch, factor_ids=tuple(batch.factor_ids[i] for i in order),
                     values=batch.values[:, :, order])
     config = BatchOptimizationConfig(selection_objective='rank_ic',
-        families=('SIGN_ORIENTATION', 'U_SHAPE_REPAIR'), maximum_candidates=7,
+        families=('SIGN_ORIENTATION', 'U_SHAPE_REPAIR'), maximum_candidates=13,
         bootstrap_draws=99)
     result = optimize_factor_batch(batch, labels, config=config, allow_research=True)
     blocked = result.factors['good']
@@ -46,7 +46,7 @@ def test_dynamic_budget_overflow_isolates_factor_without_truncating(monkeypatch,
     assert blocked.validation_candidate_identity is None
     assert blocked.candidates == ()
     assert blocked.training_diagnostics['candidate_budget'] == {
-        'required': 9, 'maximum': 7, 'status': 'exceeded', 'evaluated': 0}
+        'required': 15, 'maximum': 13, 'status': 'exceeded', 'evaluated': 0}
     np.testing.assert_array_equal(result.optimized.values[:, :, order.index(0)],
                                   batch.values[:, :, order.index(0)])
     assert result.factors['reverse'].selected_family == 'SIGN_ORIENTATION'
