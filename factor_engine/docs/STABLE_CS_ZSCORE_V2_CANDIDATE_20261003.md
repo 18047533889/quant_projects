@@ -83,8 +83,11 @@ result = finite_anchor_centered_zscore_long(
 
 `group_col` 是截面分组列，不是资产列。数学公式与上文一致，但这个长表接口
 将输入 null 和 NaN 都输出为 NaN，以对齐 FP 现有长表 v2 缺失策略。
-参数域仍是非负整数 `ddof` / 有限实数常数，布尔值列拒绝。
-独立测试 14 项通过，包含 3 天 × 5461 股票、极端值、稀疏/Inf、打乱行序、
-临时列冲突和 Decimal 参考。它是可直接调用的 FE 数学接口，不是正式算子
+`ddof` 接受有限非负实数（包含 fractional 值），常数参数仍要求有限实数；
+布尔值列拒绝。独立测试 20 项通过，原有 14 项用例仍通过，并新增
+`ddof=0.25/0.5/0.75` 的 Decimal 参考核验，覆盖普通值、Float64 极端值、
+大偏移、缺失值、Inf、分组和打乱行序。这个 fractional 支持仅属于 grouped-long
+helper；上文 wide candidate 的参数仍是非负整数，未宣称支持 fractional ddof。
+它是可直接调用的 FE 数学接口，不是正式算子
 注册或 FP 默认路由；尚未完成真实多年面板性能 A/B 和端到端内存准入。
 接 FP 默认之前还须验证完整调用契约和真实宽宇宙性能，不只改 metadata 声称复用。

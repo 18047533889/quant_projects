@@ -13,9 +13,22 @@ from typing import Any
 import polars as pl
 
 
-def _validate_parameters(ddof: Any, constant_value: Any) -> tuple[int, float]:
-    if isinstance(ddof, bool) or not isinstance(ddof, Integral) or ddof < 0:
-        raise ValueError("ddof must be a non-negative integer")
+def _validate_parameters(ddof: Any, constant_value: Any) -> tuple[int | float, float]:
+    if isinstance(ddof, bool) or not isinstance(ddof, Real):
+        raise ValueError("ddof must be a finite non-negative real number")
+    if isinstance(ddof, Integral):
+        if ddof < 0:
+            raise ValueError("ddof must be a finite non-negative real number")
+        # Keep arbitrarily large integer ddof exact. The height shortcut runs
+        # before any Float64 conversion, avoiding overflow for huge integers.
+        normalized_ddof: int | float = int(ddof)
+    else:
+        try:
+            normalized_ddof = float(ddof)
+        except (OverflowError, TypeError, ValueError) as exc:
+            raise ValueError("ddof must be a finite non-negative real number") from exc
+        if not (0.0 <= normalized_ddof < float("inf")):
+            raise ValueError("ddof must be a finite non-negative real number")
     if isinstance(constant_value, bool) or not isinstance(constant_value, Real):
         raise ValueError("constant_value must be a finite real number")
     try:
@@ -24,7 +37,7 @@ def _validate_parameters(ddof: Any, constant_value: Any) -> tuple[int, float]:
         raise ValueError("constant_value must be a finite real number") from exc
     if not (-float("inf") < constant < float("inf")):
         raise ValueError("constant_value must be a finite real number")
-    return int(ddof), constant
+    return normalized_ddof, constant
 
 
 def _fresh_name(existing: set[str], stem: str) -> str:
@@ -42,7 +55,7 @@ def finite_anchor_centered_zscore_long(
     *,
     value_col: str,
     group_col: str,
-    ddof: int = 1,
+    ddof: float = 1,
     constant_value: float = 0.0,
 ) -> pl.DataFrame:
     """Compute stable cross-sectional z-scores within each long-table group.
@@ -53,9 +66,9 @@ def finite_anchor_centered_zscore_long(
     any infinity causes all non-missing values in that group to receive the
     constant fallback. The input row/column order and other columns are kept.
 
-    Only integer ``ddof >= 0`` is accepted. This deliberately does not claim
-    equivalence for factor-preprocess fractional-ddof calls. The expression
-    plan stages group-level intermediates and never pivots to a wide panel.
+    Finite non-negative real ``ddof`` values are accepted, including
+    fractional values. The expression plan stages group-level intermediates
+    and never pivots to a wide panel.
     """
     ddof, constant = _validate_parameters(ddof, constant_value)
     if not isinstance(frame, pl.DataFrame):

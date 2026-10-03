@@ -31,7 +31,9 @@ def _decimal_row_oracle(values, *, ddof=1, constant=0.0):
                 for value in values
             ]
         mean = sum(finite) / len(finite)
-        variance = sum((value - mean) ** 2 for value in finite) / (len(finite) - ddof)
+        variance = sum((value - mean) ** 2 for value in finite) / (
+            Decimal(len(finite)) - Decimal(str(ddof))
+        )
         standard_deviation = variance.sqrt()
         return [
             (
@@ -165,12 +167,65 @@ def test_empty_frame_dtype_and_large_ddof_shortcut():
     assert result["value"].to_list() == [9.0, 9.0]
 
 
-@pytest.mark.parametrize("ddof", [-1, 1.5, True])
+@pytest.mark.parametrize("ddof", [-1, -0.25, float("nan"), float("inf"), True, "0.5"])
 def test_rejects_invalid_ddof(ddof):
     frame = pl.DataFrame({"date": ["d"], "value": [1.0]})
     with pytest.raises(ValueError):
         finite_anchor_centered_zscore_long(
             frame, value_col="value", group_col="date", ddof=ddof
+        )
+
+
+@pytest.mark.parametrize("ddof", [0.25, 0.5, 0.75])
+def test_fractional_ddof_matches_decimal_across_groups_and_preserves_rows(ddof):
+    maximum = np.finfo(np.float64).max
+    offset = 1e16
+    records = [
+        ("normal", "n0", -3.5),
+        ("normal", "n1", 0.25),
+        ("normal", "n2", 4.0),
+        ("normal", "n3", None),
+        ("normal", "n4", float("nan")),
+        ("extreme", "e0", -maximum),
+        ("extreme", "e1", 0.0),
+        ("extreme", "e2", maximum),
+        ("offset", "o0", offset),
+        ("offset", "o1", offset + 2.0),
+        ("offset", "o2", offset + 6.0),
+        ("sparse_inf", "s0", 1.0),
+        ("sparse_inf", "s1", None),
+        ("sparse_inf", "s2", float("inf")),
+        ("sparse_inf", "s3", 3.0),
+    ]
+    random.Random(20261003 + int(ddof * 100)).shuffle(records)
+    frame = pl.DataFrame(
+        {
+            "date": [row[0] for row in records],
+            "asset": [row[1] for row in records],
+            "value": [row[2] for row in records],
+            "keep": list(range(len(records))),
+        }
+    )
+    output = finite_anchor_centered_zscore_long(
+        frame,
+        value_col="value",
+        group_col="date",
+        ddof=ddof,
+        constant_value=-3.25,
+    )
+
+    assert output.columns == frame.columns
+    assert output.schema["value"] == pl.Float64
+    for column in frame.columns:
+        if column != "value":
+            assert output[column].equals(frame[column])
+    for date in dict.fromkeys(frame["date"].to_list()):
+        positions = [i for i, group in enumerate(frame["date"].to_list()) if group == date]
+        raw = [frame["value"][i] for i in positions]
+        actual = [output["value"][i] for i in positions]
+        expected = _decimal_row_oracle(raw, ddof=ddof, constant=-3.25)
+        np.testing.assert_allclose(
+            actual, expected, rtol=8e-12, atol=8e-12, equal_nan=True
         )
 
 
