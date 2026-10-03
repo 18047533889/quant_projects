@@ -201,8 +201,12 @@ def _execution_binding(plan):
             return {"route": route, "mapping_version": plan.mapping_version}
     from factor_optimizer.adapters.layered_decay import LayeredDecayPlan
     if type(plan) is LayeredDecayPlan:
-        return {"route": "factor_optimizer.adapters.layered_decay.LayeredDecayPlan.execute",
-                "mapping_version": "layered-decay.v1"}
+        from factor_optimizer.adapters.layered_decay_identity import (
+            build_layered_decay_execution_identity,
+        )
+        return {"route": "factor_optimizer.adapters.layered_decay_long._execute_sparse_layered_decay_validated",
+                "mapping_version": "layered-decay.v1",
+                "binding": build_layered_decay_execution_identity()}
     if type(plan) is not SmoothingRepairPlan and type(plan) is not ValueRepairPlan:
         raise TypeError("unknown plan execution authority; keep proposal distinct")
     from factor_preprocess.registry.transforms import get_default_registry

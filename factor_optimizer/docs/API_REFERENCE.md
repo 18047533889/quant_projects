@@ -1,7 +1,7 @@
 # factor_optimizer 完整模块与接口索引
 
 先读 [功能与算法手册](FUNCTIONAL_GUIDE.md)，再查本页的具体入口、参数和实现位置。
-扫描实际包目录：**94 个 Python 模块、978 个公开函数/类/方法定义**。
+扫描实际包目录：**95 个 Python 模块、979 个公开函数/类/方法定义**。
 收录非下划线开头的顶层定义及类的公开方法，不把所有内部模块都承诺为稳定API；私有辅助算法见功能手册。
 参数、类型、默认值直接取自源码语法树，不导入或启动可选后端。类型注解不代表生产可用性。
 未写独立说明的入口会明确标记，不凭名称编造功能；算法讲解、约束、完整流程与例子见功能手册。
@@ -20,6 +20,7 @@
 | [factor_optimizer/adapters/fe_tail_saturation.py](../factor_optimizer/adapters/fe_tail_saturation.py) | 1 | Date-local tail saturation through FactorEngine's canonical winsorize. |
 | [factor_optimizer/adapters/fitness.py](../factor_optimizer/adapters/fitness.py) | 2 | Fitness adapter: dimension/desirability mapping for generalized treatment decisions. |
 | [factor_optimizer/adapters/layered_decay.py](../factor_optimizer/adapters/layered_decay.py) | 4 | TRAIN-frozen research plan for observation-origin twenty-layer decay. |
+| [factor_optimizer/adapters/layered_decay_identity.py](../factor_optimizer/adapters/layered_decay_identity.py) | 1 | Scoped execution identity for selected sparse layered decay. |
 | [factor_optimizer/adapters/layered_decay_long.py](../factor_optimizer/adapters/layered_decay_long.py) | 0 | Sparse long-panel driver for the shared research NumPy layered-decay state. |
 | [factor_optimizer/adapters/preprocessing.py](../factor_optimizer/adapters/preprocessing.py) | 6 | Versioned research bridge from smoothing proposals to real FP kernels. |
 | [factor_optimizer/adapters/quant_evaluator.py](../factor_optimizer/adapters/quant_evaluator.py) | 14 | QuantEvaluatorAdapter: protocol for QE integration (optional dependency). |
@@ -501,6 +502,18 @@ TRAIN-frozen research plan for observation-origin twenty-layer decay.
 此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
 
 参数：`(self, values, *, allow_research=False)`。
+
+## factor_optimizer/adapters/layered_decay_identity.py
+
+Scoped execution identity for selected sparse layered decay.
+
+### build_layered_decay_execution_identity
+
+[实际实现](../factor_optimizer/adapters/layered_decay_identity.py#L17)。
+
+此入口没有独立文档字符串；结合所属类合同、功能手册及实现链接使用，不推断额外行为。
+
+参数：`()`。
 
 ## factor_optimizer/adapters/layered_decay_long.py
 
@@ -6998,8 +7011,6 @@ QE metric inputs share signal availability, never ex-post label membership.
 
 参数：`(raw, candidate, batch, labels, indices, *, minimum_assets=20, cost_rate=0.001, raw_cache=None, empty_leg_policy='signal_cash', candidate_ic_cache=None, prepared_split=None)`。
 
-`prepared_split` 是内部 TRAIN 优化复用入口：必须由 `_prepare_pair_ic_split` 为同一 batch、同一 labels 对象及完全相同的有序 indices 创建。它复用不可变标签切片与时间轴，避免每个候选重复切片、冻结和计算标签内容指纹；错配请求拒绝。默认 `None` 保留原有路径；RAW 缓存仍按实际值、缺失掩码与成本配置检查，VALIDATION 不复用 TRAIN 切片。此项不代表已测得整体耗时提升。
-
 ### compare_joint
 
 [实际实现](../factor_optimizer/research_fitness.py#L220)。
@@ -7976,7 +7987,7 @@ TRAIN-context-bound deduplication of executable repair proposals.
 
 ### deduplicate_proposals
 
-[实际实现](../factor_optimizer/search/execution_dedup.py#L258)。
+[实际实现](../factor_optimizer/search/execution_dedup.py#L262)。
 
 Group only plans with the same resolved execution and TRAIN context.
 
@@ -11072,6 +11083,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/adapters/fe_tail_saturation.py` | `b458a1726f9fda82dddab6c48d8140860a3d661d927f88c609f166bcaa9c10fc` |
 | `factor_optimizer/adapters/fitness.py` | `4486884657f730c65064fe6e1aebc7555a515fbc3cba41c71c1bf8c9e4c48ce5` |
 | `factor_optimizer/adapters/layered_decay.py` | `a26a0571b8885686be5e151ab279d9be9826a21f3a9982be094a3c7671196fdc` |
+| `factor_optimizer/adapters/layered_decay_identity.py` | `02a678034bbf55a037b8bfdc6c7ab0f0331c66733b66b7c8225a3d912cdab753` |
 | `factor_optimizer/adapters/layered_decay_long.py` | `0dc9f3e1d8ea4be5ab6e9adc4ed5be1c630cc63a6af08228aa88f5a3581ef457` |
 | `factor_optimizer/adapters/preprocessing.py` | `9518e42ad19077f34700d0edb9d2c126974cd687d969defb44d44175d1b61efe` |
 | `factor_optimizer/adapters/quant_evaluator.py` | `f91ab4d4514ca1d8e2131842c42fd972ff86433f2d3bdaff57d86d6674aecb17` |
@@ -11119,12 +11131,12 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/ports/__init__.py` | `5ae5b84348a74c71b61d1465bf3bb3acc3c77b5b7186436ed5c299adb677c827` |
 | `factor_optimizer/ports/factor_intelligence.py` | `d1f8cb9761da774d354cb3b5d6d91f79b54cb5f7c3519d0911ad98e7c79e2821` |
 | `factor_optimizer/research_baseline.py` | `d7b51613802abd52e2d7000475acbe8fd06c6e34be01e021d4e4046960ffe0f0` |
-| `factor_optimizer/research_batch.py` | `b78ceee015de3dca93670b7a958503202f7d6923b6c4ba1696d25ec6615fa323` |
+| `factor_optimizer/research_batch.py` | `595438434da3886df2de3757d903b681352abc0969e8e87705106e0148c0dbdb` |
 | `factor_optimizer/research_batch_diagnostics.py` | `0ec5186c413814db6457342e97236b582e95a460033c11a6804b815c64d24b89` |
 | `factor_optimizer/research_decay.py` | `4dc4801f9197a9016df0dc36e5525e63d9120b9bc3f663d7f5bcde8e685ecfcb` |
 | `factor_optimizer/research_diagnostics.py` | `054ee2ad344395812656f1a7991983c58cade69e8c0b524d98981258cd6947ad` |
 | `factor_optimizer/research_final_report.py` | `526f13d816a6044af3a895a7d43df93d862283953f6a2956a7bd34ab55a33f0d` |
-| `factor_optimizer/research_fitness.py` | `c7021a482a74b691f68ae6b706355b7f7c9544e8658d5aa81a921cceef4e6494` |
+| `factor_optimizer/research_fitness.py` | `7254c0c4dbe24f901c7e0eddd146ce68f1b4ba52b86d82e4fb88c1e60d5f0f71` |
 | `factor_optimizer/research_ic_antithetic.py` | `b6b5241e9925bb7d4145c7005be6aa9cf56d8e3c8d7a4babbae1ae205b6ce704` |
 | `factor_optimizer/research_manifest.py` | `4ed34125751aea2cdedc7e75fecc96e3f2f09f5e9fae70afc42ff60486c1c90f` |
 | `factor_optimizer/research_numeric.py` | `ab737c023c195826ac3fee4942e550fb346be22928ea76cba89b6c0bf9c33a64` |
@@ -11139,7 +11151,7 @@ Apply an eligible U-shape formula to a precomputed immutable FE rank.
 | `factor_optimizer/search/desirability_registry.py` | `f2e2c47cdb4dc24cf4621e9b6d2d78331272b650ff0fbf374214f83bc3dcc6b0` |
 | `factor_optimizer/search/diagnosis_routing.py` | `997ca9033fddbdb6248d3c06620edb528357b116c879c84c6a3e4d31f20ed229` |
 | `factor_optimizer/search/dimensions.py` | `d96278aa024bf275edc88072a5abfe0b749f023047971b94bccc99ae67964d90` |
-| `factor_optimizer/search/execution_dedup.py` | `050da527a085a5ac2527a0879b27079c9cdfdb4f0af8e200eed9731ab9fcc3a3` |
+| `factor_optimizer/search/execution_dedup.py` | `0c534b6d143a369786adaafbf91e81e9733c3b668b493b8c27e0c35b649e3aa9` |
 | `factor_optimizer/search/lineage.py` | `979031c4c987a40cbb1987b360704ffd8fe0749792a21db0352c41497657b25b` |
 | `factor_optimizer/search/multifidelity.py` | `6967520ca3f3f78f5648cfccaa397f759514091f2dbb2bc3977506990f1747df` |
 | `factor_optimizer/search/paired_comparison.py` | `9bfdabf2b4e3c26b41697553fcdcbbcf49f49aa9ef20222546c69f57dfbce3be` |
