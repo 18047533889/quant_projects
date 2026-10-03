@@ -21,6 +21,7 @@ import numpy as np
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.metrics.label_panel import normalize_label_panel
+from quant_evaluator.metrics.quantile_numeric import label_sum_error_bounds, repair_bucket_means
 from quant_evaluator.contracts.quantile_policy import (
     QuantileTiePolicy,
     validate_tie_policy,
@@ -522,6 +523,7 @@ def compute_quantile_returns(
     if label_validity is not None:
         labels = np.where(label_validity, labels, np.nan)
 
+    error_bounds = label_sum_error_bounds(labels)
     T, N, F = values.shape
     quantile_returns = np.full((T, n_quantiles, F), np.nan, dtype=np.float64)
     quantile_counts = np.zeros((T, n_quantiles, F), dtype=np.int32)
@@ -536,6 +538,7 @@ def compute_quantile_returns(
             min_assets=min_assets,
             out=(quantile_returns[:, :, f:f + 1],
                  quantile_counts[:, :, f:f + 1]),
+            _error_bounds=error_bounds,
         )
 
     return quantile_returns, quantile_counts
@@ -548,6 +551,7 @@ def _aggregate_quantile_assignments(
     n_quantiles: int,
     min_assets: int,
     out: Optional[Tuple[np.ndarray, np.ndarray]] = None,
+    _error_bounds: Optional[np.ndarray] = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Aggregate normalized labels using precomputed QE quantile IDs.
 
@@ -580,6 +584,8 @@ def _aggregate_quantile_assignments(
             raise ValueError("out buffers must be writable")
         returns.fill(np.nan)
         counts_out.fill(0)
+    error_bounds = (_error_bounds if _error_bounds is not None
+                    else label_sum_error_bounds(labels))
     for f in range(F):
         q_factor = q_ids[:, :, f]
         for t in range(T):
@@ -596,6 +602,8 @@ def _aggregate_quantile_assignments(
             sufficient_mask = counts >= min_assets
             counts_out[t, :, f] = counts
             returns[t, sufficient_mask, f] = sums[sufficient_mask] / counts[sufficient_mask]
+            repair_bucket_means(q_valid, label_valid, returns[t, :, f], counts,
+                                min_assets, error_bounds[t])
     return returns, counts_out
 
 
@@ -672,6 +680,7 @@ def compute_quantile_returns_optimized(
 
     # Pre-compute valid labels mask once
     valid_labels = np.isfinite(labels)
+    error_bounds = label_sum_error_bounds(labels)
 
     # Vectorized aggregation with bincount
     for t in range(T):
@@ -701,6 +710,8 @@ def compute_quantile_returns_optimized(
 
             if np.any(sufficient):
                 quantile_returns[t, sufficient, f] = sums[sufficient] / counts[sufficient]
+                repair_bucket_means(q_valid, label_valid, quantile_returns[t, :, f],
+                                    counts, min_assets, error_bounds[t])
 
     return quantile_returns, quantile_counts
 

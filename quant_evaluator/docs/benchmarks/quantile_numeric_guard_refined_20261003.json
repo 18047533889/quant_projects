@@ -1,0 +1,317 @@
+{
+  "estimated_peak_bytes": 1878966272,
+  "first_call_note": "Separate diagnostics; Numba's first call may include compilation and is not used in warm summaries.",
+  "first_call_seconds": {
+    "5": {
+      "numba": {
+        "guards_bypassed": 2.015406270045787,
+        "guards_enabled": 1.8615324530401267
+      },
+      "numpy": {
+        "guards_bypassed": 2.6983272500219755,
+        "guards_enabled": 2.6001121579902247
+      }
+    },
+    "20": {
+      "numba": {
+        "guards_bypassed": 2.114258494984824,
+        "guards_enabled": 5.869350416003726
+      },
+      "numpy": {
+        "guards_bypassed": 2.9475955630186945,
+        "guards_enabled": 3.9221778900246136
+      }
+    }
+  },
+  "guard_modes": {
+    "guards_bypassed": "only label_sum_error_bounds/repair_bucket_means/repair_quantile_panel replaced with no-ops",
+    "guards_enabled": "current genuine numeric guard path"
+  },
+  "input_sha256_after": {
+    "combined": "c2a419c6489a29925f3bf3c177b8e97388a1176a86ad9d26a82a243deb60975b",
+    "factor_validity": "b3b06d23678c66f72d7fa88bdac527ca085c88ef2cd7b13903a0bb6d19cb18a9",
+    "factor_values": "7c66e89d3a646267f6dd9c3fd4928506d9e14c91bcd782000be004a8ab3fedfc",
+    "label_validity": "9ac7a677641272a696aa82a815eba6e3c9cabf09e51b0a0c3004c81b7e7abf2e",
+    "labels": "bd1a8db685bd2c9392b769f90683e1f66aa7ef2a98755323772bf6f750243925"
+  },
+  "input_sha256_before": {
+    "combined": "c2a419c6489a29925f3bf3c177b8e97388a1176a86ad9d26a82a243deb60975b",
+    "factor_validity": "b3b06d23678c66f72d7fa88bdac527ca085c88ef2cd7b13903a0bb6d19cb18a9",
+    "factor_values": "7c66e89d3a646267f6dd9c3fd4928506d9e14c91bcd782000be004a8ab3fedfc",
+    "label_validity": "9ac7a677641272a696aa82a815eba6e3c9cabf09e51b0a0c3004c81b7e7abf2e",
+    "labels": "bd1a8db685bd2c9392b769f90683e1f66aa7ef2a98755323772bf6f750243925"
+  },
+  "interpretation_note": "Timing deltas isolate these numeric guard helpers only; they are not fastest-backend claims.",
+  "label_scale": 0.02,
+  "layout": "C-contiguous wide",
+  "median_guard_overhead_seconds": {
+    "5": {
+      "numba": -0.002531488979002461,
+      "numpy": 0.07364965148735791
+    },
+    "20": {
+      "numba": 3.073154400481144,
+      "numpy": 1.1073115699982736
+    }
+  },
+  "memory_guard_bytes": 3221225472,
+  "min_assets": 10,
+  "parity_pairs_checked": {
+    "5": {
+      "numba": 9,
+      "numpy": 9
+    },
+    "20": {
+      "numba": 9,
+      "numpy": 9
+    }
+  },
+  "parity_policy": "every cold, warmup, and timed call is paired; counts exact and returns allclose(rtol=1e-9, atol=1e-12, equal_nan=True), plus cross-route comparison",
+  "quantile_counts": [
+    5,
+    20
+  ],
+  "runtime_fingerprint_after": {
+    "blas_threadpools": [
+      {
+        "architecture": "SkylakeX",
+        "internal_api": "openblas",
+        "num_threads": 32,
+        "prefix": "libscipy_openblas",
+        "threading_layer": "pthreads",
+        "user_api": "blas",
+        "version": "0.3.28"
+      },
+      {
+        "architecture": "SkylakeX",
+        "internal_api": "openblas",
+        "num_threads": 32,
+        "prefix": "libscipy_openblas",
+        "threading_layer": "pthreads",
+        "user_api": "blas",
+        "version": "0.3.29"
+      },
+      {
+        "architecture": null,
+        "internal_api": "openmp",
+        "num_threads": 32,
+        "prefix": "libgomp",
+        "threading_layer": null,
+        "user_api": "openmp",
+        "version": null
+      }
+    ],
+    "device": null,
+    "numba_threading_layer": "omp",
+    "numba_threads": 32,
+    "packages": {
+      "llvmlite": "0.49.0",
+      "numba": "0.67.0",
+      "numpy": "2.2.6",
+      "scipy": "1.15.3",
+      "threadpoolctl": "3.6.0"
+    },
+    "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "thread_environment": {
+      "BLIS_NUM_THREADS": null,
+      "MKL_DYNAMIC": null,
+      "MKL_NUM_THREADS": null,
+      "NUMBA_NUM_THREADS": null,
+      "NUMBA_THREADING_LAYER": null,
+      "NUMEXPR_NUM_THREADS": null,
+      "OMP_NUM_THREADS": null,
+      "OMP_THREAD_LIMIT": null,
+      "OPENBLAS_NUM_THREADS": null,
+      "VECLIB_MAXIMUM_THREADS": null
+    },
+    "threadpoolctl_available": true
+  },
+  "runtime_fingerprint_before": {
+    "blas_threadpools": [
+      {
+        "architecture": "SkylakeX",
+        "internal_api": "openblas",
+        "num_threads": 32,
+        "prefix": "libscipy_openblas",
+        "threading_layer": "pthreads",
+        "user_api": "blas",
+        "version": "0.3.28"
+      },
+      {
+        "architecture": "SkylakeX",
+        "internal_api": "openblas",
+        "num_threads": 32,
+        "prefix": "libscipy_openblas",
+        "threading_layer": "pthreads",
+        "user_api": "blas",
+        "version": "0.3.29"
+      },
+      {
+        "architecture": null,
+        "internal_api": "openmp",
+        "num_threads": 32,
+        "prefix": "libgomp",
+        "threading_layer": null,
+        "user_api": "openmp",
+        "version": null
+      }
+    ],
+    "device": null,
+    "numba_threading_layer": "omp",
+    "numba_threads": 32,
+    "packages": {
+      "llvmlite": "0.49.0",
+      "numba": "0.67.0",
+      "numpy": "2.2.6",
+      "scipy": "1.15.3",
+      "threadpoolctl": "3.6.0"
+    },
+    "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "thread_environment": {
+      "BLIS_NUM_THREADS": null,
+      "MKL_DYNAMIC": null,
+      "MKL_NUM_THREADS": null,
+      "NUMBA_NUM_THREADS": null,
+      "NUMBA_THREADING_LAYER": null,
+      "NUMEXPR_NUM_THREADS": null,
+      "OMP_NUM_THREADS": null,
+      "OMP_THREAD_LIMIT": null,
+      "OPENBLAS_NUM_THREADS": null,
+      "VECLIB_MAXIMUM_THREADS": null
+    },
+    "threadpoolctl_available": true
+  },
+  "scenario": "rounded gaussian ties with deterministic missing and infinite inputs; finance-scale Gaussian labels",
+  "scope": "synthetic CPU-only current-callable guard overhead; not full QE/CUDA/COS",
+  "seed": 81033,
+  "shape": [
+    128,
+    5461,
+    48
+  ],
+  "source_files": [
+    "quant_evaluator/metrics/quantile.py",
+    "quant_evaluator/metrics/quantile_numba.py",
+    "quant_evaluator/metrics/quantile_numeric.py"
+  ],
+  "source_sha256_after": {
+    "quant_evaluator/metrics/quantile.py": "1e3fc5841f38792a81cf9b849f5eb585c4cff1b81076081f9770739a5612770e",
+    "quant_evaluator/metrics/quantile_numba.py": "8162064ff8f0b7d10de9ae66a903e8eb0a7c03bd27c5751a9861842523ad842a",
+    "quant_evaluator/metrics/quantile_numeric.py": "2e0cd233c5db09bda79a7b8eab8b6ea37773d5d5d909d85eecff993ef0d3025f"
+  },
+  "source_sha256_before": {
+    "quant_evaluator/metrics/quantile.py": "1e3fc5841f38792a81cf9b849f5eb585c4cff1b81076081f9770739a5612770e",
+    "quant_evaluator/metrics/quantile_numba.py": "8162064ff8f0b7d10de9ae66a903e8eb0a7c03bd27c5751a9861842523ad842a",
+    "quant_evaluator/metrics/quantile_numeric.py": "2e0cd233c5db09bda79a7b8eab8b6ea37773d5d5d909d85eecff993ef0d3025f"
+  },
+  "warm_medians_seconds": {
+    "5": {
+      "numba": {
+        "guards_bypassed": 1.8298572399944533,
+        "guards_enabled": 1.8273257510154508
+      },
+      "numpy": {
+        "guards_bypassed": 2.518840745004127,
+        "guards_enabled": 2.5924903964914847
+      }
+    },
+    "20": {
+      "numba": {
+        "guards_bypassed": 2.029111946991179,
+        "guards_enabled": 5.102266347472323
+      },
+      "numpy": {
+        "guards_bypassed": 2.975731791986618,
+        "guards_enabled": 4.083043361984892
+      }
+    }
+  },
+  "warm_order_per_round": "ABBA",
+  "warm_rounds": 3,
+  "warm_samples_seconds": {
+    "5": {
+      "numba": {
+        "guards_bypassed": [
+          1.8220583529910073,
+          1.8848513960256241,
+          1.828622617002111,
+          1.8310918629867956,
+          1.8218081209925003,
+          1.8511144450167194
+        ],
+        "guards_enabled": [
+          1.8125655969488434,
+          1.8153798030107282,
+          1.821137401042506,
+          1.8335141009883955,
+          1.8468990310211666,
+          1.8847589470096864
+        ]
+      },
+      "numpy": {
+        "guards_bypassed": [
+          2.506603615998756,
+          2.491835367982276,
+          2.4344404250150546,
+          2.5310778740094975,
+          2.5908756550052203,
+          2.6283624740317464
+        ],
+        "guards_enabled": [
+          2.4912872439599596,
+          2.4895831359899603,
+          2.5562700500013307,
+          2.6287107429816388,
+          2.642425573023502,
+          2.6817480769823305
+        ]
+      }
+    },
+    "20": {
+      "numba": {
+        "guards_bypassed": [
+          2.092628312006127,
+          2.0461820010095835,
+          2.012041892972775,
+          2.0049726240104064,
+          1.9959595130058005,
+          2.0853319210000336
+        ],
+        "guards_enabled": [
+          5.040806530974805,
+          5.163726163969841,
+          4.862365339999087,
+          4.8592366129742,
+          5.252068521978799,
+          5.552497893979307
+        ]
+      },
+      "numpy": {
+        "guards_bypassed": [
+          2.8953039179905318,
+          2.9585551460040733,
+          2.955097159021534,
+          2.992908437969163,
+          3.0487342389533296,
+          3.024201224965509
+        ],
+        "guards_enabled": [
+          4.066653586982284,
+          4.05911054299213,
+          4.0994331369875,
+          3.9476813270011917,
+          4.112698321987409,
+          4.128462543012574
+        ]
+      }
+    }
+  },
+  "warmup_cycles": 1,
+  "warmup_order_per_cycle": "ABBA",
+  "wrapper_sha256": "b61723231d400188055dec70dbc47c3efa1c0ab1d0c6e56521d311567f8d5bf7",
+  "wrapper_sha256_after": "b61723231d400188055dec70dbc47c3efa1c0ab1d0c6e56521d311567f8d5bf7",
+  "wrapper_sha256_before": "b61723231d400188055dec70dbc47c3efa1c0ab1d0c6e56521d311567f8d5bf7",
+  "followup_note": "Historical post-bucket-refinement report. A later finite-only finance eligibility change is not measured by this receipt."
+}

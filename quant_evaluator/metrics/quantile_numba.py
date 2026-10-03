@@ -30,6 +30,7 @@ except ImportError:
 from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.metrics.label_panel import normalize_label_panel
+from quant_evaluator.metrics.quantile_numeric import repair_quantile_panel
 
 
 @jit(nopython=True, cache=True)  # QE-Q-P0-004: Remove fastmath for NaN/Inf correctness
@@ -280,6 +281,7 @@ def compute_quantile_returns_numba(
     quantile_returns, quantile_counts = _compute_quantile_returns_jit(
         values, labels, quantiles, n_quantiles, min_assets
     )
+    repair_quantile_panel(quantiles, labels, quantile_returns, quantile_counts, min_assets)
 
     return quantile_returns, quantile_counts
 

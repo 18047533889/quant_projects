@@ -492,6 +492,29 @@ def evaluate_calibrated_batch(
     gpu_policy: GPUExecutionPolicy | None = None,
     evaluate_fn: Callable | None = None,
 ) -> CalibratedEvaluation:
+    """Calibrate an exact request; cache-hit inference is never serialized.
+
+    Only cold measurements reserve the process coordinator. After waiting,
+    request/source/runtime/device identity and the cache are checked again.
+    This prevents overlapping QE cold experiments, not other application load.
+    """
+    return _evaluate_calibrated_batch_impl(
+        batch, label_bundle, metrics=metrics, calibration_policy=calibration_policy,
+        cache=cache, gpu_policy=gpu_policy, evaluate_fn=evaluate_fn,
+    )
+
+
+def _evaluate_calibrated_batch_impl(
+    batch: FactorBatch,
+    label_bundle: LabelBundle,
+    *,
+    metrics,
+    calibration_policy: CalibrationPolicy,
+    cache: BoundedCalibrationCache,
+    gpu_policy: GPUExecutionPolicy | None = None,
+    evaluate_fn: Callable | None = None,
+    _measurement_started: float | None = None,
+) -> CalibratedEvaluation:
     """Calibrate explicit whole-request CPU/CUDA routes for one exact batch.
 
     Unsupported advanced inputs are intentionally absent from this initial
@@ -513,6 +536,7 @@ def evaluate_calibrated_batch(
     if not isinstance(gpu_policy, GPUExecutionPolicy):
         raise InvalidContractError("gpu_policy must be GPUExecutionPolicy")
     started = time.monotonic()
+    budget_started = started if _measurement_started is None else _measurement_started
     public_evaluate = __import__(
         "quant_evaluator.runtime.evaluator", fromlist=["evaluate"]).evaluate
     injected_evaluator = evaluate_fn is not None and evaluate_fn is not public_evaluate
@@ -553,6 +577,26 @@ def evaluate_calibrated_batch(
             "device_admission": admission_reason, "setup_seconds": setup_seconds,
         })
 
+    if _measurement_started is None:
+        from quant_evaluator.runtime.calibration_measurement_coordinator import (
+            serial_calibration_measurement,
+        )
+        remaining = calibration_policy.max_wall_time_seconds - (time.monotonic() - started)
+        if remaining <= 0:
+            raise TimeoutError("calibration soft time budget exhausted before measurement reservation")
+        with serial_calibration_measurement(timeout_seconds=remaining) as waited_seconds:
+            # Re-enter the private implementation: everything influencing the
+            # cache key/admission may have changed while waiting. A same-key
+            # waiter can now consume the first experiment's qualified cache.
+            result = _evaluate_calibrated_batch_impl(
+                batch, label_bundle, metrics=metrics, calibration_policy=calibration_policy,
+                cache=cache, gpu_policy=gpu_policy, evaluate_fn=evaluate_fn,
+                _measurement_started=budget_started,
+            )
+        return CalibratedEvaluation(result.bundle, {
+            **result.metadata, "calibration_queue_seconds": waited_seconds,
+        })
+
     # Complete public evaluations cannot be interrupted safely. Check the soft
     # budget between calls and alternate route order to limit order bias.
     timings = {"cpu": [], "cuda_strict": []}
@@ -565,7 +609,7 @@ def evaluate_calibrated_batch(
     for iteration in range(calibration_policy.warmups + calibration_policy.repetitions):
         routes = ("cpu", "cuda_strict") if iteration % 2 == 0 else ("cuda_strict", "cpu")
         for route in routes:
-            if time.monotonic() - started >= calibration_policy.max_wall_time_seconds:
+            if time.monotonic() - budget_started >= calibration_policy.max_wall_time_seconds:
                 raise TimeoutError("calibration soft time budget exhausted between backend calls")
             # Query outside the stopwatch. A timing record is admitted only
             # under the runtime captured in its cache key, not mixed threads.
